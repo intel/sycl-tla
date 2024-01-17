@@ -101,7 +101,7 @@ public:
       sizeof(typename CollectiveMainloop::SharedStorage),
       sizeof(typename CollectiveEpilogue::SharedStorage)));
 
-  static constexpr uint32_t MaxThreadsPerBlock = cute::size(TiledMma{});
+  static constexpr uint32_t MaxThreadsPerBlock = CUTE_STATIC_V(cute::size(TiledMma{}));
   static constexpr uint32_t MinBlocksPerMultiprocessor = 1;
 
   // Device side arguments
@@ -141,8 +141,9 @@ public:
 
   static bool
   can_implement(Arguments const& args) {
-    return args.mode == GemmUniversalMode::kGemm or
+    bool mode_implementable = args.mode == GemmUniversalMode::kGemm or
           (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
+    return mode_implementable && TileScheduler::can_implement(args.scheduler);
   }
 
   static int
@@ -159,7 +160,7 @@ public:
   static dim3
   get_grid_shape(Params const& params) {
     int batch_count = 1;
-    if constexpr (rank(ProblemShape{}) == 4) {
+    if constexpr (cute::rank(ProblemShape{}) == 4) {
       batch_count = cute::size<3>(params.problem_shape);
     }
 
@@ -193,15 +194,15 @@ public:
     auto L = get<3>(problem_shape_MNKL);
 
     // Preconditions
-    static_assert(rank(StrideA{}) == 3, "StrideA must be rank-3: [M, K, L]. If batch mode is not needed, set L stride to Int<0>.");
-    static_assert(rank(StrideB{}) == 3, "StrideB must be rank-3: [N, K, L]. If batch mode is not needed, set L stride to Int<0>.");
-    static_assert(rank(StrideC{}) == 3, "StrideC must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
-    static_assert(rank(StrideD{}) == 3, "StrideD must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(StrideA{}) == 3, "StrideA must be rank-3: [M, K, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(StrideB{}) == 3, "StrideB must be rank-3: [N, K, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(StrideC{}) == 3, "StrideC must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(StrideD{}) == 3, "StrideD must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
 
     // Get the appropriate blocks for this thread block -- potential for thread block locality
     int thread_idx = int(threadIdx.x);
     auto blk_shape = TileShape{};                                                                // (BLK_M,BLK_N,BLK_K)
-    auto [m_coord, n_coord, l_coord] = blockIdx;
+    auto [m_coord, n_coord, l_coord] = static_cast<uint3>(blockIdx);
     auto blk_coord_mnkl = make_coord(m_coord, n_coord, _, l_coord);                                        // (m,n,k,l)
 
     // Represent the full tensors

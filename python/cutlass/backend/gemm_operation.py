@@ -82,7 +82,8 @@ from cutlass.backend.c_types import (
     get_gemm_arguments_3x,
     get_gemm_arguments_streamk,
     get_gemm_grouped_arguments,
-    get_mainloop_arguments_3x
+    get_mainloop_arguments_3x,
+    get_tile_scheduler_arguments_3x,
 )
 from cutlass.backend.library import (
     ApiVersion,
@@ -163,6 +164,9 @@ class GemmArguments2x(ArgumentBase):
 
     :param output_op: output operator, optional
     :type output_op: :class:`cutlass.backend.LinearCombinationFunctorArguments`
+
+    :param stream: cuda stream, defaults to cuda.cuda.CUstream(0)
+    :type stream: :class:`cuda.cuda.CUstream`
     """
 
     def __init__(self, operation, problem_size, A, B, C, D, gemm_mode=GemmUniversalMode.Gemm, **kwargs):
@@ -554,6 +558,7 @@ class GemmArguments3x(GemmArguments2x):
             mainloop,
             epilogue,
             hw_info,
+            self.operation.rt_module.scheduler_args
         )
         return self.arguments
 
@@ -664,6 +669,9 @@ class GemmGroupedArguments:
 
     :param output_op: output operator, optional
     :type output_op: :class:`cutlass.backend.LinearCombinationFunctorArguments`
+
+    :param stream: cuda stream, defaults to cuda.cuda.CUstream(0)
+    :type stream: :class:`cuda.cuda.CUstream`
     """
 
     def __init__(self, operation, problem_sizes, A, B, C, D, **kwargs):
@@ -763,6 +771,11 @@ class GemmGroupedArguments:
             self.output_op = kwargs["output_op"]
         else:
             self.output_op = self.operation.epilogue_type(1.0, 0.0)
+        
+        if "stream" in kwargs.keys():
+            self.stream = kwargs["stream"]
+        else:
+            self.stream = cuda.CUstream(0)
 
         # Get host problem size
         self.host_problem_size_ptr = np.array(problem_size_host, dtype=np.int32).__array_interface__["data"][0]
@@ -1163,7 +1176,9 @@ extern "C" {
             operation.A.alignment,
             operation.B.alignment
         )
-        self.argument_type, self.epilogue_args, self.epilogue_type, self.hw_info = get_gemm_arguments_3x(self.mainloop_args, operation.epilogue_functor)
+        self.scheduler_args = get_tile_scheduler_arguments_3x(operation.tile_description.tile_scheduler)
+        self.argument_type, self.epilogue_args, self.epilogue_type, self.hw_info = get_gemm_arguments_3x(
+            self.mainloop_args, operation.epilogue_functor, self.scheduler_args)
 
     def get_device_workspace_size(self, arguments: GemmArguments3x):
         return self.get_kernel_workspace_size(ctypes.byref(arguments.get_arguments()))
@@ -1538,6 +1553,7 @@ class GemmOperationBase:
             arguments.host_workspace,
             arguments.device_workspace,
             arguments.launch_config,
+            arguments.stream
         )
 
         if err != cuda.CUresult.CUDA_SUCCESS:

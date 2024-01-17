@@ -131,6 +131,7 @@ from cutlass.backend.library import TensorDescription, TileDescription
 from cutlass.op.op import OperationBase
 from cutlass.shape import Conv2DProblemSize, MatrixCoord
 from cutlass.utils import check, datatypes
+from cuda import cuda
 
 
 class Conv2d(OperationBase):
@@ -293,7 +294,7 @@ class Conv2d(OperationBase):
 
         self.possible_op_classes = self.options.supporting_opclasses(
             self._element_a, self._element_b, self._element_accumulator,
-            self._layout_a, self._layout_b
+            self._layout_a, self._layout_b, self._math_operation
         )
 
         if cutlass.OpcodeClass.TensorOp in self.possible_op_classes:
@@ -301,8 +302,13 @@ class Conv2d(OperationBase):
         elif cutlass.OpcodeClass.Simt in self.possible_op_classes:
             self.opclass = cutlass.OpcodeClass.Simt
         else:
+            if self._math_operation is not None:
+                math_op_str = f' and math operation {self._math_operation}'
+            else:
+                math_op_str = ''
+
             raise Exception(f'No kernel configuration found for supported data type and layout '
-                            f'combination {datatype_comb}x{layout_comb}')
+                            f'combination {datatype_comb}x{layout_comb}{math_op_str}')
 
         if reset_epilogue:
             self._reset_epilogue_functor_activation(epilogue.identity)
@@ -345,7 +351,7 @@ class Conv2d(OperationBase):
             return
         if isinstance(td, dict):
             if self._tile_description is None:
-                op = self.possible_operations.default_operation()
+                op = self.possible_operations.default_operation(self._math_operation)
                 self._tile_description = datatypes.td_from_profiler_op(op)
             if "cluster_shape" in td.keys():
                 if td["cluster_shape"] != [1, 1, 1]:
@@ -397,6 +403,11 @@ class Conv2d(OperationBase):
         description_str = []
         for op in self.possible_operations.all_operations:
             td = datatypes.td_from_profiler_op(op)
+
+            if self._math_operation is not None:
+                if td.math_instruction.math_operation != self._math_operation:
+                    continue
+
             if str(td) not in description_str:
                 description_str.append(str(td))
                 descriptions.append(td)
@@ -569,7 +580,7 @@ class Conv2d(OperationBase):
             if self.tile_description is not None:
                 tile_description = self.tile_description
             else:
-                op = self.possible_operations.operations(alignment_A, alignment_B, alignment_C)[0]
+                op = self.possible_operations.operations(alignment_A, alignment_B, alignment_C, self._math_operation)[0]
                 tile_description = datatypes.td_from_profiler_op(op)
         else:
             valid, err_str = self._valid_tile_description(tile_description)
@@ -723,7 +734,8 @@ class Conv2d(OperationBase):
             stride=(1, 1), padding=(0, 0), dilation=(1, 1),
             alpha=None, beta=None,
             split_k=("serial", 1), sync: bool = True,
-            print_module: bool = False) -> Conv2dArguments:
+            print_module: bool = False,
+            stream: cuda.CUstream = cuda.CUstream(0)) -> Conv2dArguments:
         """
         Runs the kernel currently specified. If it has not already been, the kernel is emitted and
         compiled. Tensors holding operands and outputs of the kernel are sourced either from the
@@ -750,6 +762,8 @@ class Conv2d(OperationBase):
         :type sync: bool
         :param print_module: whether to print the emitted C++ code
         :type print_module: bool
+        :param stream: cuda stream, defaults to cuda.cuda.CUstream(0)
+        :type stream: :class:`cuda.cuda.CUstream`
 
         :return: arguments passed in to the kernel
         :rtype: cutlass.backend.Conv2dArguments
@@ -840,7 +854,8 @@ class Conv2d(OperationBase):
             A=A, B=B, C=C, D=D,
             output_op=self.operation.epilogue_type(*epilogue_args),
             split_k_mode=datatypes.getattr_enum(SplitKMode, split_k[0]),
-            split_k_slices=split_k[1]
+            split_k_slices=split_k[1],
+            stream=stream
         )
 
         self.operation.run(arguments)
@@ -854,7 +869,8 @@ class Conv2d(OperationBase):
                 workspace=arguments.ptr_D,
                 destination=D,
                 source=C,
-                output_op=self.reduction_operation.epilogue_type(*epilogue_args)
+                output_op=self.reduction_operation.epilogue_type(*epilogue_args),
+                stream=stream
             )
             self.reduction_operation.run(reduction_arguments)
 
@@ -909,11 +925,12 @@ class Conv2dFprop(Conv2d):
     def run(
         self, input=None, weight=None, C=None, output=None, alpha=None, beta=None,
         stride=(1, 1), padding=(0, 0), dilation=(1, 1), split_k=("serial", 1),
-        sync: bool = True, print_module: bool = False) -> Conv2dArguments:
+        sync: bool = True, print_module: bool = False,
+        stream: cuda.CUstream = cuda.CUstream(0)) -> Conv2dArguments:
 
         A, B, D = input, weight, output
         return super().run(
-            A, B, C, D, alpha, beta, stride, padding, dilation, split_k, sync, print_module)
+            A, B, C, D, alpha, beta, stride, padding, dilation, split_k, sync, print_module, stream)
 
 
 class Conv2dDgrad(Conv2d):
@@ -933,11 +950,12 @@ class Conv2dDgrad(Conv2d):
 
     def run(self, grad_output=None, weight=None, C=None, grad_input=None, alpha=None, beta=None,
         stride=(1, 1), padding=(0, 0), dilation=(1, 1), split_k=("serial", 1),
-        sync: bool = True, print_module: bool = False) -> Conv2dArguments:
+        sync: bool = True, print_module: bool = False,
+        stream: cuda.CUstream = cuda.CUstream(0)) -> Conv2dArguments:
         #
         A, B, D = grad_output, weight, grad_input
         return super().run(
-            A, B, C, D, alpha, beta, stride, padding, dilation, split_k, sync, print_module)
+            A, B, C, D, alpha, beta, stride, padding, dilation, split_k, sync, print_module, stream)
 
 
 class Conv2dWgrad(Conv2d):
@@ -957,8 +975,9 @@ class Conv2dWgrad(Conv2d):
 
     def run(self, grad_output=None, input=None, C=None, grad_weight=None, alpha=None, beta=None,
         stride=(1, 1), padding=(0, 0), dilation=(1, 1), split_k=("serial", 1),
-        sync: bool = True, print_module: bool = False) -> Conv2dArguments:
+        sync: bool = True, print_module: bool = False,
+        stream: cuda.CUstream = cuda.CUstream(0)) -> Conv2dArguments:
         #
         A, B, D = grad_output, input, grad_weight
         return super().run(
-            A, B, C, D, alpha, beta, stride, padding, dilation, split_k, sync, print_module)
+            A, B, C, D, alpha, beta, stride, padding, dilation, split_k, sync, print_module, stream)

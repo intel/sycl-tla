@@ -163,7 +163,7 @@ public:
   using EVTModule = HEVT<
   HostAuxStore<Gemm, true>,
   HEVT<
-    HostCompute<Gemm, cutlass::epilogue::fusion::detail::ScaleOutOp<ElementD>::Op>,  // activation(Z) * scaled_d
+    HostCompute<Gemm, cutlass::epilogue::fusion::detail::ScaleOutOp<ElementD>::template Op>,  // activation(Z) * scaled_d
     HEVT<
       HostCompute<Gemm, ActivationFn>, // activation(Z)
       HEVT<
@@ -174,11 +174,11 @@ public:
           HostCompute<Gemm, cutlass::homogeneous_multiply_add>,
           HostScalarBroadcast<Gemm, 1, 3>, // scale_a * scale_b * alpha
           HostAccumulator<Gemm>,
-          HostColBroadcast<Gemm, ElementD>,
+          HostColBroadcast<Gemm, ElementD>
         >
       >
     >,
-    HostScalarBroadcast<Gemm, 1>, // scale_d
+    HostScalarBroadcast<Gemm, 1> // scale_d
   >
   >;
 };
@@ -211,26 +211,26 @@ public:
           HostCompute<Gemm, cutlass::homogeneous_multiply_add>,
           HostScalarBroadcast<Gemm, 1, 3>, // scale_a * scale_b * alpha
           HostAccumulator<Gemm>,
-          HostColBroadcast<Gemm, ElementD>,
+          HostColBroadcast<Gemm, ElementD>
         >
       >,
       // D = activation(Z) * scaled_d, amax_d = max(abs(elements in D))
       HEVT<
-        HostCompute<Gemm, cutlass::epilogue::fusion::detail::ScaleOutOp<ElementD>::Op>,
+        HostCompute<Gemm, cutlass::epilogue::fusion::detail::ScaleOutOp<ElementD>::template Op>,
         HEVT<
           HostScalarReduce<Gemm, amax, float>,
           HEVT<
             HostCompute<Gemm, ActivationFn>, //activation(Z) * scaled_d
-            HostAccumulator<Gemm>, // Z
+            HostAccumulator<Gemm> // Z
           >
         >,
-        HostScalarBroadcast<Gemm, 1>, // scale_d
+        HostScalarBroadcast<Gemm, 1> // scale_d
       >,
       // Aux = Z * scale_aux, amax_aux = max(abs(elements in Aux))
       HEVT<
         HostAuxStore<Gemm, false, ElementD, cutlass::layout::RowMajor>,
         HEVT<
-          HostCompute<Gemm, cutlass::epilogue::fusion::detail::ScaleOutOp<ElementD>::Op>,
+          HostCompute<Gemm, cutlass::epilogue::fusion::detail::ScaleOutOp<ElementD>::template Op>,
           HEVT<
             HostScalarReduce<Gemm, amax, float>,
             HostAccumulator<Gemm>
@@ -267,7 +267,7 @@ template<
 using Sm90LinCombAuxLoad =
   Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementOutput, ElementCompute, RoundStyle>, // beta * C + (alpha * acc + bias)
     Sm90ScalarBroadcast<ElementScalar>, // beta
-    Sm90SrcFetch, // C
+    Sm90SrcFetch<ElementOutput>, // C
     Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle>, // alpha * acc + bias
       Sm90ScalarBroadcast<ElementScalar>, // alpha
       Sm90AccFetch, // acc
@@ -295,7 +295,7 @@ template<
 using Sm90LinCombEVTDAG =
   Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementOutput, ElementCompute, RoundStyle>, // beta * C + (alpha * acc + aux)
     Sm90ScalarBroadcast<ElementScalar>, // beta
-    Sm90SrcFetch, // C
+    Sm90SrcFetch<ElementOutput>, // C
     Sm90TopologicalVisitor<
       ElementCompute,
       cute::tuple<
@@ -349,7 +349,7 @@ using Sm90LinCombDAGEVT =
       Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle>,
         Sm90ScalarBroadcast<ElementScalar>,
         Sm90AccFetch,
-        Sm90SrcFetch
+        Sm90SrcFetch<ElementOutput>
       >
     >,
     Sm90ColBroadcast<0, typename EpilogueDescriptor::TileShape, ElementBias>,
@@ -371,7 +371,7 @@ template<
 using Sm90LinCombPerColumnBias =
   Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementOutput, ElementCompute, RoundStyle>, // beta * C + (alpha * acc + bias)
     Sm90ScalarBroadcast<ElementScalar>, // beta
-    Sm90SrcFetch, // C
+    Sm90SrcFetch<ElementOutput>, // C
     Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle>, // alpha * acc + bias
       Sm90ScalarBroadcast<ElementScalar>, // alpha
       Sm90AccFetch, // acc
@@ -403,7 +403,7 @@ using Sm90LinCombPerColumnReduce =
   Sm90EVT<Sm90RowReduction<RegReduceFn, GmemReduceFn, 0, CtaTileShapeMNK, ElementReduce, ElementCompute, RoundStyle>, // per column reduce
     Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementOutput, ElementCompute, RoundStyle>, // beta * C + alpha * acc
       Sm90ScalarBroadcast<ElementScalar>, // beta
-      Sm90SrcFetch, // C
+      Sm90SrcFetch<ElementOutput>, // C
       Sm90EVT<Sm90Compute<multiplies, ElementCompute, ElementCompute, RoundStyle>, // alpha * acc
         Sm90ScalarBroadcast<ElementScalar>, // alpha
         Sm90AccFetch // acc
@@ -428,7 +428,7 @@ using Sm90LinCombPerRowReduce =
   Sm90EVT<Sm90ColReduction<RegReduceFn, GmemReduceFn, 0, CtaTileShapeMNK, ElementReduce, ElementCompute, RoundStyle>, // per column reduce
     Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementOutput, ElementCompute, RoundStyle>, // beta * C + alpha * acc
       Sm90ScalarBroadcast<ElementScalar>, // beta
-      Sm90SrcFetch, // C
+      Sm90SrcFetch<ElementOutput>, // C
       Sm90EVT<Sm90Compute<multiplies, ElementCompute, ElementCompute, RoundStyle>, // alpha * acc
         Sm90ScalarBroadcast<ElementScalar>, // alpha
         Sm90AccFetch // acc
@@ -452,7 +452,7 @@ using Sm90LinCombScalarReduce =
   Sm90EVT<Sm90ScalarReduction<RegReduceFn, GmemReduceFn, ElementReduce, ElementCompute, RoundStyle>, // per column reduce
     Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementOutput, ElementCompute, RoundStyle>, // beta * C + alpha * acc
       Sm90ScalarBroadcast<ElementScalar>, // beta
-      Sm90SrcFetch, // C
+      Sm90SrcFetch<ElementOutput>, // C
       Sm90EVT<Sm90Compute<multiplies, ElementCompute, ElementCompute, RoundStyle>, // alpha * acc
         Sm90ScalarBroadcast<ElementScalar>, // alpha
         Sm90AccFetch // acc
