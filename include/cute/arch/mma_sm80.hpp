@@ -35,7 +35,7 @@
 #include <cute/arch/mma.hpp>
 
 // Config
-#if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800))
+#if ((defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800)) || defined(CUTLASS_ENABLE_SYCL))
 #  define CUTE_ARCH_MMA_SM80_ENABLED
 
 #if (__CUDA_ARCH__ <= 900)
@@ -69,6 +69,7 @@ struct SM80_16x8x8_F16F16F16F16_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k8.row.col.f16.f16.f16.f16 "
       "{%0, %1},"
@@ -79,6 +80,7 @@ struct SM80_16x8x8_F16F16F16F16_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x8_F16F16F16F16_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -102,6 +104,7 @@ struct SM80_16x8x16_F16F16F16F16_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.f16.f16.f16.f16 "
       "{%0,  %1},"
@@ -112,6 +115,7 @@ struct SM80_16x8x16_F16F16F16F16_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_F16F16F16F16_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -135,6 +139,7 @@ struct SM80_16x8x8_F32F16F16F32_TN
       float const   & c0, float const   & c1, float const   & c2, float const   & c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32 "
       "{%0,  %1,  %2,  %3},"
@@ -145,6 +150,7 @@ struct SM80_16x8x8_F32F16F16F32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "f"(c0),  "f"(c1),  "f"(c2),  "f"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x8_F32F16F16F32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -168,6 +174,7 @@ struct SM80_16x8x16_F32F16F16F32_TN
       float const   & c0, float const   & c1, float const   & c2, float const   & c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 "
       "{%0,  %1,  %2,  %3},"
@@ -178,6 +185,7 @@ struct SM80_16x8x16_F32F16F16F32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "f"(c0),  "f"(c1),  "f"(c2),  "f"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_F32F16F16F32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -201,6 +209,7 @@ struct SM80_16x8x8_F32BF16BF16F32_TN
       float const   & c0, float const   & c1, float const   & c2, float const   & c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k8.row.col.f32.bf16.bf16.f32 "
       "{%0,  %1,  %2,  %3},"
@@ -211,6 +220,7 @@ struct SM80_16x8x8_F32BF16BF16F32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "f"(c0),  "f"(c1),  "f"(c2),  "f"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x8_F32BF16BF16F32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -234,6 +244,7 @@ struct SM80_16x8x16_F32BF16BF16F32_TN
       float const   & c0, float const   & c1, float const   & c2, float const   & c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 "
       "{%0,  %1,  %2,  %3},"
@@ -244,6 +255,7 @@ struct SM80_16x8x16_F32BF16BF16F32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "f"(c0),  "f"(c1),  "f"(c2),  "f"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_F32BF16BF16F32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -267,6 +279,7 @@ struct SM80_16x8x4_F32TF32TF32F32_TN
       float const   & c0, float const   & c1, float const   & c2, float const   & c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k4.row.col.f32.tf32.tf32.f32 "
       "{%0,  %1,  %2,  %3},"
@@ -277,6 +290,7 @@ struct SM80_16x8x4_F32TF32TF32F32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "f"(c0),  "f"(c1),  "f"(c2),  "f"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x4_F32TF32TF32F32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -300,6 +314,7 @@ struct SM80_16x8x8_F32TF32TF32F32_TN
       float const   & c0, float const   & c1, float const   & c2, float const   & c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 "
       "{%0,  %1,  %2,  %3},"
@@ -310,6 +325,7 @@ struct SM80_16x8x8_F32TF32TF32F32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "f"(c0),  "f"(c1),  "f"(c2),  "f"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x8_F32TF32TF32F32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -333,6 +349,7 @@ struct SM80_8x8x4_F64F64F64F64_TN
       double const& c0, double const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k4.row.col.f64.f64.f64.f64 "
       "{%0, %1},"
@@ -343,6 +360,7 @@ struct SM80_8x8x4_F64F64F64F64_TN
       :  "d"(a0),
          "d"(b0),
          "d"(c0),  "d"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x4_F64F64F64F64_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -470,6 +488,7 @@ struct SM80_8x8x16_S32S8S8S32_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k16.row.col.s32.s8.s8.s32 "
       "{%0, %1},"
@@ -480,6 +499,7 @@ struct SM80_8x8x16_S32S8S8S32_TN
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x16_S32S8S8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -503,6 +523,7 @@ struct SM80_8x8x16_S32S8S8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k16.row.col.s32.s8.s8.s32.satfinite "
       "{%0, %1},"
@@ -513,6 +534,7 @@ struct SM80_8x8x16_S32S8S8S32_TN_SATURATE
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x16_S32S8S8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -536,6 +558,7 @@ struct SM80_16x8x16_S32S8S8S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -546,6 +569,7 @@ struct SM80_16x8x16_S32S8S8S32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_S32S8S8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -569,6 +593,7 @@ struct SM80_16x8x16_S32S8S8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -579,6 +604,7 @@ struct SM80_16x8x16_S32S8S8S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_S32S8S8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -602,6 +628,7 @@ struct SM80_16x8x32_S32S8S8S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -612,6 +639,7 @@ struct SM80_16x8x32_S32S8S8S32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32S8S8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -635,6 +663,7 @@ struct SM80_16x8x32_S32S8S8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -645,6 +674,7 @@ struct SM80_16x8x32_S32S8S8S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32S8S8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -668,6 +698,7 @@ struct SM80_8x8x16_S32S8U8S32_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k16.row.col.s32.s8.u8.s32 "
       "{%0, %1},"
@@ -678,6 +709,7 @@ struct SM80_8x8x16_S32S8U8S32_TN
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x16_S32S8U8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -701,6 +733,7 @@ struct SM80_8x8x16_S32S8U8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k16.row.col.s32.s8.u8.s32.satfinite "
       "{%0, %1},"
@@ -711,6 +744,7 @@ struct SM80_8x8x16_S32S8U8S32_TN_SATURATE
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x16_S32S8U8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -734,6 +768,7 @@ struct SM80_16x8x16_S32S8U8S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.s32.s8.u8.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -744,6 +779,7 @@ struct SM80_16x8x16_S32S8U8S32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_S32S8U8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -767,6 +803,7 @@ struct SM80_16x8x16_S32S8U8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.s32.s8.u8.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -777,6 +814,7 @@ struct SM80_16x8x16_S32S8U8S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_S32S8U8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -800,6 +838,7 @@ struct SM80_16x8x32_S32S8U8S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.s8.u8.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -810,6 +849,7 @@ struct SM80_16x8x32_S32S8U8S32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32S8U8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -833,6 +873,7 @@ struct SM80_16x8x32_S32S8U8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.s8.u8.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -843,6 +884,7 @@ struct SM80_16x8x32_S32S8U8S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32S8U8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -866,6 +908,7 @@ struct SM80_8x8x16_S32U8S8S32_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k16.row.col.s32.u8.s8.s32 "
       "{%0, %1},"
@@ -876,6 +919,7 @@ struct SM80_8x8x16_S32U8S8S32_TN
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x16_S32U8S8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -899,6 +943,7 @@ struct SM80_8x8x16_S32U8S8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k16.row.col.s32.u8.s8.s32.satfinite "
       "{%0, %1},"
@@ -909,6 +954,7 @@ struct SM80_8x8x16_S32U8S8S32_TN_SATURATE
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x16_S32U8S8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -932,6 +978,7 @@ struct SM80_16x8x16_S32U8S8S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.s32.u8.s8.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -942,6 +989,7 @@ struct SM80_16x8x16_S32U8S8S32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_S32U8S8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -965,6 +1013,7 @@ struct SM80_16x8x16_S32U8S8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.s32.u8.s8.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -975,6 +1024,7 @@ struct SM80_16x8x16_S32U8S8S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_S32U8S8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -998,6 +1048,7 @@ struct SM80_16x8x32_S32U8S8S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.u8.s8.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1008,6 +1059,7 @@ struct SM80_16x8x32_S32U8S8S32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32U8S8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1031,6 +1083,7 @@ struct SM80_16x8x32_S32U8S8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.u8.s8.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1041,6 +1094,7 @@ struct SM80_16x8x32_S32U8S8S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32U8S8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1064,6 +1118,7 @@ struct SM80_8x8x16_S32U8U8S32_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k16.row.col.s32.u8.u8.s32 "
       "{%0, %1},"
@@ -1074,6 +1129,7 @@ struct SM80_8x8x16_S32U8U8S32_TN
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x16_S32U8U8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1097,6 +1153,7 @@ struct SM80_8x8x16_S32U8U8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k16.row.col.s32.u8.u8.s32.satfinite "
       "{%0, %1},"
@@ -1107,6 +1164,7 @@ struct SM80_8x8x16_S32U8U8S32_TN_SATURATE
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x16_S32U8U8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1130,6 +1188,7 @@ struct SM80_16x8x16_S32U8U8S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.s32.u8.u8.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1140,6 +1199,7 @@ struct SM80_16x8x16_S32U8U8S32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_S32U8U8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1163,6 +1223,7 @@ struct SM80_16x8x16_S32U8U8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k16.row.col.s32.u8.u8.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1173,6 +1234,7 @@ struct SM80_16x8x16_S32U8U8S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x16_S32U8U8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1196,6 +1258,7 @@ struct SM80_16x8x32_S32U8U8S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.u8.u8.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1206,6 +1269,7 @@ struct SM80_16x8x32_S32U8U8S32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32U8U8S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1229,6 +1293,7 @@ struct SM80_16x8x32_S32U8U8S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.u8.u8.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1239,6 +1304,7 @@ struct SM80_16x8x32_S32U8U8S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32U8U8S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1262,6 +1328,7 @@ struct SM80_8x8x32_S32S4S4S32_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k32.row.col.s32.s4.s4.s32 "
       "{%0, %1},"
@@ -1272,6 +1339,7 @@ struct SM80_8x8x32_S32S4S4S32_TN
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x32_S32S4S4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1295,6 +1363,7 @@ struct SM80_8x8x32_S32S4S4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k32.row.col.s32.s4.s4.s32.satfinite "
       "{%0, %1},"
@@ -1305,6 +1374,7 @@ struct SM80_8x8x32_S32S4S4S32_TN_SATURATE
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x32_S32S4S4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1328,6 +1398,7 @@ struct SM80_16x8x32_S32S4S4S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.s4.s4.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1338,6 +1409,7 @@ struct SM80_16x8x32_S32S4S4S32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32S4S4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1361,6 +1433,7 @@ struct SM80_16x8x32_S32S4S4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.s4.s4.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1371,6 +1444,7 @@ struct SM80_16x8x32_S32S4S4S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32S4S4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1394,6 +1468,7 @@ struct SM80_16x8x64_S32S4S4S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k64.row.col.s32.s4.s4.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1404,6 +1479,7 @@ struct SM80_16x8x64_S32S4S4S32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x64_S32S4S4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1427,6 +1503,7 @@ struct SM80_16x8x64_S32S4S4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k64.row.col.s32.s4.s4.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1437,6 +1514,7 @@ struct SM80_16x8x64_S32S4S4S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x64_S32S4S4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1460,6 +1538,7 @@ struct SM80_8x8x32_S32S4U4S32_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k32.row.col.s32.s4.u4.s32 "
       "{%0, %1},"
@@ -1470,6 +1549,7 @@ struct SM80_8x8x32_S32S4U4S32_TN
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x32_S32S4U4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1493,6 +1573,7 @@ struct SM80_8x8x32_S32S4U4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k32.row.col.s32.s4.u4.s32.satfinite "
       "{%0, %1},"
@@ -1503,6 +1584,7 @@ struct SM80_8x8x32_S32S4U4S32_TN_SATURATE
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x32_S32S4U4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1526,6 +1608,7 @@ struct SM80_16x8x32_S32S4U4S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.s4.u4.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1536,6 +1619,7 @@ struct SM80_16x8x32_S32S4U4S32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32S4U4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1559,6 +1643,7 @@ struct SM80_16x8x32_S32S4U4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.s4.u4.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1569,6 +1654,7 @@ struct SM80_16x8x32_S32S4U4S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32S4U4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1592,6 +1678,7 @@ struct SM80_16x8x64_S32S4U4S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k64.row.col.s32.s4.u4.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1602,6 +1689,7 @@ struct SM80_16x8x64_S32S4U4S32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x64_S32S4U4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1625,6 +1713,7 @@ struct SM80_16x8x64_S32S4U4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k64.row.col.s32.s4.u4.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1635,6 +1724,7 @@ struct SM80_16x8x64_S32S4U4S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x64_S32S4U4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1658,6 +1748,7 @@ struct SM80_8x8x32_S32U4S4S32_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k32.row.col.s32.u4.s4.s32 "
       "{%0, %1},"
@@ -1668,6 +1759,7 @@ struct SM80_8x8x32_S32U4S4S32_TN
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x32_S32U4S4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1691,6 +1783,7 @@ struct SM80_8x8x32_S32U4S4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k32.row.col.s32.u4.s4.s32.satfinite "
       "{%0, %1},"
@@ -1701,6 +1794,7 @@ struct SM80_8x8x32_S32U4S4S32_TN_SATURATE
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x32_S32U4S4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1724,6 +1818,7 @@ struct SM80_16x8x32_S32U4S4S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.u4.s4.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1734,6 +1829,7 @@ struct SM80_16x8x32_S32U4S4S32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32U4S4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1757,6 +1853,7 @@ struct SM80_16x8x32_S32U4S4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.u4.s4.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1767,6 +1864,7 @@ struct SM80_16x8x32_S32U4S4S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32U4S4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1790,6 +1888,7 @@ struct SM80_16x8x64_S32U4S4S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k64.row.col.s32.u4.s4.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1800,6 +1899,7 @@ struct SM80_16x8x64_S32U4S4S32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x64_S32U4S4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1823,6 +1923,7 @@ struct SM80_16x8x64_S32U4S4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k64.row.col.s32.u4.s4.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1833,6 +1934,7 @@ struct SM80_16x8x64_S32U4S4S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x64_S32U4S4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1856,6 +1958,7 @@ struct SM80_8x8x32_S32U4U4S32_TN
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k32.row.col.s32.u4.u4.s32 "
       "{%0, %1},"
@@ -1866,6 +1969,7 @@ struct SM80_8x8x32_S32U4U4S32_TN
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x32_S32U4U4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1889,6 +1993,7 @@ struct SM80_8x8x32_S32U4U4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k32.row.col.s32.u4.u4.s32.satfinite "
       "{%0, %1},"
@@ -1899,6 +2004,7 @@ struct SM80_8x8x32_S32U4U4S32_TN_SATURATE
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x32_S32U4U4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1922,6 +2028,7 @@ struct SM80_16x8x32_S32U4U4S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.u4.u4.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1932,6 +2039,7 @@ struct SM80_16x8x32_S32U4U4S32_TN
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32U4U4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1955,6 +2063,7 @@ struct SM80_16x8x32_S32U4U4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k32.row.col.s32.u4.u4.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -1965,6 +2074,7 @@ struct SM80_16x8x32_S32U4U4S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x32_S32U4U4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -1988,6 +2098,7 @@ struct SM80_16x8x64_S32U4U4S32_TN
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k64.row.col.s32.u4.u4.s32 "
       "{%0,  %1,  %2,  %3},"
@@ -1998,6 +2109,7 @@ struct SM80_16x8x64_S32U4U4S32_TN
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x64_S32U4U4S32_TN without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -2021,6 +2133,7 @@ struct SM80_16x8x64_S32U4U4S32_TN_SATURATE
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k64.row.col.s32.u4.u4.s32.satfinite "
       "{%0,  %1,  %2,  %3},"
@@ -2031,6 +2144,7 @@ struct SM80_16x8x64_S32U4U4S32_TN_SATURATE
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x64_S32U4U4S32_TN_SATURATE without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -2056,6 +2170,7 @@ struct SM80_8x8x128_S32U1U1S32_TN_XORPOPC
       uint32_t const& c0, uint32_t const& c1)
   {
 #if defined(CUTE_ARCH_MMA_B1_XOR_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m8n8k128.row.col.s32.b1.b1.s32.xor.popc "
       "{%0, %1},"
@@ -2066,6 +2181,7 @@ struct SM80_8x8x128_S32U1U1S32_TN_XORPOPC
       :  "r"(a0),
          "r"(b0),
          "r"(c0),  "r"(c1));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_8x8x128_S32U1U1S32_TN_XORPOPC without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -2089,6 +2205,7 @@ struct SM80_16x8x128_S32U1U1S32_TN_XORPOPC
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_B1_XOR_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k128.row.col.s32.b1.b1.s32.xor.popc "
       "{%0,  %1,  %2,  %3},"
@@ -2099,6 +2216,7 @@ struct SM80_16x8x128_S32U1U1S32_TN_XORPOPC
       :  "r"(a0),  "r"(a1),
          "r"(b0),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x128_S32U1U1S32_TN_XORPOPC without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif
@@ -2122,6 +2240,7 @@ struct SM80_16x8x256_S32U1U1S32_TN_XORPOPC
       uint32_t const& c0, uint32_t const& c1, uint32_t const& c2, uint32_t const& c3)
   {
 #if defined(CUTE_ARCH_MMA_B1_XOR_SM80_ENABLED)
+#if defined(SYCL_ENABLE_NVPTX)
     asm volatile(
       "mma.sync.aligned.m16n8k256.row.col.s32.b1.b1.s32.xor.popc "
       "{%0,  %1,  %2,  %3},"
@@ -2132,6 +2251,7 @@ struct SM80_16x8x256_S32U1U1S32_TN_XORPOPC
       :  "r"(a0),  "r"(a1),  "r"(a2),  "r"(a3),
          "r"(b0),  "r"(b1),
          "r"(c0),  "r"(c1),  "r"(c2),  "r"(c3));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Attempting to use SM80_16x8x256_S32U1U1S32_TN_XORPOPC without CUTE_ARCH_MMA_SM80_ENABLED");
 #endif

@@ -56,7 +56,7 @@
   #define CUTE_ARCH_LDSM_SM75_ENABLED (CUTE_ARCH_LDSM_SM75_SUPPORTED)
 #endif
 
-#if (CUTE_ARCH_LDSM_SM75_ENABLED) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 750
+#if ((CUTE_ARCH_LDSM_SM75_ENABLED) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 750) || defined(CUTLASS_ENABLE_SYCL)
   #define CUTE_ARCH_LDSM_SM75_ACTIVATED 1
 #endif
 
@@ -173,10 +173,12 @@ struct SM75_U16x8_LDSM_T
        uint32_t& dst0, uint32_t& dst1, uint32_t& dst2, uint32_t& dst3)
   {
 #if defined(CUTE_ARCH_LDSM_SM75_ACTIVATED)
+#if defined(SYCL_ENABLE_NVPTX)
     uint32_t smem_int_ptr = cast_smem_ptr_to_uint(&smem_src);
     asm volatile ("ldmatrix.sync.aligned.x4.trans.m8n8.shared.b16 {%0, %1, %2, %3}, [%4];\n"
         : "=r"(dst0), "=r"(dst1), "=r"(dst2), "=r"(dst3)
         :  "r"(smem_int_ptr));
+#endif
 #else
     CUTE_RUNTIME_ASSERT("Trying to use ldmatrix without CUTE_ARCH_LDSM_SM75_ACTIVATED.");
 #endif

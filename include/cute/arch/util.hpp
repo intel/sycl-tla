@@ -112,7 +112,7 @@ cast_smem_ptr_to_uint(void const* const ptr)
 
   return __nvvm_get_smem_pointer(ptr);
 
-#elif defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
+#elif defined(__CUDA_ARCH__) || defined(CUTLASS_ENABLE_SYCL)
 
   uint32_t smem_ptr;
 
@@ -166,20 +166,20 @@ explode(Fn fn,
   return fn(a[Ia]..., b[Ib]..., c[Ic]...);
 }
 
-template <class Fn,
+template <class MMA_Op,
           class PtrD, int... Id,
           class PtrA, int... Ia,
           class PtrB, int... Ib,
           class PtrC, int... Ic>
 CUTE_HOST_DEVICE constexpr
 void
-explode(Fn fn,
+explode(
         PtrD&& d, int_sequence<Id...>,
         PtrA&& a, int_sequence<Ia...>,
         PtrB&& b, int_sequence<Ib...>,
         PtrC&& c, int_sequence<Ic...>)
 {
-  return fn(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]...);
+  return MMA_Op::fma(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]...);
 }
 
 template <class Fn,
