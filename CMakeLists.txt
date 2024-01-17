@@ -118,6 +118,10 @@ set(CUTLASS_ENABLE_TESTS ${CUTLASS_ENABLE_TESTS_INIT} CACHE BOOL "Enable CUTLASS
 set(CUTLASS_ENABLE_GTEST_UNIT_TESTS ${CUTLASS_ENABLE_TESTS} CACHE BOOL "Enable CUTLASS GTest-based Unit Tests")
 ################################################################################
 
+set(CUTLASS_ENABLE_SYCL OFF CACHE BOOL "Enable SYCL")
+
+################################################################################
+
 set(CUTLASS_NVCC_ARCHS_SUPPORTED "")
 if (CUDA_VERSION VERSION_GREATER_EQUAL 11.4 AND NOT CUDA_COMPILER MATCHES "[Cc]lang")
   list(APPEND CUTLASS_NVCC_ARCHS_SUPPORTED 70 72 75 80 86 87)
@@ -640,6 +644,12 @@ endif()
 if(NOT WIN32)
   # Add common library search paths so executables and libraries can load and run
   # without LD_LIBRARY_PATH being set.
+  if(CUTLASS_ENABLE_SYCL)
+  link_libraries(
+    "-Wl,-rpath,'${CUDA_TOOLKIT_ROOT_DIR}/lib64'"
+    "-Wl,-rpath,'${CUDA_TOOLKIT_ROOT_DIR}/lib'"
+    )
+   else()
   link_libraries(
     "-Wl,-rpath,'$ORIGIN'"
     "-Wl,-rpath,'$ORIGIN/../lib64'"
@@ -647,6 +657,7 @@ if(NOT WIN32)
     "-Wl,-rpath,'${CUDA_TOOLKIT_ROOT_DIR}/lib64'"
     "-Wl,-rpath,'${CUDA_TOOLKIT_ROOT_DIR}/lib'"
     )
+   endif()
 endif()
 
 ################################################################################
