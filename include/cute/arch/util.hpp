@@ -112,20 +112,21 @@ cast_smem_ptr_to_uint(void const* const ptr)
 
   return __nvvm_get_smem_pointer(ptr);
 
-#elif defined(__CUDA_ARCH__) || defined(CUTLASS_ENABLE_SYCL)
+#elif defined(CUTLASS_ENABLE_SYCL)
+
+    return (intptr_t)(__attribute__((opencl_local)) void const *)ptr;
+
+#elif defined(__CUDA_ARCH__) 
 
   uint32_t smem_ptr;
 
-#if defined(SYCL_ENABLE_NVPTX)
   asm(
   "{ .reg .u64 smem_ptr; cvta.to.shared.u64 smem_ptr, %1; cvt.u32.u64 %0, smem_ptr; }\n" 
     : "=r"(smem_ptr) : "l"(ptr));
-#endif
 
   return smem_ptr;
 
 #else
-
 
   (void) ptr;
   printf("ERROR: cast_smem_ptr_to_uint not supported but used.\n");
