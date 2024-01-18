@@ -51,8 +51,8 @@ using TileShape = Shape<_128, _128, _32>;
 
 using TiledMma = TiledMMA<
         MMA_Atom<SM80_16x8x16_F32F16F16F32_TN>,
-        Layout<Shape<_2,_2,_1>>, // 2x2x1 thread group
-        Layout<Shape<_1,_2,_1>>>;                    // 1x2x1 value group for 16x16x16 and LDSM
+        Layout<Shape<_2,_2,_1>>,  // 2x2x1 thread group
+        Tile<_32,_32,_16>>;       // 32x32x16 MMA for LDSM, 1x2x1 value group
 
 // Smem
 using SmemLayoutAtomA = decltype(

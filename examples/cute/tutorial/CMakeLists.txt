@@ -45,9 +45,8 @@ else ()
           sgemm_nt_tensorop_1
           sgemm_nt_tensorop_1.cu
   )
+  cutlass_example_add_executable(
+          tiled_copy
+          tiled_copy.cu
+  )
 endif ()
-
-cutlass_example_add_executable(
-  tiled_copy
-  tiled_copy.cu
-)
