@@ -116,7 +116,7 @@ cast_smem_ptr_to_uint(void const* const ptr)
 
     return (intptr_t)(__attribute__((opencl_local)) void const *)ptr;
 
-#elif defined(__CUDA_ARCH__) 
+#elif defined(__CUDA_ARCH__)
 
   uint32_t smem_ptr;
 
