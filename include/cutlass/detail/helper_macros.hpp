@@ -49,6 +49,9 @@
 #if defined(__NVCC__) || (defined(__clang__) && defined(__CUDA__))
 #define CUTLASS_HOST_DEVICE __forceinline__ __device__ __host__
 #define CUTLASS_DEVICE __forceinline__ __device__
+#elif defined(CUTLASS_ENABLE_SYCL)
+#define CUTLASS_HOST_DEVICE __attribute__((always_inline))
+#define CUTLASS_DEVICE __attribute__((always_inline))
 #elif defined(__CUDACC_RTC__)
 #define CUTLASS_HOST_DEVICE __forceinline__ __device__
 #define CUTLASS_DEVICE __forceinline__ __device__
