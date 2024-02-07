@@ -62,6 +62,10 @@ else ()
           sgemm_nt_multistage_tensorop_tf32_1.cu
   )
   cutlass_example_add_executable(
+          sgemm_nt_cutlass_multistage_tensorop_tf32_1
+          sgemm_nt_cutlass_multistage_tensorop_tf32_1.cu
+  )
+  cutlass_example_add_executable(
           tiled_copy
           tiled_copy.cu
   )
