@@ -101,10 +101,10 @@ struct Options {
   
   Options():
     help(false),
-    problem_size({5120, 4096, 4096}),
+    problem_size({5120, 5120, 4096}),
     batch_count(1),
     reference_check(true),
-    iterations(20),
+    iterations(100),
     alpha(1),
     beta() { }
 
@@ -175,9 +175,9 @@ using ElementOutput = float;                        // <- data type of elements 
 
 // The code section below describes matrix layout of input and output matrices. Column Major for
 // Matrix A, Row Major for Matrix B and Row Major for Matrix C
-using LayoutInputA = cutlass::layout::RowMajor;
-using LayoutInputB = cutlass::layout::ColumnMajor;
-using LayoutOutput = cutlass::layout::RowMajor;
+using LayoutInputA = cutlass::layout::ColumnMajor;
+using LayoutInputB = cutlass::layout::RowMajor;
+using LayoutOutput = cutlass::layout::ColumnMajor;
 
 // This code section describes whether you want to use tensor cores or regular SIMT cores on GPU SM
 using MMAOp = cutlass::arch::OpClassTensorOp;
