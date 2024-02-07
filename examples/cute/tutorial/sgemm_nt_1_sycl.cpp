@@ -44,8 +44,8 @@ void gemm_device(MShape M, NShape N, KShape K,
     CUTE_STATIC_ASSERT_V(shape<1>(blockA) == shape<1>(blockB));        // BLK_K
 
     // Shared memory buffers
-    auto smemA = syclcompat::local_mem<TA[cosize_v<ABlockLayout>]>();
-    auto smemB = syclcompat::local_mem<TB[cosize_v<BBlockLayout>]>();
+    auto smemA = *(sycl::ext::oneapi::group_local_memory_for_overwrite<TA[cosize_v<ABlockLayout>]>(syclcompat::this_nd_item<1>().get_group()));    // syclcompat::local_mem<TA[cosize_v<ABlockLayout>]>();
+    auto smemB = *(sycl::ext::oneapi::group_local_memory_for_overwrite<TB[cosize_v<BBlockLayout>]>(syclcompat::this_nd_item<1>().get_group())); // syclcompat::local_mem<TB[cosize_v<BBlockLayout>]>();
     auto sA = make_tensor(make_smem_ptr(smemA), blockA);               // (BLK_M,BLK_K)
     auto sB = make_tensor(make_smem_ptr(smemB), blockB);               // (BLK_N,BLK_K)
 
