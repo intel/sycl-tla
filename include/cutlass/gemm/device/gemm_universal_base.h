@@ -355,7 +355,14 @@ public:
     else {
       CUTLASS_ASSERT(cuda_adapter == nullptr);
 
+#if defined(CUTLASS_ENABLE_SYCL)
+      const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
+      const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
+
+      syclcompat::launch<Kernel2<GemmKernel>>(sycl_grid, sycl_block, smem_size_, params_);
+#else
       Kernel2<GemmKernel><<<grid, block, smem_size_, stream>>>(params_);
+#endif
 
       // Query for errors
       cudaError_t result = cudaGetLastError();

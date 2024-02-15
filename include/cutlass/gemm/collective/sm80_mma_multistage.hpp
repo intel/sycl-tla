@@ -279,7 +279,7 @@ struct CollectiveMma<
     if (K_BLOCK_MAX > 1) {
       // Wait until our first prefetched tile is loaded in
       cp_async_wait<DispatchPolicy::Stages-2>();
-      __syncthreads();
+      syncthreads();
 
       // Prefetch the first rmem from the first k-tile
       copy(smem_tiled_copy_A, tCsA_p(_,_,Int<0>{}), tCrA_copy_view(_,_,Int<0>{}));
@@ -290,11 +290,16 @@ struct CollectiveMma<
     CUTLASS_PRAGMA_NO_UNROLL
     for ( ; k_tile_count > -(DispatchPolicy::Stages-1); --k_tile_count)
     {
+
       // Pipeline the outer products with a static for loop.
-      //
-      // Note, the for_each() function is required here to ensure `k_block` is of type Int<x>.
+#if defined(CUTLASS_ENABLE_SYCL)
+      CUTLASS_PRAGMA_UNROLL
+      for (auto k_block = 0; k_block < K_BLOCK_MAX; ++k_block) {
+#else
+        // Note, the for_each() function is required here to ensure `k_block` is of type Int<N>.
       for_each(make_int_sequence<K_BLOCK_MAX>{}, [&] (auto k_block)
       {
+#endif
         if (k_block == K_BLOCK_MAX - 1)
         {
           // Slice the smem_pipe_read smem
@@ -303,7 +308,7 @@ struct CollectiveMma<
 
           // Commit the smem for smem_pipe_read
           cp_async_wait<DispatchPolicy::Stages-2>();
-          __syncthreads();
+          syncthreads();
         }
 
         // Load A, B shmem->regs for k_block+1
@@ -329,8 +334,10 @@ struct CollectiveMma<
         cute::transform(tCrB(_,_,k_block), TransformB{});
         // Thread-level register gemm for k_block
         cute::gemm(tiled_mma, accum, tCrA(_,_,k_block), tCrB(_,_,k_block), src_accum);
-      });
-
+      }
+#if !defined(CUTLASS_ENABLE_SYCL)
+      );
+#endif
     }
   }
 };
@@ -620,7 +627,7 @@ struct CollectiveMma<
     if (K_BLOCK_MAX > 1) {
       // Wait until our first prefetched tile is loaded in
       cp_async_wait<DispatchPolicy::Stages-2>();
-      __syncthreads();
+      syncthreads();
 
       // Prefetch the first rmem from the first k-tile
       copy(smem_tiled_copy_A, tCsA_p(_,_,Int<0>{}), tCrA_copy_view(_,_,Int<0>{}));
@@ -633,34 +640,37 @@ struct CollectiveMma<
     {
       // Pipeline the outer products with a static for loop.
       //
+#if defined(CUTLASS_ENABLE_SYCL)
+      CUTLASS_PRAGMA_UNROLL
+      for (auto k_block = 0; k_block < K_BLOCK_MAX; ++k_block) {
+#else
       // Note, the for_each() function is required here to ensure `k_block` is of type Int<N>.
       for_each(make_int_sequence<K_BLOCK_MAX>{}, [&] (auto k_block)
       {
-        if (k_block == K_BLOCK_MAX - 1)
-        {
+#endif
+        if (k_block == K_BLOCK_MAX - 1) {
           // Slice the smem_pipe_read smem
-          tCsA_p = tCsA(_,_,_,smem_pipe_read);
-          tCsB_p = tCsB(_,_,_,smem_pipe_read);
+          tCsA_p = tCsA(_, _, _, smem_pipe_read);
+          tCsB_p = tCsB(_, _, _, smem_pipe_read);
 
           // Commit the smem for smem_pipe_read
-          cp_async_wait<DispatchPolicy::Stages-2>();
-          __syncthreads();
+          cp_async_wait<DispatchPolicy::Stages - 2>();
+          syncthreads();
         }
 
         // Load A, B shmem->regs for k_block+1
         auto k_block_next = (k_block + Int<1>{}) % K_BLOCK_MAX;  // static
-        copy(smem_tiled_copy_A, tCsA_p(_,_,k_block_next), tCrA_copy_view(_,_,k_block_next));
-        copy(smem_tiled_copy_B, tCsB_p(_,_,k_block_next), tCrB_copy_view(_,_,k_block_next));
+        copy(smem_tiled_copy_A, tCsA_p(_, _, k_block_next), tCrA_copy_view(_, _, k_block_next));
+        copy(smem_tiled_copy_B, tCsB_p(_, _, k_block_next), tCrB_copy_view(_, _, k_block_next));
         // Copy gmem to smem before computing gemm on each k-pipe
-        if (k_block == 0)
-        {
+        if (k_block == 0) {
           // Set all predicates to false if we are going to overshoot bounds
           if (k_tile_count <= 0) {
             clear(tApA);
             clear(tBpB);
           }
-          copy_if(gmem_tiled_copy_A, tApA, tAgA(_,_,_,*k_tile_iter), tAsA(_,_,_,smem_pipe_write));
-          copy_if(gmem_tiled_copy_B, tBpB, tBgB(_,_,_,*k_tile_iter), tBsB(_,_,_,smem_pipe_write));
+          copy_if(gmem_tiled_copy_A, tApA, tAgA(_, _, _, *k_tile_iter), tAsA(_, _, _, smem_pipe_write));
+          copy_if(gmem_tiled_copy_B, tBpB, tBgB(_, _, _, *k_tile_iter), tBsB(_, _, _, smem_pipe_write));
           cp_async_fence();
           ++k_tile_iter;
 
@@ -671,12 +681,14 @@ struct CollectiveMma<
         }
 
         // Transform before compute
-        cute::transform(tCrA(_,_,k_block), TransformA{});
-        cute::transform(tCrB(_,_,k_block), TransformB{});
+        cute::transform(tCrA(_, _, k_block), TransformA{});
+        cute::transform(tCrB(_, _, k_block), TransformB{});
         // Thread-level register gemm for k_block
-        cute::gemm(tiled_mma, accum, tCrA(_,_,k_block), tCrB(_,_,k_block), src_accum);
-      });
-
+        cute::gemm(tiled_mma, accum, tCrA(_, _, k_block), tCrB(_, _, k_block), src_accum);
+      }
+#if !defined(CUTLASS_ENABLE_SYCL)
+      );
+#endif
     }
   }
 };

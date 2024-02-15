@@ -2508,7 +2508,7 @@ namespace detail {
     template <int Offset, size_t ParentWidth, typename ArrayConverter>
     CUTLASS_DEVICE
     static void convert_helper(
-      typename ArrayConverter::result_type& result, 
+      typename ArrayConverter::result_type& result,
       typename ArrayConverter::source_type const& source) {
 
       using ElementRes = typename ArrayConverter::result_type::Element;
@@ -2530,14 +2530,14 @@ namespace detail {
     static void convert_helper(typename ArrayConverter::result_type& result, typename ArrayConverter::source_type const& source) {
       static_assert(sizeof...(OtherVectorArrays) % 2 == 0, "Vector converters must come in {dst, src} pairs");
       static_assert(ResultVectorArray::kElements == SourceVectorArray::kElements, "Vector converters must have the same vector width");
-      static_assert(cutlass::platform::is_same<typename ArrayConverter::result_type::Element, typename ResultVectorArray::Element>::value, 
+      static_assert(cutlass::platform::is_same<typename ArrayConverter::result_type::Element, typename ResultVectorArray::Element>::value,
         "ResultVectorArray must have the same type ArrayConverter::result_type");
-      static_assert(cutlass::platform::is_same<typename ArrayConverter::source_type::Element, typename SourceVectorArray::Element>::value, 
+      static_assert(cutlass::platform::is_same<typename ArrayConverter::source_type::Element, typename SourceVectorArray::Element>::value,
         "SourceVectorArray must have the same type ArrayConverter::result_type");
       static_assert(Offset >= 0 && Offset <= ArrayConverter::result_type::kElements, "Offset must be between 0 and N");
 
       static_assert(ParentWidth == 0 || ParentWidth > ResultVectorArray::kElements, "Vector arrays must be given in decreasing order of width");
-      
+
       constexpr int vector_width = ResultVectorArray::kElements;
       static_assert(ispow2(vector_width), "Vector width must be a power of 2");
 
@@ -2569,8 +2569,8 @@ namespace detail {
 
   public:
     /*
-        A method to convert vectors of elements using the packed_convert method of the converter. 
-        
+        A method to convert vectors of elements using the packed_convert method of the converter.
+
         Converters using this class must implement packed convert and support 1 or more vector conversions.
       */
     template <typename ArrayConverter, typename ResultVectorArray, typename SourceVectorArray, typename... OtherVectorArrays>
@@ -2651,7 +2651,7 @@ private:
       uint32_t final_prmt_idx = final_prmt_base | sign;
 
       // This uses a look up table to convert packed int4s to packed fp8s, using the int4 value
-      // as the index to prmt. 
+      // as the index to prmt.
       // It first select both the positive and negative candidates, then uses the sign bit to
       // select the correct candidate.
       asm volatile(
@@ -2675,8 +2675,8 @@ public:
   static result_type convert(source_type const &source) {
     result_type result;
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_8, source_type_packed_8, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_8, source_type_packed_8,
                                          result_type_packed_4, source_type_packed_4>(result, source);
 
     return result;
@@ -2684,7 +2684,7 @@ public:
 
 
   CUTLASS_DEVICE
-  result_type operator()(source_type const &s) const { 
+  result_type operator()(source_type const &s) const {
     return convert(s);
   }
 };
@@ -2771,7 +2771,7 @@ private:
                   (platform::is_same<PackedSrcType, source_type_packed_8>::value &&
                    platform::is_same<PackedResultType, result_type_packed_8>::value),
                   "Invalid PackedSrcType/PackedResultType must be 1, 2, 4 or 8 to use private convert dispatch.");
-    
+
     // Hold output FP16s in reg. We need 1 reg for every 2 elements
     PackedResultType r;
 
@@ -2788,23 +2788,23 @@ private:
     return r;
   }
 
-  friend class detail::VectorizedConverter; 
+  friend class detail::VectorizedConverter;
 
 public:
   CUTLASS_DEVICE
   static result_type convert(source_type const &source) {
     result_type result;
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_8, source_type_packed_8, 
-                                         result_type_packed_4, source_type_packed_4, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_8, source_type_packed_8,
+                                         result_type_packed_4, source_type_packed_4,
                                          result_type_packed_2, source_type_packed_2>(result, source);
 
     return result;
   }
 
   CUTLASS_DEVICE
-  result_type operator()(source_type const &s) const { 
+  result_type operator()(source_type const &s) const {
     return convert(s);
   }
 };
@@ -2844,7 +2844,7 @@ private:
                   (platform::is_same<PackedSrcType, source_type_packed_4>::value &&
                    platform::is_same<PackedResultType, result_type_packed_4>::value),
                   "Invalid PackedSrcType/PackedResultType must be 2 or 4 to use private convert dispatch.");
-    
+
     PackedResultType r;
     // View the input as reg
     uint32_t src_reg = to_reg(source);
@@ -2875,15 +2875,15 @@ public:
     result_type result;
 
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_4, source_type_packed_4, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_4, source_type_packed_4,
                                          result_type_packed_2, source_type_packed_2>(result, source);
 
     return result;
   }
 
   CUTLASS_DEVICE
-  result_type operator()(source_type const &s) const { 
+  result_type operator()(source_type const &s) const {
     return convert(s);
   }
 };
@@ -2923,12 +2923,12 @@ private:
                   (platform::is_same<PackedSrcType, source_type_packed_4>::value &&
                    platform::is_same<PackedResultType, result_type_packed_4>::value),
                   "Invalid PackedSrcType/PackedResultType must be 2 or 4 to use private convert dispatch.");
-    
+
     PackedResultType r;
     // View the input as reg
     uint32_t src_reg = to_reg(source);
 
-    // __byte_perm simulates the add.u32 0x4B000000 to every u8 element of u8x4 source and stores 
+    // __byte_perm simulates the add.u32 0x4B000000 to every u8 element of u8x4 source and stores
     // the result in r (without introducing extra cvt.u32.u8 instruction)
     uint32_t const prmt_indices[4] = {0x7650, 0x7651, 0x7652, 0x7653};
     uint32_t* result_as_int = reinterpret_cast<uint32_t*>(&r);
@@ -2948,15 +2948,15 @@ public:
   static result_type convert(source_type const &source) {
     result_type result;
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_4, source_type_packed_4, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_4, source_type_packed_4,
                                          result_type_packed_2, source_type_packed_2>(result, source);
 
     return result;
   }
 
   CUTLASS_DEVICE
-  result_type operator()(source_type const &s) const { 
+  result_type operator()(source_type const &s) const {
     return convert(s);
   }
 };
@@ -3010,10 +3010,10 @@ private:
                   (platform::is_same<PackedSrcType, source_type_packed_8>::value &&
                    platform::is_same<PackedResultType, result_type_packed_8>::value),
                   "Invalid PackedSrcType/PackedResultType must be 2, 4 or 8 to use private convert dispatch.");
-    
+
     // Hold output FP16s in reg. We need 1 reg for every 2 elements
     using RegArray = cutlass::AlignedArray<uint32_t, PackedResultType::kElements / 2, sizeof(PackedResultType)>;
-    RegArray r; 
+    RegArray r;
 
     // View the input as reg
     uint32_t src_reg = to_reg(source);
@@ -3034,7 +3034,7 @@ private:
           "  prmt.b32 %0, %1, %2, %3;\n"
           "}\n"
           : "=r"(r[ii])
-          : "r"(src_reg), "n"(0), "r"(prmt_indices[ii]));     
+          : "r"(src_reg), "n"(0), "r"(prmt_indices[ii]));
     }
 
     // The below XOR does the following:
@@ -3057,7 +3057,7 @@ private:
           "  lop3.b32 %0, %0, %1, %2, %3;\n"
           "}\n"
           : "+r"(r[ii])
-          : "n"(and_mask), "n"(xor_mask), "n"(immLut));     
+          : "n"(and_mask), "n"(xor_mask), "n"(immLut));
     }
 
     // We will issue 2 hfmas that do the following:
@@ -3087,23 +3087,23 @@ private:
     return reinterpret_cast<PackedResultType&>(r);
   }
 
-  friend class detail::VectorizedConverter; 
+  friend class detail::VectorizedConverter;
 
 public:
   CUTLASS_DEVICE
   static result_type convert(source_type const &source) {
     result_type result;
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_8, source_type_packed_8, 
-                                         result_type_packed_4, source_type_packed_4, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_8, source_type_packed_8,
+                                         result_type_packed_4, source_type_packed_4,
                                          result_type_packed_2, source_type_packed_2>(result, source);
 
     return result;
   }
 
   CUTLASS_DEVICE
-  result_type operator()(source_type const &s) const { 
+  result_type operator()(source_type const &s) const {
     return convert(s);
   }
 };
@@ -3145,10 +3145,10 @@ private:
                   (platform::is_same<PackedSrcType, source_type_packed_4>::value &&
                    platform::is_same<PackedResultType, result_type_packed_4>::value),
                   "Invalid PackedSrcType/PackedResultType must be 2 or 4 to use private convert dispatch.");
-    
+
     // Hold output FP16s in reg. We need 1 reg for every 2 elements
     using RegArray = cutlass::AlignedArray<uint32_t, PackedResultType::kElements / 2, sizeof(PackedResultType)>;
-    RegArray r; 
+    RegArray r;
 
     #if 0 // Scalar conversion (Please keep this code for reference for vectorized version below)
     auto result = reinterpret_cast<PackedResultType&>(r);
@@ -3187,7 +3187,7 @@ private:
 
     for (int ii = 0; ii < RegArray::kElements; ++ii) {
       // The bit-wise operation executed below is `r[ii] = (r[ii] & 0x03FF03FF) ^ 0x66006600;`
-      asm volatile("lop3.b32 %0, %1, %2, %3, %4;\n" : 
+      asm volatile("lop3.b32 %0, %1, %2, %3, %4;\n" :
                                 "=r"(r[ii]) : "r"(r[ii]), "n"(0x03FF03FF), "n"(0x66006600), "n"(kImmLut));
     }
 
@@ -3209,8 +3209,8 @@ public:
     result_type result;
 
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_4, source_type_packed_4, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_4, source_type_packed_4,
                                          result_type_packed_2, source_type_packed_2>(result, source);
     return result;
   }
@@ -3256,11 +3256,11 @@ private:
                   (platform::is_same<PackedSrcType, source_type_packed_4>::value &&
                    platform::is_same<PackedResultType, result_type_packed_4>::value),
                   "Invalid PackedSrcType/PackedResultType must be 2 or 4 to use private convert dispatch.");
-    
+
     // Hold output FP16s in reg. We need 1 reg for every 2 elements
     using RegArray = cutlass::AlignedArray<uint32_t, PackedResultType::kElements / 2, sizeof(PackedResultType)>;
-    RegArray r; 
-  
+    RegArray r;
+
     // View the input as reg
     uint32_t src_reg = to_reg(source);
     uint32_t const prmt_indices[2] = {0x5150, 0x5352};
@@ -3289,8 +3289,8 @@ public:
     result_type result;
 
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_4, source_type_packed_4, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_4, source_type_packed_4,
                                          result_type_packed_2, source_type_packed_2>(result, source);
 
     return result;
@@ -3352,10 +3352,10 @@ private:
                   (platform::is_same<PackedSrcType, source_type_packed_8>::value &&
                    platform::is_same<PackedResultType, result_type_packed_8>::value),
                   "Invalid PackedSrcType/PackedResultType must be 2, 4 or 8 to use private convert dispatch.");
-    
+
     // Hold output FP16s in reg. We need 1 reg for every 2 elements
     using RegArray = cutlass::AlignedArray<uint32_t, PackedResultType::kElements / 2, sizeof(PackedResultType)>;
-    RegArray r; 
+    RegArray r;
 
     // View the input as reg
     uint32_t src_reg = to_reg(source);
@@ -3371,7 +3371,7 @@ private:
           "  prmt.b32 %0, %1, %2, %3;\n"
           "}\n"
           : "=r"(r[ii])
-          : "r"(src_reg), "r"(src_reg_shifted), "r"(prmt_indices[ii]));     
+          : "r"(src_reg), "r"(src_reg_shifted), "r"(prmt_indices[ii]));
     }
 
     // The below XOR does the following:
@@ -3390,7 +3390,7 @@ private:
           "  lop3.b32 %0, %0, %1, %2, %3;\n"
           "}\n"
           : "+r"(r[ii])
-          : "n"(and_mask), "n"(xor_mask), "n"(immLut));     
+          : "n"(and_mask), "n"(xor_mask), "n"(immLut));
     }
 
     // We will issue 2 bfmas that do the following:
@@ -3400,7 +3400,7 @@ private:
     // This is the BF16 {136, 136} represented as an integer.
     static constexpr uint32_t bias_rep = 0x43084308;
     const __nv_bfloat162& bias = reinterpret_cast<const __nv_bfloat162&>(bias_rep);
-    
+
     CUTLASS_PRAGMA_UNROLL
     for (int ii = 0; ii < RegArray::kElements; ++ii) {
       __nv_bfloat162& bf16x2_val = reinterpret_cast<__nv_bfloat162&>(r[ii]);
@@ -3410,23 +3410,23 @@ private:
     return reinterpret_cast<PackedResultType&>(r);
   }
 
-  friend class detail::VectorizedConverter; 
+  friend class detail::VectorizedConverter;
 
 public:
   CUTLASS_DEVICE
   static result_type convert(source_type const &source) {
     result_type result;
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_8, source_type_packed_8, 
-                                         result_type_packed_4, source_type_packed_4, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_8, source_type_packed_8,
+                                         result_type_packed_4, source_type_packed_4,
                                          result_type_packed_2, source_type_packed_2>(result, source);
 
     return result;
   }
 
   CUTLASS_DEVICE
-  result_type operator()(source_type const &s) const { 
+  result_type operator()(source_type const &s) const {
     return convert(s);
   }
 };
@@ -3466,7 +3466,7 @@ private:
                   (platform::is_same<PackedSrcType, source_type_packed_4>::value &&
                    platform::is_same<PackedResultType, result_type_packed_4>::value),
                   "Invalid PackedSrcType/PackedResultType must be 2 or 4 to use private convert dispatch.");
-    
+
     NumericArrayConverter<float, int8_t, PackedResultType::kElements, Round> convert_int8_to_f32;
     Array<float, PackedResultType::kElements> tmp = convert_int8_to_f32(source);
     NumericArrayConverter<cutlass::bfloat16_t, float, PackedResultType::kElements, Round> convert_f32_to_bf16;
@@ -3481,8 +3481,8 @@ public:
     result_type result;
 
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_4, source_type_packed_4, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_4, source_type_packed_4,
                                          result_type_packed_2, source_type_packed_2>(result, source);
 
     return result;
@@ -3529,7 +3529,7 @@ private:
                   (platform::is_same<PackedSrcType, source_type_packed_4>::value &&
                    platform::is_same<PackedResultType, result_type_packed_4>::value),
                   "Invalid PackedSrcType/PackedResultType must be 2 or 4 to use private convert dispatch.");
-    
+
     NumericArrayConverter<float, uint8_t, PackedResultType::kElements, Round> convert_uint8_to_f32;
     Array<float, PackedResultType::kElements> tmp = convert_uint8_to_f32(source);
     NumericArrayConverter<cutlass::bfloat16_t, float, PackedResultType::kElements, Round> convert_f32_to_bf16_;
@@ -3543,8 +3543,8 @@ public:
   static result_type convert(source_type const &source) {
     result_type result;
     using ConverterType = NumericArrayConverter<typename result_type::Element, typename source_type::Element, N, Round>;
-    detail::VectorizedConverter::convert<ConverterType, 
-                                         result_type_packed_4, source_type_packed_4, 
+    detail::VectorizedConverter::convert<ConverterType,
+                                         result_type_packed_4, source_type_packed_4,
                                          result_type_packed_2, source_type_packed_2>(result, source);
 
     return result;

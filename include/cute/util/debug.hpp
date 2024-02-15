@@ -94,7 +94,11 @@ namespace cute
 #endif
 
 #if !defined(CUTE_CHECK_LAST)
+#if defined(CUTLASS_ENABLE_SYCL)
+#  define CUTE_CHECK_LAST() syclcompat::get_default_queue().wait_and_throw()
+#else
 #  define CUTE_CHECK_LAST() CUTE_ERROR_EXIT(cudaPeekAtLastError()); CUTE_ERROR_EXIT(cudaDeviceSynchronize())
+#endif
 #endif
 
 #if !defined(CUTE_CHECK_ERROR)
