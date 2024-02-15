@@ -322,6 +322,7 @@ void test_gemm(int m, int n, int k)
 
   // Run once (and check)
   run(gemm_op);
+  syclcompat::get_default_queue().wait_and_throw();
   CUTE_CHECK_LAST();
   thrust::host_vector<TC> cute_result = d_C;
 
@@ -330,9 +331,10 @@ void test_gemm(int m, int n, int k)
   for (int i = 0; i < timing_iterations; ++i) {
     run(gemm_op);
   }
+  syclcompat::get_default_queue().wait_and_throw();
   double cute_time = timer.seconds() / timing_iterations;
   CUTE_CHECK_LAST();
-  printf("CUDA_CUTLASS_GEMM:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
+  printf("SYCL_CUTLASS_GEMM:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
 
 #if defined(CUTLASS_ENABLE_CUBLAS) && CUTLASS_ENABLE_CUBLAS != 0
   printf("Empirical Perf: %.1f%%\n", (cublas_time / cute_time) * 100);

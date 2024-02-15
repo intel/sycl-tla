@@ -128,6 +128,11 @@ namespace cutlass {
 
   #define CUTLASS_GEMM_LOOP CUTLASS_PRAGMA_NO_UNROLL
 
+#elif defined(CUTLASS_ENABLE_SYCL)
+  #define CUTLASS_PRAGMA_UNROLL _Pragma("unroll")
+  #define CUTLASS_PRAGMA_NO_UNROLL _Pragma("unroll 1")
+  #define CUTLASS_GEMM_LOOP CUTLASS_PRAGMA_NO_UNROLL
+
 #else
 
     #define CUTLASS_PRAGMA_UNROLL

@@ -47,6 +47,175 @@
 
 #include "cutlass/detail/helper_macros.hpp"
 
+#if defined(CUTLASS_ENABLE_SYCL)
+#if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__)
+#  define SYCL_ENABLE_NVPTX 1
+#endif
+#else
+#  define SYCL_ENABLE_NVPTX 1
+#endif
+
+#if defined(CUTLASS_ENABLE_SYCL)
+
+#include "syclcompat.hpp"
+
+class NotImplementedException : public std::logic_error
+{
+private:
+
+    std::string _text;
+
+    NotImplementedException(const char* message, const char* function)
+            :
+            std::logic_error("Not Implemented")
+    {
+      _text = message;
+      _text += " : ";
+      _text += function;
+    };
+
+public:
+
+    NotImplementedException()
+            :
+            NotImplementedException("Not Implememented", __FUNCTION__)
+    {
+    }
+
+    NotImplementedException(const char* message)
+            :
+            NotImplementedException(message, __FUNCTION__)
+    {
+    }
+
+    virtual const char *what() const throw()
+    {
+      return _text.c_str();
+    }
+};
+
+constexpr uint warpSize = 32;
+
+// threadIdx
+
+CUTLASS_DEVICE uint ThreadIdxX() { return syclcompat::local_id::x(); }
+CUTLASS_DEVICE uint ThreadIdxY() { return syclcompat::local_id::y(); }
+CUTLASS_DEVICE uint ThreadIdxZ() { return syclcompat::local_id::z(); }
+
+// blockIdx
+
+CUTLASS_DEVICE uint BlockIdxX() { return syclcompat::work_group_id::x(); }
+CUTLASS_DEVICE uint BlockIdxY() { return syclcompat::work_group_id::y(); }
+CUTLASS_DEVICE uint BlockIdxZ() { return syclcompat::work_group_id::z(); }
+
+// blockDim
+
+CUTLASS_DEVICE uint BlockDimX() { return syclcompat::work_group_range::x(); }
+CUTLASS_DEVICE uint BlockDimY() { return syclcompat::work_group_range::y(); }
+CUTLASS_DEVICE uint BlockDimZ() { return syclcompat::work_group_range::z(); }
+
+// gridDim
+
+CUTLASS_DEVICE uint GridDimX() { return syclcompat::global_range::x(); }
+CUTLASS_DEVICE uint GridDimY() { return syclcompat::global_range::y(); }
+CUTLASS_DEVICE uint GridDimZ() { return syclcompat::global_range::z(); }
+
+// sync
+
+CUTLASS_DEVICE void syncthreads() { syclcompat::wg_barrier(); }
+CUTLASS_DEVICE int syncthreads_and(int cond) { throw NotImplementedException(); }
+CUTLASS_DEVICE void syncwarp() { throw NotImplementedException(); }
+
+CUTLASS_DEVICE void threadfence() { throw NotImplementedException(); }
+
+// byte perm
+
+CUTLASS_DEVICE
+uint byte_perm(uint x, uint y, uint s) {
+//  return __imf_byte_perm(x, y, s);
+  throw NotImplementedException();
+}
+
+// shfl
+
+CUTLASS_DEVICE
+uint shfl_up_sync(const unsigned mask, const uint var, const int delta, const int width = warpSize) {
+  throw NotImplementedException();
+}
+
+CUTLASS_DEVICE
+uint shfl_down_sync(const unsigned mask, const uint var, const int delta, const int width = warpSize) {
+  throw NotImplementedException();
+}
+
+CUTLASS_DEVICE
+uint shfl_sync(const unsigned mask, const uint var, const int delta, const int width = warpSize) {
+  throw NotImplementedException();
+}
+
+// atomic
+
+CUTLASS_DEVICE int atomicAdd(int *address, int val) {
+  throw NotImplementedException();
+}
+
+CUTLASS_DEVICE int atomicCAS(int *address, int compare, int val) {
+  throw NotImplementedException();
+}
+
+#else
+
+CUTLASS_HOST_DEVICE uint ThreadIdxX() { return threadIdx.x; }
+CUTLASS_HOST_DEVICE uint ThreadIdxY() { return threadIdx.y; }
+CUTLASS_HOST_DEVICE uint ThreadIdxZ() { return threadIdx.z; }
+
+CUTLASS_HOST_DEVICE uint BlockIdxX() { return blockIdx.x; }
+CUTLASS_HOST_DEVICE uint BlockIdxY() { return blockIdx.y; }
+CUTLASS_HOST_DEVICE uint BlockIdxZ() { return blockIdx.z; }
+
+CUTLASS_HOST_DEVICE uint BlockDimX() { return blockDim.x; }
+CUTLASS_HOST_DEVICE uint BlockDimY() { return blockDim.y; }
+CUTLASS_HOST_DEVICE uint BlockDimZ() { return blockDim.z; }
+
+CUTLASS_HOST_DEVICE uint GridDimX() { return gridDim.x; }
+CUTLASS_HOST_DEVICE uint GridDimY() { return gridDim.y; }
+CUTLASS_HOST_DEVICE uint GridDimZ() { return gridDim.z; }
+
+// syncthreads
+
+CUTLASS_DEVICE void syncthreads() { __syncthreads(); }
+CUTLASS_DEVICE int syncthreads_and(int cond) { return __syncthreads_and(cond); }
+CUTLASS_DEVICE void syncwarp() { __syncwarp(); }
+
+CUTLASS_DEVICE void threadfence() { __threadfence(); }
+
+// byte perm
+
+CUTLASS_DEVICE
+uint byte_perm(uint x, uint y, uint s) {
+  return __byte_perm(x, y, s);
+}
+
+// shfl
+
+CUTLASS_DEVICE
+uint shfl_up_sync(const unsigned mask, const uint var, const int delta, const int width = warpSize) {
+  return __shfl_up_sync(mask, var, delta, width);
+}
+
+CUTLASS_DEVICE
+uint shfl_down_sync(const unsigned mask, const uint var, const int delta, const int width = warpSize) {
+  return __shfl_down_sync(mask, var, delta, width);
+}
+
+CUTLASS_DEVICE
+uint shfl_sync(const unsigned mask, const uint var, const int delta, const int width = warpSize) {
+  return __shfl_sync(mask, var, delta, width);
+}
+
+#endif
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass {

@@ -39,6 +39,7 @@
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/gemm/device/gemm_universal.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
+#include "cutlass/gemm/collective/collective_mma.hpp"
 
 #include <cute/tensor.hpp>
 
@@ -52,36 +53,6 @@
 
 #include "cutlass/detail/dependent_false.hpp"
 #include "cutlass/util/device_memory.h"
-
-/////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace cutlass::gemm::collective {
-
-/////////////////////////////////////////////////////////////////////////////////////////////////
-
-    template<
-            class DispatchPolicy,
-            class TileShape,
-            class ElementA,
-            class StrideA,
-            class ElementB,
-            class StrideB,
-            class TiledMma,
-            class GmemTiledCopyA,
-            class SmemLayoutAtomA,
-            class SmemCopyAtomA,
-            class TransformA,
-            class GmemTiledCopyB,
-            class SmemLayoutAtomB,
-            class SmemCopyAtomB,
-            class TransformB
-    >
-    struct CollectiveMma {
-        static_assert(cutlass::detail::dependent_false<ElementA> == 0, "Could not find a mainloop specialization.");
-    };
-}
-
-#include "cutlass/gemm/collective/sm80_mma_multistage.hpp"
 
 using namespace cute;
 
@@ -330,9 +301,9 @@ void test_gemm(int m, int n, int k)
   for (int i = 0; i < timing_iterations; ++i) {
     run(gemm_op);
   }
-  double cute_time = timer.seconds() / timing_iterations;
   CUTE_CHECK_LAST();
-  printf("CUDA_CUTLASS_GEMM:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
+  double cute_time = timer.seconds() / timing_iterations;
+  printf("CUTLASS_GEMM:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
 
 #if defined(CUTLASS_ENABLE_CUBLAS) && CUTLASS_ENABLE_CUBLAS != 0
   printf("Empirical Perf: %.1f%%\n", (cublas_time / cute_time) * 100);
@@ -349,8 +320,6 @@ void test_gemm(int m, int n, int k)
   const auto B_view = host_matrix_to_const_column_major_cute_tensor(h_B, n, k, n);
   const auto C_computed_view = host_matrix_to_const_column_major_cute_tensor(cute_result, m, n, m);
   const auto C_expected_view = host_matrix_to_const_column_major_cute_tensor(cublas_result, m, n, m);
-//  print_tensor(C_computed_view);
-//  print_tensor(C_expected_view);
   print_matrix_multiply_mollified_relative_error("float", A_view, B_view, C_computed_view, C_expected_view);
 
 #endif // CUTLASS_ENABLE_CUBLAS

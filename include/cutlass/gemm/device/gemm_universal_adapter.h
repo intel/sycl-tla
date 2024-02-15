@@ -111,7 +111,7 @@ public:
 
   static ComplexTransform const kTransformA = cute::is_same_v<typename GemmKernel::CollectiveMainloop::TransformA, cute::conjugate> ?
                                               ComplexTransform::kConjugate : ComplexTransform::kNone;
-  static ComplexTransform const kTransformB = cute::is_same_v<typename GemmKernel::CollectiveMainloop::TransformB, cute::conjugate> ? 
+  static ComplexTransform const kTransformB = cute::is_same_v<typename GemmKernel::CollectiveMainloop::TransformB, cute::conjugate> ?
                                               ComplexTransform::kConjugate : ComplexTransform::kNone;
 
   // Legacy: Assume MultiplyAdd only since we do not use this tag type in 3.0
@@ -305,6 +305,7 @@ public:
 
       CUTLASS_ASSERT(cuda_adapter == nullptr);
 
+#if !defined(CUTLASS_ENABLE_SYCL)
       if (smem_size >= (48 << 10)) {
         CUTLASS_TRACE_HOST("  Setting smem size to " << smem_size);
         cudaError_t result = cudaFuncSetAttribute(
@@ -317,6 +318,7 @@ public:
           return Status::kErrorInternal;
         }
       }
+#endif
     }
 
     return Status::kSuccess;
@@ -399,7 +401,14 @@ public:
       }
       else {
         CUTLASS_ASSERT(cuda_adapter == nullptr);
+#if defined(CUTLASS_ENABLE_SYCL)
+        const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
+        const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
+
+        syclcompat::launch<device_kernel<GemmKernel>>(sycl_grid, sycl_block, smem_size, params);
+#else
         device_kernel<GemmKernel><<<grid, block, smem_size, stream>>>(params);
+#endif
       }
     }
 
@@ -599,7 +608,7 @@ public:
 
   /// Runs the kernel using initialized state.
   Status operator()(
-    cudaStream_t stream = nullptr, 
+    cudaStream_t stream = nullptr,
     CudaHostAdapter *cuda_adapter = nullptr) {
 
     return run(stream);
