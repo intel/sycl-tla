@@ -424,7 +424,7 @@ public:
     AccumulatorArrayT* reduction_workspace_array = reinterpret_cast<AccumulatorArrayT*>(group_reduction_workspace);
     AccumulatorArrayT* accumulator_array = reinterpret_cast<AccumulatorArrayT*>(&accumulators);
 
-    int barrier_group_thread_idx = threadIdx.x % BarrierManager::ThreadCount;
+    int barrier_group_thread_idx = ThreadIdxX() % BarrierManager::ThreadCount;
 
     // The number of tiles for which reduction is required is either:
     //   (a) the total number of output tiles (in the case of split-K)
