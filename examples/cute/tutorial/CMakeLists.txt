@@ -44,10 +44,6 @@ if (CUTLASS_ENABLE_SYCL)
           sgemm_nt_multistage_tensorop_tf32_1_sycl
           sgemm_nt_multistage_tensorop_tf32_1_sycl.cpp
   )
-  cutlass_example_add_executable(
-          sgemm_nt_cutlass_multistage_tensorop_tf32_1_sycl
-          sgemm_nt_cutlass_multistage_tensorop_tf32_1_sycl.cpp
-  )
 else ()
   cutlass_example_add_executable(
           sgemm_nt_1
@@ -64,10 +60,6 @@ else ()
   cutlass_example_add_executable(
           sgemm_nt_multistage_tensorop_tf32_1
           sgemm_nt_multistage_tensorop_tf32_1.cu
-  )
-  cutlass_example_add_executable(
-          sgemm_nt_cutlass_multistage_tensorop_tf32_1
-          sgemm_nt_cutlass_multistage_tensorop_tf32_1.cu
   )
   cutlass_example_add_executable(
           tiled_copy

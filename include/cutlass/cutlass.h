@@ -163,6 +163,13 @@ CUTLASS_DEVICE int atomicCAS(int *address, int compare, int val) {
   throw NotImplementedException();
 }
 
+// math
+
+template <typename T>
+CUTLASS_DEVICE T hfma2(const T a, const T b, const T c) {
+  throw NotImplementedException();
+}
+
 #else
 
 CUTLASS_HOST_DEVICE uint ThreadIdxX() { return threadIdx.x; }
@@ -211,6 +218,13 @@ uint shfl_down_sync(const unsigned mask, const uint var, const int delta, const 
 CUTLASS_DEVICE
 uint shfl_sync(const unsigned mask, const uint var, const int delta, const int width = warpSize) {
   return __shfl_sync(mask, var, delta, width);
+}
+
+// math
+
+template <typename T>
+CUTLASS_DEVICE T hfma2(const T a, const T b, const T c) {
+  return hfma2(a, b, c);
 }
 
 #endif

@@ -60,8 +60,8 @@ using TileShape = Shape<_128, _128, _32>;
 
 using TiledMma = TiledMMA<
         MMA_Atom<SM80_16x8x8_F32TF32TF32F32_TN>,
-        Layout<Shape<_2, _2, _1>, Stride<_2, _1, _1>>, // 2x2x1 thread group
-        Layout<Shape<_1, _2, _1>>>;                    // 1x2x1 value group for 16x16x8 and LDSM
+        Layout<Shape<_2,_2,_1>, Stride<_2, _1, _1>>, // 2x2x1 thread group
+        Tile<_32,_32,_8>>;                           // 32x32x8 MMA for LDSM, 1x2x1 value group
 
 // Smem
 using SmemLayoutAtomA = decltype(
@@ -106,12 +106,6 @@ using ElementInputA = float;                        // <- data type of elements 
 using ElementInputB = float;                        // <- data type of elements in input matrix B
 using ElementOutput = float;                        // <- data type of elements in output matrix D
 
-// The code section below describes matrix layout of input and output matrices. Column Major for
-// Matrix A, Row Major for Matrix B and Row Major for Matrix C
-//using LayoutInputA = cutlass::layout::ColumnMajor;
-//using LayoutInputB = cutlass::layout::ColumnMajor;
-//using LayoutOutput = cutlass::layout::ColumnMajor;
-
 // This code section describes whether you want to use tensor cores or regular SIMT cores on GPU SM
 using MMAOp = cutlass::arch::OpClassTensorOp;
 
@@ -121,7 +115,7 @@ using SmArch = cutlass::arch::Sm80;
 // This code section describes the epilogue part of the kernel
 using EpilogueOp = cutlass::epilogue::thread::LinearCombination<
         ElementOutput,                                     // <- data type of output matrix
-        1,//128 / cutlass::sizeof_bits<ElementOutput>::value,  // <- the number of elements per vectorized
+        128 / cutlass::sizeof_bits<ElementOutput>::value,  // <- the number of elements per vectorized
         // memory access. For a byte, it's 16
         // elements. This becomes the vector width of
         // math instructions in the epilogue too
@@ -156,8 +150,6 @@ void test_gemm(int m, int n, int k)
 
   for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( j % 11 );
   for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( j % 11 );
-//  for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( 2*(rand() / double(RAND_MAX)) - 1);
-//  for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( 2*(rand() / double(RAND_MAX)) - 1);
   for (int j = 0; j < m*n; ++j) h_C[j] = static_cast<TC>(-1);
 
   thrust::device_vector<TA> d_A = h_A;
