@@ -180,9 +180,6 @@ gemm_device(MShape M, NShape N, KShape K,
     copy(tAgA(_,_,_,k), tAsA);
     copy(tBgB(_,_,_,k), tBsB);
 
-    cp_async_fence();
-    cp_async_wait<0>();
-
     syclcompat::wg_barrier();
 
     // Copy smem to rmem
@@ -191,8 +188,6 @@ gemm_device(MShape M, NShape N, KShape K,
 
     // Compute gemm on smem
     gemm(tiled_mma, tCrC, tCrA, tCrB, tCrC);
-
-    syclcompat::wg_barrier();
   }
   //
   // Epilogue
@@ -263,8 +258,6 @@ void test_gemm(int m, int n, int k)
 
   for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( j % 10 );
   for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( j % 10 );
-//  for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( 2*(rand() / double(RAND_MAX)) - 1 );
-//  for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( 2*(rand() / double(RAND_MAX)) - 1 );
   for (int j = 0; j < m*n; ++j) h_C[j] = static_cast<TC>(-1);
 
   auto d_A = sycl::malloc_device<TA>(m*k, q);
