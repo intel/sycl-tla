@@ -180,21 +180,14 @@ gemm_device(MShape M, NShape N, KShape K,
 
     cp_async_fence();
     cp_async_wait<0>();
-
     __syncthreads();
 
     // Copy smem to rmem
     copy(smem_tiled_copy_A, tCsA, tCrA_copy_view);
     copy(smem_tiled_copy_B, tCsB, tCrB_copy_view);
 
-    // FIXME: identity does nothing
-    transform(tCrA, identity());
-    transform(tCsB, identity());
-
-      // Compute gemm on smem
+    // Compute gemm on smem
     gemm(tiled_mma, tCrC, tCrA, tCrB, tCrC);
-
-      __syncthreads();
   }
 
     //
@@ -271,8 +264,6 @@ void test_gemm(int m, int n, int k)
 
   for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( j % 10 );
   for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( j % 10 );
-//  for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( 2*(rand() / double(RAND_MAX)) - 1 );
-//  for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( 2*(rand() / double(RAND_MAX)) - 1 );
   for (int j = 0; j < m*n; ++j) h_C[j] = static_cast<TC>(-1);
 
   thrust::device_vector<TA> d_A = h_A;

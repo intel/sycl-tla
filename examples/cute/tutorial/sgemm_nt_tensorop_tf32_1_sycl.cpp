@@ -188,14 +188,8 @@ gemm_device(MShape M, NShape N, KShape K,
     copy(smem_tiled_copy_A, tCsA, tCrA_copy_view);
     copy(smem_tiled_copy_B, tCsB, tCrB_copy_view);
 
-    // FIXME: identity does nothing
-    transform(tCrA, identity());
-    transform(tCsB, identity());
-
-      // Compute gemm on smem
+    // Compute gemm on smem
     gemm(tiled_mma, tCrC, tCrA, tCrB, tCrC);
-
-    syclcompat::wg_barrier();
   }
   //
   // Epilogue
@@ -241,12 +235,12 @@ gemm(sycl::queue q, int m, int n, int k,
   const auto grid = syclcompat::dim3(ceil_div(size(M), size(bM)),
                                      ceil_div(size(N), size(bN)));
 
-    const int smem_size = (cosize_v<SmemLayoutA> + cosize_v<SmemLayoutA>) * sizeof(tfloat32_t);
+  const int smem_size = (cosize_v<SmemLayoutA> + cosize_v<SmemLayoutA>) * sizeof(tfloat32_t);
 
-    syclcompat::launch<
-            gemm_device<int, int, int, TA, decltype(dA), TB, decltype(dB),
-                    TC, decltype(dC), Alpha, Beta>
-    >(grid, block, smem_size, q, M,  N,  K, A, dA, B, dB, C, dC, alpha, beta);
+  syclcompat::launch<
+          gemm_device<int, int, int, TA, decltype(dA), TB, decltype(dB),
+                  TC, decltype(dC), Alpha, Beta>
+  >(grid, block, smem_size, q, M,  N,  K, A, dA, B, dB, C, dC, alpha, beta);
 }
 
 void test_gemm(int m, int n, int k)
@@ -268,8 +262,6 @@ void test_gemm(int m, int n, int k)
 
   for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( j % 10 );
   for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( j % 10 );
-//  for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( 2*(rand() / double(RAND_MAX)) - 1 );
-//  for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( 2*(rand() / double(RAND_MAX)) - 1 );
   for (int j = 0; j < m*n; ++j) h_C[j] = static_cast<TC>(-1);
 
   auto d_A = sycl::malloc_device<TA>(m*k, q);
