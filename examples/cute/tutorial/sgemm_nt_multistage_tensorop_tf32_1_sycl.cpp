@@ -230,7 +230,6 @@ gemm_device(MShape M, NShape N, KShape K,
     // Note, the for_each() function is required here to ensure `k_block` is of type Int<x>.
     CUTE_UNROLL
     for (auto k_block = 0; k_block < K_BLOCK_MAX; ++k_block) {
-//    for_each(make_int_sequence<K_BLOCK_MAX>{}, [&] (auto k_block) {
       if (k_block == K_BLOCK_MAX - 1) {
         // Slice the smem_pipe_read smem
         tCsA_p = tCsA(_, _, _, smem_pipe_read);
@@ -264,7 +263,6 @@ gemm_device(MShape M, NShape N, KShape K,
       cute::transform(tCrB(_, _, k_block), identity());
       // Thread-level register gemm for k_block
       cute::gemm(tiled_mma, tCrC, tCrA(_, _, k_block), tCrB(_, _, k_block), tCrC);
-//    });
     }
   }
 
@@ -359,8 +357,6 @@ void test_gemm(int m, int n, int k)
 
   for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( j % 11 );
   for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( j % 11 );
-//  for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( 2*(rand() / double(RAND_MAX)) - 1 );
-//  for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( 2*(rand() / double(RAND_MAX)) - 1 );
   for (int j = 0; j < m*n; ++j) h_C[j] = static_cast<TC>(-1);
 
   auto d_A = sycl::malloc_device<TA>(m*k, q);
