@@ -38,9 +38,17 @@ cutlass_example_add_executable(
   14_ampere_tf32_tensorop_gemm_cute
   ampere_tf32_tensorop_gemm_cute.cpp
   )
+cutlass_example_add_executable(
+  14_ampere_tf32_tensorop_gemm_relu_cute
+  ampere_tf32_tensorop_gemm_relu_cute.cpp
+)
 else()
 cutlass_example_add_executable(
   14_ampere_tf32_tensorop_gemm_cute
   ampere_tf32_tensorop_gemm_cute.cu
   )
+cutlass_example_add_executable(
+  14_ampere_tf32_tensorop_gemm_relu_cute
+  ampere_tf32_tensorop_gemm_relu_cute.cu
+)
 endif()

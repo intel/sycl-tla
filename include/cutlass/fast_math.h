@@ -767,7 +767,11 @@ T fast_max(T a, T b) {
 template <>
 CUTLASS_HOST_DEVICE
 float fast_max(float a, float b) {
+#if defined(CUTLASS_ENABLE_SYCL)
+  return sycl::fmax(a, b);
+#else
   return fmaxf(a, b);
+#endif
 }
 
 CUTLASS_HOST_DEVICE

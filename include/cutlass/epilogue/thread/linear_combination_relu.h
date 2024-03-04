@@ -82,6 +82,8 @@ public:
   using ElementOutput = ElementOutput_;
   using ElementAccumulator = ElementAccumulator_;
   using ElementCompute = ElementCompute_;
+  using ElementC = ElementOutput_;
+  using ElementD = ElementOutput_;
 
   static int const kCount = Count;
   static const ScaleType::Kind kScale = Scale;
@@ -287,6 +289,71 @@ public:
 
     return destination_converter(intermediate);
   }
+
+    //
+    // Specializations for scalar (for use with cute::collective::DefaultEpilogue)
+    //
+    CUTLASS_HOST_DEVICE
+    ElementD operator()(ElementAccumulator const accumulator, ElementC const source) const {
+      // Convert everything to Compute type, do compute, and then store to output type
+      NumericConverter<ElementCompute, ElementAccumulator, Round> accumulator_converter;
+      [[maybe_unused]] NumericConverter<ElementCompute, ElementC, Round> source_converter;
+      NumericConverter<ElementD, ElementCompute, Round> destination_converter;
+
+      // Convert to destination numeric type
+
+      ElementCompute converted_accumulator = accumulator_converter(accumulator);
+      if constexpr (Scale == ScaleType::Nothing) {
+        return destination_converter(converted_accumulator);
+      }
+
+      // Perform binary operations
+      ElementCompute intermediate;
+      multiplies<ElementCompute> multiply;
+      multiply_add<ElementCompute> madd;
+
+      if constexpr (Scale == ScaleType::NoBetaScaling) {
+        intermediate = source_converter(source);
+      }
+      else {
+        intermediate = multiply(beta_, source);                            // X =  beta * C + uniform
+      }
+
+      intermediate = madd(alpha_, converted_accumulator, intermediate);    // D = alpha * Accum + X
+
+      ReLu<ElementCompute> relu;
+
+      // Compute threshold optionally
+      intermediate = relu(threshold_, intermediate);
+
+      return destination_converter(intermediate);
+    }
+
+    CUTLASS_HOST_DEVICE
+    ElementD operator()(ElementAccumulator const accumulator) const {
+      // Convert everything to Compute type, do compute, and then store to output type
+      NumericConverter<ElementCompute, ElementAccumulator, Round> accumulator_converter;
+      NumericConverter<ElementD, ElementCompute, Round> destination_converter;
+      ElementCompute converted_accumulator = accumulator_converter(accumulator);
+
+      // Convert to destination numeric type
+      if constexpr (Scale == ScaleType::Nothing) {
+        return destination_converter(converted_accumulator);
+      }
+
+      // Perform binary operations
+      ElementCompute intermediate;
+      multiplies<ElementCompute> multiply;
+
+      intermediate = multiply(alpha_, accumulator);    // D = alpha * Accum
+
+      ReLu<ElementCompute> relu;
+
+      // Compute threshold optionally
+      intermediate = relu(threshold_, intermediate);
+
+      return destination_converter(intermediate);
+    }
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////

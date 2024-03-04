@@ -327,7 +327,11 @@ template <>
 struct maximum<float, false> {
   CUTLASS_HOST_DEVICE
   float operator()(float const &lhs, float const &rhs) const {
+#if defined(CUTLASS_ENABLE_SYCL)
+    return sycl::fmax(lhs, rhs);
+#else
     return fmaxf(lhs, rhs);
+#endif
   }
 };
 
