@@ -68,10 +68,10 @@ using SmemLayoutAtomA = decltype(
 composition(Swizzle <2,3,2> {},
             Layout<Shape<_32, _8>,
                     Stride<_1, _32>>{}));
-using SmemCopyAtomA = Copy_Atom<UniversalCopy<tfloat32_t>, tfloat32_t>;
+using SmemCopyAtomA = Copy_Atom<UniversalCopy<float>, float>;
 // Gmem
 using GmemTiledCopyA = decltype(
-make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEGLOBAL<cute::uint128_t>, tfloat32_t>{},
+make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEGLOBAL<cute::uint128_t>, float>{},
                 Layout<Shape<_16, _8>,
                         Stride<_1, _16>>{},
                 Layout<Shape<_4, _1>>{}));
@@ -81,10 +81,10 @@ using SmemLayoutAtomB = decltype(
 composition(Swizzle <2,3,2> {},
             Layout<Shape<_32, _8>,
                     Stride<_1, _32>>{}));
-using SmemCopyAtomB = Copy_Atom<UniversalCopy<tfloat32_t>, tfloat32_t>;
+using SmemCopyAtomB = Copy_Atom<UniversalCopy<float>, float>;
 // Gmem
 using GmemTiledCopyB = decltype(
-make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEGLOBAL<cute::uint128_t>, tfloat32_t>{},
+make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEGLOBAL<cute::uint128_t>, float>{},
                 Layout<Shape<_16, _8>,
                         Stride<_1, _16>>{},
                 Layout<Shape<_4, _1>>{}));
@@ -101,7 +101,7 @@ using SmemLayoutB = decltype(tile_to_shape(
 // The code section below describes datatype for input, output matrices and computation between
 // elements in input matrices.
 using ElementAccumulator = float;                   // <- data type of accumulator
-using ElementComputeEpilogue = ElementAccumulator;  // <- data type of epilogue operations
+using ElementComputeEpilogue = float;  // <- data type of epilogue operations
 using ElementInputA = float;                        // <- data type of elements in input matrix A
 using ElementInputB = float;                        // <- data type of elements in input matrix B
 using ElementOutput = float;                        // <- data type of elements in output matrix D
@@ -112,7 +112,7 @@ using MMAOp = cutlass::arch::OpClassTensorOp;
 // This code section describes CUDA SM architecture number
 using SmArch = cutlass::arch::Sm80;
 
-// This code section describes the epilogue part of the kernel
+//// This code section describes the epilogue part of the kernel
 using EpilogueOp = cutlass::epilogue::thread::LinearCombination<
         ElementOutput,                                     // <- data type of output matrix
         128 / cutlass::sizeof_bits<ElementOutput>::value,  // <- the number of elements per vectorized
@@ -148,8 +148,8 @@ void test_gemm(int m, int n, int k)
   thrust::host_vector<TB> h_B(n*k);
   thrust::host_vector<TC> h_C(m*n);
 
-  for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( j % 11 );
-  for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( j % 11 );
+  for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<tfloat32_t>( 2*(rand() / double(RAND_MAX)) - 1 );
+  for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<tfloat32_t>( 2*(rand() / double(RAND_MAX)) - 1 );
   for (int j = 0; j < m*n; ++j) h_C[j] = static_cast<TC>(-1);
 
   thrust::device_vector<TA> d_A = h_A;
