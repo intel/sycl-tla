@@ -186,11 +186,11 @@ gemm_device(MShape M, NShape N, KShape K,
     copy(smem_tiled_copy_A, tCsA, tCrA_copy_view);
     copy(smem_tiled_copy_B, tCsB, tCrB_copy_view);
 
-    // Compute gemm on smem
+    // Compute gemm on rmem
     gemm(tiled_mma, tCrC, tCrA, tCrB, tCrC);
   }
 
-    //
+  //
   // Epilogue
   //
   axpby(alpha, tCrC, beta, tCgC);
