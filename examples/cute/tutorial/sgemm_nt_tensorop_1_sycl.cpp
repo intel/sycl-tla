@@ -28,22 +28,12 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-
-#include <cstdlib>
-#include <cstdio>
-#include <vector>
-
 #include <CL/sycl.hpp>
-#include <cute/tensor.hpp>
 #include <syclcompat.hpp>
 
-#include "cutlass/util/print_error.hpp"
-#include "cutlass/util/GPU_Clock.hpp"
-#if defined(CUTLASS_ENABLE_CUBLAS) && CUTLASS_ENABLE_CUBLAS != 0
-#  include "cutlass/util/cublas_wrappers.hpp"
-#endif
+#include <cute/tensor.hpp>
+
+#include "utils.hpp"
 
 using namespace cute;
 
@@ -63,7 +53,7 @@ using SmemCopyAtomA = Copy_Atom<SM75_U16x8_LDSM_T, half_t>;
 
 // Gmem
 using GmemTiledCopyA = decltype(
-make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, half_t>{},
+make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEGLOBAL<cute::uint128_t>, half_t>{},
                 Layout<Shape <_16, _8>,
                         Stride< _1,_16>>{},
                 Layout<Shape < _8, _1>>{}));
@@ -77,7 +67,7 @@ using SmemCopyAtomB = Copy_Atom<SM75_U16x8_LDSM_T, half_t>;
 
 // Gmem
 using GmemTiledCopyB = decltype(
-make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, half_t>{},
+make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEGLOBAL<cute::uint128_t>, half_t>{},
                 Layout<Shape <_16, _8>,
                         Stride< _1,_16>>{},
                 Layout<Shape < _8, _1>>{}));
@@ -199,7 +189,7 @@ gemm_device(MShape M, NShape N, KShape K,
 template <typename TA, typename TB, typename TC,
           typename Alpha, typename Beta>
 void
-gemm(sycl::queue q, int m, int n, int k,
+gemm(int m, int n, int k,
      Alpha alpha,
      TA const* A, int ldA,
      TB const* B, int ldB,
@@ -233,151 +223,16 @@ gemm(sycl::queue q, int m, int n, int k,
   const auto grid = syclcompat::dim3(ceil_div(size(M), size(bM)),
                                      ceil_div(size(N), size(bN)));
 
-    syclcompat::launch<
-            gemm_device<int, int, int, TA, decltype(dA), TB, decltype(dB),
-                    TC, decltype(dC), Alpha, Beta>
-    >(grid, block, q, M,  N,  K, A, dA, B, dB, C, dC, alpha, beta);
-}
-
-void test_gemm(int m, int n, int k)
-{
-  auto q = sycl::queue { sycl::gpu_selector_v } ;
-
-  std::cout << "M = " << m << std::endl;
-  std::cout << "N = " << n << std::endl;
-  std::cout << "K = " << k << std::endl;
-
-  using TA = float;
-  using TB = float;
-  using TC = float;
-  using TI = float;
-
-  thrust::host_vector<TA> h_A(m*k);
-  thrust::host_vector<TB> h_B(n*k);
-  thrust::host_vector<TC> h_C(m*n);
-
-  for (int j = 0; j < m*k; ++j) h_A[j] = static_cast<TA>( j % 10 );
-  for (int j = 0; j < n*k; ++j) h_B[j] = static_cast<TB>( j % 10 );
-  for (int j = 0; j < m*n; ++j) h_C[j] = static_cast<TC>(-1);
-
-  auto d_A = sycl::malloc_device<TA>(m*k, q);
-  auto d_B = sycl::malloc_device<TB>(n*k, q);
-  auto d_C = sycl::malloc_device<TC>(m*n, q);
-
-  q.memcpy(d_A, h_A.data(), m*k * sizeof(TA)).wait();
-  q.memcpy(d_B, h_B.data(), n*k * sizeof(TB)).wait();
-  q.memcpy(d_C, h_C.data(), m*n * sizeof(TC)).wait();
-
-  TI alpha = 1.0;
-  TI beta  = 0.0;
-
-  double tflops = (2.0*m*n*k) * 1e-12;
-
-  const int timing_iterations = 100;
-  GPU_Clock timer;
-
-#if defined(CUTLASS_ENABLE_CUBLAS) && CUTLASS_ENABLE_CUBLAS != 0
-  //
-  // cuBLas
-  //
-
-  cublasHandle_t handle;
-  cublasCreate(&handle);
-
-  thrust::device_vector<TA> dc_A = h_A;
-  thrust::device_vector<TB> dc_B = h_B;
-  thrust::device_vector<TC> dc_C = h_C;
-
-  // Run once
-  blam::cublas::gemm(handle, CUBLAS_OP_N, CUBLAS_OP_T,
-                     m, n, k,
-                     &alpha,
-                     dc_A.data().get(), m,
-                     dc_B.data().get(), n,
-                     &beta,
-                     dc_C.data().get(), m);
-  CUTE_CHECK_LAST();
-
-  thrust::host_vector<TC> cublas_result = dc_C;
-
-  // Timing iterations
-    timer.start();
-  for (int i = 0; i < timing_iterations; ++i) {
-    blam::cublas::gemm(handle, CUBLAS_OP_N, CUBLAS_OP_T,
-                       m, n, k,
-                       &alpha,
-                       dc_A.data().get(), m,
-                       dc_B.data().get(), n,
-                       &beta,
-                       dc_C.data().get(), m);
-  }
-  double cublas_time = timer.seconds() / timing_iterations;
-  CUTE_CHECK_LAST();
-  printf("CUBLAS_GEMM:   [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cublas_time, cublas_time*1000);
-
-#else
-
-  std::cout << "Verification by comparison with cuBLAS is disabled, "
-    "either because the CMake option CUTLASS_ENABLE_CUBLAS "
-    "was explicitly set to OFF, or because CMake could not find cuBLAS.  "
-    "If you would like to enable verification with cuBLAS, "
-    "please set the CMake option CUTLASS_ENABLE_CUBLAS to ON, "
-    "rerun CMake, and recompile this example.\n";
-
-#endif // CUTLASS_ENABLE_CUBLAS
-
-  //
-  // CuTe
-  //
-
-  // Run once (and check)
-  gemm(q, m, n, k,
-       alpha,
-       d_A, m,
-       d_B, n,
-       beta,
-       d_C, m);
-  CUTE_CHECK_LAST();
-  q.wait_and_throw();
-
-  // Timing iterations
-  timer.start();
-  for (int i = 0; i < timing_iterations; ++i) {
-    gemm(q, m, n, k,
-         alpha,
-         d_A, m,
-         d_B, n,
-         beta,
-         d_C, m);
-  }
-
-  q.wait();
-
-  double cute_time = timer.seconds() / timing_iterations;
-  CUTE_CHECK_LAST();
-  printf("SYCL_CUTE_GEMM:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
-
-  std::vector<TC> cute_result(m*n);
-  q.memcpy(cute_result.data(), d_C, m*n * sizeof(TC)).wait();
-
-#if defined(CUTLASS_ENABLE_CUBLAS) && CUTLASS_ENABLE_CUBLAS != 0
-  printf("Empirical Perf: %.1f%%\n", (cublas_time / cute_time) * 100);
-
-  auto host_matrix_to_const_column_major_cute_tensor =
-    [](const auto& X, int num_rows, int num_cols, int LDX) {
-      const auto shape = cute::Shape<int, int>{num_rows, num_cols};
-      const auto strides = cute::Stride<int, int>{1, LDX};
-      return cute::make_tensor(X.data(), cute::make_layout(shape, strides));
-    };
-
-  const auto A_view = host_matrix_to_const_column_major_cute_tensor(h_A, m, k, m);
-  // B^T is k x n, so B is n x k.
-  const auto B_view = host_matrix_to_const_column_major_cute_tensor(h_B, n, k, n);
-  const auto C_computed_view = host_matrix_to_const_column_major_cute_tensor(cute_result, m, n, m);
-  const auto C_expected_view = host_matrix_to_const_column_major_cute_tensor(cublas_result, m, n, m);
-  print_matrix_multiply_mollified_relative_error("float", A_view, B_view, C_computed_view, C_expected_view);
-
-#endif // CUTLASS_ENABLE_CUBLAS
+  utils::launch_kernel<gemm_device<int, int, int,
+          TA, decltype(dA),
+          TB, decltype(dB),
+          TC, decltype(dC),
+          Alpha, Beta>>
+          (grid, block, M,  N,  K,
+           A, dA,
+           B, dB,
+           C, dC,
+           alpha, beta);
 }
 
 int main(int argc, char** argv)
@@ -394,7 +249,18 @@ int main(int argc, char** argv)
   if (argc >= 4)
     sscanf(argv[3], "%d", &k);
 
-  test_gemm(m, n, k);
+  using TA = float;
+  using TB = float;
+  using TC = float;
+  using TI = float;
+
+  // This MMA operation casts the input matrices to half type, causing precision issues
+  // when comparing with cublas output. Cast the input matrices to integers to avoid
+  // these issues.
+  using TAT = int;
+  using TBT = int;
+
+  utils::test_gemm<gemm<TA, TB, TC, TI, TI>, TA, TB, TC, TI, TAT, TBT>(m, n, k);
 
   return 0;
 }

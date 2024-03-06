@@ -47,10 +47,16 @@ struct GPU_Clock
   }
 
   void start() {
+#if defined(CUTLASS_ENABLE_SYCL)
+    syclcompat::get_default_queue().wait();
+#endif
     cudaEventRecord(start_);
   }
 
   float milliseconds() {
+#if defined(CUTLASS_ENABLE_SYCL)
+    syclcompat::get_default_queue().wait();
+#endif
     cudaEventRecord(stop_);
     cudaEventSynchronize(stop_);
     float time;
