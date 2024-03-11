@@ -316,11 +316,11 @@ namespace utils {
  * @param args The arguments to pass to the kernel function.
  */
     template <auto F, typename Grid, typename Block, typename... Args>
-    void launch_kernel(const Grid &grid, const Block &block, Args... args) {
+    void launch_kernel(const Grid &grid, const Block &block, const int smem_size, Args... args) {
 #if defined(CUTLASS_ENABLE_SYCL)
-      syclcompat::launch<F>(grid, block, args...);
+      syclcompat::launch<F>(grid, block, smem_size, args...);
 #else
-      F<<< grid, block, 0, 0 >>>(args...);
+      F<<< grid, block, smem_size, 0 >>>(args...);
 #endif
     }
 

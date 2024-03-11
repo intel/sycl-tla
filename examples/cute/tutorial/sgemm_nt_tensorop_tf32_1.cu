@@ -228,7 +228,7 @@ gemm(int m, int n, int k,
           TB, decltype(dB),
           TC, decltype(dC),
           Alpha, Beta>>
-          (dimGrid, dimBlock, M,  N,  K,
+          (dimGrid, dimBlock, 0, M,  N,  K,
            A, dA,
            B, dB,
            C, dC,
@@ -257,8 +257,8 @@ int main(int argc, char** argv)
   // This MMA operation casts the input matrices to TF32 type, causing precision issues
   // when comparing with cublas output. Cast the input matrices to TF32 to avoid
   // these issues.
-  using TAT = int;
-  using TBT = int;
+  using TAT = tfloat32_t;
+  using TBT = tfloat32_t;
 
   utils::test_gemm<gemm<TA, TB, TC, TI, TI>, TA, TB, TC, TI, TAT, TBT>(m, n, k);
 

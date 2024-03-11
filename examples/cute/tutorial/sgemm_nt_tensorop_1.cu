@@ -226,7 +226,7 @@ gemm(int m, int n, int k,
           TB, decltype(dB),
           TC, decltype(dC),
           Alpha, Beta>>
-          (dimGrid, dimBlock, M,  N,  K,
+          (dimGrid, dimBlock, 0, M,  N,  K,
            A, dA,
            B, dB,
            C, dC,

@@ -261,7 +261,7 @@ gemm(int m, int n, int k,
           TB, decltype(dB), decltype(sB), decltype(tB),
           TC, decltype(dC), decltype(sC), decltype(tC),
           Alpha, Beta>>
-          (grid, block, M,  N,  K,
+          (grid, block, 0, M,  N,  K,
            A, dA, sA, tA,
            B, dB, sB, tB,
            C, dC, sC, tC,
