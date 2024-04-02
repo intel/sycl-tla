@@ -29,7 +29,7 @@
 
 if (CUTLASS_ENABLE_SYCL)
   cutlass_example_add_executable(
-    sgemm_1
+    sgemm_nt_1_sycl
     sgemm_nt_1_sycl.cpp
   )
 else ()

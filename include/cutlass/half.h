@@ -203,7 +203,7 @@ struct alignas(2) half_t {
     CUTLASS_HOST_DEVICE
   #endif  
   static half_t convert(float const& flt) {
-  #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 530)
+  #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 530)) || (defined(__SYCL_CUDA_ARCH__) && (__SYCL_CUDA_ARCH__ >= 530))
     return half_t(__float2half_rn(flt));
   #else
 
@@ -284,7 +284,7 @@ struct alignas(2) half_t {
   /// FP32 -> FP16 conversion - rounds to nearest even
   CUTLASS_HOST_DEVICE
   static half_t convert(int const& n) {
-  #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 530)
+  #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 530)) || (defined(__SYCL_CUDA_ARCH__) && (__SYCL_CUDA_ARCH__ >= 530))
     return half_t(__int2half_rn(n));
   #else
     return convert(float(n));
@@ -309,7 +309,7 @@ struct alignas(2) half_t {
     CUTLASS_HOST_DEVICE
   #endif
   static float convert(half_t const& x) {
-  #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 530)
+  #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 530)) || (defined(__SYCL_CUDA_ARCH__) && (__SYCL_CUDA_ARCH__ >= 530))
     return __half2float(x.to_half());
   #else
 
@@ -371,7 +371,7 @@ struct alignas(2) half_t {
   /// Reinterpret cast from CUDA's half type
   CUTLASS_HOST_DEVICE
   explicit half_t(half const & x) {
-    #if defined(__CUDA_ARCH__)
+    #if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
     storage = reinterpret_cast<uint16_t const &>(x);
     #else
     __half_raw raw(x);
