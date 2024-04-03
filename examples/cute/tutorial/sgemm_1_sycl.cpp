@@ -368,13 +368,13 @@ int main(int argc, char** argv) {
     assert(false);
   }
   // Run once
-  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue).wait();
+  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue).wait_and_throw();
   CUTE_CHECK_LAST();
 
   // Timing iterations
   timer.start();
   for (int i = 0; i < timing_iterations; ++i) {
-    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue).wait();
+    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue).wait_and_throw();
   }
   double cute_time = timer.seconds() / timing_iterations;
   CUTE_CHECK_LAST();
