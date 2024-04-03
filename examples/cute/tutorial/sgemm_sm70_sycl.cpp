@@ -435,7 +435,6 @@ int main(int argc, char** argv) {
   }
   // Run once
   gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue).wait_and_throw();
-  CUTE_CHECK_LAST();
 
   // Timing iterations
   timer.start();
@@ -443,7 +442,6 @@ int main(int argc, char** argv) {
     gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue).wait_and_throw();
   }
   double cute_time = timer.seconds() / timing_iterations;
-  CUTE_CHECK_LAST();
   printf("SYCL_CUTE_GEMM:     [%6.1f]GFlop/s  (%6.4f)ms\n", gflops / cute_time, cute_time * 1000);
   return 0;
 }
