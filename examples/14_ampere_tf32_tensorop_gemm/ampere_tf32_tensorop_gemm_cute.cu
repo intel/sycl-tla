@@ -214,7 +214,6 @@ void test_gemm(int m, int n, int k)
   // CuTe
   //
 
-  using namespace cute;
 
   d_C = h_C;
 
