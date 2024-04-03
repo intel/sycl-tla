@@ -64,7 +64,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   // Partition the copying of A and B tiles across the threads
   //
 
-  ThrCopy thr_copy_a = copy_a.get_slice();
+  ThrCopy thr_copy_a = copy_a.get_slice(syclcompat::local_id::x());
   Tensor tAgA = thr_copy_a.partition_S(gA);  // (CPY,CPY_M,CPY_K,k)
   Tensor tAsA = thr_copy_a.partition_D(sA);  // (CPY,CPY_M,CPY_K,PIPE)
 
