@@ -222,6 +222,7 @@ CUTLASS_DEVICE void syncthreads() {
 
 CUTLASS_DEVICE int syncthreads_and(int cond) {
 #if defined(CUTLASS_ENABLE_SYCL)
+  // TODO: Add SYCL equivalent function
   assert(false);
 #else
   return __syncthreads_and(cond);
@@ -230,6 +231,7 @@ CUTLASS_DEVICE int syncthreads_and(int cond) {
 
 CUTLASS_DEVICE void syncwarp() {
 #if defined(CUTLASS_ENABLE_SYCL)
+  // TODO: Add SYCL equivalent function
   assert(false);
 #else
   __syncwarp();
@@ -238,6 +240,7 @@ CUTLASS_DEVICE void syncwarp() {
 
 CUTLASS_DEVICE void threadfence() {
 #if defined(CUTLASS_ENABLE_SYCL)
+  // TODO: Add SYCL equivalent function
   assert(false);
 #else
   __threadfence();
@@ -249,6 +252,7 @@ CUTLASS_DEVICE void threadfence() {
 CUTLASS_DEVICE
 uint byte_perm(uint x, uint y, uint s) {
 #if defined(CUTLASS_ENABLE_SYCL)
+  // TODO: Add SYCL equivalent function
   assert(false);
 #else
   return __byte_perm(x, y, s);
@@ -260,6 +264,7 @@ uint byte_perm(uint x, uint y, uint s) {
 CUTLASS_DEVICE
 uint shfl_up_sync(const unsigned mask, const uint var, const int delta, const int width = NumThreadsPerWarp) {
 #if defined(CUTLASS_ENABLE_SYCL)
+  // TODO: Add SYCL equivalent function
   assert(false);
 #else
   return __shfl_up_sync(mask, var, delta, width);
@@ -269,6 +274,7 @@ uint shfl_up_sync(const unsigned mask, const uint var, const int delta, const in
 CUTLASS_DEVICE
 uint shfl_down_sync(const unsigned mask, const uint var, const int delta, const int width = NumThreadsPerWarp) {
 #if defined(CUTLASS_ENABLE_SYCL)
+  // TODO: Add SYCL equivalent function
   assert(false);
 #else
   return __shfl_down_sync(mask, var, delta, width);
@@ -278,6 +284,7 @@ uint shfl_down_sync(const unsigned mask, const uint var, const int delta, const 
 CUTLASS_DEVICE
 uint shfl_sync(const unsigned mask, const uint var, const int delta, const int width = NumThreadsPerWarp) {
 #if defined(CUTLASS_ENABLE_SYCL)
+  // TODO: Add SYCL equivalent function
   assert(false);
 #else
   return __shfl_sync(mask, var, delta, width);
@@ -289,6 +296,7 @@ uint shfl_sync(const unsigned mask, const uint var, const int delta, const int w
 template <typename T>
 CUTLASS_DEVICE T hfma2(const T a, const T b, const T c) {
 #if defined(CUTLASS_ENABLE_SYCL)
+  // TODO: Add SYCL equivalent function
   assert(false);
 #else
   return hfma2(a, b, c);
@@ -299,10 +307,12 @@ CUTLASS_DEVICE T hfma2(const T a, const T b, const T c) {
 
 #if defined(CUTLASS_ENABLE_SYCL)
 CUTLASS_DEVICE int atomicAdd(int *address, int val) {
+  // TODO: Add SYCL equivalent function
   assert(false);
 }
 
 CUTLASS_DEVICE int atomicCAS(int *address, int compare, int val) {
+  // TODO: Add SYCL equivalent function
   assert(false);
 }
 #endif
