@@ -253,36 +253,35 @@ sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
   auto M = int(m);
   auto N = int(n);
   auto K = int(k);
-  auto prob_shape = make_shape(M, N, K);                     // (M, N, K)
+  auto prob_shape = make_shape(M, N, K);  // (M, N, K)
 
   // Define NT strides (mixed)
-  auto dA = make_stride(Int<1>{}, ldA);                      // (dM, dK)
-  auto dB = make_stride(Int<1>{}, ldB);                      // (dN, dK)
-  auto dC = make_stride(Int<1>{}, ldC);                      // (dM, dN)
+  auto dA = make_stride(Int<1>{}, ldA);  // (dM, dK)
+  auto dB = make_stride(Int<1>{}, ldB);  // (dN, dK)
+  auto dC = make_stride(Int<1>{}, ldC);  // (dM, dN)
 
   // Define CTA tile sizes (static)
   auto bM = Int<128>{};
   auto bN = Int<128>{};
-  auto bK = Int<  8>{};
-  auto cta_tiler = make_shape(bM, bN, bK);                   // (BLK_M, BLK_N, BLK_K)
-  auto bP = Int<3>{};  // Pipeline
+  auto bK = Int<8>{};
+  auto cta_tiler = make_shape(bM, bN, bK);  // (BLK_M, BLK_N, BLK_K)
+  auto bP = Int<3>{};                       // Pipeline
 
   // Define the smem layouts (static)
-  auto sA = make_layout(make_shape(bM, bK, bP));             // (m,k,p) -> smem_idx; m-major
-  auto sB = make_layout(make_shape(bN, bK, bP));             // (n,k,p) -> smem_idx; n-major
-  auto sC = make_layout(make_shape(bM, bN));                 // (m,n) -> smem_idx; m-major
+  auto sA = make_layout(make_shape(bM, bK, bP));  // (m,k,p) -> smem_idx; m-major
+  auto sB = make_layout(make_shape(bN, bK, bP));  // (n,k,p) -> smem_idx; n-major
+  auto sC = make_layout(make_shape(bM, bN));      // (m,n) -> smem_idx; m-major
 
   // Define the thread layouts (static)
 
   TiledCopy copyA = make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<uint128_t>, TA>{},
-                                    Layout<Shape<_32,_8>>{}, // Thr layout 32x8 m-major
-                                    Layout<Shape< _4,_1>>{});// Val layout  4x1 m-major
+                                    Layout<Shape<_32, _8>>{},  // Thr layout 32x8 m-major
+                                    Layout<Shape<_4, _1>>{});  // Val layout  4x1 m-major
   TiledCopy copyB = make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<uint128_t>, TB>{},
-                                    Layout<Shape<_32,_8>>{}, // Thr layout 32x8 n-major
-                                    Layout<Shape< _4,_1>>{});// Val layout  4x1 n-major
+                                    Layout<Shape<_32, _8>>{},  // Thr layout 32x8 n-major
+                                    Layout<Shape<_4, _1>>{});  // Val layout  4x1 n-major
 
-  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC,TA,TB>{},
-                                 Layout<Shape<_16,_16,_1>>{});  // 16x16x1 TiledMMA
+  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{}, Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
 
 #if 0
   print(copyA);
@@ -297,8 +296,7 @@ sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
 #endif
 
   auto dimBlock = syclcompat::dim3(size(mmaC));
-  auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)),
-               size(ceil_div(N, bN)));
+  auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
   return syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
                                         decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
                                         decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
@@ -314,40 +312,39 @@ sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
   auto M = int(m);
   auto N = int(n);
   auto K = int(k);
-  auto prob_shape = make_shape(M, N, K);                     // (M, N, K)
+  auto prob_shape = make_shape(M, N, K);  // (M, N, K)
 
   // Define TN strides (mixed)
-  auto dA = make_stride(ldA, Int<1>{});                      // (dM, dK)
-  auto dB = make_stride(ldB, Int<1>{});                      // (dN, dK)
-  auto dC = make_stride(Int<1>{}, ldC);                      // (dM, dN)
+  auto dA = make_stride(ldA, Int<1>{});  // (dM, dK)
+  auto dB = make_stride(ldB, Int<1>{});  // (dN, dK)
+  auto dC = make_stride(Int<1>{}, ldC);  // (dM, dN)
 
   // Define CTA tile sizes (static)
   auto bM = Int<128>{};
   auto bN = Int<128>{};
-  auto bK = Int<  8>{};
-  auto cta_tiler = make_shape(bM, bN, bK);                   // (BLK_M, BLK_N, BLK_K)
-  auto bP = Int<3>{};  // Pipeline
+  auto bK = Int<8>{};
+  auto cta_tiler = make_shape(bM, bN, bK);  // (BLK_M, BLK_N, BLK_K)
+  auto bP = Int<3>{};                       // Pipeline
 
   // Define the smem layouts (static)
-  auto sA_atom = make_layout(make_shape (      bM,          bK),
-                             make_stride(Int<1>{}, bM+Int<1>{}));   // (m,k) -> smem_idx; padded m-major
-  auto sB_atom = make_layout(make_shape (      bN,          bK),
-                             make_stride(Int<1>{}, bN+Int<1>{}));   // (n,k) -> smem_idx; padded n-major
+  auto sA_atom =
+      make_layout(make_shape(bM, bK), make_stride(Int<1>{}, bM + Int<1>{}));  // (m,k) -> smem_idx; padded m-major
+  auto sB_atom =
+      make_layout(make_shape(bN, bK), make_stride(Int<1>{}, bN + Int<1>{}));  // (n,k) -> smem_idx; padded n-major
   auto sA = tile_to_shape(sA_atom, make_shape(bM, bK, bP));
   auto sB = tile_to_shape(sA_atom, make_shape(bN, bK, bP));
-  auto sC = make_layout(make_shape(bM, bN));                        // (m,n) -> smem_idx
+  auto sC = make_layout(make_shape(bM, bN));  // (m,n) -> smem_idx
 
   // Define the thread layouts (static)
 
   TiledCopy copyA = make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<TA>, TA>{},
-                                    Layout<Shape<_32,_8>,Stride<_8,_1>>{}, // Thr layout 32x8 k-major
-                                    Layout<Shape< _1,_1>>{});              // Val layout  1x1
+                                    Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
+                                    Layout<Shape<_1, _1>>{});                  // Val layout  1x1
   TiledCopy copyB = make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<TB>, TB>{},
-                                    Layout<Shape<_32,_8>,Stride<_8,_1>>{}, // Thr layout 32x8 k-major
-                                    Layout<Shape< _1,_1>>{});              // Val layout  1x1
+                                    Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
+                                    Layout<Shape<_1, _1>>{});                  // Val layout  1x1
 
-  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC,TA,TB>{},
-                                 Layout<Shape<_16,_16,_1>>{});  // 16x16x1 TiledMMA
+  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{}, Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
 
 #if 0
   print(copyA);
@@ -361,8 +358,7 @@ sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
   print_latex(mmaC);
 #endif
   auto dimBlock = syclcompat::dim3(size(mmaC));
-  auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)),
-               size(ceil_div(N, bN)));
+  auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
   return syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
                                         decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
                                         decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
