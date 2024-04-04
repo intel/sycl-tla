@@ -29,6 +29,7 @@
  *
  **************************************************************************************************/
 
+#include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/print_error.hpp"
 #include "sycl_utils.hpp"
 
@@ -38,12 +39,13 @@
 
 using namespace cute;
 
-template <class ProblemShape, class CtaTiler, class TA, class AStride, class ASmemLayout, class TiledCopyA, class TB,
-          class BStride, class BSmemLayout, class TiledCopyB, class TC, class CStride, class CSmemLayout,
-          class TiledMma, class Alpha, class Beta>
-void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStride dA, ASmemLayout sA_layout,
-                 TiledCopyA copy_a, TB const* B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b, TC* C,
-                 CStride dC, CSmemLayout, TiledMma mma, Alpha alpha, Beta beta) {
+template <class ProblemShape, class CtaTiler, class TA, class AStride, class ASmemLayout,
+          class TiledCopyA, class TB, class BStride, class BSmemLayout, class TiledCopyB, class TC,
+          class CStride, class CSmemLayout, class TiledMma, class Alpha, class Beta>
+void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStride dA,
+                 ASmemLayout sA_layout, TiledCopyA copy_a, TB const* B, BStride dB,
+                 BSmemLayout sB_layout, TiledCopyB copy_b, TC* C, CStride dC, CSmemLayout,
+                 TiledMma mma, Alpha alpha, Beta beta) {
   // Preconditions
   CUTE_STATIC_ASSERT_V(rank(shape_MNK) == Int<3>{});  // (M, N, K)
   CUTE_STATIC_ASSERT_V(rank(cta_tiler) == Int<3>{});  // (BLK_M, BLK_N, BLK_K)
@@ -76,10 +78,11 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   Tensor mC = make_tensor(make_gmem_ptr(C), select<0, 1>(shape_MNK), dC);  // (M,N)
 
   // Get the appropriate blocks for this thread block
-  auto cta_coord = make_coord(syclcompat::work_group_id::x(), syclcompat::work_group_id::y(), _);  // (m,n,k)
-  Tensor gA = local_tile(mA, cta_tiler, cta_coord, Step<_1, X, _1>{});                             // (BLK_M,BLK_K,k)
-  Tensor gB = local_tile(mB, cta_tiler, cta_coord, Step<X, _1, _1>{});                             // (BLK_N,BLK_K,k)
-  Tensor gC = local_tile(mC, cta_tiler, cta_coord, Step<_1, _1, X>{});                             // (BLK_M,BLK_N)
+  auto cta_coord =
+      make_coord(syclcompat::work_group_id::x(), syclcompat::work_group_id::y(), _);  // (m,n,k)
+  Tensor gA = local_tile(mA, cta_tiler, cta_coord, Step<_1, X, _1>{});  // (BLK_M,BLK_K,k)
+  Tensor gB = local_tile(mB, cta_tiler, cta_coord, Step<X, _1, _1>{});  // (BLK_N,BLK_K,k)
+  Tensor gC = local_tile(mC, cta_tiler, cta_coord, Step<_1, _1, X>{});  // (BLK_M,BLK_N)
 
   // Shared memory buffers
   auto smemA = syclcompat::local_mem<TA[cosize_v<ASmemLayout>]>();
@@ -234,8 +237,8 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
 }
 
 template <class TA, class TB, class TC, class Alpha, class Beta>
-sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
-                    int ldC, sycl::queue& queue) {
+void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
+             Beta beta, TC* C, int ldC, sycl::queue& queue) {
   // Define shapes (dynamic)
   auto M = int(m);
   auto N = int(n);
@@ -259,14 +262,15 @@ sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
   auto sC = make_layout(make_shape(bM, bN));  // (m,n) -> smem_idx; m-major
 
   // Define the thread layouts (static)
-  TiledCopy copyA =
-      make_tiled_copy(Copy_Atom<UniversalCopy<uint128_t>, TA>{}, Layout<Shape<_32, _8>>{},  // Thr layout 32x8 m-major
-                      Layout<Shape<_4, _1>>{});                                             // Val layout  4x1 m-major
-  TiledCopy copyB =
-      make_tiled_copy(Copy_Atom<UniversalCopy<uint128_t>, TB>{}, Layout<Shape<_32, _8>>{},  // Thr layout 32x8 n-major
-                      Layout<Shape<_4, _1>>{});                                             // Val layout  4x1 n-major
+  TiledCopy copyA = make_tiled_copy(Copy_Atom<UniversalCopy<uint128_t>, TA>{},
+                                    Layout<Shape<_32, _8>>{},  // Thr layout 32x8 m-major
+                                    Layout<Shape<_4, _1>>{});  // Val layout  4x1 m-major
+  TiledCopy copyB = make_tiled_copy(Copy_Atom<UniversalCopy<uint128_t>, TB>{},
+                                    Layout<Shape<_32, _8>>{},  // Thr layout 32x8 n-major
+                                    Layout<Shape<_4, _1>>{});  // Val layout  4x1 n-major
 
-  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{}, Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
+  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{},
+                                 Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
 
 #if 0
   print(copyA);
@@ -282,17 +286,18 @@ sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
 
   auto dimBlock = syclcompat::dim3(size(mmaC));
   auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
-  return syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
-                                        decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
-                                        decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
-      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC, sC, mmaC, alpha,
-      beta);
+  syclcompat::launch<
+      gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
+                  decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
+                  decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
+      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC,
+      sC, mmaC, alpha, beta);
 }
 
 // Setup params for a TN GEMM
 template <class TA, class TB, class TC, class Alpha, class Beta>
-sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
-                    int ldC, sycl::queue& queue) {
+void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
+             Beta beta, TC* C, int ldC, sycl::queue& queue) {
   // Define shapes (dynamic)
   auto M = int(m);
   auto N = int(n);
@@ -311,20 +316,25 @@ sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
   auto cta_tiler = make_shape(bM, bN, bK);  // (BLK_M, BLK_N, BLK_K)
 
   // Define the smem layouts (static)
-  auto sA = make_layout(make_shape(bM, bK), make_stride(Int<1>{}, bM + Int<1>{}));  // (m,k) -> smem_idx; padded m-major
-  auto sB = make_layout(make_shape(bN, bK), make_stride(Int<1>{}, bN + Int<1>{}));  // (n,k) -> smem_idx; padded n-major
-  auto sC = make_layout(make_shape(bM, bN));                                        // (m,n) -> smem_idx
+  auto sA = make_layout(make_shape(bM, bK),
+                        make_stride(Int<1>{}, bM + Int<1>{}));  // (m,k) -> smem_idx; padded m-major
+  auto sB = make_layout(make_shape(bN, bK),
+                        make_stride(Int<1>{}, bN + Int<1>{}));  // (n,k) -> smem_idx; padded n-major
+  auto sC = make_layout(make_shape(bM, bN));                    // (m,n) -> smem_idx
 
   // Define the thread layouts (static)
 
-  TiledCopy copyA = make_tiled_copy(Copy_Atom<UniversalCopy<TA>, TA>{},
-                                    Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
-                                    Layout<Shape<_1, _1>>{});                  // Val layout  1x1
-  TiledCopy copyB = make_tiled_copy(Copy_Atom<UniversalCopy<TB>, TB>{},
-                                    Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
-                                    Layout<Shape<_1, _1>>{});                  // Val layout  1x1
+  TiledCopy copyA =
+      make_tiled_copy(Copy_Atom<UniversalCopy<TA>, TA>{},
+                      Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
+                      Layout<Shape<_1, _1>>{});                  // Val layout  1x1
+  TiledCopy copyB =
+      make_tiled_copy(Copy_Atom<UniversalCopy<TB>, TB>{},
+                      Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
+                      Layout<Shape<_1, _1>>{});                  // Val layout  1x1
 
-  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{}, Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
+  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{},
+                                 Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
 
 #if 0
   print(copyA);
@@ -340,16 +350,17 @@ sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
 
   auto dimBlock = syclcompat::dim3(size(mmaC));
   auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
-  return syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
-                                        decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
-                                        decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
-      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC, sC, mmaC, alpha,
-      beta);
+  syclcompat::launch<
+      gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
+                  decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
+                  decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
+      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC,
+      sC, mmaC, alpha, beta);
 }
 
 template <class TA, class TB, class TC, class Alpha, class Beta>
-sycl::event gemm(char transA, char transB, int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
-                 Beta beta, TC* C, int ldC, sycl::queue& queue) {
+void gemm(char transA, char transB, int m, int n, int k, Alpha alpha, TA const* A, int ldA,
+          TB const* B, int ldB, Beta beta, TC* C, int ldC, sycl::queue& queue) {
   if (transA == 'N' && transB == 'T') {
     return gemm_nt(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC, queue);
   } else if (transA == 'T' && transB == 'N') {
@@ -407,9 +418,10 @@ int main(int argc, char** argv) {
   queue.copy(h_C.data(), d_C, m * n);
   queue.wait();
 
-  std::size_t flops = (static_cast<std::size_t>(2) * m * n * k);
+  double gflops = (2.0 * m * n * k) * 1e-9;
 
   const int timing_iterations = 100;
+  GPU_Clock timer;
 
   int ldA = 0, ldB = 0, ldC = m;
 
@@ -428,9 +440,16 @@ int main(int argc, char** argv) {
   } else {
     assert(false);
   }
+  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
+  queue.wait_and_throw();
 
-  auto [gflops, total_time] = benchmark(gemm<TA, TB, TC, TI, TI>, timing_iterations, 1, flops, transA, transB, m, n, k,
-                                        alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
-  printf("SYCL_CUTE_GEMM:     [%6.1f]GFlop/s  (%6.4f)ms\n", gflops, total_time);
+  timer.start();
+  for (int i = 0; i < timing_iterations; i++) {
+    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
+  }
+  queue.wait();
+  double cute_time = timer.seconds() / timing_iterations;
+  printf("SYCL_CUTE_GEMM:     [%4.3f]GFlop/s  (%6.4f)ms\n", 
+                                                gflops / cute_time, cute_time * 1e3);
   return 0;
 }

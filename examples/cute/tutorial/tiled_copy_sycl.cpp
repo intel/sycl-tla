@@ -77,8 +77,10 @@ void copy_kernel(TensorS S, TensorD D, ThreadLayout) {
   // Construct a partitioning of the tile among threads with the given thread arrangement.
 
   // Concept:                         Tensor  ThrLayout       ThrIndex
-  Tensor thr_tile_S = local_partition(tile_S, ThreadLayout{}, syclcompat::local_id::x());  // (ThrValM, ThrValN)
-  Tensor thr_tile_D = local_partition(tile_D, ThreadLayout{}, syclcompat::local_id::x());  // (ThrValM, ThrValN)
+  Tensor thr_tile_S =
+      local_partition(tile_S, ThreadLayout{}, syclcompat::local_id::x());  // (ThrValM, ThrValN)
+  Tensor thr_tile_D =
+      local_partition(tile_D, ThreadLayout{}, syclcompat::local_id::x());  // (ThrValM, ThrValN)
 
   // Construct a register-backed Tensor with the same shape as each thread's partition
   // Use make_tensor to try to match the layout of thr_tile_S
@@ -179,7 +181,8 @@ int main(int argc, char** argv) {
   // Note, by convention, capital letters are used to represent static modes.
   auto block_shape = make_shape(Int<128>{}, Int<64>{});
 
-  if ((size<0>(tensor_shape) % size<0>(block_shape)) || (size<1>(tensor_shape) % size<1>(block_shape))) {
+  if ((size<0>(tensor_shape) % size<0>(block_shape)) ||
+      (size<1>(tensor_shape) % size<1>(block_shape))) {
     std::cerr << "The tensor shape must be divisible by the block shape." << std::endl;
     return -1;
   }
@@ -207,15 +210,16 @@ int main(int argc, char** argv) {
   //
 
   auto gridDim =
-      syclcompat::dim3(size<1>(tiled_tensor_D), size<2>(tiled_tensor_D));  // Grid shape corresponds to modes m' and n'
+      syclcompat::dim3(size<1>(tiled_tensor_D),
+                       size<2>(tiled_tensor_D));  // Grid shape corresponds to modes m' and n'
   auto blockDim = syclcompat::dim3(size(thr_layout));
 
   //
   // Launch the kernel
   //
-  syclcompat::launch<copy_kernel_vectorized<decltype(tiled_tensor_S), decltype(tiled_tensor_D), decltype(thr_layout),
-                                            decltype(vec_layout)>>(gridDim, blockDim, queue, tiled_tensor_S,
-                                                                   tiled_tensor_D, thr_layout, vec_layout)
+  syclcompat::launch<copy_kernel_vectorized<decltype(tiled_tensor_S), decltype(tiled_tensor_D),
+                                            decltype(thr_layout), decltype(vec_layout)>>(
+      gridDim, blockDim, queue, tiled_tensor_S, tiled_tensor_D, thr_layout, vec_layout)
       .wait_and_throw();
 
   //
@@ -229,7 +233,8 @@ int main(int argc, char** argv) {
 
   for (size_t i = 0; i < host_output.size(); ++i) {
     if (host_src[i] != host_output[i]) {
-      std::cerr << "Error. S[" << i << "]: " << host_src[i] << ",   D[" << i << "]: " << host_output[i] << std::endl;
+      std::cerr << "Error. S[" << i << "]: " << host_src[i] << ",   D[" << i
+                << "]: " << host_output[i] << std::endl;
 
       if (++errors >= kErrorLimit) {
         std::cerr << "Aborting on " << kErrorLimit << "nth error." << std::endl;

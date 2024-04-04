@@ -38,43 +38,7 @@ using namespace std::chrono;
 
 void print_device_info(sycl::queue& queue, std::ostream& output_stream) {
   output_stream << "Running on: " << queue.get_device().get_info<sycl::info::device::name>() << " ";
-  output_stream << "Num CUs: " << queue.get_device().get_info<sycl::info::device::max_compute_units>() << std::endl;
-}
-
-template <class Kernel, typename... Args>
-std::pair<double, double> benchmark(syclcompat::dim3&& grid_dim, syclcompat::dim3&& block_dim, sycl::queue& queue,
-                                    int timing_iterations, int warmup_iterations, std::size_t flops, Args... args) {
-  for (int i = 0; i < warmup_iterations; i++) {
-    syclcompat::launch<Kernel>(grid_dim, block_dim, queue, args...).wait_and_throw();
-  }
-
-  double total_time = 0;
-  for (int i = 0; i < timing_iterations; i++) {
-    auto t1 = high_resolution_clock::now();
-    syclcompat::launch<Kernel>(grid_dim, block_dim, queue, args...).wait();
-    auto t2 = high_resolution_clock::now();
-    total_time += duration_cast<microseconds>(t2 - t1).count();
-  }
-  // Returns GigaFlops
-  double average_time_in_seconds = (total_time / timing_iterations) * 1e-6;
-  return {(static_cast<double>(flops) / average_time_in_seconds) * 1e-9, total_time * 1e-3};
-}
-
-template <typename Foo, typename... Args>
-std::pair<double, double> benchmark(Foo&& foo, int timing_iterations, int warmup_iterations, std::size_t flops,
-                                    Args... args) {
-  for (int i = 0; i < warmup_iterations; i++) {
-    foo(args...).wait_and_throw();
-  }
-
-  double total_time = 0;
-  for (int i = 0; i < timing_iterations; i++) {
-    auto t1 = high_resolution_clock::now();
-    foo(args...).wait();
-    auto t2 = high_resolution_clock::now();
-    total_time += duration_cast<microseconds>(t2 - t1).count();
-  }
-  // Returns GigaFlops
-  double average_time_in_seconds = (total_time / timing_iterations) * 1e-6;
-  return {(static_cast<double>(flops) / average_time_in_seconds) * 1e-9, total_time * 1e-3};
+  output_stream << "Num CUs: "
+                << queue.get_device().get_info<sycl::info::device::max_compute_units>()
+                << std::endl;
 }

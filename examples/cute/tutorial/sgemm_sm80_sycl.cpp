@@ -29,6 +29,7 @@
  *
  **************************************************************************************************/
 
+#include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/print_error.hpp"
 #include "sycl_utils.hpp"
 
@@ -36,14 +37,14 @@
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
 
-using namespace cute;
-
 template <class ProblemShape, class CtaTiler, class TA, class AStride, class ASmemLayout, class TiledCopyA, class TB,
           class BStride, class BSmemLayout, class TiledCopyB, class TC, class CStride, class CSmemLayout,
           class TiledMma, class Alpha, class Beta>
 void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStride dA, ASmemLayout sA_layout,
                  TiledCopyA copy_a, TB const* B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b, TC* C,
                  CStride dC, CSmemLayout, TiledMma mma, Alpha alpha, Beta beta) {
+  using namespace cute;
+
   // Preconditions
   CUTE_STATIC_ASSERT_V(rank(shape_MNK) == Int<3>{});  // (M, N, K)
   CUTE_STATIC_ASSERT_V(rank(cta_tiler) == Int<3>{});  // (BLK_M, BLK_N, BLK_K)
@@ -274,8 +275,10 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
 
 // Setup params for a NT GEMM
 template <class TA, class TB, class TC, class Alpha, class Beta>
-sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
+void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
                     int ldC, sycl::queue& queue) {
+  using namespace cute;
+
   // Define shapes (dynamic)
   auto M = int(m);
   auto N = int(n);
@@ -324,7 +327,7 @@ sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
 
   auto dimBlock = syclcompat::dim3(size(mmaC));
   auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
-  return syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
+  syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
                                         decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
                                         decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
       dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC, sC, mmaC, alpha,
@@ -333,8 +336,10 @@ sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
 
 // Setup params for a NT GEMM
 template <class TA, class TB, class TC, class Alpha, class Beta>
-sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
+void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
                     int ldC, sycl::queue& queue) {
+  using namespace cute;
+  
   // Define shapes (dynamic)
   auto M = int(m);
   auto N = int(n);
@@ -386,7 +391,7 @@ sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
 #endif
   auto dimBlock = syclcompat::dim3(size(mmaC));
   auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
-  return syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
+  syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
                                         decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
                                         decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
       dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC, sC, mmaC, alpha,
@@ -394,7 +399,7 @@ sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
 }
 
 template <class TA, class TB, class TC, class Alpha, class Beta>
-sycl::event gemm(char transA, char transB, int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
+void gemm(char transA, char transB, int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
                  Beta beta, TC* C, int ldC, sycl::queue& queue) {
   if (transA == 'N' && transB == 'T') {
     return gemm_nt(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC, queue);
@@ -453,9 +458,10 @@ int main(int argc, char** argv) {
   queue.copy(h_C.data(), d_C, m * n);
   queue.wait();
 
-  std::size_t flops = (static_cast<std::size_t>(2) * m * n * k);
+  double gflops = (2.0 * m * n * k) * 1e-9;
 
   const int timing_iterations = 100;
+  GPU_Clock timer;
   
   int ldA = 0, ldB = 0, ldC = m;
 
@@ -475,9 +481,17 @@ int main(int argc, char** argv) {
     assert(false);
   }
 
-  auto [gflops, total_time] = benchmark(gemm<TA, TB, TC, TI, TI>, timing_iterations, 1, flops, transA, transB, m, n, k,
-                                        alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
-  printf("SYCL_CUTE_GEMM:     [%6.1f]GFlop/s  (%6.4f)ms\n", gflops, total_time);
+  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
+  queue.wait_and_throw();
+
+  timer.start();
+  for (int i = 0; i < timing_iterations; i++) {
+    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
+  }
+  queue.wait();
+  double cute_time = timer.seconds() / timing_iterations;
+  printf("SYCL_CUTE_GEMM:     [%4.3f]GFlop/s  (%6.4f)ms\n", 
+                                               gflops / cute_time, cute_time * 1e3);
   return 0;
 
 }

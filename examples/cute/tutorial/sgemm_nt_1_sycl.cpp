@@ -284,7 +284,7 @@ gemm(sycl::queue q, int m, int n, int k,
 
 void test_gemm(int m, int n, int k)
 {
-    auto q = sycl::queue { sycl::gpu_selector_v } ;
+    auto q = sycl::queue { sycl::gpu_selector_v, {sycl::property::queue::in_order()}} ;
 
     std::cout << "M = " << m << std::endl;
     std::cout << "N = " << n << std::endl;
@@ -381,7 +381,6 @@ void test_gemm(int m, int n, int k)
          d_B, n,
          beta,
          d_C, m);
-    CUTE_CHECK_LAST();
     q.wait_and_throw();
 
     // Timing iterations
@@ -399,7 +398,6 @@ void test_gemm(int m, int n, int k)
     q.wait();
 
     double cute_time = timer.seconds() / timing_iterations;
-    CUTE_CHECK_LAST();
     printf("SYCL_CUTE_GEMM:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
 
     std::vector<TC> cute_result(m*n);

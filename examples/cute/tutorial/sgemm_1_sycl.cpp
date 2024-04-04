@@ -30,6 +30,7 @@
  *
  **************************************************************************************************/
 
+#include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/print_error.hpp"
 #include "sycl_utils.hpp"
 
@@ -39,12 +40,13 @@
 
 using namespace cute;
 
-template <class ProblemShape, class CtaTiler, class TA, class AStride, class ASmemLayout, class AThreadLayout, class TB,
-          class BStride, class BSmemLayout, class BThreadLayout, class TC, class CStride, class CSmemLayout,
-          class CThreadLayout, class Alpha, class Beta>
-void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStride dA, ASmemLayout sA_layout,
-                 AThreadLayout tA, TB const* B, BStride dB, BSmemLayout sB_layout, BThreadLayout tB, TC* C, CStride dC,
-                 CSmemLayout, CThreadLayout tC, Alpha alpha, Beta beta) {
+template <class ProblemShape, class CtaTiler, class TA, class AStride, class ASmemLayout,
+          class AThreadLayout, class TB, class BStride, class BSmemLayout, class BThreadLayout,
+          class TC, class CStride, class CSmemLayout, class CThreadLayout, class Alpha, class Beta>
+void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStride dA,
+                 ASmemLayout sA_layout, AThreadLayout tA, TB const* B, BStride dB,
+                 BSmemLayout sB_layout, BThreadLayout tB, TC* C, CStride dC, CSmemLayout,
+                 CThreadLayout tC, Alpha alpha, Beta beta) {
   // Preconditions
   CUTE_STATIC_ASSERT_V(rank(shape_MNK) == Int<3>{});  // (M, N, K)
   CUTE_STATIC_ASSERT_V(rank(cta_tiler) == Int<3>{});  // (BLK_M, BLK_N, BLK_K)
@@ -88,10 +90,11 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   Tensor mC = make_tensor(make_gmem_ptr(C), select<0, 1>(shape_MNK), dC);  // (M,N)
 
   // Get the appropriate blocks for this thread block
-  auto cta_coord = make_coord(syclcompat::work_group_id::x(), syclcompat::work_group_id::y(), _);  // (m,n,k)
-  Tensor gA = local_tile(mA, cta_tiler, cta_coord, Step<_1, X, _1>{});                             // (BLK_M,BLK_K,k)
-  Tensor gB = local_tile(mB, cta_tiler, cta_coord, Step<X, _1, _1>{});                             // (BLK_N,BLK_K,k)
-  Tensor gC = local_tile(mC, cta_tiler, cta_coord, Step<_1, _1, X>{});                             // (BLK_M,BLK_N)
+  auto cta_coord =
+      make_coord(syclcompat::work_group_id::x(), syclcompat::work_group_id::y(), _);  // (m,n,k)
+  Tensor gA = local_tile(mA, cta_tiler, cta_coord, Step<_1, X, _1>{});  // (BLK_M,BLK_K,k)
+  Tensor gB = local_tile(mB, cta_tiler, cta_coord, Step<X, _1, _1>{});  // (BLK_N,BLK_K,k)
+  Tensor gC = local_tile(mC, cta_tiler, cta_coord, Step<_1, _1, X>{});  // (BLK_M,BLK_N)
 
   // Shared memory buffers
   auto smemA = syclcompat::local_mem<TA[cosize_v<ASmemLayout>]>();
@@ -127,7 +130,8 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   // Partition sB (N,K) by the cols of tC
   Tensor tCsB = local_partition(sB, tC, syclcompat::local_id::x(), Step<X, _1>{});  // (THR_N,BLK_K)
   // Partition gC (M,N) by the tile of tC
-  Tensor tCgC = local_partition(gC, tC, syclcompat::local_id::x(), Step<_1, _1>{});  // (THR_M,THR_N)
+  Tensor tCgC =
+      local_partition(gC, tC, syclcompat::local_id::x(), Step<_1, _1>{});  // (THR_M,THR_N)
 
   // Allocate the accumulators -- same shape/layout as the partitioned data
   Tensor tCrC = make_tensor_like(tCgC);  // (THR_M,THR_N)
@@ -233,8 +237,8 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
 // Setup params for an NT GEMM
 // Use m-major smem sA, n-major smem sB, and mn-major threads tA|tB
 template <class TA, class TB, class TC, class Alpha, class Beta>
-sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
-                    int ldC, sycl::queue& queue) {
+void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
+             Beta beta, TC* C, int ldC, sycl::queue& queue) {
   // Define shapes (dynamic)
   auto M = int(m);
   auto N = int(n);
@@ -265,17 +269,19 @@ sycl::event gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
   auto dimBlock = syclcompat::dim3(size(tC));
   auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
 
-  return syclcompat::launch<
-      gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA), decltype(tA), TB,
-                  decltype(dB), decltype(sB), decltype(tB), TC, decltype(dC), decltype(sC), decltype(tC), Alpha, Beta>>(
-      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, tA, B, dB, sB, tB, C, dC, sC, tC, alpha, beta);
+  syclcompat::launch<
+      gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
+                  decltype(tA), TB, decltype(dB), decltype(sB), decltype(tB), TC, decltype(dC),
+                  decltype(sC), decltype(tC), Alpha, Beta>>(dimGrid, dimBlock, queue, prob_shape,
+                                                            cta_tiler, A, dA, sA, tA, B, dB, sB, tB,
+                                                            C, dC, sC, tC, alpha, beta);
 }
 
 // Setup params for a TN GEMM
 // Use padded m-major smem sA, padded n-major smem sB, and k-major threads tA|tB
 template <class TA, class TB, class TC, class Alpha, class Beta>
-sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
-                    int ldC, sycl::queue& queue) {
+void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
+             Beta beta, TC* C, int ldC, sycl::queue& queue) {
   // Define shapes (dynamic)
   auto M = int(m);
   auto N = int(n);
@@ -299,22 +305,26 @@ sycl::event gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB c
   auto sC = make_layout(make_shape(bM, bN));                 // (m,n) -> smem_idx; m-major
 
   // Define the thread layouts (static)
-  auto tA = make_layout(make_shape(Int<32>{}, Int<8>{}), LayoutRight{});  // (m,k) -> thr_idx; k-major
-  auto tB = make_layout(make_shape(Int<32>{}, Int<8>{}), LayoutRight{});  // (n,k) -> thr_idx; k-major
-  auto tC = make_layout(make_shape(Int<16>{}, Int<16>{}));                // (m,n) -> thr_idx; m-major
+  auto tA =
+      make_layout(make_shape(Int<32>{}, Int<8>{}), LayoutRight{});  // (m,k) -> thr_idx; k-major
+  auto tB =
+      make_layout(make_shape(Int<32>{}, Int<8>{}), LayoutRight{});  // (n,k) -> thr_idx; k-major
+  auto tC = make_layout(make_shape(Int<16>{}, Int<16>{}));          // (m,n) -> thr_idx; m-major
 
   auto dimBlock = syclcompat::dim3(size(tC));
   auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
 
-  return syclcompat::launch<
-      gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA), decltype(tA), TB,
-                  decltype(dB), decltype(sB), decltype(tB), TC, decltype(dC), decltype(sC), decltype(tC), Alpha, Beta>>(
-      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, tA, B, dB, sB, tB, C, dC, sC, tC, alpha, beta);
+  syclcompat::launch<
+      gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
+                  decltype(tA), TB, decltype(dB), decltype(sB), decltype(tB), TC, decltype(dC),
+                  decltype(sC), decltype(tC), Alpha, Beta>>(dimGrid, dimBlock, queue, prob_shape,
+                                                            cta_tiler, A, dA, sA, tA, B, dB, sB, tB,
+                                                            C, dC, sC, tC, alpha, beta);
 }
 
 template <class TA, class TB, class TC, class Alpha, class Beta>
-sycl::event gemm(char transA, char transB, int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
-                 Beta beta, TC* C, int ldC, sycl::queue& queue) {
+void gemm(char transA, char transB, int m, int n, int k, Alpha alpha, TA const* A, int ldA,
+          TB const* B, int ldB, Beta beta, TC* C, int ldC, sycl::queue& queue) {
   if (transA == 'N' && transB == 'T') {
     return gemm_nt(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC, queue);
   } else if (transA == 'T' && transB == 'N') {
@@ -372,9 +382,10 @@ int main(int argc, char** argv) {
   queue.copy(h_C.data(), d_C, m * n);
   queue.wait();
 
-  std::size_t flops = (static_cast<std::size_t>(2) * m * n * k);
+  double gflops = (2.0 * m * n * k) * 1e-9;
 
   const int timing_iterations = 100;
+  GPU_Clock timer;
 
   int ldA = 0, ldB = 0, ldC = m;
 
@@ -393,8 +404,17 @@ int main(int argc, char** argv) {
   } else {
     assert(false);
   }
-  auto [gflops, total_time] = benchmark(gemm<TA, TB, TC, TI, TI>, timing_iterations, 1, flops, transA, transB, m, n, k,
-                                        alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
-  printf("SYCL_CUTE_GEMM:     [%6.1f]GFlop/s  (%6.4f)ms\n", gflops, total_time);
+
+  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
+  queue.wait_and_throw();
+
+  timer.start();
+  for (int i = 0; i < timing_iterations; i++) {
+    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
+  }
+  queue.wait();
+  double cute_time = timer.seconds() / timing_iterations;
+  printf("SYCL_CUTE_GEMM:     [%4.3f]GFlop/s  (%6.4f)ms\n", 
+                                               gflops / cute_time, cute_time * 1e3);
   return 0;
 }
