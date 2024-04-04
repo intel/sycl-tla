@@ -40,7 +40,7 @@
 #include <cute/config.hpp>
 
 #ifdef CUTLASS_ENABLE_SYCL
-#  include <syclcompat.hpp>
+#include <syclcompat.hpp>
 #endif
 
 namespace cute
