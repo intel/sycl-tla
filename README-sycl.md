@@ -21,8 +21,18 @@ Currently, only one example works on NVIDIA SM 80.
  
 To build CUTLASS SYCL support you need the latest version of DPC++ compiler, you can either use a recent [nighly build](https://github.com/intel/llvm/releases)
 or build the compiler from source.
-In either case, make sure to enable the NVIDIA plugin so you can build applications
+For the latter, make sure to enable the NVIDIA plugin so you can build applications
 for NVIDIA GPUs.
+
+
+I see, in that case let's not call it plugins, which confuses with the Plugins available on the codeplay's website to people who are completely new to SYCL,
+
+we can phrase it as -
+
+Suggested change
+In either case, make sure to enable the NVIDIA plugin so you can build applications
+To build CUTLASS with SYCL support, install the latest DPC++ compiler with the CUDA backend enabled, either by building from source as described [here](https://github.com/intel/llvm/blob/sycl/sycl/doc/GetStartedGuide.md#build-dpc-toolchain-with-support-for-nvidia-cuda) ,  or by downloading the [nightly releases](https://github.com/intel/llvm/releases)
+
 
 ## Building with SYCL support
 Once you have your compiler installed, you need to point the
@@ -70,4 +80,3 @@ LD_LIBRARY_PATH=/path/to/sycl/install/lib ./examples/cute/tutorial/[EXAMPLE_NAME
 # References
 
 [1] https://www.khronos.org/sycl/
-
