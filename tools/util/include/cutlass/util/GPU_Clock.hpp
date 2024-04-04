@@ -34,7 +34,7 @@
 #include <cuda_runtime.h>
 
 #ifdef CUTLASS_ENABLE_SYCL
-  #include <syclcompat.hpp>
+#include <syclcompat.hpp>
 #endif
 
 struct GPU_Clock
