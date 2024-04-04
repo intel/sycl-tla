@@ -30,11 +30,7 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/print_error.hpp"
-#if defined(CUTLASS_ENABLE_CUBLAS) && CUTLASS_ENABLE_CUBLAS != 0
-#include "cutlass/util/cublas_wrappers.hpp"
-#endif
 #include "sycl_utils.hpp"
 
 #include <cute/tensor.hpp>
@@ -376,10 +372,9 @@ int main(int argc, char** argv) {
   queue.copy(h_C.data(), d_C, m * n);
   queue.wait();
 
-  double gflops = (2.0 * m * n * k) * 1e-9;
+  std::size_t flops = (static_cast<std::size_t>(2) * m * n * k);
 
   const int timing_iterations = 100;
-  GPU_Clock timer;
 
   int ldA = 0, ldB = 0, ldC = m;
 
@@ -398,15 +393,8 @@ int main(int argc, char** argv) {
   } else {
     assert(false);
   }
-  // Run once
-  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue).wait_and_throw();
-
-  // Timing iterations
-  timer.start();
-  for (int i = 0; i < timing_iterations; ++i) {
-    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue).wait_and_throw();
-  }
-  double cute_time = timer.seconds() / timing_iterations;
-  printf("SYCL_CUTE_GEMM:     [%6.1f]GFlop/s  (%6.4f)ms\n", gflops / cute_time, cute_time * 1000);
+  auto [gflops, total_time] = benchmark(gemm<TA, TB, TC, TI, TI>, timing_iterations, 1, flops, transA, transB, m, n, k,
+                                        alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
+  printf("SYCL_CUTE_GEMM:     [%6.1f]GFlop/s  (%6.4f)ms\n", gflops, total_time);
   return 0;
 }

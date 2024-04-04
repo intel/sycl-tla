@@ -29,7 +29,6 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/print_error.hpp"
 #include "sycl_utils.hpp"
 
