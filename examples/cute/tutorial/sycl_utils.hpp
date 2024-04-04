@@ -29,12 +29,8 @@
  *
  **************************************************************************************************/
 
-#include <chrono>
 #include <iostream>
 #include <sycl/sycl.hpp>
-#include <syclcompat.hpp>
-
-using namespace std::chrono;
 
 void print_device_info(sycl::queue& queue, std::ostream& output_stream) {
   output_stream << "Running on: " << queue.get_device().get_info<sycl::info::device::name>() << " ";
