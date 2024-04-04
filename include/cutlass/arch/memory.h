@@ -81,7 +81,7 @@ struct global_load<AccessType,
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   uint4 *data = reinterpret_cast<uint4 *>(&D);
 
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -119,7 +119,7 @@ struct global_load<AccessType,
   CUTLASS_DEVICE
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   uint4 *data = reinterpret_cast<uint4 *>(&D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -152,7 +152,7 @@ struct global_load<AccessType,
   CUTLASS_DEVICE
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   uint4 &data = reinterpret_cast<uint4 &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -181,7 +181,7 @@ struct global_load<AccessType,
   CUTLASS_DEVICE
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   uint4 &data = reinterpret_cast<uint4 &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -206,7 +206,7 @@ struct global_load<AccessType,
   CUTLASS_DEVICE
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   uint2 &data = reinterpret_cast<uint2 &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -233,7 +233,7 @@ struct global_load<AccessType,
   CUTLASS_DEVICE
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   uint2 &data = reinterpret_cast<uint2 &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -256,7 +256,7 @@ struct global_load<AccessType,
   CUTLASS_DEVICE
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   unsigned &data = reinterpret_cast<unsigned &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -282,7 +282,7 @@ struct global_load<AccessType,
   CUTLASS_DEVICE
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   unsigned &data = reinterpret_cast<unsigned &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -304,7 +304,7 @@ struct global_load<AccessType,
   CUTLASS_DEVICE
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   uint16_t &data = reinterpret_cast<uint16_t &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -330,7 +330,7 @@ struct global_load<AccessType,
   CUTLASS_DEVICE
   global_load(AccessType &D, void const *ptr, bool pred_guard) {
   uint16_t &data = reinterpret_cast<uint16_t &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
         "{\n"
         "  .reg .pred p;\n"
@@ -377,7 +377,7 @@ struct global_store<AccessType, 64> {
   CUTLASS_DEVICE
   global_store(AccessType const &D, void *ptr, bool pred_guard) {
   uint4 const *data = reinterpret_cast<uint4 const *>(&D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile(
       "{\n"
       "  .reg .pred p;\n"
@@ -405,7 +405,7 @@ struct global_store<AccessType, 32> {
   CUTLASS_DEVICE
   global_store(AccessType const &D, void *ptr, bool pred_guard) {
   uint4 const *data = reinterpret_cast<uint4 const *>(&D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile(
       "{\n"
       "  .reg .pred p;\n"
@@ -426,7 +426,7 @@ struct global_store<AccessType, 16> {
   CUTLASS_DEVICE
   global_store(AccessType const &D, void *ptr, bool pred_guard) {
   uint4 const &data = reinterpret_cast<uint4 const &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile(
       "{\n"
       "  .reg .pred p;\n"
@@ -444,7 +444,7 @@ struct global_store<AccessType, 8> {
   CUTLASS_DEVICE
   global_store(AccessType const &D, void *ptr, bool pred_guard) {
   uint2 const &data = reinterpret_cast<uint2 const &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile(
       "{\n"
       "  .reg .pred p;\n"
@@ -462,7 +462,7 @@ struct global_store<AccessType, 4> {
   CUTLASS_DEVICE
   global_store(AccessType const &D, void *ptr, bool pred_guard) {
   uint32_t const &data = reinterpret_cast<uint32_t const &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
     asm volatile(
       "{\n"
       "  .reg .pred p;\n"
@@ -480,7 +480,7 @@ struct global_store<AccessType, 2> {
   CUTLASS_DEVICE
   global_store(AccessType const &D, void *ptr, bool pred_guard) {
   uint16_t const &data = reinterpret_cast<uint16_t const &>(D);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile(
       "{\n"
       "  .reg .pred p;\n"
@@ -513,7 +513,7 @@ void shared_load(void *dst, uint32_t ptr);
 template <>
 CUTLASS_DEVICE
 void shared_load<2>(void *dst, uint32_t ptr) {
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("ld.shared.u16 %0, [%1];\n"
     : "=h"(*reinterpret_cast<uint16_t *>(dst))
     : "r"(ptr));
@@ -524,7 +524,7 @@ void shared_load<2>(void *dst, uint32_t ptr) {
 template <>
 CUTLASS_DEVICE
 void shared_load<4>(void *dst, uint32_t ptr) {
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("ld.shared.u32 %0, [%1];\n"
     : "=r"(*reinterpret_cast<uint32_t *>(dst))
     : "r"(ptr));
@@ -536,7 +536,7 @@ template <>
 CUTLASS_DEVICE
 void shared_load<8>(void *dst, uint32_t ptr) {
   uint2 *dst_u64 = reinterpret_cast<uint2 *>(dst);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("ld.shared.v2.u32 {%0, %1}, [%2];\n"
     :
       "=r"(dst_u64->x),
@@ -550,7 +550,7 @@ template <>
 CUTLASS_DEVICE
 void shared_load<16>(void *dst, uint32_t ptr) {
   uint4 *dst_u128 = reinterpret_cast<uint4 *>(dst);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("ld.shared.v4.u32 {%0, %1, %2, %3}, [%4];\n"
     :
       "=r"(dst_u128->x),
@@ -573,7 +573,7 @@ void shared_store(uint32_t ptr, void const *src);
 template <>
 CUTLASS_DEVICE
 void shared_store<2>(uint32_t ptr, void const *src) {
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("st.shared.u16 [%0], %1;\n"
     : :
     "r"(ptr),
@@ -586,7 +586,7 @@ void shared_store<2>(uint32_t ptr, void const *src) {
 template <>
 CUTLASS_DEVICE
 void shared_store<4>(uint32_t ptr, void const *src) {
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("st.shared.u32 [%0], %1;\n"
     : :
     "r"(ptr),
@@ -600,7 +600,7 @@ template <>
 CUTLASS_DEVICE
 void shared_store<8>(uint32_t ptr, void const *src) {
   uint2 const *dst_u64 = reinterpret_cast<uint2 const *>(src);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("st.shared.v2.u32 [%0], {%1, %2};\n"
     : :
       "r"(ptr),
@@ -615,7 +615,7 @@ template <>
 CUTLASS_DEVICE
 void shared_store<16>(uint32_t ptr, void const *src) {
   uint4 const *dst_u128 = reinterpret_cast<uint4 const *>(src);
-#if defined(ENABLE_NVPTX)
+#if !defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("st.shared.v4.u32 [%0], {%1, %2, %3, %4};\n"
     : :
       "r"(ptr),
