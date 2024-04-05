@@ -47,9 +47,11 @@ function(cutlass_example_add_executable NAME)
   cutlass_add_executable(${NAME} ${__UNPARSED_ARGUMENTS} BATCH_SOURCES OFF)
 
   add_dependencies(cutlass_examples ${NAME})
+
   if (${CUTLASS_ENABLE_DEBUG_PRINTS})
     target_compile_definitions(${NAME} INTERFACE CUTLASS_ENABLE_DEBUG_PRINTS)
   endif()
+  
   target_link_libraries(
     ${NAME}
     PRIVATE
