@@ -142,7 +142,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   // Clear the accumulators
   clear(tCrC);
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   if(thread0()) {
     print("  mA : "); print(  mA); print("\n");
     print("  gA : "); print(  gA); print("\n");
@@ -153,7 +153,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   }
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   if(thread0()) {
     print("  mB : "); print(  mB); print("\n");
     print("  gB : "); print(  gB); print("\n");
@@ -164,7 +164,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   }
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   if(thread0()) {
     print("  mC : "); print(  mC); print("\n");
     print("  gC : "); print(  gC); print("\n");
@@ -174,8 +174,6 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
     print("tCrC : "); print(tCrC); print("\n");
   }
 #endif
-
-#if 1
 
   // TUTORIAL: Example of an inner loop that pipelines compute with reads
   //           from global memory by staging through register and shared memory.
@@ -218,8 +216,6 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
     //     }
     //   }
   }
-
-#endif
 
   //
   // Epilogue
@@ -276,13 +272,13 @@ void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B
   TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{},
                                  Layout<Shape<_16, _16, _1>>{});  // 16x16x1 UniversalFMA
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print(copyA);
   print(copyB);
   print(mmaC);
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print_latex(copyA);
   print_latex(copyB);
   print_latex(mmaC);
@@ -348,13 +344,13 @@ void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B
   TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{},
                                  Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print(copyA);
   print(copyB);
   print(mmaC);
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print_latex(copyA);
   print_latex(copyB);
   print_latex(mmaC);

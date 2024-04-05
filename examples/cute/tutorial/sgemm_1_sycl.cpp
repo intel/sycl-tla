@@ -145,7 +145,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   // Clear the accumulators
   clear(tCrC);
 
-#if 0
+#ifdef CUTLASS_ENABLE_DEBUG_PRINTS
   if(thread0()) {
     print("  mA : "); print(  mA); print("\n");
     print("  gA : "); print(  gA); print("\n");
@@ -155,7 +155,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   }
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   if(thread0()) {
     print("  mB : "); print(  mB); print("\n");
     print("  gB : "); print(  gB); print("\n");
@@ -165,7 +165,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   }
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   if(thread0()) {
     print("  mC : "); print(  mC); print("\n");
     print("  gC : "); print(  gC); print("\n");
@@ -175,8 +175,6 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
     print("tCrC : "); print(tCrC); print("\n");
   }
 #endif
-
-#if 1
 
   // TUTORIAL: Example of a simple mainloop that read tiles of data into shared memory,
   //           and then computes on those tiles.
@@ -218,8 +216,6 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
 
     syclcompat::wg_barrier();  // Wait for all threads to read from smem
   }
-
-#endif
 
   //
   // Epilogue
