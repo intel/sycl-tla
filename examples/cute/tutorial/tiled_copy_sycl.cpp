@@ -155,15 +155,15 @@ int main(int argc, char** argv) {
   std::vector<dtype> host_src(size(tensor_shape));
   std::vector<dtype> host_output(size(tensor_shape));
 
-  dtype* device_src = (dtype*)syclcompat::malloc(size(tensor_shape) * sizeof(dtype));
-  dtype* device_output = (dtype*)syclcompat::malloc(size(tensor_shape) * sizeof(dtype));
+  dtype* device_src = syclcompat::malloc<dtype>(size(tensor_shape));
+  dtype* device_output = syclcompat::malloc<dtype>(size(tensor_shape));
 
   for (size_t i = 0; i < host_src.size(); ++i) {
     host_src[i] = static_cast<dtype>(i);
   }
 
-  syclcompat::memcpy(device_src, host_src.data(), size(tensor_shape) * sizeof(dtype));
-  syclcompat::memcpy(device_output, host_output.data(), size(tensor_shape) * sizeof(dtype));
+  syclcompat::memcpy<dtype>(device_src, host_src.data(), size(tensor_shape));
+  syclcompat::memcpy<dtype>(device_output, host_output.data(), size(tensor_shape));
 
   //
   // Make tensors
@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
   // Verify
   //
 
-  syclcompat::memcpy(host_output.data(), device_output, size(tensor_shape) * sizeof(dtype));
+  syclcompat::memcpy<dtype>(host_output.data(), device_output, size(tensor_shape));
 
   int32_t errors = 0;
   int32_t const kErrorLimit = 10;
