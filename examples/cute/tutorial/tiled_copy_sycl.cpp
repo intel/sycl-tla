@@ -30,13 +30,10 @@
  **************************************************************************************************/
 
 #include "cutlass/util/print_error.hpp"
-#include "sycl_utils.hpp"
 
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
-
-using namespace cute;
 
 // This is a simple tutorial showing several ways to partition a tensor into tiles then
 // perform efficient, coalesced copies. This example also shows how to vectorize accesses
@@ -68,6 +65,8 @@ using namespace cute;
 // Uses local_partition() to partition a tile among threads arranged as (THR_M, THR_N).
 template <class TensorS, class TensorD, class ThreadLayout>
 void copy_kernel(TensorS S, TensorD D, ThreadLayout) {
+  using namespace cute;
+
   // Slice the tiled tensors
   Tensor tile_S = S(make_coord(_, _), syclcompat::work_group_id::x(),
                     syclcompat::work_group_id::y());  // (BlockShape_M, BlockShape_N)
@@ -98,6 +97,8 @@ void copy_kernel(TensorS S, TensorD D, ThreadLayout) {
 ///
 template <class TensorS, class TensorD, class ThreadLayout, class VecLayout>
 void copy_kernel_vectorized(TensorS S, TensorD D, ThreadLayout, VecLayout) {
+  using namespace cute;
+
   using Element = typename TensorS::value_type;
 
   // Slice the tensors to obtain a view into each tile.
@@ -139,8 +140,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, ThreadLayout, VecLayout) {
 
 /// Main function
 int main(int argc, char** argv) {
-  sycl::queue queue{sycl::gpu_selector_v};
-  print_device_info(queue, std::cout);
+  using namespace cute;
   //
   // Given a 2D shape, perform an efficient copy
   //
@@ -155,16 +155,15 @@ int main(int argc, char** argv) {
   std::vector<dtype> host_src(size(tensor_shape));
   std::vector<dtype> host_output(size(tensor_shape));
 
-  dtype* device_src = sycl::malloc_device<dtype>(size(tensor_shape), queue);
-  dtype* device_output = sycl::malloc_device<dtype>(size(tensor_shape), queue);
+  dtype* device_src = (dtype*)syclcompat::malloc(size(tensor_shape) * sizeof(dtype));
+  dtype* device_output = (dtype*)syclcompat::malloc(size(tensor_shape) * sizeof(dtype));
 
   for (size_t i = 0; i < host_src.size(); ++i) {
     host_src[i] = static_cast<dtype>(i);
   }
 
-  queue.copy(host_src.data(), device_src, size(tensor_shape));
-  queue.copy(host_output.data(), device_output, size(tensor_shape));
-  queue.wait();
+  syclcompat::memcpy(device_src, host_src.data(), size(tensor_shape) * sizeof(dtype));
+  syclcompat::memcpy(device_output, host_output.data(), size(tensor_shape) * sizeof(dtype));
 
   //
   // Make tensors
@@ -219,14 +218,14 @@ int main(int argc, char** argv) {
   //
   syclcompat::launch<copy_kernel_vectorized<decltype(tiled_tensor_S), decltype(tiled_tensor_D),
                                             decltype(thr_layout), decltype(vec_layout)>>(
-      gridDim, blockDim, queue, tiled_tensor_S, tiled_tensor_D, thr_layout, vec_layout)
-      .wait_and_throw();
+      gridDim, blockDim, tiled_tensor_S, tiled_tensor_D, thr_layout, vec_layout);
+  syclcompat::wait_and_throw();
 
   //
   // Verify
   //
 
-  queue.copy(device_output, host_output.data(), size(tensor_shape)).wait();
+  syclcompat::memcpy(host_output.data(), device_output, size(tensor_shape) * sizeof(dtype));
 
   int32_t errors = 0;
   int32_t const kErrorLimit = 10;
