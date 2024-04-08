@@ -489,13 +489,13 @@ int main(int argc, char** argv) {
   for (int j = 0; j < n * k; ++j) h_B[j] = static_cast<TB>(2 * (rand() / double(RAND_MAX)) - 1);
   for (int j = 0; j < m * n; ++j) h_C[j] = static_cast<TC>(-1);
 
-  auto d_A = (TA*)syclcompat::malloc(m * k * sizeof(TA));
-  auto d_B = (TB*)syclcompat::malloc(k * n * sizeof(TB));
-  auto d_C = (TC*)syclcompat::malloc(m * n * sizeof(TC));
+  auto d_A = syclcompat::malloc<TA>(m * k);
+  auto d_B = syclcompat::malloc<TB>(k * n);
+  auto d_C = syclcompat::malloc<TC>(m * n);
 
-  syclcompat::memcpy(d_A, h_A.data(), m * k * sizeof(TA));
-  syclcompat::memcpy(d_B, h_B.data(), k * n * sizeof(TB));
-  syclcompat::memcpy(d_C, h_C.data(), m * n * sizeof(TC));
+  syclcompat::memcpy<TA>(d_A, h_A.data(), m * k);
+  syclcompat::memcpy<TB>(d_B, h_B.data(), k * n);
+  syclcompat::memcpy<TC>(d_C, h_C.data(), m * n);
 
   double gflops = (2.0 * m * n * k) * 1e-9;
 
@@ -526,8 +526,8 @@ int main(int argc, char** argv) {
   timer.start();
   for (int i = 0; i < timing_iterations; i++) {
     gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC);
-    syclcompat::wait();
   }
+  syclcompat::wait();
 
   double cute_time = timer.seconds() / timing_iterations;
   printf("SYCL_CUTE_GEMM:     [%4.3f]GFlop/s  (%6.4f)ms\n", gflops / cute_time, cute_time * 1e3);
