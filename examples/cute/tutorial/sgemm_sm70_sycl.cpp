@@ -31,13 +31,10 @@
 
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/print_error.hpp"
-#include "sycl_utils.hpp"
 
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
-
-using namespace cute;
 
 template <class ProblemShape, class CtaTiler, class TA, class AStride, class ASmemLayout,
           class TiledCopyA, class TB, class BStride, class BSmemLayout, class TiledCopyB, class TC,
@@ -46,6 +43,8 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
                  ASmemLayout sA_layout, TiledCopyA copy_a, TB const* B, BStride dB,
                  BSmemLayout sB_layout, TiledCopyB copy_b, TC* C, CStride dC, CSmemLayout,
                  TiledMma mma, Alpha alpha, Beta beta) {
+  using namespace cute;
+
   // Preconditions
   CUTE_STATIC_ASSERT_V(rank(shape_MNK) == Int<3>{});  // (M, N, K)
   CUTE_STATIC_ASSERT_V(rank(cta_tiler) == Int<3>{});  // (BLK_M, BLK_N, BLK_K)
@@ -145,7 +144,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   // Clear the accumulators
   clear(tCrC);
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   if(thread0()) {
     print("  mA : "); print(  mA); print("\n");
     print("  gA : "); print(  gA); print("\n");
@@ -156,7 +155,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   }
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   if(thread0()) {
     print("  mB : "); print(  mB); print("\n");
     print("  gB : "); print(  gB); print("\n");
@@ -167,7 +166,7 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   }
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   if(thread0()) {
     print("  mC : "); print(  mC); print("\n");
     print("  gC : "); print(  gC); print("\n");
@@ -177,8 +176,6 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
     print("tCrC : "); print(tCrC); print("\n");
   }
 #endif
-
-#if 1
 
   // Copy rmem to smem
   copy(tArA, tAsA);
@@ -227,8 +224,6 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
     }  // k_block
   }    // k_tile
 
-#endif
-
   //
   // Epilogue
   //
@@ -238,7 +233,9 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
 
 template <class TA, class TB, class TC, class Alpha, class Beta>
 void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
-             Beta beta, TC* C, int ldC, sycl::queue& queue) {
+             Beta beta, TC* C, int ldC) {
+  using namespace cute;
+
   // Define shapes (dynamic)
   auto M = int(m);
   auto N = int(n);
@@ -272,13 +269,13 @@ void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B
   TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{},
                                  Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print(copyA);
   print(copyB);
   print(mmaC);
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print_latex(copyA);
   print_latex(copyB);
   print_latex(mmaC);
@@ -290,14 +287,16 @@ void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B
       gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
                   decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
                   decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
-      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC,
+      dimGrid, dimBlock, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC,
       sC, mmaC, alpha, beta);
 }
 
 // Setup params for a TN GEMM
 template <class TA, class TB, class TC, class Alpha, class Beta>
 void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
-             Beta beta, TC* C, int ldC, sycl::queue& queue) {
+             Beta beta, TC* C, int ldC) {
+  using namespace cute;
+
   // Define shapes (dynamic)
   auto M = int(m);
   auto N = int(n);
@@ -336,13 +335,13 @@ void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B
   TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{},
                                  Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print(copyA);
   print(copyB);
   print(mmaC);
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print_latex(copyA);
   print_latex(copyB);
   print_latex(mmaC);
@@ -354,25 +353,23 @@ void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B
       gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
                   decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
                   decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
-      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC,
+      dimGrid, dimBlock, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC,
       sC, mmaC, alpha, beta);
 }
 
 template <class TA, class TB, class TC, class Alpha, class Beta>
 void gemm(char transA, char transB, int m, int n, int k, Alpha alpha, TA const* A, int ldA,
-          TB const* B, int ldB, Beta beta, TC* C, int ldC, sycl::queue& queue) {
+          TB const* B, int ldB, Beta beta, TC* C, int ldC) {
   if (transA == 'N' && transB == 'T') {
-    return gemm_nt(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC, queue);
+    return gemm_nt(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC);
   } else if (transA == 'T' && transB == 'N') {
-    return gemm_tn(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC, queue);
+    return gemm_tn(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC);
   }
   throw std::runtime_error("Not implemented");
 }
 
 int main(int argc, char** argv) {
-  sycl::queue queue{sycl::gpu_selector_v, {sycl::property::queue::in_order()}};
-  print_device_info(queue, std::cout);
-
+  
   int m = 5120;
   if (argc >= 2) sscanf(argv[1], "%d", &m);
 
@@ -409,14 +406,13 @@ int main(int argc, char** argv) {
   for (int j = 0; j < n * k; ++j) h_B[j] = static_cast<TB>(2 * (rand() / double(RAND_MAX)) - 1);
   for (int j = 0; j < m * n; ++j) h_C[j] = static_cast<TC>(-1);
 
-  auto d_A = sycl::malloc_device<TA>(m * k, queue);
-  auto d_B = sycl::malloc_device<TA>(k * n, queue);
-  auto d_C = sycl::malloc_device<TA>(m * n, queue);
+  auto d_A = syclcompat::malloc<TA>(m * k);
+  auto d_B = syclcompat::malloc<TB>(k * n);
+  auto d_C = syclcompat::malloc<TC>(m * n);
 
-  queue.copy(h_A.data(), d_A, m * k);
-  queue.copy(h_B.data(), d_B, k * n);
-  queue.copy(h_C.data(), d_C, m * n);
-  queue.wait();
+  syclcompat::memcpy<TA>(d_A, h_A.data(), m * k);
+  syclcompat::memcpy<TB>(d_B, h_B.data(), k * n);
+  syclcompat::memcpy<TC>(d_C, h_C.data(), m * n);
 
   double gflops = (2.0 * m * n * k) * 1e-9;
 
@@ -440,14 +436,15 @@ int main(int argc, char** argv) {
   } else {
     assert(false);
   }
-  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
-  queue.wait_and_throw();
+  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC);
+  syclcompat::wait_and_throw();
 
   timer.start();
   for (int i = 0; i < timing_iterations; i++) {
-    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
+    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC);
   }
-  queue.wait();
+  syclcompat::wait();
+  
   double cute_time = timer.seconds() / timing_iterations;
   printf("SYCL_CUTE_GEMM:     [%4.3f]GFlop/s  (%6.4f)ms\n", 
                                                 gflops / cute_time, cute_time * 1e3);

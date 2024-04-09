@@ -31,18 +31,18 @@
 
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/print_error.hpp"
-#include "sycl_utils.hpp"
 
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
 
-template <class ProblemShape, class CtaTiler, class TA, class AStride, class ASmemLayout, class TiledCopyA, class TB,
-          class BStride, class BSmemLayout, class TiledCopyB, class TC, class CStride, class CSmemLayout,
-          class TiledMma, class Alpha, class Beta>
-void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStride dA, ASmemLayout sA_layout,
-                 TiledCopyA copy_a, TB const* B, BStride dB, BSmemLayout sB_layout, TiledCopyB copy_b, TC* C,
-                 CStride dC, CSmemLayout, TiledMma mma, Alpha alpha, Beta beta) {
+template <class ProblemShape, class CtaTiler, class TA, class AStride, class ASmemLayout,
+          class TiledCopyA, class TB, class BStride, class BSmemLayout, class TiledCopyB, class TC,
+          class CStride, class CSmemLayout, class TiledMma, class Alpha, class Beta>
+void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStride dA,
+                 ASmemLayout sA_layout, TiledCopyA copy_a, TB const* B, BStride dB,
+                 BSmemLayout sB_layout, TiledCopyB copy_b, TC* C, CStride dC, CSmemLayout,
+                 TiledMma mma, Alpha alpha, Beta beta) {
   using namespace cute;
 
   // Preconditions
@@ -77,10 +77,11 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   Tensor mC = make_tensor(make_gmem_ptr(C), select<0, 1>(shape_MNK), dC);  // (M,N)
 
   // Get the appropriate blocks for this thread block
-  auto cta_coord = make_coord(syclcompat::work_group_id::x(), syclcompat::work_group_id::y(), _);  // (m,n,k)
-  Tensor gA = local_tile(mA, cta_tiler, cta_coord, Step<_1, X, _1>{});                             // (BLK_M,BLK_K,k)
-  Tensor gB = local_tile(mB, cta_tiler, cta_coord, Step<X, _1, _1>{});                             // (BLK_N,BLK_K,k)
-  Tensor gC = local_tile(mC, cta_tiler, cta_coord, Step<_1, _1, X>{});                             // (BLK_M,BLK_N)
+  auto cta_coord =
+      make_coord(syclcompat::work_group_id::x(), syclcompat::work_group_id::y(), _);  // (m,n,k)
+  Tensor gA = local_tile(mA, cta_tiler, cta_coord, Step<_1, X, _1>{});  // (BLK_M,BLK_K,k)
+  Tensor gB = local_tile(mB, cta_tiler, cta_coord, Step<X, _1, _1>{});  // (BLK_N,BLK_K,k)
+  Tensor gC = local_tile(mC, cta_tiler, cta_coord, Step<_1, _1, X>{});  // (BLK_M,BLK_N)
 
   // Shared memory buffers
   auto smemA = syclcompat::local_mem<TA[cosize_v<ASmemLayout>]>();
@@ -153,40 +154,74 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
   // Clear the accumulators
   clear(tCrC);
 
-#if 0
-  if(thread0()) {
-    print("  mA : "); print(  mA); print("\n");
-    print("  gA : "); print(  gA); print("\n");
-    print("  sA : "); print(  sA); print("\n");
-    print("tAgA : "); print(tAgA); print("\n");
-    print("tAsA : "); print(tAsA); print("\n");
+#if CUTLASS_ENABLE_DEBUG_PRINTS
+  if (thread0()) {
+    print("  mA : ");
+    print(mA);
+    print("\n");
+    print("  gA : ");
+    print(gA);
+    print("\n");
+    print("  sA : ");
+    print(sA);
+    print("\n");
+    print("tAgA : ");
+    print(tAgA);
+    print("\n");
+    print("tAsA : ");
+    print(tAsA);
+    print("\n");
   }
 #endif
 
-#if 0
-  if(thread0()) {
-    print("  mB : "); print(  mB); print("\n");
-    print("  gB : "); print(  gB); print("\n");
-    print("  sB : "); print(  sB); print("\n");
-    print("tBgB : "); print(tBgB); print("\n");
-    print("tBsB : "); print(tBsB); print("\n");
+#if CUTLASS_ENABLE_DEBUG_PRINTS
+  if (thread0()) {
+    print("  mB : ");
+    print(mB);
+    print("\n");
+    print("  gB : ");
+    print(gB);
+    print("\n");
+    print("  sB : ");
+    print(sB);
+    print("\n");
+    print("tBgB : ");
+    print(tBgB);
+    print("\n");
+    print("tBsB : ");
+    print(tBsB);
+    print("\n");
   }
 #endif
 
-#if 0
-  if(thread0()) {
-    print("  mC : "); print(  mC); print("\n");
-    print("  gC : "); print(  gC); print("\n");
-    print("tCsA : "); print(tCsA); print("\n");
-    print("tCsB : "); print(tCsB); print("\n");
-    print("tCgC : "); print(tCgC); print("\n");
-    print("tCrA : "); print(tCrA); print("\n");
-    print("tCrB : "); print(tCrB); print("\n");
-    print("tCrC : "); print(tCrC); print("\n");
+#if CUTLASS_ENABLE_DEBUG_PRINTS
+  if (thread0()) {
+    print("  mC : ");
+    print(mC);
+    print("\n");
+    print("  gC : ");
+    print(gC);
+    print("\n");
+    print("tCsA : ");
+    print(tCsA);
+    print("\n");
+    print("tCsB : ");
+    print(tCsB);
+    print("\n");
+    print("tCgC : ");
+    print(tCgC);
+    print("\n");
+    print("tCrA : ");
+    print(tCrA);
+    print("\n");
+    print("tCrB : ");
+    print(tCrB);
+    print("\n");
+    print("tCrC : ");
+    print(tCrC);
+    print("\n");
   }
 #endif
-
-#if 1
 
   // Current pipe index in smem to read from
   int smem_pipe_read = 0;
@@ -213,7 +248,8 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
 
   //
   // PIPELINED MAIN LOOP
-  // TUTORIAL: Example of a gemm loop that pipelines shared memory using SM80's cp.async instructions
+  // TUTORIAL: Example of a gemm loop that pipelines shared memory using SM80's cp.async
+  // instructions
   //           and explicit pipelines in shared memory.
   //   Data is read from global(k_tile_next) to shared(smem_pipe_write).
   //   Data is read from shared(smem_pipe_read) to registers(k_block_next).
@@ -264,8 +300,6 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
     }
   }
 
-#endif
-
   //
   // Epilogue
   //
@@ -275,8 +309,8 @@ void gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, TA const* A, AStrid
 
 // Setup params for a NT GEMM
 template <class TA, class TB, class TC, class Alpha, class Beta>
-void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
-                    int ldC, sycl::queue& queue) {
+void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
+             Beta beta, TC* C, int ldC) {
   using namespace cute;
 
   // Define shapes (dynamic)
@@ -311,15 +345,16 @@ void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B
                                     Layout<Shape<_32, _8>>{},  // Thr layout 32x8 n-major
                                     Layout<Shape<_4, _1>>{});  // Val layout  4x1 n-major
 
-  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{}, Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
+  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{},
+                                 Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print(copyA);
   print(copyB);
   print(mmaC);
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print_latex(copyA);
   print_latex(copyB);
   print_latex(mmaC);
@@ -327,19 +362,20 @@ void gemm_nt(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B
 
   auto dimBlock = syclcompat::dim3(size(mmaC));
   auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
-  syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
-                                        decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
-                                        decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
-      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC, sC, mmaC, alpha,
-      beta);
+  syclcompat::launch<
+      gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
+                  decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
+                  decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
+      dimGrid, dimBlock, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC, sC, mmaC,
+      alpha, beta);
 }
 
 // Setup params for a NT GEMM
 template <class TA, class TB, class TC, class Alpha, class Beta>
-void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB, Beta beta, TC* C,
-                    int ldC, sycl::queue& queue) {
+void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
+             Beta beta, TC* C, int ldC) {
   using namespace cute;
-  
+
   // Define shapes (dynamic)
   auto M = int(m);
   auto N = int(n);
@@ -360,59 +396,63 @@ void gemm_tn(int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B
 
   // Define the smem layouts (static)
   auto sA_atom =
-      make_layout(make_shape(bM, bK), make_stride(Int<1>{}, bM + Int<1>{}));  // (m,k) -> smem_idx; padded m-major
+      make_layout(make_shape(bM, bK),
+                  make_stride(Int<1>{}, bM + Int<1>{}));  // (m,k) -> smem_idx; padded m-major
   auto sB_atom =
-      make_layout(make_shape(bN, bK), make_stride(Int<1>{}, bN + Int<1>{}));  // (n,k) -> smem_idx; padded n-major
+      make_layout(make_shape(bN, bK),
+                  make_stride(Int<1>{}, bN + Int<1>{}));  // (n,k) -> smem_idx; padded n-major
   auto sA = tile_to_shape(sA_atom, make_shape(bM, bK, bP));
   auto sB = tile_to_shape(sA_atom, make_shape(bN, bK, bP));
   auto sC = make_layout(make_shape(bM, bN));  // (m,n) -> smem_idx
 
   // Define the thread layouts (static)
 
-  TiledCopy copyA = make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<TA>, TA>{},
-                                    Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
-                                    Layout<Shape<_1, _1>>{});                  // Val layout  1x1
-  TiledCopy copyB = make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<TB>, TB>{},
-                                    Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
-                                    Layout<Shape<_1, _1>>{});                  // Val layout  1x1
+  TiledCopy copyA =
+      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<TA>, TA>{},
+                      Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
+                      Layout<Shape<_1, _1>>{});                  // Val layout  1x1
+  TiledCopy copyB =
+      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<TB>, TB>{},
+                      Layout<Shape<_32, _8>, Stride<_8, _1>>{},  // Thr layout 32x8 k-major
+                      Layout<Shape<_1, _1>>{});                  // Val layout  1x1
 
-  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{}, Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
+  TiledMMA mmaC = make_tiled_mma(UniversalFMA<TC, TA, TB>{},
+                                 Layout<Shape<_16, _16, _1>>{});  // 16x16x1 TiledMMA
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print(copyA);
   print(copyB);
   print(mmaC);
 #endif
 
-#if 0
+#if CUTLASS_ENABLE_DEBUG_PRINTS
   print_latex(copyA);
   print_latex(copyB);
   print_latex(mmaC);
 #endif
+
   auto dimBlock = syclcompat::dim3(size(mmaC));
   auto dimGrid = syclcompat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
-  syclcompat::launch<gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
-                                        decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
-                                        decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
-      dimGrid, dimBlock, queue, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC, sC, mmaC, alpha,
-      beta);
+  syclcompat::launch<
+      gemm_device<decltype(prob_shape), decltype(cta_tiler), TA, decltype(dA), decltype(sA),
+                  decltype(copyA), TB, decltype(dB), decltype(sB), decltype(copyB), TC,
+                  decltype(dC), decltype(sC), decltype(mmaC), Alpha, Beta>>(
+      dimGrid, dimBlock, prob_shape, cta_tiler, A, dA, sA, copyA, B, dB, sB, copyB, C, dC, sC, mmaC,
+      alpha, beta);
 }
 
 template <class TA, class TB, class TC, class Alpha, class Beta>
-void gemm(char transA, char transB, int m, int n, int k, Alpha alpha, TA const* A, int ldA, TB const* B, int ldB,
-                 Beta beta, TC* C, int ldC, sycl::queue& queue) {
+void gemm(char transA, char transB, int m, int n, int k, Alpha alpha, TA const* A, int ldA,
+          TB const* B, int ldB, Beta beta, TC* C, int ldC) {
   if (transA == 'N' && transB == 'T') {
-    return gemm_nt(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC, queue);
+    return gemm_nt(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC);
   } else if (transA == 'T' && transB == 'N') {
-    return gemm_tn(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC, queue);
+    return gemm_tn(m, n, k, alpha, A, ldA, B, ldB, beta, C, ldC);
   }
   throw std::runtime_error("Not implemented");
 }
 
 int main(int argc, char** argv) {
-  sycl::queue queue{sycl::gpu_selector_v, {sycl::property::queue::in_order()}};
-  print_device_info(queue, std::cout);
-
   int m = 5120;
   if (argc >= 2) sscanf(argv[1], "%d", &m);
 
@@ -449,20 +489,18 @@ int main(int argc, char** argv) {
   for (int j = 0; j < n * k; ++j) h_B[j] = static_cast<TB>(2 * (rand() / double(RAND_MAX)) - 1);
   for (int j = 0; j < m * n; ++j) h_C[j] = static_cast<TC>(-1);
 
-  auto d_A = sycl::malloc_device<TA>(m * k, queue);
-  auto d_B = sycl::malloc_device<TA>(k * n, queue);
-  auto d_C = sycl::malloc_device<TA>(m * n, queue);
+  auto d_A = syclcompat::malloc<TA>(m * k);
+  auto d_B = syclcompat::malloc<TB>(k * n);
+  auto d_C = syclcompat::malloc<TC>(m * n);
 
-  queue.copy(h_A.data(), d_A, m * k);
-  queue.copy(h_B.data(), d_B, k * n);
-  queue.copy(h_C.data(), d_C, m * n);
-  queue.wait();
+  syclcompat::memcpy<TA>(d_A, h_A.data(), m * k);
+  syclcompat::memcpy<TB>(d_B, h_B.data(), k * n);
+  syclcompat::memcpy<TC>(d_C, h_C.data(), m * n);
 
   double gflops = (2.0 * m * n * k) * 1e-9;
 
   const int timing_iterations = 100;
   GPU_Clock timer;
-  
   int ldA = 0, ldB = 0, ldC = m;
 
   if (transA == 'N') {
@@ -481,17 +519,16 @@ int main(int argc, char** argv) {
     assert(false);
   }
 
-  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
-  queue.wait_and_throw();
+  gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC);
+  syclcompat::wait_and_throw();
 
   timer.start();
   for (int i = 0; i < timing_iterations; i++) {
-    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC, queue);
+    gemm(transA, transB, m, n, k, alpha, d_A, ldA, d_B, ldB, beta, d_C, ldC);
   }
-  queue.wait();
-  double cute_time = timer.seconds() / timing_iterations;
-  printf("SYCL_CUTE_GEMM:     [%4.3f]GFlop/s  (%6.4f)ms\n", 
-                                               gflops / cute_time, cute_time * 1e3);
-  return 0;
+  syclcompat::wait();
 
+  double cute_time = timer.seconds() / timing_iterations;
+  printf("SYCL_CUTE_GEMM:     [%4.3f]GFlop/s  (%6.4f)ms\n", gflops / cute_time, cute_time * 1e3);
+  return 0;
 }
