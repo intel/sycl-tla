@@ -501,6 +501,7 @@ int main(int argc, char** argv) {
 
   const int timing_iterations = 100;
   GPU_Clock timer;
+
   int ldA = 0, ldB = 0, ldC = m;
 
   if (transA == 'N') {
