@@ -22,7 +22,7 @@ Currently, only one example works on NVIDIA SM 80.
 To build CUTLASS SYCL support you need the latest version of DPC++ compiler. You can either use a recent [nighly build](https://github.com/intel/llvm/releases)
 or build the compiler from source as described in [oneAPI DPC++ guidline]((https://github.com/intel/llvm/blob/sycl/sycl/doc/GetStartedGuide.md#build-dpc-toolchain-with-support-for-nvidia-cuda)).
 
-In either case, CUDA version >= 12.0 is required.
+In either case, CUDA version >= 12.3 is required.
 
 ## Building with SYCL support
 Once you have your compiler installed, you need to point the
