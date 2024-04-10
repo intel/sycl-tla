@@ -52,6 +52,7 @@ ninja [EXAMPLE_NAME]_sycl
 You can run it like this from your build directory
 
 ```
+LD_LIBRARY_PATH=/path/to/sycl/install/lib 
 ./examples/cute/tutorial/[EXAMPLE_NAME]_sycl
 ```
 
@@ -62,7 +63,8 @@ You can run it like this from your build directory
  ```
  You can run it like this from your build directory
  ```
-  NVIDIA_TF32_OVERRIDE=1 ./examples/14_ampere_tf32_tensorop_gemm/14_ampere_tf32_tensorop_gemm_cute
+  NVIDIA_TF32_OVERRIDE=1 LD_LIBRARY_PATH=/path/to/sycl/install/lib 
+ ./examples/14_ampere_tf32_tensorop_gemm/14_ampere_tf32_tensorop_gemm_cute
  ```
 
 # References
