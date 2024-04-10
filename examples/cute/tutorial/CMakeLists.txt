@@ -43,23 +43,23 @@ else ()
     sgemm_1.cu
   )
 
-cutlass_example_add_executable(
-  sgemm_2
-  sgemm_2.cu
-)
+  cutlass_example_add_executable(
+    sgemm_2
+    sgemm_2.cu
+  )
 
-cutlass_example_add_executable(
-  sgemm_sm70
-  sgemm_sm70.cu
-)
+  cutlass_example_add_executable(
+    sgemm_sm70
+    sgemm_sm70.cu
+  )
 
-cutlass_example_add_executable(
-  sgemm_sm80
-  sgemm_sm80.cu
-)
+  cutlass_example_add_executable(
+    sgemm_sm80
+    sgemm_sm80.cu
+  )
 
-cutlass_example_add_executable(
-  tiled_copy
-  tiled_copy.cu
-)
+  cutlass_example_add_executable(
+    tiled_copy
+    tiled_copy.cu
+  )
 endif()
