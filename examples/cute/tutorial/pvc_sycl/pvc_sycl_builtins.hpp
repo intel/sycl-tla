@@ -132,9 +132,15 @@ enum LSC_LDCC {
 };
 
 typedef ushort __attribute__((ext_vector_type(32))) ushort32;
-typedef ushort __attribute__((ext_vector_type(64))) ushort64;
-
 typedef uint __attribute__((ext_vector_type(32))) uint32;
+
+typedef ushort __attribute__((ext_vector_type(64))) ushort64;
+typedef uint __attribute__((ext_vector_type(16))) uint16;
+typedef uint __attribute__((ext_vector_type(8))) uint8;
+typedef int __attribute__((ext_vector_type(8))) int8;
+typedef ushort __attribute__((ext_vector_type(8))) ushort8;
+typedef short __attribute__((ext_vector_type(8))) short8;
+typedef float __attribute__((ext_vector_type(8))) float8;
 
 #ifdef __SYCL_DEVICE_ONLY__
 #define SYCL_DEVICE_BUILTIN(x) SYCL_EXTERNAL extern "C" x

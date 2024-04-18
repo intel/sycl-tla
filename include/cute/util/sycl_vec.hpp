@@ -9,12 +9,12 @@ template<class T, int N> using vector_t = typename sycl::vec<T,N>::vector_t;
 template<class T, int N> using vector_t = sycl::vec<T,N>;
 #endif
 
-using float8 = vector_t<float, 8>;
-using short8 = vector_t<short, 8>;
-using ushort8 = vector_t<ushort, 8>;
+// using float8 = vector_t<float, 8>;
+// using short8 = vector_t<short, 8>;
+// using ushort8 = vector_t<ushort, 8>;
 using int2_ = vector_t<int, 2>; //conflicts with vector_types
-using int8 = vector_t<int, 8>;
-using uint8 = vector_t<uint, 8>;
-using ushort16 = vector_t<ushort, 16>;
-using uint16 = vector_t<uint, 16>;
+// using int8 = vector_t<int, 8>;
+// using uint8 = vector_t<uint, 8>;
+// using ushort16 = vector_t<ushort, 16>;
+// using uint16 = vector_t<uint, 16>;
 
