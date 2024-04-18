@@ -5,10 +5,6 @@
 #define HELPER_NAMEX(PREFIX, MM, NN) PREFIX##_m##MM##_n##NN
 #define HELPER_NAME(PREFIX, MM, NN) HELPER_NAMEX(PREFIX, MM, NN)
 
-#if !defined(PREFETCH_DISTANCE)
-#define PREFETCH_DISTANCE 1
-#endif
-
 void HELPER_NAME(atile_prefetch_rowmajor, MM,
                  NN)(global ushort *A, int tM, int K, int m, int prefetch_k) {
   for (int kk = 0; kk < KK; kk += 2) {

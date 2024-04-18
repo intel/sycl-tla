@@ -37,6 +37,10 @@ size_t matrixSize = 4096;
 
 #define WARMUP_ITERATIONS 10
 
+#if !defined(PREFETCH_DISTANCE)
+#define PREFETCH_DISTANCE 1
+#endif
+
 std::string makeTestName(const std::string &func, int tM, int tN, int tK,
                          int MM, int NN, size_t M, size_t N, size_t K) {
   std::ostringstream ret;
@@ -48,7 +52,7 @@ std::string makeTestName(const std::string &func, int tM, int tN, int tK,
 }
 
 template <typename T>
-static void fill_matrix(T* M, size_t numRows, size_t numCols) {
+static void fill_matrix(T *M, size_t numRows, size_t numCols) {
   if (identityData) {
     for (size_t r = 0; r < numRows; r++) {
       for (size_t c = 0; c < numCols; c++) {
@@ -73,10 +77,9 @@ static void fill_matrix(T* M, size_t numRows, size_t numCols) {
   }
 }
 
-
 template <typename T>
-static void vnni_matrix(T* dst, const T* src,
-                        size_t numRows, size_t numCols, size_t factor) {
+static void vnni_matrix(T *dst, const T *src, size_t numRows, size_t numCols,
+                        size_t factor) {
   for (size_t r = 0; r < numRows / factor; r++) {
     for (size_t c = 0; c < numCols; c++) {
       for (size_t k = 0; k < factor; k++) {
@@ -88,7 +91,7 @@ static void vnni_matrix(T* dst, const T* src,
 }
 
 template <typename DstT, typename SrcT>
-static void compute_reference(DstT* C, SrcT* A, SrcT* B, size_t M, size_t N,
+static void compute_reference(DstT *C, SrcT *A, SrcT *B, size_t M, size_t N,
                               size_t K) {
   for (size_t m = 0; m < M; m++) {
     for (size_t n = 0; n < N; n++) {
@@ -103,8 +106,7 @@ static void compute_reference(DstT* C, SrcT* A, SrcT* B, size_t M, size_t N,
 }
 
 template <typename T>
-void check_results(size_t M, size_t N, const T* C,
-                   const T* C_ref) {
+void check_results(size_t M, size_t N, const T *C, const T *C_ref) {
   float err = 0.f;
   size_t error_cnt = 0;
   for (size_t m = 0; m < M; m++) {
@@ -142,11 +144,9 @@ inline size_t time_event(sycl::event &e) {
 }
 
 template <int tM, int tN, int tK, int MM, int NN>
-static void
-go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc* c_vec,
-                             dtype_a* a, dtype_b* b,
-                             size_t M, size_t N, size_t K,
-                             dtype_acc* C_ref) {
+static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *c_vec,
+                                         dtype_a *a, dtype_b *b, size_t M,
+                                         size_t N, size_t K, dtype_acc *C_ref) {
   printf("%80s: ",
          makeTestName(__FUNCTION__, tM, tN, tK, MM, NN, M, N, K).c_str());
   fflush(stdout);
@@ -221,8 +221,8 @@ go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc* c_vec,
 #ifdef PREFETCH_DEFAULT
               for (int p = 0; p < PREFETCH_DISTANCE; p++) {
 #ifdef B_VNNI
-            // HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
-            //((ushort *)B, tN, K, N, prefetch_k, n);
+                HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
+                ((ushort *)B, tN, K, N, prefetch_k, n);
 #else
                 HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
                 ((ushort *)B, tN, K, N, prefetch_k, n);
@@ -236,25 +236,24 @@ go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc* c_vec,
               for (int k = 0; k < K; k += tK * KK) {
                 for (int kk = 0; kk < KK; kk++) {
                   copy(A_copy, tAi(_, _, k + kk * tK), tAr(_, _, kk));
-                  copy(B_copy, tBi(_, (k + kk * tK)/ 2, _), tBr(_, _, kk));
+                  copy(B_copy, tBi(_, (k + kk * tK) / 2, _), tBr(_, _, kk));
                 }
-                
 
 #ifdef PREFETCH_DEFAULT
-                if (k % ((PREFETCH_DISTANCE)*tK) == 0) {
-                  for (int p = 0; p < PREFETCH_DISTANCE; p++) {
+                //   if (k % ((PREFETCH_DISTANCE)*tK) == 0) {
+                for (int p = 0; p < PREFETCH_DISTANCE; p++) {
 #ifdef B_VNNI
-                // HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
-                //  ((ushort *)B, tN, K, N, prefetch_k, n);
+                  HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
+                  ((ushort *)B, tN, K, N, prefetch_k, n);
 #else
-                    HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
-                    ((ushort *)B, tN, K, N, prefetch_k, n);
+                  HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
+                  ((ushort *)B, tN, K, N, prefetch_k, n);
 #endif
-                    HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
-                    ((ushort *)A, tM, M, K, m, prefetch_k);
-                    prefetch_k += tK * KK;
-                  }
+                  HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
+                  ((ushort *)A, tM, M, K, m, prefetch_k);
+                  prefetch_k += tK * KK;
                 }
+            //  }
 #endif
                 gemm(tiled_mma, tAr, tBr, tCr);
               }
@@ -299,11 +298,16 @@ int main(int argc, char **argv) {
   const auto N = matrixSize;
   const auto K = matrixSize;
 
-  dtype_a* A_vec = (dtype_a*)syclcompat::malloc_shared(sizeof(dtype_a) * M * K);
-  dtype_b* B_vec = (dtype_b*)syclcompat::malloc_shared(sizeof(dtype_b) * N * K);
-  dtype_b* Bvnni_vec = (dtype_b*)syclcompat::malloc_shared(sizeof(dtype_b) * N * K);
-  dtype_acc* C_vec = (dtype_acc*)syclcompat::malloc_shared(sizeof(dtype_acc) * M * N);
-  dtype_acc* C_ref = (dtype_acc*)syclcompat::malloc_shared(sizeof(dtype_acc) * M * N);
+  dtype_a *A_vec =
+      (dtype_a *)syclcompat::malloc_shared(sizeof(dtype_a) * M * K);
+  dtype_b *B_vec =
+      (dtype_b *)syclcompat::malloc_shared(sizeof(dtype_b) * N * K);
+  dtype_b *Bvnni_vec =
+      (dtype_b *)syclcompat::malloc_shared(sizeof(dtype_b) * N * K);
+  dtype_acc *C_vec =
+      (dtype_acc *)syclcompat::malloc_shared(sizeof(dtype_acc) * M * N);
+  dtype_acc *C_ref =
+      (dtype_acc *)syclcompat::malloc_shared(sizeof(dtype_acc) * M * N);
 
   printf("Initializing source matrices...\n");
   fill_matrix(A_vec, M, K);
@@ -332,9 +336,8 @@ int main(int argc, char **argv) {
   if (validate) {
     printf("Computing reference...\n");
     get_gemm_gold<dtype_a, dtype_b, dtype_acc>(
-        M, N, K, mem_layout::row_major, mem_layout::row_major,
-        (dtype_a *)A_vec, (dtype_b *)B_vec,
-        (dtype_acc *)C_ref);
+        M, N, K, mem_layout::row_major, mem_layout::row_major, (dtype_a *)A_vec,
+        (dtype_b *)B_vec, (dtype_acc *)C_ref);
     // compute_reference(C_ref, A_vec, B_vec, M, N, K);
   }
 
