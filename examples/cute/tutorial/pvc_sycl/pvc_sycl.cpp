@@ -30,16 +30,30 @@ using dtype_acc = float;
 bool identityData = false;
 bool fixedData = false;
 bool validate = true;
-int testIterations = 1;
+int testIterations = 10;
 dtype_acc threshold = 0.01f;
 size_t matrixSize = 4096;
 #define B_VNNI
 
-#define WARMUP_ITERATIONS 10
+#define WARMUP_ITERATIONS 100
 
 #if !defined(PREFETCH_DISTANCE)
 #define PREFETCH_DISTANCE 1
 #endif
+
+#ifdef __SYCL_DEVICE_ONLY__
+#define SYCL_DEVICE_BUILTIN(x) SYCL_EXTERNAL extern "C" x
+#else
+#define SYCL_DEVICE_BUILTIN(x)                                                 \
+  inline x { assert(false); }
+#endif
+
+SYCL_DEVICE_BUILTIN(ushort64 __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, int2_ coord));
+SYCL_DEVICE_BUILTIN(uint16 __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, int2_ coord));
 
 std::string makeTestName(const std::string &func, int tM, int tN, int tK,
                          int MM, int NN, size_t M, size_t N, size_t K) {
@@ -187,38 +201,15 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *c_vec,
               auto B = b;
               auto C = c_vec;
 
-              Tensor tAr = make_tensor<ushort>(Shape<_8, Int<MM>, Int<KK>>{});
-              Tensor tBr = make_tensor<uint>(Shape<_8, Int<NN>, Int<KK>>{});
-              Tensor tCr =
-                  make_tensor<dtype_acc>(Shape<_8, Int<MM>, Int<NN>>{});
-
-              auto A_copy = make_xe_2d_copy<XE_2D_LOAD>(
-                  make_tensor(make_gmem_ptr(A), make_shape(M, K)));
-              auto B_copy = make_xe_2d_copy<XE_2D_LOAD>(
-                  make_tensor(make_gmem_ptr(B), make_shape(K, N)));
-              auto C_copy = make_xe_2d_copy<XE_2D_SAVE>(
-                  make_tensor(make_gmem_ptr(C), make_shape(M, N)));
-              // TODO: - decide on how to deal with vector types
-              //       - create layouts with tiling/partitioning
-
-              Tensor tAi = make_tensor(
-                  make_inttuple_iter(m, 0),
-                  make_layout(make_shape(_1{}, Int<MM>{}, K),
-                              make_stride(_1{}, tM * E<0>{}, E<1>{})));
-              Tensor tBi = make_tensor(
-                  make_inttuple_iter(0, n),
-                  make_layout(make_shape(_1{}, K, Int<NN>{}),
-                              make_stride(_1{}, E<0>{}, tN * E<1>{})));
-              Tensor tCi = make_tensor(
-                  make_inttuple_iter(m, n),
-                  make_layout(Shape<_1, Int<MM>, Int<NN>>{},
-                              make_stride(_1{}, tM * E<0>{}, tN * E<1>{})));
-              TiledMMA<MMA_Atom<XE_8x16x16_BF16BF16F32F32_NN>,
-                       Layout<Shape<_1, _1, _1>>>
-                  tiled_mma;
-
+              float8 sum[NN][MM];
+              for (int mm = 0; mm < MM; mm++) {
+                for (int nn = 0; nn < NN; nn++) {
+                  sum[nn][mm] = 0;
+                }
+              }
               int prefetch_k = 0;
 #ifdef PREFETCH_DEFAULT
+              //   if (k % ((PREFETCH_DISTANCE)*tK) == 0) {
               for (int p = 0; p < PREFETCH_DISTANCE; p++) {
 #ifdef B_VNNI
                 HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
@@ -231,14 +222,34 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *c_vec,
                 ((ushort *)A, tM, M, K, m, prefetch_k);
                 prefetch_k += tK * KK;
               }
+          //  }
 #endif
 
               for (int k = 0; k < K; k += tK * KK) {
-                for (int kk = 0; kk < KK; kk++) {
-                  copy(A_copy, tAi(_, _, k + kk * tK), tAr(_, _, kk));
-                  copy(B_copy, tBi(_, (k + kk * tK) / 2, _), tBr(_, _, kk));
-                }
+                short8 aData[2][4];
+                int8 bData[4][2];
 
+                ushort64 tmpA =
+                    __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
+                        (long)A, K * sizeof(ushort) - 1, M - 1,
+                        K * sizeof(ushort) - 1, int2_{k, m});
+                aData[0][0] = sycl::bit_cast<short8>(tmpA.lo.lo.lo);
+                aData[0][1] = sycl::bit_cast<short8>(tmpA.lo.lo.hi);
+                aData[0][2] = sycl::bit_cast<short8>(tmpA.lo.hi.lo);
+                aData[0][3] = sycl::bit_cast<short8>(tmpA.lo.hi.hi);
+                aData[1][0] = sycl::bit_cast<short8>(tmpA.hi.lo.lo);
+                aData[1][1] = sycl::bit_cast<short8>(tmpA.hi.lo.hi);
+                aData[1][2] = sycl::bit_cast<short8>(tmpA.hi.hi.lo);
+                aData[1][3] = sycl::bit_cast<short8>(tmpA.hi.hi.hi);
+
+                for (int i = 0; i < NN; i++) {
+                  uint16 tmpB =
+                      __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
+                          (long)B, N * sizeof(uint) - 1, K - 1,
+                          N * sizeof(uint) - 1, int2_{n + i * tN, k / 2});
+                  bData[i][0] = sycl::bit_cast<int8>(tmpB.lo);
+                  bData[i][1] = sycl::bit_cast<int8>(tmpB.hi);
+                }
 #ifdef PREFETCH_DEFAULT
                 //   if (k % ((PREFETCH_DISTANCE)*tK) == 0) {
                 for (int p = 0; p < PREFETCH_DISTANCE; p++) {
@@ -255,10 +266,24 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *c_vec,
                 }
             //  }
 #endif
-                gemm(tiled_mma, tAr, tBr, tCr);
+                for (int kk = 0; kk < KK; kk++) {
+                  for (int nn = 0; nn < NN; nn++) {
+                    for (int mm = 0; mm < MM; mm++) {
+                      sum[nn][mm] = intel_sub_group_bf16_bf16_matrix_mad_k16(
+                          aData[kk][mm], bData[nn][kk], sum[nn][mm]);
+                    }
+                  }
+                }
               }
 
-              copy(C_copy, tCr, tCi);
+              for (int mm = 0; mm < MM; mm++) {
+                for (int nn = 0; nn < NN; nn++) {
+                  __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
+                      (long)C, N * sizeof(float) - 1, M - 1,
+                      N * sizeof(float) - 1, int2_{n + nn * tN, m + mm * tM},
+                      sycl::bit_cast<uint8>(sum[nn][mm]));
+                }
+              }
             });
       });
 
