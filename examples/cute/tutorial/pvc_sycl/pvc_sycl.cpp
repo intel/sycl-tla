@@ -27,42 +27,24 @@ using dtype_b = bfloat16_t;
 using dtype_c = float;
 using dtype_acc = float;
 
-bool identityData = false;
-bool fixedData = false;
-bool validate = true;
 int testIterations = 10;
 dtype_acc threshold = 0.01f;
 size_t matrixSize = 4096;
+
 #define B_VNNI
 
 #define WARMUP_ITERATIONS 100
 
-#if !defined(PREFETCH_DISTANCE)
 #define PREFETCH_DISTANCE 1
-#endif
 
 template <typename T>
 static void fill_matrix(T *M, size_t numRows, size_t numCols) {
-  if (identityData) {
-    for (size_t r = 0; r < numRows; r++) {
-      for (size_t c = 0; c < numCols; c++) {
-        M[r * numCols + c] = bfloat16_t(1.0f);
-      }
-    };
-  } else if (fixedData) {
-    for (size_t r = 0; r < numRows; r++) {
-      for (size_t c = 0; c < numCols; c++) {
-        M[r * numCols + c] = bfloat16_t(float(r + c));
-      }
-    }
-  } else {
-    std::random_device dev;
-    std::mt19937 rng(dev());
-    std::uniform_real_distribution<float> dist(-1.0, 1.0);
-    for (size_t r = 0; r < numRows; r++) {
-      for (size_t c = 0; c < numCols; c++) {
-        M[r * numCols + c] = bfloat16_t(dist(rng));
-      }
+  std::random_device dev;
+  std::mt19937 rng(dev());
+  std::uniform_real_distribution<float> dist(-1.0, 1.0);
+  for (size_t r = 0; r < numRows; r++) {
+    for (size_t c = 0; c < numCols; c++) {
+      M[r * numCols + c] = bfloat16_t(dist(rng));
     }
   }
 }
@@ -103,7 +85,8 @@ void check_results(size_t M, size_t N, const T *C, const T *C_ref) {
 
   auto fail_rate = (float)error_cnt * 100 / (M * N);
 
-  std::cout << "\n\n==== fail rate is: " << fail_rate << "% !!!\n" << std::endl;
+  std::cout << "\n\n==== fail points %d  is: " << fail_rate << "% !!!\n"
+            << std::endl;
 }
 
 inline size_t time_event(sycl::event &e) {
@@ -119,161 +102,127 @@ inline size_t time_event(sycl::event &e) {
 }
 
 template <int tM, int tN, int tK, int MM, int NN>
-static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *c_vec,
-                                         dtype_a *a, dtype_b *b, size_t M,
+static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
+                                         dtype_a *A, dtype_b *B, size_t M,
                                          size_t N, size_t K, dtype_acc *C_ref) {
   int total_iterations = WARMUP_ITERATIONS + testIterations;
-  if (tM * MM > M) {
-    printf("M is too small.\n");
-  } else if (tN * NN > N) {
-    printf("N is too small.\n");
-  } else {
-    std::vector<size_t> event_times(total_iterations);
 
-    sycl::range<2> group_range{(M + WG_SIZE_Y - 1) / WG_SIZE_Y,
-                               (N + WG_SIZE_X - 1) / WG_SIZE_X};
-    sycl::range<2> local_range{(WG_SIZE_Y + ITEM_SIZE_Y - 1) / ITEM_SIZE_Y,
-                               (WG_SIZE_X + ITEM_SIZE_X - 1) / ITEM_SIZE_X};
-    sycl::nd_range<2> nd_range(group_range * local_range, local_range);
+  std::vector<float> event_times(total_iterations);
 
-    for (int test = 0; test < total_iterations; test++) {
-      // sycl::buffer c{c_vec};
-      sycl::event ev;
-      ev = queue.submit([&](sycl::handler &cgh) {
-        // sycl::accessor accA{a, cgh, sycl::read_only};
-        // sycl::accessor accB{b, cgh, sycl::read_only};
-        // sycl::accessor accC{c, cgh, sycl::write_only};
+  sycl::range<2> group_range{(M + WG_SIZE_Y - 1) / WG_SIZE_Y,
+                             (N + WG_SIZE_X - 1) / WG_SIZE_X};
+  sycl::range<2> local_range{(WG_SIZE_Y + ITEM_SIZE_Y - 1) / ITEM_SIZE_Y,
+                             (WG_SIZE_X + ITEM_SIZE_X - 1) / ITEM_SIZE_X};
+  sycl::nd_range<2> nd_range(group_range * local_range, local_range);
 
-        cgh.parallel_for /*<dpas_blockread_vnni_tiled<tM, tN, tK, MM, NN>>*/ (
-            nd_range,
-            [=](sycl::nd_item<2> id) [[sycl::reqd_sub_group_size(16)]] {
-              const int M = id.get_global_range(0) * ITEM_SIZE_Y;
-              const int N = id.get_global_range(1) * ITEM_SIZE_X;
-              const int m = id.get_group(0) * WG_SIZE_Y +
-                            (get_sub_group_id() / SGS_PER_WG_X) * SG_SIZE_Y;
-              const int n = id.get_group(1) * WG_SIZE_X +
-                            (get_sub_group_id() % SGS_PER_WG_X) * SG_SIZE_X;
+  for (int test = 0; test < total_iterations; test++) {
+    sycl::event ev;
+    ev = queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for(
+          nd_range, [=](sycl::nd_item<2> id) [[sycl::reqd_sub_group_size(16)]] {
+            const int m = id.get_group(0) * WG_SIZE_Y +
+                          (get_sub_group_id() / SGS_PER_WG_X) * SG_SIZE_Y;
+            const int n = id.get_group(1) * WG_SIZE_X +
+                          (get_sub_group_id() % SGS_PER_WG_X) * SG_SIZE_X;
 
-              auto A = a;
-              auto B = b;
-              auto C = c_vec;
-
-              float8 sum[NN][MM];
-              for (int mm = 0; mm < MM; mm++) {
-                for (int nn = 0; nn < NN; nn++) {
-                  sum[nn][mm] = 0;
-                }
+            float8 sum[NN][MM];
+            for (int mm = 0; mm < MM; mm++) {
+              for (int nn = 0; nn < NN; nn++) {
+                sum[nn][mm] = 0;
               }
-              int prefetch_k = 0;
+            }
+
+            int prefetch_k = 0;
 #ifdef PREFETCH_DEFAULT
-              //   if (k % ((PREFETCH_DISTANCE)*tK) == 0) {
+            for (int p = 0; p < PREFETCH_DISTANCE; p++) {
+#ifdef B_VNNI
+              HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
+              ((ushort *)B, tN, K, N, prefetch_k, n);
+#else
+                HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
+                ((ushort *)B, tN, K, N, prefetch_k, n);
+#endif
+              HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
+              ((ushort *)A, tM, M, K, m, prefetch_k);
+              prefetch_k += tK * KK;
+            }
+#endif
+
+            for (int k = 0; k < K; k += tK * KK) {
+              short8 aData[2][4];
+              int8 bData[4][2];
+
+              *(ushort64 *)(&aData) =
+                  __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
+                      (long)A, K * sizeof(ushort) - 1, M - 1,
+                      K * sizeof(ushort) - 1, int2_{k, m});
+
+              for (int i = 0; i < NN; i++) {
+                *(uint16 *)(&bData[i][0]) =
+                    __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
+                        (long)B, N * sizeof(uint) - 1, K - 1,
+                        N * sizeof(uint) - 1, int2_{n + i * tN, k / 2});
+              }
+
+#ifdef PREFETCH_DEFAULT
               for (int p = 0; p < PREFETCH_DISTANCE; p++) {
 #ifdef B_VNNI
                 HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
                 ((ushort *)B, tN, K, N, prefetch_k, n);
 #else
-                HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
-                ((ushort *)B, tN, K, N, prefetch_k, n);
+                  HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
+                  ((ushort *)B, tN, K, N, prefetch_k, n);
 #endif
                 HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
                 ((ushort *)A, tM, M, K, m, prefetch_k);
                 prefetch_k += tK * KK;
               }
-          //  }
 #endif
-
-              for (int k = 0; k < K; k += tK * KK) {
-                short8 aData[2][4];
-                int8 bData[4][2];
-
-                ushort64 tmpA =
-                    __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
-                        (long)A, K * sizeof(ushort) - 1, M - 1,
-                        K * sizeof(ushort) - 1, int2_{k, m});
-                aData[0][0] = sycl::bit_cast<short8>(tmpA.lo.lo.lo);
-                aData[0][1] = sycl::bit_cast<short8>(tmpA.lo.lo.hi);
-                aData[0][2] = sycl::bit_cast<short8>(tmpA.lo.hi.lo);
-                aData[0][3] = sycl::bit_cast<short8>(tmpA.lo.hi.hi);
-                aData[1][0] = sycl::bit_cast<short8>(tmpA.hi.lo.lo);
-                aData[1][1] = sycl::bit_cast<short8>(tmpA.hi.lo.hi);
-                aData[1][2] = sycl::bit_cast<short8>(tmpA.hi.hi.lo);
-                aData[1][3] = sycl::bit_cast<short8>(tmpA.hi.hi.hi);
-
-                for (int i = 0; i < NN; i++) {
-                  uint16 tmpB =
-                      __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
-                          (long)B, N * sizeof(uint) - 1, K - 1,
-                          N * sizeof(uint) - 1, int2_{n + i * tN, k / 2});
-                  bData[i][0] = sycl::bit_cast<int8>(tmpB.lo);
-                  bData[i][1] = sycl::bit_cast<int8>(tmpB.hi);
-                }
-#ifdef PREFETCH_DEFAULT
-                //   if (k % ((PREFETCH_DISTANCE)*tK) == 0) {
-                for (int p = 0; p < PREFETCH_DISTANCE; p++) {
-#ifdef B_VNNI
-                  HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
-                  ((ushort *)B, tN, K, N, prefetch_k, n);
-#else
-                  HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
-                  ((ushort *)B, tN, K, N, prefetch_k, n);
-#endif
-                  HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
-                  ((ushort *)A, tM, M, K, m, prefetch_k);
-                  prefetch_k += tK * KK;
-                }
-            //  }
-#endif
-                for (int kk = 0; kk < KK; kk++) {
-                  for (int nn = 0; nn < NN; nn++) {
-                    for (int mm = 0; mm < MM; mm++) {
-                      sum[nn][mm] = intel_sub_group_bf16_bf16_matrix_mad_k16(
-                          aData[kk][mm], bData[nn][kk], sum[nn][mm]);
-                    }
+              for (int kk = 0; kk < KK; kk++) {
+                for (int nn = 0; nn < NN; nn++) {
+                  for (int mm = 0; mm < MM; mm++) {
+                    sum[nn][mm] = intel_sub_group_bf16_bf16_matrix_mad_k16(
+                        aData[kk][mm], bData[nn][kk], sum[nn][mm]);
                   }
                 }
               }
+            }
 
-              for (int mm = 0; mm < MM; mm++) {
-                for (int nn = 0; nn < NN; nn++) {
-                  __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
-                      (long)C, N * sizeof(float) - 1, M - 1,
-                      N * sizeof(float) - 1, int2_{n + nn * tN, m + mm * tM},
-                      sycl::bit_cast<uint8>(sum[nn][mm]));
-                }
+            for (int mm = 0; mm < MM; mm++) {
+              for (int nn = 0; nn < NN; nn++) {
+                __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
+                    (long)C, N * sizeof(float) - 1, M - 1,
+                    N * sizeof(float) - 1, int2_{n + nn * tN, m + mm * tM},
+                    sycl::bit_cast<uint8>(sum[nn][mm]));
               }
-            });
-      });
+            }
+          });
+    });
 
-      ev.wait_and_throw();
-      event_times[test] = time_event(ev);
-    }
-
-    double average_event_time = 0.f;
-    for (int i = WARMUP_ITERATIONS; i < total_iterations; i++) {
-      printf("GPU time is %f, Gflops is: %f\n", event_times[i] / 1e3,
-             2.0 * M * N * K / (event_times[i] * 1e3));
-      average_event_time += event_times[i];
-    }
-    average_event_time /= (testIterations * 1e3);
-    auto gops = 2.0 * M * N * K;
-    printf("Average is %f microseconds (%f gops)\n", average_event_time,
-           gops / (1e3 * average_event_time));
-
-    if (validate) {
-      printf("Checking results... ");
-      fflush(stdout);
-      check_results(M, N, c_vec, C_ref);
-      printf(" done!\n");
-    }
+    ev.wait_and_throw();
+    event_times[test] = time_event(ev) / 1e6; // ms
   }
+
+  double average_event_time = 0.f;
+  auto best = 999.f;
+  for (int i = WARMUP_ITERATIONS; i < total_iterations; i++) {
+    printf("GPU time is %f ms, Gflops is: %f\n", event_times[i],
+           2.0 * M * N * K / 1e9 / (event_times[i] / 1e3));
+    average_event_time += event_times[i];
+    best = min(best, event_times[i]);
+  }
+  average_event_time /= testIterations;
+  printf("Average is %f gflops, best is %f gflops\n",
+         2.0 * M * N * K / 1e9 / (average_event_time / 1e3),
+         2.0 * M * N * K / 1e9 / (best / 1e3));
+
+  printf("Checking results... ");
+  fflush(stdout);
+  check_results(M, N, C, C_ref);
+  printf(" done!\n");
 }
 
 int main(int argc, char **argv) {
-  printf("Config:\n");
-  printf("\tTest Iterations: %d\n", testIterations);
-  printf("\tValidating data?: %s\n", validate ? "true" : "false");
-  printf("\tFixed data?: %s\n", fixedData ? "true" : "false");
-
   sycl::queue queue{{sycl::property::queue::enable_profiling()}};
   auto context = queue.get_info<sycl::info::queue::context>();
   auto device = queue.get_info<sycl::info::queue::device>();
@@ -299,19 +248,17 @@ int main(int argc, char **argv) {
 
   vnni_matrix(Bvnni_vec, B_vec, K, N, 2);
 
-  if (validate) {
-    printf("Computing reference...\n");
-    get_gemm_gold<dtype_a, dtype_b, dtype_acc>(
-        M, N, K, mem_layout::row_major, mem_layout::row_major, (dtype_a *)A_vec,
-        (dtype_b *)B_vec, (dtype_acc *)C_ref);
-  }
+  printf("Computing reference...\n");
+  get_gemm_gold<dtype_a, dtype_b, dtype_acc>(
+      M, N, K, mem_layout::row_major, mem_layout::row_major, (dtype_a *)A_vec,
+      (dtype_b *)B_vec, (dtype_acc *)C_ref);
 
   printf("Creating source buffers...\n");
   auto A = A_vec;
   auto B = B_vec;
   auto Bvnni = Bvnni_vec;
 
-  printf("Running tests...\n");
+  printf("Running gemm tests, MKN: (%d, %d, %d)...\n", M, K, N);
 
 #ifdef B_VNNI
   go_dpas_blockread_vnni_tiled<8, 16, 16, 4, 4>(queue, C_vec, A, Bvnni, M, N, K,
