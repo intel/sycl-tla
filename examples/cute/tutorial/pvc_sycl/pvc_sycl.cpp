@@ -41,30 +41,6 @@ size_t matrixSize = 4096;
 #define PREFETCH_DISTANCE 1
 #endif
 
-#ifdef __SYCL_DEVICE_ONLY__
-#define SYCL_DEVICE_BUILTIN(x) SYCL_EXTERNAL extern "C" x
-#else
-#define SYCL_DEVICE_BUILTIN(x)                                                 \
-  inline x { assert(false); }
-#endif
-
-SYCL_DEVICE_BUILTIN(ushort64 __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
-    long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(uint16 __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
-    long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-
-std::string makeTestName(const std::string &func, int tM, int tN, int tK,
-                         int MM, int NN, size_t M, size_t N, size_t K) {
-  std::ostringstream ret;
-  ret << func;
-  ret << "<tM:" << tM << "x" << MM << ", tN:" << tN << "x" << NN
-      << ", tK:" << tK << ">";
-  ret << " (M=" << M << ", N=" << N << ", K=" << K << ")";
-  return ret.str();
-}
-
 template <typename T>
 static void fill_matrix(T *M, size_t numRows, size_t numCols) {
   if (identityData) {
@@ -100,21 +76,6 @@ static void vnni_matrix(T *dst, const T *src, size_t numRows, size_t numCols,
         dst[r * numCols * factor + c * factor + k] =
             src[(r * factor + k) * numCols + c];
       }
-    }
-  }
-}
-
-template <typename DstT, typename SrcT>
-static void compute_reference(DstT *C, SrcT *A, SrcT *B, size_t M, size_t N,
-                              size_t K) {
-  for (size_t m = 0; m < M; m++) {
-    for (size_t n = 0; n < N; n++) {
-      DstT sum = 0;
-      for (size_t k = 0; k < K; k++) {
-        sum = std::fma(static_cast<DstT>(A[m * K + k]),
-                       static_cast<DstT>(B[k * N + n]), sum);
-      }
-      C[m * N + n] = sum;
     }
   }
 }
@@ -161,10 +122,6 @@ template <int tM, int tN, int tK, int MM, int NN>
 static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *c_vec,
                                          dtype_a *a, dtype_b *b, size_t M,
                                          size_t N, size_t K, dtype_acc *C_ref) {
-  printf("%80s: ",
-         makeTestName(__FUNCTION__, tM, tN, tK, MM, NN, M, N, K).c_str());
-  fflush(stdout);
-
   int total_iterations = WARMUP_ITERATIONS + testIterations;
   if (tM * MM > M) {
     printf("M is too small.\n");
@@ -293,6 +250,8 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *c_vec,
 
     double average_event_time = 0.f;
     for (int i = WARMUP_ITERATIONS; i < total_iterations; i++) {
+      printf("GPU time is %f, Gflops is: %f\n", event_times[i] / 1e3,
+             2.0 * M * N * K / (event_times[i] * 1e3));
       average_event_time += event_times[i];
     }
     average_event_time /= (testIterations * 1e3);
@@ -340,30 +299,11 @@ int main(int argc, char **argv) {
 
   vnni_matrix(Bvnni_vec, B_vec, K, N, 2);
 
-  // dtype_a* A_dev = (dtype_a*)sycl::aligned_alloc_device(
-  //         64, M * K * sizeof(dtype_a), device, context);
-  // dtype_b* B_dev = (dtype_b*)sycl::aligned_alloc_device(
-  //         64, K * N * sizeof(dtype_b), device, context);
-  // dtype_b* Bvnni_dev = (dtype_b*)sycl::aligned_alloc_device(
-  //         64, K * N * sizeof(dtype_b), device, context);
-  // dtype_acc* C_dev = (dtype_acc*)sycl::aligned_alloc_device(
-  //         64, M * N * sizeof(dtype_acc), device, context);
-
-  // queue.memcpy((void *)A_dev, (void *)A_vec, M * K * sizeof(dtype_a))
-  //           .wait();
-  // queue.memcpy((void *)B_dev, (void *)B_vec, N * K * sizeof(dtype_b))
-  //           .wait();
-  // queue.memcpy((void *)Bvnni_dev, (void *)Bvnni_vec, N * K * sizeof(dtype_b))
-  //           .wait();
-  // queue.memcpy((void *)C_dev, (void *)C_vec, M * N * sizeof(dtype_acc))
-  //           .wait();
-
   if (validate) {
     printf("Computing reference...\n");
     get_gemm_gold<dtype_a, dtype_b, dtype_acc>(
         M, N, K, mem_layout::row_major, mem_layout::row_major, (dtype_a *)A_vec,
         (dtype_b *)B_vec, (dtype_acc *)C_ref);
-    // compute_reference(C_ref, A_vec, B_vec, M, N, K);
   }
 
   printf("Creating source buffers...\n");
@@ -373,26 +313,9 @@ int main(int argc, char **argv) {
 
   printf("Running tests...\n");
 
-#if 0
-  go_dpas_blockread_vnni_tiled<8, 16, 16, 1, 1>(queue, C_vec, A, Bvnni, M, N, K,
-                                                C_ref);
-  go_dpas_blockread_vnni_tiled<8, 16, 16, 2, 1>(queue, C_vec, A, Bvnni, M, N, K,
-                                                C_ref);
-  go_dpas_blockread_vnni_tiled<8, 16, 16, 1, 2>(queue, C_vec, A, Bvnni, M, N, K,
-                                                C_ref);
-  go_dpas_blockread_vnni_tiled<8, 16, 16, 2, 2>(queue, C_vec, A, Bvnni, M, N, K,
-                                                C_ref);
-  go_dpas_blockread_vnni_tiled<8, 16, 16, 4, 2>(queue, C_vec, A, Bvnni, M, N, K,
-                                                C_ref);
-  go_dpas_blockread_vnni_tiled<8, 16, 16, 2, 4>(queue, C_vec, A, Bvnni, M, N, K,
-
-                                                C_ref);
-#endif
-
 #ifdef B_VNNI
   go_dpas_blockread_vnni_tiled<8, 16, 16, 4, 4>(queue, C_vec, A, Bvnni, M, N, K,
                                                 C_ref);
-
 #else
   go_dpas_blockread_vnni_tiled<8, 16, 16, 4, 4>(queue, C_vec, A, B, M, N, K,
                                                 C_ref);
@@ -405,11 +328,6 @@ int main(int argc, char **argv) {
   free(C_vec, queue);
   free(Bvnni_vec, queue);
   free(C_ref, queue);
-
-  // free(C_dev, queue);
-  // free(B_dev, queue);
-  // free(Bvnni_dev, queue);
-  // free(A_dev, queue);
 
   return 0;
 }

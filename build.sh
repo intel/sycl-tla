@@ -2,6 +2,7 @@ sycl_compiler_path=/opt/cutlass_compiler/
 target=./examples/cute/tutorial/pvc_sycl
 cuda_path=/usr/local/cuda-12.3/
 rm -rf $target
+export ZE_AFFINITY_MASK=0
 export CPATH=$sycl_compiler_path:$sycl_compiler_path/include/:$sycl_compiler_path/include/sycl/:/opt/intel/oneapi/mkl/2024.1/include/
 export LIBRARY_PATH=/opt/intel/oneapi/mkl/2024.1/lib/
 export LD_LIBRARY_PATH=/opt/intel/oneapi/mkl/2024.1/lib/:${sycl_compiler_path}/lib/

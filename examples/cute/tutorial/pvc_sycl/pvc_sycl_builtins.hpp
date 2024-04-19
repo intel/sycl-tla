@@ -59,67 +59,6 @@ void prefetch_b_vnni_d16_k16v2_n16_sg16(global ushort *B, int rowStart,
 #endif // defined(PREFETCH_DEFAULT)
 }
 
-// Note for 2D block reads:
-//  - the tile width and height is encoded into the function name.
-//  - base_address is the byte address.  Must be 64B aligned.
-//  - width is the width of the entire matrix, in bytes.  Must be >= 64B.  Must
-//  be 4B aligned.
-//  - height is the height of the entire matrix, or equivalently the number of
-//  rows.
-//  - pitch is the number of bytes between rows of the entire matrix.  Must be
-//  >= 64B.  Must be a multiple of 8 bytes.
-//  - coord is the number of elements (x coord) and row (y coord) to read from.
-//  X coord must be multiple 4 for for 1B data and 2 for 2B data.
-
-// Built-in functions are:
-
-// #ifdef cl_intel_subgroup_extended_block_read
-// ushort2  intel_subgroup_block_read_u8_m1k32v2(__global void *base_address,
-// int width, int height, int pitch, int2 coord); ushort4
-// intel_subgroup_block_read_u8_m2k32v2(__global void *base_address, int width,
-// int height, int pitch, int2 coord); ushort8
-// intel_subgroup_block_read_u8_m4k32v2(__global void *base_address, int width,
-// int height, int pitch, int2 coord); ushort16
-// intel_subgroup_block_read_u8_m8k32v2(__global void *base_address, int width,
-// int height, int pitch, int2 coord); ushort2
-// intel_subgroup_block_read_u16_m1k16v2(__global void *base_address, int width,
-// int height, int pitch, int2 coord); ushort4
-// intel_subgroup_block_read_u16_m2k16v2(__global void *base_address, int width,
-// int height, int pitch, int2 coord); ushort8
-// intel_subgroup_block_read_u16_m4k16v2(__global void *base_address, int width,
-// int height, int pitch, int2 coord); ushort16
-// intel_subgroup_block_read_u16_m8k16v2(__global void *base_address, int width,
-// int height, int pitch, int2 coord); uint8
-// intel_subgroup_block_read_transform_u8_k32(__global void *base_address, int
-// width, int height, int pitch, int2 coord); uint8
-// intel_subgroup_block_read_transform_u16_k16(__global void *base_address, int
-// width, int height, int pitch, int2 coord); uint8
-// intel_subgroup_block_read_transpose_u32_k8(__global void *base_address, int
-// width, int height, int pitch, int2 coord); ulong4
-// intel_subgroup_block_read_transpose_u64_k4(__global void *base_address, int
-// width, int height, int pitch, int2 coord); #endif
-// //defined(cl_intel_subgroup_extended_block_read)
-
-// For intrinsics, the pattern is:
-//  - prefix: __builtin_IB_subgroup_block_read_flat or
-//  __builtin_IB_subgroup_block_write_flat
-//  - operation (optional): _transpose or _transform
-//  - for no transpose or transform:
-//      - type / elements size: _u8 or _u16 or _u32 or _u64
-//      - number of tile rows: _m32 or _m16 or _m8 or _m4 or _m2 or _m1
-//      - tile width: _k64 or _k32 or _k16 or _k8
-//      - number of tiles: _v2 or _v1
-//  - for transpose:
-//      - type / element size: _u64 or _u32
-//      - number of tile rows: subgroup size (16)
-//      - tile width: _k4 (for _u64) or _k8 (for _u32)
-//      - number of tiles: 1
-//  - for transform:
-//      - type / element size: _u16 or _u8
-//      - number of tile rows: _k32 (for _u8) or _k16 (for _u16)
-//      - tile width: subgroup size (16)
-//      - number of tiles: 1
-
 enum LSC_LDCC {
   LSC_LDCC_DEFAULT = 0,
   LSC_LDCC_L1UC_L3UC = 1, // Override to L1 uncached and L3 uncached
@@ -133,7 +72,6 @@ enum LSC_LDCC {
 
 typedef ushort __attribute__((ext_vector_type(32))) ushort32;
 typedef uint __attribute__((ext_vector_type(32))) uint32;
-
 typedef ushort __attribute__((ext_vector_type(64))) ushort64;
 typedef uint __attribute__((ext_vector_type(16))) uint16;
 typedef uint __attribute__((ext_vector_type(8))) uint8;
@@ -176,6 +114,12 @@ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u32_m8k16v1(
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u32_m16k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, int2_ coord, enum LSC_LDCC cache_control));
+SYCL_DEVICE_BUILTIN(ushort64 __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, int2_ coord));
+SYCL_DEVICE_BUILTIN(uint16 __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, int2_ coord));
 
 void intel_subgroup_block_prefetch_u16_m8k16(const __global void *base_address,
                                              int width, int height, int pitch,
