@@ -70,9 +70,9 @@ enum LSC_LDCC {
   LSC_LDCC_L1IAR_L3C = 7, // Override to L1 invalidate-after-read, and L3 cached
 };
 
-typedef ushort __attribute__((ext_vector_type(32))) ushort32;
-typedef uint __attribute__((ext_vector_type(32))) uint32;
-typedef ushort __attribute__((ext_vector_type(64))) ushort64;
+// typedef ushort __attribute__((ext_vector_type(32))) ushort32;
+// typedef uint __attribute__((ext_vector_type(32))) uint32;
+// typedef ushort __attribute__((ext_vector_type(64))) ushort64;
 typedef uint __attribute__((ext_vector_type(16))) uint16;
 typedef uint __attribute__((ext_vector_type(8))) uint8;
 typedef int __attribute__((ext_vector_type(8))) int8;
@@ -114,12 +114,6 @@ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u32_m8k16v1(
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u32_m16k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, int2_ coord, enum LSC_LDCC cache_control));
-SYCL_DEVICE_BUILTIN(ushort64 __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
-    long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(uint16 __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
-    long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_work_group_barrier_arrive(uint flags));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_work_group_barrier_wait(uint flags));
 

@@ -53,6 +53,19 @@ static void fill_matrix(T *M, size_t numRows, size_t numCols) {
 }
 
 template <typename T>
+static void fill_matrix_B(T *M, size_t numRows, size_t numCols) {
+  for (size_t r = 0; r < numRows; r++) {
+    for (size_t c = 0; c < numCols; c++) {
+      M[r * numCols + c] = bfloat16_t(0.0f);
+    }
+  };
+
+  for (size_t r = 0; r < numRows; r++) {
+    M[r * numCols + r] = bfloat16_t(1.0f);
+  }
+}
+
+template <typename T>
 static void vnni_matrix(T *dst, const T *src, size_t numRows, size_t numCols,
                         size_t factor) {
   for (size_t r = 0; r < numRows / factor; r++) {
@@ -77,8 +90,8 @@ void check_results(size_t M, size_t N, const T *C, const T *C_ref) {
       err = std::max(localErr, err);
       if (localErr >= threshold) {
         error_cnt++;
-        // std::cerr << "Error at m = " << m << ", n = " << n << ": (local error
-        // "
+        // std::cerr << "Error at m = " << m << ", n = " << n << ": (local
+        // error"
         //           << localErr << "): Wanted " << C_ref[index] << ", got "
         //          << C[index] << std::endl;
         // return;
@@ -121,93 +134,93 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
   for (int test = 0; test < total_iterations; test++) {
     sycl::event ev;
     ev = queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for(
-          nd_range, [=](sycl::nd_item<2> id) [[sycl::reqd_sub_group_size(16)]] {
-            const int m = id.get_group(0) * WG_SIZE_Y +
-                          (get_sub_group_id() / SGS_PER_WG_X) * SG_SIZE_Y;
-            const int n = id.get_group(1) * WG_SIZE_X +
-                          (get_sub_group_id() % SGS_PER_WG_X) * SG_SIZE_X;
+      cgh.parallel_for(nd_range, [=](sycl::nd_item<2>
+                                         id) [[sycl::reqd_sub_group_size(16)]] {
+        const int M = id.get_global_range(0) * ITEM_SIZE_Y;
+        const int N = id.get_global_range(1) * ITEM_SIZE_X;
+        const int m = id.get_group(0) * WG_SIZE_Y +
+                      (get_sub_group_id() / SGS_PER_WG_X) * SG_SIZE_Y;
+        const int n = id.get_group(1) * WG_SIZE_X +
+                      (get_sub_group_id() % SGS_PER_WG_X) * SG_SIZE_X;
 
-            float8 sum[NN][MM];
-            for (int mm = 0; mm < MM; mm++) {
-              for (int nn = 0; nn < NN; nn++) {
-                sum[nn][mm] = 0;
-              }
-            }
+        Tensor tAr = make_tensor<ushort>(Shape<Int<8 * KK * MM>, Int<1>>{});
+        Tensor tBr = make_tensor<ushort>(Shape<Int<16 * KK>, Int<NN>>{});
+        Tensor tCr = make_tensor<dtype_acc>(Shape<_8, Int<MM>, Int<NN>>{});
 
-            int prefetch_k = 0;
+        auto A_copy =
+            make_xe_2d_A_copy(make_tensor(make_gmem_ptr(A), make_shape(M, K)));
+        auto B_copy =
+            make_xe_2d_B_copy(make_tensor(make_gmem_ptr(B), make_shape(K, N)));
+        auto C_copy =
+            make_xe_2d_copy(make_tensor(make_gmem_ptr(C), make_shape(M, N)));
+        // TODO: - decide on how to deal with vector types
+        //       - create layouts with tiling/partitioning
+
+        Tensor tAi = make_tensor(
+            make_inttuple_iter(m, 0),
+            make_layout(make_shape(_1{}, _1{}, K),
+                        make_stride(_1{}, MM * tM * E<0>{}, E<1>{})));
+        Tensor tBi =
+            make_tensor(make_inttuple_iter(0, n),
+                        make_layout(make_shape(_1{}, K, Int<NN>{}),
+                                    make_stride(_1{}, E<0>{}, tN * E<1>{})));
+        Tensor tCi = make_tensor(
+            make_inttuple_iter(m, n),
+            make_layout(Shape<_1, Int<MM>, Int<NN>>{},
+                        make_stride(_1{}, tM * E<0>{}, tN * E<1>{})));
+        TiledMMA<MMA_Atom<XE_8x16x16_BF16BF16F32F32_NN>,
+                 Layout<Shape<_1, _1, _1>>>
+            tiled_mma;
+
+        int prefetch_k = 0;
 #ifdef PREFETCH_DEFAULT
-            for (int p = 0; p < PREFETCH_DISTANCE; p++) {
+        for (int p = 0; p < PREFETCH_DISTANCE; p++) {
 #ifdef B_VNNI
-              HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
-              ((ushort *)B, tN, K, N, prefetch_k, n);
+          HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
+          ((ushort *)B, tN, K, N, prefetch_k, n);
 #else
                 HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
                 ((ushort *)B, tN, K, N, prefetch_k, n);
 #endif
-              HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
-              ((ushort *)A, tM, M, K, m, prefetch_k);
-              prefetch_k += tK * KK;
-            }
+          HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
+          ((ushort *)A, tM, M, K, m, prefetch_k);
+          prefetch_k += tK * KK;
+        }
 #endif
 
-            split_barrier_arrive();
-
-            for (int k = 0; k < K; k += tK * KK) {
-              short8 aData[2][4];
-              int8 bData[4][2];
+        for (int k = 0; k < K; k += tK * KK) {
+          copy(A_copy, tAi(_, _, k), tAr);
+          copy(B_copy, tBi(_, k / 2, _), tBr);
 
 #ifdef PREFETCH_DEFAULT
+          for (int p = 0; p < PREFETCH_DISTANCE; p++) {
 #ifdef B_VNNI
-              HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
-              ((ushort *)B, tN, K, N, prefetch_k, n);
+            HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
+            ((ushort *)B, tN, K, N, prefetch_k, n);
 #else
                   HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
                   ((ushort *)B, tN, K, N, prefetch_k, n);
 #endif
-              HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
-              ((ushort *)A, tM, M, K, m, prefetch_k);
-              prefetch_k += tK * KK;
+            HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
+            ((ushort *)A, tM, M, K, m, prefetch_k);
+            prefetch_k += tK * KK;
+          }
 #endif
+          auto tAr_view = make_tensor(static_cast<decltype(tAr) &&>(tAr).data(),
+                                      Shape<_8, Int<MM>, Int<KK>>{});
+          auto tBr_view = make_tensor(static_cast<decltype(tBr) &&>(tBr).data(),
+                                      Shape<_16, Int<KK>, Int<NN>>{});
+          for (int kl = 0; kl < KK; kl++) {
+            gemm(tiled_mma, tAr_view(_, _, kl), tBr_view(_, kl, _), tCr);
+          }
+        }
 
-              *(ushort64 *)(&aData) =
-                  __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
-                      (long)A, K * sizeof(ushort) - 1, M - 1,
-                      K * sizeof(ushort) - 1, int2_{k, m});
-
-              for (int i = 0; i < NN; i++) {
-                *(uint16 *)(&bData[i][0]) =
-                    __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
-                        (long)B, N * sizeof(uint) - 1, K - 1,
-                        N * sizeof(uint) - 1, int2_{n + i * tN, k / 2});
-              }
-
-              for (int kk = 0; kk < KK; kk++) {
-                for (int nn = 0; nn < NN; nn++) {
-                  for (int mm = 0; mm < MM; mm++) {
-                    sum[nn][mm] = intel_sub_group_bf16_bf16_matrix_mad_k16(
-                        aData[kk][mm], bData[nn][kk], sum[nn][mm]);
-                  }
-                }
-              }
-              split_barrier_wait();
-              split_barrier_arrive();
-            }
-            split_barrier_wait();
-
-            for (int mm = 0; mm < MM; mm++) {
-              for (int nn = 0; nn < NN; nn++) {
-                __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
-                    (long)C, N * sizeof(float) - 1, M - 1,
-                    N * sizeof(float) - 1, int2_{n + nn * tN, m + mm * tM},
-                    sycl::bit_cast<uint8>(sum[nn][mm]));
-              }
-            }
-          });
+        copy(C_copy, tCr, tCi);
+      });
     });
 
     ev.wait_and_throw();
-    event_times[test] = time_event(ev) / 1e6; // ms
+    event_times[test] = time_event(ev) / 1e6;
   }
 
   double average_event_time = 0.f;
