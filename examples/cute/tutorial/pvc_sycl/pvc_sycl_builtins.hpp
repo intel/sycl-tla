@@ -120,6 +120,8 @@ SYCL_DEVICE_BUILTIN(ushort64 __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
 SYCL_DEVICE_BUILTIN(uint16 __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, int2_ coord));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_work_group_barrier_arrive(uint flags));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_work_group_barrier_wait(uint flags));
 
 void intel_subgroup_block_prefetch_u16_m8k16(const __global void *base_address,
                                              int width, int height, int pitch,

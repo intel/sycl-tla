@@ -37,6 +37,9 @@ size_t matrixSize = 4096;
 
 #define PREFETCH_DISTANCE 1
 
+#define split_barrier_arrive() __builtin_IB_work_group_barrier_arrive(0)
+#define split_barrier_wait() __builtin_IB_work_group_barrier_wait(0)
+
 template <typename T>
 static void fill_matrix(T *M, size_t numRows, size_t numCols) {
   std::random_device dev;
@@ -148,9 +151,24 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
             }
 #endif
 
+            split_barrier_arrive();
+
             for (int k = 0; k < K; k += tK * KK) {
               short8 aData[2][4];
               int8 bData[4][2];
+
+#ifdef PREFETCH_DEFAULT
+#ifdef B_VNNI
+              HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
+              ((ushort *)B, tN, K, N, prefetch_k, n);
+#else
+                  HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
+                  ((ushort *)B, tN, K, N, prefetch_k, n);
+#endif
+              HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
+              ((ushort *)A, tM, M, K, m, prefetch_k);
+              prefetch_k += tK * KK;
+#endif
 
               *(ushort64 *)(&aData) =
                   __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
@@ -164,20 +182,6 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
                         N * sizeof(uint) - 1, int2_{n + i * tN, k / 2});
               }
 
-#ifdef PREFETCH_DEFAULT
-              for (int p = 0; p < PREFETCH_DISTANCE; p++) {
-#ifdef B_VNNI
-                HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
-                ((ushort *)B, tN, K, N, prefetch_k, n);
-#else
-                  HELPER_NAME(btile_block_prefetch_rowmajor, 4, 4)
-                  ((ushort *)B, tN, K, N, prefetch_k, n);
-#endif
-                HELPER_NAME(atile_block_prefetch_rowmajor, 4, 4)
-                ((ushort *)A, tM, M, K, m, prefetch_k);
-                prefetch_k += tK * KK;
-              }
-#endif
               for (int kk = 0; kk < KK; kk++) {
                 for (int nn = 0; nn < NN; nn++) {
                   for (int mm = 0; mm < MM; mm++) {
@@ -186,7 +190,10 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
                   }
                 }
               }
+              split_barrier_wait();
+              split_barrier_arrive();
             }
+            split_barrier_wait();
 
             for (int mm = 0; mm < MM; mm++) {
               for (int nn = 0; nn < NN; nn++) {
