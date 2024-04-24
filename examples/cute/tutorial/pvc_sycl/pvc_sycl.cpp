@@ -27,7 +27,7 @@ using dtype_b = bfloat16_t;
 using dtype_c = float;
 using dtype_acc = float;
 
-int testIterations = 10;
+size_t testIterations = 10;
 dtype_acc threshold = 0.01f;
 size_t matrixSize = 4096;
 
@@ -120,24 +120,24 @@ template <int tM, int tN, int tK, int MM, int NN>
 static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
                                          dtype_a *A, dtype_b *B, size_t M,
                                          size_t N, size_t K, dtype_acc *C_ref) {
-  int total_iterations = WARMUP_ITERATIONS + testIterations;
+  const uint32_t total_iterations = WARMUP_ITERATIONS + testIterations;
 
   std::vector<float> event_times(total_iterations);
 
-  sycl::range<2> group_range{(M + WG_SIZE_Y - 1) / WG_SIZE_Y,
-                             (N + WG_SIZE_X - 1) / WG_SIZE_X};
-  sycl::range<2> local_range{(WG_SIZE_Y + ITEM_SIZE_Y - 1) / ITEM_SIZE_Y,
-                             (WG_SIZE_X + ITEM_SIZE_X - 1) / ITEM_SIZE_X};
+  sycl::range<2> group_range{(N + WG_SIZE_X - 1) / WG_SIZE_X,
+                             (M + WG_SIZE_Y - 1) / WG_SIZE_Y};
+  sycl::range<2> local_range{(WG_SIZE_X + ITEM_SIZE_X - 1) / ITEM_SIZE_X,
+                             (WG_SIZE_Y + ITEM_SIZE_Y - 1) / ITEM_SIZE_Y};
   sycl::nd_range<2> nd_range(group_range * local_range, local_range);
 
-  for (int test = 0; test < total_iterations; test++) {
+  for (uint32_t test = 0; test < total_iterations; test++) {
     sycl::event ev;
     ev = queue.submit([&](sycl::handler &cgh) {
       cgh.parallel_for(nd_range, [=](sycl::nd_item<2>
                                          id) [[sycl::reqd_sub_group_size(16)]] {
-        const int m = id.get_group(0) * WG_SIZE_Y +
+        const int m = id.get_group(1) * WG_SIZE_Y +
                       (get_sub_group_id() / SGS_PER_WG_X) * SG_SIZE_Y;
-        const int n = id.get_group(1) * WG_SIZE_X +
+        const int n = id.get_group(0) * WG_SIZE_X +
                       (get_sub_group_id() % SGS_PER_WG_X) * SG_SIZE_X;
 
         Tensor tAr = make_tensor<ushort>(Shape<Int<8 * KK * MM>, Int<1>>{});
@@ -169,9 +169,9 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
                  Layout<Shape<_1, _1, _1>>>
             tiled_mma;
 
-        int prefetch_k = 0;
+        uint32_t prefetch_k = 0;
 #ifdef PREFETCH_DEFAULT
-        for (int p = 0; p < PREFETCH_DISTANCE; p++) {
+        for (uint32_t p = 0; p < PREFETCH_DISTANCE; p++) {
 #ifdef B_VNNI
           HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
           ((ushort *)B, tN, K, N, prefetch_k, n);
@@ -190,7 +190,7 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
           copy(B_copy, tBi(_, k / 2, _), tBr);
 
 #ifdef PREFETCH_DEFAULT
-          for (int p = 0; p < PREFETCH_DISTANCE; p++) {
+          for (uint32_t p = 0; p < PREFETCH_DISTANCE; p++) {
 #ifdef B_VNNI
             HELPER_NAME(btile_block_prefetch_vnni, 4, 4)
             ((ushort *)B, tN, K, N, prefetch_k, n);
@@ -207,7 +207,7 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
                                       Shape<_8, Int<MM>, Int<KK>>{});
           auto tBr_view = make_tensor(static_cast<decltype(tBr) &&>(tBr).data(),
                                       Shape<_16, Int<KK>, Int<NN>>{});
-          for (int kl = 0; kl < KK; kl++) {
+          for (uint32_t kl = 0; kl < KK; kl++) {
             gemm(tiled_mma, tAr_view(_, _, kl), tBr_view(_, kl, _), tCr);
           }
         }
@@ -222,16 +222,16 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
 
   double average_event_time = 0.f;
   auto best = 999.f;
-  for (int i = WARMUP_ITERATIONS; i < total_iterations; i++) {
-    printf("GPU time is %f ms, Gflops is: %f\n", event_times[i],
-           2.0 * M * N * K / 1e9 / (event_times[i] / 1e3));
+  for (uint32_t i = WARMUP_ITERATIONS; i < total_iterations; i++) {
+    printf("GPU time is %f ms, Tflops is: %f\n", event_times[i],
+           2.0 * M * N * K / 1e12 / (event_times[i] / 1e3));
     average_event_time += event_times[i];
     best = min(best, event_times[i]);
   }
   average_event_time /= testIterations;
-  printf("Average is %f gflops, best is %f gflops\n",
-         2.0 * M * N * K / 1e9 / (average_event_time / 1e3),
-         2.0 * M * N * K / 1e9 / (best / 1e3));
+  printf("Average is %f Tflops, best is %f Tflops\n",
+         2.0 * M * N * K / 1e12 / (average_event_time / 1e3),
+         2.0 * M * N * K / 1e12 / (best / 1e3));
 
   printf("Checking results... ");
   fflush(stdout);
