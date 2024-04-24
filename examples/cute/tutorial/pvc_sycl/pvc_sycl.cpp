@@ -99,10 +99,9 @@ void check_results(size_t M, size_t N, const T *C, const T *C_ref) {
     }
   }
 
-  auto fail_rate = (float)error_cnt * 100 / (M * N);
+  auto pass_rate = (1.f - ((float)error_cnt / (M * N))) * 100; // %
 
-  std::cout << "\n\n==== fail points %d  is: " << fail_rate << "% !!!\n"
-            << std::endl;
+  std::cout << "\n\n==== Pass rate is: " << pass_rate << "% !!!\n" << std::endl;
 }
 
 inline size_t time_event(sycl::event &e) {
@@ -136,8 +135,6 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
     ev = queue.submit([&](sycl::handler &cgh) {
       cgh.parallel_for(nd_range, [=](sycl::nd_item<2>
                                          id) [[sycl::reqd_sub_group_size(16)]] {
-        const int M = id.get_global_range(0) * ITEM_SIZE_Y;
-        const int N = id.get_global_range(1) * ITEM_SIZE_X;
         const int m = id.get_group(0) * WG_SIZE_Y +
                       (get_sub_group_id() / SGS_PER_WG_X) * SG_SIZE_Y;
         const int n = id.get_group(1) * WG_SIZE_X +
@@ -238,12 +235,17 @@ static void go_dpas_blockread_vnni_tiled(sycl::queue queue, dtype_acc *C,
 
   printf("Checking results... ");
   fflush(stdout);
-  check_results(M, N, C, C_ref);
+
+  dtype_c *C_host = (dtype_c *)syclcompat::malloc_host(sizeof(float) * M * N);
+  queue.memcpy(C_host, C, M * N * sizeof(dtype_c));
+  check_results(M, N, C_host, C_ref);
+
+  free(C_host, queue);
   printf(" done!\n");
 }
 
 int main(int argc, char **argv) {
-  sycl::queue queue{{sycl::property::queue::enable_profiling()}};
+  auto queue = sycl::queue{{sycl::property::queue::enable_profiling()}};
   auto context = queue.get_info<sycl::info::queue::context>();
   auto device = queue.get_info<sycl::info::queue::device>();
 
@@ -251,50 +253,55 @@ int main(int argc, char **argv) {
   const auto N = matrixSize;
   const auto K = matrixSize;
 
-  dtype_a *A_vec =
-      (dtype_a *)syclcompat::malloc_shared(sizeof(dtype_a) * M * K);
-  dtype_b *B_vec =
-      (dtype_b *)syclcompat::malloc_shared(sizeof(dtype_b) * N * K);
-  dtype_b *Bvnni_vec =
-      (dtype_b *)syclcompat::malloc_shared(sizeof(dtype_b) * N * K);
-  dtype_acc *C_vec =
-      (dtype_acc *)syclcompat::malloc_shared(sizeof(dtype_acc) * M * N);
-  dtype_acc *C_ref =
-      (dtype_acc *)syclcompat::malloc_shared(sizeof(dtype_acc) * M * N);
+  dtype_a *A_host = (dtype_a *)syclcompat::malloc_host(sizeof(dtype_a) * M * K);
+  dtype_b *B_host = (dtype_b *)syclcompat::malloc_host(sizeof(dtype_b) * N * K);
+  dtype_b *Bvnni_host =
+      (dtype_b *)syclcompat::malloc_host(sizeof(dtype_b) * N * K);
+  dtype_acc *C_host =
+      (dtype_acc *)syclcompat::malloc_host(sizeof(dtype_c) * M * N);
+  dtype_acc *C_ref_host =
+      (dtype_acc *)syclcompat::malloc_host(sizeof(dtype_acc) * M * N);
+
+  dtype_a *A_dev =
+      (dtype_a *)sycl::malloc_device(sizeof(dtype_a) * M * K, device, context);
+  dtype_b *B_dev =
+      (dtype_b *)sycl::malloc_device(sizeof(dtype_b) * N * K, device, context);
+  dtype_acc *C_dev = (dtype_acc *)sycl::malloc_device(sizeof(dtype_c) * M * N,
+                                                      device, context);
 
   printf("Initializing source matrices...\n");
-  fill_matrix(A_vec, M, K);
-  fill_matrix(B_vec, K, N);
+  fill_matrix(A_host, M, K);
+  fill_matrix(B_host, K, N);
+  vnni_matrix(Bvnni_host, B_host, K, N, 2);
 
-  vnni_matrix(Bvnni_vec, B_vec, K, N, 2);
+  queue.memcpy(A_dev, A_host, sizeof(dtype_a) * M * K);
+  queue.memcpy(B_dev, Bvnni_host, sizeof(dtype_b) * N * K);
+  queue.memcpy(C_dev, C_host, sizeof(dtype_c) * M * N);
 
   printf("Computing reference...\n");
   get_gemm_gold<dtype_a, dtype_b, dtype_acc>(
-      M, N, K, mem_layout::row_major, mem_layout::row_major, (dtype_a *)A_vec,
-      (dtype_b *)B_vec, (dtype_acc *)C_ref);
-
-  printf("Creating source buffers...\n");
-  auto A = A_vec;
-  auto B = B_vec;
-  auto Bvnni = Bvnni_vec;
+      M, N, K, mem_layout::row_major, mem_layout::row_major, (dtype_a *)A_host,
+      (dtype_b *)B_host, (dtype_c *)C_ref_host);
 
   printf("Running gemm tests, MKN: (%d, %d, %d)...\n", M, K, N);
 
 #ifdef B_VNNI
-  go_dpas_blockread_vnni_tiled<8, 16, 16, 4, 4>(queue, C_vec, A, Bvnni, M, N, K,
-                                                C_ref);
+  go_dpas_blockread_vnni_tiled<8, 16, 16, 4, 4>(queue, C_dev, A_dev, B_dev, M,
+                                                N, K, C_ref_host);
 #else
-  go_dpas_blockread_vnni_tiled<8, 16, 16, 4, 4>(queue, C_vec, A, B, M, N, K,
-                                                C_ref);
+  // TODO:
 #endif
 
   printf("Done.\n");
 
-  free(A_vec, queue);
-  free(B_vec, queue);
-  free(C_vec, queue);
-  free(Bvnni_vec, queue);
-  free(C_ref, queue);
+  free(A_host, queue);
+  free(B_host, queue);
+  free(C_host, queue);
+  free(Bvnni_host, queue);
+  free(C_ref_host, queue);
+  free(A_dev, queue);
+  free(B_dev, queue);
+  free(C_dev, queue);
 
   return 0;
 }
