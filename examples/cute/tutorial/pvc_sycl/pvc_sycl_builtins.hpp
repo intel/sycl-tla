@@ -6,10 +6,10 @@
 #define global
 #define __global
 
-#define as_long (long)
+#define SGS_PER_WG_X 4
+#define SGS_PER_WG_Y 8
 
-#define SGS_PER_WG_Y (WG_SIZE_Y / SG_SIZE_Y)
-#define SGS_PER_WG_X (WG_SIZE_X / SG_SIZE_X)
+#define as_long (long)
 
 #define get_sub_group_id()                                                     \
   (sycl::ext::oneapi::experimental::this_nd_item<3>()                          \
