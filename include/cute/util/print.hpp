@@ -34,6 +34,8 @@
 
 #include <cute/util/type_traits.hpp>
 
+#define printf sycl::ext::oneapi::experimental::printf
+
 //
 // CUDA compatible print and printf
 //

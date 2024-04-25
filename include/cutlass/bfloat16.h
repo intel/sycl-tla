@@ -119,7 +119,7 @@ public:
     asm("cvt.rn.bf16.f32 %0, %1;\n" : "=h"(storage) : "f"(x));
 
     #elif defined(CUTLASS_ENABLE_SYCL)
-
+    
     storage = sycl::ext::oneapi::detail::bfloat16ToBits(sycl::ext::oneapi::bfloat16(x));
 
     #else
