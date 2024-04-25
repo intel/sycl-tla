@@ -40,7 +40,7 @@
          C++11 compatibility is enforced by this unit test: `cutlass_test_unit_core_cpp11`.
 */
 
-#if !defined(__CUDACC_RTC__)
+#if !defined(__CUDACC_RTC__) && !defined(CUTLASS_ENABLE_SYCL)
 #include "cuda_runtime.h"
 
 #include "cutlass/trace.h"
