@@ -48,30 +48,29 @@ namespace cutlass {
     using cuDoubleComplex = std::complex<double>;
 
     CUTLASS_HOST_DEVICE
-    float cuCrealf (cuFloatComplex x)
+    float cuCrealf(cuFloatComplex x)
     {
       return x.real();
     }
 
     CUTLASS_HOST_DEVICE
-    float cuCimagf (cuFloatComplex x)
+    float cuCimagf(cuFloatComplex x)
     {
       return x.imag();
     }
 
-    CUTLASS_HOST_DEVICE double cuCreal (cuDoubleComplex x)
+    CUTLASS_HOST_DEVICE double cuCreal(cuDoubleComplex x)
     {
       return x.real();
     }
 
-    CUTLASS_HOST_DEVICE double cuCimag (cuDoubleComplex x)
+    CUTLASS_HOST_DEVICE double cuCimag(cuDoubleComplex x)
     {
       return x.imag();
     }
 
     CUTLASS_HOST_DEVICE
-    cuFloatComplex make_cuFloatComplex
-            (float r, float i)
+    cuFloatComplex make_cuFloatComplex(float r, float i)
     {
       return cuFloatComplex{r, i};
     }

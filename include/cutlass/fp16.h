@@ -69,7 +69,7 @@ namespace cutlass {
     half float2half_rn (float const& flt) {
 #if defined(CUTLASS_ENABLE_SYCL)
       // TODO: find SYCL equivalent for float2half_rn
-  return static_cast<half>(flt);
+      return static_cast<half>(flt);
 #else
       return __float2half_rn(flt);
 #endif
@@ -79,7 +79,7 @@ namespace cutlass {
     int int2half_rn (half const& flt) {
 #if defined(CUTLASS_ENABLE_SYCL)
       // TODO: find SYCL equivalent for int2half_rn
-  return static_cast<int>(flt);
+      return static_cast<int>(flt);
 #else
       return __int2half_rn(flt);
 #endif
@@ -89,7 +89,7 @@ namespace cutlass {
     half2 hsub2(const half2 a, const half2 b) {
 #if defined(CUTLASS_ENABLE_SYCL)
       // TODO: find SYCL equivalent
-  return a - b;
+      return a - b;
 #else
       return __hsub2(a, b);
 #endif
