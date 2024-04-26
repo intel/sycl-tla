@@ -161,12 +161,12 @@ struct XE_2D_U16x8x16x1x2_LD_N
                                     int height, int pitch, int2_ coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)
-    static_assert(sizeof(T) == 2, "Expected T to have size 2");
-    ushort16 tmp = (intel_subgroup_block_read_u16_m8k16v2(
-        (__global void *)baseoffset, width, height, pitch, coord));
-    *(ushort16 *)dst = *reinterpret_cast<ushort16 *>(&tmp);
+      static_assert(sizeof(T) == 2, "Expected T to have size 2");
+      ushort16 tmp = (intel_subgroup_block_read_u16_m8k16v2(
+          (__global void *)baseoffset, width, height, pitch, coord));
+      *(ushort16 *)dst = *reinterpret_cast<ushort16 *>(&tmp);
     #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
+      CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif
   }
 };
