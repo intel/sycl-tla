@@ -227,12 +227,12 @@ struct XE_2D_U32x8x16x1x1_ST_N
   CUTE_HOST_DEVICE static void copy(void *baseoffset, int width, int height,
                                     int pitch, int2_ coord, const T *src) {
     #if defined(ARCH_PVC_ACTIVATED)
-    static_assert(sizeof(T) == 4, "Expected T to have size 4");
-    __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
-        (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-        *(uint8 *)src);
+      static_assert(sizeof(T) == 4, "Expected T to have size 4");
+      __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
+          (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
+          *(uint8 *)src);
     #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
+      CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif
   }
 };
