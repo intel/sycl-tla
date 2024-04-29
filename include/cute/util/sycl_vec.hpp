@@ -46,7 +46,7 @@ using int8 = vector_t<int, 8>;
 using uint8 = vector_t<uint, 8>;
 using uint16 = vector_t<uint, 16>;
 
-typedef ushort __attribute__((ext_vector_type(8))) ushort8_t;
+typedef ushort __attribute__((ext_vector_type(8))) ushort8;
 typedef ushort __attribute__((ext_vector_type(16))) ushort16;
 typedef ushort __attribute__((ext_vector_type(32))) ushort32;
 typedef ushort __attribute__((ext_vector_type(64))) ushort64;
