@@ -68,10 +68,6 @@ set(CUTLASS_ENABLE_SYCL OFF CACHE BOOL "Enable SYCL")
 if (CUTLASS_ENABLE_SYCL)
   set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-  if("${DPCPP_SYCL_TARGET}" STREQUAL "")
-    set(DPCPP_SYCL_TARGET "nvptx64-nvidia-cuda" CACHE STRING "Default target for Nvidia GPU")
-  endif()
-
   if("${DPCPP_SYCL_TARGET}" STREQUAL "nvptx64-nvidia-cuda")
     set(SYCL_NVIDIA_TARGET ON)
     add_compile_definitions(SYCL_NVIDIA_TARGET)
