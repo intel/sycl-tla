@@ -200,8 +200,7 @@ CUTLASS_DEVICE void syncwarp() {
 #if defined(__CUDA_ARCH__)
   __syncwarp();
 #elif defined(__SYCL_DEVICE_ONLY__)
-  // TODO: Add SYCL equivalent function
-  assert(false);
+  sycl::group_barrier(syclcompat::get_nd_item<1>().get_sub_group());
 #endif
 }
 
@@ -209,8 +208,7 @@ CUTLASS_DEVICE void threadfence() {
 #if defined(__CUDA_ARCH__)
   __threadfence();
 #elif defined(__SYCL_DEVICE_ONLY__)
-  // TODO: Add SYCL equivalent function
-  assert(false);
+  syclcompat::get_nd_item<1>().barrier(sycl::access::fence_space::global_space);
 #endif
 }
 
@@ -221,9 +219,7 @@ uint byte_perm(uint x, uint y, uint s) {
 #if defined(__CUDA_ARCH__)
   return __byte_perm(x, y, s);
 #elif defined(__SYCL_DEVICE_ONLY__)
-  // TODO: Add SYCL equivalent function
-  assert(false);
-  return 0;
+  return syclcompat::byte_level_permute(x, y, s);
 #else
   return 0;
 #endif
@@ -236,9 +232,7 @@ uint shfl_up_sync(const unsigned mask, const uint var, const int delta, const in
 #if defined(__CUDA_ARCH__)
   return __shfl_up_sync(mask, var, delta, width);
 #elif defined(__SYCL_DEVICE_ONLY__)
-  // TODO: Add SYCL equivalent function
-  assert(false);
-  return 0;
+  return syclcompat::shift_sub_group_right(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
 #else
   return 0;
 #endif
@@ -249,9 +243,7 @@ uint shfl_down_sync(const unsigned mask, const uint var, const int delta, const 
 #if defined(__CUDA_ARCH__)
   return __shfl_down_sync(mask, var, delta, width);
 #elif defined(__SYCL_DEVICE_ONLY__)
-  // TODO: Add SYCL equivalent function
-  assert(false);
-  return 0;
+  return syclcompat::shift_sub_group_left(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
 #else
   return 0;
 #endif
@@ -277,9 +269,7 @@ CUTLASS_DEVICE T hfma2(const T a, const T b, const T c) {
 #if defined(__CUDA_ARCH__)
   return hfma2(a, b, c);
 #elif defined(__SYCL_DEVICE_ONLY__)
-  // TODO: Add SYCL equivalent function
-  assert(false);
-  return  T(0);
+  return sycl::fma(a, b, c);
 #else
   return T(0);
 #endif
@@ -315,16 +305,14 @@ namespace cutlass {
 
     CUTLASS_DEVICE int atomicAdd(int *address, int val) {
 #if defined(__SYCL_DEVICE_ONLY__)
-      // TODO: Add SYCL equivalent function
-      assert(false);
+      return syclcompat::atomic_fetch_add(address, val);
 #endif
       return 0;
     }
 
     CUTLASS_DEVICE int atomicCAS(int *address, int compare, int val) {
 #if defined(__SYCL_DEVICE_ONLY__)
-      // TODO: Add SYCL equivalent function
-      assert(false);
+      syclcompat::atomic_compare_exchange_strong(address, compare, val);
 #endif
       return 0;
     }
