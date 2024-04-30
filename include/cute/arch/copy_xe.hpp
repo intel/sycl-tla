@@ -49,40 +49,40 @@ namespace cute
 
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord, uint8 data));
-SYCL_DEVICE_BUILTIN(ushort8 __builtin_IB_subgroup_block_read_flat_u16_m8k16v1(
+    int pitch_minus_one, intel::coord_t coord, uint8 data));
+SYCL_DEVICE_BUILTIN(intel::ushort8 __builtin_IB_subgroup_block_read_flat_u16_m8k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(uint8 __builtin_IB_subgroup_block_read_flat_u32_m8k16v1(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::uint8 __builtin_IB_subgroup_block_read_flat_u32_m8k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(ushort64 __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::ushort64 __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(ushort32 __builtin_IB_subgroup_block_read_flat_u16_m16k16v2(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::ushort32 __builtin_IB_subgroup_block_read_flat_u16_m16k16v2(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(ushort16 intel_subgroup_block_read_u16_m8k16v2(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::ushort16 intel_subgroup_block_read_u16_m8k16v2(
     __global void *baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(ushort32 __builtin_IB_subgroup_block_read_flat_u16_m32k16v1(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::ushort32 __builtin_IB_subgroup_block_read_flat_u16_m32k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(uint16 __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::uint16 __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(uint32 __builtin_IB_subgroup_block_read_flat_transform_u16_k32v2(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::uint32 __builtin_IB_subgroup_block_read_flat_transform_u16_k32v2(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(int16 __builtin_IB_subgroup_block_read_flat_transform_u16_k16v2(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::int16 __builtin_IB_subgroup_block_read_flat_transform_u16_k16v2(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(int16 __builtin_IB_subgroup_block_read_flat_transform_u16_k32(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::int16 __builtin_IB_subgroup_block_read_flat_transform_u16_k32(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
-SYCL_DEVICE_BUILTIN(int8 intel_subgroup_block_read_transform_u16_k16(
+    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(intel::int8 intel_subgroup_block_read_transform_u16_k16(
     __global void * baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, int2_ coord));
+    int pitch_minus_one, intel::coord_t coord));
 
 
 #undef SYCL_DEVICE_BUILTIN
@@ -91,11 +91,11 @@ struct XE_2D_U16x8x16x1x1_LD_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, int2_ coord,
+                                    int height, int pitch, intel::coord_t coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-      *(ushort8 *)dst = __builtin_IB_subgroup_block_read_flat_u16_m8k16v1(
+      *(intel::ushort8 *)dst = __builtin_IB_subgroup_block_read_flat_u16_m8k16v1(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
@@ -107,11 +107,11 @@ struct XE_2D_U32x8x16x1x1_LD_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, int2_ coord,
+                                    int height, int pitch, intel::coord_t coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 4, "Expected T to have size 4");
-      *(uint8 *)dst = __builtin_IB_subgroup_block_read_flat_u32_m8k16v1(
+      *(intel::uint8 *)dst = __builtin_IB_subgroup_block_read_flat_u32_m8k16v1(
             (long)baseoffset, width - 1, height - 1, pitch - 1, coord); 
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
@@ -123,11 +123,11 @@ struct XE_2D_U16x16x16x1x1_LD_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, int2_ coord,
+                                    int height, int pitch, intel::coord_t coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)                                  
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-      *(uint8 *)dst = __builtin_IB_subgroup_block_read_flat_u32_m8k16v1(
+      *(intel::uint8 *)dst = __builtin_IB_subgroup_block_read_flat_u32_m8k16v1(
             (long)baseoffset, width - 1, height - 1, pitch - 1, coord);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
@@ -139,11 +139,11 @@ struct XE_2D_U16x8x16x4x2_LD_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, int2_ coord,
+                                    int height, int pitch, intel::coord_t coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-      *(ushort64 *)dst = __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
+      *(intel::ushort64 *)dst = __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
           long(baseoffset), width - 1, height - 1, pitch - 1, coord);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
@@ -155,11 +155,11 @@ struct XE_2D_U16x8x16x2x2_LD_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, int2_ coord,
+                                    int height, int pitch, intel::coord_t coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-      *(ushort32*) dst = __builtin_IB_subgroup_block_read_flat_u16_m16k16v2(
+      *(intel::ushort32*) dst = __builtin_IB_subgroup_block_read_flat_u16_m16k16v2(
           long(baseoffset), width - 1, height - 1, pitch - 1, coord);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
@@ -171,13 +171,13 @@ struct XE_2D_U16x8x16x1x2_LD_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, int2_ coord,
+                                    int height, int pitch, intel::coord_t coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-      ushort16 tmp = (intel_subgroup_block_read_u16_m8k16v2(
+      intel::ushort16 tmp = (intel_subgroup_block_read_u16_m8k16v2(
           (__global void *)baseoffset, width, height, pitch, coord));
-      *(ushort16 *)dst = *reinterpret_cast<ushort16 *>(&tmp);
+      *(intel::ushort16 *)dst = *reinterpret_cast<intel::ushort16 *>(&tmp);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif
@@ -188,11 +188,11 @@ struct XE_2D_U16x8x16x4x1_LD_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, int2_ coord,
+                                    int height, int pitch, intel::coord_t coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-        *(ushort32*) dst = __builtin_IB_subgroup_block_read_flat_u16_m32k16v1(
+        *(intel::ushort32*) dst = __builtin_IB_subgroup_block_read_flat_u16_m32k16v1(
             long(baseoffset), width - 1, height - 1, pitch - 1, coord);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
@@ -204,13 +204,13 @@ struct XE_2D_U32x8x16x2x1_LD_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, int2_ coord,
+                                    int height, int pitch, intel::coord_t coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 4, "Expected T to have size 4");
-      uint16 tmp = __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
+      intel::uint16 tmp = __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
           long(baseoffset), width - 1, height - 1, pitch - 1, coord);
-      *(uint16 *)dst = *reinterpret_cast<uint16 *>(&tmp);
+      *(intel::uint16 *)dst = *reinterpret_cast<intel::uint16 *>(&tmp);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif
@@ -221,13 +221,13 @@ struct XE_2D_U16x16x16x2x1_LD_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, int2_ coord,
+                                    int height, int pitch, intel::coord_t coord,
                                     T *dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-      uint16 tmp = __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
+      intel::uint16 tmp = __builtin_IB_subgroup_block_read_flat_u32_m16k16v1(
           long(baseoffset), width - 1, height - 1, pitch - 1, coord);
-      *(uint16 *)dst = *reinterpret_cast<uint16 *>(&tmp);
+      *(intel::uint16 *)dst = *reinterpret_cast<intel::uint16 *>(&tmp);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif
@@ -237,10 +237,10 @@ struct XE_2D_U16x16x16x2x1_LD_N
 struct XE_2D_U16x16x16x2x2_V
 {
   template <class T>
-  CUTE_HOST_DEVICE static void copy(const void *base_address, int width, int height, int pitch, int2_ coord, T* dst) {
+  CUTE_HOST_DEVICE static void copy(const void *base_address, int width, int height, int pitch, intel::coord_t coord, T* dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-      *(uint32*) dst = __builtin_IB_subgroup_block_read_flat_transform_u16_k32v2(long(base_address), width - 1, height - 1, pitch - 1, coord);
+      *(intel::uint32*) dst = __builtin_IB_subgroup_block_read_flat_transform_u16_k32v2(long(base_address), width - 1, height - 1, pitch - 1, coord);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif
@@ -250,10 +250,10 @@ struct XE_2D_U16x16x16x2x2_V
 struct XE_2D_U16x16x16x1x2_V
 {
   template <class T>
-  CUTE_HOST_DEVICE static void copy(const void *base_address, int width, int height, int pitch, int2_ coord, T* dst) {
+  CUTE_HOST_DEVICE static void copy(const void *base_address, int width, int height, int pitch, intel::coord_t coord, T* dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-      *(int16*) dst = __builtin_IB_subgroup_block_read_flat_transform_u16_k16v2(long(base_address), width - 1, height - 1, pitch - 1, coord);
+      *(intel::int16*) dst = __builtin_IB_subgroup_block_read_flat_transform_u16_k16v2(long(base_address), width - 1, height - 1, pitch - 1, coord);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif
@@ -263,10 +263,10 @@ struct XE_2D_U16x16x16x1x2_V
 struct XE_2D_U16x16x16x2x1_V
 {
   template <class T>
-  CUTE_HOST_DEVICE static void copy(const void *base_address, int width, int height, int pitch, int2_ coord, T* dst) {
+  CUTE_HOST_DEVICE static void copy(const void *base_address, int width, int height, int pitch, intel::coord_t coord, T* dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
-      *(int16*) dst = __builtin_IB_subgroup_block_read_flat_transform_u16_k32(long(base_address), width - 1, height - 1, pitch - 1, coord);
+      *(intel::int16*) dst = __builtin_IB_subgroup_block_read_flat_transform_u16_k32(long(base_address), width - 1, height - 1, pitch - 1, coord);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif
@@ -276,11 +276,11 @@ struct XE_2D_U16x16x16x2x1_V
 struct XE_2D_U16x16x16x1x1_V
 {
   template <class T>
-  CUTE_HOST_DEVICE static void copy(const void *base_address, int width, int height, int pitch, int2_ coord, T* dst) {
+  CUTE_HOST_DEVICE static void copy(const void *base_address, int width, int height, int pitch, intel::coord_t coord, T* dst) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
       // Note: this function is in the headers, but is named confusingly and returns unsigned integers rather than signed integers:
-      *(int8*) dst = intel_subgroup_block_read_transform_u16_k16((__global void *)base_address, width, height, pitch, coord);
+      *(intel::int8*) dst = intel_subgroup_block_read_transform_u16_k16((__global void *)base_address, width, height, pitch, coord);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif
@@ -291,12 +291,12 @@ struct XE_2D_U32x8x16x1x1_ST_N
 {
   template <class T>
   CUTE_HOST_DEVICE static void copy(void *baseoffset, int width, int height,
-                                    int pitch, int2_ coord, const T *src) {
+                                    int pitch, intel::coord_t coord, const T *src) {
     #if defined(ARCH_PVC_ACTIVATED)
       static_assert(sizeof(T) == 4, "Expected T to have size 4");
       __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          *(uint8 *)src);
+          *(intel::uint8 *)src);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware")
     #endif

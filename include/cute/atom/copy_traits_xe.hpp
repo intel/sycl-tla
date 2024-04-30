@@ -54,7 +54,7 @@ struct XE_2D_LD_Unpack
       int H = size<0>(traits.tensor);
       int W = size<1>(traits.tensor) * sizeof(typename Copy_Traits::CopyInternalType);
       auto [y, x] = src.data().coord_;
-      CopyOp::copy(traits.tensor.data().get(), W, H, W, int2_{static_cast<int>(x), static_cast<int>(y)}, &*dst.data());
+      CopyOp::copy(traits.tensor.data().get(), W, H, W, intel::coord_t{static_cast<int>(x), static_cast<int>(y)}, &*dst.data());
   }
 };
 
@@ -275,7 +275,7 @@ struct XE_2D_ST_Unpack
       int H = size<0>(traits.tensor);
       int W = size<1>(traits.tensor) * sizeof(typename Copy_Traits::CopyInternalType);
       auto [y, x] = dst.data().coord_;
-      CopyOp::copy(traits.tensor.data().get(), W, H, W, int2_{static_cast<int>(x), static_cast<int>(y)}, &*src.data());
+      CopyOp::copy(traits.tensor.data().get(), W, H, W, intel::coord_t{static_cast<int>(x), static_cast<int>(y)}, &*src.data());
   }
 };
 
@@ -285,7 +285,6 @@ struct Copy_Traits<XE_2D_U32x8x16x1x1_ST_N, GTensor>
 {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
-  using NumBits = Int<sizeof(typename GTensor::engine_type::value_type) * 8>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout =
     Layout<Shape<_16, Shape<_8, _32>>, Stride<_32, Stride<_512, _1>>>;
