@@ -47,6 +47,10 @@ target_link_libraries(
   cuda_driver
   )
 
+  if(${CUTLASS_ENABLE_SYCL})
+    add_sycl_to_target(TARGET cutlass_test_unit_infra)
+  endif()
+
 cutlass_add_library(
   cutlass_test_unit_infra_lib
   OBJECT
@@ -58,6 +62,10 @@ target_link_libraries(
   PUBLIC
   cutlass_test_unit_infra
   )
+
+  if(${CUTLASS_ENABLE_SYCL})
+    add_sycl_to_target(TARGET cutlass_test_unit_infra_lib)
+  endif()
 
 set(CUTLASS_TEST_UNIT_RESULTS_CACHE_DIR ${CMAKE_CURRENT_LIST_DIR}/data/hashes)
 
@@ -97,6 +105,10 @@ function(cutlass_test_unit_add_executable NAME)
 
   if (CUTLASS_ENABLE_OPENMP_TESTS AND OpenMP_CXX_FOUND)
     target_link_libraries(${NAME} PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  
+  if(${CUTLASS_ENABLE_SYCL})
+    add_sycl_to_target(TARGET ${NAME})
   endif()
 
   string(REGEX REPLACE cutlass_ "" NAME_STEM ${NAME})
