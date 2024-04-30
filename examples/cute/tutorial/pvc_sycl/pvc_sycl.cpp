@@ -269,16 +269,19 @@ void cute_gemm(size_t M, size_t K, size_t N) {
   double average_event_time = 0.f;
   auto best = 999.f;
   for (uint32_t i = WARMUP_ITERATIONS; i < total_iterations; i++) {
+#if 0
     printf("GPU time is %f ms, Tflops is: %f, HBM (GBs) is %f\n",
            event_times[i] / 1e3, 2.0 * M * N * K / 1e12 / event_times[i],
            (M * K * sizeof(dtype_a) + K * N * sizeof(dtype_b) +
             M * N * sizeof(dtype_c)) /
                event_times[i] / 1e9);
+#endif
     average_event_time += event_times[i];
     best = min(best, event_times[i]);
   }
   average_event_time /= testIterations;
-  printf("Best is %f Tflops, %f HBM (GBs)\n", 2.0 * M * N * K / 1e12 / best,
+  printf("MKN (%d, %d, %d), Best is %f ms, %f Tflops, %f HBM (GBs)\n", M, K, N,
+         best * 1e3, 2.0 * M * N * K / 1e12 / best,
          (M * K * sizeof(dtype_a) + K * N * sizeof(dtype_b) +
           M * N * sizeof(dtype_c)) /
              best / 1e9);
@@ -305,6 +308,7 @@ void cute_gemm(size_t M, size_t K, size_t N) {
 }
 
 int main(int argc, char **argv) {
+  // M, K, N
   cute_gemm<256, 256, 32, 64, 32, 32>(2048, 2048, 2048);
   cute_gemm<256, 256, 32, 64, 32, 32>(4096, 4096, 4096);
   cute_gemm<256, 256, 32, 64, 32, 32>(8192, 8192, 8192);
