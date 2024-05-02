@@ -28,15 +28,32 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 if (CUTLASS_ENABLE_SYCL)
-  file(GLOB_RECURSE SYCL_EXAMPLES CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/*sycl.cpp)
-  foreach(EXAMPLE ${SYCL_EXAMPLES})
-    get_filename_component(EXECUTABLE_NAME ${EXAMPLE} NAME_WE)
-    cutlass_example_add_executable(
-      ${EXECUTABLE_NAME}
-      ${EXAMPLE}
-    )
-  endforeach()
+  cutlass_example_add_executable(
+    sgemm_1
+    sgemm_1_sycl.cpp
+  )
 
+  cutlass_example_add_executable(
+    sgemm_2
+    sgemm_2_sycl.cpp
+  )
+
+  cutlass_example_add_executable(
+    tiled_copy
+    tiled_copy_sycl.cpp
+  )
+
+  if (SYCL_NVIDIA_TARGET)
+    cutlass_example_add_executable(
+      sgemm_sm70
+      sgemm_sm70_sycl.cpp
+    )
+
+    cutlass_example_add_executable(
+      sgemm_sm80
+      sgemm_sm80_sycl.cpp
+    )
+  endif()
 else ()
   cutlass_example_add_executable(
     sgemm_1
