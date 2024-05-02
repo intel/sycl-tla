@@ -65,7 +65,7 @@ struct XE_8x16x16_BF16BF16F32F32_NN
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_BF16BF16F32F32_NN on non-PVC hardware")
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_BF16BF16F32F32_NN on non-PVC hardware");
 #endif
   }
 };
@@ -86,7 +86,7 @@ struct XE_1x16x16_BF16BF16F32F32_NN
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_BF16BF16F32F32_NN on non-PVC hardware")
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_BF16BF16F32F32_NN on non-PVC hardware");
 #endif
   }
 };
