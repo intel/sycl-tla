@@ -113,7 +113,7 @@ CUTLASS_HOST_DEVICE uint BlockDimX() {
 #if defined(__CUDA_ARCH__)
   return blockDim.x;
 #elif defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::work_group_range::x();
+  return syclcompat::local_range::x();
 #else
   return 0;
 #endif
@@ -123,7 +123,7 @@ CUTLASS_HOST_DEVICE uint BlockDimY() {
 #if defined(__CUDA_ARCH__)
   return blockDim.y;
 #elif defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::work_group_range::y();
+  return syclcompat::local_range::y();
 #else
   return 0;
 #endif
@@ -133,7 +133,7 @@ CUTLASS_HOST_DEVICE uint BlockDimZ() {
 #if defined(__CUDA_ARCH__)
   return blockDim.z;
 #elif defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::work_group_range::z();
+  return syclcompat::local_range::z();
 #else
   return 0;
 #endif
@@ -143,7 +143,7 @@ CUTLASS_HOST_DEVICE uint GridDimX() {
 #if defined(__CUDA_ARCH__)
   return gridDim.x;
 #elif defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::global_range::x();
+  return syclcompat::work_group_range::x();
 #else
   return 0;
 #endif
@@ -153,7 +153,7 @@ CUTLASS_HOST_DEVICE uint GridDimY() {
 #if defined(__CUDA_ARCH__)
   return gridDim.y;
 #elif defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::global_range::y();
+  return syclcompat::work_group_range::y();
 #else
   return 0;
 #endif
@@ -163,7 +163,7 @@ CUTLASS_HOST_DEVICE uint GridDimZ() {
 #if defined(__CUDA_ARCH__)
   return gridDim.z;
 #elif defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::global_range::z();
+  return syclcompat::work_group_range::z();
 #else
   return 0;
 #endif
@@ -173,6 +173,7 @@ CUTLASS_HOST_DEVICE uint GridDimZ() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Wrapper functions for intrinsics implemented exclusively in the NVCC compiler.
+// https://www.intel.com/content/www/us/en/docs/dpcpp-compatibility-tool/developer-guide-reference/2023-2/cuda-and-sycl-programming-model-comparison.html
 
 // syncthreads
 
@@ -188,9 +189,9 @@ CUTLASS_DEVICE int syncthreads_and(int cond) {
 #if defined(__CUDA_ARCH__)
   return __syncthreads_and(cond);
 #elif defined(__SYCL_DEVICE_ONLY__)
-  // TODO: Add SYCL equivalent function
-  assert(false);
-  return 0;
+  auto group = syclcompat::get_nd_item<1>().get_group();
+  sycl::group_barrier(group);
+  return sycl::all_of_group(group, cond);
 #else
   return 0;
 #endif
@@ -208,7 +209,7 @@ CUTLASS_DEVICE void threadfence() {
 #if defined(__CUDA_ARCH__)
   __threadfence();
 #elif defined(__SYCL_DEVICE_ONLY__)
-  syclcompat::get_nd_item<1>().barrier(sycl::access::fence_space::global_space);
+  sycl::atomic_fence(sycl::memory_order::acq_rel, sycl::memory_scope::device);
 #endif
 }
 
@@ -254,9 +255,9 @@ uint shfl_sync(const unsigned mask, const uint var, const int delta, const int w
 #if defined(__CUDA_ARCH__)
   return __shfl_sync(mask, var, delta, width);
 #elif defined(__SYCL_DEVICE_ONLY__)
-  // TODO: Add SYCL equivalent function
-  assert(false);
-  return 0;
+  auto g = syclcompat::get_nd_item<1>().get_sub_group();
+  unsigned int start_index = (g.get_local_linear_id() / width) * width;
+  return sycl::select_from_group(g, var, start_index + delta % width);
 #else
   return 0;
 #endif
