@@ -26,6 +26,8 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+if (NOT ${CUTLASS_ENABLE_SYCL})
+
 add_custom_target(
   cutlass_test_unit_cute_hopper
   DEPENDS
@@ -71,3 +73,4 @@ cutlass_test_unit_add_executable(
   bulk_store.cu
 )
 
+endif()

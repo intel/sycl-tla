@@ -132,6 +132,14 @@ endfunction()
 add_custom_target(cutlass_test_unit)
 add_custom_target(test_unit)
 
+if (${CUTLASS_ENABLE_SYCL})
+
+set(SUBDIRS
+  cute
+  )
+
+else()
+
 set(SUBDIRS
   core
   cute
@@ -147,6 +155,8 @@ set(SUBDIRS
   cluster_launch
   )
 
+endif()
+
 if(TARGET nvidia::nvrtc AND TARGET nvidia::cuda_driver)
   set(CUTLASS_NVRTC_ENABLE_INIT ON)
 else()
@@ -155,7 +165,7 @@ endif()
 
 set(CUTLASS_NVRTC_ENABLE ${CUTLASS_NVRTC_ENABLE_INIT} CACHE BOOL "Enable NVRTC support")
 
-if (CUTLASS_NVRTC_ENABLE)
+if (CUTLASS_NVRTC_ENABLE AND NOT ${CUTLASS_ENABLE_SYCL})
   list(APPEND SUBDIRS nvrtc)
 endif()
 
@@ -166,4 +176,3 @@ foreach(SUBDIR ${SUBDIRS})
   add_dependencies(test_unit test_unit_${SUBDIR})
 
 endforeach()
-

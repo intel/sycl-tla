@@ -26,6 +26,8 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+if (NOT ${CUTLASS_ENABLE_SYCL})
+
 cutlass_test_unit_add_executable(
   cutlass_test_unit_pipeline
   pipeline_tma_async.cu
@@ -34,3 +36,5 @@ cutlass_test_unit_add_executable(
   pipeline_async.cu
   sequence_barrier.cu
 )
+
+endif()

@@ -26,6 +26,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+
+if (NOT ${CUTLASS_ENABLE_SYCL})
+
 set(CUTLASS_NVRTC_HAS_CUDA_FP16 FALSE)
 
 # CUTLASS NVRTC target
@@ -112,3 +115,5 @@ add_subdirectory(thread)
 
 add_custom_target(cutlass_test_unit_nvrtc DEPENDS cutlass_test_unit_nvrtc_thread)
 add_custom_target(test_unit_nvrtc DEPENDS test_unit_nvrtc_thread)
+
+endif()

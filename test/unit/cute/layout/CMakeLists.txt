@@ -28,7 +28,7 @@
 
 if(${CUTLASS_ENABLE_SYCL})
 cutlass_test_unit_add_executable(
-  cutlass_sycl_test_unit_cute_layout
+  cutlass_test_unit_cute_layout
   layout_operator.cpp
   )
 else()

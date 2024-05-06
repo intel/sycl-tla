@@ -26,13 +26,16 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-cutlass_test_unit_add_executable(
-  cutlass_test_unit_cute_ampere
-  cp_async.cu
-  ldsm.cu
-)
 
-cutlass_test_unit_add_executable(
-  cutlass_test_unit_cute_ampere_tiled_cp_async
-  tiled_cp_async.cu
-)
+if (NOT ${CUTLASS_ENABLE_SYCL})
+  cutlass_test_unit_add_executable(
+    cutlass_test_unit_cute_ampere
+    cp_async.cu
+    ldsm.cu
+  )
+
+  cutlass_test_unit_add_executable(
+    cutlass_test_unit_cute_ampere_tiled_cp_async
+    tiled_cp_async.cu
+  )
+endif()

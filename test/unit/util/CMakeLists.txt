@@ -26,9 +26,13 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+if (NOT ${CUTLASS_ENABLE_SYCL})
+
 cutlass_test_unit_add_executable(
   cutlass_test_unit_util
   tensor_reduce.cu
   cutlass_test_levels.cu
   rms_norm.cu
   )
+
+endif()
