@@ -227,7 +227,7 @@ void test_gemm(int m, int n, int k)
   // Run once (and check)
   run(gemm_op);
 
-  syclcompat::get_default_queue().wait_and_throw();
+  syclcompat::wait_and_throw();
 
   auto cute_result = std::vector<TC>(h_C.size());
   syclcompat::memcpy<TC>(cute_result.data(), d_C, h_C.size());
@@ -237,7 +237,7 @@ void test_gemm(int m, int n, int k)
   for (int i = 0; i < timing_iterations; ++i) {
     run(gemm_op);
   }
-  syclcompat::get_default_queue().wait_and_throw();
+  syclcompat::wait_and_throw();
 
   double cute_time = timer.seconds() / timing_iterations;
   printf("CUTLASS_GEMM:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);

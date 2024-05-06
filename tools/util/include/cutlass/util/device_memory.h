@@ -57,6 +57,9 @@ T* allocate(size_t count = 1) {
 
 #if defined(CUTLASS_ENABLE_SYCL)
   ptr = syclcompat::malloc<T>(count);
+  if (ptr == nullptr) {
+    throw std::runtime_error("Failed to allocate memory");
+  }
 #else
   size_t bytes = 0;
 
@@ -74,12 +77,19 @@ T* allocate(size_t count = 1) {
 /// Free the buffer pointed to by \p ptr
 template <typename T>
 void free(T* ptr) {
+#if defined(CUTLASS_ENABLE_SYCL)
+    syclcompat::free((void*)ptr);
+    if (ptr != nullptr) {
+      throw std::runtime_error("Failed to free device memory");
+    }
+#else
   if (ptr) {
     cudaError_t cuda_error = (cudaFree(ptr));
     if (cuda_error != cudaSuccess) {
       throw cuda_exception("Failed to free device memory", cuda_error);
     }
   }
+#endif
 }
 
 /******************************************************************************
