@@ -42,7 +42,7 @@ function(cutlass_add_library NAME)
   target_compile_features(
     ${NAME}
     INTERFACE
-    cxx_std_11
+    cxx_std_17
   )
 
   get_target_property(TARGET_TYPE ${NAME} TYPE)
