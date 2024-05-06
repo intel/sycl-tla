@@ -75,67 +75,68 @@ std::ostream &operator<<(std::ostream &out, cudaDeviceProp const &deviceProperti
 /// Sets flags for Unit test
 void FilterArchitecture() {
   // Default flags can be overwritten by --gtest_filter from commandline
+  #if !defined(CUTLASS_ENABLE_SYCL)
+    int const kMaxDevice = 999;
 
-  int const kMaxDevice = 999;
+    cudaError_t err;
 
-  cudaError_t err;
-
-  int cudaDeviceId;
-  err = cudaGetDevice(&cudaDeviceId);
-  if (cudaSuccess != err) {
-    std::cerr << "*** Error: Could not detect active GPU device ID"
-              << " [" << cudaGetErrorString(err) << "]" << std::endl;
-    exit(1);
-  }
-
-  cudaDeviceProp deviceProperties;
-  err = cudaGetDeviceProperties(&deviceProperties, cudaDeviceId);
-  if (cudaSuccess != err) {
-    std::cerr << "*** Error: Could not get device properties for GPU " << cudaDeviceId << " ["
-              << cudaGetErrorString(err) << "]" << std::endl;
-    exit(1);
-  }
-
-  int deviceMajorMinor = deviceProperties.major * 10 + deviceProperties.minor;
-
-  // Defines text filters for each GEMM kernel based on minimum supported compute capability
-  struct {
-
-    /// Unit test filter string
-    char const *filter;
-
-    /// Minimum compute capability for the kernels in the named test
-    int min_compute_capability;
-
-    /// Maximum compute capability for which the kernels are enabled 
-    int max_compute_capability;
-  } 
-  test_filters[] = {
-    { "SM50*",                      50, kMaxDevice},
-    { "SM60*",                      60, kMaxDevice},
-    { "SM61*",                      61, kMaxDevice},
-    { "SM70*",                      70, 75},
-    { "SM75*",                      75, kMaxDevice},
-    { "SM80*",                      80, kMaxDevice},
-    { "SM89*",                      89, 89},
-    { "SM90*",                      90, 90},
-    { 0, 0, false }
-  };
-
-
-  // Set negative test filters
-  std::stringstream ss;
-  ss << "-";
-  for (int i = 0, j = 0; test_filters[i].filter; ++i) {
-
-    if (deviceMajorMinor < test_filters[i].min_compute_capability ||
-        deviceMajorMinor > test_filters[i].max_compute_capability) {
-
-      ss << (j++ ? ":" : "") << test_filters[i].filter;
+    int cudaDeviceId;
+    err = cudaGetDevice(&cudaDeviceId);
+    if (cudaSuccess != err) {
+      std::cerr << "*** Error: Could not detect active GPU device ID"
+                << " [" << cudaGetErrorString(err) << "]" << std::endl;
+      exit(1);
     }
-  }
 
-  ::testing::GTEST_FLAG(filter) = ss.str();
+    cudaDeviceProp deviceProperties;
+    err = cudaGetDeviceProperties(&deviceProperties, cudaDeviceId);
+    if (cudaSuccess != err) {
+      std::cerr << "*** Error: Could not get device properties for GPU " << cudaDeviceId << " ["
+                << cudaGetErrorString(err) << "]" << std::endl;
+      exit(1);
+    }
+
+    int deviceMajorMinor = deviceProperties.major * 10 + deviceProperties.minor;
+
+    // Defines text filters for each GEMM kernel based on minimum supported compute capability
+    struct {
+
+      /// Unit test filter string
+      char const *filter;
+
+      /// Minimum compute capability for the kernels in the named test
+      int min_compute_capability;
+
+      /// Maximum compute capability for which the kernels are enabled 
+      int max_compute_capability;
+    } 
+    test_filters[] = {
+      { "SM50*",                      50, kMaxDevice},
+      { "SM60*",                      60, kMaxDevice},
+      { "SM61*",                      61, kMaxDevice},
+      { "SM70*",                      70, 75},
+      { "SM75*",                      75, kMaxDevice},
+      { "SM80*",                      80, kMaxDevice},
+      { "SM89*",                      89, 89},
+      { "SM90*",                      90, 90},
+      { 0, 0, false }
+    };
+
+
+    // Set negative test filters
+    std::stringstream ss;
+    ss << "-";
+    for (int i = 0, j = 0; test_filters[i].filter; ++i) {
+
+      if (deviceMajorMinor < test_filters[i].min_compute_capability ||
+          deviceMajorMinor > test_filters[i].max_compute_capability) {
+
+        ss << (j++ ? ":" : "") << test_filters[i].filter;
+      }
+    }
+
+    ::testing::GTEST_FLAG(filter) = ss.str();
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
