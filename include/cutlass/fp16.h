@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,42 +30,65 @@
  **************************************************************************************************/
 #pragma once
 
-/// @file copy_traits_sm90_tma_swizzle.hpp
-/// @brief Functions for converting swizzle layout to TMA descriptor
-
-#if !defined(__CUDACC_RTC__) && !defined(CUTLASS_ENABLE_SYCL)
-#include <cuda.h>
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <sycl/sycl.hpp>
+#else
+#include <cuda_fp16.h>
 #endif
 
-#include <cute/arch/copy_sm90_desc.hpp>
-#include <cute/swizzle_layout.hpp>
+// Add these definitions in the cutlass namespace, so they do not clash with the ones in cuda
+namespace cutlass {
 
-namespace cute::detail {
+#if defined(CUTLASS_ENABLE_SYCL)
+    using half = sycl::half;
+    using half2 = sycl::half2;
+#else
+    using half_raw = __half_raw;
+    using half2 = __half2;
+#endif
 
-template <int B, int M, int S>
-CUTE_HOST_DEVICE constexpr
-TMA::SmemSwizzleBits
-get_tma_swizzle_bits(Swizzle<B,M,S>)
-{
-  if constexpr (M == 4) {
-    switch (B) {
-      default:  static_assert(0 <= B && B <= 3, "Expected B = 0,1,2, or 3 when M == 4. Unsupported layout swizzle.");
-      case 3:   return TMA::SmemSwizzleBits::B128;
-      case 2:   return TMA::SmemSwizzleBits::B64;
-      case 1:   return TMA::SmemSwizzleBits::B32;
-      case 0:   return TMA::SmemSwizzleBits::DISABLE;
+    CUTLASS_HOST_DEVICE
+    float half2float (half const& flt) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return static_cast<float>(flt);
+#else
+      return __half2float(flt);
+#endif
     }
-  } else
-  {
-    static_assert(M < 0, "Unsupported layout swizzle.");
-  }
-}
 
-template <class Layout>
-TMA::SmemSwizzleBits
-get_tma_swizzle_bits(Layout const& layout)
-{
-  return get_tma_swizzle_bits(get_swizzle_portion(layout));
-}
+    CUTLASS_HOST_DEVICE
+    half float2half (float const& flt) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return static_cast<half>(flt);
+#else
+      return __float2half(flt);
+#endif
+    }
 
-} // namespace cute::detail
+    CUTLASS_HOST_DEVICE
+    half float2half_rn (float const& flt) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return static_cast<half>(flt);
+#else
+      return __float2half_rn(flt);
+#endif
+    }
+
+    CUTLASS_HOST_DEVICE
+    int int2half_rn (half const& flt) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return static_cast<int>(flt);
+#else
+      return __int2half_rn(flt);
+#endif
+    }
+
+    CUTLASS_HOST_DEVICE
+    half2 hsub2(const half2 a, const half2 b) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return a - b;
+#else
+      return __hsub2(a, b);
+#endif
+    }
+}

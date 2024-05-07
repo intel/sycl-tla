@@ -28,19 +28,21 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-cutlass_example_add_executable(
-  14_ampere_tf32_tensorop_gemm
-  ampere_tf32_tensorop_gemm.cu
+if (CUTLASS_ENABLE_SYCL)
+  if (SYCL_NVIDIA_TARGET)
+    cutlass_example_add_executable(
+      14_ampere_tf32_tensorop_gemm_cute
+      ampere_tf32_tensorop_gemm_cute.cpp
+    )
+  endif()
+else()
+  cutlass_example_add_executable(
+    14_ampere_tf32_tensorop_gemm
+    ampere_tf32_tensorop_gemm.cu
   )
 
-if (CUTLASS_ENABLE_SYCL)
-cutlass_example_add_executable(
-  14_ampere_tf32_tensorop_gemm_cute
-  ampere_tf32_tensorop_gemm_cute.cpp
-  )
-else()
-cutlass_example_add_executable(
-  14_ampere_tf32_tensorop_gemm_cute
-  ampere_tf32_tensorop_gemm_cute.cu
+  cutlass_example_add_executable(
+    14_ampere_tf32_tensorop_gemm_cute
+    ampere_tf32_tensorop_gemm_cute.cu
   )
 endif()
