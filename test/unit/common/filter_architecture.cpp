@@ -35,6 +35,8 @@
 
 #include "cutlass_unit_test.h"
 
+#if !defined(CUTLASS_ENABLE_SYCL)
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Gets a CUDA device
@@ -77,7 +79,7 @@ std::ostream &operator<<(std::ostream &out, cudaDeviceProp const &deviceProperti
 /// Sets flags for Unit test
 void FilterArchitecture() {
   // Default flags can be overwritten by --gtest_filter from commandline
-  #if !defined(CUTLASS_ENABLE_SYCL)
+  
     int const kMaxDevice = 999;
 
     cudaError_t err;
@@ -138,9 +140,10 @@ void FilterArchitecture() {
     }
 
     ::testing::GTEST_FLAG(filter) = ss.str();
-  #endif
+ 
 }
 
+ #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 int CutlassUnitTestProblemCount() {
