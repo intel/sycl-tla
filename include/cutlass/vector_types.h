@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,42 +30,62 @@
  **************************************************************************************************/
 #pragma once
 
-/// @file copy_traits_sm90_tma_swizzle.hpp
-/// @brief Functions for converting swizzle layout to TMA descriptor
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <sycl/sycl.hpp>
 
-#if !defined(__CUDACC_RTC__) && !defined(CUTLASS_ENABLE_SYCL)
-#include <cuda.h>
+// Add these definitions in the cutlass namespace, so they do not clash with the ones in cuda
+namespace cutlass {
+    // We use this struct instead of sycl::int4 because the sycl version requires x() to access x,
+    // while the struct does not need the (). This prevents us from having to modify the Cutlass
+    // implementation in all the places where these vector types are used.
+    using int4 = struct alignas(16) {
+        int x, y, z, w;
+    };
+
+    using uint2 = struct alignas(8) {
+        unsigned int x, y;
+    };
+
+    using uint4 = struct alignas(16) {
+        unsigned int x, y, z, w;
+    };
+
+    using float4 = struct alignas(16) {
+        float x, y, z, w;
+    };
+
+    using long4 = struct alignas(16) {
+        long int x, y, z, w;
+    };
+
+    using ulong4 = struct alignas(16) {
+        unsigned long int x, y, z, w;
+    };
+
+    using longlong2 = struct alignas(16) {
+        long long int x, y;
+    };
+
+    using ulonglong2 = struct alignas(16) {
+        unsigned long long int x, y;
+    };
+
+    using longlong4 = struct alignas(16) {
+        long long int x, y, z, w;
+    };
+
+    using ulonglong4 = struct alignas(16) {
+        unsigned long long int x, y, z, w;
+    };
+
+    using double2 = struct alignas(16) {
+        long long int x, y;
+    };
+
+    using double4 = struct alignas(16) {
+        long long int x, y, z, w;
+    };
+}
+#else
+#include <vector_types.h>
 #endif
-
-#include <cute/arch/copy_sm90_desc.hpp>
-#include <cute/swizzle_layout.hpp>
-
-namespace cute::detail {
-
-template <int B, int M, int S>
-CUTE_HOST_DEVICE constexpr
-TMA::SmemSwizzleBits
-get_tma_swizzle_bits(Swizzle<B,M,S>)
-{
-  if constexpr (M == 4) {
-    switch (B) {
-      default:  static_assert(0 <= B && B <= 3, "Expected B = 0,1,2, or 3 when M == 4. Unsupported layout swizzle.");
-      case 3:   return TMA::SmemSwizzleBits::B128;
-      case 2:   return TMA::SmemSwizzleBits::B64;
-      case 1:   return TMA::SmemSwizzleBits::B32;
-      case 0:   return TMA::SmemSwizzleBits::DISABLE;
-    }
-  } else
-  {
-    static_assert(M < 0, "Unsupported layout swizzle.");
-  }
-}
-
-template <class Layout>
-TMA::SmemSwizzleBits
-get_tma_swizzle_bits(Layout const& layout)
-{
-  return get_tma_swizzle_bits(get_swizzle_portion(layout));
-}
-
-} // namespace cute::detail
