@@ -29,6 +29,10 @@
 cmake_minimum_required(VERSION 3.19 FATAL_ERROR)
 cmake_policy(SET CMP0112 NEW)
 
+if(CUTLASS_ENABLE_SYCL)
+  cmake_policy(SET CMP0119 NEW)
+endif()
+
 if(cutlass_LOADED)
   # If CUTLASS has been previously fetched and loaded, don't do it again.
   return()

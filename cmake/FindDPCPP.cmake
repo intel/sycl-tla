@@ -57,7 +57,7 @@ if(UNIX)
     INTERFACE_LINK_OPTIONS "${DPCPP_FLAGS}"
     INTERFACE_LINK_LIBRARIES ${DPCPP_LIB_DIR}
     INTERFACE_INCLUDE_DIRECTORIES "${DPCPP_BIN_DIR}/../include/sycl;${DPCPP_BIN_DIR}/../include")
-  message(STATUS "DPCPP INCLUDE DIR: "${DPCPP_BIN_DIR}/../include/sycl;${DPCPP_BIN_DIR}/../include")
+  message(STATUS "DPCPP INCLUDE DIR: ${DPCPP_BIN_DIR}/../include/sycl;${DPCPP_BIN_DIR}/../include")
   message(STATUS "Using DPCPP flags: ${DPCPP_FLAGS}")
 else()
   set_target_properties(DPCPP::DPCPP PROPERTIES
