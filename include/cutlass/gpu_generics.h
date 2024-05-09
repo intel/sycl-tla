@@ -36,7 +36,10 @@
  * frameworks such as CUDA and SYCL.
  */
 
+#if defined(CUTLASS_ENABLE_SYCL)
 #include <sycl/sycl.hpp>
+#include <syclcompat.hpp>
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -295,33 +298,14 @@ namespace cutlass {
     using cudaStream_t = void *;
 
     // dim3
-    class dim3 {
-    public:
-        size_t x, y, z;
-        dim3(const sycl::range<3> &r) : x(r[2]), y(r[1]), z(r[0]) {}
-        dim3(const sycl::range<2> &r) : x(r[1]), y(r[0]), z(1) {}
+    struct dim3 {
+        uint x, y, z;
 
-        dim3(const sycl::range<1> &r) : x(r[0]), y(1), z(1) {}
+        dim3() = default;
 
-        constexpr dim3() : x(1), y(1), z(1) {}
+        dim3(uint x, uint y, uint z) : x(x), y(y), z(z) {}
+    };
 
-        constexpr dim3(size_t x, size_t y = 1, size_t z = 1) : x(x), y(y), z(z) {}
-
-        constexpr size_t size() const { return x * y * z; }
-        operator sycl::range<3>() const { return sycl::range<3>(z, y, x); }
-        operator sycl::range<2>() const {
-          if (z != 1)
-            throw std::invalid_argument(
-                    "Attempting to convert a 3D dim3 into sycl::range<2>");
-          return sycl::range<2>(y, x);
-        }
-        operator sycl::range<1>() const {
-          if (z != 1 || y != 1)
-            throw std::invalid_argument(
-                    "Attempting to convert a 2D or 3D dim3 into sycl::range<1>");
-          return sycl::range<1>(x);
-        }
-    }; // namespace dim3
 
     // Atomic
 
