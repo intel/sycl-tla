@@ -70,3 +70,4 @@ cutlass_test_unit_add_executable(
   cutlass_test_unit_cute_hopper_bulk_store
   bulk_store.cu
 )
+
