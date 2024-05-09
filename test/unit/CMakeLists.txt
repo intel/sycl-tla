@@ -36,6 +36,10 @@ cutlass_add_library(
   common/filter_architecture.cpp
   )
 
+if (NOT CUTLASS_ENABLE_SYCL)
+  SET(ADD_CUDA ON)
+endif()
+
 target_link_libraries(
   cutlass_test_unit_infra
   PUBLIC
@@ -43,13 +47,13 @@ target_link_libraries(
   cutlass_tools_util_includes
   $<$<BOOL:${CUTLASS_ENABLE_CUBLAS}>:nvidia::cublas>
   gtest
-  cudart
-  cuda_driver
-  )
+  $<$<BOOL:${ADD_CUDA}>:nvidia::cudart>
+  $<$<BOOL:${ADD_CUDA}>:nvidia::cuda_driver>
+)
 
-  if(${CUTLASS_ENABLE_SYCL})
-    add_sycl_to_target(TARGET cutlass_test_unit_infra)
-  endif()
+if(CUTLASS_ENABLE_SYCL)
+  add_sycl_include_directories_to_target(cutlass_test_unit_infra)
+endif()
 
 cutlass_add_library(
   cutlass_test_unit_infra_lib
@@ -62,10 +66,6 @@ target_link_libraries(
   PUBLIC
   cutlass_test_unit_infra
   )
-
-  if(${CUTLASS_ENABLE_SYCL})
-    add_sycl_to_target(TARGET cutlass_test_unit_infra_lib)
-  endif()
 
 set(CUTLASS_TEST_UNIT_RESULTS_CACHE_DIR ${CMAKE_CURRENT_LIST_DIR}/data/hashes)
 
@@ -107,7 +107,7 @@ function(cutlass_test_unit_add_executable NAME)
     target_link_libraries(${NAME} PRIVATE OpenMP::OpenMP_CXX)
   endif()
   
-  if(${CUTLASS_ENABLE_SYCL})
+  if(CUTLASS_ENABLE_SYCL)
     add_sycl_to_target(TARGET ${NAME})
   endif()
 

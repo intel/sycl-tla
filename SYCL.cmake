@@ -68,6 +68,6 @@ function(cutlass_add_executable NAME)
   target_compile_features(
     ${NAME}
     INTERFACE
-    cxx_std_11
+    cxx_std_17
   )
 endfunction()

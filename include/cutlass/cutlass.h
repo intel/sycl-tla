@@ -46,12 +46,7 @@
 #pragma once
 
 #include "cutlass/detail/helper_macros.hpp"
-
-#if defined(CUTLASS_ENABLE_SYCL)
-#include "syclcompat.hpp"
-#endif
-
-#include <cutlass/gpu_generics.h>
+#include "cutlass/gpu_generics.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -111,7 +106,7 @@ static char const* cutlassGetStatusString(cutlass::Status status) {
 CUTLASS_HOST_DEVICE bool thread0() {
   #if defined(__CUDA_ARCH__)
     return (!threadIdx.x && !threadIdx.y && !threadIdx.z) && (!blockIdx.x && !blockIdx.y && !blockIdx.z);
-  #elif defined(CUTLASS_ENABLE_SYCL)
+  #elif defined(__SYCL_DEVICE_ONLY__)
     return (!syclcompat::global_id::x() && !syclcompat::global_id::y() && !syclcompat::global_id::z());
   #else
     return false;

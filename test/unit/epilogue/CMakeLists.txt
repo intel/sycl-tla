@@ -26,7 +26,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-if (NOT ${CUTLASS_ENABLE_SYCL})
 add_subdirectory(thread)
 add_subdirectory(warp)
 add_subdirectory(threadblock)
@@ -46,4 +45,3 @@ add_custom_target(
   test_unit_epilogue_warp
   test_unit_epilogue_threadblock
  )
-endif()

@@ -36,6 +36,11 @@
  * frameworks such as CUDA and SYCL.
  */
 
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <sycl/sycl.hpp>
+#include <syclcompat.hpp>
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static const int NumThreadsPerWarp = 32;
@@ -357,6 +362,7 @@ namespace cutlass {
     }
 
     using CUresult = unsigned int;
+    using CUdeviceptr = unsigned long long;
     constexpr CUresult CUDA_SUCCESS = 0;
 
     CUTLASS_HOST_DEVICE
