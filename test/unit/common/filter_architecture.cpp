@@ -109,25 +109,25 @@ void FilterArchitecture() {
   // Defines text filters for each GEMM kernel based on minimum supported compute capability
   struct {
 
-      /// Unit test filter string
-      char const *filter;
+    /// Unit test filter string
+    char const *filter;
 
-      /// Minimum compute capability for the kernels in the named test
-      int min_compute_capability;
+    /// Minimum compute capability for the kernels in the named test
+    int min_compute_capability;
 
-      /// Maximum compute capability for which the kernels are enabled 
-      int max_compute_capability;
+    /// Maximum compute capability for which the kernels are enabled
+    int max_compute_capability;
   }
-          test_filters[] = {
-          { "SM50*",                      50, kMaxDevice},
-          { "SM60*",                      60, kMaxDevice},
-          { "SM61*",                      61, kMaxDevice},
-          { "SM70*",                      70, 75},
-          { "SM75*",                      75, kMaxDevice},
-          { "SM80*",                      80, kMaxDevice},
-          { "SM89*",                      89, 89},
-          { "SM90*",                      90, 90},
-          { 0, 0, false }
+  test_filters[] = {
+    { "SM50*",                      50, kMaxDevice},
+    { "SM60*",                      60, kMaxDevice},
+    { "SM61*",                      61, kMaxDevice},
+    { "SM70*",                      70, 75},
+    { "SM75*",                      75, kMaxDevice},
+    { "SM80*",                      80, kMaxDevice},
+    { "SM89*",                      89, 89},
+    { "SM90*",                      90, 90},
+    { 0, 0, false }
   };
 
 
