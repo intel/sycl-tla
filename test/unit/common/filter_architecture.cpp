@@ -115,9 +115,9 @@ void FilterArchitecture() {
     /// Minimum compute capability for the kernels in the named test
     int min_compute_capability;
 
-    /// Maximum compute capability for which the kernels are enabled
+    /// Maximum compute capability for which the kernels are enabled 
     int max_compute_capability;
-  }
+  } 
   test_filters[] = {
     { "SM50*",                      50, kMaxDevice},
     { "SM60*",                      60, kMaxDevice},
