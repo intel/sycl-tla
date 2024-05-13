@@ -28,7 +28,19 @@
 
 add_subdirectory(layout)
 
-if (NOT CUTLASS_ENABLE_SYCL)
+if (CUTLASS_ENABLE_SYCL)
+  add_custom_target(
+    cutlass_test_unit_cute
+    DEPENDS
+    cutlass_test_unit_cute_layout
+  )
+
+  add_custom_target(
+    test_unit_cute
+    DEPENDS
+    test_unit_cute_layout
+  )
+else()
   add_subdirectory(core)
   add_subdirectory(volta)
   add_subdirectory(ampere)
@@ -56,19 +68,4 @@ if (NOT CUTLASS_ENABLE_SYCL)
     test_unit_cute_hopper
     test_unit_cute_msvc_compilation
   )
-
-else()
-
-  add_custom_target(
-    cutlass_test_unit_cute
-    DEPENDS
-    cutlass_test_unit_cute_layout
-  )
-
-  add_custom_target(
-    test_unit_cute
-    DEPENDS
-    test_unit_cute_layout
-  )
-
 endif()
