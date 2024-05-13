@@ -46,11 +46,6 @@
 #pragma once
 
 #include "cutlass/detail/helper_macros.hpp"
-
-#if defined(CUTLASS_ENABLE_SYCL)
-#include "syclcompat.hpp"
-#endif
-
 #include <cutlass/gpu_generics.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
