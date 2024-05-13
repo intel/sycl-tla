@@ -362,7 +362,7 @@ namespace cutlass {
     }
 
     using CUresult = unsigned int;
-    using CUdeviceptr = unsigned long long;
+    using CUdeviceptr = unsigned int*;
     constexpr CUresult CUDA_SUCCESS = 0;
 
     CUTLASS_HOST_DEVICE
