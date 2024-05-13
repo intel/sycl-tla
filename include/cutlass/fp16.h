@@ -30,32 +30,65 @@
  **************************************************************************************************/
 #pragma once
 
-// fwd declare OCL function and OCL types
-#include <sycl.hpp> //for sycl::vec
-
-namespace cute
-{
-namespace intel
-{
-#ifdef __SYCL_DEVICE_ONLY__
-template <class T, int N> using vector_t = typename sycl::vec<T, N>::vector_t;
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <sycl/sycl.hpp>
 #else
-template <class T, int N> using vector_t = sycl::vec<T, N>;
+#include <cuda_fp16.h>
 #endif
 
-using float8 = vector_t<float, 8>;
-using short8 = vector_t<short, 8>;
-using int8 = vector_t<int, 8>;
-using int16 = vector_t<int, 16>;
-using uint8 = vector_t<uint, 8>;
-using uint16 = vector_t<uint, 16>;
+// Add these definitions in the cutlass namespace, so they do not clash with the ones in cuda
+namespace cutlass {
 
-typedef ushort __attribute__((ext_vector_type(8))) ushort8;
-typedef ushort __attribute__((ext_vector_type(16))) ushort16;
-typedef ushort __attribute__((ext_vector_type(32))) ushort32;
-typedef ushort __attribute__((ext_vector_type(64))) ushort64;
-typedef uint __attribute__((ext_vector_type(32))) uint32;
+#if defined(CUTLASS_ENABLE_SYCL)
+    using half = sycl::half;
+    using half2 = sycl::half2;
+#else
+    using half_raw = __half_raw;
+    using half2 = __half2;
+#endif
 
-using coord_t = vector_t<int, 2>;
-} // namespace intel end
-} // namespace cute end
+    CUTLASS_HOST_DEVICE
+    float half2float (half const& flt) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return static_cast<float>(flt);
+#else
+      return __half2float(flt);
+#endif
+    }
+
+    CUTLASS_HOST_DEVICE
+    half float2half (float const& flt) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return static_cast<half>(flt);
+#else
+      return __float2half(flt);
+#endif
+    }
+
+    CUTLASS_HOST_DEVICE
+    half float2half_rn (float const& flt) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return static_cast<half>(flt);
+#else
+      return __float2half_rn(flt);
+#endif
+    }
+
+    CUTLASS_HOST_DEVICE
+    int int2half_rn (half const& flt) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return static_cast<int>(flt);
+#else
+      return __int2half_rn(flt);
+#endif
+    }
+
+    CUTLASS_HOST_DEVICE
+    half2 hsub2(const half2 a, const half2 b) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      return a - b;
+#else
+      return __hsub2(a, b);
+#endif
+    }
+}

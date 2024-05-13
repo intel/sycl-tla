@@ -30,32 +30,62 @@
  **************************************************************************************************/
 #pragma once
 
-// fwd declare OCL function and OCL types
-#include <sycl.hpp> //for sycl::vec
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <sycl/sycl.hpp>
 
-namespace cute
-{
-namespace intel
-{
-#ifdef __SYCL_DEVICE_ONLY__
-template <class T, int N> using vector_t = typename sycl::vec<T, N>::vector_t;
+// Add these definitions in the cutlass namespace, so they do not clash with the ones in cuda
+namespace cutlass {
+    // We use this struct instead of sycl::int4 because the sycl version requires x() to access x,
+    // while the struct does not need the (). This prevents us from having to modify the Cutlass
+    // implementation in all the places where these vector types are used.
+    using int4 = struct alignas(16) {
+        int x, y, z, w;
+    };
+
+    using uint2 = struct alignas(8) {
+        unsigned int x, y;
+    };
+
+    using uint4 = struct alignas(16) {
+        unsigned int x, y, z, w;
+    };
+
+    using float4 = struct alignas(16) {
+        float x, y, z, w;
+    };
+
+    using long4 = struct alignas(16) {
+        long int x, y, z, w;
+    };
+
+    using ulong4 = struct alignas(16) {
+        unsigned long int x, y, z, w;
+    };
+
+    using longlong2 = struct alignas(16) {
+        long long int x, y;
+    };
+
+    using ulonglong2 = struct alignas(16) {
+        unsigned long long int x, y;
+    };
+
+    using longlong4 = struct alignas(16) {
+        long long int x, y, z, w;
+    };
+
+    using ulonglong4 = struct alignas(16) {
+        unsigned long long int x, y, z, w;
+    };
+
+    using double2 = struct alignas(16) {
+        long long int x, y;
+    };
+
+    using double4 = struct alignas(16) {
+        long long int x, y, z, w;
+    };
+}
 #else
-template <class T, int N> using vector_t = sycl::vec<T, N>;
+#include <vector_types.h>
 #endif
-
-using float8 = vector_t<float, 8>;
-using short8 = vector_t<short, 8>;
-using int8 = vector_t<int, 8>;
-using int16 = vector_t<int, 16>;
-using uint8 = vector_t<uint, 8>;
-using uint16 = vector_t<uint, 16>;
-
-typedef ushort __attribute__((ext_vector_type(8))) ushort8;
-typedef ushort __attribute__((ext_vector_type(16))) ushort16;
-typedef ushort __attribute__((ext_vector_type(32))) ushort32;
-typedef ushort __attribute__((ext_vector_type(64))) ushort64;
-typedef uint __attribute__((ext_vector_type(32))) uint32;
-
-using coord_t = vector_t<int, 2>;
-} // namespace intel end
-} // namespace cute end

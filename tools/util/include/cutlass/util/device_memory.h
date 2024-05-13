@@ -54,8 +54,16 @@ template <typename T>
 T* allocate(size_t count = 1) {
 
   T* ptr = 0;
-  size_t bytes = 0;
 
+#if defined(CUTLASS_ENABLE_SYCL)
+  if (count > 0) {
+    ptr = reinterpret_cast<T*>(syclcompat::malloc(bytes));
+    if ((void*)ptr == nullptr) {
+      throw std::runtime_error("Failed to allocate memory");
+    }
+  }
+#else
+  size_t bytes = 0;
   bytes = count * sizeof(T);
 
   cudaError_t cuda_error = cudaMalloc((void**)&ptr, bytes);
@@ -63,19 +71,26 @@ T* allocate(size_t count = 1) {
   if (cuda_error != cudaSuccess) {
     throw cuda_exception("Failed to allocate memory", cuda_error);
   }
-
+#endif
   return ptr;
 }
 
 /// Free the buffer pointed to by \p ptr
 template <typename T>
 void free(T* ptr) {
+#if defined(CUTLASS_ENABLE_SYCL)
+    syclcompat::free(ptr);
+    if (ptr != nullptr) {
+      throw std::runtime_error("Failed to free device memory");
+    }
+#else
   if (ptr) {
     cudaError_t cuda_error = (cudaFree(ptr));
     if (cuda_error != cudaSuccess) {
       throw cuda_exception("Failed to free device memory", cuda_error);
     }
   }
+#endif
 }
 
 /******************************************************************************
@@ -87,10 +102,14 @@ void copy(T* dst, T const* src, size_t count, cudaMemcpyKind kind) {
   size_t bytes = count * sizeof_bits<T>::value / 8;
   if (bytes == 0 && count > 0)
     bytes = 1;
+#if defined(CUTLASS_ENABLE_SYCL)
+  syclcompat::memcpy(dst, src, bytes);
+#else
   cudaError_t cuda_error = (cudaMemcpy(dst, src, bytes, kind));
   if (cuda_error != cudaSuccess) {
     throw cuda_exception("cudaMemcpy() failed", cuda_error);
   }
+#endif
 }
 
 template <typename T>
@@ -140,12 +159,16 @@ public:
   /// Delete functor for CUDA device memory
   struct deleter {
     void operator()(T* ptr) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      syclcompat::free(ptr);
+#else
       cudaError_t cuda_error = (cudaFree(ptr));
       if (cuda_error != cudaSuccess) {
         // noexcept
         //                throw cuda_exception("cudaFree() failed", cuda_error);
         return;
       }
+#endif
     }
   };
 
