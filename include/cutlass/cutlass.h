@@ -46,7 +46,7 @@
 #pragma once
 
 #include "cutlass/detail/helper_macros.hpp"
-#include "cutlass/gpu_generics.h"
+#include <cutlass/gpu_generics.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
