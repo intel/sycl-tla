@@ -237,34 +237,21 @@ void test_gemm(int m, int n, int k)
   syclcompat::memcpy<TC>(cute_result.data(), d_C, h_C.size());
 
 #if defined(CUTLASS_ENABLE_MKL)
-        auto d_CRef = syclcompat::malloc<TC>(h_C.size());
-        auto d_hRef = std::vector<TC>(h_C.size());
-        auto queue = syclcompat::get_default_queue();
-        oneapi::mkl::blas::column_major::gemm(
-                queue,
-                oneapi::mkl::transpose::N,
-                oneapi::mkl::transpose::N,
-                m,
-                n,
-                k,
-                alpha,
-                d_A,
-                m,
-                d_B,
-                k,
-                beta,
-                d_CRef,
-                m
-        ).wait_and_throw();
-        std::cout << "H_C size is " << h_C.size() << std::endl;
-        syclcompat::memcpy<TC>(d_hRef.data(), d_CRef, h_C.size());
-        for (int i = 0; i < h_C.size(); i++) {
-          if (std::abs(d_hRef[i] - cute_result[i]) > 0.05) {
-            std::cout << "Error at element = " << i << " Expected: " << d_hRef[i] << " Actual "
-                      << cute_result[i] << std::endl;
-            
-          }
-        }
+  auto d_CRef = syclcompat::malloc<TC>(h_C.size());
+  auto d_hRef = std::vector<TC>(h_C.size());
+  auto queue = syclcompat::get_default_queue();
+  oneapi::mkl::blas::column_major::gemm(queue, oneapi::mkl::transpose::N, oneapi::mkl::transpose::T,
+                                        m, n, k, alpha, d_A, m, d_B, n, beta, d_CRef, m)
+      .wait_and_throw();
+
+  syclcompat::memcpy<TC>(d_hRef.data(), d_CRef, h_C.size());
+  for (int i = 0; i < h_C.size(); i++) {
+    if (std::abs(d_hRef[i] - cute_result[i]) > 0.05) {
+      std::cout << "Error at element = " << i << " Expected: " << d_hRef[i] << " Actual "
+                << cute_result[i] << std::endl;
+      throw std::runtime_error("Verification Failed");
+    }
+  }
 #endif
 
   // Timing iterations
@@ -280,15 +267,15 @@ void test_gemm(int m, int n, int k)
 
 int main(int argc, char** argv)
 {
-  int m = 4;
+  int m = 5120;
   if (argc >= 2)
     sscanf(argv[1], "%d", &m);
 
-  int n = 4;
+  int n = 5120;
   if (argc >= 3)
     sscanf(argv[2], "%d", &n);
 
-  int k = 4;
+  int k = 4096;
   if (argc >= 4)
     sscanf(argv[3], "%d", &k);
 
