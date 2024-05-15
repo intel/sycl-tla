@@ -42,6 +42,10 @@
 #include "cutlass/util/device_memory.h"
 #include "helper.h"
 
+#if defined(CUTLASS_ENABLE_MKL)
+#  include  <oneapi/mkl.hpp>
+#endif
+
 using namespace cute;
 
 using TileShape = Shape<_128, _128, _32>;
@@ -232,6 +236,37 @@ void test_gemm(int m, int n, int k)
   auto cute_result = std::vector<TC>(h_C.size());
   syclcompat::memcpy<TC>(cute_result.data(), d_C, h_C.size());
 
+#if defined(CUTLASS_ENABLE_MKL)
+        auto d_CRef = syclcompat::malloc<TC>(h_C.size());
+        auto d_hRef = std::vector<TC>(h_C.size());
+        auto queue = syclcompat::get_default_queue();
+        oneapi::mkl::blas::column_major::gemm(
+                queue,
+                oneapi::mkl::transpose::N,
+                oneapi::mkl::transpose::N,
+                m,
+                n,
+                k,
+                alpha,
+                d_A,
+                m,
+                d_B,
+                k,
+                beta,
+                d_CRef,
+                m
+        ).wait_and_throw();
+        std::cout << "H_C size is " << h_C.size() << std::endl;
+        syclcompat::memcpy<TC>(d_hRef.data(), d_CRef, h_C.size());
+        for (int i = 0; i < h_C.size(); i++) {
+          if (std::abs(d_hRef[i] - cute_result[i]) > 0.05) {
+            std::cout << "Error at element = " << i << " Expected: " << d_hRef[i] << " Actual "
+                      << cute_result[i] << std::endl;
+            
+          }
+        }
+#endif
+
   // Timing iterations
   timer.start();
   for (int i = 0; i < timing_iterations; ++i) {
@@ -245,15 +280,15 @@ void test_gemm(int m, int n, int k)
 
 int main(int argc, char** argv)
 {
-  int m = 5120;
+  int m = 4;
   if (argc >= 2)
     sscanf(argv[1], "%d", &m);
 
-  int n = 5120;
+  int n = 4;
   if (argc >= 3)
     sscanf(argv[2], "%d", &n);
 
-  int k = 4096;
+  int k = 4;
   if (argc >= 4)
     sscanf(argv[3], "%d", &k);
 
