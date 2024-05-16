@@ -72,7 +72,7 @@ function(cutlass_example_add_executable NAME)
     ${CUTLASS_EXAMPLES_UTILS_DIR}
     )
 
-  if (${CUTLASS_ENABLE_MKL})
+  if (CUTLASS_ENABLE_MKL)
     add_dependencies(${NAME} onemkl_project)
     target_include_directories(${NAME} PUBLIC ${ONEMKL_INCLUDE_DIR})
     target_link_libraries(${NAME} PUBLIC ${ONEMKL_LIB})
