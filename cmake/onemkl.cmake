@@ -28,8 +28,6 @@
 
 include_guard()
 
-if(CUTLASS_ENABLE_SYCL AND CUTLASS_ENABLE_MKL)
-
 include(ExternalProject)
 
 set(ONEMKL_INSTALL_DIR ${CMAKE_BINARY_DIR}/deps/oneMKL)
@@ -78,5 +76,3 @@ ExternalProject_Add(
 
 add_library(oneMKL SHARED IMPORTED)
 include_directories(${ONEMKL_INSTALL_DIR}/include)
-
-endif()
