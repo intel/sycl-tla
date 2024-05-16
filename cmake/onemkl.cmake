@@ -44,11 +44,12 @@ endif()
 if(SYCL_NVIDIA_TARGET)
   set(ENABLE_CUBLAS_BACKEND ON)
   set(ENABLE_MKLGPU_BACKEND OFF)
-else()
+elseif(SYCL_INTEL_TARGET)
   set(ENABLE_CUBLAS_BACKEND OFF)
   set(ENABLE_MKLGPU_BACKEND ON)
+else()
+  message(FATAL_ERROR "SYCL target required for MKL compilation")
 endif()
-
 ExternalProject_Add(
     onemkl_project
 
