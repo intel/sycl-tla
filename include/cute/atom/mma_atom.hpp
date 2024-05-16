@@ -38,6 +38,10 @@
 #include <cute/tensor.hpp>
 #include <cute/util/type_traits.hpp>
 
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <cute/atom/mma_traits_xe.hpp>
+#endif
+
 namespace cute {
 
 template <class... Args>
