@@ -60,7 +60,7 @@ T* allocate(size_t count = 1) {
 
 #if defined(CUTLASS_ENABLE_SYCL)
   if (count > 0) {
-    ptr = reinterpret_cast<T*>(syclcompat::malloc(count * sizeof(T)));
+    ptr = reinterpret_cast<T*>(syclcompat::malloc(bytes));
     if ((void*)ptr == nullptr) {
       throw std::runtime_error("Failed to allocate memory");
     }
