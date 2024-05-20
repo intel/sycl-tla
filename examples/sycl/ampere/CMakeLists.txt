@@ -27,8 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-if(SYCL_INTEL_TARGET)
-  add_subdirectory(pvc)
-else(SYCL_NVIDIA_TARGET)
-  add_subdirectory(ampere)
-endif()
+cutlass_example_add_executable(
+  ampere_gemm_fp16_fp16_fp32_tensor_op_fp32
+  ampere_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp
+)
