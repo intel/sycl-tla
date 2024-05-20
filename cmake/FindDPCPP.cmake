@@ -38,7 +38,7 @@ find_library(DPCPP_LIB_DIR NAMES sycl sycl6 PATHS "${DPCPP_BIN_DIR}/../lib")
 
 add_library(DPCPP::DPCPP INTERFACE IMPORTED)
 
-set(DPCPP_FLAGS "-fsycl")
+set(DPCPP_FLAGS "-fsycl;-mllvm;-enable-global-offset=false;")
 if(NOT "${DPCPP_SYCL_TARGET}" STREQUAL "")
   list(APPEND DPCPP_FLAGS "-fsycl-targets=${DPCPP_SYCL_TARGET};")
 endif()
