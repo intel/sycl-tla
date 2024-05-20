@@ -48,11 +48,8 @@
 template <typename T>
 static void fill_matrix(std::vector<T> &M)
 {
-  std::random_device dev;
-  std::mt19937 rng(dev());
-  std::uniform_real_distribution<float> dist(1.0, 2.0);
   std::generate(std::begin(M), std::end(M), [&]
-                { return static_cast<T>(dist(rng)); });
+  { return static_cast<T>( 2*(rand() / double(RAND_MAX)) - 1 ); });
 }
 
 template <typename T>
@@ -208,7 +205,12 @@ struct ExampleRunner {
 
     // Check if output from CUTLASS kernel and reference kernel are relatively equal or not
     // need to set a larger error margin for comparison to succeed
-    bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_D.get(), block_D.get(), block_D.size(), 0.5f, 0.5f);
+    auto epsilon = static_cast<ElementOutput>(0.1f);
+    auto nonzero_floor = static_cast<ElementOutput>(0.1f);
+
+    bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(
+            block_ref_D.get(), block_D.get(), block_D.size(),
+            epsilon, nonzero_floor);
 
     return passed;
   }
@@ -219,7 +221,7 @@ struct ExampleRunner {
     auto [M, N, K, L] = problem_shape_MNKL;
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
-    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(K, N, L));
+    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
@@ -279,7 +281,7 @@ struct ExampleRunner {
 
     // Verify that the result is correct
     bool passed = verify(problem_size, options.alpha, options.beta);
-    std::cout << "PVC GEMM Example : " << (passed ? "Passed" : "Failed") << std::endl;
+    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if (passed && options.iterations > 0) {
       GPU_Clock timer;
@@ -291,7 +293,8 @@ struct ExampleRunner {
 
       float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
-      printf("PVC GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
+      std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
     }
 
     return;
