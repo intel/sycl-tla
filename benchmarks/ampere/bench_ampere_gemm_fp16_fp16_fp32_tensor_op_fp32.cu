@@ -29,7 +29,7 @@
  *
  **************************************************************************************************/
 
-#include "../common/example_runner.hpp"
+#include "../common/benchmark_runner.hpp"
 #include "gemm_configuration.hpp"
 
 int main(int argc, const char** argv)
@@ -53,7 +53,7 @@ int main(int argc, const char** argv)
   }
 
   //
-  // Run examples
+  // Run Benchmark
   //
 
   // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
@@ -73,7 +73,7 @@ int main(int argc, const char** argv)
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::ColumnMajor;
-  using LayoutB = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
   using LayoutC = cutlass::layout::ColumnMajor;
   using LayoutD = cutlass::layout::ColumnMajor;
 
@@ -145,7 +145,7 @@ int main(int argc, const char** argv)
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
-  ExampleRunner<Gemm> runner;
+  BenchmarkRunner<Gemm> runner;
 
   runner.run(options, hw_info);
 
