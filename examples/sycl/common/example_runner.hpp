@@ -224,7 +224,8 @@ struct ExampleRunner {
       std::vector<ElementA> a(K * M * L);
       std::vector<ElementB> b(K * N * L);
       std::vector<ElementC> c(M * N * L);
-      std::vector<ElementC> d(M * N * L, ElementC{0});
+      std::vector<ElementC> d(M * N * L, ElementC{-1});
+      std::vector<ElementC> ref_d(M * N * L, ElementC{-2});
 
       fill_matrix(a);
       fill_matrix(b);
@@ -234,7 +235,7 @@ struct ExampleRunner {
       block_B.copy_from_host(b.data(), b.size());
       block_C.copy_from_host(c.data(), c.size());
       block_D.copy_from_host(d.data(), d.size());
-      block_ref_D.copy_from_host(d.data(), d.size());
+      block_ref_D.copy_from_host(ref_d.data(), d.size());
     }
 
     virtual void run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
