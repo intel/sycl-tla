@@ -31,3 +31,8 @@ cutlass_example_add_executable(
   ampere_gemm_fp16_fp16_fp32_tensor_op_fp32
   ampere_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp
 )
+
+cutlass_example_add_executable(
+  ampere_gemm_bf16_bf16_fp32_tensor_op_fp32
+  ampere_gemm_bf16_bf16_fp32_tensor_op_fp32.cpp
+)
