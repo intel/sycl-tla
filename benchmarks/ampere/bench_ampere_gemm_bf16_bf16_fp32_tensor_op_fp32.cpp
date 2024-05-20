@@ -29,7 +29,7 @@
  *
  **************************************************************************************************/
 
-#include "../common/example_runner.hpp"
+#include "../common/benchmark_runner.hpp"
 #include "gemm_configuration.hpp"
 
 int main(int argc, const char** argv)
@@ -53,7 +53,7 @@ int main(int argc, const char** argv)
   }
 
   //
-  // Run examples
+  // Run benchmark
   //
 
   // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
@@ -64,25 +64,23 @@ int main(int argc, const char** argv)
   // to use a GPU other than that with device ID 0.
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
-  bool passed;
-
 // The code section below describes datatype for input, output matrices and computation between
 // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = half_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = half_t;                        // <- data type of elements in input matrix B
+  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
+  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::ColumnMajor;
-  using LayoutB = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
   using LayoutC = cutlass::layout::ColumnMajor;
   using LayoutD = cutlass::layout::ColumnMajor;
 
   using TileShape = Shape<_128, _128, _32>;
 
   using TiledMma = TiledMMA<
-          MMA_Atom<SM80_16x8x16_F32F16F16F32_TN>,
+          MMA_Atom<SM80_16x8x16_F32BF16BF16F32_TN>,
           Layout<Shape<_2,_2,_1>>, // 2x2x1 thread group
           Tile<_32,_32,_16>>;                           // 32x32x8 MMA for LDSM, 1x2x1 value group
 
@@ -147,7 +145,7 @@ int main(int argc, const char** argv)
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
-  ExampleRunner<Gemm> runner;
+  BenchmarkRunner<Gemm> runner;
 
   runner.run(options, hw_info);
 
