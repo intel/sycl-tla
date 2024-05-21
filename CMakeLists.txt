@@ -161,10 +161,6 @@ set(CUTLASS_ENABLE_PERFORMANCE ${CUTLASS_ENABLE_PROFILER} CACHE BOOL "Enable CUT
 option(CUTLASS_ENABLE_DEBUG_PRINTS "Whether or not to enable debug prints in CUTLASS kernels" OFF)
 set(CUTLASS_ENABLE_BENCHMARKS ON CACHE BOOL "Enable CUTLASS Benchmarks")
 
-if (CUTLASS_ENABLE_SYCL)
-  set(CUTLASS_ENABLE_BENCHMARKS ON CACHE BOOL "Enable CUTLASS Benchmarks")
-endif()
-
 set(CUTLASS_ENABLE_TESTS ${CUTLASS_ENABLE_TESTS_INIT} CACHE BOOL "Enable CUTLASS Tests")
 set(CUTLASS_ENABLE_GTEST_UNIT_TESTS ${CUTLASS_ENABLE_TESTS} CACHE BOOL "Enable CUTLASS GTest-based Unit Tests")
 ################################################################################
