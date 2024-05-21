@@ -68,8 +68,6 @@ endfunction()
 
 if(SYCL_INTEL_TARGET)
   add_subdirectory(pvc)
-else(SYCL_NVIDIA_TARGET OR NOT CUTLASS_ENABLE_SYCL)
-  add_subdirectory(ampere)
 endif()
 if(SYCL_NVIDIA_TARGET OR NOT CUTLASS_ENABLE_SYCL)
   add_subdirectory(ampere)
