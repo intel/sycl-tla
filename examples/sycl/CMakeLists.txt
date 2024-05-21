@@ -29,6 +29,4 @@
 
 if(SYCL_INTEL_TARGET)
   add_subdirectory(pvc)
-else()
-  add_subdirectory(ampere)
 endif()
