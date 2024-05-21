@@ -29,7 +29,7 @@
  *
  **************************************************************************************************/
 
-#include "../common/example_runner.hpp"
+#include "../common/benchmark_runner.hpp"
 #include "gemm_configuration.hpp"
 
 int main(int argc, const char** argv)
@@ -68,9 +68,9 @@ int main(int argc, const char** argv)
 // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
-  using ElementOutput = bfloat16_t;                        // <- data type of elements in output matrix D
+  using ElementInputA = half_t;                        // <- data type of elements in input matrix A
+  using ElementInputB = half_t;                        // <- data type of elements in input matrix B
+  using ElementOutput = half_t;                        // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::ColumnMajor;
   using LayoutB = cutlass::layout::RowMajor;
@@ -80,7 +80,7 @@ int main(int argc, const char** argv)
   using TileShape = Shape<_128, _128, _32>;
 
   using TiledMma = TiledMMA<
-          MMA_Atom<SM80_16x8x16_F32BF16BF16F32_TN>,
+          MMA_Atom<SM80_16x8x16_F32F16F16F32_TN>,
           Layout<Shape<_2,_2,_1>>, // 2x2x1 thread group
           Tile<_32,_32,_16>>;                           // 32x32x8 MMA for LDSM, 1x2x1 value group
 
@@ -145,8 +145,8 @@ int main(int argc, const char** argv)
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
-  auto epsilon = static_cast<ElementOutput>(0.8f);
-  auto nonzero_floor = static_cast<ElementOutput>(0.8f);
+  auto epsilon = static_cast<ElementOutput>(0.3f);
+  auto nonzero_floor = static_cast<ElementOutput>(0.3f);
 
   ExampleRunner<Gemm> runner(epsilon, nonzero_floor);
 

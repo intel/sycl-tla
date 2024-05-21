@@ -67,7 +67,7 @@ bool relatively_equal_float(T a, T b, T epsilon, T nonzero_floor) {
   T abs_A = abs(a);
   T abs_B = abs(b);
   T diff = abs(a - b);
-  T zero = T(0);
+  T zero = T(0.0f);
 
   if (a == b) {
     return true;
