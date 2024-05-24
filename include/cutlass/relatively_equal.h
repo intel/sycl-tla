@@ -56,9 +56,7 @@ template <typename T>
 CUTLASS_HOST_DEVICE
 bool relatively_equal_float(T a, T b, T epsilon, T nonzero_floor) {
 
-#if defined (CUTLASS_ENABLE_SYCL)
-  auto abs = [] (T value)-> T { return static_cast<T>(sycl::fabs(static_cast<float>(value))); };
-#elif defined(__CUDACC_RTC__)
+#if defined(__CUDACC_RTC__)
   using cuda::std::abs;
 #else
   using std::abs;

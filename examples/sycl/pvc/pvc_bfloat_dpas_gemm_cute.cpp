@@ -46,10 +46,11 @@
 #include "cutlass/util/reference/device/tensor_compare.h"
 
 template <typename T>
-static void fill_matrix(std::vector<T> &M)
+static void fill_matrix(std::vector<T> &vector)
 {
-  std::generate(std::begin(M), std::end(M), [&]
-  { return static_cast<T>( 2*(rand() / double(RAND_MAX)) - 1 ); });
+  std::generate(std::begin(vector), std::end(vector), [&] {
+      return static_cast<T>( (rand() / double(RAND_MAX)) );
+  });
 }
 
 template <typename T>
