@@ -766,7 +766,6 @@ if (CUTLASS_ENABLE_CUBLAS)
   target_compile_definitions(CUTLASS INTERFACE CUTLASS_ENABLE_CUBLAS=1)
 endif()
 
-
 include(${CMAKE_CURRENT_SOURCE_DIR}/cuDNN.cmake)
 
 if (CUTLASS_ENABLE_CUDNN)
