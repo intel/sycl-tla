@@ -766,10 +766,6 @@ if (CUTLASS_ENABLE_CUBLAS)
   target_compile_definitions(CUTLASS INTERFACE CUTLASS_ENABLE_CUBLAS=1)
 endif()
 
-if (CUTLASS_ENABLE_MKL AND CUTLASS_ENABLE_SYCL)
-  include(onemkl)
-  target_compile_definitions(CUTLASS INTERFACE CUTLASS_ENABLE_MKL=1)
-endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cuDNN.cmake)
 
