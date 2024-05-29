@@ -92,10 +92,7 @@ namespace cutlass {
 
     CUTLASS_HOST_DEVICE
     int2 make_int2(int x, int y) {
-      int2 t;
-      t.x = x;
-      t.y = y;
-      return t;
+      return int2{x,y};
     }
 
     CUTLASS_HOST_DEVICE
