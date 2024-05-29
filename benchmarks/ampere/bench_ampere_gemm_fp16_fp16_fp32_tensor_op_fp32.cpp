@@ -53,7 +53,7 @@ int main(int argc, const char** argv)
   }
 
   //
-  // Run examples
+  // Run Benchmark 
   //
 
   // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
