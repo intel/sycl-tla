@@ -73,7 +73,7 @@ int main(int argc, const char** argv)
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::ColumnMajor;
-  using LayoutB = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
   using LayoutC = cutlass::layout::ColumnMajor;
   using LayoutD = cutlass::layout::ColumnMajor;
 
