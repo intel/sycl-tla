@@ -48,7 +48,7 @@
   #define CUTE_ARCH_NVCC_SUPPORTS_LDSM_SM75 ((__CUDACC_VER_MAJOR__  == 10 && __CUDACC_VER_MINOR__ >= 2) || __CUDACC_VER_MAJOR__ >= 11)
 #endif
 
-#if defined(CUTLASS_ENABLE_SYCL)
+#if defined(SYCL_NVIDIA_TARGET)
   #define CUTE_ARCH_NVCC_SUPPORTS_LDSM_SM75 1
 #endif
 
