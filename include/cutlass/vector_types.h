@@ -97,12 +97,7 @@ namespace cutlass {
 
     CUTLASS_HOST_DEVICE
     int4 make_int4(int x, int y, int z, int w) {
-      int4 t;
-      t.x = x;
-      t.y = y;
-      t.z = z;
-      t.w = w;
-      return t;
+      return int4 {x,y,z,w};
     }
 }
 #else
