@@ -103,7 +103,7 @@ struct CollectiveMma<
   using DpasShape = typename TiledMma::Shape_MNK;
   using TileDpasShape = decltype(tile_shape(TiledMma()));
 
-  static constexpr uint32_t MaxThreadsPerBlock = get<0>(DpasShape()) * get<1>(DpasShape());
+  static constexpr uint32_t MaxThreadsPerBlock = cute::size(TileShape{}) / cute::size(TileDpasShape{}) * SubgroupSize;
 
   static constexpr int FragsM = get<0>(TileDpasShape{}) / get<0>(DpasShape()); // A frags per sub_group
   static constexpr int FragsN = get<1>(TileDpasShape{}) / get<1>(DpasShape()); // B frags per sub_group

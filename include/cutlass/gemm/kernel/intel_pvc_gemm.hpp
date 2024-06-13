@@ -101,13 +101,9 @@ public:
 
   static constexpr int SubgroupSize = CollectiveMainloop::SubgroupSize; // sub_group size
   static constexpr uint32_t MaxThreadsPerBlock = CollectiveMainloop::MaxThreadsPerBlock;
-  static constexpr uint32_t MinBlocksPerMultiprocessor = CollectiveMainloop::MinBlocksPerMultiprocessor;
-
-  static constexpr int num_sg = MaxThreadsPerBlock / SubgroupSize; // number of sub_groups per work group
 
   using DpasShape = typename CollectiveMainloop::DpasShape;
   using TileDpasShape = typename CollectiveMainloop::TileDpasShape;
-
 
   static constexpr int FragsM = CollectiveMainloop::FragsM;
   static constexpr int FragsN = CollectiveMainloop::FragsN;
@@ -182,9 +178,9 @@ public:
     const int sg_n = (N - 1) / get<1>(TileDpasShape{}) + 1; // sub_groups required to process B fragments
 
     return dim3(
-      sg_m,
-      cute::ceil_div(sg_n, num_sg),
-      batch_count
+            cute::size(cute::ceil_div(cute::shape<0>(params.problem_shape), cute::shape<0>(TileShape{}))),
+            cute::size(cute::ceil_div(cute::shape<1>(params.problem_shape), cute::shape<1>(TileShape{}))),
+            batch_count
     );
   }
 
@@ -218,9 +214,10 @@ public:
 
     // Get the appropriate blocks for this sub_group -- potential for sub_group locality
     int thread_idx = int(ThreadIdxX());
-    auto subgroup_shape = TileDpasShape{};                                                  // (SUB_M,SUB_N,SUB_K)
+    constexpr auto workgroup_shape = TileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
+    constexpr auto subgroup_shape = TileDpasShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     const int m_coord = BlockIdxX() * get<0>(subgroup_shape);
-    const int n_coord = (BlockIdxY() * num_sg + thread_idx / SubgroupSize) * get<1>(subgroup_shape);
+    const int n_coord = BlockIdxY() * get<1>(workgroup_shape) + thread_idx / SubgroupSize * get<1>(subgroup_shape);
     const int l_coord = BlockIdxZ();
 
     Tensor tAi = params.mainloop.gmem_tiled_copy_a.get_pvc_tensor(make_coord(m_coord, 0, 0),
