@@ -100,22 +100,22 @@ struct CollectiveMma<
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
-  using DpasShape = typename TiledMma::Shape_MNK;
+  using MmaAtomShape = typename TiledMma::AtomShape_MNK;
   using SubgroupTileShape = decltype(tile_shape(TiledMma()));
 
   static constexpr uint32_t MaxThreadsPerBlock =
           cute::size(WorkgroupTileShape{}) / cute::size(SubgroupTileShape{})* SubgroupSize;
 
-  static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(DpasShape()); // A frags per sub_group
-  static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(DpasShape()); // B frags per sub_group
-  static constexpr int FragsK = get<2>(SubgroupTileShape{}) / get<2>(DpasShape());
+  static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(MmaAtomShape()); // A frags per sub_group
+  static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(MmaAtomShape()); // B frags per sub_group
+  static constexpr int FragsK = get<2>(SubgroupTileShape{}) / get<2>(MmaAtomShape());
 
   // Calculate the vector width based on the amount of registers 
   // required per work item by dividing the total fragment size by 
   // the sub_group size.
-  static constexpr int VecC = (get<1>(DpasShape()) * get<0>(DpasShape())) / SubgroupSize;
-  static constexpr int VecA = (get<0>(DpasShape()) * get<2>(DpasShape())) / SubgroupSize;
-  static constexpr int VecB = (get<1>(DpasShape()) * get<2>(DpasShape())) / SubgroupSize;
+  static constexpr int VecC = (get<1>(MmaAtomShape()) * get<0>(MmaAtomShape())) / SubgroupSize;
+  static constexpr int VecA = (get<0>(MmaAtomShape()) * get<2>(MmaAtomShape())) / SubgroupSize;
+  static constexpr int VecB = (get<1>(MmaAtomShape()) * get<2>(MmaAtomShape())) / SubgroupSize;
 
   // Host side kernel arguments
   struct Arguments {
@@ -202,7 +202,7 @@ struct CollectiveMma<
     //
     // Mainloop
     //
-   for (int k_tile = 0, k = 0; k_tile < k_tile_count; ++k_tile, k += get<2>(DpasShape()) * FragsK)
+   for (int k_tile = 0, k = 0; k_tile < k_tile_count; ++k_tile, k += get<2>(MmaAtomShape()) * FragsK)
    {
      // Copy gmem to rmem for the first k_tile
      copy(mainloop.gmem_tiled_copy_a, gA(_,_,k), tAr);
