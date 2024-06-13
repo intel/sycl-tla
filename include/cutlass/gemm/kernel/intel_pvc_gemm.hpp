@@ -172,12 +172,6 @@ public:
       batch_count = cute::size<3>(params.problem_shape);
     }
 
-    auto M = get<0>(params.problem_shape);
-    auto N = get<1>(params.problem_shape);
-
-    const int sg_m = (M - 1) / get<0>(SubgroupTileShape{}) + 1; // sub_groups required to process A fragments
-    const int sg_n = (N - 1) / get<1>(SubgroupTileShape{}) + 1; // sub_groups required to process B fragments
-
     return dim3(
             cute::size(cute::ceil_div(cute::shape<0>(params.problem_shape), cute::shape<0>(WorkgroupTileShape{}))),
             cute::size(cute::ceil_div(cute::shape<1>(params.problem_shape), cute::shape<1>(WorkgroupTileShape{}))),
