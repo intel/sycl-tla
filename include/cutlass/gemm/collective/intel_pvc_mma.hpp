@@ -81,7 +81,7 @@ struct CollectiveMma<
   // Type Aliases
   //
   using DispatchPolicy = MainloopIntelPVCUnpredicated;
-  using TileShape = TileShape_;
+  using WorkgroupTileShape = TileShape_;
   using ElementA = ElementA_;
   using StrideA = StrideA_;
   using ElementB = ElementB_;
@@ -101,13 +101,14 @@ struct CollectiveMma<
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
   using DpasShape = typename TiledMma::Shape_MNK;
-  using TileDpasShape = decltype(tile_shape(TiledMma()));
+  using SubgroupTileShape = decltype(tile_shape(TiledMma()));
 
-  static constexpr uint32_t MaxThreadsPerBlock = cute::size(TileShape{}) / cute::size(TileDpasShape{}) * SubgroupSize;
+  static constexpr uint32_t MaxThreadsPerBlock =
+          cute::size(WorkgroupTileShape{}) / cute::size(SubgroupTileShape{})* SubgroupSize;
 
-  static constexpr int FragsM = get<0>(TileDpasShape{}) / get<0>(DpasShape()); // A frags per sub_group
-  static constexpr int FragsN = get<1>(TileDpasShape{}) / get<1>(DpasShape()); // B frags per sub_group
-  static constexpr int FragsK = get<2>(TileDpasShape{}) / get<2>(DpasShape());
+  static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(DpasShape()); // A frags per sub_group
+  static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(DpasShape()); // B frags per sub_group
+  static constexpr int FragsK = get<2>(SubgroupTileShape{}) / get<2>(DpasShape());
 
   // Calculate the vector width based on the amount of registers 
   // required per work item by dividing the total fragment size by 
@@ -186,8 +187,9 @@ struct CollectiveMma<
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
     // Tensor to hold input data
-    Tensor tAr = make_tensor<typename TiledMma::ValTypeA>(Shape<Int<get<0>(TileDpasShape{}) * FragsK>, Int<1>>{});
-    Tensor tBr = make_tensor<typename TiledMma::ValTypeB>(Shape<Int<FragsK * get<1>(TileDpasShape{}) / FragsN>, Int<FragsN>>{});
+    Tensor tAr = make_tensor<typename TiledMma::ValTypeA>(Shape<Int<get<0>(SubgroupTileShape{}) * FragsK>, Int<1>>{});
+    Tensor tBr = make_tensor<typename TiledMma::ValTypeB>(
+            Shape<Int<FragsK * get<1>(SubgroupTileShape{}) / FragsN>, Int<FragsN>>{});
 
     Tensor tAr_view = make_tensor(static_cast<decltype(tAr) &&>(tAr).data(),
                             Shape<Int<VecA>, Int<FragsM>, Int<FragsK>>{});
