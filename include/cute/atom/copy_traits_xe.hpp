@@ -50,12 +50,29 @@ auto get_shape_WHD(cute::Stride<IntT, Int<1>, IntT> s, cute::Shape<int,int,int> 
   return Shape<int, int, int>(get<1>(shape_MKL), get<0>(shape_MKL), get<2>(shape_MKL));
 }
 
+template <class IntT, class TS, class SLayout>
+CUTE_HOST_DEVICE constexpr
+auto get_coordinates(cute::Stride<Int<1>, IntT, IntT> s,
+                     Tensor<ViewEngine<ArithmeticTupleIterator<TS>>, SLayout> const &src) {
+  auto [x, y, z] = src.data().coord_;
+  return make_coord(x, y, z);
+}
+
+template <class IntT, class TS, class SLayout>
+CUTE_HOST_DEVICE constexpr
+auto get_coordinates(cute::Stride<IntT, Int<1>, IntT> s,
+                     Tensor<ViewEngine<ArithmeticTupleIterator<TS>>, SLayout> const &src) {
+  auto [x, y, z] = src.data().coord_;
+  return make_coord(y, x, z);
+}
+
 template <class CopyOp, class GTensor>
 struct XE_2D_LD_Unpack
 {
   GTensor tensor;
 
   using Copy_Traits = Copy_Traits<CopyOp, GTensor>;
+
   template <class TS, class SLayout,
             class TD, class DLayout>
   CUTE_HOST_DEVICE friend constexpr void
@@ -63,12 +80,12 @@ struct XE_2D_LD_Unpack
               Tensor<ViewEngine<ArithmeticTupleIterator<TS>>, SLayout> const &src,
               Tensor<TD, DLayout> &dst)
   {
-      static_assert(is_rmem<TD>::value);
-      auto shape_wdh = get_shape_WHD(traits.tensor.stride(), traits.tensor.shape());
-      int W = size<0>(shape_wdh) * sizeof(typename Copy_Traits::CopyInternalType);
-      int H = size<1>(shape_wdh);
-      auto [y, x, z] = src.data().coord_;
-      CopyOp::copy(traits.tensor.data() + z, W, H, W, intel::coord_t{x, y}, &*dst.data());
+    static_assert(is_rmem<TD>::value);
+    auto shape_wdh = get_shape_WHD(traits.tensor.stride(), traits.tensor.shape());
+    int W = size<0>(shape_wdh) * sizeof(typename Copy_Traits::CopyInternalType);
+    int H = size<1>(shape_wdh);
+    auto [x, y, z] = get_coordinates(traits.tensor.stride(), src);
+    CopyOp::copy(traits.tensor.data() + z, W, H, W, intel::coord_t{x, y}, &*dst.data());
   }
 
   template <class GCoord, class GShape, class GStride>

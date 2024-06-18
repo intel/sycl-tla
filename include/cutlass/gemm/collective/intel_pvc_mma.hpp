@@ -206,7 +206,7 @@ struct CollectiveMma<
    {
      // Copy gmem to rmem for the first k_tile
      copy(mainloop.gmem_tiled_copy_a, gA(_,_,k), tAr);
-     copy(mainloop.gmem_tiled_copy_b, gB(_,k/2,_), tBr);
+     copy(mainloop.gmem_tiled_copy_b, gB(_,_,k/2), tBr);
 
      cute::gemm(tiled_mma, accum, tAr_view, tBr_view, src_accum);
    }
