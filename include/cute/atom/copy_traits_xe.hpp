@@ -46,7 +46,7 @@ auto get_shape_WHD(cute::Stride<Int<1>, IntT, IntT> , cute::Shape<int,int,int> s
 
 template <class IntT>
 CUTE_HOST_DEVICE constexpr
-auto get_shape_WHD(cute::Stride<IntT, Int<1>, IntT> s, cute::Shape<int,int,int> shape_MKL) {
+auto get_shape_WHD(cute::Stride<IntT, Int<1>, IntT> , cute::Shape<int,int,int> shape_MKL) {
   return Shape<int, int, int>(get<1>(shape_MKL), get<0>(shape_MKL), get<2>(shape_MKL));
 }
 
