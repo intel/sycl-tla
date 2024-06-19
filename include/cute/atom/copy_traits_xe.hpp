@@ -52,7 +52,7 @@ auto get_shape_WHD(cute::Stride<IntT, Int<1>, IntT> , cute::Shape<int,int,int> s
 
 template <class IntT, class TS, class SLayout>
 CUTE_HOST_DEVICE constexpr
-auto get_coordinates(cute::Stride<Int<1>, IntT, IntT> s,
+auto get_coordinates(cute::Stride<Int<1>, IntT, IntT> ,
                      Tensor<ViewEngine<ArithmeticTupleIterator<TS>>, SLayout> const &src) {
   auto [x, y, z] = src.data().coord_;
   return make_coord(x, y, z);
