@@ -60,7 +60,7 @@ auto get_coordinates(cute::Stride<Int<1>, IntT, IntT> ,
 
 template <class IntT, class TS, class SLayout>
 CUTE_HOST_DEVICE constexpr
-auto get_coordinates(cute::Stride<IntT, Int<1>, IntT> s,
+auto get_coordinates(cute::Stride<IntT, Int<1>, IntT> ,
                      Tensor<ViewEngine<ArithmeticTupleIterator<TS>>, SLayout> const &src) {
   auto [x, y, z] = src.data().coord_;
   return make_coord(y, x, z);
