@@ -40,7 +40,7 @@ namespace cute
 
 template <class IntT>
 CUTE_HOST_DEVICE constexpr
-auto get_shape_WHD(cute::Stride<Int<1>, IntT, IntT> s, cute::Shape<int,int,int> shape_MKL) {
+auto get_shape_WHD(cute::Stride<Int<1>, IntT, IntT> , cute::Shape<int,int,int> shape_MKL) {
   return shape_MKL;
 }
 
