@@ -140,7 +140,7 @@ struct Copy_Traits<XE_2D_U16x8x16x4x2_LD_N, GTensor>
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape<_1, Shape<_1, _1>>>; // one coordinate
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape<_1, Shape<_32, _2>>>;
+  using DstLayout = Layout<Shape<_1, Shape<_64, _1>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = SrcLayout;
   using CopyInternalType = ushort;

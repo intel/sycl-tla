@@ -187,7 +187,7 @@ struct CollectiveMma<
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
     // Tensor to hold input data
-    Tensor tAr = make_tensor<typename TiledMma::ValTypeA>(Shape<Int<get<0>(SubgroupTileShape{})>, Int<FragsK>>{});
+    Tensor tAr = make_tensor<typename TiledMma::ValTypeA>(Shape<Int<get<0>(SubgroupTileShape{}) * FragsK>, _1>{});
     Tensor tBr = make_tensor<typename TiledMma::ValTypeB>(Shape<Int<get<1>(SubgroupTileShape{}) / 2>, Int<FragsN>>{});
 
     Tensor tAr_view = make_tensor(static_cast<decltype(tAr) &&>(tAr).data(),
