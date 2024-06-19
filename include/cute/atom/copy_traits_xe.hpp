@@ -81,9 +81,9 @@ struct XE_2D_LD_Unpack
               Tensor<TD, DLayout> &dst)
   {
     static_assert(is_rmem<TD>::value);
-    auto shape_wdh = get_shape_WHD(traits.tensor.stride(), traits.tensor.shape());
-    int W = size<0>(shape_wdh) * sizeof(typename Copy_Traits::CopyInternalType);
-    int H = size<1>(shape_wdh);
+    auto shape_whd = get_shape_WHD(traits.tensor.stride(), traits.tensor.shape());
+    int W = size<0>(shape_whd) * sizeof(typename Copy_Traits::CopyInternalType);
+    int H = size<1>(shape_whd);
     auto [x, y, z] = get_coordinates(traits.tensor.stride(), src);
     CopyOp::copy(traits.tensor.data() + z, W, H, W, intel::coord_t{x, y}, &*dst.data());
   }
