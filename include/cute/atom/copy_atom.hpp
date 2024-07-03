@@ -111,6 +111,10 @@ struct Copy_Atom<Copy_Traits<Args...>, CopyInternalType>
       //   recurse this rank-1 layout by peeling off the mode
       //   ((A,B,C,...)) -> (A,B,C,...)
       return copy(*this, tensor<0>(src), tensor<0>(dst));
+    } else if constexpr (is_tuple<typename Tensor<SEngine,
+                                 SLayout>::engine_type::iterator::
+                                         value_type>::value) {
+        return copy_unpack(*this, src, dst);
     } else {
       static_assert(dependent_false<SEngine>, "No instruction match and no recursion possible.");
     }

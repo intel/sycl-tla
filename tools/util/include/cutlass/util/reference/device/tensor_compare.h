@@ -95,16 +95,18 @@ __global__ void
 
   size_t idx = ThreadIdxX() + BlockDimX() * BlockIdxX();
 
-  for (; idx < capacity; idx += GridDimX() * BlockDimX()) {
-
+  //for (; idx < capacity; idx += GridDimX() * BlockDimX()) {
+  if (idx < capacity ){
     Element a = cutlass::ReferenceFactory<Element>::get(ptr_A, idx);
     Element b = cutlass::ReferenceFactory<Element>::get(ptr_B, idx);
 
     if (!relatively_equal(a, b, epsilon, nonzero_floor)) {
       *equal = 0;
+      //printf("error, idx at: %lu, capacity: %lu, a: %f, b: %f\n", idx, capacity, a, b);
       return;
     }
   }
+ // }
 }
 
 } // namespace kernel
@@ -239,7 +241,7 @@ bool BlockCompareRelativelyEqual(
 #if defined (CUTLASS_ENABLE_SYCL)
     block_size = 128;
     grid_size = (capacity + block_size - 1) / block_size;
-    grid_size = (grid_size < 64 ? grid_size : 64); // limit grid size to avoid out_of_resources runtime error.
+    //grid_size = (grid_size < 64 ? grid_size : 64); // limit grid size to avoid out_of_resources runtime error.
 #else
     // if grid_size or block_size are zero, query occupancy using the CUDA Occupancy API
     cudaError_t result = cudaOccupancyMaxPotentialBlockSize(
