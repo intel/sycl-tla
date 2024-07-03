@@ -183,7 +183,28 @@ public:
       threshold_ = reinterpret_cast<ElementCompute const &>(allones);
     }
   }
-  
+
+#ifdef EPILOGUE_RELU
+  using ElementC = ElementOutput_;
+  using ElementD = ElementOutput_;
+  template<class REngine, class RLayout>
+  CUTLASS_HOST_DEVICE
+  void operator()(cute::Tensor<REngine, RLayout> &accumulators) const {
+    for (int i = 0; i < size(accumulators); i++) {
+      accumulators(i) = accumulators(i) < 0 ? 0 : accumulators(i);
+    }
+  }
+
+  template<class REngine, class RLayout>
+  CUTLASS_HOST_DEVICE
+  void operator()(cute::Tensor<REngine, RLayout> &accumulators,
+                  cute::Tensor<REngine, RLayout> const &source) const {
+    for (int i = 0; i < size(accumulators); i++) {
+      accumulators(i) = accumulators(i) < 0 ? source(i) : accumulators(i) + source(i);
+    }
+  }
+#endif
+
   /// Computes linear scaling: D = alpha * accumulator + beta * source
   CUTLASS_HOST_DEVICE
   FragmentOutput operator()(
