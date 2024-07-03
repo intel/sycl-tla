@@ -44,6 +44,18 @@ namespace cute
   inline x { assert(false); }
 #endif
 
+enum LSC_LDCC {
+    LSC_LDCC_DEFAULT = 0,
+    LSC_LDCC_L1UC_L3UC = 1, // Override to L1 uncached and L3 uncached
+    LSC_LDCC_L1UC_L3C = 2, // Override to L1 uncached and L3 cached
+    LSC_LDCC_L1C_L3UC = 3, // Override to L1 cached and L3 uncached
+    LSC_LDCC_L1C_L3C = 4, // Override to L1 cached and L3 cached
+    LSC_LDCC_L1S_L3UC = 5, // Override to L1 streaming load and L3 uncached
+    LSC_LDCC_L1S_L3C = 6, // Override to L1 streaming load and L3 cached
+    LSC_LDCC_L1IAR_L3C
+    = 7, // Override to L1 invalidate-after-read, and L3 cached
+};
+
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, intel::coord_t coord, intel::uint8 data));
@@ -80,7 +92,24 @@ SYCL_DEVICE_BUILTIN(intel::int16 __builtin_IB_subgroup_block_read_flat_transform
 SYCL_DEVICE_BUILTIN(intel::int8 intel_subgroup_block_read_transform_u16_k16(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, intel::coord_t coord));
-
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
 
 #undef SYCL_DEVICE_BUILTIN
 
@@ -98,6 +127,22 @@ struct XE_2D_U16x8x16x1x1_LD_N
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+  struct PREFETCH {
+      template <class T>
+      CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+              int height, int pitch, intel::coord_t coord) {
+#if defined(SYCL_INTEL_TARGET)
+      static_assert(sizeof(T) == 2, "Expected T to have size 2");
+      __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v1(
+              (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
+              LSC_LDCC_L1C_L3C);
+#else
+      CUTE_INVALID_CONTROL_PATH(
+              "Trying to use block prefetch on non-PVC hardware");
+#endif
+        }
+    };
 };
 
 struct XE_2D_U32x8x16x1x1_LD_N
@@ -130,6 +175,22 @@ struct XE_2D_U16x16x16x1x1_LD_N
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif                                      
   }
+
+    struct PREFETCH {
+        template <class T>
+        CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                int height, int pitch, intel::coord_t coord) {
+#if defined(SYCL_INTEL_TARGET)
+            static_assert(sizeof(T) == 2, "Expected T to have size 2");
+            __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v1(
+                    (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
+                    LSC_LDCC_L1C_L3C);
+#else
+            CUTE_INVALID_CONTROL_PATH(
+                    "Trying to use block prefetch on non-PVC hardware");
+#endif
+        }
+    };
 };
 
 struct XE_2D_U16x8x16x4x2_LD_N
@@ -146,6 +207,23 @@ struct XE_2D_U16x8x16x4x2_LD_N
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+    struct PREFETCH {
+        template <class T>
+        CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                int height, int pitch, intel::coord_t coord) {
+#if defined(SYCL_INTEL_TARGET)
+            static_assert(sizeof(T) == 2, "Expected T to have size 2");
+            // __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
+            __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(  
+                    (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
+                    LSC_LDCC_L1C_L3C);
+#else
+            CUTE_INVALID_CONTROL_PATH(
+                    "Trying to use block prefetch on non-PVC hardware");
+#endif
+        }
+    };
 };
 
 struct XE_2D_U16x8x16x2x2_LD_N
@@ -162,6 +240,22 @@ struct XE_2D_U16x8x16x2x2_LD_N
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+    struct PREFETCH {
+        template <class T>
+        CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                int height, int pitch, intel::coord_t coord) {
+#if defined(SYCL_INTEL_TARGET)
+            static_assert(sizeof(T) == 2, "Expected T to have size 2");
+            __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
+                    (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
+                    LSC_LDCC_L1C_L3C);
+#else
+            CUTE_INVALID_CONTROL_PATH(
+                    "Trying to use block prefetch on non-PVC hardware");
+#endif
+        }
+    };
 };
 
 struct XE_2D_U16x8x16x1x2_LD_N
@@ -179,6 +273,22 @@ struct XE_2D_U16x8x16x1x2_LD_N
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+    struct PREFETCH {
+        template <class T>
+        CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                int height, int pitch, intel::coord_t coord) {
+#if defined(SYCL_INTEL_TARGET)
+            static_assert(sizeof(T) == 2, "Expected T to have size 2");
+            __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
+                    (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
+                    LSC_LDCC_L1C_L3C);
+#else
+            CUTE_INVALID_CONTROL_PATH(
+                    "Trying to use block prefetch on non-PVC hardware");
+#endif
+        }
+    };
 };
 
 struct XE_2D_U16x8x16x4x1_LD_N
@@ -195,6 +305,22 @@ struct XE_2D_U16x8x16x4x1_LD_N
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+    struct PREFETCH {
+        template <class T>
+        CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                int height, int pitch, intel::coord_t coord) {
+#if defined(SYCL_INTEL_TARGET)
+            static_assert(sizeof(T) == 2, "Expected T to have size 2");
+            __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v1(
+                    (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
+                    LSC_LDCC_L1C_L3C);
+#else
+            CUTE_INVALID_CONTROL_PATH(
+                    "Trying to use block prefetch on non-PVC hardware");
+#endif
+        }
+    };
 };
 
 struct XE_2D_U32x8x16x2x1_LD_N
@@ -229,6 +355,8 @@ struct XE_2D_U16x16x16x2x1_LD_N
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+  using PREFETCH = typename XE_2D_U16x8x16x4x1_LD_N::PREFETCH;
 };
 
 struct XE_2D_U16x16x16x2x2_V
@@ -242,6 +370,9 @@ struct XE_2D_U16x16x16x2x2_V
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+    // using PREFETCH = typename XE_2D_U16x8x16x4x2_LD_N::PREFETCH;
+    using PREFETCH = typename XE_2D_U16x8x16x2x2_LD_N::PREFETCH;
 };
 
 struct XE_2D_U16x16x16x1x2_V
@@ -255,6 +386,8 @@ struct XE_2D_U16x16x16x1x2_V
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+    using PREFETCH = typename XE_2D_U16x8x16x2x2_LD_N::PREFETCH;
 };
 
 struct XE_2D_U16x16x16x2x1_V
@@ -268,6 +401,8 @@ struct XE_2D_U16x16x16x2x1_V
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+      using PREFETCH = typename XE_2D_U16x8x16x4x1_LD_N::PREFETCH;
 };
 
 struct XE_2D_U16x16x16x1x1_V
@@ -282,6 +417,8 @@ struct XE_2D_U16x16x16x1x1_V
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
   }
+
+    using PREFETCH = typename XE_2D_U16x16x16x1x1_LD_N::PREFETCH;
 };
 
 struct XE_2D_U32x8x16x1x1_ST_N
