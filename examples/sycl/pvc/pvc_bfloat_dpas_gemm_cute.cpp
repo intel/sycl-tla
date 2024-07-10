@@ -46,11 +46,6 @@
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
 
-//  0 - None
-//  1 - FLUSH by memset
-//  2 - FLUSH by input offset with pingpong
-#define CACHE_FLUSH 2
-
 template <typename T> static void fill_matrix(std::vector<T> &M) {
   std::random_device dev;
   std::mt19937 rng(dev());
@@ -142,7 +137,7 @@ struct Options {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class Gemm> struct ExampleRunner {
+template <class Gemm, bool cache_clear> struct ExampleRunner {
 
   using StrideA = typename Gemm::GemmKernel::StrideA;
   using StrideB = typename Gemm::GemmKernel::StrideB;
@@ -184,12 +179,10 @@ template <class Gemm> struct ExampleRunner {
 
   static constexpr auto l3_cache_size = 256 * 1024 * 1024;
 
-#if CACHE_FLUSH == 2
-  size_t PINGPONG_ITER = 3;
+  size_t PINGPONG_ITER = 1;
   size_t pingpong_size_a;
   size_t pingpong_size_b;
   size_t pingpong_size_d;
-#endif
 
   std::vector<ElementA> a;
   std::vector<ElementB> b;
@@ -220,7 +213,6 @@ template <class Gemm> struct ExampleRunner {
     );
 
 #ifdef EPILOGUE_SOFTMAX
-#define IDX (l * M * N + i * N + j)
 
     ElementOutput *ptr =
         (ElementOutput *)std::malloc(M * N * L * sizeof(ElementOutput));
@@ -229,21 +221,24 @@ template <class Gemm> struct ExampleRunner {
     syclcompat::wait();
     for (int l = 0; l < L; l++) {
       for (int i = 0; i < M; i++) {
-
+        auto row_idx = l * M * N + i * N;
         auto row_max = ptr[l * M * N + i * N];
-        for (int j = 0; j < N; j++) {
-          row_max = max(row_max, ptr[IDX]);
-        }
 
         ElementOutput exp_sum = (ElementOutput)0;
         for (int j = 0; j < N; j++) {
-          ptr[IDX] = ptr[IDX] - row_max;
-          ptr[IDX] = exp(ptr[IDX]);
-          exp_sum += ptr[IDX];
+          auto idx = row_idx + j;
+          row_max = max(row_max, ptr[idx]);
+        }
+        for (int j = 0; j < N; j++) {
+          auto idx = row_idx + j;
+          ptr[idx] = ptr[idx] - row_max;
+          ptr[idx] = exp(ptr[idx]);
+          exp_sum += ptr[idx];
         }
 
         for (int j = 0; j < N; j++) {
-          ptr[IDX] = ptr[IDX] / exp_sum;
+          auto idx = row_idx + j;
+          ptr[idx] = ptr[idx] / exp_sum;
         }
       }
     }
@@ -253,8 +248,6 @@ template <class Gemm> struct ExampleRunner {
     syclcompat::wait();
 
     std::free(ptr);
-
-#undef IDX
 
 #endif
 
@@ -292,17 +285,9 @@ template <class Gemm> struct ExampleRunner {
     return passed;
   }
 
-  void init_cache_flush(const ProblemShapeType &problem_size) {
+  void init_cache_clear(const ProblemShapeType &problem_size) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
-
-#if CACHE_FLUSH == 1
-    auto ref_d_element = max(l3_cache_size / sizeof(ElementOutput), M * N * L);
-    block_ref_D.reset(ref_d_element);
-    syclcompat::memset(block_ref_D.get(), 0,
-                       ref_d_element * sizeof(ElementOutput));
-
-#elif CACHE_FLUSH == 2
 
     pingpong_size_a = max((size_t)M * K * L, l3_cache_size / sizeof(ElementA));
     pingpong_size_b = max((size_t)K * N * L, l3_cache_size / sizeof(ElementB));
@@ -330,8 +315,6 @@ template <class Gemm> struct ExampleRunner {
       syclcompat::memcpy(block_D.get() + i * pingpong_size_d, d.data(),
                          d.size() * sizeof(ElementC));
     }
-#endif
-
     // syclcompat::wait();
   }
 
@@ -423,8 +406,10 @@ template <class Gemm> struct ExampleRunner {
       // return;
     }
 
-    // ================ init cache flush ================
-    init_cache_flush(problem_size);
+    // ================ init cache clear ================
+    if constexpr(cache_clear) {
+      init_cache_clear(problem_size);
+    }
 
     // ================ run and collect performance data ================
     if (total_iterations > 0) {
@@ -433,19 +418,6 @@ template <class Gemm> struct ExampleRunner {
       auto worst = 0.f;
 
       for (int i = 0; i < testIterations + warmup; ++i) {
-#if CACHE_FLUSH == 1
-        init_cache_flush(problem_size);
-        typename Gemm::GemmKernel::Arguments arguments{
-            cutlass::gemm::GemmUniversalMode::kGemm,
-            problem_size,
-            {block_A.get(), stride_A, block_B.get(), stride_B},
-            {{1, 0.f},
-             nullptr /*block_C.get() + i * M * N * L*/,
-             stride_C,
-             block_D.get(),
-             stride_D},
-            hw_info};
-#elif CACHE_FLUSH == 2
         typename Gemm::GemmKernel::Arguments arguments{
             cutlass::gemm::GemmUniversalMode::kGemm,
             problem_size,
@@ -457,7 +429,6 @@ template <class Gemm> struct ExampleRunner {
              block_D.get() + (i % PINGPONG_ITER) * pingpong_size_d,
              stride_D},
             hw_info};
-#endif
 
         Gemm gemm_op;
         gemm_op.can_implement(arguments);
@@ -480,7 +451,6 @@ template <class Gemm> struct ExampleRunner {
 
       float average = total_time / testIterations;
       double tflops = (2.0 * M * N * K * L) * 1e-12;
-      double gflops = (2.0 * M * N * K * L) * 1e-9;
 
       double hbm =
           L *
@@ -510,7 +480,7 @@ template <class Gemm> struct ExampleRunner {
 };
 
 template <int wg_tile_m, int wg_tile_n, int sg_tile_m, int sg_tile_n,
-          int sg_tile_k, bool wg_order_m_first = false, uint32_t snake_n = 0>
+          int sg_tile_k, bool wg_order_m_first = false, uint32_t snake_n = 0, bool cache_clear = true>
 void collective_gemm(int M, int K, int N, int L = 1) {
   //
   // Parse options
@@ -615,7 +585,7 @@ void collective_gemm(int M, int K, int N, int L = 1) {
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
-  ExampleRunner<Gemm> runner;
+  ExampleRunner<Gemm, cache_clear> runner;
 
   runner.template run<wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k>(
       M, K, N, L, hw_info);
@@ -663,7 +633,7 @@ int main() {
 #endif
 
 #if defined(EPILOGUE_RELU)
-  // gemm + softmax
+  // gemm + relu
   collective_gemm<256, 256, 32, 64, 32>(4096, 4096, 4096);
 #endif
 }
