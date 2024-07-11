@@ -44,8 +44,12 @@ namespace epilogue {
 namespace collective {
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class StrideC_, class StrideD_, class ThreadEpilogueOp_,
-          class EpilogueSchedule_, uint32_t m, uint32_t n>
+template <class StrideC_,
+    class StrideD_,
+    class ThreadEpilogueOp_,
+    class EpilogueSchedule_,
+    uint32_t m,
+    uint32_t n>
 class PvcEpilogueTensorSoftmax {
 public:
   using EpilogueSchedule = EpilogueSchedule_;
@@ -68,9 +72,9 @@ public:
   // Host side epilogue arguments
   struct Arguments {
     typename ThreadEpilogueOp::Params thread{};
-    ElementC const *ptr_C = nullptr;
+    ElementC const* ptr_C = nullptr;
     StrideC dC{};
-    ElementD *ptr_D = nullptr;
+    ElementD* ptr_D = nullptr;
     StrideD dD{};
   };
 
@@ -78,23 +82,21 @@ public:
   using Params = Arguments;
 
   template <class ProblemShape>
-  static constexpr Params
-  to_underlying_arguments([[maybe_unused]] ProblemShape const &_,
-                          Arguments const &args,
-                          [[maybe_unused]] void *workspace) {
+  static Params constexpr to_underlying_arguments([[maybe_unused]] ProblemShape const& _,
+      Arguments const& args,
+      [[maybe_unused]] void* workspace) {
     return args;
   }
 
-  template <typename T> CUTLASS_DEVICE void operator()(T &t) {
+  template <typename T> CUTLASS_DEVICE void operator()(T& t) {
     static_assert(cute::is_same_v<typename T::value_type, float> && m <= 32);
 
-    auto const &group =
-        sycl::ext::oneapi::experimental::this_nd_item<3>().get_group();
+    auto const& group = sycl::ext::oneapi::experimental::this_nd_item<3>().get_group();
 
-    static constexpr auto vec_size = 4;
+    static auto constexpr vec_size = 4;
 
     static_assert((m % vec_size) == 0 && vec_size <= 16);
-    static constexpr auto loop_cnt = m / vec_size;
+    static auto constexpr loop_cnt = m / vec_size;
 
     sycl::vec<float, vec_size> local_max;
     sycl::vec<float, vec_size> local_plus;
