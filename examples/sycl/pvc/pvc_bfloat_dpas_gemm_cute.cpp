@@ -46,22 +46,20 @@
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
 
-template <typename T> static void fill_matrix(std::vector<T> &M) {
+template <typename T> static void fill_matrix(std::vector<T>& M) {
   std::random_device dev;
   std::mt19937 rng(dev());
   std::uniform_real_distribution<float> dist((T)0.0,
 #ifdef EPILOGUE_SOFTMAX
-                                             (T)0.1);
+      (T)0.1);
 #else
-                                             (T)1.0);
+      (T)1.0);
 #endif
-  std::generate(std::begin(M), std::end(M),
-                [&] { return static_cast<T>(dist(rng)); });
+  std::generate(std::begin(M), std::end(M), [&] { return static_cast<T>(dist(rng)); });
 }
 
 template <typename T>
-static void vnni_matrix(T *dst, const T *src, int batch, int numRows,
-                        int numCols, int factor) {
+static void vnni_matrix(T* dst, T const* src, int batch, int numRows, int numCols, int factor) {
   for (int b = 0; b < batch; b++) {
     for (int r = 0; r < numRows / factor; r++) {
       for (int c = 0; c < numCols; c++) {
@@ -78,9 +76,9 @@ using namespace cute;
 
 using ElementAccumulator = float;     // <- data type of accumulator
 using ElementComputeEpilogue = float; // <- data type of epilogue operations
-using ElementInputA = bfloat16_t; // <- data type of elements in input matrix A
-using ElementInputB = bfloat16_t; // <- data type of elements in input matrix B
-using ElementOutput = float;      // <- data type of elements in output matrix D
+using ElementInputA = bfloat16_t;     // <- data type of elements in input matrix A
+using ElementInputB = bfloat16_t;     // <- data type of elements in input matrix B
+using ElementOutput = float;          // <- data type of elements in output matrix D
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -94,11 +92,11 @@ struct Options {
   float alpha, beta;
 
   Options()
-      : help(false), error(false), m(4096), n(4096), k(4096), l(1),
-        iterations(100), alpha(1.f), beta(0.f) {}
+      : help(false), error(false), m(4096), n(4096), k(4096), l(1), iterations(100), alpha(1.f),
+        beta(0.f) {}
 
   // Parses the command line
-  void parse(int argc, char const **args) {
+  void parse(int argc, char const** args) {
     cutlass::CommandLine cmd(argc, args);
 
     if (cmd.check_cmd_line_flag("help")) {
@@ -116,7 +114,7 @@ struct Options {
   }
 
   /// Prints the usage statement.
-  std::ostream &print_usage(std::ostream &out) const {
+  std::ostream& print_usage(std::ostream& out) const {
 
     out << "PVC GEMM Example\n\n"
         << "Options:\n\n"
@@ -177,7 +175,7 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
 
-  static constexpr auto l3_cache_size = 256 * 1024 * 1024;
+  static auto constexpr l3_cache_size = 256 * 1024 * 1024;
 
   size_t PINGPONG_ITER = 1;
   size_t pingpong_size_a;
@@ -191,20 +189,17 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
   // Methods
   //
 
-  bool verify(const ProblemShapeType &problem_size, ElementCompute alpha,
-              ElementCompute beta) {
+  bool verify(ProblemShapeType const& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
     cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
     cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    cutlass::TensorRef ref_C((ElementC *)nullptr /*block_C.get()*/,
-                             LayoutC::packed({M, N}));
+    cutlass::TensorRef ref_C((ElementC*)nullptr /*block_C.get()*/, LayoutC::packed({M, N}));
     cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
     cutlass::reference::device::GemmComplex(
         {M, N, K}, alpha, ref_A, cutlass::ComplexTransform::kNone, ref_B,
-        cutlass::ComplexTransform::kNone, beta, ref_C, ref_D,
-        ElementAccumulator(0),
+        cutlass::ComplexTransform::kNone, beta, ref_C, ref_D, ElementAccumulator(0),
         L,     // batch_count
         M * K, // batch_stride_A
         K * N, // batch_stride_B
@@ -214,10 +209,8 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
 
 #ifdef EPILOGUE_SOFTMAX
 
-    ElementOutput *ptr =
-        (ElementOutput *)std::malloc(M * N * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr, block_ref_D.get(),
-                       M * N * L * sizeof(ElementOutput));
+    ElementOutput* ptr = (ElementOutput*)std::malloc(M * N * L * sizeof(ElementOutput));
+    syclcompat::memcpy(ptr, block_ref_D.get(), M * N * L * sizeof(ElementOutput));
     syclcompat::wait();
     for (int l = 0; l < L; l++) {
       for (int i = 0; i < M; i++) {
@@ -243,8 +236,7 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
       }
     }
 
-    syclcompat::memcpy(block_ref_D.get(), ptr,
-                       M * N * L * sizeof(ElementOutput));
+    syclcompat::memcpy(block_ref_D.get(), ptr, M * N * L * sizeof(ElementOutput));
     syclcompat::wait();
 
     std::free(ptr);
@@ -285,57 +277,48 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
     return passed;
   }
 
-  void init_cache_clear(const ProblemShapeType &problem_size) {
+  void init_cache_clear(ProblemShapeType const& problem_size) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
     pingpong_size_a = max((size_t)M * K * L, l3_cache_size / sizeof(ElementA));
     pingpong_size_b = max((size_t)K * N * L, l3_cache_size / sizeof(ElementB));
-    pingpong_size_d =
-        max((size_t)M * N * L, l3_cache_size / sizeof(ElementOutput));
+    pingpong_size_d = max((size_t)M * N * L, l3_cache_size / sizeof(ElementOutput));
     auto gmem_size = syclcompat::get_current_device().get_global_mem_size();
-    PINGPONG_ITER =
-        std::min((size_t)3,
-                 std::max((size_t)1,
-                          (size_t)gmem_size /
-                                  ((pingpong_size_a * sizeof(ElementA) +
-                                    pingpong_size_b * sizeof(ElementB) +
-                                    pingpong_size_d * sizeof(ElementOutput))) -
-                              1));
+    PINGPONG_ITER = std::min((size_t)3,
+        std::max((size_t)1, (size_t)gmem_size / ((pingpong_size_a * sizeof(ElementA) +
+                                                    pingpong_size_b * sizeof(ElementB) +
+                                                    pingpong_size_d * sizeof(ElementOutput))) -
+                                1));
     block_A.reset(pingpong_size_a * PINGPONG_ITER);
     block_B.reset(pingpong_size_b * PINGPONG_ITER);
     // block_C.reset(M * N * L * ITER);
     block_D.reset(pingpong_size_d * PINGPONG_ITER);
 
     for (int i = 0; i < PINGPONG_ITER; i++) {
-      syclcompat::memcpy(block_A.get() + i * pingpong_size_a, a.data(),
-                         a.size() * sizeof(ElementA));
-      syclcompat::memcpy(block_B.get() + i * pingpong_size_b, b.data(),
-                         b.size() * sizeof(ElementB));
-      syclcompat::memcpy(block_D.get() + i * pingpong_size_d, d.data(),
-                         d.size() * sizeof(ElementC));
+      syclcompat::memcpy(
+          block_A.get() + i * pingpong_size_a, a.data(), a.size() * sizeof(ElementA));
+      syclcompat::memcpy(
+          block_B.get() + i * pingpong_size_b, b.data(), b.size() * sizeof(ElementB));
+      syclcompat::memcpy(
+          block_D.get() + i * pingpong_size_d, d.data(), d.size() * sizeof(ElementC));
     }
     // syclcompat::wait();
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
-  void initialize(const ProblemShapeType &problem_size) {
+  void initialize(ProblemShapeType const& problem_size) {
     auto [M, N, K, L] = problem_size;
 
-    stride_A =
-        cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
-    stride_B =
-        cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(K, N, L));
-    stride_C =
-        cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
-    stride_D =
-        cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
+    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
+    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(K, N, L));
+    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
+    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
     block_A.reset((size_t)M * K * L);
     block_B.reset((size_t)K * N * L);
     // block_C.reset(M * N * L);
     block_D.reset((size_t)M * N * L);
-    block_ref_D.reset(
-        (size_t)max(l3_cache_size / sizeof(ElementOutput), (size_t)M * N * L));
+    block_ref_D.reset((size_t)max(l3_cache_size / sizeof(ElementOutput), (size_t)M * N * L));
 
     // TODO: Enable initialization on device directly once RNG is
     // available through SYCL.
@@ -351,26 +334,17 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
     syclcompat::memcpy(block_D.get(), d.data(), d.size() * sizeof(ElementC));
   }
 
-  template <int wg_tile_m, int wg_tile_n, int sg_tile_m, int sg_tile_n,
-            int sg_tile_k>
-  void run(int M, int K, int N, int L,
-           const cutlass::KernelHardwareInfo &hw_info) {
-    static constexpr auto warmup = 10;
-    static constexpr auto testIterations = 10;
-    static constexpr auto total_iterations = warmup + testIterations;
+  template <int wg_tile_m, int wg_tile_n, int sg_tile_m, int sg_tile_n, int sg_tile_k>
+  void run(int M, int K, int N, int L, cutlass::KernelHardwareInfo const& hw_info) {
+    static auto constexpr warmup = 10;
+    static auto constexpr testIterations = 10;
+    static auto constexpr total_iterations = warmup + testIterations;
     ProblemShapeType problem_size = ProblemShapeType{M, N, K, L};
     initialize(problem_size);
     // ================ verfy the gemm result first ================
-    typename Gemm::GemmKernel::Arguments arguments{
-        cutlass::gemm::GemmUniversalMode::kGemm,
-        problem_size,
-        {block_A.get(), stride_A, block_B.get(), stride_B},
-        {{1, 0.f},
-         nullptr /*block_C.get()*/,
-         stride_C,
-         block_D.get(),
-         stride_D},
-        hw_info};
+    typename Gemm::GemmKernel::Arguments arguments{cutlass::gemm::GemmUniversalMode::kGemm,
+        problem_size, {block_A.get(), stride_A, block_B.get(), stride_B},
+        {{1, 0.f}, nullptr /*block_C.get()*/, stride_C, block_D.get(), stride_D}, hw_info};
     Gemm gemm_op_verify;
 
     size_t workspace_size = Gemm::get_workspace_size(arguments);
@@ -390,24 +364,24 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
       printf("PVC GEMM%s%s Example %s, MKNL(%d, %d,%d,%d), Config(%d, "
              "%d,%d,%d,%d)  !!!!!!!!!!!!!\n\n",
 #ifdef EPILOGUE_RELU
-             "-relu"
+          "-relu"
 #else
-             ""
+          ""
 #endif
-             ,
+          ,
 #ifdef EPILOGUE_SOFTMAX
-             "-softmax"
+          "-softmax"
 #else
-             ""
+          ""
 #endif
-             ,
-             (passed ? "Passed" : "Failed"), M, K, N, L, wg_tile_m, wg_tile_n,
-             sg_tile_m, sg_tile_n, sg_tile_k);
+          ,
+          (passed ? "Passed" : "Failed"), M, K, N, L, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n,
+          sg_tile_k);
       // return;
     }
 
     // ================ init cache clear ================
-    if constexpr(cache_clear) {
+    if constexpr (cache_clear) {
       init_cache_clear(problem_size);
     }
 
@@ -418,16 +392,12 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
       auto worst = 0.f;
 
       for (int i = 0; i < testIterations + warmup; ++i) {
-        typename Gemm::GemmKernel::Arguments arguments{
-            cutlass::gemm::GemmUniversalMode::kGemm,
+        typename Gemm::GemmKernel::Arguments arguments{cutlass::gemm::GemmUniversalMode::kGemm,
             problem_size,
             {block_A.get() + (i % PINGPONG_ITER) * pingpong_size_a, stride_A,
-             block_B.get() + (i % PINGPONG_ITER) * pingpong_size_b, stride_B},
-            {{1, 0.f},
-             nullptr /*block_C.get() + i * M * N * L*/,
-             stride_C,
-             block_D.get() + (i % PINGPONG_ITER) * pingpong_size_d,
-             stride_D},
+                block_B.get() + (i % PINGPONG_ITER) * pingpong_size_b, stride_B},
+            {{1, 0.f}, nullptr /*block_C.get() + i * M * N * L*/, stride_C,
+                block_D.get() + (i % PINGPONG_ITER) * pingpong_size_d, stride_D},
             hw_info};
 
         Gemm gemm_op;
@@ -452,11 +422,10 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
       float average = total_time / testIterations;
       double tflops = (2.0 * M * N * K * L) * 1e-12;
 
-      double hbm =
-          L *
-          (M * K * sizeof(ElementInputA) + K * N * sizeof(ElementInputB) +
-           M * N * sizeof(ElementOutput)) *
-          1e-9;
+      double hbm = L *
+                   (M * K * sizeof(ElementInputA) + K * N * sizeof(ElementInputB) +
+                       M * N * sizeof(ElementOutput)) *
+                   1e-9;
 
       printf("Collective pvc gemm%s, MKNL(%d, %d, %d, %d), Config(%d, %d, "
              "%d, %d, %d):\n     max:     (%6.4f)ms, (%4.2f)TFlop/s, "
@@ -464,23 +433,28 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
              "(%4.2f)GB/s\n     average: (%6.4f)ms, (%4.2f)TFlop/s, "
              "(%4.2f)GB/s\n\n\n",
 #if defined(EPILOGUE_RELU)
-             "-relu"
+          "-relu"
 #elif defined(EPILOGUE_SOFTMAX)
-             "softmax"
+          "softmax"
 #else
-             ""
+          ""
 #endif
-             ,
-             M, K, N, L, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k,
-             best * 1000, tflops / best, hbm / best, worst * 1000,
-             tflops / worst, hbm / worst, average * 1000, tflops / average,
-             hbm / average);
+          ,
+          M, K, N, L, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k, best * 1000,
+          tflops / best, hbm / best, worst * 1000, tflops / worst, hbm / worst, average * 1000,
+          tflops / average, hbm / average);
     }
   }
 };
 
-template <int wg_tile_m, int wg_tile_n, int sg_tile_m, int sg_tile_n,
-          int sg_tile_k, bool wg_order_m_first = false, uint32_t snake_n = 0, bool cache_clear = true>
+template <int wg_tile_m,
+    int wg_tile_n,
+    int sg_tile_m,
+    int sg_tile_n,
+    int sg_tile_k,
+    bool wg_order_m_first = false,
+    uint32_t snake_n = 0,
+    bool cache_clear = true>
 void collective_gemm(int M, int K, int N, int L = 1) {
   //
   // Parse options
@@ -511,8 +485,7 @@ void collective_gemm(int M, int K, int N, int L = 1) {
   // Change device_id to another value if you are running on a machine with
   // multiple GPUs and wish to use a GPU other than that with device ID 0.
   hw_info.sm_count =
-      cutlass::KernelHardwareInfo::query_device_multiprocessor_count(
-          hw_info.device_id);
+      cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
   bool passed;
 
@@ -527,68 +500,63 @@ void collective_gemm(int M, int K, int N, int L = 1) {
   using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
   using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
 
-  using TileShape = Shape<Int<wg_tile_m>, Int<wg_tile_n>, Int<sg_tile_m>,
-                          Int<sg_tile_n>, Int<sg_tile_k>>;
+  using TileShape =
+      Shape<Int<wg_tile_m>, Int<wg_tile_n>, Int<sg_tile_m>, Int<sg_tile_n>, Int<sg_tile_k>>;
 
-  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_BF16BF16F32F32_NN>,
-                            Layout<Shape<_8, _16, _1>>>;
+  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_BF16BF16F32F32_NN>, Layout<Shape<_8, _16, _1>>>;
 
   using DispatchPolicy = cutlass::gemm::MainloopIntelPVCUnpredicated;
 #ifdef EPILOGUE_RELU
-  using EpilogueOp = cutlass::epilogue::thread::LinearCombinationRelu<
-      ElementOutput, // <- data type of output matrix
-      128 / cutlass::sizeof_bits<ElementOutput>::value, // <- the number of
-      // elements per vectorized
-      // memory access. For a byte, it's 16
-      // elements. This becomes the vector width of
-      // math instructions in the epilogue too
-      ElementAccumulator,      // <- data type of accumulator
-      ElementComputeEpilogue>; // <- data type for alpha/beta in linear
+  using EpilogueOp =
+      cutlass::epilogue::thread::LinearCombinationRelu<ElementOutput, // <- data type of output
+                                                                      // matrix
+          128 / cutlass::sizeof_bits<ElementOutput>::value,           // <- the number of
+          // elements per vectorized
+          // memory access. For a byte, it's 16
+          // elements. This becomes the vector width of
+          // math instructions in the epilogue too
+          ElementAccumulator,      // <- data type of accumulator
+          ElementComputeEpilogue>; // <- data type for alpha/beta in linear
 
 #else
-  using EpilogueOp = cutlass::epilogue::thread::LinearCombination<
-      ElementOutput, // <- data type of output matrix
-      128 / cutlass::sizeof_bits<ElementOutput>::value, // <- the number of
-      // elements per vectorized
-      // memory access. For a byte, it's 16
-      // elements. This becomes the vector width of
-      // math instructions in the epilogue too
-      ElementAccumulator,      // <- data type of accumulator
-      ElementComputeEpilogue>; // <- data type for alpha/beta in linear
+  using EpilogueOp =
+      cutlass::epilogue::thread::LinearCombination<ElementOutput, // <- data type of output matrix
+          128 / cutlass::sizeof_bits<ElementOutput>::value,       // <- the number of
+          // elements per vectorized
+          // memory access. For a byte, it's 16
+          // elements. This becomes the vector width of
+          // math instructions in the epilogue too
+          ElementAccumulator,      // <- data type of accumulator
+          ElementComputeEpilogue>; // <- data type for alpha/beta in linear
   // combination function
 #endif
   // Mainloop
-  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
-      DispatchPolicy, TileShape, ElementInputA,
-      cutlass::gemm::TagToStrideA_t<LayoutA>, ElementInputB,
-      cutlass::gemm::TagToStrideB_t<LayoutB>, TiledMma, GmemTiledCopyA, void,
-      void, cute::identity,                      // A
+  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<DispatchPolicy, TileShape,
+      ElementInputA, cutlass::gemm::TagToStrideA_t<LayoutA>, ElementInputB,
+      cutlass::gemm::TagToStrideB_t<LayoutB>, TiledMma, GmemTiledCopyA, void, void,
+      cute::identity,                            // A
       GmemTiledCopyB, void, void, cute::identity // B
       >;
 
 #ifdef EPILOGUE_SOFTMAX
-  using CollectiveEpilogue =
-      cutlass::epilogue::collective::PvcEpilogueTensorSoftmax<
-          cutlass::gemm::TagToStrideC_t<LayoutC>,
-          cutlass::gemm::TagToStrideC_t<LayoutD>, EpilogueOp,
-          cutlass::gemm::EpilogueDefault, CollectiveMainloop::sg_tile_m,
-          CollectiveMainloop::sg_tile_n / CollectiveMainloop::SubgroupSize>;
+  using CollectiveEpilogue = cutlass::epilogue::collective::PvcEpilogueTensorSoftmax<
+      cutlass::gemm::TagToStrideC_t<LayoutC>, cutlass::gemm::TagToStrideC_t<LayoutD>, EpilogueOp,
+      cutlass::gemm::EpilogueDefault, CollectiveMainloop::sg_tile_m,
+      CollectiveMainloop::sg_tile_n / CollectiveMainloop::SubgroupSize>;
 #else
-  using CollectiveEpilogue = cutlass::epilogue::collective::DefaultEpilogue<
-      cutlass::gemm::TagToStrideC_t<LayoutC>,
-      cutlass::gemm::TagToStrideC_t<LayoutD>, EpilogueOp,
-      cutlass::gemm::EpilogueDefault>;
+  using CollectiveEpilogue =
+      cutlass::epilogue::collective::DefaultEpilogue<cutlass::gemm::TagToStrideC_t<LayoutC>,
+          cutlass::gemm::TagToStrideC_t<LayoutD>, EpilogueOp, cutlass::gemm::EpilogueDefault>;
 #endif
 
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue>;
+  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<Shape<int, int, int, int>,
+      CollectiveMainloop, CollectiveEpilogue>;
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
   ExampleRunner<Gemm, cache_clear> runner;
 
-  runner.template run<wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k>(
-      M, K, N, L, hw_info);
+  runner.template run<wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k>(M, K, N, L, hw_info);
 }
 
 int main() {
