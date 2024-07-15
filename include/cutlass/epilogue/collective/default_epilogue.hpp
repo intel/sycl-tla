@@ -186,6 +186,39 @@ public:
     class ProblemShapeMNKL,
     class BlockShapeMNK,
     class BlockCoordMNKL,
+    class FrgEngine, class FrgLayout>
+  CUTLASS_HOST_DEVICE void
+  operator()(
+    ProblemShapeMNKL problem_shape_mnkl,
+    BlockShapeMNK blk_shape_MNK,
+    BlockCoordMNKL blk_coord_mnkl,
+    cute::Tensor<FrgEngine, FrgLayout> & accumulators){
+    auto M = get<0>(problem_shape_mnkl);
+    auto N = get<1>(problem_shape_mnkl);
+    auto L = get<3>(problem_shape_mnkl);
+
+    auto [m_coord, n_coord, k_coord, l_coord] = blk_coord_mnkl;
+    if (epilogue_op.is_source_needed()) {
+      auto source = make_fragment_like(accumulators);
+      auto gmem_tiled_copy_c =
+        make_xe_2d_copy<XE_2D_U32x8x16x1x1_LD_N>(make_tensor(
+            params.ptr_C, make_shape(M, N, L), params.dC));
+
+      Tensor tCi = gmem_tiled_copy_c.get_pvc_tensor(
+          make_coord(m_coord, n_coord, l_coord),
+          make_shape(size<1>(accumulators), size<2>(accumulators), L),
+          make_stride(size<0>(blk_shape_MNK), size<1>(blk_shape_MNK)));
+      copy(gmem_tiled_copy_c, tCi(_, _, _, l_coord), source);  
+      epilogue_op(accumulators, source);
+    } else {
+      epilogue_op(accumulators);
+    } 
+  }
+
+  template<
+    class ProblemShapeMNKL,
+    class BlockShapeMNK,
+    class BlockCoordMNKL,
     class FrgEngine, class FrgLayout,
     class TiledMma,
     class ResidueMNK
