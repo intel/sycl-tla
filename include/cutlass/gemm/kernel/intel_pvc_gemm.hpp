@@ -119,6 +119,12 @@ public:
 
   static constexpr int VecC = CollectiveMainloop::VecC;
 
+  // Kernel level shared memory storage
+  struct SharedStorage {
+    using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;
+    EpilogueTensorStorage epilogue;
+  };
+
   // Device side arguments
   struct Arguments {
     GemmUniversalMode mode{};
@@ -197,7 +203,7 @@ public:
   CUTLASS_DEVICE
   void operator()(Params const& params, char* smem_buf) {
 
-    (void)smem_buf;
+    SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(smem_buf);
 
     // Preconditions
     CUTE_STATIC_ASSERT(is_static<TileShape>::value);
@@ -231,6 +237,7 @@ public:
         BlockIdxX() * CollectiveMainloop::wg_tile_n +
         (get_sub_group_id() % sg_per_wg_n) * CollectiveMainloop::sg_tile_n;
     const int l_coord = BlockIdxZ();
+    const auto tile_coord = make_coord(m_coord, n_coord, _, l_coord);
 
     Tensor tAi = params.mainloop.gmem_tiled_copy_a.get_pvc_tensor(
         make_coord(m_coord, 0, l_coord), make_shape(_1{}, K, _1{}),

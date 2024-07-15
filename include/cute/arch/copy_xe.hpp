@@ -346,7 +346,7 @@ struct XE_2D_U16x16x16x1x1_V
 struct XE_2D_U32x8x16x1x1_ST_N
 {
   template <class T>
-  CUTE_HOST_DEVICE static void copy(void *baseoffset, int width, int height,
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width, int height,
                                     int pitch, intel::coord_t coord, const T *src) {
       static_assert(sizeof(T) == 4, "Expected T to have size 4");
       __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
