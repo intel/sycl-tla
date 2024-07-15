@@ -35,10 +35,16 @@
 #include <cute/util/sycl_vec.hpp>
 
 #ifdef __SYCL_DEVICE_ONLY__ 
+#ifdef SYCL_INTEL_TARGET
 #define SYCL_DEVICE_OCL(x) SYCL_EXTERNAL x
 #else 
-#define SYCL_DEVICE_OCL(x) inline x { assert(false); }
+#define SYCL_DEVICE_OCL(x)  \
+  inline x { CUTE_INVALID_CONTROL_PATH("Trying to use IGC built-in on non-Intel hardware"); }
 #endif
+#else
+#define SYCL_DEVICE_OCL(x)  \
+  inline x { CUTE_INVALID_CONTROL_PATH("Trying to use device built-in on host."); }
+#endif 
 
 SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::float8 acc));
 SYCL_DEVICE_OCL(float  intel_sub_group_bf16_bf16_matrix_mad_k16(short a, cute::intel::int8 b, float acc));
@@ -62,11 +68,7 @@ struct XE_8x16x16_BF16BF16F32F32_NN
       intel::int8   const& b,
       intel::float8 const& c)
   {
-#if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
-#else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_BF16BF16F32F32_NN on non-PVC hardware");
-#endif
   }
 };
 //float  intel_sub_group_bf16_bf16_matrix_mad_k16(short  a, int8 b, float  acc)
@@ -83,11 +85,7 @@ struct XE_1x16x16_BF16BF16F32F32_NN
       intel::int8  const& b,
       float const& c)
   {
-#if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
-#else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_BF16BF16F32F32_NN on non-PVC hardware");
-#endif
   }
 };
 } //namespace cute
