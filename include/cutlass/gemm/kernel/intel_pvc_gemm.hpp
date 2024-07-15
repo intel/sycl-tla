@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice,
- *this list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ * list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
@@ -18,24 +18,23 @@
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- *ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- *LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- *CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- *SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- *CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- *POSSIBILITY OF SUCH DAMAGE.
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
 #pragma once
 
 #include "cutlass/cutlass.h"
-#include "cutlass/gemm/collective/collective_builder.hpp"
-#include "cutlass/gemm/dispatch_policy.hpp"
-#include "cutlass/gemm/gemm.h"
 #include "cutlass/kernel_hardware_info.hpp"
+#include "cutlass/gemm/gemm.h"
+#include "cutlass/gemm/dispatch_policy.hpp"
+#include "cutlass/gemm/collective/collective_builder.hpp"
 
 #include "cute/tensor.hpp"
 
@@ -43,13 +42,19 @@ namespace cutlass::gemm::kernel {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-template <class ProblemShape_, class CollectiveMainloop_,
-          class CollectiveEpilogue_, class TileScheduler_>
+template <
+  class ProblemShape_,
+  class CollectiveMainloop_,
+  class CollectiveEpilogue_,
+  class TileScheduler_
+>
 class GemmUniversal<
-    ProblemShape_, CollectiveMainloop_, CollectiveEpilogue_, TileScheduler_,
-    cute::enable_if_t<cute::is_base_of_v<
-        KernelSinglestage,
-        typename CollectiveMainloop_::DispatchPolicy::Schedule>>> {
+  ProblemShape_,
+  CollectiveMainloop_,
+  CollectiveEpilogue_,
+  TileScheduler_,
+  cute::enable_if_t<cute::is_base_of_v<KernelSinglestage, typename CollectiveMainloop_::DispatchPolicy::Schedule>>>
+{
 public:
   //
   // Type Aliases
@@ -57,7 +62,7 @@ public:
   using ProblemShape = ProblemShape_;
 
   static_assert(rank(ProblemShape{}) == 3 or rank(ProblemShape{}) == 4,
-                "ProblemShape{} should be <M,N,K> or <M,N,K,L>");
+    "ProblemShape{} should be <M,N,K> or <M,N,K,L>");
 
   // Mainloop derived types
   using CollectiveMainloop = CollectiveMainloop_;
@@ -73,9 +78,8 @@ public:
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
 
-  static_assert(cute::is_void_v<TileScheduler_> or
-                    cute::is_same_v<TileScheduler_, PersistentScheduler>,
-                "Intel PVC does not support specializing the tile scheduler.");
+  static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler>,
+    "Intel PVC does not support specializing the tile scheduler.");
   using TileSchedulerTag = TileScheduler_;
   using TileScheduler = typename detail::TileSchedulerSelector<
       TileScheduler_, ArchTag, TileShape,
@@ -85,15 +89,13 @@ public:
   // Epilogue derived types
   using CollectiveEpilogue = CollectiveEpilogue_;
   using ElementC = typename CollectiveEpilogue::ElementC;
-  using StrideC = typename CollectiveEpilogue::StrideC;
+  using StrideC  = typename CollectiveEpilogue::StrideC;
   using ElementD = typename CollectiveEpilogue::ElementD;
-  using StrideD = typename CollectiveEpilogue::StrideD;
+  using StrideD  = typename CollectiveEpilogue::StrideD;
   using EpilogueArguments = typename CollectiveEpilogue::Arguments;
   using EpilogueParams = typename CollectiveEpilogue::Params;
-  static_assert(
-      cute::is_same_v<ElementAccumulator,
-                      typename CollectiveEpilogue::ElementAccumulator>,
-      "Mainloop and epilogue do not agree on accumulator value type.");
+  static_assert(cute::is_same_v<ElementAccumulator, typename CollectiveEpilogue::ElementAccumulator>,
+    "Mainloop and epilogue do not agree on accumulator value type.");
 
   // MSVC requires the cast to fix a warning-as-error.
   static constexpr int SharedStorageSize = 0;
@@ -139,31 +141,35 @@ public:
   // Methods
   //
 
-  // Convert to underlying arguments. In this case, a simple copy for the
-  // aliased type.
-  static Params to_underlying_arguments(Arguments const &args,
-                                        void *workspace) {
-    (void)workspace;
-    return {args.mode, args.problem_shape,
-            CollectiveMainloop::to_underlying_arguments(
-                args.problem_shape, args.mainloop, workspace),
-            CollectiveEpilogue::to_underlying_arguments(
-                args.problem_shape, args.epilogue, workspace)};
+  // Convert to underlying arguments. In this case, a simple copy for the aliased type.
+  static
+  Params
+  to_underlying_arguments(Arguments const& args, void* workspace) {
+    (void) workspace;
+    return {
+      args.mode,
+      args.problem_shape,
+      CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
+      CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace)
+    };
   }
 
-  static bool can_implement(Arguments const &args) {
-    bool mode_implementable =
-        args.mode == GemmUniversalMode::kGemm or
-        (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
+  static bool
+  can_implement(Arguments const& args) {
+    bool mode_implementable = args.mode == GemmUniversalMode::kGemm or
+          (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
     return mode_implementable && TileScheduler::can_implement(args.scheduler);
   }
 
-  static int get_workspace_size(Arguments const &args) { return 0; }
+  static int
+  get_workspace_size(Arguments const& args) {
+    return 0;
+  }
 
-  static cutlass::Status
-  initialize_workspace(Arguments const &args, void *workspace = nullptr,
-                       cudaStream_t stream = nullptr,
-                       CudaHostAdapter *cuda_adapter = nullptr) {
+  static
+  cutlass::Status
+  initialize_workspace(Arguments const& args, void* workspace = nullptr, cudaStream_t stream = nullptr, 
+    CudaHostAdapter* cuda_adapter = nullptr) {
     return Status::kSuccess;
   }
 
@@ -172,28 +178,24 @@ public:
     auto N = get<1>(params.problem_shape);
     auto L = get<3>(params.problem_shape);
 
-    int const sg_m =
-        cute::ceil_div(M,
-                       CollectiveMainloop::wg_tile_m); // sub_groups required to
-                                                       // process A fragments
-    int const sg_n =
-        cute::ceil_div(N,
-                       CollectiveMainloop::wg_tile_n); // sub_groups required to
-                                                       // process B fragments
+    int const sg_m = cute::ceil_div(M,
+        CollectiveMainloop::wg_tile_m); // sub_groups required to
+                                        // process A fragments
+    int const sg_n = cute::ceil_div(N,
+        CollectiveMainloop::wg_tile_n); // sub_groups required to
+                                        // process B fragments
 
     return dim3(sg_n, sg_m, L);
   }
 
   static dim3 get_block_shape() {
-    return dim3(cute::ceil_div(CollectiveMainloop::wg_tile_n,
-                               CollectiveMainloop::sg_tile_n / SubgroupSize),
-                cute::ceil_div(CollectiveMainloop::wg_tile_m,
-                               CollectiveMainloop::sg_tile_m),
-                1);
+    return dim3(
+        cute::ceil_div(CollectiveMainloop::wg_tile_n, CollectiveMainloop::sg_tile_n / SubgroupSize),
+        cute::ceil_div(CollectiveMainloop::wg_tile_m, CollectiveMainloop::sg_tile_m), 1);
   }
 
   CUTLASS_DEVICE
-  void operator()(Params const &params, char *smem_buf) {
+  void operator()(Params const& params, char* smem_buf) {
 
     SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(smem_buf);
 
@@ -201,8 +203,7 @@ public:
     CUTE_STATIC_ASSERT(is_static<TileShape>::value);
 
     // Separate out problem shape for convenience
-    // Optionally append 1s until problem shape is rank-4 in case its is only
-    // rank-3 (MNK)
+    // Optionally append 1s until problem shape is rank-4 in case its is only rank-3 (MNK)
     auto problem_shape_MNKL = append<4>(params.problem_shape, Int<1>{});
     auto M = get<0>(problem_shape_MNKL);
     auto N = get<1>(problem_shape_MNKL);
@@ -210,21 +211,12 @@ public:
     auto L = get<3>(problem_shape_MNKL);
 
     // Preconditions
-    static_assert(cute::rank(StrideA{}) == 3,
-                  "StrideA must be rank-3: [M, K, L]. If batch mode is not "
-                  "needed, set L stride to Int<0>.");
-    static_assert(cute::rank(StrideB{}) == 3,
-                  "StrideB must be rank-3: [N, K, L]. If batch mode is not "
-                  "needed, set L stride to Int<0>.");
-    static_assert(cute::rank(StrideC{}) == 3,
-                  "StrideC must be rank-3: [M, N, L]. If batch mode is not "
-                  "needed, set L stride to Int<0>.");
-    static_assert(cute::rank(StrideD{}) == 3,
-                  "StrideD must be rank-3: [M, N, L]. If batch mode is not "
-                  "needed, set L stride to Int<0>.");
+    static_assert(cute::rank(StrideA{}) == 3, "StrideA must be rank-3: [M, K, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(StrideB{}) == 3, "StrideB must be rank-3: [N, K, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(StrideC{}) == 3, "StrideC must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(StrideD{}) == 3, "StrideD must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
 
-    // Get the appropriate blocks for this sub_group -- potential for sub_group
-    // locality
+    // Get the appropriate blocks for this sub_group -- potential for sub_group locality
     int thread_idx = int(ThreadIdxX());
     int thread_idy = int(ThreadIdxY());
 
@@ -255,20 +247,15 @@ public:
         make_stride(_1{}, Int<version * DpasN>{}));
 
     // Compute tile residues for predication
-    auto m_max_coord =
-        M - get<0>(subgroup_shape) * m_coord; // M - SUB_M * m_coord
-    auto n_max_coord =
-        N - get<1>(subgroup_shape) * n_coord; // N - SUB_N * n_coord
-    auto k_residue =
-        K - get<2>(subgroup_shape) *
-                (K / get<2>(subgroup_shape)); // K - SUB_K * k_coord_max
+    auto m_max_coord = M - get<0>(subgroup_shape) * m_coord;                             // M - SUB_M * m_coord
+    auto n_max_coord = N - get<1>(subgroup_shape) * n_coord;                             // N - SUB_N * n_coord
+    auto k_residue   = K - get<2>(subgroup_shape) * (K / get<2>(subgroup_shape));        // K - SUB_K * k_coord_max
     auto residue_mnk = make_tuple(m_max_coord, n_max_coord, k_residue);
 
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
     TiledMma tiled_mma;
 
-    Tensor accumulators = make_tensor<ElementAccumulator>(
-        Shape<Int<VecC>, Int<FragsM>, Int<FragsN>>{});
+    Tensor accumulators = make_tensor<ElementAccumulator>(Shape<Int<VecC>, Int<FragsM>, Int<FragsN>>{});
     clear(accumulators);
 
     int k_tile_count = cute::ceil_div(K, CollectiveMainloop::sg_tile_k);
