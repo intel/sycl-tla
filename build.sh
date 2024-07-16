@@ -2,8 +2,8 @@ script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cp ${script_dir}/tools/clang-format/clang-format.hook ${script_dir}/.git/hooks/pre-commit
 chmod +x ${script_dir}/.git/hooks/pre-commit
 
-# https://github.com/intel/llvm/releases/tag/nightly-2024-05-16
-sycl_compiler_path=/opt/cutlass/compiler/0516/
+# https://github.com/intel/llvm/releases/tag/nightly-2024-07-03
+sycl_compiler_path=/opt/cutlass/compiler/0703/
 
 # https://ubit-gfx.intel.com/build/19168301/artifacts
 gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-25012/extract/
@@ -16,10 +16,10 @@ output=intel_gpu_pvc
 unset epilogue
 
 # epilogue relu
-#epilogue+=" -DEPILOGUE_RELU "
+# epilogue+=" -DEPILOGUE_RELU "
 
 # epilogue softmax
-#epilogue+=" -DEPILOGUE_SOFTMAX "
+# epilogue+=" -DEPILOGUE_SOFTMAX "
 
 export ZE_AFFINITY_MASK=0
 export CPATH=$sycl_compiler_path:$sycl_compiler_path/include/:$sycl_compiler_path/include/sycl/

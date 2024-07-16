@@ -197,8 +197,6 @@ public:
   CUTLASS_DEVICE
   void operator()(Params const& params, char* smem_buf) {
 
-    SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(smem_buf);
-
     // Preconditions
     CUTE_STATIC_ASSERT(is_static<TileShape>::value);
 
