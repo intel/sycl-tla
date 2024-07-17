@@ -95,18 +95,15 @@ __global__ void
 
   size_t idx = ThreadIdxX() + BlockDimX() * BlockIdxX();
 
-  //for (; idx < capacity; idx += GridDimX() * BlockDimX()) {
-  if (idx < capacity ){
+  for (; idx < capacity; idx += GridDimX() * BlockDimX()) {
     Element a = cutlass::ReferenceFactory<Element>::get(ptr_A, idx);
     Element b = cutlass::ReferenceFactory<Element>::get(ptr_B, idx);
 
     if (!relatively_equal(a, b, epsilon, nonzero_floor)) {
       *equal = 0;
-      //printf("error, idx at: %lu, capacity: %lu, a: %f, b: %f\n", idx, capacity, a, b);
       return;
     }
   }
- // }
 }
 
 } // namespace kernel
