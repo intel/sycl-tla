@@ -83,7 +83,7 @@ struct CollectiveMma<
   // Type Aliases
   //
   using DispatchPolicy = MainloopIntelPVCUnpredicated;
-  using TileShape = TileShape_;
+  using WorkgroupTileShape = TileShape_;
   using ElementA = ElementA_;
   using StrideA = StrideA_;
   using ElementB = ElementB_;
@@ -100,12 +100,16 @@ struct CollectiveMma<
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
 
-  TileShape tile_shape;
-  static constexpr auto wg_tile_m = decltype(get<0>(tile_shape))::value;
-  static constexpr auto wg_tile_n = decltype(get<1>(tile_shape))::value;
-  static constexpr auto sg_tile_m = decltype(get<2>(tile_shape))::value;
-  static constexpr auto sg_tile_n = decltype(get<3>(tile_shape))::value;
-  static constexpr auto sg_tile_k = decltype(get<4>(tile_shape))::value;
+  using MmaAtomShape = typename TiledMma::AtomShape_MNK;
+  using SubgroupTileShape = decltype(tile_shape(TiledMma()));
+  WorkgroupTileShape wg_tile_shape;
+  SubgroupTileShape sg_tile_shape;
+
+  static constexpr auto wg_tile_m = decltype(get<0>(wg_tile_shape))::value;
+  static constexpr auto wg_tile_n = decltype(get<1>(wg_tile_shape))::value;
+  static constexpr auto sg_tile_m = decltype(get<0>(sg_tile_shape))::value;
+  static constexpr auto sg_tile_n = decltype(get<1>(sg_tile_shape))::value;
+  static constexpr auto sg_tile_k = decltype(get<2>(sg_tile_shape))::value;
   static constexpr auto sg_per_wg_m = wg_tile_m / sg_tile_m;
   static constexpr auto sg_per_wg_n = wg_tile_n / sg_tile_n;
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
@@ -119,8 +123,9 @@ struct CollectiveMma<
   static constexpr int DpasK = get<1>(
       shape(typename TiledMma::LayoutA_TV{})); // cols per dpas operation per
                                                // sub_group for Matrix A
+  static constexpr uint32_t MaxThreadsPerBlock =
+          cute::size(WorkgroupTileShape{}) / cute::size(SubgroupTileShape{})* SubgroupSize;
 
-  static constexpr uint32_t MaxThreadsPerBlock = DpasM * DpasN;
   static constexpr uint32_t MinBlocksPerMultiprocessor = 1;
 
   static constexpr int FragsM = sg_tile_m / DpasM; // A frags per sub_group
@@ -204,13 +209,13 @@ struct CollectiveMma<
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
     // Tensor to hold input data
-    Tensor tAr = make_tensor<typename TiledMma::ValTypeA>(
-        Shape<Int<sg_tile_m * FragsK>, Int<1>>{});
-
     constexpr int version =
         is_same_v<GmemTiledCopyB, XE_2D_U16x16x16x2x1_V> ? 1 : 2;
-    Tensor tBr = make_tensor<typename TiledMma::ValTypeB>(
-        Shape<Int<sg_tile_k * version>, Int<FragsN / version>>{});
+
+    Tensor tAr = make_tensor<typename TiledMma::ValTypeA>(Shape<Int<sg_tile_m * FragsK>, Int<1>>{});
+    Tensor tBr = make_tensor<typename TiledMma::ValTypeB>(Shape<Int<sg_tile_k * version>, Int<FragsN / version>>{});
+
+
 
     Tensor tAr_view = make_tensor(static_cast<decltype(tAr) &&>(tAr).data(),
                             Shape<Int<VecA>, Int<FragsM>, Int<FragsK>>{});

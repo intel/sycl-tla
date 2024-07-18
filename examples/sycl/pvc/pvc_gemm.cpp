@@ -33,6 +33,8 @@
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/gemm/collective/collective_mma.hpp"
+#include "cutlass/epilogue/collective/intel_pvc_epilogue.hpp"
+#include "cutlass/epilogue/fusion/intel_pvc_callbacks.hpp"
 #include "cutlass/gemm/device/gemm.h"
 #include "cutlass/gemm/device/gemm_universal.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
@@ -51,12 +53,7 @@
 template <typename T> static void fill_matrix(std::vector<T>& M) {
   std::random_device dev;
   std::mt19937 rng(dev());
-  std::uniform_real_distribution<float> dist((T)0.0,
-#ifdef EPILOGUE_SOFTMAX
-      (T)0.1);
-#else
-      (T)1.0);
-#endif
+  std::uniform_real_distribution<float> dist((T)0.0, (T)1.0);
   std::generate(std::begin(M), std::end(M), [&] { return static_cast<T>(dist(rng)); });
 }
 
@@ -209,66 +206,6 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
         M * N  // batch_stride_D
     );
 
-#ifdef EPILOGUE_SOFTMAX
-
-    ElementOutput* ptr = (ElementOutput*)std::malloc(M * N * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr, block_ref_D.get(), M * N * L * sizeof(ElementOutput));
-    syclcompat::wait();
-    for (int l = 0; l < L; l++) {
-      for (int i = 0; i < M; i++) {
-        auto row_idx = l * M * N + i * N;
-        auto row_max = ptr[l * M * N + i * N];
-
-        ElementOutput exp_sum = (ElementOutput)0;
-        for (int j = 0; j < N; j++) {
-          auto idx = row_idx + j;
-          row_max = max(row_max, ptr[idx]);
-        }
-        for (int j = 0; j < N; j++) {
-          auto idx = row_idx + j;
-          ptr[idx] = ptr[idx] - row_max;
-          ptr[idx] = exp(ptr[idx]);
-          exp_sum += ptr[idx];
-        }
-
-        for (int j = 0; j < N; j++) {
-          auto idx = row_idx + j;
-          ptr[idx] = ptr[idx] / exp_sum;
-        }
-      }
-    }
-
-    syclcompat::memcpy(block_ref_D.get(), ptr, M * N * L * sizeof(ElementOutput));
-    syclcompat::wait();
-
-    std::free(ptr);
-
-#endif
-
-#if 0
-    ElementOutput *ptr =
-        (ElementOutput *)std::malloc(M * N * L * sizeof(ElementOutput));
-
-    syclcompat::memcpy(ptr, block_D.get(), M * N * L * sizeof(ElementOutput));
-
-    ElementOutput *ptr_refD =
-        (ElementOutput *)std::malloc((size_t)M * N * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr_refD, block_ref_D.get(),
-                       (size_t)M * N * L * sizeof(ElementOutput));
-    syclcompat::wait();
-    for (int b = 0; b < L; b++) {
-      for (int i = 0; i < M; i++) {
-        for (int j = 0; j < N; j++) {
-          int idx = b * M * N + i * N + j;
-          if (abs(ptr[idx] - ptr_refD[idx]) / ptr_refD[idx] >= 0.01f)
-            std::cout << "(" << b << ", " << i << ", " << j << "): " << "host: " << ptr[idx]
-                        << "   and device: " << ptr_refD[idx] << std::endl;
-        }
-      }
-    }
-    std::free(ptr);
-    std::free(ptr_refD);
-#endif
     syclcompat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are relatively
@@ -378,22 +315,10 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
     // Verify that the result is correct
     bool passed = verify(problem_size, 1, 0.f);
     if (!passed) {
-      printf("PVC GEMM%s%s Example %s, MKNL(%d, %d,%d,%d), Config(%d, "
-             "%d,%d,%d,%d)  !!!!!!!!!!!!!\n\n",
-#ifdef EPILOGUE_RELU
-          "-relu"
-#else
-          ""
-#endif
-          ,
-#ifdef EPILOGUE_SOFTMAX
-          "-softmax"
-#else
-          ""
-#endif
-          ,
-          (passed ? "Passed" : "Failed"), M, K, N, L, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n,
-          sg_tile_k);
+      printf("PVC GEMM Example %s, MKNL(%d, %d,%d,%d), Config(%d, "
+             "%d,%d,%d,%d)  !!!!!!!!!!!!!\n\n", 
+             (passed ? "Passed" : "Failed"), M, K, N, L, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n,
+             sg_tile_k);
       // return;
     }
 
@@ -444,22 +369,14 @@ template <class Gemm, bool cache_clear> struct ExampleRunner {
                        M * N * sizeof(ElementOutput)) *
                    1e-9;
 
-      printf("Collective pvc gemm%s, MKNL(%d, %d, %d, %d), Config(%d, %d, "
+      printf("Collective pvc gemm, MKNL(%d, %d, %d, %d), Config(%d, %d, "
              "%d, %d, %d):\n     max:     (%6.4f)ms, (%4.2f)TFlop/s, "
              "(%4.2f)GB/s\n     min:     (%6.4f)ms, (%4.2f)TFlop/s, "
              "(%4.2f)GB/s\n     average: (%6.4f)ms, (%4.2f)TFlop/s, "
              "(%4.2f)GB/s\n\n\n",
-#if defined(EPILOGUE_RELU)
-          "-relu"
-#elif defined(EPILOGUE_SOFTMAX)
-          "softmax"
-#else
-          ""
-#endif
-          ,
-          M, K, N, L, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k, best * 1000,
-          tflops / best, hbm / best, worst * 1000, tflops / worst, hbm / worst, average * 1000,
-          tflops / average, hbm / average);
+             M, K, N, L, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k, best * 1000,
+             tflops / best, hbm / best, worst * 1000, tflops / worst, hbm / worst, average * 1000,
+             tflops / average, hbm / average);
     }
   }
 };
@@ -506,6 +423,14 @@ void collective_gemm(int M, int K, int N, int L = 1) {
 
   bool passed;
 
+  // The code section below describes datatype for input, output matrices and computation between
+  // elements in input matrices.
+  using ElementAccumulator = float;                   // <- data type of accumulator
+  using ElementComputeEpilogue = float;  // <- data type of epilogue operations
+  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
+  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
+  using ElementOutput = float;                        // <- data type of elements in output matrix D
+
   // The code section below describes datatype for input, output matrices and
   // computation between elements in input matrices.
 
@@ -517,54 +442,43 @@ void collective_gemm(int M, int K, int N, int L = 1) {
   using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
   using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
 
-  using TileShape =
-      Shape<Int<wg_tile_m>, Int<wg_tile_n>, Int<sg_tile_m>, Int<sg_tile_n>, Int<sg_tile_k>>;
+  using TileShape = Shape<_256, _256, _32>;
+  // using TileShape =
+  //     Shape<Int<wg_tile_m>, Int<wg_tile_n>, Int<sg_tile_m>, Int<sg_tile_n>, Int<sg_tile_k>>;
 
-  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_BF16BF16F32F32_NN>, Layout<Shape<_8, _16, _1>>>;
+  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_BF16BF16F32F32_NN>,
+          Layout<Shape<_1,_1,_1>>,
+          Tile<_32,_64,_32>>; 
+          
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCUnpredicated;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
-  using DispatchPolicy = cutlass::gemm::MainloopIntelPVCUnpredicated;
-#ifdef EPILOGUE_RELU
-  using EpilogueOp =
-      cutlass::epilogue::thread::LinearCombinationRelu<ElementOutput, // <- data type of output
-                                                                      // matrix
-          128 / cutlass::sizeof_bits<ElementOutput>::value,           // <- the number of
-          // elements per vectorized
-          // memory access. For a byte, it's 16
-          // elements. This becomes the vector width of
-          // math instructions in the epilogue too
-          ElementAccumulator,      // <- data type of accumulator
-          ElementComputeEpilogue>; // <- data type for alpha/beta in linear
+  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
+          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
-#else
-  using EpilogueOp =
-      cutlass::epilogue::thread::LinearCombination<ElementOutput, // <- data type of output matrix
-          128 / cutlass::sizeof_bits<ElementOutput>::value,       // <- the number of
-          // elements per vectorized
-          // memory access. For a byte, it's 16
-          // elements. This becomes the vector width of
-          // math instructions in the epilogue too
-          ElementAccumulator,      // <- data type of accumulator
-          ElementComputeEpilogue>; // <- data type for alpha/beta in linear
-  // combination function
-#endif
+  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
+          decltype(tile_shape(TiledMma()))>;
+
   // Mainloop
-  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<DispatchPolicy, TileShape,
+  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<GEMMDispatchPolicy, TileShape,
       ElementInputA, cutlass::gemm::TagToStrideA_t<LayoutA>, ElementInputB,
       cutlass::gemm::TagToStrideB_t<LayoutB>, TiledMma, GmemTiledCopyA, void, void,
       cute::identity,                            // A
       GmemTiledCopyB, void, void, cute::identity // B
       >;
 
-#ifdef EPILOGUE_SOFTMAX
-  using CollectiveEpilogue = cutlass::epilogue::collective::PvcEpilogueTensorSoftmax<
-      cutlass::gemm::TagToStrideC_t<LayoutC>, cutlass::gemm::TagToStrideC_t<LayoutD>, EpilogueOp,
-      cutlass::gemm::EpilogueDefault, CollectiveMainloop::sg_tile_m,
-      CollectiveMainloop::sg_tile_n / CollectiveMainloop::SubgroupSize>;
-#else
-  using CollectiveEpilogue =
-      cutlass::epilogue::collective::DefaultEpilogue<cutlass::gemm::TagToStrideC_t<LayoutC>,
-          cutlass::gemm::TagToStrideC_t<LayoutD>, EpilogueOp, cutlass::gemm::EpilogueDefault>;
-#endif
+  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
+        EpilogueDispatchPolicy,
+        TileShape,
+        ElementAccumulator,
+        cutlass::gemm::TagToStrideC_t<LayoutC>,
+        ElementOutput,
+        cutlass::gemm::TagToStrideC_t<LayoutD>,
+        FusionCallBacks,
+        XE_2D_U32x8x16x1x1_LD_N,
+        void, void,
+        XE_2D_U32x8x16x1x1_ST_N,
+        void, void>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<Shape<int, int, int, int>,
       CollectiveMainloop, CollectiveEpilogue>;
@@ -578,7 +492,6 @@ void collective_gemm(int M, int K, int N, int L = 1) {
 
 int main() {
   auto gmem_size = syclcompat::get_current_device().get_global_mem_size();
-#if !defined(EPILOGUE_RELU) && !defined(EPILOGUE_SOFTMAX)
   collective_gemm<256, 256, 32, 64, 32>(4096, 4096, 4096);
   collective_gemm<256, 256, 32, 64, 32>(8192, 8192, 8192);
   collective_gemm<256, 256, 32, 64, 32>(1, 5120, 13824);
@@ -605,20 +518,4 @@ int main() {
   collective_gemm<256, 256, 32, 64, 32>(32768, 128, 4096, 4);
   collective_gemm<256, 256, 32, 64, 32>(32768, 4096, 128, 4);
   collective_gemm<256, 256, 32, 64, 32>(4096, 4096, 128, 32);
-#endif
-
-#if defined(EPILOGUE_SOFTMAX)
-  // gemm + softmax
-  collective_gemm<64, 1024, 16, 64, 32>(1024, 64, 1024, 4);
-  collective_gemm<128, 512, 16, 64, 32>(512, 64, 512, 32);
-  collective_gemm<64, 1024, 16, 64, 32>(1024, 64, 1024, 16);
-  collective_gemm<32, 2048, 16, 64, 16>(2048, 64, 2048, 8);
-  collective_gemm<16, 4096, 16, 64, 32>(4096, 64, 4096, 4);
-  collective_gemm<8, 8192, 8, 128, 16>(8192, 64, 8192, 2);
-#endif
-
-#if defined(EPILOGUE_RELU)
-  // gemm + relu
-  collective_gemm<256, 256, 32, 64, 32>(4096, 4096, 4096);
-#endif
 }

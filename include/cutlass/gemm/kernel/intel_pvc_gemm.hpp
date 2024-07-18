@@ -66,7 +66,8 @@ public:
 
   // Mainloop derived types
   using CollectiveMainloop = CollectiveMainloop_;
-  using TileShape = typename CollectiveMainloop::TileShape;
+  using TileShape = typename CollectiveMainloop::WorkgroupTileShape;
+  using WorkgroupTileShape = TileShape;
   using TiledMma = typename CollectiveMainloop::TiledMma;
   using ArchTag = typename CollectiveMainloop::ArchTag;
   using ElementA = typename CollectiveMainloop::ElementA;
@@ -82,7 +83,7 @@ public:
     "Intel PVC does not support specializing the tile scheduler.");
   using TileSchedulerTag = TileScheduler_;
   using TileScheduler = typename detail::TileSchedulerSelector<
-      TileScheduler_, ArchTag, TileShape,
+      TileScheduler_, ArchTag, WorkgroupTileShape,
       cute::Shape<cute::Int<1>, cute::Int<1>, cute::Int<1>>>::Scheduler;
   using TileSchedulerArguments = typename TileScheduler::Arguments;
 
@@ -118,6 +119,12 @@ public:
   static constexpr int FragsN = CollectiveMainloop::FragsN;
 
   static constexpr int VecC = CollectiveMainloop::VecC;
+
+  // Kernel level shared memory storage
+  struct SharedStorage {
+    using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;
+    EpilogueTensorStorage epilogue;
+  };
 
   // Device side arguments
   struct Arguments {
@@ -196,7 +203,7 @@ public:
 
   CUTLASS_DEVICE
   void operator()(Params const& params, char* smem_buf) {
-
+    SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(smem_buf);
     // Preconditions
     CUTE_STATIC_ASSERT(is_static<TileShape>::value);
 
@@ -229,6 +236,7 @@ public:
         BlockIdxX() * CollectiveMainloop::wg_tile_n +
         (get_sub_group_id() % sg_per_wg_n) * CollectiveMainloop::sg_tile_n;
     const int l_coord = BlockIdxZ();
+    const auto tile_coord = make_coord(m_coord, n_coord, _, l_coord);
 
     Tensor tAi = params.mainloop.gmem_tiled_copy_a.get_pvc_tensor(
         make_coord(m_coord, 0, l_coord), make_shape(_1{}, K, _1{}),
@@ -261,34 +269,39 @@ public:
 
     // Perform the collective scoped MMA
     CollectiveMainloop collective_mma;
-    collective_mma(accumulators, tAi(_, _, _, 0), tBi(_, _, _, 0), accumulators,
-                   k_tile_iter, k_tile_count, residue_mnk, thread_idx, smem_buf,
-                   params.mainloop);
+    collective_mma(
+      accumulators,
+      tAi(_,_,_,0),
+      tBi(_,_,_,0),
+      accumulators,
+      k_tile_iter, k_tile_count,
+      residue_mnk,
+      thread_idx,
+      smem_buf,
+      params.mainloop
+    );
+    CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
+    epilogue(
+      problem_shape_MNKL,
+      subgroup_shape,
+      tile_coord,
+      accumulators,
+      tiled_mma,
+      residue_mnk,
+      thread_idx,
+      smem_buf
+    );
 
-#ifdef EPILOGUE_RELU
-    // relu
-    CollectiveEpilogue collective_relu(params.epilogue);
-    collective_relu(problem_shape_MNKL,
-                    make_shape(Int<DpasM>{}, Int<DpasN>{}, Int<DpasK>{}),
-                    make_coord(m_coord, n_coord, 0, l_coord), accumulators);
-#endif
+    // auto gmem_tiled_copy_c =
+    //     make_xe_2d_copy<XE_2D_U32x8x16x1x1_ST_N>(make_tensor(
+    //         params.epilogue.ptr_D, make_shape(M, N, L), params.epilogue.dD));
 
-#ifdef EPILOGUE_SOFTMAX
-    // softmax
-    CollectiveEpilogue collective_softmax;
-    collective_softmax(accumulators);
-#endif
+    // Tensor tCi = gmem_tiled_copy_c.get_pvc_tensor(
+    //     make_coord(m_coord, n_coord, l_coord),
+    //     make_shape(Int<FragsM>{}, Int<FragsN>{}, _1{}),
+    //     make_stride(Int<DpasM>{}, Int<DpasN>{}));
 
-    auto gmem_tiled_copy_c =
-        make_xe_2d_copy<XE_2D_U32x8x16x1x1_ST_N>(make_tensor(
-            params.epilogue.ptr_D, make_shape(M, N, L), params.epilogue.dD));
-
-    Tensor tCi = gmem_tiled_copy_c.get_pvc_tensor(
-        make_coord(m_coord, n_coord, l_coord),
-        make_shape(Int<FragsM>{}, Int<FragsN>{}, _1{}),
-        make_stride(Int<DpasM>{}, Int<DpasN>{}));
-
-    copy(gmem_tiled_copy_c, accumulators, tCi(_, _, _, 0));
+    // copy(gmem_tiled_copy_c, accumulators, tCi(_, _, _, 0));
   }
 };
 
