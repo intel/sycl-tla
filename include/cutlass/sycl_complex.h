@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+* Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,76 +30,34 @@
  **************************************************************************************************/
 #pragma once
 
-#include <cute/config.hpp>
+#include "cutlass/detail/helper_macros.hpp"
 
-#include <cute/arch/util.hpp>
-#include <cute/numeric/numeric_types.hpp>
+namespace cutlass {
+// Add these definitions in the cutlass namespace, so they do not clash with the ones in cuda
+using cuFloatComplex = std::complex<float>;
+using cuDoubleComplex = std::complex<double>;
 
-namespace cute
-{
-
-//
-// Direct Copy for any type
-//
-
-template <class S, class D = S>
-struct UniversalCopy
-{
-  using SRegisters = S[1];
-  using DRegisters = D[1];
-
-  template <class S_, class D_>
-  CUTE_HOST_DEVICE static constexpr void
-  copy(S_ const& src,
-       D_      & dst)
-  {
-    dst = static_cast<D>(static_cast<S>(src));
-  }
-
-  // Accept mutable temporaries
-  template <class S_, class D_>
-  CUTE_HOST_DEVICE static constexpr void
-  copy(S_ const& src,
-       D_     && dst)
-  {
-    UniversalCopy<S,D>::copy(src, dst);
-  }
-};
-
-//
-// Placeholder for the copy algorithm's stronger auto-vectorizing behavior
-//   that assumes alignment of dynamic layouts up to MaxVecBits
-//
-
-template <int MaxVecBits = 128>
-struct AutoVectorizingCopyWithAssumedAlignment
-     : UniversalCopy<uint_bit_t<MaxVecBits>>
-{
-  static_assert(MaxVecBits == 8 || MaxVecBits == 16 || MaxVecBits == 32 || MaxVecBits == 64 || MaxVecBits == 128,
-                "Expected MaxVecBits to be 8 or 16 or 32 or 64 or 128 for alignment and performance.");
-};
-
-//
-// Placeholder for the copy algorithm's default auto-vectorizing behavior
-//   that does not assume alignment of dynamic layouts
-//
-
-using AutoVectorizingCopy = AutoVectorizingCopyWithAssumedAlignment<8>;
-
-// Alias
-using DefaultCopy = AutoVectorizingCopy;
-
-
-//
-// Global memory prefetch into L2
-//
-
-CUTE_HOST_DEVICE static void
-prefetch(void const* gmem_ptr)
-{
-#if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
-  asm volatile("prefetch.global.L2 [%0];\n" : : "l"(gmem_ptr) : "memory");
-#endif
+CUTLASS_HOST_DEVICE
+float cuCrealf(cuFloatComplex x) {
+  return x.real();
 }
 
-} // end namespace cute
+CUTLASS_HOST_DEVICE
+float cuCimagf(cuFloatComplex x) {
+  return x.imag();
+}
+
+CUTLASS_HOST_DEVICE double cuCreal(cuDoubleComplex x) {
+  return x.real();
+}
+
+CUTLASS_HOST_DEVICE double cuCimag(cuDoubleComplex x) {
+  return x.imag();
+}
+
+CUTLASS_HOST_DEVICE
+cuFloatComplex make_cuFloatComplex(float r, float i) {
+  return cuFloatComplex{r, i};
+}
+
+} // cutlass namespace

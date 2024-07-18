@@ -42,7 +42,6 @@
 
 #include <cute/pointer.hpp>
 #include <cute/layout.hpp>
-#include <iomanip>
 
 namespace cute
 {
