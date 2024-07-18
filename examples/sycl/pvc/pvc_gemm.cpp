@@ -491,7 +491,6 @@ void collective_gemm(int M, int K, int N, int L = 1) {
 }
 
 int main() {
-  auto gmem_size = syclcompat::get_current_device().get_global_mem_size();
   collective_gemm<256, 256, 32, 64, 32>(4096, 4096, 4096);
   collective_gemm<256, 256, 32, 64, 32>(8192, 8192, 8192);
   collective_gemm<256, 256, 32, 64, 32>(1, 5120, 13824);

@@ -51,7 +51,7 @@ struct XE_2D_LD_Unpack {
         int W = size<1>(traits.tensor)
                 * sizeof(typename Copy_Traits::CopyInternalType);
         auto [y, x, z] = src.data().coord_;
-        CopyOp::copy(traits.tensor.data() + z * W * H / sizeof(typename Copy_Traits::CopyInternalType), W, H, W, intel::coord_t {x, y},
+        CopyOp::copy(traits.tensor.data() + z, W, H, W, intel::coord_t {x, y},
                 &*dst.data());
     }
 
@@ -99,7 +99,7 @@ struct XE_2D_PF_Unpack {
         int H = size<0>(traits.tensor);
         int W = size<1>(traits.tensor) * sizeof(T);
         auto [y, x, z] = src.data().coord_;
-        CopyOp::template copy<T>(traits.tensor.data() + z * W * H / sizeof(T), W, H, W,
+        CopyOp::template copy<T>(traits.tensor.data() + z, W, H, W,
                 intel::coord_t {static_cast<int>(x), static_cast<int>(y)});
     }
 };
@@ -416,7 +416,7 @@ struct XE_2D_ST_Unpack {
                 * sizeof(typename Copy_Traits::CopyInternalType);
         auto [y, x, z] = dst.data().coord_;
         
-        CopyOp::copy(traits.tensor.data() + z * W * H / sizeof(typename Copy_Traits::CopyInternalType), W, H, W, intel::coord_t {x, y},
+        CopyOp::copy(traits.tensor.data() + z, W, H, W, intel::coord_t {x, y},
                 &*src.data());
     }
 

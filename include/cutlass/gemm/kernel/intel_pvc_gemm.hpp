@@ -239,7 +239,7 @@ public:
     const auto tile_coord = make_coord(m_coord, n_coord, _, l_coord);
 
     Tensor tAi = params.mainloop.gmem_tiled_copy_a.get_pvc_tensor(
-        make_coord(m_coord, 0, l_coord), make_shape(_1{}, K, _1{}),
+        make_coord(m_coord, 0, 0), make_shape(_1{}, K, L),
         make_stride(Int<FragsM * DpasM>{}, _1{}));
     constexpr int version =
         is_same_v<typename CollectiveMainloop::GmemTiledCopyB,
@@ -248,8 +248,8 @@ public:
             : 2;
 
     Tensor tBi = params.mainloop.gmem_tiled_copy_b.get_pvc_tensor(
-        make_coord(0, n_coord, l_coord),
-        make_shape(K, Int<FragsN / version>{}, _1{}),
+        make_coord(0, n_coord, 0),
+        make_shape(K, Int<FragsN / version>{}, L),
         make_stride(_1{}, Int<version * DpasN>{}));
 
     // Compute tile residues for predication
@@ -271,8 +271,8 @@ public:
     CollectiveMainloop collective_mma;
     collective_mma(
       accumulators,
-      tAi(_,_,_,0),
-      tBi(_,_,_,0),
+      tAi(_,_,_,l_coord),
+      tBi(_,_,_,l_coord),
       accumulators,
       k_tile_iter, k_tile_count,
       residue_mnk,
