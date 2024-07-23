@@ -184,17 +184,6 @@ public:
     }
   }
 
-  using ElementC = ElementOutput_;
-  using ElementD = ElementOutput_;
-
-  template<class TensorType>
-  CUTLASS_HOST_DEVICE
-  void operator()(TensorType &accumulators) const {
-    for (int i = 0; i < size(accumulators); i++) {
-      accumulators(i) = accumulators(i) < 0 ? 0 : accumulators(i);
-    }
-  }
-
   template<class TensorDst, class TensorSrc>
   CUTLASS_HOST_DEVICE
   void operator()(TensorDst &accumulators,
