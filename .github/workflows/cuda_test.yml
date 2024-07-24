@@ -24,9 +24,10 @@ jobs:
         run: |
           nvidia-smi
           export CUDACXX=/usr/local/cuda/bin/nvcc
-          cmake -DCUTLASS_NVCC_ARCHS="90a"
+          cmake -G Ninja -DCUTLASS_NVCC_ARCHS="90a"
+          cmake --build .
 
       - name: Unit test
         shell: bash
         run: |
-          make test_unit -j
+          cmake --build . --target test_unit -j
