@@ -184,15 +184,6 @@ public:
     }
   }
 
-  template<class TensorDst, class TensorSrc>
-  CUTLASS_HOST_DEVICE
-  void operator()(TensorDst &accumulators,
-                  TensorSrc const &source) const {
-    for (int i = 0; i < size(accumulators); i++) {
-      accumulators(i) = accumulators(i) < 0 ? source(i) : accumulators(i) + source(i);
-    }
-  }
-
   /// Computes linear scaling: D = alpha * accumulator + beta * source
   CUTLASS_HOST_DEVICE
   FragmentOutput operator()(

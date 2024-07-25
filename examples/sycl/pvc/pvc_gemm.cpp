@@ -79,8 +79,10 @@ using namespace cute;
 
 // Command line options parsing
 struct Options {
+
   bool help;
   bool error;
+
   int m, n, k, l, iterations;
   float alpha, beta;
 
@@ -99,6 +101,7 @@ struct Options {
       help = true;
       return;
     }
+
     cmd.get_cmd_line_argument("m", m, 4096);
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
@@ -137,22 +140,28 @@ struct ExampleRunner {
   using StrideB = typename Gemm::GemmKernel::StrideB;
   using StrideC = typename Gemm::GemmKernel::StrideC;
   using StrideD = typename Gemm::GemmKernel::StrideD;
+
   using LayoutA = typename Gemm::LayoutA;
   using LayoutB = typename Gemm::LayoutB;
   using LayoutC = typename Gemm::LayoutC;
   using LayoutD = typename Gemm::LayoutD;
+
   using ElementA = typename Gemm::ElementA;
   using ElementB = typename Gemm::ElementB;
   using ElementAcc = typename Gemm::ElementAccumulator;
+
   using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
+
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
+
   //
   // Data members
   //
+
   /// Initialization
   StrideA stride_A;
   StrideB stride_B;
@@ -161,7 +170,6 @@ struct ExampleRunner {
 
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
-  cutlass::DeviceAllocation<ElementB> block_B_vnni;
   cutlass::DeviceAllocation<ElementC> block_C;
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
@@ -222,7 +230,6 @@ struct ExampleRunner {
 
     block_A.reset(M * K * L);
     block_B.reset(K * N * L);
-    block_B_vnni.reset(K * N * L);
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
@@ -238,11 +245,9 @@ struct ExampleRunner {
     fill_matrix(a);
     fill_matrix(b);
     fill_matrix(c);
-    vnni_matrix(b_vnni.data(), b.data(), L, K, N, 2);
 
     syclcompat::memcpy(block_A.get(), a.data(), a.size() * sizeof(ElementA));
     syclcompat::memcpy(block_B.get(), b.data(), b.size() * sizeof(ElementB));
-    syclcompat::memcpy(block_B_vnni.get(), b_vnni.data(), b.size() * sizeof(ElementB));
     syclcompat::memcpy(block_C.get(), c.data(), c.size() * sizeof(ElementC));
     syclcompat::memcpy(block_D.get(), d.data(), d.size() * sizeof(ElementC));
   }
@@ -256,13 +261,14 @@ struct ExampleRunner {
       sycl::property::queue::in_order(),
       sycl::property::queue::enable_profiling()
     };
+
     auto q = sycl::queue(syclcompat::get_default_context(), syclcompat::get_current_device(), prop);
     syclcompat::set_default_queue(q);
 
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A.get(), stride_A, block_B_vnni.get(), stride_B},
+      {block_A.get(), stride_A, block_B.get(), stride_B},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
       hw_info
     };
@@ -287,9 +293,8 @@ struct ExampleRunner {
 
     if (passed && options.iterations > 0) {
       GPU_Clock timer;
-      // timer.start();
+      timer.start();
       for (int i = 0; i < options.iterations; ++i) {
-        if (i == 10) timer.start();
         gemm_op.run();
       }
       syclcompat::wait();
@@ -355,11 +360,12 @@ int main(int argc, const char** argv)
   using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
   using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
 
+  // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
   using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_BF16BF16F32F32_NN>,
           Layout<Shape<_1,_1,_1>>,
-          Tile<_32,_64,_32>>; 
+          Tile<_32,_64,_32>>; // Subgroup level-tile
 
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCUnpredicated;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;

@@ -68,12 +68,12 @@ public:
   using CollectiveMainloop = CollectiveMainloop_;
   using TileShape = typename CollectiveMainloop::WorkgroupTileShape;
   using WorkgroupTileShape = TileShape;
-  using TiledMma = typename CollectiveMainloop::TiledMma;
-  using ArchTag = typename CollectiveMainloop::ArchTag;
-  using ElementA = typename CollectiveMainloop::ElementA;
-  using StrideA = typename CollectiveMainloop::StrideA;
-  using ElementB = typename CollectiveMainloop::ElementB;
-  using StrideB = typename CollectiveMainloop::StrideB;
+  using TiledMma  = typename CollectiveMainloop::TiledMma;
+  using ArchTag   = typename CollectiveMainloop::ArchTag;
+  using ElementA  = typename CollectiveMainloop::ElementA;
+  using StrideA   = typename CollectiveMainloop::StrideA;
+  using ElementB  = typename CollectiveMainloop::ElementB;
+  using StrideB   = typename CollectiveMainloop::StrideB;
   using DispatchPolicy = typename CollectiveMainloop::DispatchPolicy;
   using ElementAccumulator = typename CollectiveMainloop::ElementAccumulator;
   using MainloopArguments = typename CollectiveMainloop::Arguments;
@@ -83,8 +83,8 @@ public:
     "Intel PVC does not support specializing the tile scheduler.");
   using TileSchedulerTag = TileScheduler_;
   using TileScheduler = typename detail::TileSchedulerSelector<
-      TileScheduler_, ArchTag, WorkgroupTileShape,
-      cute::Shape<cute::Int<1>, cute::Int<1>, cute::Int<1>>>::Scheduler;
+    TileScheduler_, ArchTag, WorkgroupTileShape,
+    cute::Shape<cute::Int<1>, cute::Int<1>, cute::Int<1>>>::Scheduler;
   using TileSchedulerArguments = typename TileScheduler::Arguments;
 
   // Epilogue derived types
@@ -101,19 +101,13 @@ public:
   // MSVC requires the cast to fix a warning-as-error.
   static constexpr int SharedStorageSize = 0;
 
-  static constexpr int SubgroupSize =
-      CollectiveMainloop::SubgroupSize; // sub_group size
-  static constexpr uint32_t MaxThreadsPerBlock =
-      CollectiveMainloop::MaxThreadsPerBlock;
-  static constexpr uint32_t MinBlocksPerMultiprocessor =
-      CollectiveMainloop::MinBlocksPerMultiprocessor;
+  static constexpr int SubgroupSize = CollectiveMainloop::SubgroupSize; // sub_group size
+  static constexpr uint32_t MaxThreadsPerBlock = CollectiveMainloop::MaxThreadsPerBlock;
+  using MmaAtomShape = typename CollectiveMainloop::MmaAtomShape;
+  using SubgroupTileShape = typename CollectiveMainloop::SubgroupTileShape;
 
   static constexpr int num_sg =
       MaxThreadsPerBlock / SubgroupSize; // number of sub_groups per work group
-
-  static constexpr int DpasM = CollectiveMainloop::DpasM;
-  static constexpr int DpasN = CollectiveMainloop::DpasN;
-  static constexpr int DpasK = CollectiveMainloop::DpasK;
 
   static constexpr int FragsM = CollectiveMainloop::FragsM;
   static constexpr int FragsN = CollectiveMainloop::FragsN;
@@ -180,32 +174,30 @@ public:
     return Status::kSuccess;
   }
 
-  static dim3 get_grid_shape(Params const &params) {
-    auto M = get<0>(params.problem_shape);
-    auto N = get<1>(params.problem_shape);
-    auto L = get<3>(params.problem_shape);
-
-    int const sg_m = cute::ceil_div(M,
-        CollectiveMainloop::wg_tile_m); // sub_groups required to
-                                        // process A fragments
-    int const sg_n = cute::ceil_div(N,
-        CollectiveMainloop::wg_tile_n); // sub_groups required to
-                                        // process B fragments
-
-    return dim3(sg_n, sg_m, L);
+  static dim3
+  get_grid_shape(Params const& params) {
+    int batch_count = 1;
+    if constexpr (cute::rank(ProblemShape{}) == 4) {
+      batch_count = cute::size<3>(params.problem_shape);
+    }
+    return dim3(
+            cute::size(cute::ceil_div(cute::shape<0>(params.problem_shape), cute::shape<0>(WorkgroupTileShape{}))),
+            cute::size(cute::ceil_div(cute::shape<1>(params.problem_shape), cute::shape<1>(WorkgroupTileShape{}))),
+            batch_count
+    );
   }
 
-  static dim3 get_block_shape() {
-    return dim3(
-        cute::ceil_div(CollectiveMainloop::wg_tile_n, CollectiveMainloop::sg_tile_n / SubgroupSize),
-        cute::ceil_div(CollectiveMainloop::wg_tile_m, CollectiveMainloop::sg_tile_m), 1);
+  static dim3
+  get_block_shape() {
+    return dim3(MaxThreadsPerBlock, 1, 1);
   }
 
   CUTLASS_DEVICE
-  void operator()(Params const& params, char* smem_buf) {
+  void
+  operator()(Params const& params, char* smem_buf) {
     SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(smem_buf);
     // Preconditions
-    CUTE_STATIC_ASSERT(is_static<TileShape>::value);
+    CUTE_STATIC_ASSERT(is_static<WorkgroupTileShape>::value);
 
     // Separate out problem shape for convenience
     // Optionally append 1s until problem shape is rank-4 in case its is only rank-3 (MNK)
@@ -223,24 +215,17 @@ public:
 
     // Get the appropriate blocks for this sub_group -- potential for sub_group locality
     int thread_idx = int(ThreadIdxX());
-    int thread_idy = int(ThreadIdxY());
-
-    static constexpr auto sg_per_wg_n =
-        CollectiveMainloop::wg_tile_n / CollectiveMainloop::sg_tile_n;
-
-    auto subgroup_shape = TileShape{}; // (SUB_M,SUB_N,SUB_K)
-    const int m_coord =
-        BlockIdxY() * CollectiveMainloop::wg_tile_m +
-        (get_sub_group_id() / sg_per_wg_n) * CollectiveMainloop::sg_tile_m;
-    const int n_coord =
-        BlockIdxX() * CollectiveMainloop::wg_tile_n +
-        (get_sub_group_id() % sg_per_wg_n) * CollectiveMainloop::sg_tile_n;
+    constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
+    constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
+    const int m_coord = BlockIdxX() * get<0>(workgroup_shape) + get_sub_group_id() / CollectiveMainloop::sg_per_wg_n * get<0>(subgroup_shape);
+    const int n_coord = BlockIdxY() * get<1>(workgroup_shape) + get_sub_group_id() % CollectiveMainloop::sg_per_wg_n * get<1>(subgroup_shape);
     const int l_coord = BlockIdxZ();
     const auto tile_coord = make_coord(m_coord, n_coord, _, l_coord);
 
     Tensor tAi = params.mainloop.gmem_tiled_copy_a.get_pvc_tensor(
-        make_coord(m_coord, 0, 0), make_shape(_1{}, K, L),
-        make_stride(Int<FragsM * DpasM>{}, _1{}));
+            make_coord(m_coord, 0, 0),
+            make_shape(_1{}, K, L),
+            make_stride(Int<FragsM>{} * get<0>(MmaAtomShape()),_1{}));
     constexpr int version =
         is_same_v<typename CollectiveMainloop::GmemTiledCopyB,
                   XE_2D_U16x16x16x2x1_V>
@@ -248,9 +233,9 @@ public:
             : 2;
 
     Tensor tBi = params.mainloop.gmem_tiled_copy_b.get_pvc_tensor(
-        make_coord(0, n_coord, 0),
-        make_shape(K, Int<FragsN / version>{}, L),
-        make_stride(_1{}, Int<version * DpasN>{}));
+            make_coord(0, n_coord, 0),
+            make_shape(K, Int<FragsN / version>{}, L),
+            make_stride(_1{}, Int<version * get<1>(MmaAtomShape())>{}));
 
     // Compute tile residues for predication
     auto m_max_coord = M - get<0>(subgroup_shape) * m_coord;                             // M - SUB_M * m_coord
@@ -264,8 +249,8 @@ public:
     Tensor accumulators = make_tensor<ElementAccumulator>(Shape<Int<VecC>, Int<FragsM>, Int<FragsN>>{});
     clear(accumulators);
 
-    int k_tile_count = cute::ceil_div(K, CollectiveMainloop::sg_tile_k);
-    auto k_tile_iter = cute::make_coord_iterator(make_shape(k_tile_count));
+    auto k_tile_iter  = cute::make_coord_iterator(make_shape(K / get<2>(subgroup_shape)));
+    int  k_tile_count = K / get<2>(subgroup_shape);
 
     // Perform the collective scoped MMA
     CollectiveMainloop collective_mma;
@@ -280,6 +265,7 @@ public:
       smem_buf,
       params.mainloop
     );
+
     CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
     epilogue(
       problem_shape_MNKL,
@@ -291,17 +277,6 @@ public:
       thread_idx,
       smem_buf
     );
-
-    // auto gmem_tiled_copy_c =
-    //     make_xe_2d_copy<XE_2D_U32x8x16x1x1_ST_N>(make_tensor(
-    //         params.epilogue.ptr_D, make_shape(M, N, L), params.epilogue.dD));
-
-    // Tensor tCi = gmem_tiled_copy_c.get_pvc_tensor(
-    //     make_coord(m_coord, n_coord, l_coord),
-    //     make_shape(Int<FragsM>{}, Int<FragsN>{}, _1{}),
-    //     make_stride(Int<DpasM>{}, Int<DpasN>{}));
-
-    // copy(gmem_tiled_copy_c, accumulators, tCi(_, _, _, 0));
   }
 };
 

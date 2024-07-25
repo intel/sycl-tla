@@ -34,11 +34,13 @@
 #include "cutlass/gemm/dispatch_policy.hpp"
 
 #include "cute/algorithm/functional.hpp"
+#include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
 #include "cute/atom/mma_atom.hpp"
 #include "cute/tensor_predicate.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
+
 namespace cutlass::gemm::collective {
 using namespace cute;
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -100,44 +102,27 @@ struct CollectiveMma<
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
 
-  using MmaAtomShape = typename TiledMma::AtomShape_MNK;
-  using SubgroupTileShape = decltype(tile_shape(TiledMma()));
-  WorkgroupTileShape wg_tile_shape;
-  SubgroupTileShape sg_tile_shape;
-
-  static constexpr auto wg_tile_m = decltype(get<0>(wg_tile_shape))::value;
-  static constexpr auto wg_tile_n = decltype(get<1>(wg_tile_shape))::value;
-  static constexpr auto sg_tile_m = decltype(get<0>(sg_tile_shape))::value;
-  static constexpr auto sg_tile_n = decltype(get<1>(sg_tile_shape))::value;
-  static constexpr auto sg_tile_k = decltype(get<2>(sg_tile_shape))::value;
-  static constexpr auto sg_per_wg_m = wg_tile_m / sg_tile_m;
-  static constexpr auto sg_per_wg_n = wg_tile_n / sg_tile_n;
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
-  static constexpr int DpasM = get<0>(
-      shape(typename TiledMma::LayoutA_TV{})); // rows per dpas operation per
-                                               // sub_group for Matrix A
-  static constexpr int DpasN = get<1>(
-      shape(typename TiledMma::LayoutB_TV{})); // cols per dpas operation per
-                                               // sub_group for Matrix B
-  static constexpr int DpasK = get<1>(
-      shape(typename TiledMma::LayoutA_TV{})); // cols per dpas operation per
-                                               // sub_group for Matrix A
+  using MmaAtomShape = typename TiledMma::AtomShape_MNK;
+  using SubgroupTileShape = decltype(tile_shape(TiledMma()));
+
+  static constexpr auto sg_per_wg_m = get<0>(WorkgroupTileShape{}) / get<0>(SubgroupTileShape{});
+  static constexpr auto sg_per_wg_n = get<1>(WorkgroupTileShape{}) / get<1>(SubgroupTileShape{});
+
   static constexpr uint32_t MaxThreadsPerBlock =
-          cute::size(WorkgroupTileShape{}) / cute::size(SubgroupTileShape{})* SubgroupSize;
+          cute::size(WorkgroupTileShape{}) / cute::size(SubgroupTileShape{}) * SubgroupSize;
 
-  static constexpr uint32_t MinBlocksPerMultiprocessor = 1;
+  static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(MmaAtomShape()); // A frags per sub_group
+  static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(MmaAtomShape()); // B frags per sub_group
+  static constexpr int FragsK = get<2>(SubgroupTileShape{}) / get<2>(MmaAtomShape());
 
-  static constexpr int FragsM = sg_tile_m / DpasM; // A frags per sub_group
-  static constexpr int FragsN = sg_tile_n / DpasN; // B frags per sub_group
-  static constexpr int FragsK = sg_tile_k / DpasK;
-
-  // Calculate the vector width based on the amount of registers
-  // required per work item by dividing the total fragment size by
+  // Calculate the vector width based on the amount of registers 
+  // required per work item by dividing the total fragment size by 
   // the sub_group size.
-  static constexpr int VecC = (DpasN * DpasM) / SubgroupSize;
-  static constexpr int VecA = (DpasM * DpasK) / SubgroupSize;
-  static constexpr int VecB = (DpasN * DpasK) / SubgroupSize;
+  static constexpr int VecC = (get<1>(MmaAtomShape()) * get<0>(MmaAtomShape())) / SubgroupSize;
+  static constexpr int VecA = (get<0>(MmaAtomShape()) * get<2>(MmaAtomShape())) / SubgroupSize;
+  static constexpr int VecB = (get<1>(MmaAtomShape()) * get<2>(MmaAtomShape())) / SubgroupSize;
 
   // Host side kernel arguments
   struct Arguments {
@@ -171,7 +156,7 @@ struct CollectiveMma<
     auto [M,N,K,L] = problem_shape_MNKL;
 
     Tensor tensorA = make_tensor(args.ptr_A, make_layout(make_shape(M,K,L), args.dA));
-    Tensor tensorB = make_tensor(args.ptr_B, make_layout(make_shape(K,N,L), args.dB));
+    Tensor tensorB = make_tensor(args.ptr_B, make_layout(make_shape(N,K,L), args.dB));
 
     typename Params::XE_Copy_A copyA = make_xe_2d_copy<GmemTiledCopyA>(tensorA);
     typename Params::XE_Copy_B copyB = make_xe_2d_copy<GmemTiledCopyB>(tensorB);
@@ -212,10 +197,8 @@ struct CollectiveMma<
     constexpr int version =
         is_same_v<GmemTiledCopyB, XE_2D_U16x16x16x2x1_V> ? 1 : 2;
 
-    Tensor tAr = make_tensor<typename TiledMma::ValTypeA>(Shape<Int<sg_tile_m * FragsK>, Int<1>>{});
-    Tensor tBr = make_tensor<typename TiledMma::ValTypeB>(Shape<Int<sg_tile_k * version>, Int<FragsN / version>>{});
-
-
+    Tensor tAr = make_tensor<typename TiledMma::ValTypeA>(Shape<Int<get<0>(SubgroupTileShape{}) * FragsK>, Int<1>>{});
+    Tensor tBr = make_tensor<typename TiledMma::ValTypeB>(Shape<Int<get<2>(SubgroupTileShape{}) * version>, Int<FragsN / version>>{});
 
     Tensor tAr_view = make_tensor(static_cast<decltype(tAr) &&>(tAr).data(),
                             Shape<Int<VecA>, Int<FragsM>, Int<FragsK>>{});
@@ -237,14 +220,14 @@ struct CollectiveMma<
     Tensor tAi = make_tensor(
         make_inttuple_iter(
             *gA.data() +
-            make_coord((get_sub_group_id() % sg_per_wg_n % 4) * DpasM, 0)),
+            make_coord((get_sub_group_id() % sg_per_wg_n % 4) * get<0>(MmaAtomShape{}), 0)),
         make_layout(make_shape(_1{}, _1{}, K),
                     make_stride(_1{}, E<0>{}, E<1>{})));
     Tensor tBi = make_tensor(
         make_inttuple_iter(
             *gB.data() +
-            make_coord((get_sub_group_id() / sg_per_wg_n / 2 % 2) * DpasK,
-                       (get_sub_group_id() / sg_per_wg_n % 2 * 2) * DpasN)),
+            make_coord((get_sub_group_id() / sg_per_wg_n / 2 % 2) * get<2>(MmaAtomShape{}),
+                       (get_sub_group_id() / sg_per_wg_n % 2 * 2) * get<1>(MmaAtomShape{}))),
         make_layout(make_shape(_1{}, K, _1{}),
                     make_stride(_1{}, E<0>{}, E<1>{})));
     //
@@ -254,18 +237,18 @@ struct CollectiveMma<
     for (int i = 0; i < 3; i++) {
       prefetch(mainloop.gmem_tiled_copy_a, tAi(_, _, prefetch_k));
       prefetch(mainloop.gmem_tiled_copy_b, tBi(_, prefetch_k, _));
-      prefetch_k += sg_tile_k;
+      prefetch_k += get<2>(SubgroupTileShape{});
     }
 
     for (int k_tile = 0, k = 0; k_tile < k_tile_count;
-         ++k_tile, k += DpasK * FragsK) {
+         ++k_tile, k += get<2>(SubgroupTileShape{})) {
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.gmem_tiled_copy_a, gA(_, _, k), tAr);
       copy(mainloop.gmem_tiled_copy_b, gB(_, k, _), tBr);
 
       prefetch(mainloop.gmem_tiled_copy_a, tAi(_, _, prefetch_k));
       prefetch(mainloop.gmem_tiled_copy_b, tBi(_, prefetch_k, _));
-      prefetch_k += sg_tile_k;
+      prefetch_k += get<2>(SubgroupTileShape{});
 
       for (int kl = 0; kl < FragsK; kl++) {
         cute::gemm(tiled_mma, accum, tAr_view(_, _, kl), tBr_view(_, kl, _),
