@@ -106,9 +106,6 @@ public:
   using MmaAtomShape = typename CollectiveMainloop::MmaAtomShape;
   using SubgroupTileShape = typename CollectiveMainloop::SubgroupTileShape;
 
-  static constexpr int num_sg =
-      MaxThreadsPerBlock / SubgroupSize; // number of sub_groups per work group
-
   static constexpr int FragsM = CollectiveMainloop::FragsM;
   static constexpr int FragsN = CollectiveMainloop::FragsN;
 
@@ -215,10 +212,11 @@ public:
 
     // Get the appropriate blocks for this sub_group -- potential for sub_group locality
     int thread_idx = int(ThreadIdxX());
+    int sub_group_id = thread_idx / SubgroupSize;
     constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
-    const int m_coord = BlockIdxX() * get<0>(workgroup_shape) + get_sub_group_id() / CollectiveMainloop::sg_per_wg_n * get<0>(subgroup_shape);
-    const int n_coord = BlockIdxY() * get<1>(workgroup_shape) + get_sub_group_id() % CollectiveMainloop::sg_per_wg_n * get<1>(subgroup_shape);
+    const int m_coord = BlockIdxX() * get<0>(workgroup_shape) + sub_group_id / CollectiveMainloop::sg_per_wg_n * get<0>(subgroup_shape);
+    const int n_coord = BlockIdxY() * get<1>(workgroup_shape) + sub_group_id % CollectiveMainloop::sg_per_wg_n * get<1>(subgroup_shape);
     const int l_coord = BlockIdxZ();
     const auto tile_coord = make_coord(m_coord, n_coord, _, l_coord);
 

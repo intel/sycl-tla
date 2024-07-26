@@ -36,7 +36,6 @@
 #include "cute/algorithm/functional.hpp"
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
-#include "cute/atom/mma_atom.hpp"
 #include "cute/tensor_predicate.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -44,10 +43,6 @@
 namespace cutlass::gemm::collective {
 using namespace cute;
 /////////////////////////////////////////////////////////////////////////////////////////////////
-#define get_sub_group_id()                                                     \
-  (sycl::ext::oneapi::experimental::this_nd_item<3>()                          \
-       .get_sub_group()                                                        \
-       .get_group_id()[0])
 
 template <
   class TileShape_,
@@ -210,6 +205,7 @@ struct CollectiveMma<
 
     int K = size<1>(mainloop.gmem_tiled_copy_a.tensor);
 
+    auto sub_group_id = ThreadIdxX() / SubgroupSize;
     /* Cooperative prefetch
        Divice the thread space to sg_per_wg_m x sg_per_wg_n, all the threads in one row/col use the same tile A/B. 
        Each thread loads sizeof(tile A or B) / numof(sg_per_wg_n or sg_per_wg_m). 
@@ -220,14 +216,14 @@ struct CollectiveMma<
     Tensor tAi = make_tensor(
         make_inttuple_iter(
             *gA.data() +
-            make_coord((get_sub_group_id() % sg_per_wg_n % 4) * get<0>(MmaAtomShape{}), 0)),
+            make_coord((sub_group_id % sg_per_wg_n % 4) * get<0>(MmaAtomShape{}), 0)),
         make_layout(make_shape(_1{}, _1{}, K),
                     make_stride(_1{}, E<0>{}, E<1>{})));
     Tensor tBi = make_tensor(
         make_inttuple_iter(
             *gB.data() +
-            make_coord((get_sub_group_id() / sg_per_wg_n / 2 % 2) * get<2>(MmaAtomShape{}),
-                       (get_sub_group_id() / sg_per_wg_n % 2 * 2) * get<1>(MmaAtomShape{}))),
+            make_coord((sub_group_id / sg_per_wg_n / 2 % 2) * get<2>(MmaAtomShape{}),
+                       (sub_group_id / sg_per_wg_n % 2 * 2) * get<1>(MmaAtomShape{}))),
         make_layout(make_shape(_1{}, K, _1{}),
                     make_stride(_1{}, E<0>{}, E<1>{})));
     //

@@ -363,7 +363,7 @@ int main(int argc, const char** argv)
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
-  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_BF16BF16F32F32_NN>,
+  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
           Layout<Shape<_1,_1,_1>>,
           Tile<_32,_64,_32>>; // Subgroup level-tile
 

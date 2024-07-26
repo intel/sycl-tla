@@ -183,7 +183,7 @@ public:
       threshold_ = reinterpret_cast<ElementCompute const &>(allones);
     }
   }
-
+  
   /// Computes linear scaling: D = alpha * accumulator + beta * source
   CUTLASS_HOST_DEVICE
   FragmentOutput operator()(
