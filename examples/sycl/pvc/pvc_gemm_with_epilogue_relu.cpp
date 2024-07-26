@@ -90,7 +90,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(4096), n(4096), k(4096), l(1), iterations(10),
+    m(4096), n(4096), k(4096), l(1), iterations(100),
     alpha(1.f), beta(0.f)
   { }
 
@@ -109,7 +109,7 @@ struct Options {
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
-    cmd.get_cmd_line_argument("iterations", iterations, 10);
+    cmd.get_cmd_line_argument("iterations", iterations, 100);
   }
 
   /// Prints the usage statement.
@@ -297,7 +297,7 @@ struct ExampleRunner {
       }
       syclcompat::wait();
 
-      float cute_time = timer.seconds();
+      float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
       printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
