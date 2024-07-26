@@ -89,7 +89,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(4096), n(4096), k(4096), l(1), iterations(100),
+    m(4096), n(4096), k(4096), l(1), iterations(20),
     alpha(1.f), beta(0.f)
   { }
 
@@ -108,7 +108,7 @@ struct Options {
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
-    cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("iterations", iterations, 20);
   }
 
   /// Prints the usage statement.
