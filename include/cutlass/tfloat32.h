@@ -107,7 +107,7 @@ struct alignas(4) tfloat32_t {
 //  explicit tfloat32_t(int x) {
   tfloat32_t(int x) {
     float flt = static_cast<float>(x);
-    #if defined(__CUDA_ARCH__)
+    #if defined(__CUDA_ARCH__) || defined(CUTLASS_ENABLE_SYCL)
     storage = reinterpret_cast<uint32_t const &>(flt);
     #else
     std::memcpy(&storage, &flt, sizeof(storage));
@@ -122,7 +122,7 @@ struct alignas(4) tfloat32_t {
     // of the mantissa.
     unsigned bits = (storage & ~0x1fffu);
 
-    #if defined(__CUDA_ARCH__)    
+    #if defined(__CUDA_ARCH__) || defined(CUTLASS_ENABLE_SYCL)
     return reinterpret_cast<float const &>(bits);
     #else
     float flt;

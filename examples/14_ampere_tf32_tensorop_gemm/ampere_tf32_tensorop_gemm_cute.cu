@@ -55,6 +55,10 @@
 
 */
 
+#if defined(CUTLASS_ENABLE_SYCL)
+#define SYCLCOMPAT_PROFILING_ENABLED
+#endif
+
 #include <iostream>
 
 #include "cutlass/cutlass.h"
@@ -70,8 +74,9 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/util/reference/device/tensor_fill.h"
-
+#endif
 #include "helper.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -184,9 +189,46 @@ bool initialize_block(
     scope_min = -8;
   }
 
+#if defined(CUTLASS_ENABLE_SYCL)
+  using FloatType = typename std::conditional<
+  (sizeof(Element) > 4),
+  double,
+  float>::type;
+
+  using IntType = typename std::conditional<
+    (sizeof(Element) > 4),
+    int64_t,
+    int>::type;
+
+  srand(seed);
+  Element range = static_cast<FloatType>(scope_max - scope_min);
+  Element max = static_cast<FloatType>(scope_max);
+  int int_scale = 0;
+
+  Element float_scale_up = FloatType(IntType(2) << int_scale); // scale up to clamp low order bits
+  Element float_scale_down = FloatType(1) / FloatType(IntType(2) << int_scale);
+
+  // Random values are cast to integer after scaling by a power of two to facilitate error
+  // testing
+  auto const size = block.size();
+  auto h_vector = std::vector<Element>(size);
+  for (int j = 0; j < size; ++j) {
+    FloatType rnd = rand() / double(RAND_MAX);
+    rnd = max - range * rnd;
+
+    if (int_scale >= 0) {
+      rnd = FloatType(IntType(std::llround(rnd * float_scale_up)));
+      h_vector[j] = Element(IntType(rnd * float_scale_down));
+    }
+    else {
+      h_vector[j] = Element(rnd);
+    }
+  }
+  syclcompat::memcpy<Element>(block.get(), h_vector.data(), size);
+#else
   cutlass::reference::device::BlockFillRandomUniform(
           block.get(), block.size(), seed, scope_max, scope_min, 0);
-
+#endif
   return true;
 }
 
@@ -267,12 +309,16 @@ struct ExampleRunner {
             M * N  // batch_stride_D
     );
 
+#if defined(CUTLASS_ENABLE_SYCL)
+    syclcompat::wait_and_throw();
+#else
     cudaError_t result = cudaDeviceSynchronize();
     if (result != cudaSuccess) {
       std::cerr << "Reference kernel failed. Last CUDA error: "
                 << cudaGetErrorString(result) << std::endl;
       return false;
     }
+#endif
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareEqual(block_ref_D.get(), block_D.get(), block_D.size());
@@ -367,6 +413,7 @@ int main(int argc, char const **args) {
   // in CUDA 11.0.
   //
   // CUTLASS must be compiled with CUDA 11.0 Toolkit to run these examples.
+#if !defined(CUTLASS_ENABLE_SYCL)
   if (!(__CUDACC_VER_MAJOR__ >= 11)) {
     std::cerr << "Ampere Tensor Core operations must be compiled with CUDA 11.0 Toolkit or later." << std::endl;
     return 0;
@@ -385,6 +432,7 @@ int main(int argc, char const **args) {
               << std::endl;
     return 0;
   }
+#endif
 
   //
   // Parse options
