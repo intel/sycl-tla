@@ -198,7 +198,8 @@ struct CollectiveMma<
     Tensor tAr_view = make_tensor(static_cast<decltype(tAr) &&>(tAr).data(),
                             Shape<Int<VecA>, Int<FragsM>, Int<FragsK>>{});
     Tensor tBr_view = make_tensor(static_cast<decltype(tBr) &&>(tBr).data(),
-                                  Shape<Int<VecB>, Int<FragsK>, Int<FragsN>>{});
+                                  Shape<Int<VecB>, Int<FragsN>, Int<FragsK>>{},
+                                  Stride<_1, Int<VecB * FragsK>, Int<VecB>>{});
 
     // Instantiate the M MA object
     TiledMma tiled_mma;
@@ -222,9 +223,9 @@ struct CollectiveMma<
     Tensor tBi = make_tensor(
         make_inttuple_iter(
             *gB.data() +
-            make_coord((sub_group_id / sg_per_wg_n / 2 % 2) * get<2>(MmaAtomShape{}),
-                       (sub_group_id / sg_per_wg_n % 2 * 2) * get<1>(MmaAtomShape{}))),
-        make_layout(make_shape(_1{}, K, _1{}),
+            make_coord((sub_group_id / sg_per_wg_n % 2 * 2) * get<1>(MmaAtomShape{}),
+                       (sub_group_id / sg_per_wg_n / 2 % 2) * get<2>(MmaAtomShape{}))),
+        make_layout(make_shape(_1{}, _1{}, K),
                     make_stride(_1{}, E<0>{}, E<1>{})));
     //
     // Mainloop
@@ -232,7 +233,7 @@ struct CollectiveMma<
     int prefetch_k = 0;
     for (int i = 0; i < 3; i++) {
       prefetch(mainloop.gmem_tiled_copy_a, tAi(_, _, prefetch_k));
-      prefetch(mainloop.gmem_tiled_copy_b, tBi(_, prefetch_k, _));
+      prefetch(mainloop.gmem_tiled_copy_b, tBi(_, _, prefetch_k));
       prefetch_k += get<2>(SubgroupTileShape{});
     }
 
@@ -240,16 +241,13 @@ struct CollectiveMma<
          ++k_tile, k += get<2>(SubgroupTileShape{})) {
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.gmem_tiled_copy_a, gA(_, _, k), tAr);
-      copy(mainloop.gmem_tiled_copy_b, gB(_, k, _), tBr);
+      copy(mainloop.gmem_tiled_copy_b, gB(_, _, k), tBr);
 
       prefetch(mainloop.gmem_tiled_copy_a, tAi(_, _, prefetch_k));
-      prefetch(mainloop.gmem_tiled_copy_b, tBi(_, prefetch_k, _));
+      prefetch(mainloop.gmem_tiled_copy_b, tBi(_, _, prefetch_k));
       prefetch_k += get<2>(SubgroupTileShape{});
 
-      for (int kl = 0; kl < FragsK; kl++) {
-        cute::gemm(tiled_mma, accum, tAr_view(_, _, kl), tBr_view(_, kl, _),
-                   src_accum);
-      }
+      cute::gemm(tiled_mma, accum, tAr_view, tBr_view, src_accum);
     }
   }
 };

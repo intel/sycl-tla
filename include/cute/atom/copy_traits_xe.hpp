@@ -35,7 +35,37 @@
 
 #include <cute/arch/copy_xe.hpp>
 
-namespace cute {
+namespace cute 
+{
+
+template <class IntT>
+CUTE_HOST_DEVICE constexpr      
+auto get_shape_WHD(cute::Stride<Int<1>, IntT, IntT> , cute::Shape<int,int,int> shape_MKL) {
+  return shape_MKL;
+}
+
+template <class IntT>
+CUTE_HOST_DEVICE constexpr
+auto get_shape_WHD(cute::Stride<IntT, Int<1>, IntT> , cute::Shape<int,int,int> shape_MKL) {
+  return Shape<int, int, int>(get<1>(shape_MKL), get<0>(shape_MKL), get<2>(shape_MKL));
+}
+
+template <class IntT, class TS, class SLayout>
+CUTE_HOST_DEVICE constexpr
+auto get_coordinates(cute::Stride<Int<1>, IntT, IntT> ,
+                     Tensor<ViewEngine<ArithmeticTupleIterator<TS>>, SLayout> const &src) {
+  auto [x, y, z] = src.data().coord_;
+  return make_coord(x, y, z);
+}
+
+template <class IntT, class TS, class SLayout>
+CUTE_HOST_DEVICE constexpr
+auto get_coordinates(cute::Stride<IntT, Int<1>, IntT> ,
+                     Tensor<ViewEngine<ArithmeticTupleIterator<TS>>, SLayout> const &src) {
+  auto [x, y, z] = src.data().coord_;
+  return make_coord(y, x, z);
+}
+
 template <class CopyOp, class GTensor>
 struct XE_2D_LD_Unpack {
     GTensor tensor;
@@ -47,11 +77,11 @@ struct XE_2D_LD_Unpack {
             Tensor<ViewEngine<ArithmeticTupleIterator<TS>>, SLayout> const &src,
             Tensor<TD, DLayout> &dst) {
         static_assert(is_rmem<TD>::value);
-        int H = size<0>(traits.tensor);
-        int W = size<1>(traits.tensor)
-                * sizeof(typename Copy_Traits::CopyInternalType);
-        auto [y, x, z] = src.data().coord_;
-        CopyOp::copy(traits.tensor.data() + z, W, H, W, intel::coord_t {x, y},
+        auto shape_whd = get_shape_WHD(traits.tensor.stride(), traits.tensor.shape());
+        int W = size<0>(shape_whd) * sizeof(typename Copy_Traits::CopyInternalType);
+        int H = size<1>(shape_whd);
+        auto [x, y, z] = get_coordinates(traits.tensor.stride(), src);
+        CopyOp::copy(traits.tensor.data() + z, W, H, W, intel::coord_t{x, y},
                 &*dst.data());
     }
 
@@ -96,9 +126,10 @@ struct XE_2D_PF_Unpack {
             Tensor<ViewEngine<ArithmeticTupleIterator<TS>>, SLayout> const &src,
             Tensor<TD, DLayout> &dst) {
         using T = typename Copy_Traits::CopyInternalType;
-        int H = size<0>(traits.tensor);
-        int W = size<1>(traits.tensor) * sizeof(T);
-        auto [y, x, z] = src.data().coord_;
+        auto shape_whd = get_shape_WHD(traits.tensor.stride(), traits.tensor.shape());
+        int W = size<0>(shape_whd) * sizeof(T);
+        int H = size<1>(shape_whd);
+        auto [x, y, z] = get_coordinates(traits.tensor.stride(), src);
         CopyOp::template copy<T>(traits.tensor.data() + z, W, H, W,
                 intel::coord_t {static_cast<int>(x), static_cast<int>(y)});
     }
@@ -412,12 +443,9 @@ struct XE_2D_ST_Unpack {
             Tensor<ViewEngine<ArithmeticTupleIterator<TD>>, DLayout> &dst) {
         static_assert(is_rmem<TS>::value);
         int H = size<0>(traits.tensor);
-        int W = size<1>(traits.tensor)
-                * sizeof(typename Copy_Traits::CopyInternalType);
+        int W = size<1>(traits.tensor) * sizeof(typename Copy_Traits::CopyInternalType);
         auto [y, x, z] = dst.data().coord_;
-        
-        CopyOp::copy(traits.tensor.data() + z, W, H, W, intel::coord_t {x, y},
-                &*src.data());
+        CopyOp::copy(traits.tensor.data() + z, W, H, W, intel::coord_t{x, y}, &*src.data());
     }
 
     template <class GCoord, class GShape, class GStride>
