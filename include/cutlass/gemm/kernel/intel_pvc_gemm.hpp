@@ -34,7 +34,6 @@
 #include "cutlass/kernel_hardware_info.hpp"
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
-#include "cutlass/gemm/collective/collective_builder.hpp"
 
 #include "cute/tensor.hpp"
 
