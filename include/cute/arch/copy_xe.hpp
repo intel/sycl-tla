@@ -436,4 +436,4 @@ struct XE_2D_U32x8x16x1x1_ST_N
   }
 };
 
-} // end namespace cute
+} // end namespace 

@@ -198,8 +198,8 @@ struct CollectiveMma<
     Tensor tAr_view = make_tensor(static_cast<decltype(tAr) &&>(tAr).data(),
                             Shape<Int<VecA>, Int<FragsM>, Int<FragsK>>{});
     Tensor tBr_view = make_tensor(static_cast<decltype(tBr) &&>(tBr).data(),
-                                  Shape<Int<VecB>, Int<FragsN>, Int<FragsK>>{},
-                                  Stride<_1, Int<VecB * FragsK>, Int<VecB>>{});
+                            Shape<Int<VecB>, Int<FragsN>, Int<FragsK>>{},
+                            Stride<_1, Int<VecB * FragsK>, Int<VecB>>{});
 
     // Instantiate the M MA object
     TiledMma tiled_mma;
@@ -231,8 +231,9 @@ struct CollectiveMma<
     // Mainloop
     //
     int prefetch_k = 0;
-    // Manually set the value to 3
-    // TODO: Expose to user to set distance
+
+    // Manually set the value to 1
+    // TODO: Expose to users like stages parameter
     int constexpr prefetch_distance = 3;
     for (int i = 0; i < prefetch_distance; i++) {
       prefetch(mainloop.gmem_tiled_copy_a, tAi(_, _, prefetch_k));
