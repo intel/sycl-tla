@@ -231,7 +231,10 @@ struct CollectiveMma<
     // Mainloop
     //
     int prefetch_k = 0;
-    for (int i = 0; i < 3; i++) {
+    // Manually set the value to 3
+    // TODO: Expose to user to set distance
+    int constexpr prefetch_distance = 3;
+    for (int i = 0; i < prefetch_distance; i++) {
       prefetch(mainloop.gmem_tiled_copy_a, tAi(_, _, prefetch_k));
       prefetch(mainloop.gmem_tiled_copy_b, tBi(_, _, prefetch_k));
       prefetch_k += get<2>(SubgroupTileShape{});
