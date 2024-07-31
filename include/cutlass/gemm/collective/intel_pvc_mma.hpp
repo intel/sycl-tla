@@ -232,7 +232,7 @@ struct CollectiveMma<
     //
     int prefetch_k = 0;
 
-    // Manually set the value to 1
+    // Manually set the prefetch_distance to 3
     // TODO: Expose to users like stages parameter
     int constexpr prefetch_distance = 3;
     for (int i = 0; i < prefetch_distance; i++) {
