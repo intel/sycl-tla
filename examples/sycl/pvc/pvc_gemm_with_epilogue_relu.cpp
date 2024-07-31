@@ -57,23 +57,6 @@ static void fill_matrix(std::vector<T> &vector)
   });
 }
 
-template <typename T>
-static void vnni_matrix(
-    T* dst, const T* src,
-    int batch, int numRows, int numCols, int factor)
-{
-    for (int b = 0; b < batch; b++) {
-      for (int r = 0; r < numRows / factor; r++) {
-          for (int c = 0; c < numCols; c++) {
-              for (int k = 0; k < factor; k++) {
-                  dst[((b * (numRows / factor) + r) * numCols + c) * factor + k] =
-                      src[((b * (numRows / factor) + r) * factor + k) * numCols + c];
-              }
-          }
-      }
-    }
-}
-
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
