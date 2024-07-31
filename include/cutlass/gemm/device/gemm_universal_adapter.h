@@ -60,7 +60,6 @@
 
 #if defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/util/sycl_event_manager.hpp"
-#include <syclcompat/syclcompat.hpp>
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
