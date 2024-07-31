@@ -150,7 +150,7 @@ struct Copy_Traits<XE_2D_U16x8x16x1x1_LD_N::PREFETCH, GTensor>
     using ThrID = Layout<_16>;
     // Map from (src-thr,src-val) to bit
     using SrcLayout
-            = Layout<Shape<_16, Shape<_8, _16>>, Stride<_16, Stride<_256, _1>>>;
+            = Layout<Shape<_16, Shape<_1, _16>>, Stride<_16, Stride<_16, _1>>>;
     // Map from (dst-thr,dst-val) to bit
     using DstLayout
             = Layout<Shape<_16, Shape<_8, _16>>, Stride<_16, Stride<_256, _1>>>;
@@ -172,7 +172,7 @@ struct Copy_Traits<XE_2D_U16x8x16x1x2_LD_N::PREFETCH, GTensor>
     using ThrID = Layout<_16>;
     // Map from (src-thr,src-val) to bit
     using SrcLayout
-            = Layout<Shape<_16, Shape<_8, _32>>, Stride<_32, Stride<_512, _1>>>;
+            = Layout<Shape<_16, Shape<_1, _16>>, Stride<_16, Stride<_16, _1>>>;
     // Map from (dst-thr,dst-val) to bit
     using DstLayout
             = Layout<Shape<_16, Shape<_8, _32>>, Stride<_32, Stride<_512, _1>>>;
@@ -193,8 +193,8 @@ struct Copy_Traits<XE_2D_U16x8x16x4x1_LD_N::PREFETCH, GTensor>
     // Logical thread id to thread idx
     using ThrID = Layout<_16>;
     // Map from (src-thr,src-val) to bit
-    using SrcLayout = Layout<Shape<_16, Shape<_32, _16>>,
-            Stride<_16, Stride<_256, _1>>>;
+    using SrcLayout
+            = Layout<Shape<_16, Shape<_1, _16>>, Stride<_16, Stride<_16, _1>>>;
     // Map from (dst-thr,dst-val) to bit
     using DstLayout = Layout<Shape<_16, Shape<_32, _16>>,
             Stride<_16, Stride<_256, _1>>>;
@@ -215,8 +215,8 @@ struct Copy_Traits<XE_2D_U16x8x16x4x2_LD_N::PREFETCH, GTensor>
     // Logical thread id to thread idx
     using ThrID = Layout<_16>;
     // Map from (src-thr,src-val) to bit
-    using SrcLayout = Layout<Shape<_16, Shape<_32, _32>>,
-            Stride<_32, Stride<_512, _1>>>;
+    using SrcLayout
+            = Layout<Shape<_16, Shape<_1, _16>>, Stride<_16, Stride<_16, _1>>>;
     // Map from (dst-thr,dst-val) to bit
     using DstLayout = Layout<Shape<_16, Shape<_32, _32>>,
             Stride<_32, Stride<_512, _1>>>;
@@ -236,8 +236,8 @@ struct Copy_Traits<XE_2D_U16x8x16x2x2_LD_N::PREFETCH, GTensor>
     // Logical thread id to thread idx
     using ThrID = Layout<_16>;
     // Map from (src-thr,src-val) to bit
-    using SrcLayout = Layout<Shape<_16, Shape<_16, _32>>,
-            Stride<_32, Stride<_512, _1>>>;
+    using SrcLayout
+            = Layout<Shape<_16, Shape<_1, _16>>, Stride<_16, Stride<_16, _1>>>;
     // Map from (dst-thr,dst-val) to bit
     using DstLayout = Layout<Shape<_16, Shape<_16, _32>>,
             Stride<_32, Stride<_512, _1>>>;
@@ -258,8 +258,8 @@ struct Copy_Traits<XE_2D_U16x16x16x1x1_LD_N::PREFETCH, GTensor>
     // Logical thread id to thread idx
     using ThrID = Layout<_16>;
     // Map from (src-thr,src-val) to bit
-    using SrcLayout = Layout<Shape<_16, Shape<_16, _16>>,
-            Stride<_16, Stride<_256, _1>>>;
+    using SrcLayout
+            = Layout<Shape<_16, Shape<_1, _16>>, Stride<_16, Stride<_16, _1>>>;
     // Map from (dst-thr,dst-val) to bit
     using DstLayout = Layout<Shape<_16, Shape<_16, _16>>,
             Stride<_16, Stride<_256, _1>>>;
