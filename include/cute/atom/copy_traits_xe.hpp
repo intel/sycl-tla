@@ -97,6 +97,9 @@ struct XE_2D_LD_Unpack {
     }
 };
 
+/// ThrID: How many threads involved.
+/// DstLayout: Size<0>(DstLayout) same as thrID, Size<1>(DstLayout) represents data layout that hold by each thread in bits.
+/// TODO: SrcLayout just a placeHolder, not used.
 template <class GTensor>
 struct Copy_Traits<XE_2D_U16x8x16x1x1_LD_N, GTensor>
     : XE_2D_LD_Unpack<XE_2D_U16x8x16x1x1_LD_N, GTensor> {

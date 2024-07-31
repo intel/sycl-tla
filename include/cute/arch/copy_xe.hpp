@@ -112,6 +112,9 @@ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
 
 #undef SYCL_DEVICE_BUILTIN
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// Loads 1x1 memory blocks, and each block size is 8x16x16bits
 struct XE_2D_U16x8x16x1x1_LD_N
 {
   template <class T>
@@ -144,6 +147,9 @@ struct XE_2D_U16x8x16x1x1_LD_N
     };
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// Loads 1x1 memory blocks, and each block size is 8x16x32bits
 struct XE_2D_U32x8x16x1x1_LD_N
 {
   template <class T>
@@ -160,6 +166,9 @@ struct XE_2D_U32x8x16x1x1_LD_N
   }
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// Loads 1x1 memory blocks, and each block size is 16x16x16bits
 struct XE_2D_U16x16x16x1x1_LD_N
 {
   template <class T>
@@ -192,6 +201,9 @@ struct XE_2D_U16x16x16x1x1_LD_N
     };
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// Loads 4x2 memory blocks, and each block size is 8x16x16bits
 struct XE_2D_U16x8x16x4x2_LD_N
 {
   template <class T>
@@ -225,6 +237,9 @@ struct XE_2D_U16x8x16x4x2_LD_N
     };
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// Loads 4x2 memory blocks, and each block size is 8x16x16bits
 struct XE_2D_U16x8x16x2x2_LD_N
 {
   template <class T>
@@ -257,6 +272,9 @@ struct XE_2D_U16x8x16x2x2_LD_N
     };
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// Loads 1x2 memory blocks, and each block size is 8x16x16bits
 struct XE_2D_U16x8x16x1x2_LD_N
 {
   template <class T>
@@ -290,6 +308,9 @@ struct XE_2D_U16x8x16x1x2_LD_N
     };
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// Loads 4x1 memory blocks, and each block size is 8x16x16bits
 struct XE_2D_U16x8x16x4x1_LD_N
 {
   template <class T>
@@ -322,6 +343,9 @@ struct XE_2D_U16x8x16x4x1_LD_N
     };
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// Loads 2x1 memory blocks, and each block size is 8x16x32bits
 struct XE_2D_U32x8x16x2x1_LD_N
 {
   template <class T>
@@ -339,6 +363,9 @@ struct XE_2D_U32x8x16x2x1_LD_N
   }
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// Loads 2x1 memory blocks, and each block size is 16x16x16bits
 struct XE_2D_U16x16x16x2x1_LD_N
 {
   template <class T>
@@ -358,6 +385,10 @@ struct XE_2D_U16x16x16x2x1_LD_N
   using PREFETCH = typename XE_2D_U16x8x16x4x1_LD_N::PREFETCH;
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// From flat format in memory transform to VNNI format in registers.
+/// Loads 2x2 memory blocks, and each block size is 16x16x16bits
 struct XE_2D_U16x16x16x2x2_V
 {
   template <class T>
@@ -374,6 +405,10 @@ struct XE_2D_U16x16x16x2x2_V
     using PREFETCH = typename XE_2D_U16x8x16x2x2_LD_N::PREFETCH;
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// From flat format in memory transform to VNNI format in registers.
+/// Loads 1x2 memory blocks, and each block size is 16x16x16bits
 struct XE_2D_U16x16x16x1x2_V
 {
   template <class T>
@@ -389,6 +424,10 @@ struct XE_2D_U16x16x16x1x2_V
     using PREFETCH = typename XE_2D_U16x8x16x2x2_LD_N::PREFETCH;
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// From flat format in memory transform to VNNI format in registers.
+/// Loads 2x1 memory blocks, and each block size is 16x16x16bits
 struct XE_2D_U16x16x16x2x1_V
 {
   template <class T>
@@ -404,6 +443,10 @@ struct XE_2D_U16x16x16x2x1_V
       using PREFETCH = typename XE_2D_U16x8x16x4x1_LD_N::PREFETCH;
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// From flat format in memory transform to VNNI format in registers.
+/// Loads 1x1 memory blocks, and each block size is 16x16x16bits
 struct XE_2D_U16x16x16x1x1_V
 {
   template <class T>
@@ -420,6 +463,10 @@ struct XE_2D_U16x16x16x1x1_V
     using PREFETCH = typename XE_2D_U16x16x16x1x1_LD_N::PREFETCH;
 };
 
+/// @brief This function loads data from 2D memory surface.
+/// Loads an array of rectangular regions coord(X,Y)..coord(X+W,Y+H) from global memory into registers.
+/// From flat format in memory transform to VNNI format in registers.
+/// Loads 1x1 memory blocks, and each block size is 8x16x32bits
 struct XE_2D_U32x8x16x1x1_ST_N
 {
   template <class T>
