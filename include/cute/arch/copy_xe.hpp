@@ -44,7 +44,7 @@ namespace cute
   inline x { assert(false); }
 #endif
 
-enum CacheControl {
+enum class CacheControl {
     kDefault   = 0,
     kL1UC_L3UC = 1, // Override to L1 uncached and L3 uncached
     kL1UC_L3C  = 2, // Override to L1 uncached and L3 cached
@@ -138,7 +138,7 @@ struct XE_2D_U16x8x16x1x1_LD_N
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
       __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v1(
               (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-              kL1C_L3C);
+              CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
               "Trying to use block prefetch on non-PVC hardware");
@@ -192,7 +192,7 @@ struct XE_2D_U16x16x16x1x1_LD_N
             static_assert(sizeof(T) == 2, "Expected T to have size 2");
             __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v1(
                     (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-                    kL1C_L3C);
+                    CacheControl::kL1C_L3C);
 #else
             CUTE_INVALID_CONTROL_PATH(
                     "Trying to use block prefetch on non-PVC hardware");
@@ -227,7 +227,7 @@ struct XE_2D_U16x8x16x4x2_LD_N
             static_assert(sizeof(T) == 2, "Expected T to have size 2");
             __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(  
                     (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-                    kL1C_L3C);
+                    CacheControl::kL1C_L3C);
 #else
             CUTE_INVALID_CONTROL_PATH(
                     "Trying to use block prefetch on non-PVC hardware");
@@ -262,7 +262,7 @@ struct XE_2D_U16x8x16x2x2_LD_N
             static_assert(sizeof(T) == 2, "Expected T to have size 2");
             __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
                     (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-                    kL1C_L3C);
+                    CacheControl::kL1C_L3C);
 #else
             CUTE_INVALID_CONTROL_PATH(
                     "Trying to use block prefetch on non-PVC hardware");
@@ -298,7 +298,7 @@ struct XE_2D_U16x8x16x1x2_LD_N
             static_assert(sizeof(T) == 2, "Expected T to have size 2");
             __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
                     (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-                    kL1C_L3C);
+                    CacheControl::kL1C_L3C);
 #else
             CUTE_INVALID_CONTROL_PATH(
                     "Trying to use block prefetch on non-PVC hardware");
@@ -333,7 +333,7 @@ struct XE_2D_U16x8x16x4x1_LD_N
             static_assert(sizeof(T) == 2, "Expected T to have size 2");
             __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v1(
                     (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-                    kL1C_L3C);
+                    CacheControl::kL1C_L3C);
 #else
             CUTE_INVALID_CONTROL_PATH(
                     "Trying to use block prefetch on non-PVC hardware");
