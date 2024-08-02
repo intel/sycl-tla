@@ -247,12 +247,12 @@ struct Copy_Traits<XE_2D_U16x8x16x2x2_LD_N::PREFETCH, GTensor>
 };
 
 template <class GTensor>
-struct Copy_Traits<XE_2D_U16x16x16x1x1_LD_N::PREFETCH, GTensor>
-    : XE_2D_PF_Unpack<XE_2D_U16x16x16x1x1_LD_N::PREFETCH, GTensor> {
+struct Copy_Traits<XE_2D_U16x8x16x2x1_LD_N::PREFETCH, GTensor>
+    : XE_2D_PF_Unpack<XE_2D_U16x8x16x2x1_LD_N::PREFETCH, GTensor> {
 
     template <class... CopyArgs>
     CUTE_HOST_DEVICE Copy_Traits(Copy_Traits<CopyArgs...> const &traits)
-        : XE_2D_PF_Unpack<XE_2D_U16x16x16x1x1_LD_N::PREFETCH, GTensor>(
+        : XE_2D_PF_Unpack<XE_2D_U16x8x16x2x1_LD_N::PREFETCH, GTensor>(
                   traits.tensor) {}
 
     // Logical thread id to thread idx
@@ -346,22 +346,6 @@ struct Copy_Traits<XE_2D_U16x8x16x4x1_LD_N, GTensor>
 template <class GTensor>
 struct Copy_Traits<XE_2D_U32x8x16x2x1_LD_N, GTensor>
     : XE_2D_LD_Unpack<XE_2D_U32x8x16x2x1_LD_N, GTensor> {
-    // Logical thread id to thread idx
-    using ThrID = Layout<_16>;
-    // Map from (src-thr,src-val) to bit
-    using SrcLayout = Layout<Shape<_16, _64>, Stride<_0, _1>>;
-    // Map from (dst-thr,dst-val) to bit
-    using DstLayout = Layout<Shape<_16, Shape<_16, _32>>,
-            Stride<_32, Stride<_512, _1>>>;
-    // Reference map from (thr,val) to bit
-    using RefLayout = DstLayout;
-    // 32 bits register file
-    using CopyInternalType = uint;
-};
-
-template <class GTensor>
-struct Copy_Traits<XE_2D_U16x16x16x2x1_LD_N, GTensor>
-    : XE_2D_LD_Unpack<XE_2D_U16x16x16x2x1_LD_N, GTensor> {
     // Logical thread id to thread idx
     using ThrID = Layout<_16>;
     // Map from (src-thr,src-val) to bit
