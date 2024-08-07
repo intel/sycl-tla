@@ -56,6 +56,7 @@ CUTLASS_GLOBAL void
 test(double const* g_in, double* g_out)
 {
   #ifdef CUTLASS_ENABLE_SYCL
+  //TODO: access shared memory via the work-group static extension
   #else 
     extern __shared__ double smem[];
   #endif
@@ -72,6 +73,7 @@ test2(double const* g_in, double* g_out)
   using namespace cute;
 
   #ifdef CUTLASS_ENABLE_SYCL
+  //TODO: access shared memory via the work-group static extension
   #else
     extern __shared__ double smem[];
   #endif
@@ -100,6 +102,7 @@ TEST(SM80_CuTe_Ampere, CpAsync)
 
   device_vector<double> d_out(count, -1);
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
     test<<<1, count, sizeof(double) * count>>>(
       thrust::raw_pointer_cast(d_in.data()),

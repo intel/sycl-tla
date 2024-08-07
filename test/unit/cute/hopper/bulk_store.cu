@@ -59,6 +59,7 @@ bulk_copy_test_device_cute(T const* g_in,
 {
   // Use Shared Storage structure to allocate and distribute aligned SMEM addresses
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: access shared memory via the work-group static extension
   #else
   extern __shared__ char shared_memory[];
   #endif
@@ -118,6 +119,7 @@ void run_and_validate(GLayout gmem_layout,
 
   int32_t smem_size = static_cast<int32_t>(sizeof(SharedStorage<T, decltype(smem_layout)>));
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   bulk_copy_test_device_cute<<<1, 128, smem_size>>>(thrust::raw_pointer_cast(d_in.data()),
                                                     thrust::raw_pointer_cast(d_out.data()),

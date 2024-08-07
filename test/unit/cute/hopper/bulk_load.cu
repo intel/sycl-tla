@@ -60,6 +60,7 @@ bulk_copy_test_device_cute(T const* g_in,
 {
   // Use Shared Storage structure to allocate and distribute aligned SMEM addresses
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: access shared memory via the work-group static extension
   #else
   extern __shared__ char shared_memory[];
   #endif

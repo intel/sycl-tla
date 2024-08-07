@@ -56,6 +56,7 @@ stsm_test_device(uint16_t* g_in, uint16_t* g_out)
   }
   
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: access shared memory via the work-group static extension
   #else
   __shared__ uint32_t smem[32 * count];
   #endif
@@ -81,6 +82,7 @@ stsm_test_device_cute(uint16_t* g_in, uint16_t* g_out,
   using namespace cute;
 
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: access shared memory via the work-group static extension
   #else
   __shared__ uint16_t smem[size(smem_layout)];
   #endif
@@ -156,7 +158,8 @@ TEST(SM90_CuTe_Hopper, Stsm)
 
   {
   device_vector<uint16_t> d_out(count);
-    #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device<uint64_t><<<1, 32>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -176,7 +179,8 @@ TEST(SM90_CuTe_Hopper, Stsm)
 
   {
   device_vector<uint16_t> d_out(count);
-    #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device<uint128_t><<<1, 32>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -203,6 +207,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape<_32,_1>>{},
                                     Layout<Shape< _1,_8>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -228,6 +233,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape< _1,_8>>{});
 
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -252,6 +258,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape<_32,_1>>{},
                                     Layout<Shape< _1,_8>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -277,6 +284,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape< _1,_8>>{});
 
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -301,6 +309,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape<_16,_2>>{},
                                     Layout<Shape< _2,_4>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -325,6 +334,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape<_16,_2>>{},
                                     Layout<Shape< _2,_4>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -349,6 +359,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape<_16,_2>>{},
                                     Layout<Shape< _2,_4>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -373,6 +384,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape<_16,_2>>{},
                                     Layout<Shape< _2,_4>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -397,6 +409,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape<_4,_8>>{},
                                     Layout<Shape<_2,_1>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -421,6 +434,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape<_4,_8>>{},
                                     Layout<Shape<_4,_1>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),
@@ -445,6 +459,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
                                     Layout<Shape<_4,_8>>{},
                                     Layout<Shape<_8,_1>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
     thrust::raw_pointer_cast(d_in.data()),

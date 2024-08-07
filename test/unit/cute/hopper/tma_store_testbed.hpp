@@ -62,6 +62,7 @@ tma_test_device_cute(T const* g_in, T* g_out,
 
   // Use Shared Storage structure to allocate and distribute aligned SMEM addresses
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: access shared memory via the work-group static extension
   #else
   extern __shared__ char shared_memory[];
   #endif
@@ -121,7 +122,7 @@ tma_test_device_cute(T const* g_in, T* g_out,
 #endif
 
   // Test L2 prefetch
-  cooperative_prefetch<128>(threadIdx.x, gA);
+  cooperative_prefetch<128>(ThreadIdxX(), gA);
 
   // Loop over the TMA stages, using smem as our buffer
   for (int stage = 0; stage < size<1>(tBgB); ++stage)
@@ -141,7 +142,7 @@ tma_test_device_cute(T const* g_in, T* g_out,
     // Perform the TMA_STORE
     //
 
-    if (threadIdx.x == 0) {
+    if (ThreadIdxX() == 0) {
       copy(tma, tBsB(_,0), tBgB(_,stage));
     }
 
@@ -179,6 +180,7 @@ test_tma_store(CopyOp      const& copy_op,
   // Launch
   int smem_size = int(sizeof(SharedStorage<T, decltype(smem_layout)>));
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   tma_test_device_cute<<<1, 128, smem_size>>>(
     reinterpret_cast<T const*>(raw_pointer_cast(d_in.data())),

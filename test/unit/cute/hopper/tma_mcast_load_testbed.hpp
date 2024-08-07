@@ -64,7 +64,8 @@ tma_test_device_cute(T const* g_in, T* g_out, GmemLayout gmem_layout, SmemLayout
   CUTE_STATIC_ASSERT_V(product_each(shape(cta_tiler)) == product_each(shape(smem_layout)));
 
   // Use Shared Storage structure to allocate and distribute aligned SMEM addresses
-    #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: access shared memory via the work-group static extension
   #else
   extern __shared__ char shared_memory[];
   #endif
@@ -93,7 +94,7 @@ tma_test_device_cute(T const* g_in, T* g_out, GmemLayout gmem_layout, SmemLayout
     print("  gA  :  "); print(  gA);   print("\n");
     print("  gB  :  "); print(  gB);   print("\n");
     print("  sA  :  "); print(  sA);   print("\n");
-  } __syncthreads(); cute::cluster_sync();
+  } syncthreads(); cute::cluster_sync();
 #endif
 
   //
@@ -112,7 +113,7 @@ tma_test_device_cute(T const* g_in, T* g_out, GmemLayout gmem_layout, SmemLayout
     print("tBgB  :  "); print(tBgB); print("\n");
     print("tAgA  :  "); print(tAgA); print("\n");
     print("tAsA  :  "); print(tAsA); print("\n");
-  } __syncthreads(); cute::cluster_sync();
+  } syncthreads(); cute::cluster_sync();
 #endif
 
   //
@@ -208,6 +209,7 @@ test_tma_load(CopyOp       const& copy_op,
 
   // Launch
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   dim3 dimBlock(32);
   dim3 dimCluster(size(cluster_size));
@@ -226,7 +228,7 @@ test_tma_load(CopyOp       const& copy_op,
                                     tma, cta_tiler, cluster_size);
   #endif
   // Copy results back to host
-  thrust::host_vector<uint8_t> h_out = d_out;
+  host_vector<uint8_t> h_out = d_out;
   Tensor hA_out = make_tensor(recast_ptr<T>(h_out.data()), gmem_layout);
 
   // Validate the results. Print only the first 3 errors.

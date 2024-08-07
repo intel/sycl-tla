@@ -59,6 +59,7 @@ test_tiled_cp_async_device_cute(T const* g_in, T* g_out,
 {
   using namespace cute;
   #if defined(CUTLASS_ENABLE_SYCL)
+  //TODO: access shared memory via the work-group static extension
   #else
     extern __shared__ char shared_memory[];
   #endif
@@ -129,7 +130,7 @@ test_tiled_cp_async(
     smem_layout);
   #endif
   // Copy results back to host
-  thrust::host_vector<T> h_out = d_out;
+  host_vector<T> h_out = d_out;
   Tensor hA_out = make_tensor(recast_ptr<T>(h_out.data()), gmem_layout);
 
   // Validate the results. Print only the first 3 errors.
