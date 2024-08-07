@@ -112,6 +112,7 @@ class device_vector {
     if(!ptr) {
       throw std::runtime_error("Allocation Failed.");
     }
+    return ptr;
   }
   std::shared_ptr<T> make_shared(std::size_t size) {
     return std::shared_ptr<T>(safe_malloc(size), [=](T* ptr) {
