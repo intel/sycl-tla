@@ -115,29 +115,7 @@ void FilterArchitecture() {
   };
 
 
-#if !defined(CUTLASS_ENABLE_SYCL)
-
-  cudaError_t err;
-
-  int cudaDeviceId;
-  err = cudaGetDevice(&cudaDeviceId);
-  if (cudaSuccess != err) {
-    std::cerr << "*** Error: Could not detect active GPU device ID"
-              << " [" << cudaGetErrorString(err) << "]" << std::endl;
-    exit(1);
-  }
-
-  cudaDeviceProp deviceProperties;
-  err = cudaGetDeviceProperties(&deviceProperties, cudaDeviceId);
-  if (cudaSuccess != err) {
-    std::cerr << "*** Error: Could not get device properties for GPU " << cudaDeviceId << " ["
-              << cudaGetErrorString(err) << "]" << std::endl;
-    exit(1);
-  }
-
-  int deviceMajorMinor = deviceProperties.major * 10 + deviceProperties.minor;
-
-#elif defined(CUTLASS_ENABLE_SYCL)
+#if defined(CUTLASS_ENABLE_SYCL)
   using namespace sycl::ext::oneapi::experimental;
 
   // We might be adding PVC unit tests someday
@@ -169,6 +147,27 @@ void FilterArchitecture() {
   }
 
   const int deviceMajorMinor = arch_map[device_architecture];
+
+#else
+  cudaError_t err;
+
+  int cudaDeviceId;
+  err = cudaGetDevice(&cudaDeviceId);
+  if (cudaSuccess != err) {
+    std::cerr << "*** Error: Could not detect active GPU device ID"
+              << " [" << cudaGetErrorString(err) << "]" << std::endl;
+    exit(1);
+  }
+
+  cudaDeviceProp deviceProperties;
+  err = cudaGetDeviceProperties(&deviceProperties, cudaDeviceId);
+  if (cudaSuccess != err) {
+    std::cerr << "*** Error: Could not get device properties for GPU " << cudaDeviceId << " ["
+              << cudaGetErrorString(err) << "]" << std::endl;
+    exit(1);
+  }
+
+  int deviceMajorMinor = deviceProperties.major * 10 + deviceProperties.minor;
 #endif
   
   std::stringstream ss;
