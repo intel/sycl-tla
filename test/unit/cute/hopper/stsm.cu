@@ -362,7 +362,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   //TODO: Launch kernel using syclcompat with the Work group static launch property
   #else
   stsm_test_device_cute<<<1, int(size(tiled_copy))>>>(
-    thrust::raw_pointer_cast(d_in.data()),
+    thrust::raw_pointer_cast(d_in.data()),__syn
     thrust::raw_pointer_cast(d_out.data()),
     tiled_copy,
     smem_layout);

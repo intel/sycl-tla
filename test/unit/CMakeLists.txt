@@ -170,4 +170,3 @@ foreach(SUBDIR ${SUBDIRS})
   add_dependencies(cutlass_test_unit cutlass_test_unit_${SUBDIR})
   add_dependencies(test_unit test_unit_${SUBDIR})
 endforeach()
-
