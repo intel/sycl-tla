@@ -40,7 +40,7 @@
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)
-// Please suggest a better namespace
+// Move to SYCLCompat ?
 namespace cutlass {
 
   namespace kernel {

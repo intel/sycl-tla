@@ -110,7 +110,7 @@ void FilterArchitecture() {
     { "SM80*",                      80, kMaxDevice},
     { "SM89*",                      89, 89},
     { "SM90*",                      90, 90},
-    { "IntelPVC",                   0,  0}
+    { "IntelPVC",                   0,  0},
     { 0, 0, false }
   };
 
@@ -120,30 +120,30 @@ void FilterArchitecture() {
 
   // We might be adding PVC unit tests someday
   std::map<architecture, int> arch_map {
-    {nvidia_gpu_sm_50, 50},
-    {nvidia_gpu_sm_52, 52},
-    {nvidia_gpu_sm_53, 53},
-    {nvidia_gpu_sm_60, 60},
-    {nvidia_gpu_sm_61, 61},
-    {nvidia_gpu_sm_62, 62},
-    {nvidia_gpu_sm_70, 70},
-    {nvidia_gpu_sm_72, 72},
-    {nvidia_gpu_sm_75, 75},
-    {nvidia_gpu_sm_80, 80},
-    {nvidia_gpu_sm_86, 86},
-    {nvidia_gpu_sm_89, 89},
-    {nvidia_gpu_sm_90, 90},
-    {nvidia_gpu_sm_90a, 90}
-    {intel_gpu_pvc, 0}
-  }
+    {architecture::nvidia_gpu_sm_50, 50},
+    {architecture::nvidia_gpu_sm_52, 52},
+    {architecture::nvidia_gpu_sm_53, 53},
+    {architecture::nvidia_gpu_sm_60, 60},
+    {architecture::nvidia_gpu_sm_61, 61},
+    {architecture::nvidia_gpu_sm_62, 62},
+    {architecture::nvidia_gpu_sm_70, 70},
+    {architecture::nvidia_gpu_sm_72, 72},
+    {architecture::nvidia_gpu_sm_75, 75},
+    {architecture::nvidia_gpu_sm_80, 80},
+    {architecture::nvidia_gpu_sm_86, 86},
+    {architecture::nvidia_gpu_sm_89, 89},
+    {architecture::nvidia_gpu_sm_90, 90},
+    {architecture::nvidia_gpu_sm_90a, 90},
+    {architecture::intel_gpu_pvc, 0}
+  };
   auto device_architecture = 
-        syclcompat::get_default_queue().device().get_info<info::device::architecture>();
+        syclcompat::get_default_queue().get_device().get_info<info::device::architecture>();
   if (device_architecture == architecture::unknown) {
-    throw std::runtime_error("Encountered Unknown architecture");
+    throw std::runtime_error("Encountered Unknown architecture.");
   }
 
   if(auto search_result = arch_map.find(device_architecture); search_result == arch_map.end()) {
-    throw std::runtime_error("Detected Architecture is not supported.")
+    throw std::runtime_error("Detected Architecture is not supported.");
   }
 
   const int deviceMajorMinor = arch_map[device_architecture];
