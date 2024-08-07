@@ -1165,6 +1165,7 @@ struct numeric_limits<cutlass::float_e5m2_t>  :
 }  // namespace std
 #endif
 
+namespace cutlass {
 namespace platform {
 
 /// Numeric limits common to all float8 types
@@ -1220,7 +1221,7 @@ public:
   static F8Type denorm_min() { return F8Type::bitcast(0x01); }
 };
 
-/// std::numeric_limits
+/// Forward Declaration
 template <class T>
 struct numeric_limits;
 
@@ -1251,6 +1252,8 @@ struct numeric_limits<cutlass::float_e5m2_t>  :
 };
 
 }  // namespace platform
+
+}  // namespace cutlass
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

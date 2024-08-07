@@ -62,5 +62,6 @@ class CollectiveEpilogue {
 #include "sm70_epilogue_vectorized.hpp"
 #include "sm90_epilogue_tma_warpspecialized.hpp"
 #include "sm90_epilogue_tma_warpspecialized_bias_elementwise.hpp"
+#include "sm90_epilogue_array_tma_warpspecialized.hpp"
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////

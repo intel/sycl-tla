@@ -332,9 +332,6 @@ struct DescriptorIterator
   {
     return { GmmaDescriptor{desc_ + uint64_t(offset)} };
   }
-
-  CUTE_HOST_DEVICE friend void
-  print(DescriptorIterator) { printf("GMMA::DescriptorIterator"); }
 };
 
 template <class T>
@@ -351,6 +348,11 @@ DescriptorIterator
 recast_ptr(DescriptorIterator const& iter) {
   static_assert(is_same<NewT, uint64_t>::value, "Can only cast GmmaDescriptorIterator to uint64_t.");
   return iter;  // Do nothing, it will still dereference to GmmaDescriptor and decay to uint64_t
+}
+
+CUTE_HOST_DEVICE void
+print(DescriptorIterator) {
+  printf("GMMA::DescriptorIterator");
 }
 
 // The GMMA Traits below have custom fragment type flags for their smem desc tensors.
@@ -390,16 +392,40 @@ using CLayout_64x16  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2,  _2>>,
 using CLayout_64x32  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2,  _4>>,
                               Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
 
+using CLayout_64x48  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, _6>>,
+                              Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
+
 using CLayout_64x64  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2,  _8>>,
+                              Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
+
+using CLayout_64x80  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, _10>>,
                               Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
 
 using CLayout_64x96  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, _12>>,
                               Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
 
+using CLayout_64x112  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, Int<14>>>,
+                              Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
+
 using CLayout_64x128 = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, _16>>,
                               Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
 
+using CLayout_64x144  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, Int<18>>>,
+                              Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
+
+using CLayout_64x160  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, Int<20>>>,
+                              Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
+
+using CLayout_64x176  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, Int<22>>>,
+                              Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
+
 using CLayout_64x192 = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, _24>>,
+                              Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
+
+using CLayout_64x224  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, Int<28>>>,
+                              Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
+
+using CLayout_64x240  = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, Int<30>>>,
                               Stride<Stride<_128,_1,_16>,Stride<_64,_8,_512>>>;
 
 using CLayout_64x256 = Layout<Shape <Shape <  _4,_8, _4>,Shape < _2,_2, _32>>,
@@ -552,6 +578,53 @@ struct MMA_Traits<SM90_64x32x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_48,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout< 48, 16>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_48,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout< 48, 16>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x64x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
 {
@@ -592,6 +665,53 @@ struct MMA_Traits<SM90_64x64x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_80,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout< 80, 16>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_80,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout< 80, 16>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -638,6 +758,53 @@ struct MMA_Traits<SM90_64x96x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_112,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<112, 16>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_112,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<112, 16>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x128x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
 {
@@ -681,6 +848,147 @@ struct MMA_Traits<SM90_64x128x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_144,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<144, 16>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_144,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<144, 16>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_160,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<160, 16>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_160,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<160, 16>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_176,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<176, 16>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_176,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<176, 16>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x192x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
 {
@@ -721,6 +1029,147 @@ struct MMA_Traits<SM90_64x192x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_208,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<208, 16>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_208,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<208, 16>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_224,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<224, 16>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_224,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<224, 16>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x16_F16F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_240,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<240, 16>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x16_F16F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_240,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<240, 16>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -896,6 +1345,53 @@ struct MMA_Traits<SM90_64x32x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_48,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout< 48, 16>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_48,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout< 48, 16>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x64x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
 {
@@ -936,6 +1432,53 @@ struct MMA_Traits<SM90_64x64x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_80,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout< 80, 16>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_80,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout< 80, 16>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -982,6 +1525,53 @@ struct MMA_Traits<SM90_64x96x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_112,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<112, 16>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_112,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<112, 16>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x128x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
 {
@@ -1025,6 +1615,147 @@ struct MMA_Traits<SM90_64x128x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_144,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<144, 16>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_144,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<144, 16>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_160,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<160, 16>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_160,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<160, 16>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_176,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<176, 16>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_176,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<176, 16>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x192x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
 {
@@ -1065,6 +1796,147 @@ struct MMA_Traits<SM90_64x192x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_208,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<208, 16>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_208,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<208, 16>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_224,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<224, 16>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_224,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<224, 16>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x16_F32F16F16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_240,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<240, 16>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x16_F32F16F16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = half_t;
+  using ValTypeB = half_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_240,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<240, 16>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1240,6 +2112,53 @@ struct MMA_Traits<SM90_64x32x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_48,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout< 48, 16>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_48,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout< 48, 16>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x64x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
 {
@@ -1280,6 +2199,53 @@ struct MMA_Traits<SM90_64x64x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_80,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout< 80, 16>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_80,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout< 80, 16>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1326,6 +2292,53 @@ struct MMA_Traits<SM90_64x96x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_112,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<112, 16>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_112,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<112, 16>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x128x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
 {
@@ -1369,6 +2382,147 @@ struct MMA_Traits<SM90_64x128x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_144,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<144, 16>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_144,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<144, 16>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_160,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<160, 16>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_160,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<160, 16>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_176,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<176, 16>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_176,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<176, 16>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x192x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
 {
@@ -1409,6 +2563,147 @@ struct MMA_Traits<SM90_64x192x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_208,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<208, 16>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_208,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<208, 16>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_224,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<224, 16>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_224,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<224, 16>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x16_F32BF16BF16_SS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<tnspA>;
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_240,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 16>;
+  using BLayout = GMMA::ABLayout<240, 16>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::Major tnspA, GMMA::Major tnspB, GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x16_F32BF16BF16_RS<tnspA, tnspB, scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = bfloat16_t;
+  using ValTypeB = bfloat16_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<tnspB>;
+
+  using Shape_MNK = Shape<_64,_240,_16>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x16;
+  using BLayout = GMMA::ABLayout<240, 16>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1584,6 +2879,53 @@ struct MMA_Traits<SM90_64x32x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64,  8>;
+  using BLayout = GMMA::ABLayout< 48,  8>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x8;
+  using BLayout = GMMA::ABLayout< 48,  8>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x64x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
 {
@@ -1624,6 +2966,53 @@ struct MMA_Traits<SM90_64x64x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64,  8>;
+  using BLayout = GMMA::ABLayout< 80,  8>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x8;
+  using BLayout = GMMA::ABLayout< 80,  8>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1670,6 +3059,53 @@ struct MMA_Traits<SM90_64x96x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64,  8>;
+  using BLayout = GMMA::ABLayout<112,  8>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x8;
+  using BLayout = GMMA::ABLayout<112,  8>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x128x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
 {
@@ -1713,6 +3149,147 @@ struct MMA_Traits<SM90_64x128x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64,  8>;
+  using BLayout = GMMA::ABLayout<144,  8>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x8;
+  using BLayout = GMMA::ABLayout<144,  8>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64,  8>;
+  using BLayout = GMMA::ABLayout<160,  8>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x8;
+  using BLayout = GMMA::ABLayout<160,  8>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64,  8>;
+  using BLayout = GMMA::ABLayout<176,  8>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x8;
+  using BLayout = GMMA::ABLayout<176,  8>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x192x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
 {
@@ -1753,6 +3330,147 @@ struct MMA_Traits<SM90_64x192x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64,  8>;
+  using BLayout = GMMA::ABLayout<208,  8>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x8;
+  using BLayout = GMMA::ABLayout<208,  8>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64,  8>;
+  using BLayout = GMMA::ABLayout<224,  8>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x8;
+  using BLayout = GMMA::ABLayout<224,  8>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x8_F32TF32TF32_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64,  8>;
+  using BLayout = GMMA::ABLayout<240,  8>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x8_F32TF32TF32_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = tfloat32_t;
+  using ValTypeB = tfloat32_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_8>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x8;
+  using BLayout = GMMA::ABLayout<240,  8>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1822,7 +3540,51 @@ struct MMA_Traits<SM90_64x8x32_S32S8S8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x8x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_8,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<  8, 32>;
+  using CLayout = GMMA::CLayout_64x8;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x16x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_16,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 16, 32>;
+  using CLayout = GMMA::CLayout_64x16;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x16x32_S32S8S8_SS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = int8_t;
@@ -1866,6 +3628,76 @@ struct MMA_Traits<SM90_64x32x32_S32S8S8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x32x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_32,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 32, 32>;
+  using CLayout = GMMA::CLayout_64x32;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x64x32_S32S8S8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -1884,6 +3716,76 @@ struct MMA_Traits<SM90_64x64x32_S32S8S8_SS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x64x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_64,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 64, 32>;
+  using CLayout = GMMA::CLayout_64x64;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1910,6 +3812,76 @@ struct MMA_Traits<SM90_64x96x32_S32S8S8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x96x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_96,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 96, 32>;
+  using CLayout = GMMA::CLayout_64x96;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x128x32_S32S8S8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -1928,6 +3900,172 @@ struct MMA_Traits<SM90_64x128x32_S32S8S8_SS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x128x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_128,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<128, 32>;
+  using CLayout = GMMA::CLayout_64x128;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1954,7 +4092,195 @@ struct MMA_Traits<SM90_64x192x32_S32S8S8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x192x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_192,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<192, 32>;
+  using CLayout = GMMA::CLayout_64x192;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32S8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x256x32_S32S8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_256,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<256, 32>;
+  using CLayout = GMMA::CLayout_64x256;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x256x32_S32S8S8_SS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = int8_t;
@@ -1997,7 +4323,49 @@ struct MMA_Traits<SM90_64x8x32_S32S8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x8x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_8,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<  8, 32>;
+  using CLayout = GMMA::CLayout_64x8;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x16x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_16,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 16, 32>;
+  using CLayout = GMMA::CLayout_64x16;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x16x32_S32S8S8_RS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = int8_t;
@@ -2039,6 +4407,73 @@ struct MMA_Traits<SM90_64x32x32_S32S8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x32x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_32,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 32, 32>;
+  using CLayout = GMMA::CLayout_64x32;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x64x32_S32S8S8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -2056,6 +4491,73 @@ struct MMA_Traits<SM90_64x64x32_S32S8S8_RS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x64x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_64,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 64, 32>;
+  using CLayout = GMMA::CLayout_64x64;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2081,6 +4583,73 @@ struct MMA_Traits<SM90_64x96x32_S32S8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x96x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_96,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 96, 32>;
+  using CLayout = GMMA::CLayout_64x96;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x128x32_S32S8S8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -2098,6 +4667,165 @@ struct MMA_Traits<SM90_64x128x32_S32S8S8_RS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x128x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_128,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<128, 32>;
+  using CLayout = GMMA::CLayout_64x128;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2123,6 +4851,165 @@ struct MMA_Traits<SM90_64x192x32_S32S8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x192x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_192,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<192, 32>;
+  using CLayout = GMMA::CLayout_64x192;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32S8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x256x32_S32S8S8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -2144,7 +5031,50 @@ struct MMA_Traits<SM90_64x256x32_S32S8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x256x32_S32S8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_256,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<256, 32>;
+  using CLayout = GMMA::CLayout_64x256;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x8x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_8,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<  8, 32>;
+  using CLayout = GMMA::CLayout_64x8;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x8x32_S32S8U8_SS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = int8_t;
@@ -2188,6 +5118,28 @@ struct MMA_Traits<SM90_64x16x32_S32S8U8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x16x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_16,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 16, 32>;
+  using CLayout = GMMA::CLayout_64x16;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x32x32_S32S8U8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -2206,6 +5158,76 @@ struct MMA_Traits<SM90_64x32x32_S32S8U8_SS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x32x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_32,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 32, 32>;
+  using CLayout = GMMA::CLayout_64x32;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2232,6 +5254,76 @@ struct MMA_Traits<SM90_64x64x32_S32S8U8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x64x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_64,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 64, 32>;
+  using CLayout = GMMA::CLayout_64x64;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x96x32_S32S8U8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -2250,6 +5342,76 @@ struct MMA_Traits<SM90_64x96x32_S32S8U8_SS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x96x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_96,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 96, 32>;
+  using CLayout = GMMA::CLayout_64x96;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2276,6 +5438,172 @@ struct MMA_Traits<SM90_64x128x32_S32S8U8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x128x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_128,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<128, 32>;
+  using CLayout = GMMA::CLayout_64x128;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x192x32_S32S8U8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -2298,7 +5626,195 @@ struct MMA_Traits<SM90_64x192x32_S32S8U8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x192x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_192,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<192, 32>;
+  using CLayout = GMMA::CLayout_64x192;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32S8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x256x32_S32S8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_256,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<256, 32>;
+  using CLayout = GMMA::CLayout_64x256;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x256x32_S32S8U8_SS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = int8_t;
@@ -2341,7 +5857,49 @@ struct MMA_Traits<SM90_64x8x32_S32S8U8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x8x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_8,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<  8, 32>;
+  using CLayout = GMMA::CLayout_64x8;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x16x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_16,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 16, 32>;
+  using CLayout = GMMA::CLayout_64x16;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x16x32_S32S8U8_RS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = int8_t;
@@ -2383,6 +5941,73 @@ struct MMA_Traits<SM90_64x32x32_S32S8U8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x32x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_32,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 32, 32>;
+  using CLayout = GMMA::CLayout_64x32;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x64x32_S32S8U8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -2400,6 +6025,73 @@ struct MMA_Traits<SM90_64x64x32_S32S8U8_RS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x64x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_64,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 64, 32>;
+  using CLayout = GMMA::CLayout_64x64;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2425,6 +6117,73 @@ struct MMA_Traits<SM90_64x96x32_S32S8U8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x96x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_96,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 96, 32>;
+  using CLayout = GMMA::CLayout_64x96;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x128x32_S32S8U8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -2442,6 +6201,165 @@ struct MMA_Traits<SM90_64x128x32_S32S8U8_RS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x128x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_128,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<128, 32>;
+  using CLayout = GMMA::CLayout_64x128;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2467,6 +6385,165 @@ struct MMA_Traits<SM90_64x192x32_S32S8U8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x192x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_192,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<192, 32>;
+  using CLayout = GMMA::CLayout_64x192;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32S8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x256x32_S32S8U8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -2488,7 +6565,50 @@ struct MMA_Traits<SM90_64x256x32_S32S8U8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x256x32_S32S8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = int8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_256,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<256, 32>;
+  using CLayout = GMMA::CLayout_64x256;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x8x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_8,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<  8, 32>;
+  using CLayout = GMMA::CLayout_64x8;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x8x32_S32U8S8_SS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = uint8_t;
@@ -2532,6 +6652,28 @@ struct MMA_Traits<SM90_64x16x32_S32U8S8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x16x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_16,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 16, 32>;
+  using CLayout = GMMA::CLayout_64x16;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x32x32_S32U8S8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -2550,6 +6692,76 @@ struct MMA_Traits<SM90_64x32x32_S32U8S8_SS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x32x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_32,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 32, 32>;
+  using CLayout = GMMA::CLayout_64x32;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2576,6 +6788,76 @@ struct MMA_Traits<SM90_64x64x32_S32U8S8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x64x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_64,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 64, 32>;
+  using CLayout = GMMA::CLayout_64x64;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x96x32_S32U8S8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -2594,6 +6876,76 @@ struct MMA_Traits<SM90_64x96x32_S32U8S8_SS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x96x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_96,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 96, 32>;
+  using CLayout = GMMA::CLayout_64x96;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2620,6 +6972,172 @@ struct MMA_Traits<SM90_64x128x32_S32U8S8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x128x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_128,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<128, 32>;
+  using CLayout = GMMA::CLayout_64x128;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x192x32_S32U8S8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -2642,7 +7160,195 @@ struct MMA_Traits<SM90_64x192x32_S32U8S8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x192x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_192,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<192, 32>;
+  using CLayout = GMMA::CLayout_64x192;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32U8S8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x256x32_S32U8S8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_256,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<256, 32>;
+  using CLayout = GMMA::CLayout_64x256;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x256x32_S32U8S8_SS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = uint8_t;
@@ -2685,7 +7391,49 @@ struct MMA_Traits<SM90_64x8x32_S32U8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x8x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_8,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<  8, 32>;
+  using CLayout = GMMA::CLayout_64x8;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x16x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_16,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 16, 32>;
+  using CLayout = GMMA::CLayout_64x16;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x16x32_S32U8S8_RS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = uint8_t;
@@ -2727,6 +7475,73 @@ struct MMA_Traits<SM90_64x32x32_S32U8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x32x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_32,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 32, 32>;
+  using CLayout = GMMA::CLayout_64x32;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x64x32_S32U8S8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -2744,6 +7559,73 @@ struct MMA_Traits<SM90_64x64x32_S32U8S8_RS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x64x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_64,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 64, 32>;
+  using CLayout = GMMA::CLayout_64x64;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2769,6 +7651,73 @@ struct MMA_Traits<SM90_64x96x32_S32U8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x96x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_96,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 96, 32>;
+  using CLayout = GMMA::CLayout_64x96;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x128x32_S32U8S8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -2786,6 +7735,165 @@ struct MMA_Traits<SM90_64x128x32_S32U8S8_RS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x128x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_128,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<128, 32>;
+  using CLayout = GMMA::CLayout_64x128;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2811,6 +7919,165 @@ struct MMA_Traits<SM90_64x192x32_S32U8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x192x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_192,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<192, 32>;
+  using CLayout = GMMA::CLayout_64x192;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32U8S8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x256x32_S32U8S8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -2832,7 +8099,50 @@ struct MMA_Traits<SM90_64x256x32_S32U8S8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x256x32_S32U8S8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = int8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_256,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<256, 32>;
+  using CLayout = GMMA::CLayout_64x256;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x8x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_8,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<  8, 32>;
+  using CLayout = GMMA::CLayout_64x8;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x8x32_S32U8U8_SS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = uint8_t;
@@ -2876,6 +8186,28 @@ struct MMA_Traits<SM90_64x16x32_S32U8U8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x16x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_16,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 16, 32>;
+  using CLayout = GMMA::CLayout_64x16;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x32x32_S32U8U8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -2894,6 +8226,76 @@ struct MMA_Traits<SM90_64x32x32_S32U8U8_SS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x32x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_32,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 32, 32>;
+  using CLayout = GMMA::CLayout_64x32;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2920,6 +8322,76 @@ struct MMA_Traits<SM90_64x64x32_S32U8U8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x64x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_64,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 64, 32>;
+  using CLayout = GMMA::CLayout_64x64;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x96x32_S32U8U8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -2938,6 +8410,76 @@ struct MMA_Traits<SM90_64x96x32_S32U8U8_SS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x96x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_96,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 96, 32>;
+  using CLayout = GMMA::CLayout_64x96;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2964,6 +8506,172 @@ struct MMA_Traits<SM90_64x128x32_S32U8U8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x128x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_128,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<128, 32>;
+  using CLayout = GMMA::CLayout_64x128;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x192x32_S32U8U8_SS_TN>
 {
   using ValTypeD = int32_t;
@@ -2986,7 +8694,195 @@ struct MMA_Traits<SM90_64x192x32_S32U8U8_SS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x192x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_192,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<192, 32>;
+  using CLayout = GMMA::CLayout_64x192;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32U8U8_SS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x256x32_S32U8U8_SS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_256,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<256, 32>;
+  using CLayout = GMMA::CLayout_64x256;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x256x32_S32U8U8_SS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = uint8_t;
@@ -3029,7 +8925,49 @@ struct MMA_Traits<SM90_64x8x32_S32U8U8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x8x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_8,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<  8, 32>;
+  using CLayout = GMMA::CLayout_64x8;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x16x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_16,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 16, 32>;
+  using CLayout = GMMA::CLayout_64x16;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x16x32_S32U8U8_RS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = uint8_t;
@@ -3071,6 +9009,73 @@ struct MMA_Traits<SM90_64x32x32_S32U8U8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x32x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_32,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 32, 32>;
+  using CLayout = GMMA::CLayout_64x32;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x48x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x64x32_S32U8U8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -3088,6 +9093,73 @@ struct MMA_Traits<SM90_64x64x32_S32U8U8_RS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x64x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_64,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 64, 32>;
+  using CLayout = GMMA::CLayout_64x64;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x80x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -3113,6 +9185,73 @@ struct MMA_Traits<SM90_64x96x32_S32U8U8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x96x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_96,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 96, 32>;
+  using CLayout = GMMA::CLayout_64x96;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x112x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x128x32_S32U8U8_RS_TN>
 {
   using ValTypeD = int32_t;
@@ -3130,6 +9269,165 @@ struct MMA_Traits<SM90_64x128x32_S32U8U8_RS_TN>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x128x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_128,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<128, 32>;
+  using CLayout = GMMA::CLayout_64x128;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x144x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x160x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x176x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -3155,7 +9453,187 @@ struct MMA_Traits<SM90_64x192x32_S32U8U8_RS_TN>
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
+struct MMA_Traits<SM90_64x192x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_192,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<192, 32>;
+  using CLayout = GMMA::CLayout_64x192;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x208x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x224x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <>
+struct MMA_Traits<SM90_64x240x32_S32U8U8_RS_TN_SATURATE>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
 struct MMA_Traits<SM90_64x256x32_S32U8U8_RS_TN>
+{
+  using ValTypeD = int32_t;
+  using ValTypeA = uint8_t;
+  using ValTypeB = uint8_t;
+  using ValTypeC = int32_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_256,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<256, 32>;
+  using CLayout = GMMA::CLayout_64x256;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct MMA_Traits<SM90_64x256x32_S32U8U8_RS_TN_SATURATE>
 {
   using ValTypeD = int32_t;
   using ValTypeA = uint8_t;
@@ -3433,6 +9911,100 @@ struct MMA_Traits<SM90_64x32x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F16E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F32E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x64x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
 {
@@ -3516,6 +10088,100 @@ struct MMA_Traits<SM90_64x64x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F16E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F32E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -3605,6 +10271,100 @@ struct MMA_Traits<SM90_64x96x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F16E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F32E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x128x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
 {
@@ -3691,6 +10451,288 @@ struct MMA_Traits<SM90_64x128x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F16E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F32E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F16E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F32E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F16E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F32E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x192x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
 {
@@ -3774,6 +10816,288 @@ struct MMA_Traits<SM90_64x192x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F16E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F32E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F16E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F32E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F16E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F16E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F32E4M3E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F32E4M3E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -4121,6 +11445,100 @@ struct MMA_Traits<SM90_64x32x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F16E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F32E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x64x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
 {
@@ -4204,6 +11622,100 @@ struct MMA_Traits<SM90_64x64x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F16E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F32E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -4293,6 +11805,100 @@ struct MMA_Traits<SM90_64x96x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F16E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F32E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x128x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
 {
@@ -4379,6 +11985,288 @@ struct MMA_Traits<SM90_64x128x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F16E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F32E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F16E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F32E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F16E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F32E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x192x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
 {
@@ -4462,6 +12350,288 @@ struct MMA_Traits<SM90_64x192x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F16E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F32E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F16E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F32E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F16E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F16E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F32E4M3E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F32E4M3E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e4m3_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -4809,6 +12979,100 @@ struct MMA_Traits<SM90_64x32x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F16E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F32E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x64x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
 {
@@ -4892,6 +13156,100 @@ struct MMA_Traits<SM90_64x64x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F16E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F32E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -4981,6 +13339,100 @@ struct MMA_Traits<SM90_64x96x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F16E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F32E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x128x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
 {
@@ -5067,6 +13519,288 @@ struct MMA_Traits<SM90_64x128x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F16E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F32E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F16E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F32E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F16E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F32E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x192x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
 {
@@ -5150,6 +13884,288 @@ struct MMA_Traits<SM90_64x192x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F16E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F32E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F16E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F32E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F16E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F16E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F32E5M2E4M3_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F32E5M2E4M3_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e4m3_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -5497,6 +14513,100 @@ struct MMA_Traits<SM90_64x32x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F16E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F32E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x48x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_48,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 48, 32>;
+  using CLayout = GMMA::CLayout_64x48;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x64x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
 {
@@ -5580,6 +14690,100 @@ struct MMA_Traits<SM90_64x64x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F16E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F32E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x80x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_80,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout< 80, 32>;
+  using CLayout = GMMA::CLayout_64x80;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -5669,6 +14873,100 @@ struct MMA_Traits<SM90_64x96x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F16E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F32E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x112x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_112,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<112, 32>;
+  using CLayout = GMMA::CLayout_64x112;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x128x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
 {
@@ -5752,6 +15050,288 @@ struct MMA_Traits<SM90_64x128x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F16E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F32E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x144x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_144,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<144, 32>;
+  using CLayout = GMMA::CLayout_64x144;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F16E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F32E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x160x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_160,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<160, 32>;
+  using CLayout = GMMA::CLayout_64x160;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F16E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F32E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x176x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_176,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<176, 32>;
+  using CLayout = GMMA::CLayout_64x176;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -5841,6 +15421,288 @@ struct MMA_Traits<SM90_64x192x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F16E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F32E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x208x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_208,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<208, 32>;
+  using CLayout = GMMA::CLayout_64x208;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F16E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F32E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x224x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_224,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<224, 32>;
+  using CLayout = GMMA::CLayout_64x224;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F16E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = half_t;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = half_t;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F32E5M2E5M2_SS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeA = GMMA::smem_desc<GMMA::Major::K>;
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ABLayout< 64, 32>;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTE_SM90_EXTENDED_MMA_SHAPES_ENABLED)
+template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
+struct MMA_Traits<SM90_64x240x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
+{
+  using ValTypeD = float;
+  using ValTypeA = float_e5m2_t;
+  using ValTypeB = float_e5m2_t;
+  using ValTypeC = float;
+
+  using FrgTypeB = GMMA::smem_desc<GMMA::Major::K>;
+
+  using Shape_MNK = Shape<_64,_240,_32>;
+  using ThrID   = Layout<_128>;
+  using ALayout = GMMA::ALayout_64x32;
+  using BLayout = GMMA::ABLayout<240, 32>;
+  using CLayout = GMMA::CLayout_64x240;
+
+  GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
+};
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 template <GMMA::ScaleIn scaleA, GMMA::ScaleIn scaleB>
 struct MMA_Traits<SM90_64x256x32_F16E5M2E5M2_SS_TN<scaleA, scaleB>>
 {
@@ -5924,6 +15786,7 @@ struct MMA_Traits<SM90_64x256x32_F32E5M2E5M2_RS_TN<scaleA, scaleB>>
 
   GMMA::ScaleOut accumulate_ = GMMA::ScaleOut::One;
 };
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // end namespace cute
