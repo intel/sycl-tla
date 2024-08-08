@@ -316,8 +316,7 @@ struct BenchmarkRunner {
                                      std::to_string(options.l);
       full_test_name << test_name_suffix;
       benchmark::RegisterBenchmark(full_test_name.str().c_str(), run_benchmark, options, gemm_op)
-      ->UseManualTime()
-      ->Range(1, 1e3);
+      ->UseManualTime();
       benchmark::RunSpecifiedBenchmarks();
   }
 
@@ -331,11 +330,12 @@ struct BenchmarkRunner {
         GPU_Clock timer;
         timer.start();
         gemm_op.run(); 
-        float cute_time = timer.seconds() / options.iterations;
+        float cute_time = timer.seconds();
         state.counters["TFlops"] = ((2.0 * options.m * options.n * options.k * options.l) * 1e-12) / cute_time;
         state.counters["Time Elapsed (ms)"] = cute_time * 1000;
+        state.SetIterationTime(cute_time);
       }
     }
-    
+
     std::string test_name;
 };
