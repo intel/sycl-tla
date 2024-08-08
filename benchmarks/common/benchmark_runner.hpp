@@ -336,7 +336,6 @@ struct BenchmarkRunner {
         state.counters["Time Elapsed (ms)"] = cute_time * 1000;
       }
     }
-
-    Gemm gemm;
+    
     std::string test_name;
 };
