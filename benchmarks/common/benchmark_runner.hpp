@@ -325,15 +325,18 @@ struct BenchmarkRunner {
     
   private:
     static void run_benchmark(benchmark::State& state, const Options& options,  Gemm gemm_op) {
+      state.counters["runtime_ms"] = 0;
       for(auto _ : state) {
         GPU_Clock timer;
         timer.start();
         gemm_op.run(); 
-        float cute_time = timer.seconds();
-        state.counters["TFlops"] = ((2.0 * options.m * options.n * options.k * options.l) * 1e-12) / cute_time;
-        state.counters["Time Elapsed (ms)"] = cute_time * 1000;
-        state.SetIterationTime(cute_time);
+        auto ms_elapsed = timer.milliseconds();
+        state.counters["runtime_ms"] +=  ms_elapsed;
+        state.SetIterationTime(ms_elapsed / 1000);
       }
+      state.counters["runtime_ms"] /= state.iterations();
+      state.counters["TFlops"] = ((2.0 * options.m * options.n * options.k * options.l) * 1e-12) / 
+                                  (state.counters["runtime_ms"] / 1000);
     }
 
     std::string test_name;
