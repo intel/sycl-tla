@@ -362,8 +362,8 @@ struct BenchmarkRunner {
       state.counters["avg_runtime_ms"] /= state.iterations();
       state.counters["avg_tflops"] /= state.iterations();
       state.counters["avg_throughput"] /= state.iterations();
-      state.counters["peak_tflop"] = tflop / (state.counters["best_runtime_ms"] / 1000);
-      state.counters["peak_bandwidth"] = giga_bytes_transferred / (state.counters["best_runtime_ms"] / 1000);
+      state.counters["best_tflop"] = tflop / (state.counters["best_runtime_ms"] / 1000);
+      state.counters["best_bandwidth"] = giga_bytes_transferred / (state.counters["best_runtime_ms"] / 1000);
     }
     std::string test_name;
 };
