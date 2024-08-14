@@ -29,22 +29,24 @@
  *
  **************************************************************************************************/
 
+
+#include "cutlass/gemm/device/gemm_universal.h"
+#include "cutlass/gemm/device/gemm_universal_adapter.h"
+
+#include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/epilogue/collective/collective_builder.hpp"
+#include "cutlass/kernel_hardware_info.h"
+
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
-#include "cutlass/kernel_hardware_info.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
+#include "cutlass/util/GPU_Clock.hpp"
+
 #include "cutlass/util/reference/device/tensor_relu.h"
 #include "cutlass/tensor_view.h"
 #include "cutlass/coord.h"
-
-#include "cutlass/gemm/device/gemm_universal.h"
-#include "cutlass/gemm/device/gemm_universal_adapter.h"
-#include "cutlass/util/GPU_Clock.hpp"
-
-#include "cutlass/gemm/collective/collective_builder.hpp"
-#include "cutlass/epilogue/collective/collective_builder.hpp"
 
 #include <cute/tensor.hpp>
 #include <random>

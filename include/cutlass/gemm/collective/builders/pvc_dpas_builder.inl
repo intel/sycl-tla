@@ -73,17 +73,18 @@ struct CollectiveBuilder<
     cute::is_same_v<GmemLayoutBTag, cutlass::layout::RowMajor>
   >
     >{
+
+      #ifdef SYCL_NVIDIA_TARGET
+        static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
+          "Trying to use PVC pipeline on Non PVC hardware");
+      #endif
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_same_v<ElementA, bfloat16_t>, "PVC single stage pipeline requires ElementA to be of type bfloat16_t");
       static_assert(cute::is_same_v<ElementB, bfloat16_t>, "PVC single stage pipeline requires ElementB to be of type bfloat16_t");
       static_assert(cute::is_same_v<ElementAccumulator, float>, "PVC dpas pipeline requires ElementC to be of type float");
-      
-      // // PVC Single Stage dpas pipeline does not impose any alignment on A and B matrices
-      // (void)AlignmentA;
-      // (void)AlignmentB;
-      
-      //Prepare Template arguments required of CollectiveMainLoop
 
+      //Prepare Template arguments required of CollectiveMainLoop
+      
       using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
               Layout<Shape<_1,_1,_1>>,
               Tile<_32,_64,_32>>; // Subgroup level-tile
