@@ -67,7 +67,7 @@ struct CollectiveBuilder<
   cutlass::gemm::collective::StageCountAuto, // Stage Count needn't be a parameter
   KernelScheduleType,
   cute::enable_if_t<
-    (cute::is_same_v<KernelScheduleType, KernelSinglestage> ||
+    (cute::is_same_v<KernelScheduleType, KernelPVC> ||
      cute::is_same_v<KernelScheduleType, KernelScheduleAuto>) &&  
     cute::is_same_v<GmemLayoutATag, cutlass::layout::RowMajor> && // Different struct specialization because this will change copy atoms
     cute::is_same_v<GmemLayoutBTag, cutlass::layout::RowMajor>
@@ -92,8 +92,8 @@ struct CollectiveBuilder<
               Layout<Shape<_1,_1,_1>>,
               Tile<_32,_64,_32>>; // Subgroup level-tile
       
-      constexpr int PipelineStages = 3;
-      using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>
+      static constexpr int PipelineStages = 3;
+      using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
 
       using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
       using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
