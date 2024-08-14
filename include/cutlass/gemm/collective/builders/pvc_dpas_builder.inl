@@ -80,12 +80,11 @@ struct CollectiveBuilder<
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_same_v<ElementA, bfloat16_t>, "PVC single stage pipeline requires ElementA to be of type bfloat16_t");
       static_assert(cute::is_same_v<ElementB, bfloat16_t>, "PVC single stage pipeline requires ElementB to be of type bfloat16_t");
-      static_assert(cute::is_same_v<ElementC, float>, "PVC dpas pipeline requires ElementC to be of type bfloat16_t");
-      static_assert(rank(TileShape_MNK) == 3, "Tile shape must be 3 Dimensional");
-
-      // PVC Single Stage dpas pipeline does not impose any alignment on A and B matrices
-      (void)AlignmentA;
-      (void)AlignmentB;
+      static_assert(cute::is_same_v<ElementAccumulator, float>, "PVC dpas pipeline requires ElementC to be of type bfloat16_t");
+      
+      // // PVC Single Stage dpas pipeline does not impose any alignment on A and B matrices
+      // (void)AlignmentA;
+      // (void)AlignmentB;
       
       //Prepare Template arguments required of CollectiveMainLoop
 
@@ -111,9 +110,9 @@ struct CollectiveBuilder<
               DispatchPolicy,
               TileShape_MNK,
               ElementA,
-              cutlass::gemm::TagToStrideA_t<LayoutA>,
+              cutlass::gemm::TagToStrideA_t<GmemLayoutATag>,
               ElementB,
-              cutlass::gemm::TagToStrideA_t<LayoutB>,
+              cutlass::gemm::TagToStrideA_t<GmemLayoutBTag>,
               TiledMma,
               GmemTiledCopyA,
               SmemLayoutAtomA,

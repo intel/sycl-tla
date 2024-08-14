@@ -39,7 +39,7 @@
 #include "cutlass/gemm/collective/collective_builder_decl.hpp"
 #include "cutlass/gemm/collective/builders/sm90_gmma_builder.inl"
 
-#if defined(CUTLASS_INTEL_TARGET)
+#if defined(SYCL_INTEL_TARGET)
 #include "cutlass/gemm/collective/builders/pvc_dpas_builder.inl"
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////

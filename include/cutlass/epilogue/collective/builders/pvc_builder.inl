@@ -54,7 +54,7 @@ template <
   int AlignmentD,
   class FusionOpOrCallbacks
   >
-  class CollectiveBuilder<
+  struct CollectiveBuilder<
       arch::IntelPVC,
       arch::OpClassTensorOp, 
       TileShape_MNK,
@@ -74,14 +74,17 @@ template <
         cute::is_same_v<GmemLayoutTagC_,  cutlass::layout::RowMajor> &&
         cute::is_same_v<GmemLayoutTagD,  cutlass::layout::RowMajor> &&
         cute::is_same_v<EpilogueTileType, EpilogueTileAuto> &&
-        // Only linear combination is supported at the moment
-        cute::is_same_v<FusionOpOrCallbacks, 
-                        cutlass::epilogue::fusion::LinearCombination<ElementD,ElementCompute,ElementC,ElementCompute>>
+        // // Only linear combination is supported at the moment
+        (cute::is_same_v<FusionOpOrCallbacks, 
+                        cutlass::epilogue::fusion::LinearCombination<ElementD,ElementCompute,ElementC_,ElementCompute>> ||
+        cute::is_same_v<FusionOpOrCallbacks,
+                        cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu,
+                        ElementD,ElementCompute,ElementC_,ElementCompute>>)
       >
     >{
       #ifndef SYCL_INTEL_TARGET
         static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
-                      "Trying to use Intel PVC pipeline when target device is not intel_gpu_pvc")
+                      "Trying to use Intel PVC pipeline when target device is not intel_gpu_pvc");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_same_v<ElementC_, float>, "ElementC needs to be float for PVC pipeline");
@@ -90,8 +93,8 @@ template <
       //static_assert(cute::is_same_v<ElementC, ElementD>, "ElementC and ElementD needs to be of the same type");
       
       // PVC epilogue with linear combination does not impose any alignment restrictions on C or D.
-      // (void) AlignmentC;
-      // (void) AlignmentD;
+      // (void)AlignmentC;
+      // (void)AlignmentD;
 
       using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
               Layout<Shape<_1,_1,_1>>,
@@ -122,6 +125,7 @@ template <
             CopyOpG2R,
             SmemLayoutAtomC_,
             CopyOpS2R_,
+            CopyOpR2G,
             SmemLayoutAtomD_,
             CopyOpR2S_   
         >;
