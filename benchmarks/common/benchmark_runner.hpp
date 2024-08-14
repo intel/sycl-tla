@@ -310,7 +310,7 @@ private:
     auto tflop = ((2.0 * options.m * options.n * options.k * options.l) * 1e-12);
     auto giga_bytes_transferred = ((options.m * options.k) * sizeof(ElementA) +
                                     (options.k * options.n) * sizeof(ElementB) +
-                                2 * (options.m * options.n) * sizeof(ElementC)) * 1e-9;
+                                (options.beta != 0 ? 2 : 1) * (options.m * options.n) * sizeof(ElementC)) * 1e-9;
     initialize_counters(state);
     for(auto _ : state) {
       GPU_Clock timer;
