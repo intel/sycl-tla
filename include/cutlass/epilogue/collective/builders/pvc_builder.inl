@@ -89,8 +89,6 @@ template <
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_same_v<ElementC_, float>, "ElementC needs to be float for PVC pipeline");
       
-      // This is not strictly required ?
-      //static_assert(cute::is_same_v<ElementC, ElementD>, "ElementC and ElementD needs to be of the same type");
       
       // PVC epilogue with linear combination does not impose any alignment restrictions on C or D.
       // (void)AlignmentC;
