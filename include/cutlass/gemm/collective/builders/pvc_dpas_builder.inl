@@ -38,7 +38,7 @@
 
 namespace cutlass::gemm::collective {
 
-  // Intel PVC Single stage dpas pipeline
+  // Intel PVC 3 stage dpas pipeline, using prefetch
   // Also the auto builder
 
 template <
@@ -80,7 +80,7 @@ struct CollectiveBuilder<
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_same_v<ElementA, bfloat16_t>, "PVC single stage pipeline requires ElementA to be of type bfloat16_t");
       static_assert(cute::is_same_v<ElementB, bfloat16_t>, "PVC single stage pipeline requires ElementB to be of type bfloat16_t");
-      static_assert(cute::is_same_v<ElementAccumulator, float>, "PVC dpas pipeline requires ElementC to be of type bfloat16_t");
+      static_assert(cute::is_same_v<ElementAccumulator, float>, "PVC dpas pipeline requires ElementC to be of type float");
       
       // // PVC Single Stage dpas pipeline does not impose any alignment on A and B matrices
       // (void)AlignmentA;
@@ -91,8 +91,9 @@ struct CollectiveBuilder<
       using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
               Layout<Shape<_1,_1,_1>>,
               Tile<_32,_64,_32>>; // Subgroup level-tile
-
-      using DispatchPolicy = cutlass::gemm::MainloopIntelPVCUnpredicated;
+      
+      constexpr int PipelineStages = 3;
+      using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>
 
       using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
       using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
@@ -112,7 +113,7 @@ struct CollectiveBuilder<
               ElementA,
               cutlass::gemm::TagToStrideA_t<GmemLayoutATag>,
               ElementB,
-              cutlass::gemm::TagToStrideA_t<GmemLayoutBTag>,
+              cutlass::gemm::TagToStrideB_t<GmemLayoutBTag>,
               TiledMma,
               GmemTiledCopyA,
               SmemLayoutAtomA,
