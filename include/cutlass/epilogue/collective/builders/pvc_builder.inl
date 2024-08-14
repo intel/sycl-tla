@@ -82,10 +82,6 @@ template <
                         ElementD,ElementCompute,ElementC_,ElementCompute>>)
       >
     >{
-      #ifndef SYCL_INTEL_TARGET
-        static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
-                      "Trying to use Intel PVC pipeline when target device is not intel_gpu_pvc");
-      #endif
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_same_v<ElementC_, float>, "ElementC needs to be float for PVC pipeline");
       

@@ -73,10 +73,6 @@ struct CollectiveBuilder<
     cute::is_same_v<GmemLayoutBTag, cutlass::layout::RowMajor>
   >
     >{
-      #ifndef SYCL_INTEL_TARGET
-        static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
-                      "Trying to use Intel PVC pipeline when target device is not intel_gpu_pvc")
-      #endif
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_same_v<ElementA, bfloat16_t>, "PVC single stage pipeline requires ElementA to be of type bfloat16_t");
       static_assert(cute::is_same_v<ElementB, bfloat16_t>, "PVC single stage pipeline requires ElementB to be of type bfloat16_t");
