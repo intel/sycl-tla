@@ -32,7 +32,6 @@
 #pragma once
 
 #include <cutlass/arch/arch.h>
-
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/intel_pvc_epilogue.hpp"
 #include "cutlass/epilogue/fusion/intel_pvc_callbacks.hpp"
@@ -63,8 +62,8 @@ template <
       EpilogueTileType,
       ElementAccumulator,
       ElementCompute,
-      ElementC,
-      GmemLayoutTagC,
+      ElementC_,
+      GmemLayoutTagC_,
       AlignmentC,
       ElementD,
       GmemLayoutTagD,
@@ -72,7 +71,7 @@ template <
       EpilogueScheduleAuto, // We do not have different type of epilogue support yet
       FusionOpOrCallbacks,
       cute::enable_if_t<
-        cute::is_same_v<GmemLayoutTagC,  cutlass::layout::RowMajor> &&
+        cute::is_same_v<GmemLayoutTagC_,  cutlass::layout::RowMajor> &&
         cute::is_same_v<GmemLayoutTagD,  cutlass::layout::RowMajor> &&
         cute::is_same_v<EpilogueTileType, EpilogueTileAuto> &&
         // Only linear combination is supported at the moment
@@ -85,14 +84,14 @@ template <
                       "Trying to use Intel PVC pipeline when target device is not intel_gpu_pvc")
       #endif
       static_assert(is_static<TileShape_MNK>::value);
-      static_assert(cute::is_same_v<ElementC, float>, "ElementC needs to be float for PVC pipeline");
+      static_assert(cute::is_same_v<ElementC_, float>, "ElementC needs to be float for PVC pipeline");
       
       // This is not strictly required ?
       //static_assert(cute::is_same_v<ElementC, ElementD>, "ElementC and ElementD needs to be of the same type");
       
       // PVC epilogue with linear combination does not impose any alignment restrictions on C or D.
-      (void) AlignmentC;
-      (void) AlignmentD;
+      // (void) AlignmentC;
+      // (void) AlignmentD;
 
       using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
               Layout<Shape<_1,_1,_1>>,
@@ -116,9 +115,9 @@ template <
             DispatchPolicy,
             TileShape_MNK,
             ElementAccumulator,
-            cutlass::gemm::TagToStrideC_t<LayoutC>,
-            ElementOutput,
-            cutlass::gemm::TagToStrideC_t<LayoutD>,
+            cutlass::gemm::TagToStrideC_t<GmemLayoutTagC_>,
+            ElementD,
+            cutlass::gemm::TagToStrideC_t<GmemLayoutTagD>,
             FusionCallBacks,
             CopyOpG2R,
             SmemLayoutAtomC_,
@@ -126,5 +125,5 @@ template <
             SmemLayoutAtomD_,
             CopyOpR2S_   
         >;
-    }
+    };
 }

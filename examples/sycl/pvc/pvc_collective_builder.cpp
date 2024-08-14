@@ -29,13 +29,11 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/gemm/collective/collective_builder.hpp"
-#include "cutlass/epilogue/collective/collective_builder.hpp"
-
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
+#include "cutlass/kernel_hardware_info.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "cutlass/util/reference/device/tensor_relu.h"
 #include "cutlass/tensor_view.h"
@@ -45,7 +43,8 @@
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/util/GPU_Clock.hpp"
 
-
+#include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/epilogue/collective/collective_builder.hpp"
 
 #include <cute/tensor.hpp>
 #include <random>
@@ -350,13 +349,13 @@ int main(int argc, const char** argv)
   using TileShape = Shape<_256, _256, _32>;
   
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
-    cutlass:arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
     ElementInputA, LayoutA, AlignmentA,
     ElementInputB, LayoutB, AlignmentB,
     ElementAccumulator,
     TileShape, Shape<_1, _1, _1>,
     cutlass::gemm::collective::StageCountAuto,
-    cutlass::gemm::collective::cutlass::KernelScheduleAuto
+    cutlass::gemm::collective::KernelScheduleAuto
   >::CollectiveOp;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, 
@@ -364,12 +363,13 @@ int main(int argc, const char** argv)
           ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveBuilder<
-    cutlass:arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
     TileShape, Shape<_1, _1, _1>,
-    cutlass::epilogue::collective::EpilogueTileAuto, ElementCompute,
+    cutlass::epilogue::collective::EpilogueTileAuto, ElementComputeEpilogue,
+    ElementAccumulator, 
     ElementAccumulator, LayoutC, AlignmentC,
     ElementOutput,      LayoutD, AlignmentD,
-    cutlass::epilogue::collective::`EpilogueScheduleAuto,
+    cutlass::epilogue::collective::EpilogueScheduleAuto,
     EpilogueOp
   >::CollectiveOp;
   

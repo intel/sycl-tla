@@ -124,5 +124,5 @@ struct CollectiveBuilder<
               SmemCopyAtomB,
               TransformB
           >;
-    }
+    };
 }
