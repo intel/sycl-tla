@@ -308,9 +308,10 @@ struct BenchmarkRunner {
 private:
   static void run_benchmark(benchmark::State& state, const Options& options,  Gemm gemm_op) {
     auto tflop = ((2.0 * options.m * options.n * options.k * options.l) * 1e-12);
-    auto giga_bytes_transferred = ((options.m * options.k) * sizeof(ElementA) +
+    auto giga_bytes_transferred = (((options.m * options.k) * sizeof(ElementA) +
                                     (options.k * options.n) * sizeof(ElementB) +
-                                (options.beta != 0 ? 2 : 1) * (options.m * options.n) * sizeof(ElementC)) * 1e-9;
+                                (options.beta != 0 ? 2 : 1) * (options.m * options.n) * sizeof(ElementC)) * 1e-9) * 
+                                options.l;
     initialize_counters(state);
     for(auto _ : state) {
       GPU_Clock timer;
