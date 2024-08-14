@@ -29,8 +29,6 @@
  *
  **************************************************************************************************/
 
-#define SYCLCOMPAT_PROFILING_ENABLED
-
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/intel_pvc_epilogue.hpp"
 #include "cutlass/epilogue/fusion/intel_pvc_callbacks.hpp"
@@ -47,14 +45,8 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
+#include "common.h"
 
-template <typename T>
-static void fill_matrix(std::vector<T> &vector)
-{
-  std::generate(std::begin(vector), std::end(vector), [&] {
-    return static_cast<T>( (rand() / double(RAND_MAX)) );
-  });
-}
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -71,7 +63,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(4096), n(4096), k(4096), l(1), iterations(20),
+    m(5120), n(4096), k(4096), l(1), iterations(20),
     alpha(1.f), beta(0.f)
   { }
 
@@ -84,13 +76,13 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 4096);
+    cmd.get_cmd_line_argument("m", m, 5120);
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
-    cmd.get_cmd_line_argument("iterations", iterations, 20);
+    cmd.get_cmd_line_argument("iterations", iterations, 100);
   }
 
   /// Prints the usage statement.
@@ -149,6 +141,7 @@ struct ExampleRunner {
   StrideB stride_B;
   StrideC stride_C;
   StrideD stride_D;
+  uint64_t seed = 0;
 
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
@@ -188,14 +181,9 @@ struct ExampleRunner {
 
     syclcompat::wait();
 
-    // Check if output from CUTLASS kernel and reference kernel are relatively equal or not
-    // need to set a larger error margin for comparison to succeed
-    auto epsilon = static_cast<ElementOutput>(0.1f);
-    auto nonzero_floor = static_cast<ElementOutput>(0.1f);
-
-    bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(
-            block_ref_D.get(), block_D.get(), block_D.size(),
-            epsilon, nonzero_floor);
+    // Check if output from CUTLASS kernel and reference kernel are equal or not
+    bool passed = cutlass::reference::device::BlockCompareEqual(
+      block_ref_D.get(), block_D.get(), block_D.size());
 
     return passed;
   }
@@ -216,36 +204,15 @@ struct ExampleRunner {
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
-    // TODO: Enable initialization on device directly once RNG is
-    // available through SYCL.
-    std::vector<ElementA> a(K * M * L);
-    std::vector<ElementB> b(K * N * L);
-    std::vector<ElementB> b_vnni(b.size());
-    std::vector<ElementC> c(M * N * L);
-    std::vector<ElementC> d(M * N * L, ElementC{0});
-
-    fill_matrix(a);
-    fill_matrix(b);
-    fill_matrix(c);
-
-    syclcompat::memcpy(block_A.get(), a.data(), a.size() * sizeof(ElementA));
-    syclcompat::memcpy(block_B.get(), b.data(), b.size() * sizeof(ElementB));
-    syclcompat::memcpy(block_C.get(), c.data(), c.size() * sizeof(ElementC));
-    syclcompat::memcpy(block_D.get(), d.data(), d.size() * sizeof(ElementC));
+    initialize_block(block_A, seed + 2023);
+    initialize_block(block_B, seed + 2022);
+    initialize_block(block_C, seed + 2021);
   }
 
   void run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
     initialize(problem_size);
-
-    sycl::property_list prop = {
-      sycl::property::queue::in_order(),
-      sycl::property::queue::enable_profiling()
-    };
-
-    auto q = sycl::queue(syclcompat::get_default_context(), syclcompat::get_current_device(), prop);
-    syclcompat::set_default_queue(q);
 
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
@@ -349,7 +316,8 @@ int main(int argc, const char** argv)
           Layout<Shape<_1,_1,_1>>,
           Tile<_32,_64,_32>>; // Subgroup level-tile
 
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCUnpredicated;
+  constexpr int PipelineStages = 3;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,

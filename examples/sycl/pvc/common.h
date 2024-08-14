@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+* Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,58 +31,30 @@
 
 #pragma once
 
-#if defined(CUTLASS_ENABLE_SYCL)
-#include "cutlass/util/sycl_timer.hpp"
-#else
-#include <cuda_runtime.h>
-#endif
+#include "cutlass/util/device_memory.h"
+#include "cutlass/util/reference/device/sycl_tensor_fill.h"
 
-struct GPU_Clock
-{
-  GPU_Clock() {
-#if !defined(CUTLASS_ENABLE_SYCL)
-    cudaEventCreate(&start_);
-    cudaEventCreate(&stop_);
-    cudaEventRecord(start_);
-#endif
+/// Helper to initialize a block of device data
+template <class Element>
+bool initialize_block(
+        cutlass::DeviceAllocation<Element>& block,
+        uint64_t seed=2023) {
+
+  Element scope_max, scope_min;
+  int bits_input = cutlass::sizeof_bits<Element>::value;
+
+  if (bits_input == 1) {
+   scope_max = Element(2);
+   scope_min = Element(0);
+  } else if (bits_input <= 8) {
+    scope_max = Element(2);
+    scope_min = Element(-2);
+  } else {
+    scope_max = Element(8);
+    scope_min = Element(-8);
   }
 
-  ~GPU_Clock() {
-#if !defined(CUTLASS_ENABLE_SYCL)
-    cudaEventDestroy(start_);
-    cudaEventDestroy(stop_);
-#endif
-  }
-
-  void start() {
-#if defined(CUTLASS_ENABLE_SYCL)
-    syclTimer.start();
-#else
-    cudaEventRecord(start_);
-#endif
-  }
-
-  float milliseconds() {
-#if defined(CUTLASS_ENABLE_SYCL)
-    syclTimer.stop();
-    return syclTimer.milliseconds();
-#else
-    cudaEventRecord(stop_);
-    cudaEventSynchronize(stop_);
-    float time;
-    cudaEventElapsedTime(&time, start_, stop_);
-    return time;
-#endif
-  }
-
-  float seconds() {
-    return milliseconds() * float(1e-3);
-  }
-
- private:
-#if defined(CUTLASS_ENABLE_SYCL)
-    SYCLTimer syclTimer;
-#else
-    cudaEvent_t start_, stop_;
-#endif
-};
+  cutlass::reference::device::BlockFillRandomUniform(
+       block.get(), block.size(), seed, scope_max, scope_min, 0);
+  return true;
+}
