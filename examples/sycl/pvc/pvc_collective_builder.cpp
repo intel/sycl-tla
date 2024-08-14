@@ -201,7 +201,6 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are relatively equal or not
-    // need to set a larger error margin for comparison to succeed
     auto epsilon = static_cast<ElementOutput>(0.1f);
     auto nonzero_floor = static_cast<ElementOutput>(0.1f);
 
