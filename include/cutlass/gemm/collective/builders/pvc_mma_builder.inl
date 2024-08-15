@@ -81,7 +81,7 @@ struct CollectiveBuilder<
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_same_v<ElementA, bfloat16_t>, "PVC single stage pipeline requires ElementA to be of type bfloat16_t");
       static_assert(cute::is_same_v<ElementB, bfloat16_t>, "PVC single stage pipeline requires ElementB to be of type bfloat16_t");
-      static_assert(cute::is_same_v<ElementAccumulator, float>, "PVC dpas pipeline requires ElementC to be of type float");
+      static_assert(cute::is_same_v<ElementAccumulator, float>, "PVC pipeline requires ElementC to be of type float");
 
       //Prepare Template arguments required of CollectiveMainLoop
       
