@@ -39,7 +39,7 @@
 
 namespace cutlass::epilogue::collective {
 
-  // PVC epilogue builder
+  // Intel epilogue builder
 
 template <
   class TileShape_MNK,
@@ -58,7 +58,7 @@ template <
       arch::IntelPVC,
       arch::OpClassTensorOp, 
       TileShape_MNK,
-      Shape<_1, _1, _1>,    // Cluster Shape, which has no meaning in PVC
+      Shape<_1, _1, _1>,    // Cluster Shape
       EpilogueTileType,
       ElementAccumulator,
       ElementCompute,
@@ -84,10 +84,10 @@ template <
     >{
       #ifdef SYCL_NVIDIA_TARGET
         static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
-          "Trying to use PVC pipeline on Non PVC hardware");
+          "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
-      static_assert(cute::is_same_v<ElementC_, float>, "ElementC needs to be float for PVC pipeline");
+      static_assert(cute::is_same_v<ElementC_, float>, "ElementC needs to be float for the Intel pipeline");
       
       using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
               Layout<Shape<_1,_1,_1>>,
@@ -97,7 +97,7 @@ template <
       using CopyOpG2R = XE_2D_U32x8x16x1x1_LD_N;
       using CopyOpR2G = XE_2D_U32x8x16x1x1_ST_N;
 
-      // PVC Epilogue with Linear Combination does not use shared memory
+      // Intel Epilogue with Linear Combination does not use shared memory
       using SmemLayoutAtomC_ = void;
       using CopyOpS2R_ = void;
       using SmemLayoutAtomD_ = void;
