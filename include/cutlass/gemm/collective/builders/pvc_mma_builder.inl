@@ -76,7 +76,7 @@ struct CollectiveBuilder<
 
       #ifdef SYCL_NVIDIA_TARGET
         static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
-          "Trying to use PVC pipeline on Non PVC hardware");
+          "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_same_v<ElementA, bfloat16_t>, "PVC single stage pipeline requires ElementA to be of type bfloat16_t");
