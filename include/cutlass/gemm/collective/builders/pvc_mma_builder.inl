@@ -63,7 +63,7 @@ struct CollectiveBuilder<
   AlignmentB,
   ElementAccumulator,
   TileShape_MNK,
-  Shape<_1, _1, _1>,    // Cluster Shape, which has no meaning in PVC
+  Shape<_1, _1, _1>,    // Cluster Shape
   cutlass::gemm::collective::StageCountAuto, // Stage Count needn't be a parameter
   KernelScheduleType,
   cute::enable_if_t<
