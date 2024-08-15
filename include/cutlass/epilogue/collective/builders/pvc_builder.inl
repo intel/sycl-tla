@@ -46,8 +46,8 @@ template <
   class EpilogueTileType,
   class ElementAccumulator,
   class ElementCompute,
-  class ElementC_,
-  class GmemLayoutTagC_,
+  class ElementC,
+  class GmemLayoutTagC,
   int AlignmentC,
   class ElementD,
   class GmemLayoutTagD,
@@ -62,8 +62,8 @@ template <
       EpilogueTileType,
       ElementAccumulator,
       ElementCompute,
-      ElementC_,
-      GmemLayoutTagC_,
+      ElementC,
+      GmemLayoutTagC,
       AlignmentC,
       ElementD,
       GmemLayoutTagD,
@@ -71,15 +71,15 @@ template <
       EpilogueScheduleAuto, // We do not have different type of epilogue support yet
       FusionOpOrCallbacks,
       cute::enable_if_t<
-        cute::is_same_v<GmemLayoutTagC_,  cutlass::layout::RowMajor> &&
+        cute::is_same_v<GmemLayoutTagC,  cutlass::layout::RowMajor> &&
         cute::is_same_v<GmemLayoutTagD,  cutlass::layout::RowMajor> &&
         cute::is_same_v<EpilogueTileType, EpilogueTileAuto> &&
         // Only linear combination is supported at the moment
         (cute::is_same_v<FusionOpOrCallbacks, 
-                        cutlass::epilogue::fusion::LinearCombination<ElementD,ElementCompute,ElementC_,ElementCompute>> ||
+                        cutlass::epilogue::fusion::LinearCombination<ElementD,ElementCompute,ElementC,ElementCompute>> ||
         cute::is_same_v<FusionOpOrCallbacks,
                         cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu,
-                        ElementD,ElementCompute,ElementC_,ElementCompute>>)
+                        ElementD,ElementCompute,ElementC,ElementCompute>>)
       >
     >{
       #ifdef SYCL_NVIDIA_TARGET
@@ -87,7 +87,7 @@ template <
           "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
-      static_assert(cute::is_same_v<ElementC_, float>, "ElementC needs to be float for the Intel pipeline");
+      static_assert(cute::is_same_v<ElementC, float>, "ElementC needs to be float for the Intel pipeline");
       
       using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
               Layout<Shape<_1,_1,_1>>,
@@ -111,7 +111,7 @@ template <
             DispatchPolicy,
             TileShape_MNK,
             ElementAccumulator,
-            cutlass::gemm::TagToStrideC_t<GmemLayoutTagC_>,
+            cutlass::gemm::TagToStrideC_t<GmemLayoutTagC>,
             ElementD,
             cutlass::gemm::TagToStrideC_t<GmemLayoutTagD>,
             FusionCallBacks,
