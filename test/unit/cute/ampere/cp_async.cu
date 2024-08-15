@@ -55,7 +55,7 @@ using namespace cute;
 CUTLASS_GLOBAL void
 test(double const* g_in, double* g_out)
 {
-  #ifdef CUTLASS_ENABLE_SYCL
+  #ifdef __SYCL_DEVICE_ONLY__
   //TODO: access shared memory via the work-group static extension
   #else 
     extern __shared__ double smem[];
@@ -72,7 +72,7 @@ test2(double const* g_in, double* g_out)
 {
   using namespace cute;
 
-  #ifdef CUTLASS_ENABLE_SYCL
+  #ifdef __SYCL_DEVICE_ONLY__
   //TODO: access shared memory via the work-group static extension
   #else
     extern __shared__ double smem[];

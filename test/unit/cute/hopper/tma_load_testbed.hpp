@@ -62,7 +62,7 @@ tma_test_device_cute(T const* g_in, T* g_out,
   CUTE_STATIC_ASSERT_V(product_each(shape(cta_tiler)) == product_each(shape(smem_layout)));
 
   // Use Shared Storage structure to allocate and distribute aligned SMEM addresses
-  #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(__SYCL_DEVICE_ONLY__)
   //TODO: access shared memory via the work-group static extension
   #else
   extern __shared__ char shared_memory[];

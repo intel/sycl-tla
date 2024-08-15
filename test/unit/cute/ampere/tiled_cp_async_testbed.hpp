@@ -58,7 +58,7 @@ test_tiled_cp_async_device_cute(T const* g_in, T* g_out,
                      GmemLayout gmem_layout, SmemLayout smem_layout)
 {
   using namespace cute;
-  #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(__SYCL_DEVICE_ONLY__)
   //TODO: access shared memory via the work-group static extension
   #else
     extern __shared__ char shared_memory[];

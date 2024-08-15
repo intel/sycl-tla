@@ -57,7 +57,7 @@ ldsm_test_device(uint16_t* g_in, uint16_t* g_out)
   int stride = blockDimX();
 
   // load input gmem -> smem
-  #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(__SYCL_DEVICE_ONLY__)
   //TODO: access shared memory via the work-group static extension
   // Not using static local memory extension just for consistency, otherwise that can be used here 
   // too
@@ -92,7 +92,7 @@ ldsm_test_device_cute(uint16_t* g_in, uint16_t* g_out,
                       TiledCopy tiled_copy, SmemLayout smem_layout)
 {
   using namespace cute;
-  #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(__SYCL_DEVICE_ONLY__)
   //TODO: access shared memory via the work-group static extension
   // Not using static local memory extension just for consistency, otherwise that can be used here 
   // too

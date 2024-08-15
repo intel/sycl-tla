@@ -55,7 +55,7 @@ stsm_test_device(uint16_t* g_in, uint16_t* g_out)
     reg[i] = reinterpret_cast<uint32_t*>(g_in)[tid + (stride * i)];
   }
   
-  #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(__SYCL_DEVICE_ONLY__)
   //TODO: access shared memory via the work-group static extension
   #else
   __shared__ uint32_t smem[32 * count];
@@ -81,7 +81,7 @@ stsm_test_device_cute(uint16_t* g_in, uint16_t* g_out,
 {
   using namespace cute;
 
-  #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(__SYCL_DEVICE_ONLY__)
   //TODO: access shared memory via the work-group static extension
   #else
   __shared__ uint16_t smem[size(smem_layout)];
