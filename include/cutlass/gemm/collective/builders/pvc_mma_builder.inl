@@ -95,7 +95,7 @@ struct CollectiveBuilder<
       using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
       using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
 
-      //PVC Singlestage pipeline does not use shared memory
+      //PVC pipeline does not use shared memory
       using SmemLayoutAtomA = void; 
       using SmemLayoutAtomB = void; 
       using SmemCopyAtomA = void;
