@@ -74,7 +74,7 @@ template <
         cute::is_same_v<GmemLayoutTagC_,  cutlass::layout::RowMajor> &&
         cute::is_same_v<GmemLayoutTagD,  cutlass::layout::RowMajor> &&
         cute::is_same_v<EpilogueTileType, EpilogueTileAuto> &&
-        // // Only linear combination is supported at the moment
+        // Only linear combination is supported at the moment
         (cute::is_same_v<FusionOpOrCallbacks, 
                         cutlass::epilogue::fusion::LinearCombination<ElementD,ElementCompute,ElementC_,ElementCompute>> ||
         cute::is_same_v<FusionOpOrCallbacks,
