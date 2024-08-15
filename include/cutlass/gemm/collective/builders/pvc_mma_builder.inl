@@ -64,7 +64,7 @@ struct CollectiveBuilder<
   ElementAccumulator,
   TileShape_MNK,
   Shape<_1, _1, _1>,    // Cluster Shape
-  cutlass::gemm::collective::StageCountAuto, // Stage Count needn't be a parameter
+  cutlass::gemm::collective::StageCountAuto, 
   KernelScheduleType,
   cute::enable_if_t<
     (cute::is_same_v<KernelScheduleType, KernelPVC> ||
