@@ -38,7 +38,7 @@
 
 namespace cutlass::gemm::collective {
 
-  // Intel PVC 3 stage dpas pipeline, using prefetch
+  // Intel PVC 3 stage pipeline, using prefetch
   // Also the auto builder
 
 template <
