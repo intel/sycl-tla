@@ -54,7 +54,7 @@ template <
   > 
 struct CollectiveBuilder<
   arch::IntelPVC,
-  arch::OpClassTensorOp,   // Reusing opClassTensorOp instead of declaring a new "OpClassDpasOP" as they have the same meaning
+  arch::OpClassTensorOp,   // Reusing opClassTensorOp for Intel devices
   ElementA,
   GmemLayoutATag,
   AlignmentA,
