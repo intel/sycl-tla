@@ -39,6 +39,7 @@
 #include <numeric>
 
 #if defined(CUTLASS_ENABLE_SYCL)
+#include <sycl/sycl.hpp>
 #include <syclcompat/syclcompat.hpp>
 #else
 #include <thrust/host_vector.h>
@@ -49,14 +50,16 @@
 using namespace cute;
 
 #ifdef CUTLASS_ENABLE_SYCL
-  using namespace syclcompat;
+  namespace sc = syclcompat;
+  namespace sc_exp = syclcompat::experimental;
+  namespace sycl_ext = sycl::ext::oneapi::experimental;
 #endif
 
 CUTLASS_GLOBAL void
 test(double const* g_in, double* g_out)
 {
   #ifdef __SYCL_DEVICE_ONLY__
-  //TODO: access shared memory via the work-group static extension
+    auto smem = sycl_ext::get_dynamic_work_group_memory<double>();
   #else 
     extern __shared__ double smem[];
   #endif
@@ -73,7 +76,7 @@ test2(double const* g_in, double* g_out)
   using namespace cute;
 
   #ifdef __SYCL_DEVICE_ONLY__
-  //TODO: access shared memory via the work-group static extension
+    auto smem = sycl_ext::get_dynamic_work_group_memory<double>();
   #else
     extern __shared__ double smem[];
   #endif
@@ -102,7 +105,10 @@ TEST(SM80_CuTe_Ampere, CpAsync)
 
   device_vector<double> d_out(count, -1);
   #if defined(CUTLASS_ENABLE_SYCL)
-  //TODO: Launch kernel using syclcompat with the Work group static launch property
+    sc_exp::launch<test>(sc::dim3(1), sc::dim3(count), 
+              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(double) * count)},
+              d_in.data(), d_out.data());
+    sc::wait_and_throw();
   #else
     test<<<1, count, sizeof(double) * count>>>(
       thrust::raw_pointer_cast(d_in.data()),
@@ -112,6 +118,10 @@ TEST(SM80_CuTe_Ampere, CpAsync)
 
   device_vector<double> d_out_cp_async(count, -2);
   #if defined(CUTLASS_ENABLE_SYCL)
+    sc_exp::launch<test2>(sc::dim3(1), sc::dim3(count), 
+              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(double) * count)},
+              d_in.data(), d_out_cp_async.data());
+    sc::wait_and_throw();
   #else
     test2<<<1, count, sizeof(double) * count>>>(
       thrust::raw_pointer_cast(d_in.data()),

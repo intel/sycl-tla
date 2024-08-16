@@ -43,6 +43,15 @@
 
 #include <cute/tensor.hpp>
 
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <sycl/sycl.hpp>
+#include <syclcompat/syclcompat.hpp>
+
+namespace sc = syclcompat;
+namespace sc_exp = syclcompat::experimental;
+namespace sycl_ext = sycl::ext::oneapi::experimental;
+#endif
+
 using namespace cute;
 
 template <class ElementType, class SmemLayout>
@@ -59,7 +68,7 @@ test_tiled_cp_async_device_cute(T const* g_in, T* g_out,
 {
   using namespace cute;
   #if defined(__SYCL_DEVICE_ONLY__)
-  //TODO: access shared memory via the work-group static extension
+  auto smem = sycl_ext::get_dynamic_work_group_memory<char>();
   #else
     extern __shared__ char shared_memory[];
   #endif
@@ -121,6 +130,11 @@ test_tiled_cp_async(
   // Launch
   int smem_size = int(sizeof(SharedStorage<T, decltype(smem_layout)>));
   #if defined(CUTLASS_ENABLE_SYCL)
+    sc_exp::launch<test_tiled_cp_async_device_cute<T, TiledCopy, GMEM_Layout, SMEM_Layout>>
+    ( sc::dim3(1), sc::dim3(128), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size)},
+      d_in.data(), d_out.data(), tiled_copy, gmem_layout, smem_layout);
+    sc::wait_and_throw();
   #else
   test_tiled_cp_async_device_cute<<<1, 128, smem_size>>>(
     reinterpret_cast<T const*>(raw_pointer_cast(d_in.data())),

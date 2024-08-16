@@ -44,6 +44,10 @@
 
 #include <cute/tensor.hpp>
 
+#ifdef CUTLASS_ENABLE_SYCL
+#include <syclcompat/syclcompat.hpp>
+#endif
+
 using namespace cute;
 
 template <class GmemTensor, class RmemTiler, class CopyPolicy>
@@ -80,6 +84,9 @@ test_copy_vectorization(CopyPolicy policy, GmemLayout gmem_layout, RmemTiler rme
   device_vector<T> d_in = h_in;
   Tensor m_in = make_tensor(make_gmem_ptr(raw_pointer_cast(d_in.data())), gmem_layout);
   #if defined(CUTLASS_ENABLE_SYCL)
+  syclcompat::launch<kernel<GmemLayout,RmemTiler,  CopyPolicy>>(
+    m_in, rmem_tiler, policy
+  );
   #else
   kernel<<<1,1>>>(m_in, rmem_tiler, policy);
   #endif

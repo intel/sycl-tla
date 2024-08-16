@@ -45,6 +45,15 @@
 #include <cute/tensor.hpp>
 #include <cute/numeric/numeric_types.hpp>
 
+#ifdef CUTLASS_ENABLE_SYCL
+#include <sycl/sycl.hpp>
+#include <syclcompat/syclcompat.hpp>
+
+namespace sc = syclcompat;
+namespace sc_exp = syclcompat::experimental;
+namespace sycl_ext = sycl::ext::oneapi::experimental;
+#endif
+
 using namespace cute;
 
 namespace cooperative_copy_mode {
@@ -59,8 +68,8 @@ CUTLASS_DEVICE void
 cooperative_copy_default_gs(T const* g_in, T* g_out, GMemLayout const& gmem_layout, SMemLayout const& smem_layout)
 {
   using namespace cute;
-  #if defined(CUTLASS_ENABLE_SYCL)
-  //TODO: access shared memory via the work-group static extension
+  #if defined(__SYCL_DEVICE_ONLY__)
+  auto smem = sycl_ext::get_dynamic_work_group_memory<uint128_t>();
   #else
   extern __shared__ uint128_t smem_buf[];
   #endif
@@ -96,7 +105,8 @@ cooperative_copy_default_ss(T const* g_in, T* g_out, Layout1 const& layout1, Lay
 {
   using namespace cute;
   #if defined(CUTLASS_ENABLE_SYCL)
-  //TODO: access shared memory via the work-group static extension
+  auto smem = sycl::ext::oneapi::experimental::
+                    get_dynamic_work_group_memory<uint128_t>();
   #else
   extern __shared__ uint128_t smem_buf[];
   #endif
@@ -212,7 +222,11 @@ void test_cooperative_copy_default(Layout1 const& layout1, Layout2 const& layout
     // Launch
     auto coop_copy = cooperative_copy_default_kernel<Mode, MaxVecBits, ThreadBlockSize, value_type, Layout1, Layout2>;
     #if defined(CUTLASS_ENABLE_SYCL)
-    //TODO: Launch kernel using syclcompat with the Work group static launch property
+
+    sc_exp::launch<coop_copy>(sc::dim3(1), sc::dim3(ThreadBlockSize), 
+              sc_exp::kernel_properties{sycl_ext::work_group_static_size(shared_memory_bytes)},
+              d_in.data() + extra_elements, d_out.data() + extra_elements, layout1, layout2);
+    sc::wait_and_throw();
     #else
     ASSERT_EQ(cudaFuncSetAttribute(coop_copy, cudaFuncAttributeMaxDynamicSharedMemorySize, static_cast<int>(shared_memory_bytes)), cudaSuccess);
 

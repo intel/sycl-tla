@@ -62,7 +62,7 @@ tma_test_device_cute(T const* g_in, T* g_out,
 
   // Use Shared Storage structure to allocate and distribute aligned SMEM addresses
   #if defined(__SYCL_DEVICE_ONLY__)
-  //TODO: access shared memory via the work-group static extension
+  auto smem = sycl_ext::get_dynamic_work_group_memory<char>();
   #else
   extern __shared__ char shared_memory[];
   #endif
@@ -180,7 +180,17 @@ test_tma_store(CopyOp      const& copy_op,
   // Launch
   int smem_size = int(sizeof(SharedStorage<T, decltype(smem_layout)>));
   #if defined(CUTLASS_ENABLE_SYCL)
-  //TODO: Launch kernel using syclcompat with the Work group static launch property
+  auto kernel = tma_test_device_cute<T, 
+                                    decltype(tma), 
+                                    CTA_Tile,
+                                    GmemLayout,
+                                    SmemLayout>;
+  sc_exp::launch<kernel>
+  ( sc::dim3(1), sc::dim3(128), 
+    sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size)},
+    d_in.data(), d_out.data(), tma, cta_tile,
+    gmem_layout, smem_layout);
+  sc::wait_and_throw();
   #else
   tma_test_device_cute<<<1, 128, smem_size>>>(
     reinterpret_cast<T const*>(raw_pointer_cast(d_in.data())),

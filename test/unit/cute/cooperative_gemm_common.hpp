@@ -44,6 +44,16 @@
 
 using namespace cute;
 
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <sycl/sycl.hpp>
+#include <syclcompat/syclcompat.hpp>
+
+namespace sc = syclcompat;
+namespace sc_exp = syclcompat::experimental;
+namespace sycl_ext = sycl::ext::oneapi::experimental;
+#endif
+
+
 template<typename T>
 struct fp64_tester {
   using value_type = double;
@@ -97,8 +107,13 @@ cooperative_gemm_kernel(TA const*   a,
     Tensor g_c_out_tensor = make_tensor(make_gmem_ptr(c_out), CLayout{});
 
     constexpr uint32_t copy_max_vec_bytes = CopyMaxVecBits / 8;
-
+    
+    #ifdef __SYCL_DEVICE_ONLY__
+    auto smem_buf = sycl_ext::get_dynamic_work_group_memory<float4>();
+    #else
     extern __shared__ float4 smem_buf[];
+    #endif
+
     auto* smem_ptr = reinterpret_cast<unsigned char*>(smem_buf);
     auto* smem_ptr_a = smem_ptr;
     auto* smem_ptr_b = smem_ptr_a + round_up((sizeof(TA) * cosize(SMemALayout {})), copy_max_vec_bytes);
@@ -227,6 +242,13 @@ void test_cooperative_gemm(ALoadTransform  const& a_load_transform  = {},
     ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform
   >;
   #if defined(CUTLASS_ENABLE_SYCL)
+  sc_exp::launch<kernel>
+  ( sc::dim3(1), sc::dim3(ThreadBlockSize), 
+    sc_exp::kernel_properties{sycl_ext::work_group_static_size(shared_memory_size)},
+    d_a.data(), d_b.data(), d_c.data(), d_c_out.data(),
+    alpha, beta, a_load_transform, b_load_transform,
+    c_load_transform, c_store_transform);
+  sc::wait_and_throw();
   #else
   ASSERT_EQ(cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, static_cast<int>(shared_memory_size)), 0);
   kernel<<<1, ThreadBlockSize, shared_memory_size>>>(
