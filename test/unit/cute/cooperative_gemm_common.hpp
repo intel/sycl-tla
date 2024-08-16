@@ -37,9 +37,6 @@
 
 #include <iostream>
 
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-
 #include <cute/tensor.hpp>
 
 using namespace cute;
@@ -109,7 +106,7 @@ cooperative_gemm_kernel(TA const*   a,
     constexpr uint32_t copy_max_vec_bytes = CopyMaxVecBits / 8;
     
     #ifdef __SYCL_DEVICE_ONLY__
-    auto smem_buf = sycl_ext::get_dynamic_work_group_memory<float4>();
+    auto smem_buf = (sycl::vec<float, 4>*)sycl_ext::get_dynamic_work_group_memory<char>().get();
     #else
     extern __shared__ float4 smem_buf[];
     #endif
@@ -233,7 +230,7 @@ void test_cooperative_gemm(ALoadTransform  const& a_load_transform  = {},
   const size_t shared_memory_size = round_up(sizeof(TA) * h_a.size(), copy_max_vec_bytes) 
                                   + round_up(sizeof(TB) * h_b.size(), copy_max_vec_bytes)
                                   +         (sizeof(TC) * h_c.size());
-  auto kernel = cooperative_gemm_kernel<
+  using kernel = cooperative_gemm_kernel<
     gmem_a_layout_t, gmem_b_layout_t, gmem_c_layout_t,
     smem_a_layout_t, smem_b_layout_t, smem_c_layout_t,
     SmemCopyOpA, SmemCopyOpB, SmemCopyOpC,
@@ -269,7 +266,7 @@ void test_cooperative_gemm(ALoadTransform  const& a_load_transform  = {},
     FAIL() << "Error at kernel sync: " << cudaGetErrorString(error) << "\n";
   }
   #endif
-  thrust::host_vector<TC> h_c_ref(h_c.size(), static_cast<TC>(0.0));
+  host_vector<TC> h_c_ref(h_c.size(), static_cast<TC>(0.0));
   auto h_c_ref_tensor = make_tensor(h_c_ref.data(), gmem_c_layout_t{});
   // A * B
   for (int k = 0; k < size<1>(h_a_tensor); k++) {

@@ -54,13 +54,11 @@ namespace cutlass {
   }
 
 template <typename T>
-class host_vector;
-
-template <typename T>
 class device_vector;
 
 template <typename T>
 class host_vector {
+  public:
   host_vector(std::size_t num_elements) { vec.reserve(num_elements); }
   host_vector(std::size_t num_elements, T init_val) {
     vec = std::move(std::vector<T>(num_elements, init_val));
@@ -68,15 +66,10 @@ class host_vector {
 
   T* data() { return vec.data(); }
   T& operator[](std::size_t index) {return vec[index]; }
-  std::size_t size() { return vec.size(); }
+  std::size_t size() const { return vec.size(); }
 
-  host_vector<T> operator=(const device_vector<T>& device_vec) {
-    syclcompat::wait_and_throw();
-    host_vector host_vec(device_vec.size());
-    syclcompat::memcpy(host_vec.data(), device_vec.data(),
-                       device_vec.size() * sizeof(T));
-    return host_vec;
-  }
+  host_vector<T>& operator=(device_vector<T>);
+  host_vector(device_vector<T>);
 
  private:
   std::vector<T> vec;
@@ -84,6 +77,7 @@ class host_vector {
 
 template <typename T>
 class device_vector {
+  public:
   device_vector(std::size_t num_elements) {
     num_elements = num_elements;
     dev_ptr = make_shared(num_elements);
@@ -97,14 +91,12 @@ class device_vector {
     syclcompat::wait_and_throw(); 
   }
 
-  device_vector<T> operator=(const host_vector<T>& host_vec) {
-    device_vector device_vec(host_vec.size());
-    syclcompat::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
-  }
+  device_vector<T>& operator=(host_vector<T> host_vec);
+  device_vector(host_vector<T>);
 
   T* data() { return dev_ptr.get(); }
 
-  std::size_t size() {return num_elements; }
+  std::size_t size() const {return num_elements; }
 
  private:
   T* safe_malloc(std::size_t size) {
@@ -125,6 +117,42 @@ class device_vector {
   std::shared_ptr<T> dev_ptr;
   std::size_t num_elements;
 };
+
+template<typename T>
+host_vector<T>& host_vector<T>::operator=(device_vector<T> device_vec) {
+    syclcompat::wait_and_throw();
+    host_vector host_vec(device_vec.size());
+    syclcompat::memcpy(host_vec.data(), device_vec.data(),
+                       device_vec.size() * sizeof(T));
+    *this = host_vec;
+    return *this;
+}
+
+template<typename T>
+host_vector<T>::host_vector(device_vector<T> device_vec) {
+    syclcompat::wait_and_throw();
+    host_vector host_vec(device_vec.size());
+    syclcompat::memcpy(host_vec.data(), device_vec.data(),
+                       device_vec.size() * sizeof(T));
+    *this = host_vec;
+}
+
+template<typename T>
+device_vector<T>& device_vector<T>::operator=(host_vector<T> host_vec) {
+    device_vector device_vec(host_vec.size());
+    syclcompat::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
+    syclcompat::wait_and_throw();
+    *this = device_vec;
+    return *this;
+}
+
+template<typename T>
+device_vector<T>::device_vector(host_vector<T> host_vec) {
+    device_vector device_vec(host_vec.size());
+    syclcompat::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
+    syclcompat::wait_and_throw();
+    *this = device_vec;
+}
 
 }  // namespace cutlass
 #endif

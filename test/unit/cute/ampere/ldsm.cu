@@ -33,9 +33,6 @@
 
 #include <iostream>
 
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-
 #include <cute/tensor.hpp>
 
 #include <cute/atom/copy_traits_sm75.hpp>
@@ -57,8 +54,8 @@ CUTLASS_GLOBAL void
 ldsm_test_device(uint16_t* g_in, uint16_t* g_out)
 {
   constexpr int count = sizeof(T) / 4;
-  int tid = threadIdxX();
-  int stride = blockDimX();
+  int tid = ThreadIdxX();
+  int stride = BlockDimX();
 
   // load input gmem -> smem
   #if defined(__SYCL_DEVICE_ONLY__)
@@ -104,7 +101,7 @@ ldsm_test_device_cute(uint16_t* g_in, uint16_t* g_out,
   auto t_g_out = make_tensor(make_gmem_ptr(g_out), smem_layout);
   auto t_smem  = make_tensor(make_smem_ptr(smem),  smem_layout);
 
-  int tid = threadIdx.x;
+  int tid = ThreadIdxX();
 
   // Load input gmem -> smem
   for (int i = tid; i < size(t_smem); i += size(tiled_copy)) {

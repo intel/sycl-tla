@@ -33,9 +33,6 @@
 
 #include <iostream>
 
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-
 #include <cute/tensor.hpp>
 #include <cute/arch/copy_sm90.hpp>
 

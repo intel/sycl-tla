@@ -39,9 +39,6 @@
 #include <vector>
 #include <numeric>
 
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-
 #include <cute/tensor.hpp>
 
 #ifdef CUTLASS_ENABLE_SYCL
@@ -85,6 +82,7 @@ test_copy_vectorization(CopyPolicy policy, GmemLayout gmem_layout, RmemTiler rme
   Tensor m_in = make_tensor(make_gmem_ptr(raw_pointer_cast(d_in.data())), gmem_layout);
   #if defined(CUTLASS_ENABLE_SYCL)
   syclcompat::launch<kernel<GmemLayout,RmemTiler,  CopyPolicy>>(
+    syclcompat::dim3(1), syclcompat::dim3(1),
     m_in, rmem_tiler, policy
   );
   #else
@@ -94,7 +92,7 @@ test_copy_vectorization(CopyPolicy policy, GmemLayout gmem_layout, RmemTiler rme
   host_vector<T> h_out = d_in;
   Tensor result = make_tensor(h_out.data(), gmem_layout);
 
-  thrust::host_vector<T> h_true = h_in;
+  host_vector<T> h_true = h_in;
   Tensor ref = make_tensor(h_true.data(), gmem_layout);
 
   // Set the values directly in the reference tensor, no copy

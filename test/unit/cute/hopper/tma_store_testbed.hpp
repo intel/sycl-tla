@@ -36,9 +36,6 @@
 #include <iostream>
 #include <cstdint>
 
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-
 #include <cute/tensor.hpp>
 
 namespace cutlass::test {
