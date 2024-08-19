@@ -469,4 +469,18 @@ auto make_xe_2d_copy(Tensor<GEngine, GLayout> gtensor) {
     Traits traits {gtensor};
     return Copy_Atom<Traits, typename GEngine::value_type> {traits};
 }
+
+template<class S, class D>
+struct Copy_Traits<XE_ATOMIC<S, D>> {
+  // Logical thread id to thread idx (one-thread)
+  using ThrID = Layout<_1>;
+
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape<_1,Int<sizeof_bits<S>::value>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape<_1,Int<sizeof_bits<D>::value>>>;
+
+  // Reference map from (thr,val) to bit
+  using RefLayout = SrcLayout;
+};
 } // end namespace cute

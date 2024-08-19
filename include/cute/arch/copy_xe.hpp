@@ -475,4 +475,26 @@ struct XE_2D_U32x8x16x1x1_ST_N
   }
 };
 
+/// @brief This function atomic store into global memory.
+template<class S, class D = S>
+struct XE_ATOMIC {
+  using SRegisters = S[1];
+  using DRegisters = D[1];
+
+  CUTE_STATIC_ASSERT(is_same_v<S, float> || is_same_v<S, double> || is_same_v<S, int>);
+
+  template<class S_, class D_>
+  CUTE_HOST_DEVICE static void
+  copy(S_ const& src, D_ & dst) {
+    #if defined(SYCL_INTEL_TARGET)
+      auto v = sycl::atomic_ref<D_, sycl::memory_order::relaxed,
+                                  sycl::memory_scope::device,
+                                  sycl::access::address_space::global_space>(*&dst);
+      v += static_cast<D_>(*&src);
+    #else
+      CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    #endif
+  }
+};
+
 } // end namespace 
