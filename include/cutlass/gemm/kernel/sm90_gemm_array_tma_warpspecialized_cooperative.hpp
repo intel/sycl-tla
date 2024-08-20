@@ -624,7 +624,7 @@ public:
           );
 
           // Converge before issuing tensormap fence release since fence is aligned
-          __syncwarp();
+          syncwarp();
           collective_epilogue.tensormaps_cp_fence_release<IsEpiLoad>(shared_storage.tensormaps.epilogue, epi_load_tensormap, lane_predicate);
         }
 
@@ -684,7 +684,7 @@ public:
             );
 
             // Converge before issuing tensormap fence release since fence is aligned
-            __syncwarp();
+            syncwarp();
             collective_epilogue.tensormaps_cp_fence_release<IsEpiLoad>(shared_storage.tensormaps.epilogue, epi_load_tensormap, lane_predicate);
           }
 
@@ -721,7 +721,7 @@ public:
         );
 
         // Converge before issuing tensormap fence release since fence is aligned
-        __syncwarp();
+        syncwarp();
         collective_epilogue.tensormaps_cp_fence_release<IsEpiLoad>(shared_storage.tensormaps.epilogue, epi_store_tensormap, lane_predicate);
       }
 
@@ -812,7 +812,7 @@ public:
           );
 
           // Converge before issuing tensormap fence release since fence is aligned
-          __syncwarp();
+          syncwarp();
           collective_epilogue.tensormaps_cp_fence_release<IsEpiLoad>(shared_storage.tensormaps.epilogue, epi_store_tensormap, lane_predicate);
         }
 

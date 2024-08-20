@@ -86,7 +86,7 @@ warpgroup_fence_operand(uint32_t& reg) {
   // MSVC emits a build error for 'asm volatile'
   // even if it only occurs in a __device__ function.
   // This prevents the error.
-#if defined(__CUDA_ARCH__)
+#if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("" : "+r"(reg) :: "memory");
 #endif
 }
@@ -94,7 +94,7 @@ warpgroup_fence_operand(uint32_t& reg) {
 CUTE_HOST_DEVICE
 void
 warpgroup_fence_operand(float& reg) {
-#if defined(__CUDA_ARCH__)
+#if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
   asm volatile("" : "+f"(reg) :: "memory");
 #endif
 }
