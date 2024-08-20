@@ -34,11 +34,13 @@
 
 // Config
 #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900) && \
-  ((__CUDACC_VER_MAJOR__ >= 12) || ((__CUDACC_VER_MAJOR__ == 11) && (__CUDACC_VER_MINOR__ >= 8))))
+  ((__CUDACC_VER_MAJOR__ >= 12) || ((__CUDACC_VER_MAJOR__ == 11) && (__CUDACC_VER_MINOR__ >= 8)))) || \
+  (defined(__SYCL_CUDA_ARCH__) && (__SYCL_CUDA_ARCH__ >= 900))
 #  define CUTE_ARCH_CLUSTER_SM90_ENABLED
 #endif
 
-#if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900) && (__CUDACC_VER_MAJOR__ >= 12))
+#if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900) && (__CUDACC_VER_MAJOR__ >= 12)) || \
+    (defined(__SYCL_CUDA_ARCH__) && (__SYCL_CUDA_ARCH__ >= 900))
 #  define CUTE_ARCH_ELECT_ONE_SM90_ENABLED
 #endif
 

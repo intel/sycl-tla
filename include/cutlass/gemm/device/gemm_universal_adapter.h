@@ -393,11 +393,41 @@ public:
         void const* kernel = (void const*) device_kernel<GemmKernel>;
         if constexpr (GemmKernel::ArchTag::kMinComputeCapability == 90) {
           if (is_static_1x1x1 && not launch_with_pdl) {
+            #if defined(SYCL_NVIDIA_TARGET)
+            const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
+            const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
+
+            using namespace syclcompat::experimental;
+            auto event = launch<device_kernel<GemmKernel>>(launch_policy{
+              sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}},
+              params);
+            #else
             device_kernel<GemmKernel><<<grid, block, smem_size, stream>>>(params);
+            #endif
           }
           else {
+            #if defined(SYCL_NVIDIA_TARGET)
+            using namespace sycl::ext::oneapi::experimental;
+            namespace sc = syclcompat;
+            properties launch_properties{
+              cuda::cluster_size(sycl::range<3>(cluster.z, cluster.y, cluster.x)),
+              work_group_static_size(smem_size)
+            };
+            auto queue = syclcompat::get_default_queue();
+            queue.submit([&](sycl::handler& cgh){
+              cgh.parallel_for(range<3>(grid.z * block.z, grid.y * block.y, grid.x * block.x),
+                               range<3>(block.z, block.y, block.x),
+                               launch_properties,
+                               [=](sycl::nd_item<3> it)[[intel::max_work_group_size(1, 1, GemmKernel::MaxThreadsPerBlock)]]{
+                  auto smem_buf = sycl::ext::oneapi::experimental::
++                    get_dynamic_work_group_memory<char>().get();
+                  [[clang::always_inline]]device_kernel<GemmKernel>(params, smem_buf);
+              });
+            });
+            #else
             launch_result = ClusterLauncher::launch(
               grid, cluster, block, smem_size, stream, kernel, kernel_params, launch_with_pdl);
+            #endif          
           }
         }
       }

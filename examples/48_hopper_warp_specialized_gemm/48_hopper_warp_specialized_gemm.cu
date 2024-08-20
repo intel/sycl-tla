@@ -466,6 +466,7 @@ int main(int argc, char const **args) {
 
   // CUTLASS must be compiled with CUDA 12.0 Toolkit to run this example
   // and must have compute capability at least 90.
+  #if !defined(SYCL_NVIDIA_TARGET)
   if (__CUDACC_VER_MAJOR__ < 12) {
     std::cerr << "This example requires CUDA 12 or newer.\n";
     // Returning zero so this test passes on older Toolkits. Its actions are no-op.
@@ -483,6 +484,7 @@ int main(int argc, char const **args) {
       << "later (compute capability 90 or greater).\n";
     return 0;
   }
+  #endif
   //
   // Parse options
   //

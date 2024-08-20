@@ -51,6 +51,10 @@ function(cutlass_example_add_executable NAME)
   if (NOT CUTLASS_ENABLE_SYCL)
     SET(ADD_CUDA ON)
   endif()
+  
+  if (DPCPP_SYCL_ARCH STREQUAL "sm_90a")
+    SET(ADD_CUDA ON)
+  endif()
 
   target_link_libraries(
     ${NAME}
@@ -155,6 +159,7 @@ if (NOT CUTLASS_ENABLE_SYCL)
 else()
   foreach(EXAMPLE
     14_ampere_tf32_tensorop_gemm
+    48_hopper_warp_specialized_gemm
     cute
     sycl
     )
