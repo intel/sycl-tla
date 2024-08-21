@@ -356,15 +356,15 @@ public:
     Status launch_result{ Status::kSuccess };
     // Use extended launch API only for mainloops that use it
     if constexpr (GemmKernel::ArchTag::kMinComputeCapability >= 90) {
-#if !defined(CUTLASS_ENABLE_SYCL)
       constexpr bool is_static_1x1x1 = cute::is_static_v<typename GemmKernel::DispatchPolicy::ClusterShape> and
                                        cute::size(typename GemmKernel::DispatchPolicy::ClusterShape{}) == 1;
       dim3 cluster(cute::size<0>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
                    cute::size<1>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
                    cute::size<2>(typename GemmKernel::DispatchPolicy::ClusterShape{}));
       void* kernel_params[] = {&params};
-
+      
       if constexpr (kEnableCudaHostAdapter) {
+#if !defined(CUTLASS_ENABLE_SYCL)
         //
         // Use the cuda host adapter
         //
@@ -387,6 +387,7 @@ public:
         else {
           return Status::kErrorInternal;
         }
+#endif
       }
       else {
         CUTLASS_ASSERT(cuda_adapter == nullptr);
@@ -415,15 +416,16 @@ public:
             };
             auto queue = syclcompat::get_default_queue();
             queue.submit([&](sycl::handler& cgh){
-              cgh.parallel_for(range<3>(grid.z * block.z, grid.y * block.y, grid.x * block.x),
-                               range<3>(block.z, block.y, block.x),
+              cgh.parallel_for(sycl::nd_range<3>(
+                                {grid.z * block.z, grid.y * block.y, grid.x * block.x},
+                                {block.z, block.y, block.x}
+                              ),
                                launch_properties,
                                [=](sycl::nd_item<3> it)[[intel::max_work_group_size(1, 1, GemmKernel::MaxThreadsPerBlock)]]{
-                  auto smem_buf = sycl::ext::oneapi::experimental::
-+                    get_dynamic_work_group_memory<char>().get();
+                  auto smem_buf = get_dynamic_work_group_memory<char>().get();
                   [[clang::always_inline]]device_kernel<GemmKernel>(params, smem_buf);
               });
-            });
+            }).wait_and_throw();
             #else
             launch_result = ClusterLauncher::launch(
               grid, cluster, block, smem_size, stream, kernel, kernel_params, launch_with_pdl);
@@ -431,7 +433,7 @@ public:
           }
         }
       }
-#endif
+
     }
     else {
       launch_result = Status::kSuccess;
