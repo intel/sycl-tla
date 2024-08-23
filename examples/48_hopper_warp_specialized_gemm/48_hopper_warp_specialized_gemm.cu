@@ -76,11 +76,19 @@
 #include "cutlass/util/tensor_view_io.h"
 #include "cutlass/util/reference/device/gemm.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
+#if defined(SYCL_NVIDIA_TARGET)
+#include "cutlass/util/reference/device/sycl_tensor_fill.h"
+#else
 #include "cutlass/util/reference/device/tensor_fill.h"
+#endif
 
 #include "helper.h"
 
 using namespace cute;
+
+#if defined(SYCL_NVIDIA_TARGET)
+using namespace cutlass;
+#endif
 
 #if defined(CUTLASS_ARCH_MMA_SM90_SUPPORTED)
 
@@ -379,7 +387,11 @@ bool verify(const Options &options) {
     ref_D);
 
   // Wait for kernel to finish
-  CUDA_CHECK(cudaDeviceSynchronize());
+  #if defined(SYCL_NVIDIA_TARGET)
+    syclcompat::wait_and_throw();
+  #else
+    CUDA_CHECK(cudaDeviceSynchronize());
+  #endif
 
   // Check if output from CUTLASS kernel and reference kernel are equal or not
   bool passed = cutlass::reference::device::BlockCompareEqual(block_ref_D.get(), block_D.get(), block_D.size());
