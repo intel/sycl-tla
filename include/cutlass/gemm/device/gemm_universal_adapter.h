@@ -402,6 +402,7 @@ public:
             auto event = launch<device_kernel<GemmKernel>>(launch_policy{
               sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}},
               params);
+              EventManager::getInstance().addEvent(event);
             #else
             device_kernel<GemmKernel><<<grid, block, smem_size, stream>>>(params);
             #endif
@@ -415,7 +416,7 @@ public:
               work_group_static_size(smem_size)
             };
             auto queue = syclcompat::get_default_queue();
-            queue.submit([&](sycl::handler& cgh){
+            auto event = queue.submit([&](sycl::handler& cgh){
               cgh.parallel_for(sycl::nd_range<3>(
                                 {grid.z * block.z, grid.y * block.y, grid.x * block.x},
                                 {block.z, block.y, block.x}
@@ -425,7 +426,8 @@ public:
                   auto smem_buf = get_dynamic_work_group_memory<char>().get();
                   [[clang::always_inline]]device_kernel<GemmKernel>(params, smem_buf);
               });
-            }).wait_and_throw();
+            });
+            EventManager::getInstance().addEvent(event);
             #else
             launch_result = ClusterLauncher::launch(
               grid, cluster, block, smem_size, stream, kernel, kernel_params, launch_with_pdl);
