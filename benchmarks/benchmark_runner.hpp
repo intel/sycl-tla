@@ -276,7 +276,7 @@ struct BenchmarkRunnerGemm {
     // Verify that the result is correct
     bool passed = verify(problem_size, options.alpha, options.beta);
     if(not passed) {
-      throw std::runtime_error("Disposition Failed.");
+      state.SkipWithError("Disposition Failed.");
     }
 
     auto tflop = ((2.0 * options.m * options.n * options.k * options.l) * 1e-12);
