@@ -29,22 +29,21 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/epilogue/collective/default_epilogue.hpp"
-#include "cutlass/epilogue/collective/intel_pvc_epilogue.hpp"
-#include "cutlass/epilogue/fusion/intel_pvc_callbacks.hpp"
+
 #include "cutlass/gemm/device/gemm_universal.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
-#include "cutlass/gemm/collective/collective_mma.hpp"
-#include "cutlass/util/GPU_Clock.hpp"
 
-#include <cute/tensor.hpp>
-#include <random>
+#include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/epilogue/collective/collective_builder.hpp"
+#include "cutlass/kernel_hardware_info.h"
 
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
+#include "cutlass/util/GPU_Clock.hpp"
+
 #include "cutlass/util/reference/device/tensor_relu.h"
 #include "cutlass/tensor_view.h"
 #include "cutlass/coord.h"
@@ -311,56 +310,44 @@ int main(int argc, const char** argv)
   using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
+  constexpr int AlignmentA = sizeof(ElementInputA);
+  constexpr int AlignmentB = sizeof(ElementInputB);
+  constexpr int AlignmentC = sizeof(ElementAccumulator);
+  constexpr int AlignmentD = sizeof(ElementOutput);
+  
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
-
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
+  
+  using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
+    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    ElementInputA, LayoutA, AlignmentA,
+    ElementInputB, LayoutB, AlignmentB,
+    ElementAccumulator,
+    TileShape, Shape<_1, _1, _1>,
+    cutlass::gemm::collective::StageCountAuto,
+    cutlass::gemm::collective::KernelScheduleAuto
+  >::CollectiveOp;
 
-  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-          Layout<Shape<_1,_1,_1>>,
-          Tile<_32,_64,_32>>;  // Subgroup level-tile
+  using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, 
+          ElementOutput, ElementComputeEpilogue, ElementAccumulator, 
+          ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
-  constexpr int PipelineStages = 3;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
-
-  using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, ElementOutput,
-          ElementComputeEpilogue, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
-
-  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
-          decltype(tile_shape(TiledMma()))>;
-  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-          EpilogueDispatchPolicy,
-          TileShape,
-          ElementAccumulator,
-          cutlass::gemm::TagToStrideC_t<LayoutC>,
-          ElementOutput,
-          cutlass::gemm::TagToStrideC_t<LayoutD>,
-          FusionCallBacks,
-          XE_2D_U32x8x16x1x1_LD_N,
-          void, void,
-          XE_2D_U32x8x16x1x1_ST_N,
-          void, void>;
-
-// Mainloop
-  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
-          GEMMDispatchPolicy,
-          TileShape,
-          ElementInputA,
-          cutlass::gemm::TagToStrideA_t<LayoutA>,
-          ElementInputB,
-          cutlass::gemm::TagToStrideB_t<LayoutB>,
-          TiledMma,
-          GmemTiledCopyA, void, void, cute::identity,  // A
-          GmemTiledCopyB, void, void, cute::identity   // B
-  >;
-
+  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveBuilder<
+    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    TileShape, Shape<_1, _1, _1>,
+    cutlass::epilogue::collective::EpilogueTileAuto, ElementComputeEpilogue,
+    ElementAccumulator, 
+    ElementAccumulator, LayoutC, AlignmentC,
+    ElementOutput,      LayoutD, AlignmentD,
+    cutlass::epilogue::collective::EpilogueScheduleAuto,
+    EpilogueOp
+  >::CollectiveOp;
+  
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
   Shape<int, int, int, int>,
   CollectiveMainloop,

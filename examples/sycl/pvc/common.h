@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+* Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,18 +28,33 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+
 #pragma once
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
-#include "cutlass/gemm/collective/collective_mma_decl.hpp"
-#include "cutlass/gemm/collective/collective_mma.hpp"
+#include "cutlass/util/device_memory.h"
+#include "cutlass/util/reference/device/sycl_tensor_fill.h"
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+/// Helper to initialize a block of device data
+template <class Element>
+bool initialize_block(
+        cutlass::DeviceAllocation<Element>& block,
+        uint64_t seed=2023) {
 
-#include "cutlass/gemm/collective/collective_builder_decl.hpp"
-#include "cutlass/gemm/collective/builders/sm90_gmma_builder.inl"
+  Element scope_max, scope_min;
+  int bits_input = cutlass::sizeof_bits<Element>::value;
 
-#if defined(SYCL_INTEL_TARGET)
-#include "cutlass/gemm/collective/builders/pvc_mma_builder.inl"
-#endif
-/////////////////////////////////////////////////////////////////////////////////////////////////
+  if (bits_input == 1) {
+   scope_max = Element(2);
+   scope_min = Element(0);
+  } else if (bits_input <= 8) {
+    scope_max = Element(2);
+    scope_min = Element(-2);
+  } else {
+    scope_max = Element(8);
+    scope_min = Element(-8);
+  }
+
+  cutlass::reference::device::BlockFillRandomUniform(
+       block.get(), block.size(), seed, scope_max, scope_min, 0);
+  return true;
+}
