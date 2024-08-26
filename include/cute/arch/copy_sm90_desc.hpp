@@ -30,7 +30,7 @@
  **************************************************************************************************/
 #pragma once
 
-#if !defined(__CUDACC_RTC__) || defined(SYCL_NVIDIA_TARGET)
+#if (!defined(__CUDACC_RTC__) && !defined(CUTLASS_ENABLE_SYCL)) || defined(SYCL_NVIDIA_TARGET)
 #include <cuda.h>
 #include <cinttypes>
 #endif
