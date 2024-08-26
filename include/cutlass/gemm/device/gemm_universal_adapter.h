@@ -411,6 +411,9 @@ public:
             #if defined(SYCL_NVIDIA_TARGET)
             using namespace sycl::ext::oneapi::experimental;
             namespace sc = syclcompat;
+            if (launch_with_pdl) {
+              throw std::runtime_error("Programmatic Grid synchronization is not yet supported by SYCL");
+            }
             properties launch_properties{
               cuda::cluster_size(sycl::range<3>(cluster.z, cluster.y, cluster.x)),
               work_group_static_size(smem_size)
