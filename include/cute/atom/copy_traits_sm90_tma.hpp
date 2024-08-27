@@ -975,7 +975,7 @@ make_tma_copy_desc(Tensor<GEngine,GLayout> const& gtensor,         // The origin
     //
 
   #if ((__CUDACC_VER_MAJOR__ >= 12) && !defined(__CUDACC_RTC__)) || \
-      (__PTX_VERSION__ >= 80)
+      defined(SYCL_NVIDIA_TARGET)
 
     CUtensorMapDataType     tma_format      = TMA::to_CUtensorMapDataType<TmaInternalType>();
     CUtensorMapInterleave   tma_interleave  = CU_TENSOR_MAP_INTERLEAVE_NONE;

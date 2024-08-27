@@ -27,9 +27,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-
 cutlass_example_add_executable(
   48_hopper_warp_specialized_gemm
   48_hopper_warp_specialized_gemm.cu
-  )
+)

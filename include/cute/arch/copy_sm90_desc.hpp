@@ -176,7 +176,7 @@ enum class CacheHintSm90 : uint64_t {
   EVICT_LAST = 0x14F0000000000000,
 };
 
-#if (__CUDACC_VER_MAJOR__ >= 12) || (__PTX_VERSION__ >= 80)
+#if (__CUDACC_VER_MAJOR__ >= 12) || defined(SYCL_NVIDIA_TARGET)
 
 #if !defined(__CUDACC_RTC__)
 /// @return The TMA descriptor datatype enum corresponding to T.

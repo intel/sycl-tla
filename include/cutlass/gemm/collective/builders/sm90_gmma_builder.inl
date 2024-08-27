@@ -33,7 +33,7 @@
 #include "cutlass/gemm/collective/builders/sm90_common.inl"
 
 // SM90 Collective Builders should be used only starting CUDA 12.0
-#if (__CUDACC_VER_MAJOR__ >= 12) || (__PTX_VERSION__ >= 80)
+#if (__CUDACC_VER_MAJOR__ >= 12) || (SYCL_NVIDIA_TARGET)
 #define CUTLASS_SM90_COLLECTIVE_BUILDER_SUPPORTED
 #endif
 

@@ -36,7 +36,7 @@
 
 // Config
 #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900) && (__CUDACC_VER_MAJOR__ >= 12)) || \
-    (defined(__SYCL_CUDA_ARCH__) && (__SYCL_CUDA_ARCH__ >= 900) && (__PTX_VERSION__ >= 80))
+    (defined(__SYCL_CUDA_ARCH__) && (__SYCL_CUDA_ARCH__ >= 900))
 #  define CUTE_ARCH_STSM_SM90_ENABLED
 #  define CUTE_ARCH_TMA_SM90_ENABLED
 #endif

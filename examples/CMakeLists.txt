@@ -53,7 +53,6 @@ function(cutlass_example_add_executable NAME)
   endif()
   
   if (DPCPP_SYCL_ARCH STREQUAL "sm_90a")
-    # This is needed to call the function that initialise the TMA descriptor
     SET(ADD_CUDA ON)
   endif()
 
