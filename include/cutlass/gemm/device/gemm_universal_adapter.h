@@ -362,7 +362,6 @@ public:
                    cute::size<1>(typename GemmKernel::DispatchPolicy::ClusterShape{}),
                    cute::size<2>(typename GemmKernel::DispatchPolicy::ClusterShape{}));
       void* kernel_params[] = {&params};
-      
       if constexpr (kEnableCudaHostAdapter) {
 #if !defined(CUTLASS_ENABLE_SYCL)
         //

@@ -45,12 +45,7 @@ namespace cutlass {
 /// Status code returned by CUTLASS operations
 enum class Status {
   kSuccess,                    ///< Operation was successful.
-  kErrorMisalignedOperand,     ///< operands fail alignment requirements.
-  kErrorInvalidDataType,       ///< DataType fails requirement.
-  kErrorInvalidLayout,         ///< Layout fails alignment requirement.
-  kErrorInvalidProblem,        ///< Specified problem size is not supported by operator.
-  kErrorNotSupported,          ///< Operation is not supported on current device.
-  kErrorWorkspaceNull,         ///< The given workspace is null when it is required to be non-null.
+  kErrorMisalignedOperand,     ///< operands fail alignmenthttps://github.com/codeplaysoftware/cutlass-fork/pull/126/commits/3798c3a636ecedfc71f3c3fa4a323f22fb378e3dnull when it is required to be non-null.
   kErrorInternal,              ///< An error within CUTLASS occurred.
   kErrorArchMismatch,          ///< CUTLASS runs on a device that it was not compiled for.
   kErrorInsufficientDriver,    ///< CUTLASS runs with a driver that is too old.
@@ -117,7 +112,7 @@ int canonical_lane_idx() {
 /// Threads within the warp must be converged.
 CUTLASS_DEVICE
 int canonical_warp_idx_sync() { 
-    return shfl_sync(0xffffffff, ThreadIdxX() / NumThreadsPerWarp, 0);
+  return shfl_sync(0xffffffff, ThreadIdxX() / NumThreadsPerWarp, 0);
 }
 
 /// Returns a warp index in the CTA. The threads in warp may not be convergent
