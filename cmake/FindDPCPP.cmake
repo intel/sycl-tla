@@ -51,7 +51,7 @@ endif()
 
 if(NOT "${DPCPP_SYCL_ARCH}" STREQUAL "")
   if("${DPCPP_SYCL_TARGET}" STREQUAL "nvptx64-nvidia-cuda")
-    list(APPEND DPCPP_FLAGS "-fno-sycl-decompose-functor;")
+    list(APPEND DPCPP_FLAGS "-fno-sycl-decompose-functor;") #Enables Grid Constant like behaviour
     list(APPEND DPCPP_FLAGS "-fgpu-inline-threshold=1000000;")
     list(APPEND DPCPP_FLAGS "-Xsycl-target-backend")
     list(APPEND DPCPP_FLAGS "--cuda-gpu-arch=${DPCPP_SYCL_ARCH}")

@@ -117,7 +117,7 @@ int canonical_lane_idx() {
 /// Threads within the warp must be converged.
 CUTLASS_DEVICE
 int canonical_warp_idx_sync() { 
-    return shfl_sync(0xffffffff, ThreadIdxX() / NumThreadsPerWarp, 0);
+  return shfl_sync(0xffffffff, ThreadIdxX() / NumThreadsPerWarp, 0);
 }
 
 /// Returns a warp index in the CTA. The threads in warp may not be convergent

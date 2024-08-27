@@ -762,7 +762,7 @@ print_latex_copy(LayoutS const& S, ThrIDS const& TS,  // (m,n) -> (tid,vid)  and
 #include <cute/atom/copy_traits_sm90.hpp>
 
 // Config
-#if (__CUDACC_VER_MAJOR__ >= 12) || defined(SYCL_NVIDIA_TARGET)
+#if (__CUDACC_VER_MAJOR__ >= 12) || (__PTX_VERSION__ >= 80)
 #  define CUTE_COPY_ATOM_TMA_SM90_ENABLED
 #endif
 
