@@ -36,14 +36,14 @@
 
 // Config
 #if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900) && (__CUDACC_VER_MAJOR__ >= 12)) || \
-    (defined(__SYCL_CUDA_ARCH__) && (__SYCL_CUDA_ARCH__ >= 900))
+    (defined(__SYCL_CUDA_ARCH__) && (__SYCL_CUDA_ARCH__ >= 900) && defined(__PTX_VERSION__) && (__PTX_VERSION__ >= 80))
 #  define CUTE_ARCH_STSM_SM90_ENABLED
 #  define CUTE_ARCH_TMA_SM90_ENABLED
 #endif
 
 #if defined(CUTE_ARCH_TMA_SM90_ENABLED) && \
   (((__CUDACC_VER_MAJOR__ > 12) || ((__CUDACC_VER_MAJOR__ == 12) && (__CUDACC_VER_MINOR__ >= 3))) || \
-  defined(SYCL_NVIDIA_TARGET))
+  defined(__PTX_VERSION__) && (__PTX_VERSION__ >= 80))
 #  define CUTE_ARCH_DEVICE_MODIFIABLE_TMA_SM90_ENABLED
 #endif
 
