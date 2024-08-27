@@ -411,7 +411,7 @@ public:
           }
           else {
             #if defined(CUTLASS_ENABLE_SYCL)
-              #if defined(SYCL_NVIDIA_TARGET)
+              #if defined(SYCL_NVIDIA_TARGET) && !defined(__INTEL_LLVM_COMPILER) // Disable cluster launch via icpx
               using namespace sycl::ext::oneapi::experimental;
               namespace sc = syclcompat;
               if (launch_with_pdl) {
