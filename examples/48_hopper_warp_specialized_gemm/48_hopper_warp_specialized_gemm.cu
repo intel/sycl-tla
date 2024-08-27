@@ -439,10 +439,10 @@ int run(Options &options)
   // Run profiling loop
   if (options.iterations > 0)
   {
+    CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
     GpuTimer timer;
     timer.start();
     for (int iter = 0; iter < options.iterations; ++iter) {
-      CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
       CUTLASS_CHECK(gemm.run());
     }
     timer.stop();
