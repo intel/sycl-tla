@@ -37,16 +37,9 @@
 #include <type_traits>
 #include <vector>
 #include <numeric>
-
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-
 #include <cute/tensor.hpp>
 
 #if defined(CUTLASS_ENABLE_SYCL)
-#include <sycl/sycl.hpp>
-#include <syclcompat/syclcompat.hpp>
-
 namespace sc = syclcompat;
 namespace sc_exp = syclcompat::experimental;
 namespace sycl_ext = sycl::ext::oneapi::experimental;
@@ -68,14 +61,14 @@ test_tiled_cp_async_device_cute(T const* g_in, T* g_out,
 {
   using namespace cute;
   #if defined(__SYCL_DEVICE_ONLY__)
-  auto smem = sycl_ext::get_dynamic_work_group_memory<char>();
+  auto shared_memory = sycl_ext::get_dynamic_work_group_memory<char>().get();
   #else
-    extern __shared__ char shared_memory[];
+    extern CUTLASS_SHARED char shared_memory[];
   #endif
   using SharedStorage = SharedStorage<T, SmemLayout>;
   SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(shared_memory);
 
-  auto thr_copy = tiled_copy.get_slice(threadIdxX());
+  auto thr_copy = tiled_copy.get_slice(ThreadIdxX());
   Tensor gA = make_tensor(make_gmem_ptr(g_in), gmem_layout);
   Tensor gB = make_tensor(make_gmem_ptr(g_out), gmem_layout);
 
@@ -131,8 +124,8 @@ test_tiled_cp_async(
   int smem_size = int(sizeof(SharedStorage<T, decltype(smem_layout)>));
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<test_tiled_cp_async_device_cute<T, TiledCopy, GMEM_Layout, SMEM_Layout>>
-    ( sc::dim3(1), sc::dim3(128), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size)},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(128), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size)}},
       d_in.data(), d_out.data(), tiled_copy, gmem_layout, smem_layout);
     sc::wait_and_throw();
   #else

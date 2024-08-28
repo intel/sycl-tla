@@ -40,9 +40,6 @@
 #include <cute/tensor.hpp>
 
 #if defined(CUTLASS_ENABLE_SYCL)
-#include <sycl/sycl.hpp>
-#include <syclcompat/syclcompat.hpp>
-
 namespace sc = syclcompat;
 namespace sc_exp = syclcompat::experimental;
 namespace sycl_ext = sycl::ext::oneapi::experimental;
@@ -66,9 +63,9 @@ bulk_copy_test_device_cute(T const* g_in,
 {
   // Use Shared Storage structure to allocate and distribute aligned SMEM addresses
   #if defined(__SYCL_DEVICE_ONLY__)
-  auto smem = sycl_ext::get_dynamic_work_group_memory<char>();
+  auto smem = sycl_ext::get_dynamic_work_group_memory<char>().get();
   #else
-  extern __shared__ char shared_memory[];
+  extern CUTLASS_SHARED char shared_memory[];
   #endif
   using SharedStorage = SharedStorage<T, SmemLayout>;
   SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(shared_memory);
@@ -144,8 +141,8 @@ void run_and_validate(GLayout gmem_layout,
   int32_t smem_size = static_cast<int32_t>(sizeof(SharedStorage<T, decltype(smem_layout)>));
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<bulk_copy_test_device_cute<T, GLayout, SLayout>>
-    ( sc::dim3(1), sc::dim3(128), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size)},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(128), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size)}},
       d_in.data(), d_out.data(), gmem_layout, smem_layout);
     sc::wait_and_throw();
   #else

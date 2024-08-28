@@ -48,6 +48,7 @@ using namespace cute;
 namespace sc = syclcompat;
 namespace sc_exp = syclcompat::experimental;
 namespace sycl_ext = sycl::ext::oneapi::experimental;
+using float4 = sycl::vec<float, 4>;
 #endif
 
 
@@ -83,8 +84,9 @@ template<class ALayout,
          class CLoadTransform,
          class CStoreTransform>
 #if !defined(CUTLASS_ENABLE_SYCL)
-__launch_bounds__(ThreadBlockSize) __global__ void
+__launch_bounds__(ThreadBlockSize) __global__ 
 #endif
+void
 cooperative_gemm_kernel(TA const*   a,
                         TB const*   b,
                         TC*         c,
@@ -108,7 +110,7 @@ cooperative_gemm_kernel(TA const*   a,
     #ifdef __SYCL_DEVICE_ONLY__
     auto smem_buf = (sycl::vec<float, 4>*)sycl_ext::get_dynamic_work_group_memory<char>().get();
     #else
-    extern __shared__ float4 smem_buf[];
+    extern CUTLASS_SHARED float4 smem_buf[];
     #endif
 
     auto* smem_ptr = reinterpret_cast<unsigned char*>(smem_buf);
@@ -230,25 +232,31 @@ void test_cooperative_gemm(ALoadTransform  const& a_load_transform  = {},
   const size_t shared_memory_size = round_up(sizeof(TA) * h_a.size(), copy_max_vec_bytes) 
                                   + round_up(sizeof(TB) * h_b.size(), copy_max_vec_bytes)
                                   +         (sizeof(TC) * h_c.size());
-  using kernel = cooperative_gemm_kernel<
+  #if defined(CUTLASS_ENABLE_SYCL)
+  sc_exp::launch< cooperative_gemm_kernel<
     gmem_a_layout_t, gmem_b_layout_t, gmem_c_layout_t,
     smem_a_layout_t, smem_b_layout_t, smem_c_layout_t,
     SmemCopyOpA, SmemCopyOpB, SmemCopyOpC,
     ThreadBlockSize, TiledMma, CopyMaxVecBits,
     TA, TB, TC, decltype(alpha), decltype(beta),
     ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform
-  >;
-  #if defined(CUTLASS_ENABLE_SYCL)
-  sc_exp::launch<kernel>
-  ( sc::dim3(1), sc::dim3(ThreadBlockSize), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(shared_memory_size)},
+  >>
+  ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), 
+    sc_exp::kernel_properties{sycl_ext::work_group_static_size(shared_memory_size)}},
     d_a.data(), d_b.data(), d_c.data(), d_c_out.data(),
     alpha, beta, a_load_transform, b_load_transform,
     c_load_transform, c_store_transform);
   sc::wait_and_throw();
   #else
   ASSERT_EQ(cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, static_cast<int>(shared_memory_size)), 0);
-  kernel<<<1, ThreadBlockSize, shared_memory_size>>>(
+   cooperative_gemm_kernel<
+    gmem_a_layout_t, gmem_b_layout_t, gmem_c_layout_t,
+    smem_a_layout_t, smem_b_layout_t, smem_c_layout_t,
+    SmemCopyOpA, SmemCopyOpB, SmemCopyOpC,
+    ThreadBlockSize, TiledMma, CopyMaxVecBits,
+    TA, TB, TC, decltype(alpha), decltype(beta),
+    ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform
+    ><<<1, ThreadBlockSize, shared_memory_size>>>(
     thrust::raw_pointer_cast(d_a.data()),
     thrust::raw_pointer_cast(d_b.data()),
     thrust::raw_pointer_cast(d_c.data()),

@@ -41,9 +41,6 @@
 using namespace cute;
 
 #if defined(CUTLASS_ENABLE_SYCL)
-#include <sycl/sycl.hpp>
-#include <syclcompat/syclcompat.hpp>
-
   namespace sc = syclcompat;
   namespace sc_exp = syclcompat::experimental;
   namespace sycl_ext = sycl::ext::oneapi::experimental;
@@ -59,9 +56,9 @@ ldsm_test_device(uint16_t* g_in, uint16_t* g_out)
 
   // load input gmem -> smem
   #if defined(__SYCL_DEVICE_ONLY__)
-  auto smem = sycl_ext::get_dynamic_work_group_memory<uint32_t>();
+  auto smem = sycl_ext::get_dynamic_work_group_memory<uint32_t>().get();
   #else
-  __shared__ uint32_t smem[32 * count];
+  CUTLASS_SHARED uint32_t smem[32 * count];
   #endif
   for (int i = 0; i < count; ++i) {
     smem[tid + (stride * i)] = reinterpret_cast<uint32_t*>(g_in)[tid + (stride * i)];
@@ -92,9 +89,9 @@ ldsm_test_device_cute(uint16_t* g_in, uint16_t* g_out,
 {
   using namespace cute;
   #if defined(__SYCL_DEVICE_ONLY__)
-  auto smem = sycl_ext::get_dynamic_work_group_memory<uint16_t>();
+  auto smem = sycl_ext::get_dynamic_work_group_memory<uint16_t>().get();
   #else
-  __shared__ uint16_t smem[size(smem_layout)];
+  CUTLASS_SHARED uint16_t smem[size(smem_layout)];
   #endif
 
   auto t_g_in  = make_tensor(make_gmem_ptr(g_in),  smem_layout);
@@ -151,8 +148,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
   {
   device_vector<uint16_t> d_out(count);
   #if defined(CUTLASS_ENABLE_SYCL)
-    sc_exp::launch<ldsm_test_device<uint32_t>>(sc::dim3(1), sc::dim3(32), 
-              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(uint32_t) / 4 * 32)},
+    sc_exp::launch<ldsm_test_device<uint32_t>>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(32), 
+              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(uint32_t) / 4 * 32)}},
               d_in.data(), d_out.data());
     sc::wait_and_throw();
   #else
@@ -174,8 +171,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
   {
   device_vector<uint16_t> d_out(count);
   #if defined(CUTLASS_ENABLE_SYCL)
-    sc_exp::launch<ldsm_test_device<uint64_t>>(sc::dim3(1), sc::dim3(32), 
-              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(uint64_t) / 4 * 32)},
+    sc_exp::launch<ldsm_test_device<uint64_t>>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(32), 
+              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(uint64_t) / 4 * 32)}},
               d_in.data(), d_out.data());
     sc::wait_and_throw();
   #else
@@ -199,8 +196,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
   {
   device_vector<uint16_t> d_out(count);
   #if defined(CUTLASS_ENABLE_SYCL)
-    sc_exp::launch<ldsm_test_device<uint128_t>>(sc::dim3(1), sc::dim3(32), 
-              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(uint128_t) / 4 * 32)},
+    sc_exp::launch<ldsm_test_device<uint128_t>>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(32), 
+              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(uint128_t) / 4 * 32)}},
               d_in.data(), d_out.data());
     sc::wait_and_throw();
   #else
@@ -231,8 +228,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape< _1,_8>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -260,8 +257,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape< _1,_8>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -289,8 +286,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape< _1,_8>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -318,8 +315,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape< _1,_8>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -347,8 +344,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape< _2,_4>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -376,8 +373,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape< _2,_4>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -405,8 +402,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape< _2,_4>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -434,8 +431,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape< _2,_4>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -463,8 +460,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape<_2,_1>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -492,8 +489,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape<_4,_1>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else
@@ -521,8 +518,8 @@ TEST(SM80_CuTe_Ampere, Ldsm)
                                     Layout<Shape<_8,_1>>{});
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<ldsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
-    ( sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))},
+    ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
+      sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
       d_in.data(), d_out.data(), tiled_copy, smem_layout);
     sc::wait_and_throw();
   #else

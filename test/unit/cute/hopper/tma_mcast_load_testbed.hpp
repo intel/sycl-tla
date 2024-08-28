@@ -62,9 +62,9 @@ tma_test_device_cute(T const* g_in, T* g_out, GmemLayout gmem_layout, SmemLayout
 
   // Use Shared Storage structure to allocate and distribute aligned SMEM addresses
   #if defined(CUTLASS_ENABLE_SYCL)
-  auto smem = sycl_ext::get_dynamic_work_group_memory<char>();
+  auto smem = sycl_ext::get_dynamic_work_group_memory<char>().get();
   #else
-  extern __shared__ char shared_memory[];
+  extern CUTLASS_SHARED char shared_memory[];
   #endif
   using SharedStorage = SharedStorage<T, SmemLayout>;
   SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(shared_memory);
@@ -209,9 +209,9 @@ test_tma_load(CopyOp       const& copy_op,
   auto kernel = tma_test_device_cute<T, GMEM_Layout, 
                                     SMEM_Layout, decltype(tma), CTA_Tiler, Cluster_Size>;
   sc_exp::launch<kernel>
-  ( sc::dim3(1), sc::dim3(32), 
+  ( sc_exp::launch_policy::{sc::dim3(1), sc::dim3(32), 
     sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size),
-                            sycl_ext::cuda::cluster_size(sycl::range<3>(sc::dim3(size(cluster_size))))},
+                            sycl_ext::cuda::cluster_size(sycl::range<1>(sc::dim3(size(cluster_size))))}},
     d_in.data(), d_out.data(), 
     gmem_layout,
     smem_layout,

@@ -43,9 +43,6 @@
 #include <cute/numeric/numeric_types.hpp>
 
 #ifdef CUTLASS_ENABLE_SYCL
-#include <sycl/sycl.hpp>
-#include <syclcompat/syclcompat.hpp>
-
 namespace sc = syclcompat;
 namespace sc_exp = syclcompat::experimental;
 namespace sycl_ext = sycl::ext::oneapi::experimental;
@@ -66,9 +63,9 @@ cooperative_copy_default_gs(T const* g_in, T* g_out, GMemLayout const& gmem_layo
 {
   using namespace cute;
   #if defined(__SYCL_DEVICE_ONLY__)
-  auto smem_buf = sycl_ext::get_dynamic_work_group_memory<uint128_t>();
+  auto smem_buf = reinterpret_cast<uint128_t*>(sycl_ext::get_dynamic_work_group_memory<char>().get());
   #else
-  extern __shared__ uint128_t smem_buf[];
+  extern CUTLASS_SHARED uint128_t smem_buf[];
   #endif
   // Cast smem_buf to smem_uint8_ptr and move it by MaxVecBits bits
   // This is to make sure tests pass on pointer aligned to MaxVecBits bits
@@ -102,10 +99,10 @@ cooperative_copy_default_ss(T const* g_in, T* g_out, Layout1 const& layout1, Lay
 {
   using namespace cute;
   #if defined(CUTLASS_ENABLE_SYCL)
-  auto smem_buf = (uint128_t*)sycl::ext::oneapi::experimental::
-                    get_dynamic_work_group_memory<char>().get();
+  auto smem_buf =  reinterpret_cast<uint128_t*>(sycl::ext::oneapi::experimental::
+                    get_dynamic_work_group_memory<char>().get());
   #else
-  extern __shared__ uint128_t smem_buf[];
+  extern CUTLASS_SHARED uint128_t smem_buf[];
   #endif
   // Cast smem_buf to smem_uint8_ptr and move it by MaxVecBits bits
   // This is to make sure tests pass on pointer aligned to MaxVecBits bits
@@ -216,15 +213,19 @@ void test_cooperative_copy_default(Layout1 const& layout1, Layout2 const& layout
     size_t shared_memory_bytes = (sizeof(value_type) * count) + max_vec_bytes;
     shared_memory_bytes += std::is_same_v<Mode, cooperative_copy_mode::shared_shared> * (sizeof(value_type) * count);
 
-    // Launch
-    auto coop_copy = cooperative_copy_default_kernel<Mode, MaxVecBits, ThreadBlockSize, value_type, Layout1, Layout2>;
     #if defined(CUTLASS_ENABLE_SYCL)
-
-    sc_exp::launch<coop_copy>(sc::dim3(1), sc::dim3(ThreadBlockSize), 
-              sc_exp::kernel_properties{sycl_ext::work_group_static_size(shared_memory_bytes)},
-              d_in.data() + extra_elements, d_out.data() + extra_elements, layout1, layout2);
+    sc_exp::launch<cooperative_copy_default_kernel<Mode, 
+                    MaxVecBits, 
+                    ThreadBlockSize, 
+                    value_type, 
+                    Layout1, 
+                    Layout2>>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), 
+                              sc_exp::kernel_properties{sycl_ext::work_group_static_size(shared_memory_bytes)}},
+                              d_in.data() + extra_elements, d_out.data() + extra_elements, layout1, layout2);
     sc::wait_and_throw();
     #else
+    // Launch
+    auto coop_copy = cooperative_copy_default_kernel<Mode, MaxVecBits, ThreadBlockSize, value_type, Layout1, Layout2>;
     ASSERT_EQ(cudaFuncSetAttribute(coop_copy, cudaFuncAttributeMaxDynamicSharedMemorySize, static_cast<int>(shared_memory_bytes)), cudaSuccess);
 
     auto d_in_ptr  = thrust::raw_pointer_cast(d_in.data()  + extra_elements);

@@ -96,7 +96,6 @@ else()
       test_unit_cute_ampere
       test_unit_cute_turing
       #test_unit_cute_hopper
-      test_unit_cute_msvc_compilation
     )
   else()
   add_custom_target(

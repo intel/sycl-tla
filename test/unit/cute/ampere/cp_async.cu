@@ -38,13 +38,6 @@
 #include <vector>
 #include <numeric>
 
-#if defined(CUTLASS_ENABLE_SYCL)
-#include <sycl/sycl.hpp>
-#include <syclcompat/syclcompat.hpp>
-#else
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-#endif
 #include <cute/tensor.hpp>
 
 using namespace cute;
@@ -59,9 +52,9 @@ CUTLASS_GLOBAL void
 test(double const* g_in, double* g_out)
 {
   #ifdef __SYCL_DEVICE_ONLY__
-    auto smem = sycl_ext::get_dynamic_work_group_memory<double>();
+    auto smem = sycl_ext::get_dynamic_work_group_memory<double>().get();
   #else 
-    extern __shared__ double smem[];
+    extern CUTLASS_SHARED double smem[];
   #endif
   smem[ThreadIdxX()] = g_in[ThreadIdxX()];
 
@@ -76,9 +69,9 @@ test2(double const* g_in, double* g_out)
   using namespace cute;
 
   #ifdef __SYCL_DEVICE_ONLY__
-    auto smem = sycl_ext::get_dynamic_work_group_memory<double>();
+    auto smem = sycl_ext::get_dynamic_work_group_memory<double>().get();
   #else
-    extern __shared__ double smem[];
+    extern CUTLASS_SHARED double smem[];
   #endif
 
   auto s_tensor = make_tensor(make_smem_ptr(smem + ThreadIdxX()), Int<1>{});
@@ -105,8 +98,8 @@ TEST(SM80_CuTe_Ampere, CpAsync)
 
   device_vector<double> d_out(count, -1);
   #if defined(CUTLASS_ENABLE_SYCL)
-    sc_exp::launch<test>(sc::dim3(1), sc::dim3(count), 
-              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(double) * count)},
+    sc_exp::launch<test>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(count), 
+              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(double) * count)}},
               d_in.data(), d_out.data());
     sc::wait_and_throw();
   #else
@@ -118,8 +111,8 @@ TEST(SM80_CuTe_Ampere, CpAsync)
 
   device_vector<double> d_out_cp_async(count, -2);
   #if defined(CUTLASS_ENABLE_SYCL)
-    sc_exp::launch<test2>(sc::dim3(1), sc::dim3(count), 
-              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(double) * count)},
+    sc_exp::launch<test2>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(count), 
+              sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(double) * count)}},
               d_in.data(), d_out_cp_async.data());
     sc::wait_and_throw();
   #else
