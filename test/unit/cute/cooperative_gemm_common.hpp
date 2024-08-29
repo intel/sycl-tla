@@ -48,7 +48,6 @@ using namespace cute;
 namespace sc = syclcompat;
 namespace sc_exp = syclcompat::experimental;
 namespace sycl_ext = sycl::ext::oneapi::experimental;
-using float4 = sycl::vec<float, 4>;
 #endif
 
 
@@ -109,7 +108,11 @@ cooperative_gemm_kernel(TA const*   a,
     
     #ifdef __SYCL_DEVICE_ONLY__
     auto smem_buf = (sycl::vec<float, 4>*)sycl_ext::get_dynamic_work_group_memory<char>().get();
-    #else
+    #endif
+    #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
+    char* smem_buf; // dummy declaration to avoid compilation errors during the host compilation phase
+    #endif
+    #if !defined(CUTLASS_ENABLE_SYCL)
     extern CUTLASS_SHARED float4 smem_buf[];
     #endif
 
