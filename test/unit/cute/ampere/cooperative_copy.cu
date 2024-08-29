@@ -64,7 +64,11 @@ cooperative_copy_default_gs(T const* g_in, T* g_out, GMemLayout const& gmem_layo
   using namespace cute;
   #if defined(__SYCL_DEVICE_ONLY__)
   auto smem_buf = reinterpret_cast<uint128_t*>(sycl_ext::get_dynamic_work_group_memory<char>().get());
-  #else
+  #endif
+  #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
+  uint128_t* smem_buf; // dummy declaration to avoid compilation errors during the host compilation phase
+  #endif
+  #if !defined(CUTLASS_ENABLE_SYCL)
   extern CUTLASS_SHARED uint128_t smem_buf[];
   #endif
   // Cast smem_buf to smem_uint8_ptr and move it by MaxVecBits bits
@@ -98,10 +102,14 @@ CUTLASS_DEVICE void
 cooperative_copy_default_ss(T const* g_in, T* g_out, Layout1 const& layout1, Layout2 const& layout2)
 {
   using namespace cute;
-  #if defined(CUTLASS_ENABLE_SYCL)
+  #if defined(__SYCL_DEVICE_ONLY__)
   auto smem_buf =  reinterpret_cast<uint128_t*>(sycl::ext::oneapi::experimental::
                     get_dynamic_work_group_memory<char>().get());
-  #else
+  #endif
+  #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
+  uint128_t* smem_buf; // dummy declaration to avoid compilation errors during the host compilation phase
+  #endif
+  #if !defined(CUTLASS_ENABLE_SYCL)
   extern CUTLASS_SHARED uint128_t smem_buf[];
   #endif
   // Cast smem_buf to smem_uint8_ptr and move it by MaxVecBits bits

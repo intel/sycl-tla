@@ -59,9 +59,13 @@ stsm_test_device(uint16_t* g_in, uint16_t* g_out)
   }
   
   #if defined(__SYCL_DEVICE_ONLY__)
-  auto smem = sycl_ext::get_dynamic_work_group_memory<uint32_t>().get();
-  #else
-  CUTLASS_SHARED uint32_t smem[32 * count];
+    auto smem = sycl_ext::get_dynamic_work_group_memory<uint32_t>().get();
+  #endif
+  #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
+    uint32_t* smem; // dummy declaration to avoid compilation errors during the host compilation phase
+  #endif
+  #if !defined(CUTLASS_ENABLE_SYCL)
+    CUTLASS_SHARED uint32_t smem[32 * count];
   #endif
 
   // load rmem -> smem using STSM
@@ -85,9 +89,13 @@ stsm_test_device_cute(uint16_t* g_in, uint16_t* g_out,
   using namespace cute;
 
   #if defined(__SYCL_DEVICE_ONLY__)
-  auto smem = sycl_ext::get_dynamic_work_group_memory<uint16_t>().get();
-  #else
-  CUTLASS_SHARED uint16_t smem[size(smem_layout)];
+    auto smem = sycl_ext::get_dynamic_work_group_memory<uint16_t>().get();
+  #endif
+  #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
+    char* smem_buf; // dummy declaration to avoid compilation errors during the host compilation phase
+  #endif
+  #if !defined(CUTLASS_ENABLE_SYCL)
+    CUTLASS_SHARED uint16_t smem[size(smem_layout)];
   #endif
 
   Tensor t_g_in  = make_tensor(make_gmem_ptr(g_in),  smem_layout);

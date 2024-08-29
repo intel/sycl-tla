@@ -53,7 +53,11 @@ test(double const* g_in, double* g_out)
 {
   #ifdef __SYCL_DEVICE_ONLY__
     auto smem = sycl_ext::get_dynamic_work_group_memory<double>().get();
-  #else 
+  #endif
+  #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
+    double* smem; // dummy declaration to avoid compilation errors during the host compilation phase
+  #endif
+  #if !defined(CUTLASS_ENABLE_SYCL)
     extern CUTLASS_SHARED double smem[];
   #endif
   smem[ThreadIdxX()] = g_in[ThreadIdxX()];
@@ -70,7 +74,11 @@ test2(double const* g_in, double* g_out)
 
   #ifdef __SYCL_DEVICE_ONLY__
     auto smem = sycl_ext::get_dynamic_work_group_memory<double>().get();
-  #else
+  #endif
+  #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
+    double* smem; // dummy declaration to avoid compilation errors during the host compilation phase
+  #endif
+  #if !defined(CUTLASS_ENABLE_SYCL)
     extern CUTLASS_SHARED double smem[];
   #endif
 

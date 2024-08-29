@@ -64,8 +64,12 @@ bulk_copy_test_device_cute(T const* g_in,
   // Use Shared Storage structure to allocate and distribute aligned SMEM addresses
   #if defined(__SYCL_DEVICE_ONLY__)
   auto smem = sycl_ext::get_dynamic_work_group_memory<char>().get();
-  #else
-  extern CUTLASS_SHARED char shared_memory[];
+  #endif
+  #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
+    char* smem; // dummy declaration to avoid compilation errors during the host compilation phase
+  #endif
+  #if !defined(CUTLASS_ENABLE_SYCL)
+    extern CUTLASS_SHARED char shared_memory[];
   #endif
   using SharedStorage = SharedStorage<T, SmemLayout>;
   SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(shared_memory);
