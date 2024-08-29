@@ -59,7 +59,7 @@ class device_vector;
 template <typename T>
 class host_vector {
   public:
-  host_vector(std::size_t num_elements) { vec.reserve(num_elements); }
+  host_vector(std::size_t num_elements) { vec.resize(num_elements); }
   host_vector(std::size_t num_elements, T init_val) {
     vec = std::move(std::vector<T>(num_elements, init_val));
   }
