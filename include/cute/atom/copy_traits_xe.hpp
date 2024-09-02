@@ -484,11 +484,10 @@ struct Copy_Traits<XE_2D_U16x8x16_LD_N, args_t...>
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,Shape <_8>>,
-                           Stride< _0,Stride<_0>>>;
+  using SrcLayout = Layout<Shape <_256, Shape <_8, _16>>,
+                           Stride< _1, Stride<_256,  _1>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_8,_16>>,
-                           Stride< _0,Stride<_0, _1>>>;
+  using DstLayout = SrcLayout;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
@@ -1138,11 +1137,10 @@ struct Copy_Traits<XE_2D_U16x16x16_LD_V, args_t...>
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,Shape <_16,_16>>,
-                           Stride< _0,Stride< _0, _1>>>;
+  using SrcLayout = Layout<Shape <_256, Shape < _16,_16>>,
+                           Stride<  _1, Stride<_256, _1>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_16,_16>>,
-                           Stride< _0,Stride< _0, _1>>>;
+  using DstLayout = SrcLayout;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
@@ -1568,13 +1566,12 @@ struct Copy_Traits<XE_2D_U32x8x16_ST_N, args_t...>
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,Shape <  _8,_32>>,
-                           Stride< _0,Stride<_512, _1>>>;
+  using SrcLayout = Layout<Shape <_512, Shape <  _8,_32>>,
+                           Stride<  _1, Stride<_512, _1>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <  _8,_32>>,
-                           Stride< _0,Stride<_512, _1>>>;
+  using DstLayout = SrcLayout;
   // Reference map from (thr,val) to bit
-  using RefLayout = SrcLayout;
+  using RefLayout = DstLayout;
 
   template <class... ArgTs>
   Copy_Traits(ArgTs... args)
