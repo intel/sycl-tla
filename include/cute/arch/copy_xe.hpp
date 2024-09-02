@@ -39,9 +39,11 @@ namespace cute
 
 #ifdef __SYCL_DEVICE_ONLY__
 #define SYCL_DEVICE_BUILTIN(x) SYCL_EXTERNAL extern "C" x
+#define SYCL_DEVICE_OCL(x) SYCL_EXTERNAL x
 #else
 #define SYCL_DEVICE_BUILTIN(x)  \
   inline x { CUTE_INVALID_CONTROL_PATH("Trying to use XE built-in on non-XE hardware"); }
+#define SYCL_DEVICE_OCL(x) inline x { assert(false); }
 #endif
 
 enum class CacheControl {
@@ -66,53 +68,53 @@ SYCL_DEVICE_BUILTIN(intel::int8 intel_subgroup_block_read_transform_u16_k16(
 // prefetch
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_uchar(
     const __attribute__((opencl_global)) uint8_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_ushort(
     const __attribute__((opencl_global)) uint16_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_uint(
     const __attribute__((opencl_global)) uint32_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_uint2(
     const __attribute__((opencl_global)) uint32_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_uint4(
     const __attribute__((opencl_global)) uint32_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_uint8(
     const __attribute__((opencl_global)) uint32_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_ulong(
     const __attribute__((opencl_global)) uint64_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_ulong2(
     const __attribute__((opencl_global)) uint64_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_ulong4(
     const __attribute__((opencl_global)) uint64_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_ulong8(
     const __attribute__((opencl_global)) uint64_t *base, int immElemOff,
-    enum LSC_LDCC cacheOpt));
+    enum CacheControl cacheOpt));
 
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+    int pitch_minus_one, intel::coord_t coord, enum CacheControl cache_control));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+    int pitch_minus_one, intel::coord_t coord, enum CacheControl cache_control));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+    int pitch_minus_one, intel::coord_t coord, enum CacheControl cache_control));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+    int pitch_minus_one, intel::coord_t coord, enum CacheControl cache_control));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+    int pitch_minus_one, intel::coord_t coord, enum CacheControl cache_control));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, intel::coord_t coord, enum LSC_LDCC cache_control));
+    int pitch_minus_one, intel::coord_t coord, enum CacheControl cache_control));
 
 // 8bits No transform No transpose
 SYCL_DEVICE_BUILTIN(ushort __builtin_IB_subgroup_block_read_flat_u8_m1k32v1(
@@ -972,7 +974,7 @@ struct XE_2D_U16x8x16_LD_N {
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
       __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v1(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          LSC_LDCC_L1C_L3C);
+          CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -1008,7 +1010,7 @@ struct XE_2D_U16x16x16_LD_N {
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
       __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v1(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          LSC_LDCC_L1C_L3C);
+          CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -1044,7 +1046,7 @@ struct XE_2D_U16x32x16_LD_N {
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
       __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v1(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          LSC_LDCC_L1C_L3C);
+          CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -1137,7 +1139,7 @@ struct XE_2D_U16x8x32_LD_N {
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
       __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          LSC_LDCC_L1C_L3C);
+          CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -1173,7 +1175,7 @@ struct XE_2D_U16x16x32_LD_N {
       static_assert(sizeof(T) == 2, "Expected T to have size 2");
       __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          LSC_LDCC_L1C_L3C);
+          CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -1210,7 +1212,7 @@ struct XE_2D_U16x32x32_LD_N {
       // __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
       __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          LSC_LDCC_L1C_L3C);
+          CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -2180,31 +2182,31 @@ struct PREFETCH {
 #if defined(SYCL_INTEL_TARGET)
     if constexpr(sizeof(D) == 1) {
       __builtin_IB_lsc_prefetch_global_uchar(
-          (const __attribute__((opencl_global)) uint8_t *)(&*&src), 0, LSC_LDCC_L1C_L3C);
+          (const __attribute__((opencl_global)) uint8_t *)(&*&src), 0, CacheControl::kL1C_L3C);
     }
     else if constexpr(sizeof(D) == 2) {
       __builtin_IB_lsc_prefetch_global_ushort(
-          (const __attribute__((opencl_global)) uint16_t *)(&*&src), 0, LSC_LDCC_L1C_L3C);
+          (const __attribute__((opencl_global)) uint16_t *)(&*&src), 0, CacheControl::kL1C_L3C);
     }
     else if constexpr(sizeof(D) == 4) {
       __builtin_IB_lsc_prefetch_global_uint(
-          (const __attribute__((opencl_global)) uint32_t *)(&*&src), 0, LSC_LDCC_L1C_L3C);
+          (const __attribute__((opencl_global)) uint32_t *)(&*&src), 0, CacheControl::kL1C_L3C);
     }
     else if constexpr(sizeof(D) == 8) {
       __builtin_IB_lsc_prefetch_global_uint2(
-          (const __attribute__((opencl_global)) uint32_t *)(&*&src), 0, LSC_LDCC_L1C_L3C);
+          (const __attribute__((opencl_global)) uint32_t *)(&*&src), 0, CacheControl::kL1C_L3C);
     }
     else if constexpr(sizeof(D) == 16) {
       __builtin_IB_lsc_prefetch_global_uint4(
-          (const __attribute__((opencl_global)) uint32_t *)(&*&src), 0, LSC_LDCC_L1C_L3C);
+          (const __attribute__((opencl_global)) uint32_t *)(&*&src), 0, CacheControl::kL1C_L3C);
     }
     else if constexpr(sizeof(D) == 32) {
       __builtin_IB_lsc_prefetch_global_uint8(
-          (const __attribute__((opencl_global)) uint32_t *)(&*&src), 0, LSC_LDCC_L1C_L3C);
+          (const __attribute__((opencl_global)) uint32_t *)(&*&src), 0, CacheControl::kL1C_L3C);
     }
     else if constexpr(sizeof(D) == 64) {
       __builtin_IB_lsc_prefetch_global_ulong8(
-          (const __attribute__((opencl_global)) uint64_t *)(&*&src), 0, LSC_LDCC_L1C_L3C);
+          (const __attribute__((opencl_global)) uint64_t *)(&*&src), 0, CacheControl::kL1C_L3C);
     }
 #else
       CUTE_INVALID_CONTROL_PATH(
