@@ -26,75 +26,15 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-if (NOT CUTLASS_ENABLE_SYCL)
-  add_subdirectory(core)
-  add_subdirectory(volta)
-  add_subdirectory(turing)
-  add_subdirectory(ampere)
-  add_subdirectory(hopper)
-  add_subdirectory(layout)
-  add_subdirectory(msvc_compilation)
-
-  add_custom_target(
-    cutlass_test_unit_cute
-    DEPENDS
-    cutlass_test_unit_cute_layout
-    cutlass_test_unit_cute_core
-    cutlass_test_unit_cute_volta
-    cutlass_test_unit_cute_turing
-    cutlass_test_unit_cute_ampere
-    cutlass_test_unit_cute_hopper
-    cutlass_test_unit_cute_msvc_compilation
-    )
-
-  add_custom_target(
-    test_unit_cute
-    DEPENDS
-    test_unit_cute_layout
-    test_unit_cute_core
-    test_unit_cute_volta
-    test_unit_cute_ampere
-    test_unit_cute_turing
-    test_unit_cute_hopper
-    test_unit_cute_msvc_compilation
-    )
-
-else()
-
-  add_subdirectory(core)
-  add_subdirectory(layout)
-  
-  if (SYCL_NVIDIA_TARGET)
-    # Enable Cute tests for the Nvidia backend as a part of #113
-    add_custom_target(
-      cutlass_test_unit_cute
-      DEPENDS
-      cutlass_test_unit_cute_layout
-      cutlass_test_unit_cute_core
-    )
-  
-    add_custom_target(
-      test_unit_cute
-      DEPENDS
-      test_unit_cute_layout
-      test_unit_cute_core
-    )
-  endif()
-  if (SYCL_INTEL_TARGET)
-  
-  add_custom_target(
-    cutlass_test_unit_cute
-    DEPENDS
-    cutlass_test_unit_cute_layout
-    cutlass_test_unit_cute_core
-  )
-
-  add_custom_target(
-    test_unit_cute
-    DEPENDS
-    test_unit_cute_layout
-    test_unit_cute_core
-  )
-
-  endif()
-endif()
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_cute_intel_xe
+  copy_1d.cpp
+  copy_subgroup_block.cpp
+  copy_block.cpp
+  copy_scatter.cpp
+  mma.cpp
+  gemm_partition_src_dst.cpp
+  gemm_partition_fragment_abc.cpp
+  gemm_tiled_copy_abc.cpp
+  gemm_row_col.cpp
+)
