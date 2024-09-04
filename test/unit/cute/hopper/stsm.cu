@@ -152,7 +152,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device<uint32_t>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(32), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(uint32_t) / 4 * 32)}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(sizeof(uint32_t) / 4 * 32)}},
     d_in.data(), d_out.data());
   sc::wait_and_throw();
   #else
@@ -177,7 +177,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device<uint64_t>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(32), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(uint64_t) / 4 * 32)}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(sizeof(uint64_t) / 4 * 32)}},
     d_in.data(), d_out.data());
   sc::wait_and_throw();
   #else
@@ -202,7 +202,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device<uint128_t>>
   ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(32), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(sizeof(uint128_t) / 4 * 32)}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(sizeof(uint128_t) / 4 * 32)}},
     d_in.data(), d_out.data());
   sc::wait_and_throw();
   #else
@@ -233,7 +233,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -263,7 +263,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -292,7 +292,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -322,7 +322,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -351,7 +351,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -380,7 +380,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -409,7 +409,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -438,7 +438,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -467,7 +467,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -496,7 +496,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else
@@ -525,7 +525,7 @@ TEST(SM90_CuTe_Hopper, Stsm)
   #if defined(CUTLASS_ENABLE_SYCL)
   sc_exp::launch<stsm_test_device_cute<decltype(tiled_copy), decltype(smem_layout)>>
   ( sc::launch_policy{sc::dim3(1), sc::dim3(int(size(tiled_copy))), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(size(smem_layout))}},
     d_in.data(), d_out.data(), tiled_copy, smem_layout);
   sc::wait_and_throw();
   #else

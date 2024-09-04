@@ -208,7 +208,7 @@ test_tma_load(CopyOp      const& copy_op,
                                     SmemLayout>;
   sc_exp::launch<kernel>
   ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(128), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size)}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(smem_size)}},
     d_in.data(), d_out.data(), tma, cta_tile,
     gmem_layout, smem_layout);
   sc::wait_and_throw();

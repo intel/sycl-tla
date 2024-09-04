@@ -228,7 +228,7 @@ void test_cooperative_copy_default(Layout1 const& layout1, Layout2 const& layout
                     value_type, 
                     Layout1, 
                     Layout2>>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), 
-                              sc_exp::kernel_properties{sycl_ext::work_group_static_size(shared_memory_bytes)}},
+                              sc_exp::launch_properties{sycl_ext::work_group_static_size(shared_memory_bytes)}},
                               d_in.data() + extra_elements, d_out.data() + extra_elements, layout1, layout2);
     sc::wait_and_throw();
     #else

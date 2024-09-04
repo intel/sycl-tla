@@ -214,7 +214,7 @@ test_tma_load(CopyOp       const& copy_op,
                                     SMEM_Layout, decltype(tma), CTA_Tiler, Cluster_Size>;
   sc_exp::launch<kernel>
   ( sc_exp::launch_policy::{sc::dim3(1), sc::dim3(32), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size),
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(smem_size),
                             sycl_ext::cuda::cluster_size(sycl::range<1>(sc::dim3(size(cluster_size))))}},
     d_in.data(), d_out.data(), 
     gmem_layout,

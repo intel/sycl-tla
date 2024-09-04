@@ -107,7 +107,7 @@ cooperative_gemm_kernel(TA const*   a,
     constexpr uint32_t copy_max_vec_bytes = CopyMaxVecBits / 8;
     
     #ifdef __SYCL_DEVICE_ONLY__
-    auto smem_buf = (sycl::vec<float, 4>*)sycl_ext::get_dynamic_work_group_memory<char>().get();
+    auto smem_buf = (sycl::vec<float, 4>*)sycl_ext::get_dynamic_work_group_memory<std::array<double, 2>>().get();
     #endif
     #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
     char* smem_buf; // dummy declaration to avoid compilation errors during the host compilation phase
@@ -245,11 +245,10 @@ void test_cooperative_gemm(ALoadTransform  const& a_load_transform  = {},
     ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform
   >>
   ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), 
-    sc_exp::kernel_properties{sycl_ext::work_group_static_size(shared_memory_size)}},
+    sc_exp::launch_properties{sycl_ext::work_group_static_size(shared_memory_size)}},
     d_a.data(), d_b.data(), d_c.data(), d_c_out.data(),
     alpha, beta, a_load_transform, b_load_transform,
     c_load_transform, c_store_transform);
-  sc::wait_and_throw();
   #else
   ASSERT_EQ(cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, static_cast<int>(shared_memory_size)), 0);
    cooperative_gemm_kernel<

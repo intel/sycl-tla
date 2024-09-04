@@ -79,12 +79,12 @@ template <typename T>
 class device_vector {
   public:
   device_vector(std::size_t num_elements) {
-    num_elements = num_elements;
+    n_elements = num_elements;
     dev_ptr = make_shared(num_elements);
   }
 
   device_vector(std::size_t num_elements, T init_value) { 
-    num_elements = num_elements;
+    n_elements = num_elements;
     dev_ptr = make_shared(num_elements);
     syclcompat::launch<kernel::memset<T>>(sycl::range<1>(num_elements), 
       sycl::range<1>(32), dev_ptr.get(), init_value, num_elements);
@@ -96,7 +96,7 @@ class device_vector {
 
   T* data() { return dev_ptr.get(); }
 
-  std::size_t size() const {return num_elements; }
+  std::size_t size() const {return n_elements; }
 
  private:
   T* safe_malloc(std::size_t size) {
@@ -115,7 +115,7 @@ class device_vector {
     });
   }
   std::shared_ptr<T> dev_ptr;
-  std::size_t num_elements;
+  std::size_t n_elements;
 };
 
 template<typename T>

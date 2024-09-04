@@ -125,7 +125,7 @@ test_tiled_cp_async(
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<test_tiled_cp_async_device_cute<T, TiledCopy, GMEM_Layout, SMEM_Layout>>
     ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(128), 
-      sc_exp::kernel_properties{sycl_ext::work_group_static_size(smem_size)}},
+      sc_exp::launch_properties{sycl_ext::work_group_static_size(smem_size)}},
       d_in.data(), d_out.data(), tiled_copy, gmem_layout, smem_layout);
     sc::wait_and_throw();
   #else
