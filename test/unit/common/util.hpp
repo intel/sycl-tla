@@ -35,8 +35,10 @@
 
 #include <vector>
 #else
+#if defined(__CUDACC__)
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#endif
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)
@@ -163,8 +165,10 @@ device_vector<T>::device_vector(host_vector<T> host_vec) {
   template<typename T>
   using device_vector = cutlass::device_vector<T>;
 #else
+#if defined(__CUDACC__)
   template<typename T>
   using host_vector = thrust::host_vector<T>;
   template<typename T>
   using device_vector = thrust::device_vector<T>;
+#endif
 #endif

@@ -250,15 +250,16 @@ void test_cooperative_gemm(ALoadTransform  const& a_load_transform  = {},
     alpha, beta, a_load_transform, b_load_transform,
     c_load_transform, c_store_transform);
   #else
+  auto kernel = cooperative_gemm_kernel<
+                  gmem_a_layout_t, gmem_b_layout_t, gmem_c_layout_t,
+                  smem_a_layout_t, smem_b_layout_t, smem_c_layout_t,
+                  SmemCopyOpA, SmemCopyOpB, SmemCopyOpC,
+                  ThreadBlockSize, TiledMma, CopyMaxVecBits,
+                  TA, TB, TC, decltype(alpha), decltype(beta),
+                  ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform
+                >;
   ASSERT_EQ(cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, static_cast<int>(shared_memory_size)), 0);
-   cooperative_gemm_kernel<
-    gmem_a_layout_t, gmem_b_layout_t, gmem_c_layout_t,
-    smem_a_layout_t, smem_b_layout_t, smem_c_layout_t,
-    SmemCopyOpA, SmemCopyOpB, SmemCopyOpC,
-    ThreadBlockSize, TiledMma, CopyMaxVecBits,
-    TA, TB, TC, decltype(alpha), decltype(beta),
-    ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform
-    ><<<1, ThreadBlockSize, shared_memory_size>>>(
+  kernel<<<1, ThreadBlockSize, shared_memory_size>>>(
     thrust::raw_pointer_cast(d_a.data()),
     thrust::raw_pointer_cast(d_b.data()),
     thrust::raw_pointer_cast(d_c.data()),
