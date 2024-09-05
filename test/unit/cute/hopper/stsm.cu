@@ -49,8 +49,8 @@ CUTLASS_GLOBAL void
 stsm_test_device(uint16_t* g_in, uint16_t* g_out)
 {
   constexpr int count = sizeof(T) / 4;
-  int tid = threadIdxX();
-  int stride = blockDimX();
+  int tid = ThreadIdxX();
+  int stride = BlockDimX();
 
   // load input gmem -> rmem
   uint32_t reg[count];
@@ -102,7 +102,7 @@ stsm_test_device_cute(uint16_t* g_in, uint16_t* g_out,
   Tensor t_g_out = make_tensor(make_gmem_ptr(g_out), smem_layout);
   Tensor t_smem  = make_tensor(make_smem_ptr(smem),  smem_layout);
 
-  int tid = threadIdxX();
+  int tid = ThreadIdxX();
 
   auto thr_copy = tiled_copy.get_thread_slice(tid);
 
