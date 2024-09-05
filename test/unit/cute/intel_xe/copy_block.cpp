@@ -41,7 +41,7 @@
 using namespace cute;
 using namespace cutlass;
 
-template <class TensorS, class TensorD, class TiledLoad, class TiledStore>
+template <class TensorS, class TensorD, class TiledLoad, class TiledStore, class CopyOp = void>
 void copy_kernel_vectorized(TensorS S, TensorD D, TiledLoad load,
                             TiledStore store) {
   const int m_coord = 0;
@@ -55,6 +55,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, TiledLoad load,
   auto ld_tensor =
       load.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
                           fragment.shape(), make_stride(E<0>{}, E<1>{}));
+  if constexpr (cute::detail::has_prefetch<CopyOp>) prefetch(load, ld_tensor);
   copy(load, ld_tensor, fragment);
 
   // ==========  store   ==========
@@ -134,12 +135,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x1x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x1x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -198,12 +199,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x2x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x2x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -262,12 +263,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x4x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x4x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -326,12 +327,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x8x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x8x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -390,12 +391,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x16x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x16x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -454,12 +455,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x16x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x16x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -517,12 +518,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x1x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x1x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -581,12 +582,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x2x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x2x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -657,12 +658,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x4x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x4x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -725,12 +726,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x8x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x8x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -793,12 +794,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x16x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x16x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -861,12 +862,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x32x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x32x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -928,12 +929,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x1x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x1x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -991,12 +992,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x2x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x2x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1054,12 +1055,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x4x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x4x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1117,12 +1118,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x8x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x8x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1181,12 +1182,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x16x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x16x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1245,12 +1246,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x32x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x32x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1307,12 +1308,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x1x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x1x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1371,12 +1372,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x2x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x2x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1434,12 +1435,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x4x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x4x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1497,12 +1498,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x8x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x8x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1560,12 +1561,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x16x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x16x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1623,12 +1624,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x32x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U8x32x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1686,12 +1687,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x16x2_LD_T>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x16x2_LD_T>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1751,12 +1752,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x16x4_LD_T>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x16x4_LD_T>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1816,12 +1817,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x16x8_LD_T>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U32x16x8_LD_T>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1883,12 +1884,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x16x16_LD_V>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x16x16_LD_V>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 
@@ -1948,12 +1949,12 @@ TEST(PVC_2d_copy, load_store) {
 #if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x32x16_LD_V>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #else
     syclcompat::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
-                               decltype(tiled_store)>,
+                               decltype(tiled_store), XE_2D_U16x32x16_LD_V>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
 #endif
 

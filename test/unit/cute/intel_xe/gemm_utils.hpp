@@ -69,8 +69,9 @@ void verify(uint32_t m, uint32_t n, uint32_t k, atype *A, btype *B, ctype *C,
   for (int i = 0; i < m; i++) {
     for (int j = 0; j < n; j++) {
       for (int z = 0; z < k; z++) {
+        auto a = row_a ? A[i * k + z] : A[i + z * m];
         auto b = row_b ? B[z * n + j] : B[z + j * k];
-        C[i * n + j] += A[i * k + z] * b;
+        C[i * n + j] += a * b;
       }
 
       ctype val = h_D.data()[i * n + j];

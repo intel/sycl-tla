@@ -36,12 +36,12 @@ template <uint32_t wg_m, uint32_t wg_n, uint32_t sg_m, uint32_t sg_n,
           uint32_t sg_k, class dtype_a, class dtype_b, class dtype_c,
           class traits_a, class traits_b, class traits_c,
           class traits_mma = XE_8x16x16_F32BF16BF16F32_TT>
-struct gemm_device_row_col {
+struct gemm_device_col_col {
   using TA = dtype_a;
   using TB = dtype_b;
   using TC = dtype_c;
 
-  static constexpr bool is_a_row_major = true;
+  static constexpr bool is_a_row_major = false;
   static constexpr bool is_b_row_major = false;
 
   static constexpr uint32_t wg_tile_m = wg_m;
@@ -55,7 +55,7 @@ struct gemm_device_row_col {
 
     // Represent the full tensors
     Tensor mA = make_tensor(make_gmem_ptr(A),
-                            make_layout(make_shape(m, k), make_stride(k, 1)));
+                            make_layout(make_shape(m, k), make_stride(1, m)));
     Tensor mB = make_tensor(make_gmem_ptr(B),
                             make_layout(make_shape(k, n), make_stride(1, k)));
     Tensor mC = make_tensor(make_gmem_ptr(C),
@@ -74,9 +74,9 @@ struct gemm_device_row_col {
     using traits_load_A = Copy_Traits<traits_a>;
     using atom_load_A = Copy_Atom<traits_load_A, TA>;
     TiledCopy copy_a = make_tiled_copy(
-        atom_load_A{}.with(A, k, m, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
-        Layout<Shape<Int<traits_a::blk_height>,
-                     Int<traits_a::blk_width / SUBGROUP_SIZE>>>{});
+        atom_load_A{}.with(A, m, k, m), Layout<Shape<Int<SUBGROUP_SIZE>, _1>>{},
+        Layout<Shape<Int<traits_a::blk_width / SUBGROUP_SIZE>,
+                     Int<traits_a::blk_height>>>{});
 
     using traits_load_B = Copy_Traits<traits_b>;
     using atom_load_B = Copy_Atom<traits_load_B, TB>;
@@ -151,8 +151,8 @@ struct gemm_device_row_col {
     auto k_tile_max = size<2>(gA);
     for (int k_tile = 0; k_tile < k_tile_max; ++k_tile) {
       Tensor blk_tgA = tiled_copy_A.get_pvc_tensor(
-          make_coord(m_coord, k_tile * sg_tile_k, l_coord),
-          tCrA_copy_view.shape(), make_stride(E<0>{}, E<1>{}));
+          make_coord(k_tile * sg_tile_k, m_coord, l_coord),
+          tCrA_copy_view.shape(), make_stride(E<1>{}, E<0>{}));
       Tensor blk_tgB = tiled_copy_B.get_pvc_tensor(
           make_coord(n_coord, k_tile * sg_tile_k, l_coord),
           tCrB_copy_view.shape(), make_stride(E<0>{}, E<1>{}));
@@ -172,67 +172,67 @@ struct gemm_device_row_col {
   }
 };
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_32x128x64) {
-  run<gemm_device_row_col<32, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_32x128x64) {
+  run<gemm_device_col_col<32, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(32, 128, 64);
 }
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_16x256x64) {
-  run<gemm_device_row_col<16, 128, 16, 128, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_16x256x64) {
+  run<gemm_device_col_col<16, 128, 16, 128, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(16, 256, 64);
 }
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_64x1024x64) {
-  run<gemm_device_row_col<32, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_64x1024x64) {
+  run<gemm_device_col_col<32, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(64, 1024, 64);
 }
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_128x128x64) {
-  run<gemm_device_row_col<128, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_128x128x64) {
+  run<gemm_device_col_col<128, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(128, 128, 64);
 }
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_32x1024x1024) {
-  run<gemm_device_row_col<32, 1024, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_32x1024x1024) {
+  run<gemm_device_col_col<32, 1024, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(32, 1024, 1024);
 }
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_4096x4096x256) {
-  run<gemm_device_row_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_4096x4096x256) {
+  run<gemm_device_col_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(4096, 4096, 256);
 }
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_1024x2048x512) {
-  run<gemm_device_row_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_1024x2048x512) {
+  run<gemm_device_col_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(1024, 2048, 512);
 }
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_1026x2048x512) {
-  run<gemm_device_row_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_1026x2048x512) {
+  run<gemm_device_col_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(1026, 2048, 512);
 }
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_1024x2050x512) {
-  run<gemm_device_row_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_1024x2050x512) {
+  run<gemm_device_col_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(1024, 2050, 512);
 }
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_1026x2050x256) {
-  run<gemm_device_row_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_1026x2050x256) {
+  run<gemm_device_col_col<256, 128, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(1026, 2050, 256);
 }
 
-TEST(PVC_CuTe_Xe, gemm_row_col_bf16_bf16_float_512x1024x512) {
-  run<gemm_device_row_col<256, 256, 32, 64, 32, bfloat16_t, bfloat16_t, float,
-                          XE_2D_U16x8x16_LD_N, XE_2D_U16x16x16_LD_T,
+TEST(PVC_CuTe_Xe, gemm_col_col_bf16_bf16_float_512x1024x512) {
+  run<gemm_device_col_col<256, 256, 32, 64, 32, bfloat16_t, bfloat16_t, float,
+                          XE_2D_U16x16x8_LD_T, XE_2D_U16x16x16_LD_T,
                           XE_2D_U32x8x16_ST_N>>(512, 1024, 512);
 }
