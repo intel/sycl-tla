@@ -33,7 +33,6 @@
 #include "cutlass/util/print_error.hpp"
 #include "cutlass_unit_test.h"
 
-#include "cutlass/device_kernel.h"
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
@@ -55,20 +54,21 @@ void copy_kernel_vectorized(TensorS tile_S, TensorD tile_D) {
   // using AccessType = cutlass::AlignedArray<Element, size(VecLayout{})>;
 
   // A copy atom corresponds to one hardware memory access.
-  using traits_load =
-      Copy_Traits<XE_1D_LOAD_GLOBAL<typename uint_bit<sizeof_bits_v<Element>>::type, cutlass::uint128_t>>;
+  using traits_load = Copy_Traits<XE_1D_LOAD_GLOBAL<
+      typename uint_bit<sizeof_bits_v<Element>>::type, cutlass::uint128_t>>;
   using Atom_load = Copy_Atom<traits_load, Element>;
-  using traits_store =
-      Copy_Traits<XE_1D_STORE_GLOBAL<cutlass::uint128_t, typename uint_bit<sizeof_bits_v<Element>>::type>>;
+  using traits_store = Copy_Traits<XE_1D_STORE_GLOBAL<
+      cutlass::uint128_t, typename uint_bit<sizeof_bits_v<Element>>::type>>;
   using Atom_store = Copy_Atom<traits_store, Element>;
 
   using traits_ldsm =
-      Copy_Traits<XE_1D_LDSM<typename uint_bit<sizeof_bits_v<Element>>::type, cutlass::uint128_t>>;
+      Copy_Traits<XE_1D_LDSM<typename uint_bit<sizeof_bits_v<Element>>::type,
+                             cutlass::uint128_t>>;
   using Atom_ldsm = Copy_Atom<traits_ldsm, Element>;
   using traits_stsm =
-      Copy_Traits<XE_1D_STSM<cutlass::uint128_t, typename uint_bit<sizeof_bits_v<Element>>::type>>;
+      Copy_Traits<XE_1D_STSM<cutlass::uint128_t,
+                             typename uint_bit<sizeof_bits_v<Element>>::type>>;
   using Atom_stsm = Copy_Atom<traits_stsm, Element>;
-
 
   // Construct tiled copy, a tiling of copy atoms.
   //
@@ -77,26 +77,24 @@ void copy_kernel_vectorized(TensorS tile_S, TensorD tile_D) {
   // uncoalesced reads. Alternative vector layouts are also possible, though
   // incompatible layouts will result in compile time errors.
 
-  auto VecLayout = make_layout(make_shape(_1{},Int<sizeof(cutlass::uint128_t) / sizeof(Element)>{}),
-                              Stride<Int<sizeof(cutlass::uint128_t) / sizeof(Element)>, _1>{});
+  auto VecLayout = make_layout(
+      make_shape(_1{}, Int<sizeof(cutlass::uint128_t) / sizeof(Element)>{}),
+      Stride<Int<sizeof(cutlass::uint128_t) / sizeof(Element)>, _1>{});
   auto ThreadLayout = make_layout(make_shape(_1{}, _16{}));
-  auto tiled_copy_load = make_tiled_copy(
-      Atom_load{}, // access size
-      ThreadLayout,                           // thread layout
-      VecLayout);                               // vector layout (e.g. 4x1)
-  auto tiled_copy_store = make_tiled_copy(
-      Atom_store{}, // access size
-      ThreadLayout,                           // thread layout
-      VecLayout);                               // vector layout (e.g. 4x1)
+  auto tiled_copy_load = make_tiled_copy(Atom_load{},  // access size
+                                         ThreadLayout, // thread layout
+                                         VecLayout); // vector layout (e.g. 4x1)
+  auto tiled_copy_store =
+      make_tiled_copy(Atom_store{}, // access size
+                      ThreadLayout, // thread layout
+                      VecLayout);   // vector layout (e.g. 4x1)
 
-  auto tiled_ldsm = make_tiled_copy(
-    Atom_ldsm{}, // access size
-    ThreadLayout,                           // thread layout
-    VecLayout);                               // vector layout (e.g. 4x1)
-  auto tiled_stsm = make_tiled_copy(
-      Atom_stsm{}, // access size
-      ThreadLayout,                           // thread layout
-      VecLayout);                               // vector layout (e.g. 4x1)
+  auto tiled_ldsm = make_tiled_copy(Atom_ldsm{},  // access size
+                                    ThreadLayout, // thread layout
+                                    VecLayout);   // vector layout (e.g. 4x1)
+  auto tiled_stsm = make_tiled_copy(Atom_stsm{},  // access size
+                                    ThreadLayout, // thread layout
+                                    VecLayout);   // vector layout (e.g. 4x1)
 
   // Construct a Tensor corresponding to each thread's slice.
   auto thr_copy_load =
@@ -104,10 +102,8 @@ void copy_kernel_vectorized(TensorS tile_S, TensorD tile_D) {
   auto thr_copy_store =
       tiled_copy_store.get_thread_slice(syclcompat::local_id::x());
 
-  auto thr_copy_ldsm =
-      tiled_ldsm.get_thread_slice(syclcompat::local_id::x());
-  auto thr_copy_stsm =
-      tiled_stsm.get_thread_slice(syclcompat::local_id::x());
+  auto thr_copy_ldsm = tiled_ldsm.get_thread_slice(syclcompat::local_id::x());
+  auto thr_copy_stsm = tiled_stsm.get_thread_slice(syclcompat::local_id::x());
 
   Tensor thr_tile_load_S =
       thr_copy_load.partition_S(tile_S); // (CopyOp, CopyM, CopyN)
@@ -122,8 +118,8 @@ void copy_kernel_vectorized(TensorS tile_S, TensorD tile_D) {
   // Construct a register-backed Tensor with the same shape as each thread's
   // partition Use make_fragment because the first mode is the instruction-local
   // mode
-  Tensor fragment =
-      make_fragment_like(thr_copy_load.partition_D(tile_S)); // (CopyOp, CopyM, CopyN)
+  Tensor fragment = make_fragment_like(
+      thr_copy_load.partition_D(tile_S)); // (CopyOp, CopyM, CopyN)
 
 #if 0
   if (thread(0, 0)) {
@@ -146,7 +142,7 @@ void copy_kernel_vectorized(TensorS tile_S, TensorD tile_D) {
     print(fragment.layout());
     print("\n");
   }
-  #endif
+#endif
 
   // Copy from GMEM to RMEM and from RMEM to GMEM
   prefetch(tiled_copy_load, thr_tile_load_S);
@@ -156,7 +152,6 @@ void copy_kernel_vectorized(TensorS tile_S, TensorD tile_D) {
   copy(tiled_ldsm, thr_tile_ldsm_S, fragment);
   copy(tiled_copy_store, fragment, thr_tile_store_D);
 }
-
 
 TEST(PVC_1d_copy, copy_double) {
   {
@@ -189,18 +184,12 @@ TEST(PVC_1d_copy, copy_double) {
 
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(subgroup_size);
-//
-// Launch the kernel
-//
-#if defined(CUTLASS_ENABLE_SYCL)
+    //
+    // Launch the kernel
+    //
     syclcompat::experimental::launch<
-        copy_kernel_vectorized<decltype(S), decltype(D)>,
-        subgroup_size>(1, blockDim, S, D);
-#else
-    syclcompat::launch<
-        copy_kernel_vectorized<decltype(S), decltype(D)>,
-        subgroup_size>(1, blockDim, S, D);
-#endif
+        copy_kernel_vectorized<decltype(S), decltype(D)>, subgroup_size>(
+        1, blockDim, S, D);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<Element>(host_output.data(), device_output, M * N);
@@ -241,18 +230,12 @@ TEST(PVC_1d_copy, copy_double) {
 
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(subgroup_size);
-//
-// Launch the kernel
-//
-#if defined(CUTLASS_ENABLE_SYCL)
+    //
+    // Launch the kernel
+    //
     syclcompat::experimental::launch<
-        copy_kernel_vectorized<decltype(S), decltype(D)>,
-        subgroup_size>(1, blockDim, S, D);
-#else
-    syclcompat::launch<
-        copy_kernel_vectorized<decltype(S), decltype(D)>,
-        subgroup_size>(1, blockDim, S, D);
-#endif
+        copy_kernel_vectorized<decltype(S), decltype(D)>, subgroup_size>(
+        1, blockDim, S, D);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<Element>(host_output.data(), device_output, M * N);
@@ -293,18 +276,12 @@ TEST(PVC_1d_copy, copy_double) {
 
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(subgroup_size);
-//
-// Launch the kernel
-//
-#if defined(CUTLASS_ENABLE_SYCL)
+    //
+    // Launch the kernel
+    //
     syclcompat::experimental::launch<
-        copy_kernel_vectorized<decltype(S), decltype(D)>,
-        subgroup_size>(1, blockDim, S, D);
-#else
-    syclcompat::launch<
-        copy_kernel_vectorized<decltype(S), decltype(D)>,
-        subgroup_size>(1, blockDim, S, D);
-#endif
+        copy_kernel_vectorized<decltype(S), decltype(D)>, subgroup_size>(
+        1, blockDim, S, D);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<Element>(host_output.data(), device_output, M * N);

@@ -33,7 +33,6 @@
 #include "cutlass/util/print_error.hpp"
 #include "cutlass_unit_test.h"
 
-#include "cutlass/device_kernel.h"
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
@@ -222,20 +221,13 @@ bool copy(uint32_t M, uint32_t N) {
                                   cute::ceil_div(N, wg_tile_n));
   auto blockDim = syclcompat::dim3(size(thr_layout));
 
-//
-// Launch the kernel
-//
-#if defined(CUTLASS_ENABLE_SYCL)
+  //
+  // Launch the kernel
+  //
   syclcompat::experimental::launch<
       copy_kernel_vectorized<decltype(tensor_S), decltype(tensor_D), wg_tile_m,
                              wg_tile_n, sg_tile_m, sg_tile_n>,
       subgroup_size>(gridDim, blockDim, tensor_S, tensor_D, M, N);
-#else
-  syclcompat::launch<
-      copy_kernel_vectorized<decltype(tensor_S), decltype(tensor_D), wg_tile_m,
-                             wg_tile_n, sg_tile_m, sg_tile_n>,
-      subgroup_size>(gridDim, blockDim, tensor_S, tensor_D, M, N);
-#endif
 
   syclcompat::wait_and_throw();
 

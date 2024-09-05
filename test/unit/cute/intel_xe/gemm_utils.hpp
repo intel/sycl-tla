@@ -30,24 +30,16 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/util/GPU_Clock.hpp"
-#include "cutlass/util/print_error.hpp"
-
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
 
-#include "cutlass/util/print_error.hpp"
+#include "cutlass/cluster_launch.hpp"
 #include "cutlass_unit_test.h"
-
-#include "cutlass/device_kernel.h"
-#include "cutlass_unit_test.h"
-#include <cute/tensor.hpp>
-#include <sycl/sycl.hpp>
-#include <syclcompat.hpp>
 
 using namespace cute;
 using namespace cutlass;
+using namespace syclcompat;
 
 #define SUBGROUP_SIZE (16)
 
@@ -78,7 +70,7 @@ void verify(uint32_t m, uint32_t n, uint32_t k, atype *A, btype *B, ctype *C,
       ctype expect = C[i * n + j];
 
       if (isnormal(val) && isnormal(expect)) {
-        auto error = abs((expect - val) / val);
+        auto error = std::abs((expect - val) / val);
         if (error > 0.01f) {
           cnt++;
         }
@@ -129,10 +121,15 @@ template <class kernel> void run(uint32_t m, uint32_t n, uint32_t k) {
   auto dimGrid = syclcompat::dim3(size(ceil_div(m, kernel::wg_tile_m)),
                                   size(ceil_div(n, kernel::wg_tile_n)));
 
-  syclcompat::experimental::launch<kernel::func, SUBGROUP_SIZE>(
-      dimGrid, dimBlock, d_A, d_B, d_C, m, n, k);
+  syclcompat::launch<kernel::func>(
+      launch_policy{dimGrid, dimBlock,
+                    local_mem_size{static_cast<std::size_t>(0)},
+                    kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+      d_A, d_B, d_C, m, n, k)
+      // syclcompat::experimental::launch<kernel::func, SUBGROUP_SIZE>(
+      //     dimGrid, dimBlock, d_A, d_B, d_C, m, n, k);
 
-  syclcompat::wait();
+      syclcompat::wait();
 
   verify(m, n, k, h_A.data(), h_B.data(), h_C.data(), d_C,
          kernel::is_a_row_major, kernel::is_b_row_major);

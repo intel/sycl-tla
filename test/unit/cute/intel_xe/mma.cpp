@@ -40,7 +40,6 @@
 #include "cutlass/util/print_error.hpp"
 #include "cutlass_unit_test.h"
 
-#include "cutlass/device_kernel.h"
 #include "cutlass_unit_test.h"
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
