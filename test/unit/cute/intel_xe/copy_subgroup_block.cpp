@@ -30,16 +30,20 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/util/print_error.hpp"
-#include "cutlass_unit_test.h"
-
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
 
+#include "cutlass_unit_test.h"
+
+using namespace syclcompat::experimental;
+
+#define SUBGROUP_SIZE (16)
+
 template <class TensorS, class TensorD, uint32_t wg_tile_m, uint32_t wg_tile_n,
           uint32_t sg_tile_m, uint32_t sg_tile_n>
-void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
+void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N,
+                            void *) {
   using namespace cute;
   using namespace cutlass;
 
@@ -224,10 +228,12 @@ bool copy(uint32_t M, uint32_t N) {
   //
   // Launch the kernel
   //
-  syclcompat::experimental::launch<
-      copy_kernel_vectorized<decltype(tensor_S), decltype(tensor_D), wg_tile_m,
-                             wg_tile_n, sg_tile_m, sg_tile_n>,
-      subgroup_size>(gridDim, blockDim, tensor_S, tensor_D, M, N);
+  launch<copy_kernel_vectorized<decltype(tensor_S), decltype(tensor_D),
+                                wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n>>(
+      launch_policy{gridDim, blockDim,
+                    local_mem_size{static_cast<std::size_t>(0)},
+                    kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+      tensor_S, tensor_D, M, N);
 
   syclcompat::wait_and_throw();
 

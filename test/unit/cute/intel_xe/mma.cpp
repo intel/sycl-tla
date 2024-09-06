@@ -30,30 +30,23 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/util/GPU_Clock.hpp"
-#include "cutlass/util/print_error.hpp"
-
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
-
-#include "cutlass/util/print_error.hpp"
-#include "cutlass_unit_test.h"
+#include <syclcompat/launch_policy.hpp>
 
 #include "cutlass_unit_test.h"
-#include <cute/tensor.hpp>
-#include <sycl/sycl.hpp>
-#include <syclcompat.hpp>
 
 using namespace cute;
 using namespace cutlass;
+using namespace syclcompat::experimental;
 
 #define SUBGROUP_SIZE (16)
 
 template <class MMA, uint32_t wg_tile_m, uint32_t wg_tile_n, uint32_t sg_tile_m,
           uint32_t sg_tile_n, uint32_t sg_tile_k, class TA, class TB, class TC>
 void gemm_device(TA const *A, TB const *B, TC *C, uint32_t m, uint32_t n,
-                 uint32_t k) {
+                 uint32_t k, void *) {
   using namespace cute;
 
   // Represent the full tensors
@@ -132,6 +125,8 @@ void gemm_device(TA const *A, TB const *B, TC *C, uint32_t m, uint32_t n,
   }
 #endif
 
+  // clang-format on
+
   auto k_tile_max = size<3>(tgA);
   for (int k_tile = 0; k_tile < k_tile_max; ++k_tile) {
     auto kA = tgA(_, _, _, k_tile);
@@ -157,9 +152,13 @@ void gemm(int m, int n, int k, TA *A, TB *B, TC *C) {
                                    (sg_tile_m * sg_tile_n));
   auto dimGrid = syclcompat::dim3(size(ceil_div(m, wg_tile_m)),
                                   size(ceil_div(n, wg_tile_n)));
-  syclcompat::experimental::launch<
-      gemm_device<MMA, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k, TA, TB, TC>,
-      SUBGROUP_SIZE>(dimGrid, dimBlock, A, B, C, m, n, k);
+
+  launch<gemm_device<MMA, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k,
+                     TA, TB, TC>>(
+      launch_policy{dimGrid, dimBlock,
+                    local_mem_size{static_cast<std::size_t>(0)},
+                    kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+      A, B, C, m, n, k);
 }
 
 template <class atype, class btype, class ctype>
@@ -176,8 +175,8 @@ void verify(uint32_t m, uint32_t n, uint32_t k, atype *A, btype *B, ctype *C,
         C[i * n + j] += A[i * k + z] * B[z * n + j];
       }
 
-      auto error =
-          abs((C[i * n + j] - h_D.data()[i * n + j]) / (float)h_D.data()[i * n + j]);
+      auto error = abs((C[i * n + j] - h_D.data()[i * n + j]) /
+                       (float)h_D.data()[i * n + j]);
       if (error > 0.01f) {
         cnt++;
       }
@@ -195,7 +194,7 @@ template <typename T> static void fill_matrix(std::vector<T> &M) {
                 [&] { return static_cast<T>(dist(rng)); });
 }
 
-template<class MMA, uint32_t wg_tile_m, uint32_t wg_tile_n, uint32_t sg_tile_m,
+template <class MMA, uint32_t wg_tile_m, uint32_t wg_tile_n, uint32_t sg_tile_m,
           uint32_t sg_tile_n, uint32_t sg_tile_k, class TA, class TB, class TC>
 void MMA_Test(int m, int n, int k) {
   std::vector<TA> h_A(m * k);
@@ -206,7 +205,6 @@ void MMA_Test(int m, int n, int k) {
   fill_matrix(h_A);
   fill_matrix(h_B);
 
-
   auto d_A = syclcompat::malloc<TA>(m * k);
   auto d_B = syclcompat::malloc<TB>(k * n);
   auto d_C = syclcompat::malloc<TC>(m * n);
@@ -215,121 +213,114 @@ void MMA_Test(int m, int n, int k) {
   syclcompat::memcpy<TB>(d_B, h_B.data(), k * n);
   syclcompat::memcpy<TC>(d_C, h_C.data(), m * n);
 
-  double gflops = (2.0 * m * n * k) * 1e-9;
-
-  const int timing_iterations = 1;
-  GPU_Clock timer;
-
-  timer.start();
-  gemm<MMA, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k>(m, n, k, d_A, d_B, d_C);
+  gemm<MMA, wg_tile_m, wg_tile_n, sg_tile_m, sg_tile_n, sg_tile_k>(m, n, k, d_A,
+                                                                   d_B, d_C);
   syclcompat::wait();
 
   verify(m, n, k, h_A.data(), h_B.data(), h_C.data(), d_C);
-
-  double cute_time = timer.seconds() / timing_iterations;
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_8x16x32_S32S8S8S32_TT) {
-  MMA_Test<XE_8x16x32_S32S8S8S32_TT,
-    64, 64, 8, 16, 32, int8_t, int8_t, int32_t>(512, 512, 256);
+  MMA_Test<XE_8x16x32_S32S8S8S32_TT, 64, 64, 8, 16, 32, int8_t, int8_t,
+           int32_t>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_4x16x32_S32S8S8S32_TT) {
-  MMA_Test<XE_4x16x32_S32S8S8S32_TT,
-    32, 64, 4, 16, 32, int8_t, int8_t, int32_t>(512, 512, 256);
+  MMA_Test<XE_4x16x32_S32S8S8S32_TT, 32, 64, 4, 16, 32, int8_t, int8_t,
+           int32_t>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_2x16x32_S32S8S8S32_TT) {
-  MMA_Test<XE_2x16x32_S32S8S8S32_TT,
-    16, 64, 2, 16, 32, int8_t, int8_t, int32_t>(512, 512, 256);
+  MMA_Test<XE_2x16x32_S32S8S8S32_TT, 16, 64, 2, 16, 32, int8_t, int8_t,
+           int32_t>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_1x16x32_S32S8S8S32_TT) {
-  MMA_Test<XE_1x16x32_S32S8S8S32_TT,
-    8, 64, 1, 16, 32, int8_t, int8_t, int32_t>(512, 512, 256);
+  MMA_Test<XE_1x16x32_S32S8S8S32_TT, 8, 64, 1, 16, 32, int8_t, int8_t, int32_t>(
+      512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_8x16x32_S32U8U8S32_TT) {
-  MMA_Test<XE_8x16x32_S32U8U8S32_TT,
-    64, 64, 8, 16, 32, uint8_t, uint8_t, int32_t>(512, 512, 256);
+  MMA_Test<XE_8x16x32_S32U8U8S32_TT, 64, 64, 8, 16, 32, uint8_t, uint8_t,
+           int32_t>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_4x16x32_S32U8U8S32_TT) {
-  MMA_Test<XE_4x16x32_S32U8U8S32_TT,
-    32, 64, 4, 16, 32, uint8_t, uint8_t, int32_t>(512, 512, 256);
+  MMA_Test<XE_4x16x32_S32U8U8S32_TT, 32, 64, 4, 16, 32, uint8_t, uint8_t,
+           int32_t>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_2x16x32_S32U8U8S32_TT) {
-  MMA_Test<XE_2x16x32_S32U8U8S32_TT,
-    16, 64, 2, 16, 32, uint8_t, uint8_t, int32_t>(512, 512, 256);
+  MMA_Test<XE_2x16x32_S32U8U8S32_TT, 16, 64, 2, 16, 32, uint8_t, uint8_t,
+           int32_t>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_1x16x32_S32U8U8S32_TT) {
-  MMA_Test<XE_1x16x32_S32U8U8S32_TT,
-    8, 64, 1, 16, 32, uint8_t, uint8_t, int32_t>(512, 512, 256);
+  MMA_Test<XE_1x16x32_S32U8U8S32_TT, 8, 64, 1, 16, 32, uint8_t, uint8_t,
+           int32_t>(512, 512, 256);
 }
 
-TEST(PVC_CuTe_Xe, MMA_XE_8x16x16_F32BF16BF16F32_TT) {  
-  MMA_Test<XE_8x16x16_F32BF16BF16F32_TT,
-    256, 256, 32, 64, 32, bfloat16_t, bfloat16_t, float>(512, 512, 256);
+TEST(PVC_CuTe_Xe, MMA_XE_8x16x16_F32BF16BF16F32_TT) {
+  MMA_Test<XE_8x16x16_F32BF16BF16F32_TT, 256, 256, 32, 64, 32, bfloat16_t,
+           bfloat16_t, float>(512, 512, 256);
 }
 
-TEST(PVC_CuTe_Xe, MMA_XE_4x16x16_F32BF16BF16F32_TT) {  
-  MMA_Test<XE_4x16x16_F32BF16BF16F32_TT,
-    32, 64, 4, 16, 16, bfloat16_t, bfloat16_t, float>(512, 512, 256);
+TEST(PVC_CuTe_Xe, MMA_XE_4x16x16_F32BF16BF16F32_TT) {
+  MMA_Test<XE_4x16x16_F32BF16BF16F32_TT, 32, 64, 4, 16, 16, bfloat16_t,
+           bfloat16_t, float>(512, 512, 256);
 }
 
-TEST(PVC_CuTe_Xe, MMA_XE_2x16x16_F32BF16BF16F32_TT) {  
-  MMA_Test<XE_2x16x16_F32BF16BF16F32_TT,
-    16, 64, 2, 16, 16, bfloat16_t, bfloat16_t, float>(512, 512, 256);
+TEST(PVC_CuTe_Xe, MMA_XE_2x16x16_F32BF16BF16F32_TT) {
+  MMA_Test<XE_2x16x16_F32BF16BF16F32_TT, 16, 64, 2, 16, 16, bfloat16_t,
+           bfloat16_t, float>(512, 512, 256);
 }
 
-TEST(PVC_CuTe_Xe, MMA_XE_1x16x16_F32BF16BF16F32_TT) {  
-  MMA_Test<XE_1x16x16_F32BF16BF16F32_TT,
-    8, 64, 1, 16, 16, bfloat16_t, bfloat16_t, float>(512, 512, 256);
+TEST(PVC_CuTe_Xe, MMA_XE_1x16x16_F32BF16BF16F32_TT) {
+  MMA_Test<XE_1x16x16_F32BF16BF16F32_TT, 8, 64, 1, 16, 16, bfloat16_t,
+           bfloat16_t, float>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_8x16x16_F32F16F16F32_TT) {
-  MMA_Test<XE_8x16x16_F32F16F16F32_TT,
-    64, 64, 8, 16, 16, half_t, half_t, float>(512, 512, 256);
+  MMA_Test<XE_8x16x16_F32F16F16F32_TT, 64, 64, 8, 16, 16, half_t, half_t,
+           float>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_4x16x16_F32F16F16F32_TT) {
-  MMA_Test<XE_4x16x16_F32F16F16F32_TT,
-    32, 64, 4, 16, 16, half_t, half_t, float>(512, 512, 256);
+  MMA_Test<XE_4x16x16_F32F16F16F32_TT, 32, 64, 4, 16, 16, half_t, half_t,
+           float>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_2x16x16_F32F16F16F32_TT) {
-  MMA_Test<XE_2x16x16_F32F16F16F32_TT,
-    16, 64, 2, 16, 16, half_t, half_t, float>(512, 512, 256);
+  MMA_Test<XE_2x16x16_F32F16F16F32_TT, 16, 64, 2, 16, 16, half_t, half_t,
+           float>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_1x16x16_F32F16F16F32_TT) {
-  MMA_Test<XE_1x16x16_F32F16F16F32_TT,
-    8, 64, 1, 16, 16, half_t, half_t, float>(512, 512, 256);
+  MMA_Test<XE_1x16x16_F32F16F16F32_TT, 8, 64, 1, 16, 16, half_t, half_t, float>(
+      512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_8x16x8_F32TF32TF32F32_TT) {
-  MMA_Test<XE_8x16x8_F32TF32TF32F32_TT,
-    64, 64, 8, 16, 8, tfloat32_t, tfloat32_t, float>(512, 512, 256);
+  MMA_Test<XE_8x16x8_F32TF32TF32F32_TT, 64, 64, 8, 16, 8, tfloat32_t,
+           tfloat32_t, float>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_4x16x8_F32TF32TF32F32_TT) {
-  MMA_Test<XE_4x16x8_F32TF32TF32F32_TT,
-    32, 64, 4, 16, 8, tfloat32_t, tfloat32_t, float>(512, 512, 256);
+  MMA_Test<XE_4x16x8_F32TF32TF32F32_TT, 32, 64, 4, 16, 8, tfloat32_t,
+           tfloat32_t, float>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_2x16x8_F32TF32TF32F32_TT) {
-  MMA_Test<XE_2x16x8_F32TF32TF32F32_TT,
-    16, 64, 2, 16, 8, tfloat32_t, tfloat32_t, float>(512, 512, 256);
+  MMA_Test<XE_2x16x8_F32TF32TF32F32_TT, 16, 64, 2, 16, 8, tfloat32_t,
+           tfloat32_t, float>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, MMA_XE_1x16x8_F32TF32TF32F32_TT) {
-  MMA_Test<XE_1x16x8_F32TF32TF32F32_TT,
-    8, 64, 1, 16, 8, tfloat32_t, tfloat32_t, float>(512, 512, 256);
+  MMA_Test<XE_1x16x8_F32TF32TF32F32_TT, 8, 64, 1, 16, 8, tfloat32_t, tfloat32_t,
+           float>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, FMA_XE_UniversalFMA_F32F32F32F32) {
-  MMA_Test<UniversalFMA<float, float, float, float>,
-    64, 64, 8, 16, 16, float, float, float>(512, 512, 256);
+  MMA_Test<UniversalFMA<float, float, float, float>, 64, 64, 8, 16, 16, float,
+           float, float>(512, 512, 256);
 }

@@ -30,17 +30,16 @@
  *
  **************************************************************************************************/
 
-#include "cutlass_unit_test.h"
-
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
 
+#include "cutlass_unit_test.h"
+
 using namespace cute;
 using namespace cutlass;
 
-template <class TensorS, class TensorD, class TiledLoad, class TiledStore,
-          class CopyOp = void>
+template <class TensorS, class TensorD, class TiledLoad, class TiledStore, class CopyOp = void>
 void copy_kernel_vectorized(TensorS S, TensorD D, TiledLoad load,
                             TiledStore store) {
   const int m_coord = 0;
@@ -54,8 +53,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, TiledLoad load,
   auto ld_tensor =
       load.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
                           fragment.shape(), make_stride(E<0>{}, E<1>{}));
-  if constexpr (cute::detail::has_prefetch<CopyOp>)
-    prefetch(load, ld_tensor);
+  if constexpr (cute::detail::has_prefetch<CopyOp>) prefetch(load, ld_tensor);
   copy(load, ld_tensor, fragment);
 
   // ==========  store   ==========
@@ -118,24 +116,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x1x16_LD_N>, uint16_t>{}.with(device_src,
-                                                                     N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x1x16_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                              N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_1, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x1x16_ST_N>, uint16_t>{}.with(
-            device_output, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x1x16_ST_N>, uint16_t>{}.with(device_output, N,
+                                                              M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_1, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x1x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x1x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -175,24 +180,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x2x16_LD_N>, uint16_t>{}.with(device_src,
-                                                                     N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x2x16_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                              N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x2x16_ST_N>, uint16_t>{}.with(
-            device_output, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x2x16_ST_N>, uint16_t>{}.with(device_output, N,
+                                                              M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x2x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x2x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -232,24 +244,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x4x16_LD_N>, uint16_t>{}.with(device_src,
-                                                                     N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x4x16_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                              N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_4, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x4x16_ST_N>, uint16_t>{}.with(
-            device_output, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x4x16_ST_N>, uint16_t>{}.with(device_output, N,
+                                                              M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_4, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x4x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x4x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -289,24 +308,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_LD_N>, uint16_t>{}.with(device_src,
-                                                                     N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                              N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(
-            device_output, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(device_output, N,
+                                                              M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x8x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x8x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -346,24 +372,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_N>, uint16_t>{}.with(
-            device_src, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                               N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_16, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(
-            device_output, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(device_output, N,
+                                                              M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x16x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x16x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -403,24 +436,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_N>, uint16_t>{}.with(
-            device_src, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                               N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_16, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(
-            device_output, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(device_output, N,
+                                                              M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x16x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x16x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -460,23 +500,30 @@ TEST(PVC_2d_copy, load_store) {
         make_layout(Shape<Int<2>, Int<16>>{}, Stride<Int<16>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x1x32_LD_N>, uint16_t>{}.with(device_src,
-                                                                     N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x1x32_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                              N),
         Layout<Shape<_1, _16>>{}, Layout<Shape<_1, _2>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x2x16_ST_N>, uint16_t>{}.with(
-            device_output, 16, 2, 16),
+        Copy_Atom<Copy_Traits<XE_2D_U16x2x16_ST_N>, uint16_t>{}.with(device_output, 16,
+                                                              2, 16),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x1x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x1x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -516,24 +563,31 @@ TEST(PVC_2d_copy, load_store) {
         make_layout(Shape<Int<4>, Int<16>>{}, Stride<Int<16>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x2x32_LD_N>, uint16_t>{}.with(device_src,
-                                                                     N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x2x32_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                              N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _2>, Stride<_1, _2>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x4x16_ST_N>, uint16_t>{}.with(
-            device_output, 16, 4, 16),
+        Copy_Atom<Copy_Traits<XE_2D_U16x4x16_ST_N>, uint16_t>{}.with(device_output, 16,
+                                                              4, 16),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_4, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x2x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x2x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -585,24 +639,31 @@ TEST(PVC_2d_copy, load_store) {
         make_layout(Shape<Int<8>, Int<16>>{}, Stride<Int<16>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x4x32_LD_N>, uint16_t>{}.with(device_src,
-                                                                     N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x4x32_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                              N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_4, _2>, Stride<_1, _4>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(
-            device_output, 16, 8, 16),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(device_output, 16,
+                                                              8, 16),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x4x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x4x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -646,24 +707,31 @@ TEST(PVC_2d_copy, load_store) {
         make_layout(Shape<Int<16>, Int<16>>{}, Stride<Int<16>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x32_LD_N>, uint16_t>{}.with(device_src,
-                                                                     N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x32_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                              N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _2>, Stride<_1, _8>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(
-            device_output, 16, 16, 16),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(device_output, 16,
+                                                              16, 16),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x8x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x8x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -707,24 +775,31 @@ TEST(PVC_2d_copy, load_store) {
         make_layout(Shape<Int<32>, Int<16>>{}, Stride<Int<16>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x16x32_LD_N>, uint16_t>{}.with(
-            device_src, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x16x32_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                               N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_16, _2>, Stride<_1, _16>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(
-            device_output, 16, 32, 16),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(device_output, 16,
+                                                              32, 16),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x16x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x16x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -768,24 +843,31 @@ TEST(PVC_2d_copy, load_store) {
         make_layout(Shape<Int<64>, Int<16>>{}, Stride<Int<16>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x32x32_LD_N>, uint16_t>{}.with(
-            device_src, N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x32x32_LD_N>, uint16_t>{}.with(device_src, N, M,
+                                                               N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_32, _2>, Stride<_1, _32>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(
-            device_output, 16, 64, 16),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, uint16_t>{}.with(device_output, 16,
+                                                              64, 16),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x32x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x32x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -829,24 +911,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x1x16_LD_N>, dtype>{}.with(device_src, N,
-                                                                  M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x1x16_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_1, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x1x16_ST_N>, dtype>{}.with(device_output,
-                                                                  N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x1x16_ST_N>, dtype>{}.with(device_output, N, M,
+                                                           N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_1, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U32x1x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U32x1x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -886,24 +974,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x2x16_LD_N>, dtype>{}.with(device_src, N,
-                                                                  M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x2x16_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x2x16_ST_N>, dtype>{}.with(device_output,
-                                                                  N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x2x16_ST_N>, dtype>{}.with(device_output, N, M,
+                                                           N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U32x2x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U32x2x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -943,24 +1037,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x4x16_LD_N>, dtype>{}.with(device_src, N,
-                                                                  M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x4x16_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_4, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x4x16_ST_N>, dtype>{}.with(device_output,
-                                                                  N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x4x16_ST_N>, dtype>{}.with(device_output, N, M,
+                                                           N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_4, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U32x4x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U32x4x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1000,24 +1100,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_LD_N>, dtype>{}.with(device_src, N,
-                                                                  M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_ST_N>, dtype>{}.with(device_output,
-                                                                  N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_ST_N>, dtype>{}.with(device_output, N, M,
+                                                           N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U32x8x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U32x8x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1057,24 +1163,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x16x16_LD_N>, dtype>{}.with(device_src,
-                                                                   N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x16x16_LD_N>, dtype>{}.with(device_src, N, M,
+                                                            N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_16, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_ST_N>, dtype>{}.with(device_output,
-                                                                  N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_ST_N>, dtype>{}.with(device_output, N, M,
+                                                           N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U32x16x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U32x16x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1114,24 +1227,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x32x16_LD_N>, dtype>{}.with(device_src,
-                                                                   N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x32x16_LD_N>, dtype>{}.with(device_src, N, M,
+                                                            N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_32, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_ST_N>, dtype>{}.with(device_output,
-                                                                  N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_ST_N>, dtype>{}.with(device_output, N, M,
+                                                           N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U32x32x16_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U32x32x16_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1171,23 +1291,29 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x1x32_LD_N>, dtype>{}.with(device_src, N,
-                                                                 M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x1x32_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>>{}, Layout<Shape<_1, _2>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output,
-                                                                 N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output, N, M,
+                                                          N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _2>, Stride<_2, _1>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U8x1x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U8x1x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1228,24 +1354,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_LD_N>, dtype>{}.with(device_src, N,
-                                                                 M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _2>, Stride<_1, _2>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output,
-                                                                 N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output, N, M,
+                                                          N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _2>, Stride<_2, _1>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U8x2x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U8x2x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1285,24 +1417,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x4x32_LD_N>, dtype>{}.with(device_src, N,
-                                                                 M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x4x32_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_4, _2>, Stride<_2, _1>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output,
-                                                                 N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output, N, M,
+                                                          N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _2>, Stride<_2, _1>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U8x4x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U8x4x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1342,24 +1480,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x8x32_LD_N>, dtype>{}.with(device_src, N,
-                                                                 M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x8x32_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _2>, Stride<_2, _1>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output,
-                                                                 N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output, N, M,
+                                                          N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _2>, Stride<_2, _1>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U8x8x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U8x8x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1399,24 +1543,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x16x32_LD_N>, dtype>{}.with(device_src, N,
-                                                                  M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x16x32_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_16, _2>, Stride<_2, _1>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output,
-                                                                 N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output, N, M,
+                                                          N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _2>, Stride<_2, _1>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U8x16x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U8x16x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1456,24 +1606,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x32x32_LD_N>, dtype>{}.with(device_src, N,
-                                                                  M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x32x32_LD_N>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_32, _2>, Stride<_2, _1>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output,
-                                                                 N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(device_output, N, M,
+                                                          N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _2>, Stride<_2, _1>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U8x32x32_LD_N>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U8x32x32_LD_N>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1513,24 +1669,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<N>, Int<M>>{}, Stride<Int<M>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x16x2_LD_T>, dtype>{}.with(device_src, N,
-                                                                  M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x16x2_LD_T>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_16, _1>, Stride<_1, _0>>{},
         Layout<Shape<_1, _2>, Stride<_0, _1>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x2x16_ST_N>, dtype>{}.with(device_output,
-                                                                  M, N, M),
+        Copy_Atom<Copy_Traits<XE_2D_U32x2x16_ST_N>, dtype>{}.with(device_output, M, N,
+                                                           M),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_2, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U32x16x2_LD_T>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U32x16x2_LD_T>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1572,24 +1734,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<N>, Int<M>>{}, Stride<Int<M>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x16x4_LD_T>, dtype>{}.with(device_src, N,
-                                                                  M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x16x4_LD_T>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_16, _1>, Stride<_1, _0>>{},
         Layout<Shape<_1, _4>, Stride<_0, _1>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x4x16_ST_N>, dtype>{}.with(device_output,
-                                                                  M, N, M),
+        Copy_Atom<Copy_Traits<XE_2D_U32x4x16_ST_N>, dtype>{}.with(device_output, M, N,
+                                                           M),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_4, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U32x16x4_LD_T>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U32x16x4_LD_T>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1631,24 +1799,30 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<N>, Int<M>>{}, Stride<Int<M>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x16x8_LD_T>, dtype>{}.with(device_src, N,
-                                                                  M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U32x16x8_LD_T>, dtype>{}.with(device_src, N, M, N),
         Layout<Shape<_16, _1>, Stride<_1, _0>>{},
         Layout<Shape<_1, _8>, Stride<_0, _1>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_ST_N>, dtype>{}.with(device_output,
-                                                                  M, N, M),
+        Copy_Atom<Copy_Traits<XE_2D_U32x8x16_ST_N>, dtype>{}.with(device_output, M, N,
+                                                           M),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U32x16x8_LD_T>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U32x16x8_LD_T>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1691,24 +1865,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_V>, dtype>{}.with(device_src,
-                                                                   N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_V>, dtype>{}.with(device_src, N, M,
+                                                            N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_16, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, dtype>{}.with(device_output,
-                                                                  N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, dtype>{}.with(device_output, N, M,
+                                                           N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x16x16_LD_V>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x16x16_LD_V>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1749,24 +1930,31 @@ TEST(PVC_2d_copy, load_store) {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x32x16_LD_V>, dtype>{}.with(device_src,
-                                                                   N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x32x16_LD_V>, dtype>{}.with(device_src, N, M,
+                                                            N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_32, _1>, Stride<_1, _0>>{});
     auto tiled_store = make_tiled_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, dtype>{}.with(device_output,
-                                                                  N, M, N),
+        Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N>, dtype>{}.with(device_output, N, M,
+                                                           N),
         Layout<Shape<_1, _16>, Stride<_0, _1>>{},
         Layout<Shape<_8, _1>, Stride<_1, _0>>{});
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(size(tiled_load));
-    //
-    // Launch the kernel
-    //
+//
+// Launch the kernel
+//
+#if defined(CUTLASS_ENABLE_SYCL)
     syclcompat::experimental::launch<
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), XE_2D_U16x32x16_LD_V>,
         subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+    syclcompat::launch<
+        copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                               decltype(tiled_store), XE_2D_U16x32x16_LD_V>,
+        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -1817,10 +2005,17 @@ TEST(PVC_2d_copy, load_store_XE_2D_U16x16x8_LD_T_And_XE_2D_U16x8x16_ST_N) {
   static constexpr auto subgroup_size = 16;
   auto blockDim = syclcompat::dim3(size(tiled_load));
 
+#if defined(CUTLASS_ENABLE_SYCL)
   syclcompat::experimental::launch<
       copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                              decltype(tiled_store)>,
       subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#else
+  syclcompat::launch<
+      copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
+                             decltype(tiled_store)>,
+      subgroup_size>(1, blockDim, S, D, tiled_load, tiled_store);
+#endif
 
   syclcompat::wait_and_throw();
   syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);

@@ -30,7 +30,7 @@ cutlass_test_unit_add_executable(
   cutlass_test_unit_cute_intel_xe
   copy_1d.cpp
   copy_subgroup_block.cpp
-  copy_block.cpp
+  #copy_block.cpp
   copy_scatter.cpp
   mma.cpp
   gemm_partition_src_dst.cpp

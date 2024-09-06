@@ -51,7 +51,7 @@ struct gemm_device_partition_fragment_abc {
   static constexpr uint32_t sg_tile_k = sg_k;
 
   static void func(TA const *A, TB const *B, TC *C, uint32_t m, uint32_t n,
-                   uint32_t k) {
+                   uint32_t k, void *) {
     using namespace cute;
 
     // Represent the full tensors

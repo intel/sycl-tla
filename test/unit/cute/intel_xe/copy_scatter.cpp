@@ -30,19 +30,22 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/util/print_error.hpp"
-#include "cutlass_unit_test.h"
-
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
+#include <syclcompat/launch_policy.hpp>
+
+#include "cutlass_unit_test.h"
 
 using namespace cute;
 using namespace cutlass;
+using namespace syclcompat::experimental;
+
+#define SUBGROUP_SIZE (16)
 
 template <class TensorS, class TensorD, class TiledLoad, class TiledStore>
-void copy_kernel_global(TensorS S, TensorD D, TiledLoad load,
-                        TiledStore store) {
+void copy_kernel_global(TensorS S, TensorD D, TiledLoad load, TiledStore store,
+                        void *) {
 
   auto thr_copy_load = load.get_thread_slice(syclcompat::local_id::x());
   Tensor thr_tile_load_S = thr_copy_load.partition_S(S);
@@ -128,10 +131,13 @@ TEST(PVC_2d_copy, load_store_global) {
     //
     // Launch the kernel
     //
-    syclcompat::experimental::launch<
-        copy_kernel_global<decltype(S), decltype(D), decltype(tiled_copy),
-                           decltype(tiled_copy)>,
-        subgroup_size>(1, blockDim, S, D, tiled_copy, tiled_copy);
+    launch<copy_kernel_global<decltype(S), decltype(D), decltype(tiled_copy),
+                              decltype(tiled_copy)>>(
+        launch_policy{
+            syclcompat::dim3(1), blockDim,
+            local_mem_size{static_cast<std::size_t>(0)},
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D, tiled_copy, tiled_copy);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -178,10 +184,13 @@ TEST(PVC_2d_copy, load_store_global_V) {
     //
     // Launch the kernel
     //
-    syclcompat::experimental::launch<
-        copy_kernel_global<decltype(S), decltype(D), decltype(tiled_copy),
-                           decltype(tiled_copy)>,
-        subgroup_size>(1, blockDim, S, D, tiled_copy, tiled_copy);
+    launch<copy_kernel_global<decltype(S), decltype(D), decltype(tiled_copy),
+                              decltype(tiled_copy)>>(
+        launch_policy{
+            syclcompat::dim3(1), blockDim,
+            local_mem_size{static_cast<std::size_t>(0)},
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D, tiled_copy, tiled_copy);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -193,7 +202,7 @@ TEST(PVC_2d_copy, load_store_global_V) {
 }
 
 template <class TensorS, class TensorD, class TiledCopy>
-void copy_kernel_local(TensorS S, TensorD D, TiledCopy Op) {
+void copy_kernel_local(TensorS S, TensorD D, TiledCopy Op, void *) {
 
   // Shared memory buffers
   using Element = typename TensorS::value_type;
@@ -255,9 +264,12 @@ TEST(PVC_2d_copy, load_store_local) {
     //
     // Launch the kernel
     //
-    syclcompat::experimental::launch<
-        copy_kernel_local<decltype(S), decltype(D), decltype(tiled_copy)>,
-        subgroup_size>(1, blockDim, S, D, tiled_copy);
+    launch<copy_kernel_local<decltype(S), decltype(D), decltype(tiled_copy)>>(
+        launch_policy{
+            syclcompat::dim3(1), blockDim,
+            local_mem_size{static_cast<std::size_t>(0)},
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D, tiled_copy);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -269,8 +281,8 @@ TEST(PVC_2d_copy, load_store_local) {
 }
 
 template <class TensorS, class TensorD, class TiledLoad, class TiledStore>
-void copy_kernel_atomic(TensorS S, TensorD D, TiledLoad load,
-                        TiledStore store) {
+void copy_kernel_atomic(TensorS S, TensorD D, TiledLoad load, TiledStore store,
+                        void *) {
 
   auto thr_copy_load = load.get_thread_slice(syclcompat::local_id::x());
   Tensor thr_tile_load_S = thr_copy_load.partition_S(S);
@@ -352,10 +364,13 @@ TEST(PVC_2d_copy, load_store_stomic_float) {
     //
     // Launch the kernel
     //
-    syclcompat::experimental::launch<
-        copy_kernel_atomic<decltype(S), decltype(D), decltype(tiled_load),
-                           decltype(tiled_atom)>,
-        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_atom);
+    launch<copy_kernel_atomic<decltype(S), decltype(D), decltype(tiled_load),
+                              decltype(tiled_atom)>>(
+        launch_policy{
+            syclcompat::dim3(1), blockDim,
+            local_mem_size{static_cast<std::size_t>(0)},
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D, tiled_load, tiled_atom);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);
@@ -405,10 +420,13 @@ TEST(PVC_2d_copy, load_store_stomic_int) {
     //
     // Launch the kernel
     //
-    syclcompat::experimental::launch<
-        copy_kernel_atomic<decltype(S), decltype(D), decltype(tiled_load),
-                           decltype(tiled_atom)>,
-        subgroup_size>(1, blockDim, S, D, tiled_load, tiled_atom);
+    launch<copy_kernel_atomic<decltype(S), decltype(D), decltype(tiled_load),
+                              decltype(tiled_atom)>>(
+        launch_policy{
+            syclcompat::dim3(1), blockDim,
+            local_mem_size{static_cast<std::size_t>(0)},
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D, tiled_load, tiled_atom);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<dtype>(host_output.data(), device_output, M * N);

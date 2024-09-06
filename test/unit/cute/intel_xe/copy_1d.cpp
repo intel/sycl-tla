@@ -30,18 +30,21 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/util/print_error.hpp"
-#include "cutlass_unit_test.h"
-
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
+#include <syclcompat/launch_policy.hpp>
+
+#include "cutlass_unit_test.h"
 
 using namespace cute;
 using namespace cutlass;
+using namespace syclcompat::experimental;
+
+#define SUBGROUP_SIZE (16)
 
 template <class TensorS, class TensorD>
-void copy_kernel_vectorized(TensorS tile_S, TensorD tile_D) {
+void copy_kernel_vectorized(TensorS tile_S, TensorD tile_D, void *) {
   using namespace cute;
 
   using Element = typename TensorS::value_type;
@@ -184,12 +187,13 @@ TEST(PVC_1d_copy, copy_double) {
 
     static constexpr auto subgroup_size = 16;
     auto blockDim = syclcompat::dim3(subgroup_size);
-    //
-    // Launch the kernel
-    //
-    syclcompat::experimental::launch<
-        copy_kernel_vectorized<decltype(S), decltype(D)>, subgroup_size>(
-        1, blockDim, S, D);
+
+    launch<copy_kernel_vectorized<decltype(S), decltype(D)>>(
+        launch_policy{
+            syclcompat::dim3(1), blockDim,
+            local_mem_size{static_cast<std::size_t>(0)},
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<Element>(host_output.data(), device_output, M * N);
@@ -233,9 +237,12 @@ TEST(PVC_1d_copy, copy_double) {
     //
     // Launch the kernel
     //
-    syclcompat::experimental::launch<
-        copy_kernel_vectorized<decltype(S), decltype(D)>, subgroup_size>(
-        1, blockDim, S, D);
+    launch<copy_kernel_vectorized<decltype(S), decltype(D)>>(
+        launch_policy{
+            syclcompat::dim3(1), blockDim,
+            local_mem_size{static_cast<std::size_t>(0)},
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<Element>(host_output.data(), device_output, M * N);
@@ -279,9 +286,12 @@ TEST(PVC_1d_copy, copy_double) {
     //
     // Launch the kernel
     //
-    syclcompat::experimental::launch<
-        copy_kernel_vectorized<decltype(S), decltype(D)>, subgroup_size>(
-        1, blockDim, S, D);
+    launch<copy_kernel_vectorized<decltype(S), decltype(D)>>(
+        launch_policy{
+            syclcompat::dim3(1), blockDim,
+            local_mem_size{static_cast<std::size_t>(0)},
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D);
 
     syclcompat::wait_and_throw();
     syclcompat::memcpy<Element>(host_output.data(), device_output, M * N);
