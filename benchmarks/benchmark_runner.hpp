@@ -231,9 +231,9 @@ struct BenchmarkRunnerGemm {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    std::size_t block_A_size = std::size_t(M) * std::size(K) * std::size_t(L);
-    std::size_t block_B_size = std::size_t(K) * std::size(N) * std::size_t(L);
-    std::size_t block_C_size = std::size_t(M) * std::size(N) * std::size_t(L);
+    std::size_t block_A_size = std::size_t(M) * std::size_t(K) * std::size_t(L);
+    std::size_t block_B_size = std::size_t(K) * std::size_t(N) * std::size_t(L);
+    std::size_t block_C_size = std::size_t(M) * std::size_t(N) * std::size_t(L);
 
     block_A.reset(block_A_size);
     block_B.reset(block_B_size);
