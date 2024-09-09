@@ -56,6 +56,19 @@
 
 using namespace cute;
 
+namespace cutlass {
+    void memset(void* ptr, int val, std::size_t num_bytes) {
+      #if defined(CUTLASS_ENABLE_SYCL)
+        syclcompat::memset(ptr, val, num_bytes);
+      #else
+      auto cuda_result = cudaMemset(ptr, val, num_bytes);
+      if (cuda_result != cudaSuccess) {
+        throw std::runtime_error(cudaGetErrorString(cuda_result));
+      }
+      #endif
+    }
+}
+
 namespace cutlass::benchmark {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -284,8 +297,18 @@ struct BenchmarkRunnerGemm {
                                      (options.k * options.n) * sizeof(ElementB) +
                                  (options.beta != 0 ? 2 : 1) * (options.m * options.n) * sizeof(ElementC)) * 1e-9) *
                                  options.l;
-    initialize_counters(state);
+
+    int32_t counter = 0;
     for(auto _ : state) {
+      
+      state.PauseTiming();
+      // Invalidate LLC by changing the data in the global pointer to random data, as verification is not required
+      // initialize_block is not being used beacuse it would otherwise be too slow.
+      cutlass::memset(block_A.get(), 3 * counter + 1, block_A.size() * sizeof(ElementA));
+      cutlass::memset(block_B.get(), 3 * counter + 2, block_B.size() * sizeof(ElementB));
+      cutlass::memset(block_C.get(), 3 * counter + 3, block_C.size() * sizeof(ElementC));
+      state.ResumeTiming();
+
       GPU_Clock timer;
       timer.start();
       gemm_op.run();
