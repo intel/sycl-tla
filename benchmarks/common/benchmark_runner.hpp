@@ -299,6 +299,7 @@ struct BenchmarkRunnerGemm {
                                  options.l;
 
     int32_t counter = 0;
+    initialize_counters(state);
     for(auto _ : state) {
       
       state.PauseTiming();
@@ -315,6 +316,7 @@ struct BenchmarkRunnerGemm {
       auto ms_elapsed = timer.milliseconds();
       update_counters(state, ms_elapsed, tflop, giga_bytes_transferred);
       state.SetIterationTime(ms_elapsed / 1000);
+      counter++;
     }
     finalize_counters(state, tflop, giga_bytes_transferred);
   }
