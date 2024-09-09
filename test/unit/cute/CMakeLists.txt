@@ -97,7 +97,7 @@ else()
       test_unit_cute_turing
       #test_unit_cute_hopper
       test_unit_cute_msvc_compilation
-    )
+      )
   else()
   add_custom_target(
     cutlass_test_unit_cute
@@ -114,7 +114,7 @@ else()
     test_unit_cute_core
     test_unit_cute_msvc_compilation
     #Intel Tests
-  )
+    )
 
   endif()
 endif()

@@ -170,43 +170,43 @@ cooperative_gemm_kernel(TA const*   a,
                         CLoadTransform  c_load_transform,
                         CStoreTransform c_store_transform)
 {
-  using namespace cute;
+    using namespace cute;
 
-  Tensor g_a_tensor     = make_tensor(make_gmem_ptr(a), ALayout{});
-  Tensor g_b_tensor     = make_tensor(make_gmem_ptr(b), BLayout{});
-  Tensor g_c_tensor     = make_tensor(make_gmem_ptr(c), CLayout{});
-  Tensor g_c_out_tensor = make_tensor(make_gmem_ptr(c_out), CLayout{});
+    Tensor g_a_tensor     = make_tensor(make_gmem_ptr(a), ALayout{});
+    Tensor g_b_tensor     = make_tensor(make_gmem_ptr(b), BLayout{});
+    Tensor g_c_tensor     = make_tensor(make_gmem_ptr(c), CLayout{});
+    Tensor g_c_out_tensor = make_tensor(make_gmem_ptr(c_out), CLayout{});
 
-  constexpr uint32_t copy_max_vec_bytes = CopyMaxVecBits / 8;
+    constexpr uint32_t copy_max_vec_bytes = CopyMaxVecBits / 8;
 
-  extern CUTLASS_SHARED float4 smem_buf[];
+    extern CUTLASS_SHARED float4 smem_buf[];
 
-  auto* smem_ptr = reinterpret_cast<unsigned char*>(smem_buf);
-  auto* smem_ptr_a = smem_ptr;
-  auto* smem_ptr_b = smem_ptr_a + round_up((sizeof(TA) * cosize(SMemALayout {})), copy_max_vec_bytes);
-  auto* smem_ptr_c = smem_ptr_b + round_up((sizeof(TB) * cosize(SMemBLayout {})), copy_max_vec_bytes);
+    auto* smem_ptr = reinterpret_cast<unsigned char*>(smem_buf);
+    auto* smem_ptr_a = smem_ptr;
+    auto* smem_ptr_b = smem_ptr_a + round_up((sizeof(TA) * cosize(SMemALayout {})), copy_max_vec_bytes);
+    auto* smem_ptr_c = smem_ptr_b + round_up((sizeof(TB) * cosize(SMemBLayout {})), copy_max_vec_bytes);
 
-  Tensor s_a_tensor = make_tensor(make_smem_ptr<TA>(smem_ptr_a), SMemALayout{});
-  Tensor s_b_tensor = make_tensor(make_smem_ptr<TB>(smem_ptr_b), SMemBLayout{});
-  Tensor s_c_tensor = make_tensor(make_smem_ptr<TC>(smem_ptr_c), SMemCLayout{});
+    Tensor s_a_tensor = make_tensor(make_smem_ptr<TA>(smem_ptr_a), SMemALayout{});
+    Tensor s_b_tensor = make_tensor(make_smem_ptr<TB>(smem_ptr_b), SMemBLayout{});
+    Tensor s_c_tensor = make_tensor(make_smem_ptr<TC>(smem_ptr_c), SMemCLayout{});
 
-  cooperative_copy<ThreadBlockSize, CopyMaxVecBits>(ThreadIdxX(), g_a_tensor, s_a_tensor);
-  cooperative_copy<ThreadBlockSize, CopyMaxVecBits>(ThreadIdxX(), g_b_tensor, s_b_tensor);
-  cooperative_copy<ThreadBlockSize, CopyMaxVecBits>(ThreadIdxX(), g_c_tensor, s_c_tensor);
+    cooperative_copy<ThreadBlockSize, CopyMaxVecBits>(ThreadIdxX(), g_a_tensor, s_a_tensor);
+    cooperative_copy<ThreadBlockSize, CopyMaxVecBits>(ThreadIdxX(), g_b_tensor, s_b_tensor);
+    cooperative_copy<ThreadBlockSize, CopyMaxVecBits>(ThreadIdxX(), g_c_tensor, s_c_tensor);
 
-  cp_async_fence();
-  cp_async_wait<0>();
-  syncthreads();
+    cp_async_fence();
+    cp_async_wait<0>();
+    syncthreads();
 
-  TiledMma tiled_mma;
-  cooperative_gemm<SmemCopyOpA, SmemCopyOpB, SmemCopyOpC>(
-    ThreadIdxX(), tiled_mma,
-    alpha, s_a_tensor, s_b_tensor, beta, s_c_tensor,
-    a_load_transform, b_load_transform, c_load_transform, c_store_transform
-  );
-  syncthreads();
+    TiledMma tiled_mma;
+    cooperative_gemm<SmemCopyOpA, SmemCopyOpB, SmemCopyOpC>(
+      ThreadIdxX(), tiled_mma,
+      alpha, s_a_tensor, s_b_tensor, beta, s_c_tensor,
+      a_load_transform, b_load_transform, c_load_transform, c_store_transform
+    );
+    syncthreads();
 
-  cooperative_copy<ThreadBlockSize, CopyMaxVecBits>(ThreadIdxX(), s_c_tensor, g_c_out_tensor);
+    cooperative_copy<ThreadBlockSize, CopyMaxVecBits>(ThreadIdxX(), s_c_tensor, g_c_out_tensor);
 }
 
 #endif
