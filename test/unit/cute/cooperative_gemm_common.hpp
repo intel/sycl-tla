@@ -180,7 +180,6 @@ cooperative_gemm_kernel(TA const*   a,
     constexpr uint32_t copy_max_vec_bytes = CopyMaxVecBits / 8;
 
     extern CUTLASS_SHARED float4 smem_buf[];
-
     auto* smem_ptr = reinterpret_cast<unsigned char*>(smem_buf);
     auto* smem_ptr_a = smem_ptr;
     auto* smem_ptr_b = smem_ptr_a + round_up((sizeof(TA) * cosize(SMemALayout {})), copy_max_vec_bytes);
