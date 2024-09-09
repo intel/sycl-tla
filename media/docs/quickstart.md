@@ -680,8 +680,6 @@ targeting NVIDIA Ampere, Turing, and Volta Tensor Core operations
 $ cmake .. -DCUTLASS_NVCC_ARCHS='70;75;80' -DCUTLASS_LIBRARY_KERNELS=tensorop*s*wgrad_optimized_f16
 ```
 
-
-
 # Copyright
 
 Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
