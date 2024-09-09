@@ -53,6 +53,21 @@ Cutlass GEMM Performance:     [225.773]TFlop/s  (0.7609)ms
 ```
 More examples on the Intel GPU can be found in the [sycl example folder](../../examples/sycl/pvc/)
 
+A complete example when running on a A100, using the SYCL backend
+
+```bash
+$ cmake -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=nvptx64-nvidia-cuda -DDPCPP_SYCL_ARCH=sm_80
+
+$ make 14_ampere_tf32_tensorop_gemm_cute
+
+$ ./examples/14_ampere_tf32_tensorop_gemm/14_ampere_tf32_tensorop_gemm_cute 
+
+  Disposition: Passed
+  Problem Size: 5120x4096x4096x1
+  Avg runtime: 1.5232 ms
+  GFLOPS: 112788
+```
+
 ### CUTLASS quick building  tips
 
 If your goal is strictly to build only the CUTLASS Profiler and to minimize compilation time, we suggest
