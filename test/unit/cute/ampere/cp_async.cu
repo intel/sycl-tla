@@ -46,20 +46,11 @@ using namespace cute;
   namespace sc = syclcompat;
   namespace sc_exp = syclcompat::experimental;
   namespace sycl_ext = sycl::ext::oneapi::experimental;
-#endif
 
 CUTLASS_GLOBAL void
-test(double const* g_in, double* g_out)
+test(double const* g_in, double* g_out, sycl::local_ptr<char> base_smem)
 {
-  #ifdef __SYCL_DEVICE_ONLY__
-    auto smem = sycl_ext::get_dynamic_work_group_memory<double>().get();
-  #endif
-  #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
-    double* smem; // dummy declaration to avoid compilation errors during the host compilation phase
-  #endif
-  #if !defined(CUTLASS_ENABLE_SYCL)
-    extern CUTLASS_SHARED double smem[];
-  #endif
+  auto smem = reinterpret_cast<double*>((char*)base_smem);
   smem[ThreadIdxX()] = g_in[ThreadIdxX()];
 
   syncthreads();
@@ -68,19 +59,11 @@ test(double const* g_in, double* g_out)
 }
 
 CUTLASS_GLOBAL void
-test2(double const* g_in, double* g_out)
+test2(double const* g_in, double* g_out, sycl::local_ptr<char> base_smem)
 {
   using namespace cute;
 
-  #ifdef __SYCL_DEVICE_ONLY__
-    auto smem = sycl_ext::get_dynamic_work_group_memory<double>().get();
-  #endif
-  #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
-    double* smem; // dummy declaration to avoid compilation errors during the host compilation phase
-  #endif
-  #if !defined(CUTLASS_ENABLE_SYCL)
-    extern CUTLASS_SHARED double smem[];
-  #endif
+  auto smem = reinterpret_cast<double*>((char*)base_smem);
 
   auto s_tensor = make_tensor(make_smem_ptr(smem + ThreadIdxX()), Int<1>{});
   auto g_tensor = make_tensor(make_gmem_ptr(g_in + ThreadIdxX()), Int<1>{});
@@ -94,6 +77,40 @@ test2(double const* g_in, double* g_out)
   g_out[ThreadIdxX()] = 2 * smem[ThreadIdxX()];
 }
 
+#else
+
+CUTLASS_GLOBAL void
+test(double const* g_in, double* g_out)
+{
+  extern CUTLASS_SHARED double smem[];
+  smem[ThreadIdxX()] = g_in[ThreadIdxX()];
+
+  syncthreads();
+
+  g_out[ThreadIdxX()] = 2 * smem[ThreadIdxX()];
+}
+
+CUTLASS_GLOBAL void
+test2(double const* g_in, double* g_out)
+{
+  using namespace cute;
+
+  extern CUTLASS_SHARED double smem[];
+
+  auto s_tensor = make_tensor(make_smem_ptr(smem + ThreadIdxX()), Int<1>{});
+  auto g_tensor = make_tensor(make_gmem_ptr(g_in + ThreadIdxX()), Int<1>{});
+
+  copy(g_tensor, s_tensor);
+
+  cp_async_fence();
+  cp_async_wait<0>();
+  syncthreads();
+
+  g_out[ThreadIdxX()] = 2 * smem[ThreadIdxX()];
+}
+
+#endif
+
 TEST(SM80_CuTe_Ampere, CpAsync)
 {
   constexpr int count = 32;
@@ -106,8 +123,8 @@ TEST(SM80_CuTe_Ampere, CpAsync)
 
   device_vector<double> d_out(count, -1);
   #if defined(CUTLASS_ENABLE_SYCL)
-    sc_exp::launch<test>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(count), 
-              sc_exp::launch_properties{sycl_ext::work_group_static_size(sizeof(double) * count)}},
+    sc_exp::launch<test>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(count),
+              sc_exp::local_mem_size{sizeof(double) * count}},
               d_in.data(), d_out.data());
     sc::wait_and_throw();
   #else
@@ -119,8 +136,8 @@ TEST(SM80_CuTe_Ampere, CpAsync)
 
   device_vector<double> d_out_cp_async(count, -2);
   #if defined(CUTLASS_ENABLE_SYCL)
-    sc_exp::launch<test2>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(count), 
-              sc_exp::launch_properties{sycl_ext::work_group_static_size(sizeof(double) * count)}},
+    sc_exp::launch<test2>(sc_exp::launch_policy{sc::dim3(1), sc::dim3(count),
+              sc_exp::local_mem_size{sizeof(double) * count}},
               d_in.data(), d_out_cp_async.data());
     sc::wait_and_throw();
   #else

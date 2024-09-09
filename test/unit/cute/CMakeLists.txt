@@ -63,6 +63,7 @@ else()
   
   add_subdirectory(layout)
   add_subdirectory(core)
+  add_subdirectory(msvc_compilation)
 
   if(SYCL_NVIDIA_TARGET)
   
@@ -70,8 +71,7 @@ else()
     add_subdirectory(turing)
     add_subdirectory(ampere)
     # add_subdirectory(hopper) // Hopper test support to come later once complete support in DPCPP
-    add_subdirectory(msvc_compilation)
-  
+
   endif()
 
   if(SYCL_NVIDIA_TARGET)
@@ -96,6 +96,7 @@ else()
       test_unit_cute_ampere
       test_unit_cute_turing
       #test_unit_cute_hopper
+      test_unit_cute_msvc_compilation
     )
   else()
   add_custom_target(
@@ -103,6 +104,7 @@ else()
     DEPENDS
     cutlass_test_unit_cute_layout
     cutlass_test_unit_cute_core
+    cutlass_test_unit_cute_msvc_compilation
     )
 
   add_custom_target(
@@ -110,6 +112,7 @@ else()
     DEPENDS
     test_unit_cute_layout
     test_unit_cute_core
+    test_unit_cute_msvc_compilation
     #Intel Tests
   )
 
