@@ -57,14 +57,16 @@
 using namespace cute;
 
 namespace cutlass {
-    void memset(void* ptr, int val, std::size_t num_bytes) {
+    std::size_t get_llc_size() {
       #if defined(CUTLASS_ENABLE_SYCL)
-        syclcompat::memset(ptr, val, num_bytes);
+        return syclcompat::get_default_queue().get_device().get_info<sycl::info::device::global_mem_cache_size>();   
       #else
-      auto cuda_result = cudaMemset(ptr, val, num_bytes);
-      if (cuda_result != cudaSuccess) {
-        throw std::runtime_error(cudaGetErrorString(cuda_result));
-      }
+        cudaDeviceProp prop_struct;
+        auto result = cudaGetDeviceProperties(&prop_struct, 0);
+        if (result != cudaSuccess) {
+          throw std::runtime_error(cudaGetErrorString(result));
+        }
+        return static_cast<std::size_t>(prop_struct.l2CacheSize);
       #endif
     }
 }
@@ -171,6 +173,8 @@ struct BenchmarkRunnerGemm {
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
+  int32_t count;
+
   //
   // Data members
   //
@@ -183,9 +187,9 @@ struct BenchmarkRunnerGemm {
 
   uint64_t seed;
 
-  DeviceAllocation<ElementA> block_A;
-  DeviceAllocation<ElementB> block_B;
-  DeviceAllocation<ElementC> block_C;
+  std::vector<DeviceAllocation<ElementA>> block_A;
+  std::vector<DeviceAllocation<ElementB>> block_B;
+  std::vector<DeviceAllocation<ElementC>> block_C;
   DeviceAllocation<ElementOutput> block_D;
   DeviceAllocation<ElementOutput> block_ref_D;
 
@@ -198,9 +202,9 @@ struct BenchmarkRunnerGemm {
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-    TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
+    TensorRef ref_A(block_A[0].get(), LayoutA::packed({M, K}));
+    TensorRef ref_B(block_B[0].get(), LayoutB::packed({K, N}));
+    TensorRef ref_C(block_C[0].get(), LayoutC::packed({M, N}));
     TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
     reference::device::GemmComplex(
@@ -244,15 +248,28 @@ struct BenchmarkRunnerGemm {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_C.reset(M * N * L);
+    std::size_t mem_occupied_ABC = (M * K * L * sizeof(ElementA)) + (K * N * L * sizeof(ElementB)) + 
+                                   (M * N * L * sizeof(ElementC));
+    count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC));
+
+    for(int i=0; i < count; i++) {
+      block_A.emplace_back();
+      block_B.emplace_back();
+      block_C.emplace_back();
+    }
+
+    for (int i=0; i < count; i++) {
+      block_A[i].reset(M * K * L);
+      block_B[i].reset(K * N * L);
+      block_C[i].reset(M * N * L);
+      initialize_block(block_A[i], seed + i);
+      initialize_block(block_B[i], seed + i);
+      initialize_block(block_C[i], seed + i);
+    }
+
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
-    initialize_block(block_A, seed + 2023);
-    initialize_block(block_B, seed + 2022);
-    initialize_block(block_C, seed + 2021);
   }
 
   void run(::benchmark::State& state, const Options& options, const KernelHardwareInfo& hw_info) {
@@ -263,8 +280,8 @@ struct BenchmarkRunnerGemm {
     typename Gemm::GemmKernel::Arguments arguments{
        gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
+      {block_A[0].get(), stride_A, block_B[0].get(), stride_B},
+      {{options.alpha, options.beta}, block_C[0].get(), stride_C, block_D.get(), stride_D},
       hw_info
     };
 
@@ -301,13 +318,16 @@ struct BenchmarkRunnerGemm {
     int32_t counter = 0;
     initialize_counters(state);
     for(auto _ : state) {
-      
       state.PauseTiming();
-      // Invalidate LLC by changing the data in the global pointer to random data, as verification is not required
-      // initialize_block is not being used beacuse it would otherwise be too slow.
-      cutlass::memset(block_A.get(), 3 * counter + 1, block_A.size() * sizeof(ElementA));
-      cutlass::memset(block_B.get(), 3 * counter + 2, block_B.size() * sizeof(ElementB));
-      cutlass::memset(block_C.get(), 3 * counter + 3, block_C.size() * sizeof(ElementC));
+      int input_num = std::max(int(0), (counter % count) - 1);
+      typename Gemm::GemmKernel::Arguments arguments{
+        gemm::GemmUniversalMode::kGemm,
+        problem_size,
+        {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B},
+        {{options.alpha, options.beta}, block_C[input_num].get(), stride_C, block_D.get(), stride_D},
+        hw_info
+      };
+      gemm_op.initialize(arguments, workspace.get());
       state.ResumeTiming();
 
       GPU_Clock timer;
