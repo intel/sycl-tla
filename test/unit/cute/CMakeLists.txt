@@ -60,13 +60,13 @@ if (NOT CUTLASS_ENABLE_SYCL)
     )
 
 else()
-  
-  add_subdirectory(layout)
+
   add_subdirectory(core)
+  add_subdirectory(layout)
   add_subdirectory(msvc_compilation)
 
   if(SYCL_NVIDIA_TARGET)
-  
+
     add_subdirectory(volta)
     add_subdirectory(turing)
     add_subdirectory(ampere)
