@@ -39,12 +39,6 @@
 #include <numeric>
 #include <cute/tensor.hpp>
 
-#if defined(CUTLASS_ENABLE_SYCL)
-namespace sc = syclcompat;
-namespace sc_exp = syclcompat::experimental;
-namespace sycl_ext = sycl::ext::oneapi::experimental;
-#endif
-
 using namespace cute;
 
 template <class ElementType, class SmemLayout>
@@ -53,27 +47,28 @@ struct SharedStorage
   cute::ArrayEngine<ElementType, cute::cosize_v<SmemLayout>> smem;
 };
 
+#if defined(CUTLASS_ENABLE_SYCL)
+namespace sc = syclcompat;
+namespace sc_exp = syclcompat::experimental;
+namespace sycl_ext = sycl::ext::oneapi::experimental;
+
 template <class T, class TiledCopy, class GmemLayout, class SmemLayout>
 CUTLASS_GLOBAL void
 test_tiled_cp_async_device_cute(T const* g_in, T* g_out,
                      TiledCopy const tiled_copy,
-                     GmemLayout gmem_layout, SmemLayout smem_layout)
+                     GmemLayout gmem_layout, SmemLayout smem_layout,
+                     sycl::local_ptr<char> shared_memory)
 {
   using namespace cute;
-  #if defined(__SYCL_DEVICE_ONLY__)
-  auto shared_memory = sycl_ext::get_dynamic_work_group_memory<char>().get();
-  #else
-    extern CUTLASS_SHARED char shared_memory[];
-  #endif
   using SharedStorage = SharedStorage<T, SmemLayout>;
-  SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(shared_memory);
+  SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>((char*)shared_memory);
 
   auto thr_copy = tiled_copy.get_slice(ThreadIdxX());
   Tensor gA = make_tensor(make_gmem_ptr(g_in), gmem_layout);
   Tensor gB = make_tensor(make_gmem_ptr(g_out), gmem_layout);
 
   // Construct SMEM tensor
-  Tensor sA = make_tensor(make_smem_ptr(shared_storage.smem.begin()), smem_layout);  
+  Tensor sA = make_tensor(make_smem_ptr(shared_storage.smem.begin()), smem_layout);
 
   auto tAgA = thr_copy.partition_S(gA);
   auto tAsA = thr_copy.partition_D(sA);
@@ -101,6 +96,55 @@ test_tiled_cp_async_device_cute(T const* g_in, T* g_out,
 
 }
 
+#else
+
+template <class T, class TiledCopy, class GmemLayout, class SmemLayout>
+CUTLASS_GLOBAL void
+test_tiled_cp_async_device_cute(T const* g_in, T* g_out,
+                     TiledCopy const tiled_copy,
+                     GmemLayout gmem_layout, SmemLayout smem_layout)
+{
+  using namespace cute;
+  extern CUTLASS_SHARED char shared_memory[];
+  using SharedStorage = SharedStorage<T, SmemLayout>;
+  SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(shared_memory);
+
+  auto thr_copy = tiled_copy.get_slice(ThreadIdxX());
+  Tensor gA = make_tensor(make_gmem_ptr(g_in), gmem_layout);
+  Tensor gB = make_tensor(make_gmem_ptr(g_out), gmem_layout);
+
+  // Construct SMEM tensor
+  Tensor sA = make_tensor(make_smem_ptr(shared_storage.smem.begin()), smem_layout);
+
+  auto tAgA = thr_copy.partition_S(gA);
+  auto tAsA = thr_copy.partition_D(sA);
+
+#if 0
+  if (thread0()) {
+    print("gA  : "); print(gA.layout());   print("\n");
+    print("sA  : "); print(sA.layout());   print("\n");
+    print("tAgA: "); print(tAgA.layout()); print("\n");
+    print("tAsA: "); print(tAsA.layout()); print("\n");
+  }
+#endif
+
+  copy(tiled_copy, tAgA, tAsA);
+
+  cp_async_fence();
+  cp_async_wait<0>();
+  syncthreads();
+
+  // Store trivially smem -> gmem
+
+  if (thread0()) {
+    copy(sA, gB);
+  }
+
+}
+
+#endif
+
+
 template <class T, class TiledCopy, class GMEM_Layout, class SMEM_Layout>
 void
 test_tiled_cp_async(
@@ -125,7 +169,7 @@ test_tiled_cp_async(
   #if defined(CUTLASS_ENABLE_SYCL)
     sc_exp::launch<test_tiled_cp_async_device_cute<T, TiledCopy, GMEM_Layout, SMEM_Layout>>
     ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(128), 
-      sc_exp::launch_properties{sycl_ext::work_group_static_size(smem_size)}},
+      sc_exp::local_mem_size{static_cast<size_t>(smem_size)}},
       d_in.data(), d_out.data(), tiled_copy, gmem_layout, smem_layout);
     sc::wait_and_throw();
   #else
