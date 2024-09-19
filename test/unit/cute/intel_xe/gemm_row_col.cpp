@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice,
- *this list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ * list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
@@ -18,15 +18,14 @@
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- *ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- *LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- *CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- *SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- *CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- *POSSIBILITY OF SUCH DAMAGE.
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
 
@@ -75,23 +74,23 @@ struct gemm_device_row_col {
     using atom_load_A = Copy_Atom<traits_load_A, TA>;
     TiledCopy copy_a = make_tiled_copy(
         atom_load_A{}.with(A, k, m, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
-        Layout<Shape<Int<traits_a::blk_height>,
-                     Int<traits_a::blk_width / SUBGROUP_SIZE>>>{});
+        make_layout(make_shape(get<0>(typename traits_load_A::Shape_MN{}),
+                               get<1>(typename traits_load_A::Shape_MN{}) / Int<SUBGROUP_SIZE>{})));
 
     using traits_load_B = Copy_Traits<traits_b>;
     using atom_load_B = Copy_Atom<traits_load_B, TB>;
     TiledCopy copy_b = make_tiled_copy(
         atom_load_B{}.with(B, k, n, k), Layout<Shape<Int<SUBGROUP_SIZE>, _1>>{},
-        Layout<Shape<Int<traits_b::blk_width / SUBGROUP_SIZE>,
-                     Int<traits_b::blk_height>>>{});
+        make_layout(make_shape(get<1>(typename traits_load_B::Shape_MN{})/ Int<SUBGROUP_SIZE>{},
+                               get<0>(typename traits_load_B::Shape_MN{}))));
 
     using traits_store_C = Copy_Traits<traits_c>;
     using atom_store_C = Copy_Atom<traits_store_C, TC>;
     TiledCopy copy_c = make_tiled_copy(
         atom_store_C{}.with(C, n, m, n),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
-        Layout<Shape<Int<traits_c::blk_height>,
-                     Int<traits_c::blk_width / SUBGROUP_SIZE>>>{});
+        make_layout(make_shape(get<0>(typename traits_store_C::Shape_MN{}),
+                               get<1>(typename traits_store_C::Shape_MN{}) / Int<SUBGROUP_SIZE>{})));
 
     auto thread_idx = syclcompat::local_id::x();
     auto mma = make_tiled_mma(
@@ -152,10 +151,12 @@ struct gemm_device_row_col {
     for (int k_tile = 0; k_tile < k_tile_max; ++k_tile) {
       Tensor blk_tgA = tiled_copy_A.get_pvc_tensor(
           make_coord(m_coord, k_tile * sg_tile_k, l_coord),
-          tCrA_copy_view.shape(), make_stride(E<0>{}, E<1>{}));
+          tCrA_copy_view.shape(),
+          typename traits_load_A::Shape_MN{});
       Tensor blk_tgB = tiled_copy_B.get_pvc_tensor(
           make_coord(n_coord, k_tile * sg_tile_k, l_coord),
-          tCrB_copy_view.shape(), make_stride(E<0>{}, E<1>{}));
+          tCrB_copy_view.shape(),
+          typename traits_load_B::Shape_MN{});
 
       copy(tiled_copy_A, blk_tgA, tCrA_copy_view);
       copy(tiled_copy_B, blk_tgB, tCrB_copy_view);
@@ -167,7 +168,8 @@ struct gemm_device_row_col {
     }
 
     Tensor blk_tgC = tiled_copy_C.get_pvc_tensor(
-        make_coord(m_coord, n_coord, l_coord), tCrC_copy_view.shape());
+        make_coord(m_coord, n_coord, l_coord), tCrC_copy_view.shape(),
+        typename traits_store_C::Shape_MN{});
     copy(copy_c, tCrC_copy_view, blk_tgC);
   }
 };

@@ -5,8 +5,8 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice,
- *this list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ * list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
@@ -18,15 +18,14 @@
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- *ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- *LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- *CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- *SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- *CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- *ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- *POSSIBILITY OF SUCH DAMAGE.
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
 
@@ -83,8 +82,9 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N,
   using traits_load = Copy_Traits<XE_2D_U32x8x16_LD_N, TensorS>;
   using Atom_load = Copy_Atom<traits_load, Element>;
   auto VecLayout = make_layout(
-      Shape<Int<traits_load::blk_height>, Int<traits_load::blk_width>>{},
-      Stride<Int<traits_load::blk_width>, _0>{});
+      make_shape(get<0>(typename traits_load::Shape_MN{}),
+                 get<1>(typename traits_load::Shape_MN{}) / _16{}),
+      Stride<_1, _0>{});
   auto tiled_copy_load = make_tiled_copy(Atom_load{}.with(&*S.data(), N, M, N),
                                          Layout<Shape<_1, _16>>{}, VecLayout);
 
@@ -125,7 +125,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N,
   // Copy from GMEM to RMEM and from RMEM to GMEM
   auto blk_load_S = tiled_copy_load.get_pvc_tensor(
       make_coord(m_coord, n_coord, l_coord), fragment.shape(),
-      make_stride(E<0>{}, E<1>{}));
+      typename traits_load::Shape_MN{});
   copy(tiled_copy_load, blk_load_S, fragment);
 
   using traits_store = Copy_Traits<XE_2D_U32x8x16_ST_N, TensorD>;
@@ -153,7 +153,8 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N,
 #endif
 
   auto blk_store_D = tiled_copy_store.get_pvc_tensor(
-      make_coord(m_coord, n_coord, l_coord), fragment.shape());
+      make_coord(m_coord, n_coord, l_coord), fragment.shape(),
+      typename traits_store::Shape_MN{});
 
   // onlt run first subgroup
   if (syclcompat::global_id::x() < 16 && !syclcompat::global_id::y() &&
