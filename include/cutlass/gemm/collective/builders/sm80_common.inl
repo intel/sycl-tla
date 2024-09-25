@@ -84,6 +84,15 @@ namespace cutlass::gemm::collective::detail {
   };
 
   template<>
+  struct getMMAType<float, float, float> {
+    using MMA_Atom = MMA_Atom<SM80_16x8x8_F32TF32TF32F32_TN>; // Use TF32 MMA when both operands are F32
+    using TiledMMA = TiledMMA<MMA_Atom,
+                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
+                        Tile<_32, _32, _8>
+                        >;
+  };
+
+  template<>
   struct getMMAType<double, double, double> {
     using MMA_Atom = MMA_Atom<SM80_8x8x4_F64F64F64F64_TN>;
     using TiledMma = TiledMMA<
@@ -301,6 +310,22 @@ namespace cutlass::gemm::collective::detail {
   template<>
   struct getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, cutlass::bfloat16_t, float> :
          getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, cutlass::half_t, float>  {};
+
+  template<>
+  struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, float, float> :
+         getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, float, float> {};
+
+  template<>
+  struct getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, float, float> :
+         getMemoryAtomsOperandA <cutlass::layout::RowMajor, float, float> {};
+
+  template<>
+  struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, cutlass::tfloat32_t, float> :
+         getMemoryAtomsOperandB <cutlass::layout::RowMajor, float, float>  {};
+
+  template<>
+  struct getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, cutlass::tfloat32_t, float> :
+         getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, float, float>  {};
 
   template<>
   struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, double, double> :
