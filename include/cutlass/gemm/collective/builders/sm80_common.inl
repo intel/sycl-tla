@@ -231,7 +231,7 @@ namespace cutlass::gemm::collective::detail {
     using SmemLayoutAtom = decltype(
       composition(
         Swizzle<2,0,8>{},
-        Layout<Shape <_64, _16,>,
+        Layout<Shape <_64, _16>,
               Stride<_1, _64>>{}));
 
     using GmemTiledCopy = decltype(

@@ -35,50 +35,21 @@
 #include <cute/arch/copy.hpp>
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
-#include "cutlass/epilogue/collective/sm80_epilogue.hpp"
-#include "cutlass/epilogue/collective/default_epilogue.hpp"
 
 
 namespace cutlass::epilogue::collective {
-  namespace detail {
-    template<typename ElementAccumulator>
-    struct GetMMATileShape;
-
-    template<>
-    struct GetMMATileShape<float> {
-      using TileShape = Tile<_32, _32, _8>;
-    };
-
-    template<>
-    struct GetMMATileShape<double> {
-      using TileShape = Tile<Layout<Shape<_16,_2>,Stride<_2,_1>>,
-                             Layout<Shape<_16,_2>,Stride<_2,_1>>,
-                             Underscore>;
-    };
-
-    template<>
-    struct GetMMATileShape<half_t> {
-      using TileShape = Tile<_32, _32, _16>;
-    };
-
-    template<>
-    struct GetMMATileShape<int32_t> {
-      using TileShape = Tile<_64, _64, _16>;
-    };
-  }
-
 
   template<
   class TileShape_MNK,
   class EpilogueTileType,
-  class ElementAccumulator,
-  class ElementCompute,
-  class ElementC,
-  class GmemLayoutTagC,
-  int AlignmentC,
-  class ElementD,
-  class GmemLayoutTagD,
-  int AlignmentD,
+  class ElementAccumulator_,
+  class ElementCompute_,
+  class ElementC_,
+  class GmemLayoutTagC_,
+  int AlignmentC_,
+  class ElementD_,
+  class GmemLayoutTagD_,
+  int AlignmentD_,
   class FusionOpOrCallbacks
   >
     struct CollectiveBuilder<
@@ -87,56 +58,36 @@ namespace cutlass::epilogue::collective {
       TileShape_MNK,
       Shape<_1, _1, _1>,
       EpilogueTileType,
-      ElementAccumulator,
-      ElementCompute,
-      ElementC,
-      GmemLayoutTagC,
-      AlignmentC,
-      ElementD,
-      GmemLayoutTagD,
-      AlignmentD,
+      ElementAccumulator_,
+      ElementCompute_,
+      ElementC_,
+      GmemLayoutTagC_,
+      AlignmentC_,
+      ElementD_,
+      GmemLayoutTagD_,
+      AlignmentD_,
       EpilogueScheduleAuto, 
       FusionOpOrCallbacks,
       cute::enable_if_t<
         (cute::is_same_v<FusionOpOrCallbacks, 
-                        cutlass::epilogue::fusion::LinearCombination<ElementD,ElementCompute,ElementC,ElementCompute>> ||
-        cute::is_same_v<FusionOpOrCallbacks,
-                        cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu,
-                        ElementD,ElementCompute,ElementC,ElementCompute>>)
+                        cutlass::epilogue::fusion::LinearCombination<ElementD_, ElementCompute_, ElementC_, ElementCompute_>>)
       >
     >
     {
-      
-      using DispatchPolicy = cutlass::epilogue::Sm80EpilogueElementwise<1, 1, 1, false>; // StagesC_, StagesD_, FragmentSize_, ReuseSmemC_
-      
-      using CopyOpG2R = cute::DefaultCopy;
-      using CopyOpR2G = cute::DefaultCopy;
 
-      using SmemLayoutAtomC = void;
-      using SmemLayoutAtomD = void;
+      using ElementD = ElementD_;
+      using ElementOutput = ElementD_;
+      using ElementCompute = ElementCompute_;
+      using ElementAccumulator = ElementAccumulator_;
 
-      using CopyOpS2R = void;
-      using CopyOpR2S = void;
+      static constexpr int FragmentSize = 128 / sizeof(ElementD);
+      using ThreadOp = thread::LinearCombination<
+        ElementD, FragmentSize, ElementAccumulator, ElementCompute>;
 
-      using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-          DispatchPolicy, FusionOpOrCallbacks, TileShape_MNK,
-          typename detail::GetMMATileShape<ElementAccumulator>::TileShape
-      >;
-
-      using CollectiveOp = cutlass::epilogue::collective::CollectiveEpilogue<
-        Sm80EpilogueElementwise<1, 1, 1, false>, // StagesC_, StagesD_, FragmentSize_, ReuseSmemC_
-        TileShape_MNK,
-        ElementAccumulator,
-        cutlass::gemm::TagToStrideC_t<GmemLayoutTagC>,
-        ElementD,
-        cutlass::gemm::TagToStrideC_t<GmemLayoutTagD>,
-        FusionCallBacks,
-        CopyOpG2R,
-        SmemLayoutAtomC,
-        CopyOpS2R,
-        CopyOpR2G,
-        SmemLayoutAtomD,
-        CopyOpR2S
-      >;
+      using CollectiveOp = cutlass::epilogue::collective::DefaultEpilogue<
+              cutlass::detail::TagToStrideC_t<GmemLayoutTagC_>,
+              cutlass::detail::TagToStrideC_t<GmemLayoutTagD_>,
+              ThreadOp,
+              cutlass::gemm::EpilogueDefault>;
     };
 }

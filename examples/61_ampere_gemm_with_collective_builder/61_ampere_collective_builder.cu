@@ -357,10 +357,10 @@ int main(int argc, const char** argv)
   constexpr int AlignmentC = sizeof(ElementAccumulator);
   constexpr int AlignmentD = sizeof(ElementOutput);
   
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-  using LayoutC = cutlass::layout::RowMajor;
-  using LayoutD = cutlass::layout::RowMajor;
+  using LayoutA = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using LayoutC = cutlass::layout::ColumnMajor;
+  using LayoutD = cutlass::layout::ColumnMajor;
 
   // Workgroup-level tile
   using TileShape = Shape<_128, _128, _64>;
@@ -375,7 +375,7 @@ int main(int argc, const char** argv)
     cutlass::gemm::collective::KernelScheduleAuto
   >::CollectiveOp;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, 
+  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination< 
           ElementOutput, ElementComputeEpilogue, ElementAccumulator, 
           ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
