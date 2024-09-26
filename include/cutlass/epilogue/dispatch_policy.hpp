@@ -173,19 +173,6 @@ struct Sm90TmaWarpSpecializedBiasElementwise {
   constexpr static int FragmentSize = FragmentSize_;
 };
 
-template <
-  int StagesC_,
-  int StagesD_,
-  int FragmentSize_,
-  bool ReuseSmemC_
->
-struct Sm80EpilogueElementwise {
-  static constexpr int StagesC = StagesC_;
-  static constexpr int StagesD = StagesD_;
-  static constexpr int FragmentSize = FragmentSize_;
-  static constexpr bool ReuseSmemC = ReuseSmemC_;
-};
-
 #if defined (SYCL_INTEL_TARGET)
 struct IntelPVCEpilogue {
   static constexpr int SubgroupSize = 16;
