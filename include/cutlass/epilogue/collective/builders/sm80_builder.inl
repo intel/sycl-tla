@@ -80,7 +80,7 @@ namespace cutlass::epilogue::collective {
       using ElementCompute = ElementCompute_;
       using ElementAccumulator = ElementAccumulator_;
 
-      static constexpr int FragmentSize = 128 / sizeof(ElementD);
+      static constexpr int FragmentSize = 128 / cutlass::sizeof_bits<ElementOutput>::value;
       using ThreadOp = thread::LinearCombination<
         ElementD, FragmentSize, ElementAccumulator, ElementCompute>;
 

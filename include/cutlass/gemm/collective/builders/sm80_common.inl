@@ -95,7 +95,7 @@ namespace cutlass::gemm::collective::detail {
   template<>
   struct getMMAType<double, double, double> {
     using MMA_Atom = MMA_Atom<SM80_8x8x4_F64F64F64F64_TN>;
-    using TiledMma = TiledMMA<
+    using TiledMMA = TiledMMA<
                       MMA_Atom,
                       Layout<Shape<_2,_2,_1>>,
                       Tile<Layout<Shape<_16,_2>,Stride<_2,_1>>,
