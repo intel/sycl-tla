@@ -51,8 +51,8 @@ namespace cutlass::gemm::collective::detail {
   struct getMMAType<cutlass::half_t, cutlass::half_t, float> {
     using MMA_Atom = MMA_Atom<SM80_16x8x16_F32F16F16F32_TN>;
     using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
-                        Tile<_32, _32, _8>
+                        Layout<Shape<_2,_2,_1>>,
+                        Tile<_32, _32, _16>
                         >;
   };
 
@@ -251,7 +251,7 @@ namespace cutlass::gemm::collective::detail {
                        Stride<_32, _1>>{}));
 
     using GmemTiledCopy = decltype(
-      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, float>{},
+      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float>, float>{},
                     Layout<Shape <_16,_8>,
                            Stride< _8,_1>>{},
                     Layout<Shape < _1,_4>>{}));
@@ -262,17 +262,17 @@ namespace cutlass::gemm::collective::detail {
   template <>
   struct getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, float, float> {
     using SmemLayoutAtom = decltype(
-      composition(Swizzle<2,2,3>{},
-                Layout<Shape < _8,_16>,
-                       Stride<_16, _1>>{}));
+      composition(Swizzle<3, 2, 3>{},
+                Layout<Shape <_32, _8>,
+                       Stride<_1, _32>>{}));
 
     using GmemTiledCopy = decltype(
-      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, float>{},
-                    Layout<Shape <_32,_4>,
-                           Stride< _4,_1>>{},
-                    Layout<Shape < _1,_4>>{}));
+      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float>, float>{},
+                    Layout<Shape <_16, _8>,
+                           Stride< _1, _16>>{},
+                    Layout<Shape < _4, _1>>{}));
 
-    using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, float>;
+    using SmemCopyAtom = Copy_Atom<UniversalCopy<float>, float>;
   };
 
   template<>

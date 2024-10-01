@@ -357,13 +357,13 @@ int main(int argc, const char** argv)
   constexpr int AlignmentC = sizeof(ElementAccumulator);
   constexpr int AlignmentD = sizeof(ElementOutput);
   
-  using LayoutA = cutlass::layout::ColumnMajor;
-  using LayoutB = cutlass::layout::ColumnMajor;
-  using LayoutC = cutlass::layout::ColumnMajor;
-  using LayoutD = cutlass::layout::ColumnMajor;
+  using LayoutA = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::RowMajor;
+  using LayoutC = cutlass::layout::RowMajor;
+  using LayoutD = cutlass::layout::RowMajor;
 
   // Workgroup-level tile
-  using TileShape = Shape<_128, _128, _64>;
+  using TileShape = Shape<_128, _128, _32>;
   
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
     cutlass::arch::Sm80, cutlass::arch::OpClassTensorOp,
