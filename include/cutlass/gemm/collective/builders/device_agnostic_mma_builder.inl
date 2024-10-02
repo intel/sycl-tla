@@ -83,6 +83,7 @@ struct CollectiveBuilder<
       using SmemCopyAtomA = UniversalCopy;
       using SmemCopyAtomB = UniversalCopy;
 
+      // TODO: handle different A and B layouts
       using SmemLayoutAtomA = decltype(composition(Layout<Shape<_4, _2>, Stride<_1, _4>>));
       using SmemLayoutAtomB = decltype(composition(Layout<Shape<_2, _4>, Stride<_4, _1>>));
 
