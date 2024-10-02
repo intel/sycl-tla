@@ -302,6 +302,13 @@ struct MainloopIntelPVC {
   using Schedule = KernelPVC;
   using ClusterShape = Shape<_1,_1,_1>;
 };
+
+struct MainloopDeviceAgnostic {
+  using ArchTag = arch::Agnostic;
+  using ClusterShape = Shape<_1,_1,_1>;
+  using Schedule = KernelMultistage;
+};
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////////

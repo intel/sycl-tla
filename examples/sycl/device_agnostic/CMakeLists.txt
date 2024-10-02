@@ -26,11 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-if(SYCL_INTEL_TARGET)
-  add_subdirectory(pvc)
-endif()
-
-if (CUTLASS_ENABLE_SYCL)
-  add_subdirectory(device_agnostic)
-endif()
+cutlass_example_add_executable(
+  device_agnostic_gemm
+  device_agnostic_gemm.cpp
+)

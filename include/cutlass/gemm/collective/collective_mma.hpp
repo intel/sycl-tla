@@ -48,5 +48,6 @@
 
 #if defined(SYCL_INTEL_TARGET)
 #include "cutlass/gemm/collective/xe_mma.hpp"
+#include "cutlass/gemm/collective/device_agnostic_mma.hpp"
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////

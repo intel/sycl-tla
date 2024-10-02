@@ -117,5 +117,6 @@ struct CallbacksBuilder<
 
 #if defined(SYCL_INTEL_TARGET)
 #include "builders/xe_builder.inl"
+#include "builders/device_agnostic_builder.inl"
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////
