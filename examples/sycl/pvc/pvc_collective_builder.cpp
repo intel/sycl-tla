@@ -48,7 +48,7 @@
 #include "cutlass/tensor_view.h"
 #include "cutlass/coord.h"
 
-#include "common.h"
+#include "examples/sycl/common.hpp"
 
 using namespace cute;
 

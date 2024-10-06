@@ -302,13 +302,14 @@ struct MainloopIntelPVC {
   using Schedule = KernelPVC;
   using ClusterShape = Shape<_1,_1,_1>;
 };
+#endif
 
+#if defined(CUTLASS_ENABLE_SYCL)
 struct MainloopDeviceAgnostic {
   using ArchTag = arch::Agnostic;
   using ClusterShape = Shape<_1,_1,_1>;
   using Schedule = KernelMultistage;
 };
-
 #endif
 
 //////////////////////////////////////////////////////////////////////////////

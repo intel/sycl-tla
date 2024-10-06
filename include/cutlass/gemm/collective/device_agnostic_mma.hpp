@@ -52,7 +52,7 @@ template <
   class SmemCopyAtomB_,
   class TransformB_>
 struct CollectiveMma <
-  MainloopDeviceAgnostic
+  MainloopDeviceAgnostic,
   TileShape_,
   ElementA_,
   StrideA_,
@@ -113,12 +113,10 @@ struct CollectiveMma <
     static_assert((size<1>(TileShape{}) % size<0>(SmemLayoutAtomB{})) == 0, "SmemLayoutAtom must evenly divide tile shape.");
     static_assert((size<2>(TileShape{}) % size<1>(SmemLayoutAtomB{})) == 0, "SmemLayoutAtom must evenly divide tile shape.");
 
-    static_assert(std::is_base_of<UniversalCopy, GmemTiledCopyA>, "Only Universal Copy and it's derived types are supported in the device Agnostic Pipeline");
-    static_assert(std::is_base_of<UniversalCopy, GmemTiledCopyB>, "Only Universal Copy and it's derived types are supported in the device Agnostic Pipeline");
-    static_assert(std::is_base_of<UniversalCopy, SmemLayoutAtomA>, "Only Universal Copy and it's derived types are supported in the device Agnostic Pipeline");
-    static_assert(std::is_base_of<UniversalCopy, SmemLayoutAtomB>, "Only Universal Copy and it's derived types are supported in the device Agnostic Pipeline");
-
-    using MMA_Atom = TiledMma::Atom
+    static_assert(std::is_base_of<UniversalCopy<ElementA>, GmemTiledCopyA>(), "Only Universal Copy and it's derived types are supported in the device Agnostic Pipeline");
+    static_assert(std::is_base_of<UniversalCopy<ElementB>, GmemTiledCopyB>(), "Only Universal Copy and it's derived types are supported in the device Agnostic Pipeline");
+    static_assert(std::is_base_of<UniversalCopy<ElementA>, SmemCopyAtomA>(), "Only Universal Copy and it's derived types are supported in the device Agnostic Pipeline");
+    static_assert(std::is_base_of<UniversalCopy<ElementB>, SmemCopyAtomB>(), "Only Universal Copy and it's derived types are supported in the device Agnostic Pipeline");
 
     using SmemLayoutA = decltype(tile_to_shape(
         SmemLayoutAtomA{},

@@ -34,7 +34,6 @@
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/collective/collective_mma.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
-#include "examples/sycl/pvc/common.h"
 
 #include <cute/tensor.hpp>
 #include <random>
@@ -44,7 +43,35 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "common.h"
+//#include "examples/pvc/common.hpp"
+
+#include "cutlass/util/device_memory.h"
+#include "cutlass/util/reference/device/sycl_tensor_fill.h"
+
+/// Helper to initialize a block of device data
+template <class Element>
+bool initialize_block(
+        cutlass::DeviceAllocation<Element>& block,
+        uint64_t seed=2023) {
+
+  Element scope_max, scope_min;
+  int bits_input = cutlass::sizeof_bits<Element>::value;
+
+  if (bits_input == 1) {
+   scope_max = Element(2);
+   scope_min = Element(0);
+  } else if (bits_input <= 8) {
+    scope_max = Element(2);
+    scope_min = Element(-2);
+  } else {
+    scope_max = Element(8);
+    scope_min = Element(-8);
+  }
+
+  cutlass::reference::device::BlockFillRandomUniform(
+       block.get(), block.size(), seed, scope_max, scope_min, 0);
+  return true;
+}
 
 using namespace cute;
 
@@ -311,21 +338,22 @@ int main(int argc, const char** argv)
   // Workgroup-level tile
   using TileShape = Shape<_8, _8, _16>;
 
-  using TiledMma = TiledMMA<MMA_Atom<UniversalFMA>,
+  using TiledMma = TiledMMA<MMA_Atom<UniversalFMA<ElementOutput, ElementInputA, ElementInputB, ElementAccumulator>>,
           Layout<Shape<_1,_1,_1>>,
           Tile<_2, _2, _4>>; // Subgroup level-tile
 
   using GEMMDispatchPolicy = cutlass::gemm::MainloopDeviceAgnostic;
   using CollectiveEpilogue = cutlass::epilogue::thread::LinearCombination<
-          ElementOutput,
+          ElementAccumulator,
           1,
+          ElementComputeEpilogue,
           ElementOutput>;
 
   using SmemCopyAtomA = UniversalCopy<ElementInputA>;
   using SmemCopyAtomB = UniversalCopy<ElementInputB>;
 
-  using SmemLayoutAtomA = decltype(composition(Layout<Shape<_4, _2>, Stride<_1, _4>>));
-  using SmemLayoutAtomB = decltype(composition(Layout<Shape<_2, _4>, Stride<_4, _1>>));
+  using SmemLayoutAtomA = Layout<Shape<_4, _2>, Stride<_1, _4>>;
+  using SmemLayoutAtomB = Layout<Shape<_2, _4>, Stride<_4, _1>>;
 
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
