@@ -41,7 +41,6 @@ namespace cutlass::epilogue::collective {
 
   template<
   class TileShape_MNK,
-  class EpilogueTileType,
   class ElementAccumulator_,
   class ElementCompute_,
   class ElementC_,
@@ -57,7 +56,7 @@ namespace cutlass::epilogue::collective {
       arch::OpMultiplyAdd, 
       TileShape_MNK,
       Shape<_1, _1, _1>,
-      EpilogueTileType,
+      EpilogueTileAuto,
       ElementAccumulator_,
       ElementCompute_,
       ElementC_,

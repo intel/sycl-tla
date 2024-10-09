@@ -67,42 +67,47 @@ struct CollectiveBuilder<
   cute::enable_if_t<
      cute::is_same_v<KernelScheduleType, KernelScheduleAuto>>
 >{
-        #ifndef CUTLASS_ENABLE_SYCL 
+      #ifndef CUTLASS_ENABLE_SYCL 
         static_assert(cutlass::detail::dependent_false<arch::Agnostic>, 
           "Trying to use device Agnostic pipeline without SYCL enabled");
       #endif
 
-      using TiledMMA = TiledMMA<MMA_Atom<UniversalFMA>,
-                        Layout<Shape<_1,_1,_1>>,
-                        Tile<_2,_2,_4>>;
+      using TiledMMA = TiledMMA<MMA_Atom<UniversalFMA<ElementAccumulator, ElementA, ElementB, ElementAccumulator>>,
+                            Layout<Shape<_4, _4, _1>>>;
 
       using DispatchPolicy = MainloopDeviceAgnostic;
       using GmemTiledCopyA = decltype(
-            make_tiled_copy(Copy_Atom<UniversalCopy<ElementInputA>, ElementInputA>{},
-                            Layout<Shape<_2, _4>, Stride<_4, _1>>{},
+            make_tiled_copy(Copy_Atom<UniversalCopy<ElementA>, ElementA>{},
+                            Layout<Shape<_4, _4>, Stride<_4, _1>>{},
                             Layout<Shape<_1, _1>>{}
             ));
 
       using GmemTiledCopyB = decltype(
-            make_tiled_copy(Copy_Atom<UniversalCopy<ElementInputB>, ElementInputB>{},
-                            Layout<Shape<_4, _2>, Stride<_1, _2>>{},
+            make_tiled_copy(Copy_Atom<UniversalCopy<ElementB>, ElementB>{},
+                            Layout<Shape<_4, _4>, Stride<_1, _4>>{},
                             Layout<Shape<_1, _1>>{}
             ));
       
-      using SmemCopyAtomA = Copy_Atom<UniversalCopy<ElementInputA>, ElementInputA>;
-      using SmemCopyAtomB = Copy_Atom<UniversalCopy<ElementInputB>, ElementInputB>;
+      using SmemCopyAtomA = Copy_Atom<UniversalCopy<ElementA>, ElementA>;
+      using SmemCopyAtomB = Copy_Atom<UniversalCopy<ElementB>, ElementB>;
 
+      // 
+      using SmemLayoutAtomA = decltype(
+        make_layout(make_shape(get<0>(TileShape_MNK{}), get<2>(TileShape_MNK{})), 
+                    make_stride(_1{}, get<0>(TileShape_MNK{})))
+      );
 
-      // TODO: handle different A and B layouts
-      using SmemLayoutAtomA = Layout<Shape<_4, _2>, Stride<_1, _4>>;
-      using SmemLayoutAtomB = Layout<Shape<_2, _4>, Stride<_4, _1>>;
+      using SmemLayoutAtomB = decltype(
+        make_layout(make_shape(get<1>(TileShape_MNK{}), get<2>(TileShape_MNK{})), 
+                    make_stride(_1{}, get<1>(TileShape_MNK{})))
+      );
 
       using TransformA = cute::identity;
       using TransformB = cute::identity;
 
       using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
         MainloopDeviceAgnostic,
-        TileShape,
+        TileShape_MNK,
         ElementA,
         cutlass::gemm::TagToStrideA_t<GmemLayoutATag>,
         ElementB,

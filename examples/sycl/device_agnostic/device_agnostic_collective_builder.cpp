@@ -29,24 +29,30 @@
  *
  **************************************************************************************************/
 
-#include "cutlass/epilogue/collective/default_epilogue.hpp"
+
 #include "cutlass/gemm/device/gemm_universal.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
-#include "cutlass/gemm/collective/collective_mma.hpp"
-#include "cutlass/util/GPU_Clock.hpp"
 
-#include <cute/tensor.hpp>
-#include <random>
+#include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/epilogue/collective/collective_builder.hpp"
+#include "cutlass/kernel_hardware_info.h"
 
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-//#include "examples/pvc/common.hpp"
+#include "cutlass/util/GPU_Clock.hpp"
 
-#include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/sycl_tensor_fill.h"
+#include "cutlass/tensor_view.h"
+#include "cutlass/coord.h"
+
+//#include "examples/sycl/common.hpp"
+
+using namespace cute;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Helper to initialize a block of device data
 template <class Element>
@@ -73,10 +79,6 @@ bool initialize_block(
   return true;
 }
 
-using namespace cute;
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
 // Command line options parsing
 struct Options {
 
@@ -89,7 +91,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(128), n(128), k(128), l(1), iterations(20),
+    m(128), n(128), k(128), l(1), iterations(100),
     alpha(1.f), beta(0.f)
   { }
 
@@ -206,6 +208,8 @@ struct ExampleRunner {
         );
 
     syclcompat::wait();
+
+    using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareEqual(
@@ -327,59 +331,44 @@ int main(int argc, const char** argv)
   using ElementInputB = float;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-  using LayoutC = cutlass::layout::RowMajor;
-  using LayoutD = cutlass::layout::RowMajor;
+  constexpr int AlignmentA = sizeof(ElementInputA);
+  constexpr int AlignmentB = sizeof(ElementInputB);
+  constexpr int AlignmentC = sizeof(ElementAccumulator);
+  constexpr int AlignmentD = sizeof(ElementOutput);
+  
+  using LayoutA = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using LayoutC = cutlass::layout::ColumnMajor;
+  using LayoutD = cutlass::layout::ColumnMajor;
 
-  using TileShape = Shape<_4, _4, _8>;
+  // Workgroup-level tile
+  using TileShape = Shape<_16, _16, _8>;
+  
+  using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
+    cutlass::arch::Agnostic, cutlass::arch::OpMultiplyAdd,
+    ElementInputA, LayoutA, AlignmentA,
+    ElementInputB, LayoutB, AlignmentB,
+    ElementAccumulator,
+    TileShape, Shape<_1, _1, _1>,
+    cutlass::gemm::collective::StageCountAuto,
+    cutlass::gemm::collective::KernelScheduleAuto
+  >::CollectiveOp;
 
-  using TiledMma = TiledMMA<MMA_Atom<UniversalFMA<ElementOutput, ElementInputA, ElementInputB, ElementAccumulator>>,
-                            Layout<Shape<_4, _4, _1>>>;
+  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<
+          ElementOutput, ElementComputeEpilogue, ElementAccumulator, 
+          ElementAccumulator>;
 
-  using GmemTiledCopyA = decltype(
-        make_tiled_copy(Copy_Atom<UniversalCopy<ElementInputA>, ElementInputA>{},
-                        Layout<Shape<_4, _4>, Stride<_4, _1>>{},
-                        Layout<Shape<_1, _1>>{}
-        ));
-
-  using GmemTiledCopyB = decltype(
-        make_tiled_copy(Copy_Atom<UniversalCopy<ElementInputB>, ElementInputB>{},
-                        Layout<Shape<_4, _4>, Stride <_1, _4>>{},
-                        Layout<Shape<_1, _1>>{}
-        ));
-
-  using SmemLayoutAtomA = Layout<Shape<_4, _8>, Stride<_1, _4>>;
-  using SmemLayoutAtomB = Layout<Shape<_4, _8>, Stride<_1, _4>>;
-
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopDeviceAgnostic;
-  using EpilogueOp = cutlass::epilogue::thread::LinearCombination<
-          ElementAccumulator,
-          1,
-          ElementComputeEpilogue,
-          ElementOutput>;
-
-  using CollectiveEpilogue = cutlass::epilogue::collective::DefaultEpilogue<
-          cutlass::detail::TagToStrideC_t<LayoutC>,
-          cutlass::detail::TagToStrideC_t<LayoutD>,
-          EpilogueOp,
-          cutlass::gemm::EpilogueDefault>;
-
-  using SmemCopyAtomA = Copy_Atom<UniversalCopy<ElementInputA>, ElementInputA>;
-  using SmemCopyAtomB = Copy_Atom<UniversalCopy<ElementInputB>, ElementInputB>;
-
-  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
-          GEMMDispatchPolicy,
-          TileShape,
-          ElementInputA,
-          cutlass::gemm::TagToStrideA_t<LayoutA>,
-          ElementInputB,
-          cutlass::gemm::TagToStrideB_t<LayoutB>,
-          TiledMma,
-          GmemTiledCopyA, SmemLayoutAtomA, SmemCopyAtomA, cute::identity,  // A
-          GmemTiledCopyB, SmemLayoutAtomB, SmemCopyAtomB, cute::identity   // B
-  >;
-
+  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveBuilder<
+    cutlass::arch::Agnostic, cutlass::arch::OpMultiplyAdd,
+    TileShape, Shape<_1, _1, _1>,
+    cutlass::epilogue::collective::EpilogueTileAuto, ElementComputeEpilogue,
+    ElementAccumulator, 
+    ElementAccumulator, LayoutC, AlignmentC,
+    ElementOutput,      LayoutD, AlignmentD,
+    cutlass::epilogue::collective::EpilogueScheduleAuto,
+    EpilogueOp
+  >::CollectiveOp;
+  
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
   Shape<int, int, int, int>,
   CollectiveMainloop,
@@ -390,8 +379,7 @@ int main(int argc, const char** argv)
 
   ExampleRunner<Gemm> runner;
 
-  //runner.run(options, hw_info);
-  std::cout << get<0>(TileShape{}) << std::endl;
+  runner.run(options, hw_info);
 
   return 0;
 }

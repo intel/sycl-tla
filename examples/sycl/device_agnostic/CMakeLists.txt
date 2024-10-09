@@ -30,3 +30,8 @@ cutlass_example_add_executable(
   device_agnostic_gemm
   device_agnostic_gemm.cpp
 )
+
+cutlass_example_add_executable(
+  device_agnostic_collective_builder
+  device_agnostic_collective_builder.cpp
+)

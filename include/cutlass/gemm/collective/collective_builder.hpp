@@ -41,6 +41,9 @@
 
 #if defined(SYCL_INTEL_TARGET)
 #include "cutlass/gemm/collective/builders/xe_mma_builder.inl"
+#endif
+
+#if defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/gemm/collective/builders/device_agnostic_mma_builder.inl"
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////
