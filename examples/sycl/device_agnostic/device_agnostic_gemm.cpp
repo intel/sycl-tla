@@ -43,35 +43,10 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-//#include "examples/pvc/common.hpp"
+#include "common.hpp"
 
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/sycl_tensor_fill.h"
-
-/// Helper to initialize a block of device data
-template <class Element>
-bool initialize_block(
-        cutlass::DeviceAllocation<Element>& block,
-        uint64_t seed=2023) {
-
-  Element scope_max, scope_min;
-  int bits_input = cutlass::sizeof_bits<Element>::value;
-
-  if (bits_input == 1) {
-   scope_max = Element(2);
-   scope_min = Element(0);
-  } else if (bits_input <= 8) {
-    scope_max = Element(2);
-    scope_min = Element(-2);
-  } else {
-    scope_max = Element(8);
-    scope_min = Element(-8);
-  }
-
-  cutlass::reference::device::BlockFillRandomUniform(
-       block.get(), block.size(), seed, scope_max, scope_min, 0);
-  return true;
-}
 
 using namespace cute;
 
@@ -390,8 +365,6 @@ int main(int argc, const char** argv)
 
   ExampleRunner<Gemm> runner;
 
-  //runner.run(options, hw_info);
-  std::cout << get<0>(TileShape{}) << std::endl;
-
+  runner.run(options, hw_info);
   return 0;
 }

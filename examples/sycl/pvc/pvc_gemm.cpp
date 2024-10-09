@@ -45,7 +45,7 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "examples/sycl/common.hpp"
+#include "common.hpp"
 
 using namespace cute;
 
