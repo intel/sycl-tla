@@ -67,7 +67,7 @@ struct CollectiveBuilder<
   cute::enable_if_t<
      cute::is_same_v<KernelScheduleType, KernelScheduleAuto>>
 >{
-        #ifdef SYCL_NVIDIA_TARGET
+        #ifndef CUTLASS_ENABLE_SYCL 
         static_assert(cutlass::detail::dependent_false<arch::Agnostic>, 
           "Trying to use device Agnostic pipeline without SYCL enabled");
       #endif
@@ -77,15 +77,25 @@ struct CollectiveBuilder<
                         Tile<_2,_2,_4>>;
 
       using DispatchPolicy = MainloopDeviceAgnostic;
+      using GmemTiledCopyA = decltype(
+            make_tiled_copy(Copy_Atom<UniversalCopy<ElementInputA>, ElementInputA>{},
+                            Layout<Shape<_2, _4>, Stride<_4, _1>>{},
+                            Layout<Shape<_1, _1>>{}
+            ));
 
-      using GmemTiledCopyA = UniversalCopy;
-      using GmemTiledCopyB = UniversalCopy;
-      using SmemCopyAtomA = UniversalCopy;
-      using SmemCopyAtomB = UniversalCopy;
+      using GmemTiledCopyB = decltype(
+            make_tiled_copy(Copy_Atom<UniversalCopy<ElementInputB>, ElementInputB>{},
+                            Layout<Shape<_4, _2>, Stride<_1, _2>>{},
+                            Layout<Shape<_1, _1>>{}
+            ));
+      
+      using SmemCopyAtomA = Copy_Atom<UniversalCopy<ElementInputA>, ElementInputA>;
+      using SmemCopyAtomB = Copy_Atom<UniversalCopy<ElementInputB>, ElementInputB>;
+
 
       // TODO: handle different A and B layouts
-      using SmemLayoutAtomA = decltype(composition(Layout<Shape<_4, _2>, Stride<_1, _4>>));
-      using SmemLayoutAtomB = decltype(composition(Layout<Shape<_2, _4>, Stride<_4, _1>>));
+      using SmemLayoutAtomA = Layout<Shape<_4, _2>, Stride<_1, _4>>;
+      using SmemLayoutAtomB = Layout<Shape<_2, _4>, Stride<_4, _1>>;
 
       using TransformA = cute::identity;
       using TransformB = cute::identity;

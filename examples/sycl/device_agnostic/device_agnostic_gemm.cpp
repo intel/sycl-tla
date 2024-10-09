@@ -89,7 +89,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(20),
+    m(128), n(128), k(128), l(1), iterations(20),
     alpha(1.f), beta(0.f)
   { }
 
@@ -102,9 +102,9 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 5120);
-    cmd.get_cmd_line_argument("n", n, 4096);
-    cmd.get_cmd_line_argument("k", k, 4096);
+    cmd.get_cmd_line_argument("m", m, 128);
+    cmd.get_cmd_line_argument("n", n, 128);
+    cmd.get_cmd_line_argument("k", k, 128);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
@@ -323,8 +323,8 @@ int main(int argc, const char** argv)
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
+  using ElementInputA = float;                        // <- data type of elements in input matrix A
+  using ElementInputB = float;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::RowMajor;
@@ -332,28 +332,41 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = UniversalCopy<ElementInputA>;
-  using GmemTiledCopyB = UniversalCopy<ElementInputB>;
-
-  // Workgroup-level tile
-  using TileShape = Shape<_8, _8, _16>;
+  using TileShape = Shape<_4, _4, _8>;
 
   using TiledMma = TiledMMA<MMA_Atom<UniversalFMA<ElementOutput, ElementInputA, ElementInputB, ElementAccumulator>>,
-          Layout<Shape<_1,_1,_1>>,
-          Tile<_2, _2, _4>>; // Subgroup level-tile
+                            Layout<Shape<_4, _4, _1>>>;
+
+  using GmemTiledCopyA = decltype(
+        make_tiled_copy(Copy_Atom<UniversalCopy<ElementInputA>, ElementInputA>{},
+                        Layout<Shape<_4, _4>, Stride<_4, _1>>{},
+                        Layout<Shape<_1, _1>>{}
+        ));
+
+  using GmemTiledCopyB = decltype(
+        make_tiled_copy(Copy_Atom<UniversalCopy<ElementInputB>, ElementInputB>{},
+                        Layout<Shape<_4, _4>, Stride <_1, _4>>{},
+                        Layout<Shape<_1, _1>>{}
+        ));
+
+  using SmemLayoutAtomA = Layout<Shape<_4, _8>, Stride<_1, _4>>;
+  using SmemLayoutAtomB = Layout<Shape<_4, _8>, Stride<_1, _4>>;
 
   using GEMMDispatchPolicy = cutlass::gemm::MainloopDeviceAgnostic;
-  using CollectiveEpilogue = cutlass::epilogue::thread::LinearCombination<
+  using EpilogueOp = cutlass::epilogue::thread::LinearCombination<
           ElementAccumulator,
           1,
           ElementComputeEpilogue,
           ElementOutput>;
 
-  using SmemCopyAtomA = UniversalCopy<ElementInputA>;
-  using SmemCopyAtomB = UniversalCopy<ElementInputB>;
+  using CollectiveEpilogue = cutlass::epilogue::collective::DefaultEpilogue<
+          cutlass::detail::TagToStrideC_t<LayoutC>,
+          cutlass::detail::TagToStrideC_t<LayoutD>,
+          EpilogueOp,
+          cutlass::gemm::EpilogueDefault>;
 
-  using SmemLayoutAtomA = Layout<Shape<_4, _2>, Stride<_1, _4>>;
-  using SmemLayoutAtomB = Layout<Shape<_2, _4>, Stride<_4, _1>>;
+  using SmemCopyAtomA = Copy_Atom<UniversalCopy<ElementInputA>, ElementInputA>;
+  using SmemCopyAtomB = Copy_Atom<UniversalCopy<ElementInputB>, ElementInputB>;
 
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
