@@ -207,16 +207,16 @@ public:
     // Get the appropriate blocks for this sub_group -- potential for sub_group locality
     int thread_idx = int(ThreadIdxX());
     auto blk_shape = TileShape{};
-    auto m_coord = BlockIdxX();
-    auto n_coord = BlockIdxY();
+    auto m_coord = BlockIdxY();
+    auto n_coord = BlockIdxX();
     auto l_coord = BlockIdxZ();
     auto blk_coord_mnkl = make_coord(m_coord, n_coord, _, l_coord);  
     int sub_group_id = thread_idx / SubgroupSize;
     constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     constexpr auto subgroup_shape = SubgroupTileShape{};                   
     
-    Tensor mA_mkl = make_tensor(make_gmem_ptr(params.mainloop.args.ptr_A), make_shape(M,K,L), (params.mainloop.args.dA)); //(m,k,l)
-    Tensor mB_nkl = make_tensor(make_gmem_ptr(params.mainloop.args.ptr_B), make_shape(N,K,L), (params.mainloop.args.dB)); //(n,k,l)
+    Tensor mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,L), StrideA{});   //(m,k,l)
+    Tensor mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,L), StrideB{});   //(n,k,l)
     Tensor mA_mk = mA_mkl(_,_,l_coord);                                                                        // (m,k)
     Tensor mB_nk = mB_nkl(_,_,l_coord);                                                                        // (n,k)
 

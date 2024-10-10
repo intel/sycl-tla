@@ -63,7 +63,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(512), n(512), k(16), l(1), iterations(1),
+    m(5120), n(4096), k(4096), l(1), iterations(20),
     alpha(1.f), beta(0.f)
   { }
 
@@ -76,7 +76,7 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 4096);
+    cmd.get_cmd_line_argument("m", m, 5120);
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
@@ -156,84 +156,37 @@ struct ExampleRunner {
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-    // cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    // cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    // cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
-    // cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+      cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
+      cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
+      cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
+      cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
-    // cutlass::reference::device::GemmComplex(
-    //       {M, N, K},
-    //       alpha,
-    //       ref_A,
-    //       cutlass::ComplexTransform::kNone,
-    //       ref_B,
-    //       cutlass::ComplexTransform::kNone,
-    //       beta,
-    //       ref_C,
-    //       ref_D,
-    //       ElementAccumulator(0),
-    //       L,     // batch_count
-    //       M * K, // batch_stride_A
-    //       K * N, // batch_stride_B
-    //       M * N, // batch_stride_C
-    //       M * N  // batch_stride_D
-    //     );
+    cutlass::reference::device::GemmComplex(
+          {M, N, K},
+          alpha,
+          ref_A,
+          cutlass::ComplexTransform::kNone,
+          ref_B,
+          cutlass::ComplexTransform::kNone,
+          beta,
+          ref_C,
+          ref_D,
+          ElementAccumulator(0),
+          L,     // batch_count
+          M * K, // batch_stride_A
+          K * N, // batch_stride_B
+          M * N, // batch_stride_C
+          M * N  // batch_stride_D
+        );
 
-    // syclcompat::wait();
+    syclcompat::wait();
 
-    // // Check if output from CUTLASS kernel and reference kernel are equal or not
-    // bool passed = cutlass::reference::device::BlockCompareEqual(
-    //   block_ref_D.get(), block_D.get(), block_D.size());
-    #if 1
-    std::vector<float> h_D(M * N);
-    std::vector<bfloat16_t> h_A(M * K);
-    std::vector<bfloat16_t> h_B(K * N);
-    
-    syclcompat::memcpy<bfloat16_t>(h_A.data(), block_A.get(), M * K);
-    syclcompat::memcpy<bfloat16_t>(h_B.data(), block_B.get(), N * K);
-    syclcompat::memcpy<float>(h_D.data(), block_D.get(), M * N);
-  syclcompat::wait();
+    // Check if output from CUTLASS kernel and reference kernel are equal or not
+    bool passed = cutlass::reference::device::BlockCompareEqual(
+      block_ref_D.get(), block_D.get(), block_D.size());
 
-  std::cout << "M : " << M << " N : " << N << " K : " <<K << std::endl;
-
-  int cnt = 0;
-  bool is_normal = true;
-    for(int i = 0; i < M; i++) {
-      for(int j = 0; j < N; j++) {
-        float sum = 0;
-        for(int z = 0; z < K; z++) {
-            sum += h_A.data()[i * K + z] *  h_B.data()[z * N + j];
-        }
-      float val = h_D.data()[i * N + j];
-      float expect = sum;
-      if(i ==0 &&j == 0) {
-        std::cout << "sum: " << sum << std::endl;
-      }
-
-      if (isnormal(val) && isnormal(expect)) {
-        auto error = std::abs((expect - val) / val);
-        if (error > 0.005f) {
-          return false;
-          cnt++;
-        }
-      } else {
-        is_normal = false;
-      }
-      }
-    }
-    std::cout << "ref : "<< h_D.data()[0] << " cnt : " << cnt << std::endl;
-    return cnt == 0;
-    #endif
-    // return passed;
+    return passed;
   }
-
-template <typename T> static void fill_matrix(std::vector<T> &M) {
-  std::random_device dev;
-  std::mt19937 rng(dev());
-  std::uniform_real_distribution<float> dist((T)0.0, (T)1.0);
-  std::generate(std::begin(M), std::end(M),
-                [&] { return static_cast<T>(dist(rng)); });
-}
 
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(const ProblemShapeType& problem_size) {
@@ -251,19 +204,9 @@ template <typename T> static void fill_matrix(std::vector<T> &M) {
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
-    std::vector<bfloat16_t> h_A(M * K);
-    std::vector<bfloat16_t> h_B(K * N);
-
-    fill_matrix(h_A);
-    fill_matrix(h_B);
-    syclcompat::memcpy<bfloat16_t>(block_A.get(), h_A.data(), M * K);
-    syclcompat::memcpy<bfloat16_t>(block_B.get(), h_B.data(), N * K);
-    
-    
-
-    // initialize_block(block_A, seed + 2023);
-    // initialize_block(block_B, seed + 2022);
-    // initialize_block(block_C, seed + 2021);
+    initialize_block(block_A, seed + 2023);
+    initialize_block(block_B, seed + 2022);
+    initialize_block(block_C, seed + 2021);
   }
 
   void run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -294,7 +237,6 @@ template <typename T> static void fill_matrix(std::vector<T> &M) {
     syclcompat::wait();
 
     // Verify that the result is correct
-    // bool passed = true;
     bool passed = verify(problem_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
@@ -372,7 +314,7 @@ int main(int argc, const char** argv)
 
   using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
           Layout<Shape<_8,_2,_1>>,
-          Tile<Underscore,Underscore,Underscore>>; // Subgroup level-tile
+          Tile<_64,_32,_32>>; // Subgroup level-tile
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;

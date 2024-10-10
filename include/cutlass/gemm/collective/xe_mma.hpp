@@ -140,7 +140,6 @@ struct CollectiveMma<
   };
 
   struct Params {
-    Arguments args;
     XE_Copy_A gmem_tiled_copy_a;
     XE_Copy_B gmem_tiled_copy_b;
   };
@@ -167,7 +166,7 @@ struct CollectiveMma<
                                       Layout<Shape<_1, Int<SubgroupSize>>>{},
                                       make_layout(make_shape(get<0>(typename traits_load_B::Shape_MN{}),
                                                              get<1>(typename traits_load_B::Shape_MN{}) / Int<SubgroupSize>{})));
-    return Params{args, copyA, copyB};
+    return Params{copyA, copyB};
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
@@ -191,6 +190,9 @@ struct CollectiveMma<
       char *smem_buf,
       Params const& mainloop) 
   {
+    static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
+    static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
+
     (void)residue_mnk;
     (void)thread_idx;
     (void)smem_buf;
@@ -234,8 +236,8 @@ struct CollectiveMma<
     //
     // Mainloop
     //
-    const int m_coord = BlockIdxX() * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
-    const int n_coord = BlockIdxY() * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
+    const int m_coord = BlockIdxY() * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
+    const int n_coord = BlockIdxX() * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
     const int l_coord = BlockIdxZ();
     Tensor iter_a = mainloop.gmem_tiled_copy_a.get_pvc_tensor(
       make_coord(m_coord, 0, l_coord), append<4>(tCrA_copy_view.shape(), k_tile_count),

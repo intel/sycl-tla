@@ -166,7 +166,6 @@ public:
 
   // Device side epilogue params
   struct Params {
-    Arguments args;
     typename FusionCallbacks::Params thread{};
     XE_Copy_C xe_load_c;
     XE_Copy_D xe_store_d;
@@ -205,7 +204,6 @@ public:
     }
 
     return {
-      args,
       FusionCallbacks::to_underlying_arguments(problem_shape, args.thread, workspace),
       xe_load_c,
       xe_store_d
