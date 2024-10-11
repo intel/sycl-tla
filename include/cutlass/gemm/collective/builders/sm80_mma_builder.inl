@@ -89,7 +89,7 @@ struct CollectiveBuilder <
             ElementA,
             cutlass::gemm::TagToStrideA_t<GmemLayoutA>,
             ElementB,
-            cutlass::gemm::TagToStrideA_t<GmemLayoutB>,
+            cutlass::gemm::TagToStrideB_t<GmemLayoutB>,
             TiledMMA,
             GmemTiledCopyA,
             SmemLayoutAtomA,
