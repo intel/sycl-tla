@@ -71,17 +71,17 @@ struct CollectiveBuilder <
     cute::is_same_v<KernelScheduleType, KernelMultistage>)
   >
 > {
-      using DispatchPolicy = MainloopSm80CpAsync<5>;
-      using GmemTiledCopyA =  typename detail::getMemoryAtomsOperandA<GmemLayoutA, ElementA, ElementAccumulator>::GmemTiledCopy;
-      using GmemTiledCopyB =  typename detail::getMemoryAtomsOperandB<GmemLayoutB, ElementB, ElementAccumulator>::GmemTiledCopy;
+      using DispatchPolicy = MainloopSm80CpAsync<3>;
+      using GmemTiledCopyA =  typename detail::Sm80_MemoryAtomsA<GmemLayoutA, ElementA>::GmemTiledCopy;
+      using GmemTiledCopyB =  typename detail::Sm80_MemoryAtomsB<GmemLayoutB, ElementB>::GmemTiledCopy;
 
-      using SmemLayoutAtomA =  typename detail::getMemoryAtomsOperandA<GmemLayoutA, ElementA, ElementAccumulator>::SmemLayoutAtom;
-      using SmemLayoutAtomB =  typename detail::getMemoryAtomsOperandA<GmemLayoutB, ElementB, ElementAccumulator>::SmemLayoutAtom;
+      using SmemLayoutAtomA =  typename detail::Sm80_MemoryAtomsA<GmemLayoutA, ElementA>::SmemLayoutAtom;
+      using SmemLayoutAtomB =  typename detail::Sm80_MemoryAtomsB<GmemLayoutB, ElementB>::SmemLayoutAtom;
 
-      using SmemCopyAtomA = typename detail::getMemoryAtomsOperandA<GmemLayoutA, ElementA, ElementAccumulator>::SmemCopyAtom;
-      using SmemCopyAtomB = typename detail::getMemoryAtomsOperandB<GmemLayoutB, ElementB, ElementAccumulator>::SmemCopyAtom;
+      using SmemCopyAtomA = typename detail::Sm80_MemoryAtomsA<GmemLayoutA, ElementA>::SmemCopyAtom;
+      using SmemCopyAtomB = typename detail::Sm80_MemoryAtomsB<GmemLayoutB, ElementB>::SmemCopyAtom;
 
-      using TiledMMA = typename detail::getMMAType<ElementA, ElementB, ElementAccumulator>::TiledMMA;
+      using TiledMMA = typename detail::Sm80_TiledMMA<ElementA, ElementB, ElementAccumulator>::TiledMMA;
 
       using CollectiveOp = collective::CollectiveMma<
             DispatchPolicy,

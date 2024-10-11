@@ -37,318 +37,302 @@
 
 
 namespace cutlass::gemm::collective::detail {
-  //================== Floating Point MMA ==================//
-  template<typename ElementA, typename ElementB, typename ElementMMA>
-  struct getMMAType;
+  //================== MMA Types ==================//
 
-  template <class LayoutA, typename ElementA, typename ElementAccumulator>
-  struct getMemoryAtomsOperandA;
-
-  template <class LayoutB, typename ElementB, typename ElementAccumulator>
-  struct getMemoryAtomsOperandB;
-
-  template<>
-  struct getMMAType<cutlass::half_t, cutlass::half_t, float> {
-    using MMA_Atom = MMA_Atom<SM80_16x8x16_F32F16F16F32_TN>;
-    using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>>,
-                        Tile<_32, _32, _16>
-                        >;
+  template<typename ElementA, typename ElementB, typename ElementAccum>
+  struct Sm80_TiledMMA {
+       using MMA_Atom = MMA_Atom<UniversalFMA<ElementAccum, ElementA, ElementB, ElementAccum>>;
+       using TiledMMA = TiledMMA<MMA_Atom, Layout<Shape<_4, _4, _1>>>;
   };
 
   template<>
-  struct getMMAType<cutlass::bfloat16_t, cutlass::bfloat16_t, float> {
-    using MMA_Atom = MMA_Atom<SM80_16x8x16_F32BF16BF16F32_TN>;
-    using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
-                        Tile<_32, _32, _8>
-                        >;
+  struct Sm80_TiledMMA<cute::half_t, cute::half_t, cute::half_t> {
+       using MMA_Atom = MMA_Atom<SM80_16x8x16_F16F16F16F16_TN>;
+       using TiledMMA = TiledMMA<MMA_Atom,
+                                 Layout<Shape<_2, _2, _1>>,
+                                 Tile<_32, _32, _16>>;
   };
 
   template<>
-  struct getMMAType<cutlass::half_t,  cutlass::half_t, cutlass::half_t> {
-    using MMA_Atom = MMA_Atom<SM80_16x8x16_F16F16F16F16_TN>;
-    using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
-                        Tile<_32, _32, _16>
-                        >;
-  };
-  
-  template<>
-  struct getMMAType<cutlass::tfloat32_t, cutlass::tfloat32_t, float> {
-    using MMA_Atom = MMA_Atom<SM80_16x8x8_F32TF32TF32F32_TN>;
-    using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
-                        Tile<_32, _32, _8>
-                        >;
+  struct Sm80_TiledMMA<cute::half_t, cute::half_t, float> {
+       using MMA_Atom = MMA_Atom<SM80_16x8x16_F32F16F16F32_TN>;
+       using TiledMMA = TiledMMA<MMA_Atom,
+                                 Layout<Shape<_2, _2, _1>>,
+                                 Tile<_32, _32, _16>>;
   };
 
   template<>
-  struct getMMAType<float, float, float> {
-    using MMA_Atom = MMA_Atom<SM80_16x8x8_F32TF32TF32F32_TN>; // Use TF32 MMA when both operands are F32
-    using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
-                        Tile<_32, _32, _8>
-                        >;
+  struct Sm80_TiledMMA<cute::bfloat16_t, cute::bfloat16_t, float> {
+       using MMA_Atom = MMA_Atom<SM80_16x8x16_F32BF16BF16F32_TN>;
+       using TiledMMA = TiledMMA<MMA_Atom, 
+                                 Layout<Shape<_2, _2, _1>>,
+                                 Tile<_32, _32, _16>>;
   };
 
   template<>
-  struct getMMAType<double, double, double> {
-    using MMA_Atom = MMA_Atom<SM80_8x8x4_F64F64F64F64_TN>;
-    using TiledMMA = TiledMMA<
-                      MMA_Atom,
-                      Layout<Shape<_2,_2,_1>>,
-                      Tile<Layout<Shape<_16,_2>,Stride<_2,_1>>,
-                           Layout<Shape<_16,_2>,Stride<_2,_1>>,
-                           Underscore>>;
-  };
-  
-  //================== Integer MMA (with saturation only) ==================//
-  template<>
-  struct getMMAType<int8_t, int8_t, int32_t> {
-    using MMA_Atom = MMA_Atom<SM80_16x8x16_S32S8S8S32_TN_SATURATE>;
-    using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
-                        Tile<_64, _64, _16>
-                        >;
+  struct Sm80_TiledMMA<cute::tfloat32_t, cute::tfloat32_t, float> {
+       using MMA_Atom = MMA_Atom<SM80_16x8x8_F32TF32TF32F32_TN>;
+       using TiledMMA = TiledMMA<MMA_Atom,
+                                 Layout<Shape<_2, _2, _1>, Stride<_2, _1, _1>>,
+                                 Tile<_32, _32, _8>>;
   };
 
   template<>
-  struct getMMAType<int8_t, uint8_t, int32_t> {
-    using MMA_Atom = MMA_Atom<SM80_16x8x16_S32S8U8S32_TN_SATURATE>;
-    using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
-                        Tile<_64, _64, _16>
-                        >;
-  };
-
-  template <>
-  struct getMMAType<uint8_t, int8_t, int32_t> {
-    using MMA_Atom = MMA_Atom<SM80_16x8x16_S32U8S8S32_TN_SATURATE>;
-    using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
-                        Tile<_64, _64, _16>
-                        >;
+  struct Sm80_TiledMMA<double, double, double> {
+       using MMA_Atom = MMA_Atom<SM80_8x8x4_F64F64F64F64_TN>;
+       using TiledMMA = TiledMMA<MMA_Atom,
+                                 Layout<Shape<_2, _2, _1>>,
+                                 Tile<Layout<Shape<_16, _2>, Stride<_2, _1>>,
+                                      Layout<Shape<_16, _2>, Stride<_2, _1>>,
+                                      Underscore>>;
   };
 
   template<>
-  struct getMMAType<uint8_t, uint8_t, int32_t> {
-    using MMA_Atom = MMA_Atom<SM80_16x8x16_S32U8U8S32_TN_SATURATE>;
-    using TiledMMA = TiledMMA<MMA_Atom,
-                        Layout<Shape<_2,_2,_1>, Stride<_2,_1,_1>>,
-                        Tile<_64, _64, _16>
-                        >;
-  };
-
-  //================== Memory Layouts ==================//
-
-  template<>
-  struct getMemoryAtomsOperandA<cutlass::layout::RowMajor, cutlass::half_t, float> {
-    using SmemLayoutAtom = decltype(
-                            composition(Swizzle<3,3,3>{},
-                            Layout<Shape < _8,_64>,
-                            Stride<_64, _1>>{})
-                          );
-    
-    using GmemTiledCopy = decltype(
-      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, half_t>{},
-                    Layout<Shape <_16,_8>,
-                           Stride< _8,_1>>{},
-                    Layout<Shape < _1,_8>>{}));
-
-    using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, half_t>;
+  struct Sm80_TiledMMA<int8_t, int8_t, int32_t> {
+       using MMA_Atom = MMA_Atom<SM80_16x8x32_S32S8S8S32_TN_SATURATE>;
+       using TiledMMA = TiledMMA<MMA_Atom,
+                                 Layout<Shape<_2, _2, _1>>,
+                                 Tile<_32, _32, _32>>;
   };
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, cutlass::half_t, float> {
-    using SmemLayoutAtom = decltype(
-      composition(Swizzle<3,3,3>{},
-                Layout<Shape <_64, _8>,
-                       Stride< _1,_64>>{}));
-
-    using GmemTiledCopy = decltype(
-      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, half_t>{},
-                    Layout<Shape <_16, _8>,
-                           Stride< _1,_16>>{},
-                    Layout<Shape < _8, _1>>{}));
-
-    using SmemCopyAtom = Copy_Atom<SM75_U16x8_LDSM_T, half_t>;
+  struct Sm80_TiledMMA<uint8_t, uint8_t, int32_t> {
+       using MMA_Atom = MMA_Atom<SM80_16x8x32_S32U8U8S32_TN_SATURATE>;
+       using TiledMMA = TiledMMA<MMA_Atom,
+                                 Layout<Shape<_2, _2, _1>>,
+                                 Tile<_32, _32, _32>>;
   };
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::RowMajor, double, double> {
-    using SmemLayoutAtom = decltype(
-      composition(Swizzle<2,0,4>{},
-                  Layout<Shape <_4,_16>,
-                         Stride<_1, _4>>{}));
-    
-    using GmemTiledCopy = decltype(
-          make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<double>, double>{},
-                    Layout<Shape < _8,_16>,
-                           Stride<_16, _1>>{},
-                    Layout<Shape<_1,_1>>{}));
-                  
-    using SmemCopyAtom = Copy_Atom<DefaultCopy, double>;
-
+  struct Sm80_TiledMMA<int8_t, uint8_t, int32_t> {
+       using MMA_Atom = MMA_Atom<SM80_16x8x32_S32S8U8S32_TN_SATURATE>;
+       using TiledMMA = TiledMMA<MMA_Atom,
+                                 Layout<Shape<_2, _2, _1>>,
+                                 Tile<_32, _32, _32>>;
   };
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, double, double> {
-    using SmemLayoutAtom = decltype(
-      composition(Swizzle<2,2,2>{},
-                  Layout<Shape <_16, _4>,
-                         Stride< _1,_16>>{}));
-  
-    using GmemTiledCopy = decltype(
-      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, double>{}, 
-                    Layout<Shape <_16, _8>,
-                           Stride< _1,_16>>{},                           
-                    Layout<Shape<_2,_1>>{}));          
+  struct Sm80_TiledMMA<uint8_t, int8_t, int32_t> {
+       using MMA_Atom = MMA_Atom<SM80_16x8x32_S32U8S8S32_TN_SATURATE>;
+       using TiledMMA = TiledMMA<MMA_Atom,
+                                 Layout<Shape<_2, _2, _1>>,
+                                 Tile<_32, _32, _32>>;
+  };
 
-    using SmemCopyAtom = Copy_Atom<DefaultCopy, double>;      
+  //////////////////////////////////////////////////////////////////////////////////////////////////
 
+  template<typename LayoutA, typename ElementA>
+  struct Sm80_MemoryAtomsA;
+
+  template<typename LayoutB, typename ElementB> 
+  struct Sm80_MemoryAtomsB;
+
+  template<>
+  struct Sm80_MemoryAtomsA<cutlass::layout::RowMajor, cute::half_t> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<3, 3, 3>{},
+                          Layout<Shape<_8, _64>,
+                                 Stride<_64, _1>>{}));
+       using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, cute::half_t>;
+
+       using GmemTiledCopy = decltype(
+              make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, cute::half_t>{},
+                          Layout<Shape<_16, _8>,
+                                 Stride<_8, _1>>{},
+                          Layout<Shape<_1, _8>>{}));
   };
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::RowMajor, int8_t, int32_t> {
-    using SmemLayoutAtom = decltype(
-      composition(
-        Swizzle<2,4,3>{},
-        Layout<Shape <_16,_64>,
-              Stride<_64, _1>>{}));
+  struct Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, cute::half_t> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<3, 3, 3>{},
+                          Layout<Shape<_64, _8>,
+                                 Stride<_1, _64>>{}));
+       using SmemCopyAtom = Copy_Atom<SM75_U16x8_LDSM_T, cute::half_t>;
 
-    using GmemTiledCopy = decltype(
-      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, int8_t>{},
-                      Layout<Shape <_32,_4>,
-                            Stride< _4,_1>>{},
-                      Layout<Shape<_1,Int<16>>>{}));
-
-    using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, uint8_t>;
+       using GmemTiledCopy = decltype(
+              make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, cute::half_t>{},
+                          Layout<Shape<_16, _8>,
+                                 Stride<_1, _16>>{},
+                          Layout<Shape<_8, _1>>{}));
   };
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, int8_t, int32_t> {
-    using SmemLayoutAtom = decltype(
-      composition(
-        Swizzle<2,0,8>{},
-        Layout<Shape <_64, _16>,
-              Stride<_1, _64>>{}));
+  struct Sm80_MemoryAtomsB<cutlass::layout::RowMajor, cute::half_t> :
+         Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, cute::half_t>{};
 
-    using GmemTiledCopy = decltype(
+  template<>
+  struct Sm80_MemoryAtomsB<cutlass::layout::ColumnMajor, cute::half_t> : 
+         Sm80_MemoryAtomsA<cutlass::layout::RowMajor, cute::half_t>{};
+
+  // We can re-use half_t memory layouts for bf16 as well
+  template<>
+  struct Sm80_MemoryAtomsA<cutlass::layout::RowMajor, cute::bfloat16_t> :
+         Sm80_MemoryAtomsA<cutlass::layout::RowMajor, cute::half_t>{};
+
+  template<>
+  struct Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, cute::bfloat16_t> : 
+         Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, cute::half_t>{};
+
+  template<>
+  struct Sm80_MemoryAtomsB<cutlass::layout::RowMajor, cute::bfloat16_t> : 
+         Sm80_MemoryAtomsB<cutlass::layout::RowMajor, cute::half_t>{};
+
+  template<>
+  struct Sm80_MemoryAtomsB<cutlass::layout::ColumnMajor, cute::bfloat16_t> : 
+         Sm80_MemoryAtomsB<cutlass::layout::ColumnMajor, cute::half_t>{};
+
+  template<>
+  struct Sm80_MemoryAtomsA<cutlass::layout::RowMajor, cute::tfloat32_t> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<3, 3, 3>{},
+                          Layout<Shape<_8, _32>,
+                                 Stride<_32, _1>>{}));
+       using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, cute::tfloat32_t>;
+
+       using GmemTiledCopy = decltype(
+              make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, tfloat32_t>{},
+                              Layout<Shape<_16, _8>,
+                                     Stride<_8, _1>>{},
+                              Layout<Shape<_1, _4>>{}));
+  };
+
+  template<>
+  struct Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, cute::tfloat32_t> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<3, 2, 3>{},
+                          Layout<Shape<_32, _8>,
+                                 Stride<_1, _32>>{}));
+       using SmemCopyAtom = Copy_Atom<UniversalCopy<tfloat32_t>, tfloat32_t>;
+
+       using GmemTiledCopy = decltype(
+              make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, tfloat32_t>{},
+                              Layout<Shape<_16, _8>,
+                                     Stride<_1, _16>>{},
+                              Layout<Shape<_4, _1>>{}));
+  };
+
+
+  template<>
+  struct Sm80_MemoryAtomsB<cutlass::layout::RowMajor, cute::tfloat32_t> : 
+         Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, cute::tfloat32_t>{};
+
+  template<>
+  struct Sm80_MemoryAtomsB<cutlass::layout::ColumnMajor, cute::tfloat32_t> :
+         Sm80_MemoryAtomsA<cutlass::layout::RowMajor, cute::tfloat32_t>{};
+
+
+  template<>
+  struct Sm80_MemoryAtomsA<cutlass::layout::RowMajor, double> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<2, 0, 4>{},
+                          Layout<Shape<_4, _16>,
+                                 Stride<_1, _4>>{}));
+       using SmemCopyAtom = Copy_Atom<DefaultCopy, double>;
+
+       using GmemTiledCopy = decltype(
+              make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<double>, double>{},
+                              Layout<Shape<_8, _16>,
+                                     Stride<_16, _1>>{},
+                              Layout<Shape<_1, _1>>{}));
+  };
+
+  template<>
+  struct Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, double> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<2, 2, 2>{},
+                          Layout<Shape<_16, _4>,
+                                 Stride<_1, _16>>{}));
+       using SmemCopyAtom = Copy_Atom<DefaultCopy, double>;
+
+       using GmemTiledCopy = decltype(
+              make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, double>{},
+                              Layout<Shape<_16, _8>,
+                                     Stride<_1, _16>>{},
+                              Layout<Shape<_2, _1>>{}));
+  };
+
+  template<>
+  struct Sm80_MemoryAtomsB<cutlass::layout::RowMajor, double> : 
+         Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, double>{};
+
+  template<>
+  struct Sm80_MemoryAtomsB<cutlass::layout::ColumnMajor, double> : 
+         Sm80_MemoryAtomsA<cutlass::layout::RowMajor, double>{};
+
+  template<>
+  struct Sm80_MemoryAtomsA<cutlass::layout::RowMajor, int8_t> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<2, 4, 3>{},
+              Layout<Shape<_16, _64>,
+                      Stride<_64, _1>>{}));
+       using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, int8_t>;
+
+       using GmemTiledCopy = decltype(
+              make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, int8_t>{},
+                              Layout<Shape<_32, _4>,
+                                     Stride<_4, _1>>{},
+                               Layout<Shape<_1, _16>>{}));
+  };
+
+  template<>
+  struct Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, int8_t> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<2, 0, 8>{},
+                          Layout<Shape<_64, _16>,
+                                 Stride<_1, _64>>{}));
+       using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, int8_t>;
+
+       using GmemTiledCopy = decltype(
       make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, int8_t>{},
                       Layout<Shape <_4, _32>,
                             Stride<_1, _4>>{},
                       Layout<Shape<_1,Int<16>>>{}));
-
-    using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, uint8_t>;
-  };
-
-  template <>
-  struct getMemoryAtomsOperandA <cutlass::layout::RowMajor, float, float> {
-    using SmemLayoutAtom = decltype(
-      composition(Swizzle<3,2,3>{},
-                Layout<Shape < _8,_32>,
-                       Stride<_32, _1>>{}));
-
-    using GmemTiledCopy = decltype(
-      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float>, float>{},
-                    Layout<Shape <_16,_8>,
-                           Stride< _8,_1>>{},
-                    Layout<Shape < _1,_4>>{}));
-                  
-    using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, float>;
-  };
-
-  template <>
-  struct getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, float, float> {
-    using SmemLayoutAtom = decltype(
-      composition(Swizzle<3, 2, 3>{},
-                Layout<Shape <_32, _8>,
-                       Stride<_1, _32>>{}));
-
-    using GmemTiledCopy = decltype(
-      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float>, float>{},
-                    Layout<Shape <_16, _8>,
-                           Stride< _1, _16>>{},
-                    Layout<Shape < _4, _1>>{}));
-
-    using SmemCopyAtom = Copy_Atom<UniversalCopy<float>, float>;
   };
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::RowMajor, cutlass::bfloat16_t, float> : 
-         getMemoryAtomsOperandA <cutlass::layout::RowMajor, cutlass::half_t, float> {};
+  struct Sm80_MemoryAtomsB<cutlass::layout::ColumnMajor, int8_t> : 
+         Sm80_MemoryAtomsA<cutlass::layout::RowMajor, int8_t>{};
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, cutlass::bfloat16_t, float> : 
-         getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, cutlass::half_t,float> {};
+  struct Sm80_MemoryAtomsB<cutlass::layout::RowMajor, int8_t> : 
+         Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, int8_t>{};
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::RowMajor, uint8_t, int32_t> :
-         getMemoryAtomsOperandA <cutlass::layout::RowMajor, int8_t, int32_t>  {};
+  struct Sm80_MemoryAtomsA<cutlass::layout::RowMajor, uint8_t> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<2, 4, 3>{},
+              Layout<Shape<_16, _64>,
+                      Stride<_64, _1>>{}));
+       using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, uint8_t>;
+
+       using GmemTiledCopy = decltype(
+              make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, uint8_t>{},
+                              Layout<Shape<_32, _4>,
+                                     Stride<_4, _1>>{},
+                               Layout<Shape<_1, _16>>{}));
+  };
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, uint8_t, int32_t> :
-         getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, int8_t, int32_t> {};
+  struct Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, uint8_t> {
+       using SmemLayoutAtom = decltype(
+              composition(Swizzle<2, 0, 8>{},
+                          Layout<Shape<_64, _16>,
+                                 Stride<_1, _64>>{}));
+       using SmemCopyAtom = Copy_Atom<SM75_U32x4_LDSM_N, uint8_t>;
+
+       using GmemTiledCopy = decltype(
+      make_tiled_copy(Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<cute::uint128_t>, uint8_t>{},
+                      Layout<Shape <_4, _32>,
+                            Stride<_1, _4>>{},
+                      Layout<Shape<_1,Int<16>>>{}));
+  };
 
   template<>
-  struct getMemoryAtomsOperandA <cutlass::layout::RowMajor, cutlass::tfloat32_t, float> : 
-         getMemoryAtomsOperandA <cutlass::layout::RowMajor, float, float> {};
+  struct Sm80_MemoryAtomsB<cutlass::layout::ColumnMajor, uint8_t> : 
+         Sm80_MemoryAtomsA<cutlass::layout::RowMajor, uint8_t>{};
 
   template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, cutlass::half_t, float> :
-         getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, cutlass::half_t, float>  {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, cutlass::half_t, float> :
-         getMemoryAtomsOperandA <cutlass::layout::RowMajor, cutlass::half_t, float>  {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, cutlass::bfloat16_t, float> :
-         getMemoryAtomsOperandB <cutlass::layout::RowMajor, cutlass::half_t, float>  {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, cutlass::bfloat16_t, float> :
-         getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, cutlass::half_t, float>  {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, float, float> :
-         getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, float, float> {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, float, float> :
-         getMemoryAtomsOperandA <cutlass::layout::RowMajor, float, float> {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, cutlass::tfloat32_t, float> :
-         getMemoryAtomsOperandB <cutlass::layout::RowMajor, float, float>  {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, cutlass::tfloat32_t, float> :
-         getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, float, float>  {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, double, double> :
-         getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, double, double>  {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, double, double> :
-         getMemoryAtomsOperandA <cutlass::layout::RowMajor, double, double> {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, int8_t, int32_t> :
-         getMemoryAtomsOperandA <cutlass::layout::ColumnMajor, int8_t, int32_t> {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, int8_t, int32_t> :
-         getMemoryAtomsOperandA <cutlass::layout::RowMajor, int8_t, int32_t> {};
-
-  template<>
-  struct getMemoryAtomsOperandB <cutlass::layout::RowMajor, uint8_t, int32_t> : 
-         getMemoryAtomsOperandB <cutlass::layout::RowMajor, int8_t, int32_t>  {};
-
-  template <>
-  struct  getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, uint8_t, int32_t> :
-          getMemoryAtomsOperandB <cutlass::layout::ColumnMajor, int8_t, int32_t> {};
-
+  struct Sm80_MemoryAtomsB<cutlass::layout::RowMajor, uint8_t> : 
+         Sm80_MemoryAtomsA<cutlass::layout::ColumnMajor, uint8_t>{};
 }

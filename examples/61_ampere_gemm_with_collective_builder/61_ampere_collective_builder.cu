@@ -70,7 +70,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(100),
+    m(4096), n(4096), k(4096), l(1), iterations(100),
     alpha(1.f), beta(0.f)
   { }
 
@@ -348,8 +348,8 @@ int main(int argc, const char** argv)
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = float;                        // <- data type of elements in input matrix A
-  using ElementInputB = float;                        // <- data type of elements in input matrix B
+  using ElementInputA = cute::half_t;                        // <- data type of elements in input matrix A
+  using ElementInputB = cute::half_t;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
   constexpr int AlignmentA = sizeof(ElementInputA);
@@ -357,13 +357,13 @@ int main(int argc, const char** argv)
   constexpr int AlignmentC = sizeof(ElementAccumulator);
   constexpr int AlignmentD = sizeof(ElementOutput);
   
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-  using LayoutC = cutlass::layout::RowMajor;
-  using LayoutD = cutlass::layout::RowMajor;
+  using LayoutA = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using LayoutC = cutlass::layout::ColumnMajor;
+  using LayoutD = cutlass::layout::ColumnMajor;
 
   // Workgroup-level tile
-  using TileShape = Shape<_128, _128, _32>;
+  using TileShape = Shape<_128, _128, _64>;
   
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
     cutlass::arch::Sm80, cutlass::arch::OpClassTensorOp,
