@@ -216,10 +216,6 @@ struct ExampleRunner {
       cudaDeviceSynchronize();
     #endif
 
-    using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
-    cutlass::reference::device::TensorReLu(TensorView(block_ref_D.get(), LayoutD::packed({M, N}),
-                                                      cutlass::make_Coord(M, N)));
-
     #if defined(CUTLASS_ENABLE_SYCL)
       syclcompat::wait();
     #else
