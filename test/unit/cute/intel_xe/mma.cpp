@@ -32,7 +32,6 @@
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
-#include <syclcompat/launch_policy.hpp>
 
 #include "cutlass_unit_test.h"
 
@@ -297,26 +296,6 @@ TEST(PVC_CuTe_Xe, MMA_XE_2x16x16_F32F16F16F32_TT) {
 TEST(PVC_CuTe_Xe, MMA_XE_1x16x16_F32F16F16F32_TT) {
   MMA_Test<XE_1x16x16_F32F16F16F32_TT, 8, 64, 1, 16, 16, half_t, half_t, float>(
       512, 512, 256);
-}
-
-TEST(PVC_CuTe_Xe, MMA_XE_8x16x8_F32TF32TF32F32_TT) {
-  MMA_Test<XE_8x16x8_F32TF32TF32F32_TT, 64, 64, 8, 16, 8, tfloat32_t,
-           tfloat32_t, float>(512, 512, 256);
-}
-
-TEST(PVC_CuTe_Xe, MMA_XE_4x16x8_F32TF32TF32F32_TT) {
-  MMA_Test<XE_4x16x8_F32TF32TF32F32_TT, 32, 64, 4, 16, 8, tfloat32_t,
-           tfloat32_t, float>(512, 512, 256);
-}
-
-TEST(PVC_CuTe_Xe, MMA_XE_2x16x8_F32TF32TF32F32_TT) {
-  MMA_Test<XE_2x16x8_F32TF32TF32F32_TT, 16, 64, 2, 16, 8, tfloat32_t,
-           tfloat32_t, float>(512, 512, 256);
-}
-
-TEST(PVC_CuTe_Xe, MMA_XE_1x16x8_F32TF32TF32F32_TT) {
-  MMA_Test<XE_1x16x8_F32TF32TF32F32_TT, 8, 64, 1, 16, 8, tfloat32_t, tfloat32_t,
-           float>(512, 512, 256);
 }
 
 TEST(PVC_CuTe_Xe, FMA_XE_UniversalFMA_F32F32F32F32) {

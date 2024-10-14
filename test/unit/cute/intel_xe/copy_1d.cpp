@@ -32,7 +32,6 @@
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
-#include <syclcompat/launch_policy.hpp>
 
 #include "cutlass_unit_test.h"
 
@@ -157,7 +156,6 @@ void copy_kernel_vectorized(TensorS tile_S, TensorD tile_D, void *) {
 
 TEST(PVC_1d_copy, copy_double) {
   {
-    print("XE_1D copy double test: \n");
     constexpr int M = 1;
     constexpr int N = 128;
     using Element = double;
@@ -200,11 +198,9 @@ TEST(PVC_1d_copy, copy_double) {
       // printf("%d  %d\n", int(h_in[i]), int(h_out[i]));
       EXPECT_EQ(host_output[i], host_src[i]);
     }
-    print("XE_1D copy double test end \n\n");
   }
 
   {
-    print("XE_1D copy float test: \n");
     constexpr int M = 1;
     constexpr int N = 128;
     using Element = float;
@@ -249,11 +245,9 @@ TEST(PVC_1d_copy, copy_double) {
       // printf("%d  %d\n", int(h_in[i]), int(h_out[i]));
       EXPECT_EQ(host_output[i], host_src[i]);
     }
-    print("XE_1D copy float test end \n\n");
   }
 
   {
-    print("XE_1D copy uint16_t test: \n");
     constexpr int M = 1;
     constexpr int N = 128;
     using Element = uint16_t;
@@ -298,6 +292,5 @@ TEST(PVC_1d_copy, copy_double) {
       // printf("%d  %d\n", int(h_in[i]), int(h_out[i]));
       EXPECT_EQ(host_output[i], host_src[i]);
     }
-    print("XE_1D copy uint16_t test end \n\n");
   }
 }

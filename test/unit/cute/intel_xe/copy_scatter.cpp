@@ -32,7 +32,6 @@
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
-#include <syclcompat/launch_policy.hpp>
 
 #include "cutlass_unit_test.h"
 
@@ -67,7 +66,7 @@ void copy_kernel_global(TensorS S, TensorD D, TiledLoad load, TiledStore store,
       make_tensor(static_cast<decltype(fragment) &&>(fragment).data(),
                   thr_copy_store.partition_S(D).shape());
 
-#if 1
+#if 0
   if (thread(0)) {
     print("thr_tile_load_S: ");
     print(thr_tile_load_S.layout());
@@ -300,7 +299,7 @@ void copy_kernel_atomic(TensorS S, TensorD D, TiledLoad load, TiledStore store,
   Tensor thr_tile_store_D =
       thr_copy_store.partition_D(D); // (CopyOp, CopyM, CopyN)
 
-#if 1
+#if 0
   if (thread(0)) {
     print("thr_tile_load_S: ");
     print(thr_tile_load_S.layout());

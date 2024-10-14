@@ -32,7 +32,6 @@
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
 #include <syclcompat.hpp>
-#include <syclcompat/launch_policy.hpp>
 
 #include "cutlass_unit_test.h"
 
