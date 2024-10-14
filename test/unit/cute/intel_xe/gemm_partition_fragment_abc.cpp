@@ -121,7 +121,6 @@ struct gemm_device_partition_fragment_abc {
 
     clear(fragment_C);
 
-    // clang-format off
 #if CUTLASS_ENABLE_DEBUG_PRINTS
   if (thread(LOG_THREAD, LOG_GROUP)) {
     print("=====================  A :\n");
@@ -143,7 +142,6 @@ struct gemm_device_partition_fragment_abc {
     print("  copy_view_C : "); print(copy_view_C); print("\n");
   }
 #endif
-    // clang-format on
 
     auto sg_per_wg_x = wg_tile_n / sg_tile_n;
     const int m_coord = BlockIdxX() * wg_tile_m +
@@ -160,14 +158,12 @@ struct gemm_device_partition_fragment_abc {
         make_coord(0, n_coord, l_coord), append<4>(copy_view_B.shape(), k_tile_max),
         append<3>(typename traits_load_B::Shape_MN{}, sg_tile_k), seq<0, 1, 0>{});
     for (int k_tile = 0; k_tile < k_tile_max; ++k_tile) {
-      // clang-format off
 #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (thread(LOG_THREAD, LOG_GROUP) && k_tile == 1) {
        print("blk_tgA : "); print(blk_tgA); print("\n");
        print("blk_tgB : "); print(blk_tgB); print("\n");
     }
 #endif
-      // clang-format on
 
       // Copy gmem to rmem for k_tile+1 with tA|tB thread-partitioned tensors
       copy(copy_a, blk_tgA(_, _, _, k_tile), copy_view_A);

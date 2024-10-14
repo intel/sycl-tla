@@ -127,7 +127,6 @@ struct gemm_device_partition_sd {
     Tensor fragment_C = make_fragment_like(tgC);
     clear(fragment_C);
 
-    // clang-format off
 #if CUTLASS_ENABLE_DEBUG_PRINTS
   if (thread(LOG_THREAD, LOG_GROUP)) {
     print("=====================  A :\n");
@@ -149,7 +148,6 @@ struct gemm_device_partition_sd {
     print("fragment_C : "); print(fragment_C); print("\n");
   }
 #endif
-    // clang-format on
 
     auto k_tile_max = size<3>(tgA);
     for (int k_tile = 0; k_tile < k_tile_max; ++k_tile) {
@@ -161,14 +159,12 @@ struct gemm_device_partition_sd {
           make_coord(k_tile * sg_tile_k, n_coord, l_coord), fragment_B.shape(),
           typename traits_load_B::Shape_MN{}, seq<1,0>{});
 
-      // clang-format off
 #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (thread(LOG_THREAD, LOG_GROUP) && k_tile == 1) {
        print("blk_tgA : "); print(blk_tgA); print("\n");
        print("blk_tgB : "); print(blk_tgB); print("\n");
     }
 #endif
-      // clang-format on
 
       // Copy gmem to rmem for k_tile+1 with tA|tB thread-partitioned tensors
       copy(copy_a, blk_tgA, fragment_A);

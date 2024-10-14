@@ -115,7 +115,6 @@ struct gemm_device_col_col {
 
     clear(tCrC);
 
-    // clang-format off
 #if CUTLASS_ENABLE_DEBUG_PRINTS
   if (thread(LOG_THREAD, LOG_GROUP)) {
     print("=====================  A :\n");
@@ -137,7 +136,6 @@ struct gemm_device_col_col {
     print("  tCrC : "); print(tCrC); print("\n");
   }
 #endif
-    // clang-format on
 
     auto sg_per_wg_x = wg_tile_n / sg_tile_n;
     const int m_coord = BlockIdxX() * wg_tile_m +

@@ -85,7 +85,6 @@ void gemm_device(TA const *A, TB const *B, TC *C, uint32_t m, uint32_t n,
   Tensor fragment_C = thrd_mma.make_fragment_C(tgC); // (MMA, MMA_M, MMA_N)
   clear(fragment_C);
 
-  // clang-format off
 #define CUTLASS_ENABLE_DEBUG_PRINTS (0)
 
 #define LOG_THREAD (16)
@@ -122,8 +121,6 @@ void gemm_device(TA const *A, TB const *B, TC *C, uint32_t m, uint32_t n,
     print("fragment_C : "); print(fragment_C); print("\n\n");
   }
 #endif
-
-  // clang-format on
 
   auto k_tile_max = size<3>(tgA);
   for (int k_tile = 0; k_tile < k_tile_max; ++k_tile) {
