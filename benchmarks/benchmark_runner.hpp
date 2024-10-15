@@ -250,7 +250,7 @@ struct BenchmarkRunnerGemm {
 
     std::size_t mem_occupied_ABC = (M * K * L * sizeof(ElementA)) + (K * N * L * sizeof(ElementB)) + 
                                    (M * N * L * sizeof(ElementC));
-    count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC));
+    count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC)) + 1;
 
     for(int i=0; i < count; i++) {
       block_A.emplace_back();
@@ -342,9 +342,10 @@ struct BenchmarkRunnerGemm {
       ) * 1e-6 * options.l;
 
     initialize_counters(state);
+    int32_t counter = 1;
     for(auto _ : state) {
       state.PauseTiming();
-      int input_num = std::max(int(0), (counter % count) - 1);
+      int input_num = std::max(int(0), counter % count);
       typename Gemm::GemmKernel::Arguments arguments{
         gemm::GemmUniversalMode::kGemm,
         problem_size,
