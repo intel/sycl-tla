@@ -43,7 +43,7 @@ In addition to GEMMs, CUTLASS implements high-performance convolution via the im
 
 ## CUTLASS with SYCL
 CUTLASS 3.0 API now also supports SYCL, and can run on Nvidia(upto the Ampere architecture) and Intel Xe Core architecture GPUs using the SYCL backend using the Intel open source `DPC++` compiler.
-The support is currently limited to GEMMs only. See [Quick Start Guide](./media/docs/quickstart.md) on how to build and run
+The support is currently limited to GEMMs only. See [Quick Start Guide](./media/docs/build/building_with_sycl_support.md) on how to build and run
 examples using the SYCL backend.
 
 To learn more about Intel SYCL compilers and SYCL, please see [Intel oneAPI](https://www.intel.com/content/www/us/en/developer/tools/oneapi/data-parallel-c-plus-plus.html)
