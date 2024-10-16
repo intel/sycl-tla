@@ -21,9 +21,11 @@ To build with the Intel open source `DPC++` compiler when using the SYCL backend
 ```bash
 $ mkdir build && cd build
 
-$ cmake -DCMAKE_CXX_COMPILER=/path/to/dpcpp/clang++ -DCMAKE_C_COMPILER=/path/to/dpcpp/clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=nvptx64-nvidia-cuda -DDPCPP_SYCL_ARCH=sm_80 .. # compiles for the NVIDIA Ampere GPU architecture
+# compiles for the NVIDIA Ampere GPU architecture
+$ cmake -DCMAKE_CXX_COMPILER=/path/to/dpcpp/clang++ -DCMAKE_C_COMPILER=/path/to/dpcpp/clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=nvptx64-nvidia-cuda -DDPCPP_SYCL_ARCH=sm_80 ..
 
-$ cmake -DCMAKE_CXX_COMPILER=/path/to/dpcpp/clang++ -DCMAKE_C_COMPILER=/path/to/dpcpp/clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc .. # compiles for the Intel Xe Core Architecture
+# compiles for the Intel Xe Core Architecture
+$ cmake -DCMAKE_CXX_COMPILER=/path/to/dpcpp/clang++ -DCMAKE_C_COMPILER=/path/to/dpcpp/clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc ..
 ```
 A complete example can be as follows (running on the Intel Data Center Max 1100) - 
 
@@ -34,9 +36,6 @@ $ make pvc_gemm
 
 $ ./examples/sycl/pvc/pvc_gemm
 
-Disposition: Passed
-Problem Size: 5120x4096x4096x1
-Cutlass GEMM Performance:     [225.773]TFlop/s  (0.7609)ms
 ```
 More examples on the Intel GPU can be found in the [sycl example folder](../../examples/sycl/pvc/)
 
@@ -49,10 +48,6 @@ $ make 14_ampere_tf32_tensorop_gemm_cute
 
 $ ./examples/14_ampere_tf32_tensorop_gemm/14_ampere_tf32_tensorop_gemm_cute 
 
-  Disposition: Passed
-  Problem Size: 5120x4096x4096x1
-  Avg runtime: 1.5232 ms
-  GFLOPS: 112788
 ```
 
 ## Supported CUTLASS and CUTE Examples
