@@ -68,11 +68,10 @@ CUTLASS Examples <br>
   * Example 14
   * We also provide various SYCL examples for the Intel Data Center Max range of GPUs
   
-## SYCL Supported Architectures and APIs
+## SYCL Supported Architectures
 At the time of writing, the SYCL backend supports all Nvidia architectures till Ampere, and the 
 Intel Data Center Max series of GPUs is supported.
 
-We support the `CollectiveMMA` and the collective builder APIs for the same.
 
 # References
 

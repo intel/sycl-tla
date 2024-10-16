@@ -36,7 +36,8 @@ $ mkdir build && cd build
 
 $ cmake -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=nvptx64-nvidia-cuda -DDPCPP_SYCL_ARCH=sm_80 .. # compiles for the NVIDIA Ampere GPU architecture
 
-$ cmake -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc .. # compiles for the Intel Xe Core Architecture
+# compiles for the Intel PVC Architecture
+cmake -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc ..
 ```
 A complete example can be as follows (running on the Intel Data Center Max 1100) - 
 
