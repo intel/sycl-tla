@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,6 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+if(SYCL_INTEL_TARGET)
 cutlass_test_unit_add_executable(
   cutlass_test_unit_cute_intel_xe
   copy_1d.cpp
@@ -40,3 +41,8 @@ cutlass_test_unit_add_executable(
   gemm_col_row.cpp
   gemm_col_col.cpp
 )
+else()
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_cute_intel_xe
+)
+endif()
