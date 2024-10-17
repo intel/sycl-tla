@@ -34,7 +34,7 @@
 #include <cutlass/arch/arch.h>
 #include "cutlass/gemm/collective/sm80_mma_multistage.hpp"
 
-#include "sm80_common.inl"
+#include "cutlass/gemm/collective/builders/sm80_common.inl"
 
 using namespace cute;
 
