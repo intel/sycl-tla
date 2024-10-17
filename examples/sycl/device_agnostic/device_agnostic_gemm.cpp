@@ -89,7 +89,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "PVC GEMM Example\n\n"
+    out << "Device Agnostic GEMM Example\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
@@ -284,7 +284,7 @@ int main(int argc, const char** argv)
   // Run examples
   //
 
-  // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
+  // The KernelHardwareInfo struct holds the number of CUs on the GPU with a given device ID. This
   // information is used by the underlying kernel.
   cutlass::KernelHardwareInfo hw_info;
 
