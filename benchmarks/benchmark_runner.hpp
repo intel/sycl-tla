@@ -56,6 +56,21 @@
 
 using namespace cute;
 
+namespace cutlass {
+    std::size_t get_llc_size() {
+      #if defined(CUTLASS_ENABLE_SYCL)
+        return syclcompat::get_default_queue().get_device().get_info<sycl::info::device::global_mem_cache_size>();   
+      #else
+        cudaDeviceProp prop_struct;
+        auto result = cudaGetDeviceProperties(&prop_struct, 0);
+        if (result != cudaSuccess) {
+          throw std::runtime_error(cudaGetErrorString(result));
+        }
+        return static_cast<std::size_t>(prop_struct.l2CacheSize);
+      #endif
+    }
+}
+
 namespace cutlass::benchmark {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -158,6 +173,8 @@ struct BenchmarkRunnerGemm {
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
+  int32_t count;
+
   //
   // Data members
   //
@@ -170,9 +187,9 @@ struct BenchmarkRunnerGemm {
 
   uint64_t seed;
 
-  DeviceAllocation<ElementA> block_A;
-  DeviceAllocation<ElementB> block_B;
-  DeviceAllocation<ElementC> block_C;
+  std::vector<DeviceAllocation<ElementA>> block_A;
+  std::vector<DeviceAllocation<ElementB>> block_B;
+  std::vector<DeviceAllocation<ElementC>> block_C;
   DeviceAllocation<ElementOutput> block_D;
   DeviceAllocation<ElementOutput> block_ref_D;
 
@@ -185,9 +202,9 @@ struct BenchmarkRunnerGemm {
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-    TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
+    TensorRef ref_A(block_A[0].get(), LayoutA::packed({M, K}));
+    TensorRef ref_B(block_B[0].get(), LayoutB::packed({K, N}));
+    TensorRef ref_C(block_C[0].get(), LayoutC::packed({M, N}));
     TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
     reference::device::GemmComplex(
@@ -231,15 +248,28 @@ struct BenchmarkRunnerGemm {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_C.reset(M * N * L);
+    std::size_t mem_occupied_ABC = (M * K * L * sizeof(ElementA)) + (K * N * L * sizeof(ElementB)) + 
+                                   (M * N * L * sizeof(ElementC));
+    count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC)) + 1;
+
+    for(int i=0; i < count; i++) {
+      block_A.emplace_back();
+      block_B.emplace_back();
+      block_C.emplace_back();
+    }
+
+    for (int i=0; i < count; i++) {
+      block_A[i].reset(M * K * L);
+      block_B[i].reset(K * N * L);
+      block_C[i].reset(M * N * L);
+      initialize_block(block_A[i], seed + i);
+      initialize_block(block_B[i], seed + i);
+      initialize_block(block_C[i], seed + i);
+    }
+
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
-    initialize_block(block_A, seed + 2023);
-    initialize_block(block_B, seed + 2022);
-    initialize_block(block_C, seed + 2021);
   }
 
   void run(::benchmark::State& state, const Options& options, const KernelHardwareInfo& hw_info) {
@@ -250,8 +280,8 @@ struct BenchmarkRunnerGemm {
     typename Gemm::GemmKernel::Arguments arguments{
        gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
+      {block_A[0].get(), stride_A, block_B[0].get(), stride_B},
+      {{options.alpha, options.beta}, block_C[0].get(), stride_C, block_D.get(), stride_D},
       hw_info
     };
 
@@ -276,49 +306,87 @@ struct BenchmarkRunnerGemm {
     // Verify that the result is correct
     bool passed = verify(problem_size, options.alpha, options.beta);
     if(not passed) {
-      throw std::runtime_error("Disposition Failed.");
+      state.SkipWithError("Disposition Failed.");
     }
 
-    auto tflop = ((2.0 * options.m * options.n * options.k * options.l) * 1e-12);
-    auto giga_bytes_transferred = (((options.m * options.k) * sizeof(ElementA) +
-                                     (options.k * options.n) * sizeof(ElementB) +
-                                 (options.beta != 0 ? 2 : 1) * (options.m * options.n) * sizeof(ElementC)) * 1e-9) *
-                                 options.l;
+    state.counters["m"] = options.m;
+    state.counters["n"] = options.n;
+    state.counters["k"] = options.k;
+    state.counters["l"] = options.l;
+    state.counters["alpha"] = options.alpha;
+    state.counters["beta"] = options.beta;
+
+    std::stringstream extra_label;
+    if constexpr (cute::size<0>(StrideA{}) == 1) {
+      extra_label << "layoutA=ColumnMajor ";
+    } else if constexpr (cute::size<1>(StrideA{}) == 1) {
+      extra_label << "layoutA=RowMajor ";
+    }
+    if constexpr (cute::size<0>(StrideB{}) == 1) {
+      extra_label << "layoutB=RowMajor ";
+    } else if constexpr (cute::size<1>(StrideB{}) == 1) {
+      extra_label << "layoutB=ColumnMajor ";
+    }
+    if constexpr (cute::size<0>(StrideC{}) == 1) {
+      extra_label << "layoutC=ColumnMajor ";
+    } else if constexpr (cute::size<1>(StrideC{}) == 1) {
+      extra_label << "layoutC=RowMajor ";
+    }
+    state.SetLabel(extra_label.str());
+
+    auto gflop = 2.0 * options.m * options.n * options.k * options.l * 1e-9;
+    auto mega_bytes_transferred = static_cast<double>(
+        options.m * options.k * sizeof(ElementA) +
+        options.k * options.n * sizeof(ElementB) +
+        (options.beta != 0 ? 2 : 1) * options.m * options.n * sizeof(ElementC)
+      ) * 1e-6 * options.l;
+
     initialize_counters(state);
+    int32_t counter = 1;
     for(auto _ : state) {
+      state.PauseTiming();
+      int input_num = std::max(int(0), counter % count);
+      typename Gemm::GemmKernel::Arguments arguments{
+        gemm::GemmUniversalMode::kGemm,
+        problem_size,
+        {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B},
+        {{options.alpha, options.beta}, block_C[input_num].get(), stride_C, block_D.get(), stride_D},
+        hw_info
+      };
+      gemm_op.initialize(arguments, workspace.get());
+      state.ResumeTiming();
+
       GPU_Clock timer;
       timer.start();
       gemm_op.run();
       auto ms_elapsed = timer.milliseconds();
-      update_counters(state, ms_elapsed, tflop, giga_bytes_transferred);
+      update_counters(state, ms_elapsed);
       state.SetIterationTime(ms_elapsed / 1000);
+      counter++;
     }
-    finalize_counters(state, tflop, giga_bytes_transferred);
+    finalize_counters(state, gflop, mega_bytes_transferred);
   }
 
 private:
   static void initialize_counters(::benchmark::State& state) {
     state.counters["avg_runtime_ms"] = 0;
-    state.counters["avg_tflops"] = 0;
-    state.counters["avg_throughput"] = 0;
     state.counters["best_runtime_ms"] = std::numeric_limits<double>::max();
   }
 
-  static void update_counters(::benchmark::State& state, double ms_elapsed, double tflop, double giga_bytes_transferred) {
+  static void update_counters(::benchmark::State& state, double ms_elapsed) {
     state.PauseTiming();
-    state.counters["avg_runtime_ms"] += ms_elapsed;
-    state.counters["avg_tflops"] += tflop / (ms_elapsed * 1000);
-    state.counters["avg_throughput"] += giga_bytes_transferred / (ms_elapsed / 1000);
+    state.counters["total_runtime_ms"] += ms_elapsed;
     state.counters["best_runtime_ms"] = std::min<double>(state.counters["best_runtime_ms"], ms_elapsed);
     state.ResumeTiming();
   }
 
-  static void finalize_counters(::benchmark::State& state,  double tflop, double giga_bytes_transferred) {
-    state.counters["avg_runtime_ms"] /= state.iterations();
-    state.counters["avg_tflops"] /= state.iterations();
-    state.counters["avg_throughput"] /= state.iterations();
-    state.counters["best_tflop"] = tflop / (state.counters["best_runtime_ms"] / 1000);
-    state.counters["best_bandwidth"] = giga_bytes_transferred / (state.counters["best_runtime_ms"] / 1000);
+  static void finalize_counters(::benchmark::State& state,  double gflop, double mega_bytes_transferred) {
+    state.counters["avg_runtime_ms"] =
+      state.counters["total_runtime_ms"] / static_cast<double>(state.iterations());
+    state.counters["avg_tflops"] = gflop / state.counters["avg_runtime_ms"];
+    state.counters["avg_throughput"] = mega_bytes_transferred / state.counters["avg_runtime_ms"];
+    state.counters["best_tflop"] = gflop / state.counters["best_runtime_ms"];
+    state.counters["best_bandwidth"] = mega_bytes_transferred / state.counters["best_runtime_ms"];
   }
 };
 

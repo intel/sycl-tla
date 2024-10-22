@@ -41,6 +41,6 @@
 #include "cutlass/gemm/collective/builders/sm80_mma_builder.inl"
 
 #if defined(SYCL_INTEL_TARGET)
-#include "cutlass/gemm/collective/builders/pvc_mma_builder.inl"
+#include "cutlass/gemm/collective/builders/xe_mma_builder.inl"
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////
