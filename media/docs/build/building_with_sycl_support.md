@@ -21,16 +21,20 @@ To build with the Intel open source `DPC++` compiler when using the SYCL backend
 ```bash
 $ mkdir build && cd build
 
+#set the CC and CXX compilers
+export CC=/path/to/dpcpp/clang++
+export CXX=/path/to/dpcpp/clang
+
 # compiles for the NVIDIA Ampere GPU architecture
-$ cmake -DCMAKE_CXX_COMPILER=/path/to/dpcpp/clang++ -DCMAKE_C_COMPILER=/path/to/dpcpp/clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=nvptx64-nvidia-cuda -DDPCPP_SYCL_ARCH=sm_80 ..
+$ cmake -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=nvptx64-nvidia-cuda -DDPCPP_SYCL_ARCH=sm_80 ..
 
 # compiles for the Intel Xe Core Architecture
-$ cmake -DCMAKE_CXX_COMPILER=/path/to/dpcpp/clang++ -DCMAKE_C_COMPILER=/path/to/dpcpp/clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc ..
+$ cmake -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc ..
 ```
 A complete example can be as follows (running on the Intel Data Center Max 1100) - 
 
 ```bash
-$ cmake -DCMAKE_CXX_COMPILER=/path/to/dpcpp/clang++ -DCMAKE_C_COMPILER=/path/to/dpcpp/clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc ..
+$ cmake -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc ..
 
 $ make pvc_gemm
 
@@ -42,7 +46,7 @@ More examples on the Intel GPU can be found in the [sycl example folder](../../e
 A complete example when running on a A100, using the SYCL backend
 
 ```bash
-$ cmake -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=nvptx64-nvidia-cuda -DDPCPP_SYCL_ARCH=sm_80
+$ cmake -DDPCPP_SYCL_TARGET=nvptx64-nvidia-cuda -DDPCPP_SYCL_ARCH=sm_80
 
 $ make 14_ampere_tf32_tensorop_gemm_cute
 
