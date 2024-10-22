@@ -70,7 +70,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(4096), n(4096), k(4096), l(1), iterations(100),
+    m(5120), n(4096), k(4096), l(1), iterations(100),
     alpha(1.f), beta(0.f)
   { }
 
