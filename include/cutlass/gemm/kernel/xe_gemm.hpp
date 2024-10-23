@@ -248,6 +248,8 @@ public:
       accumulators,
       k_tile_iter, k_tile_count,
       residue_mnk,
+      blk_coord_mnkl,
+      K,
       thread_idx,
       smem_buf,
       params.mainloop

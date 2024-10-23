@@ -176,7 +176,8 @@ struct CollectiveMma<
     class TensorB,
     class FrgTensorC,
     class KTileIterator,
-    class ResidueMNK
+    class ResidueMNK,
+    class BlkCoord
   >
   CUTLASS_DEVICE void
   operator() (
@@ -186,6 +187,8 @@ struct CollectiveMma<
       FrgTensorC const &src_accum,
       KTileIterator k_tile_iter, int k_tile_count,
       ResidueMNK residue_mnk,
+      BlkCoord const &blk_coord,
+      int const &K,
       int thread_idx,
       char *smem_buf,
       Params const& mainloop) 
@@ -230,38 +233,53 @@ struct CollectiveMma<
     //
     // Mainloop
     //
-    const int m_coord = BlockIdxY() * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
-    const int n_coord = BlockIdxX() * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
-    const int l_coord = BlockIdxZ();
+
+    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
+    const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
+    const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
+    const int l_coord = l_idx;
+
     Tensor iter_a = mainloop.gmem_tiled_copy_a.get_pvc_tensor(
-      make_coord(m_coord, 0, l_coord), make_shape(_, size<1>(tCrA_copy_view.shape()), size<2>(tCrA_copy_view.shape()), k_tile_count),
-      append<3>(typename XE_Copy_A::Shape_MN{}, BLK_K), seq<0,1,1>{});
+                    make_coord(m_coord, 0, l_coord),
+                    make_shape(_, size<1>(tCrA_copy_view.shape()), 
+                              size<2>(tCrA_copy_view.shape()), k_tile_count),
+                    append<3>(typename XE_Copy_A::Shape_MN{}, BLK_K), seq<0,1,1>{});
+    
     Tensor iter_b = mainloop.gmem_tiled_copy_b.get_pvc_tensor(
-      make_coord(0, n_coord, l_coord), make_shape(_, size<2>(tCrB_copy_view.shape()), size<1>(tCrB_copy_view.shape()), k_tile_count),
-      append<3>(typename XE_Copy_B::Shape_MN{}, BLK_K), seq<0,1,0>{});
-#pragma unroll
-    for (int i = 0; i < DispatchPolicy::Stages; i++) {
+                    make_coord(0, n_coord, l_coord),
+                    make_shape(_, size<2>(tCrB_copy_view.shape()), 
+                              size<1>(tCrB_copy_view.shape()), k_tile_count),
+                    append<3>(typename XE_Copy_B::Shape_MN{}, BLK_K), seq<0,1,0>{});
+
+    const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K));
+    int prefetch_k = k_start_idx;
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
       if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
-        prefetch(mainloop.gmem_tiled_copy_a, iter_a(_,_,_,i));
+        prefetch(mainloop.gmem_tiled_copy_a, iter_a(_,_,_,prefetch_k));
       }
       if constexpr(cute::detail::has_prefetch<GmemTiledCopyB>) {
-        prefetch(mainloop.gmem_tiled_copy_b, iter_b(_,_,_,i));  
+        prefetch(mainloop.gmem_tiled_copy_b, iter_b(_,_,_,prefetch_k));  
       }
     }
-#pragma unroll
-    for (int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.gmem_tiled_copy_a, iter_a(_,_,_,k_tile), tCrA_copy_view);
-      copy(mainloop.gmem_tiled_copy_b, iter_b(_,_,_,k_tile), tCrB_copy_view);
-    if(k_tile + DispatchPolicy::Stages < k_tile_count) {
-      if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
-        prefetch(mainloop.gmem_tiled_copy_a, iter_a(_,_,_,k_tile + DispatchPolicy::Stages));
+      copy(mainloop.gmem_tiled_copy_a, iter_a(_,_,_,k), tCrA_copy_view);
+      copy(mainloop.gmem_tiled_copy_b, iter_b(_,_,_,k), tCrB_copy_view);
+
+      if(prefetch_k < k_tile_count) {
+        if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
+          prefetch(mainloop.gmem_tiled_copy_a, iter_a(_,_,_,prefetch_k));
+        }
+        if constexpr(cute::detail::has_prefetch<GmemTiledCopyB>) {
+          prefetch(mainloop.gmem_tiled_copy_b, iter_b(_,_,_,prefetch_k));  
+        }
       }
-      if constexpr(cute::detail::has_prefetch<GmemTiledCopyB>) {
-        prefetch(mainloop.gmem_tiled_copy_b, iter_b(_,_,_,k_tile + DispatchPolicy::Stages));  
-      }
-    }
-    cute::gemm(tiled_mma, accum, tCrA, tCrB, src_accum);
+
+      cute::gemm(tiled_mma, accum, tCrA, tCrB, src_accum);
     }
   }
 };

@@ -30,8 +30,8 @@
  **************************************************************************************************/
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
-#include "cutlass/epilogue/collective/intel_pvc_epilogue.hpp"
-#include "cutlass/epilogue/fusion/intel_pvc_callbacks.hpp"
+#include "cutlass/epilogue/collective/xe_epilogue.hpp"
+#include "cutlass/epilogue/fusion/xe_callbacks.hpp"
 #include "cutlass/gemm/device/gemm_universal.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/collective/collective_mma.hpp"
@@ -358,15 +358,15 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
+  using GmemTiledCopyA = XE_2D_U16x8x16_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
 
   // Workgroup-level tile
-  using TileShape = Shape<_256, _256, _32>;
+  using TileShape = Shape<_256, _128, _16>;
 
   using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-          Layout<Shape<_1,_1,_1>>,
-          Tile<_32,_64,_32>>; // Subgroup level-tile
+          Layout<Shape<_8,_2,_1>>,
+          Tile<_64,_32,_16>>; // Subgroup level-tile
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
@@ -385,9 +385,9 @@ int main(int argc, const char** argv)
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
           FusionCallBacks,
-          XE_2D_U32x8x16x1x1_LD_N,
+          XE_2D_U32x8x16_LD_N,
           void, void,
-          XE_2D_U32x8x16x1x1_ST_N,
+          XE_2D_U32x8x16_ST_N,
           void, void>;
 
 // Mainloop
