@@ -37,7 +37,7 @@
 #include <cutlass/arch/memory_sm75.h>
 #include <cute/arch/cluster_sm90.hpp>
 
-#if defined SYCL_INTEL_TARGET
+#if defined(SYCL_INTEL_TARGET)
 SYCL_EXTERNAL __attribute__((convergent)) void __spirv_ControlBarrierWaitINTEL(int execution_scope, int memory_scope, int memory_semantics);
 SYCL_EXTERNAL __attribute__((convergent)) void __spirv_ControlBarrierArriveINTEL(int execution_scope, int memory_scope, int memory_semantics);
 
@@ -160,10 +160,10 @@ class NamedBarrier {
  private:
   CUTLASS_DEVICE
   static void arrive_and_wait_internal(uint32_t num_threads, uint32_t barrier_id) {
-#if defined SYCL_INTEL_TARGET
+#if defined(SYCL_INTEL_TARGET)
     __spirv_ControlBarrierArriveINTEL(EXECUTION_SCOPE_WORK_GROUP, MEMORY_SCOPE_WORK_GROUP, MEMORY_SEMANTICS_RELAXED);
     __spirv_ControlBarrierWaitINTEL(EXECUTION_SCOPE_WORK_GROUP, MEMORY_SCOPE_WORK_GROUP, MEMORY_SEMANTICS_RELAXED);
-#elif defined CUDA_BARRIER_ENABLED
+#elif CUDA_BARRIER_ENABLED
     asm volatile("bar.sync %0, %1;" : : "r"(barrier_id), "r"(num_threads));
 #elif defined(__CUDA_ARCH__)
     asm volatile ("brkpt;\n" ::);
@@ -172,7 +172,7 @@ class NamedBarrier {
 
   CUTLASS_DEVICE
   static void arrive_internal(uint32_t num_threads, uint32_t barrier_id) {
-#if defined SYCL_INTEL_TARGET
+#if defined(SYCL_INTEL_TARGET)
     __spirv_ControlBarrierArriveINTEL(EXECUTION_SCOPE_WORK_GROUP, MEMORY_SCOPE_WORK_GROUP, MEMORY_SEMANTICS_RELAXED);
 #elif CUDA_BARRIER_ENABLED
     asm volatile("bar.arrive %0, %1;" : : "r"(barrier_id), "r"(num_threads));

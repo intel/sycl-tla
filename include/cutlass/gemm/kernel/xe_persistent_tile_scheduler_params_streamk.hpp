@@ -244,8 +244,6 @@ struct PersistentTileSchedulerXeStreamKParams {
 
     // Calculate the number of work units covering the data-parallel and stream-K tiles.
     // A "work unit" is a single index in the linearized ID space used by the scheduler.
-    // We distinguish it from a "block," which is typically tied to a hardware unit
-    // (e.g., the callers into this scheduler will be persistent thread blocks).
     // A work unit can encompass multiple output tiles worth of work (as will be the
     // case for stream-K blocks).
     // Since splitting is not required for data-parallel tiles, only one data-parallel unit
@@ -438,12 +436,12 @@ struct PersistentTileSchedulerXeStreamKParams {
   static uint64_t
   get_num_sk_units(uint64_t wgs_per_sk_wave, uint32_t sk_tiles, uint32_t k_tiles_per_output_tile) {
     // If there are stream-K tiles to compute and a sufficiently large number of k iterations
-    // across them, they will be covered by a single wave of persistent threadblocks. Thus, there
-    // will be as many work units as there are threadblocks in a single wave.
+    // across them, they will be covered by a single wave of persistent work_groups. Thus, there
+    // will be as many work units as there are work_groups in a single wave.
     //
     // When the total k iterations across stream-K tiles is too small to justify distributing
-    // across an entire wave of blocks, we instead distribute the iterations over a smaller
-    // set of blocks.
+    // across an entire wave of work_groups, we instead distribute the iterations over a smaller
+    // set of work_groups.
 
     // Calculate the number of stream-K units that would be needed if each stream-K unit
     // computed the minimum allowable k iterations.

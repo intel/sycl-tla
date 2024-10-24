@@ -245,8 +245,7 @@ public:
     current_work_linear_idx_ += uint64_t(GridDimX()) * uint64_t(GridDimY()) * uint64_t(GridDimZ()) * uint64_t(advance_count);
   }
 
-  // Given the inputs, computes the total number of output blocks this problem will compute over
-  // Note that this is only the logical size of our grid, not the physical grid we will actually launch.
+  // Given the inputs, computes the total number of output work-groups this problem will compute over.
   template <class ProblemShape>
   CUTLASS_HOST_DEVICE static
   dim3
@@ -254,7 +253,7 @@ public:
     return Params::get_tiled_wg_shape_mnl(to_gemm_coord(problem_shape_mnkl), to_gemm_coord(cta_shape));
   }
 
-  // Given the cluster shape, computes the physical grid we should launch.
+  // Computes the physical grid we should launch.
   template <class ProblemShape>
   CUTLASS_HOST_DEVICE static
   dim3
