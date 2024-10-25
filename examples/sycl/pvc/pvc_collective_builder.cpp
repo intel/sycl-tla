@@ -321,7 +321,7 @@ int main(int argc, const char** argv)
   using LayoutD = cutlass::layout::RowMajor;
 
   // Workgroup-level tile
-  using TileShape = Shape<_256, _256, _32>;
+  using TileShape = Shape<_256, _128, _16>;
   
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
     cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
