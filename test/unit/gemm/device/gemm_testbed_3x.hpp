@@ -1358,6 +1358,8 @@ struct TestbedImpl {
     // Determine SMEM requirements and waive if not satisfied
     //
 
+    //TODO(joe): Add equivalent SYCLcompat logic
+#if !defined(CUTLASS_ENABLE_SYCL)
     size_t smem_size = static_cast<size_t>(Gemm::GemmKernel::SharedStorageSize);
 
     int device_idx;
@@ -1380,7 +1382,7 @@ struct TestbedImpl {
       printf("hardware smem_size: %d, required smem_size: %d\n\n", int(properties.sharedMemPerBlockOptin), int(smem_size));
       return false;
     }
-
+#endif
     return true;
   }
 
@@ -1403,7 +1405,6 @@ struct TestbedImpl {
     //
     // Run the GEMM
     //
-    cudaError_t result;
 
     for (int iter = 0; iter < iterations; ++iter) {
       status = gemm_op(arguments, workspace.get());
@@ -1413,12 +1414,17 @@ struct TestbedImpl {
       }
     }
 
+    //TODO(joe): exception handling here?
+#if defined(CUTLASS_ENABLE_SYCL)
+    syclcompat::wait();
+#else
+    cudaError_t result;
     result = cudaDeviceSynchronize();
     if (result != cudaSuccess) {
       EXPECT_EQ(result, cudaSuccess) << "Error at Kernel Sync.";
       return false;
     }
-
+#endif
     return true;
   }
 
@@ -1493,8 +1499,12 @@ struct TestbedImpl {
     cutlass::Status status = gemm_op.can_implement(arguments);
 
     if (status != cutlass::Status::kSuccess) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      std::cerr << "This test is not supported." << "\n";
+#else
       cudaError_t error = cudaGetLastError();
       std::cerr << "This test is not supported: " << cudaGetErrorString(error) << "\n";
+#endif
       return true;
     }
 
@@ -1506,15 +1516,19 @@ struct TestbedImpl {
       return profile(problem_size, static_cast<int>(iterations), gemm_op, arguments, workspace);
     }
     else {
-      cudaError_t result;
       status = gemm_op.initialize(arguments, workspace.get());
       status = gemm_op.run();
+      //TODO(joe): exception handling here?
+#if defined(CUTLASS_ENABLE_SYCL)
+    syclcompat::wait();
+#else
+      cudaError_t result;
       result = cudaDeviceSynchronize();
       if (result != cudaSuccess) {
         EXPECT_EQ(result, cudaSuccess) << "Error at Kernel Sync.";
         return false;
       }
-
+#endif
       EXPECT_TRUE(status == cutlass::Status::kSuccess) << to_string(status);
 
       //
