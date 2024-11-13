@@ -46,7 +46,7 @@
 #include "cutlass/gemm/kernel/gemm_universal.hpp"
 #include "cutlass/epilogue/collective/collective_builder.hpp"
 #include "cutlass/gemm/collective/collective_builder.hpp"
-#include "cutlass/epilogue/collective/sm70_epilogue_vectorized.hpp"
+#include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/thread/linear_combination.h"
 #include "cutlass/epilogue/thread/linear_combination_bias_elementwise.h"
@@ -57,7 +57,6 @@
 #include "sm90_evt_operations.hpp"
 
 
-#if defined(CUTLASS_ARCH_MMA_SM90_SUPPORTED)
 
 using namespace cute;
 
@@ -66,41 +65,44 @@ using namespace cute;
 //   D = scale_d * activation(Z)
 // else
 //   D = activation(Z)
-TEST(SM90_Device_Gemm_e4m3t_e4m3n_bf16t_tensor_op_gmma_f32_epilogue, 64x128x128_ScaledLinCombPerRowBiasEltAct) {
+TEST(XE_Device_Gemm_e4m3t_e4m3n_bf16t_tensor_op_gmma_f32_epilogue, 64x128x128_ScaledLinCombPerRowBiasEltAct) {
   using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using TileShape_MNK = Shape<_64,_128,_128>;
   using ClusterShape_MNK = Shape<_1,_1,_1>;
 
-  using EpilogueSchedule = cutlass::epilogue::TmaWarpSpecialized;
-  using FusionCallbacks = cutlass::epilogue::fusion::Sm90ScaledLinCombPerRowBiasEltAct<
-    TileShape_MNK,                      // CtaTileShapeMNK
-    cutlass::epilogue::thread::ReLu,    // ActivationFn
-    cutlass::bfloat16_t,                // ElementOutput
-    float,                              // ElementCompute
-    cutlass::bfloat16_t                 // ElementBias
-  >;
+  using EpilogueSchedule = cutlass::epilogue::collective::EpilogueScheduleAuto;
+  using ElementAccumulator = float;
+  using ElementComputeEpilogue = float;
+  using ElementInputA = bfloat16_t;
+  using ElementInputB = bfloat16_t;
+  using ElementOutput = float;
+
+  //TODO(joe): Do LinCombPerRowBias...
+  using FusionCallbacks = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, 
+          ElementOutput, ElementComputeEpilogue, ElementAccumulator, 
+          ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
-      cutlass::arch::Sm90, cutlass::arch::OpClassTensorOp,
+      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
       TileShape_MNK, ClusterShape_MNK,
       cutlass::epilogue::collective::EpilogueTileAuto,
-      float, float,
-      cutlass::bfloat16_t, LayoutC, 8,
-      cutlass::bfloat16_t, LayoutC, 8,
+      ElementComputeEpilogue, ElementAccumulator,
+      ElementAccumulator, LayoutC, 8,
+      ElementOutput, LayoutC, 8,
       EpilogueSchedule,
       FusionCallbacks
     >::CollectiveOp;
 
   using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-      cutlass::arch::Sm90, cutlass::arch::OpClassTensorOp,
-      cutlass::float_e4m3_t, LayoutA, 16,
-      cutlass::float_e4m3_t, LayoutB, 16,
-      float,
+      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+      ElementInputA, LayoutA, 16,
+      ElementInputB, LayoutB, 16,
+      ElementAccumulator,
       TileShape_MNK, ClusterShape_MNK,
-      cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
-      cutlass::gemm::KernelTmaWarpSpecialized
+      cutlass::gemm::collective::StageCountAuto,
+      cutlass::gemm::collective::KernelScheduleAuto
     >::CollectiveOp;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
