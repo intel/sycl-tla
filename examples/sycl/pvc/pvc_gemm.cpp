@@ -306,8 +306,30 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  constexpr int PipelineStages = 3;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+
+  static constexpr int SubgroupSize = GEMMDispatchPolicy::SubgroupSize;
+
+  using CopyAtomA = Copy_Atom<Copy_Traits<XE_2D_U16x32x32_LD_N>, ElementInputA>;
+  using CopyAtomB = Copy_Atom<Copy_Traits<XE_2D_U16x32x32_LD_V>, ElementInputB>;
+
+  using GmemTiledCopyA = decltype(make_tiled_copy(
+      CopyAtomA{}.with(static_cast<ElementInputA const *>(nullptr), int32_t(0),
+                          int32_t(0), int32_t(0)),
+      Layout<Shape<_1, Int<SubgroupSize>>>{},
+      make_layout(make_shape(get<0>(typename CopyAtomA::Shape_MN{}),
+                              get<1>(typename CopyAtomA::Shape_MN{}) /
+                                  Int<SubgroupSize>{}))));
+
+  using GmemTiledCopyB = decltype(make_tiled_copy(
+      CopyAtomB{}.with(static_cast<ElementInputB const *>(nullptr), int32_t(0),
+                          int32_t(0), int32_t(0)),
+      Layout<Shape<_1, Int<SubgroupSize>>>{},
+      make_layout(make_shape(get<0>(typename CopyAtomB::Shape_MN{}),
+                              get<1>(typename CopyAtomB::Shape_MN{}) /
+                                  Int<SubgroupSize>{}))));
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
@@ -315,10 +337,6 @@ int main(int argc, const char** argv)
   using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
           Layout<Shape<_8,_4,_1>>,
           Tile<_64,_64,_32>>; // Subgroup level-tile
-
-  constexpr int PipelineStages = 3;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
           ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
