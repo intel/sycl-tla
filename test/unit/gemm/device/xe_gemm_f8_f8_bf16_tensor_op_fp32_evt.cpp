@@ -132,68 +132,67 @@ TEST(XE_Device_Gemm_e4m3t_e4m3n_bf16t_tensor_op_gmma_f32_epilogue, 64x128x128_Sc
 //   Aux = scale_aux * Z
 // else
 //   Aux = Z
-TEST(SM90_Device_Gemm_e4m3t_e4m3n_bf16n_tensor_op_gmma_f32_epilogue, 64x128x128_4x1x1_ScaledLinCombPerRowBiasEltActAmaxAux) {
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::ColumnMajor;
-  using LayoutC = cutlass::layout::ColumnMajor;
-  using TileShape_MNK = Shape<_64,_128,_128>;
-  using ClusterShape_MNK = Shape<_2,_4,_1>;
-
-  using EpilogueSchedule = cutlass::epilogue::TmaWarpSpecialized;
-  using EpilogueTileType = cutlass::epilogue::collective::EpilogueTileAuto;
-  using EpilogueDescriptor = cutlass::epilogue::collective::detail::EpilogueDescriptor<
-    TileShape_MNK, EpilogueTileType, cutlass::bfloat16_t, cutlass::bfloat16_t, EpilogueSchedule>;
-  using AuxStoreDescriptor = cutlass::epilogue::collective::detail::AuxStoreDescriptor<
-    EpilogueDescriptor, cutlass::layout::RowMajor, cutlass::bfloat16_t>;
-    
-  using FusionCallbacks = cutlass::epilogue::fusion::Sm90ScaledLinCombPerRowBiasEltActAmaxAux<
-    TileShape_MNK,                               // CtaTileShapeMNK
-    typename EpilogueDescriptor::EpilogueTile,   // EpilogueTile
-    EpilogueDescriptor::StagesD,                 // StagesD
-    typename AuxStoreDescriptor::Stride,         // StrideAux
-    typename AuxStoreDescriptor::SmemLayoutAtom, // SmemLayoutAtom
-    typename AuxStoreDescriptor::CopyOpR2S,      // CopyOpR2S
-    cutlass::epilogue::thread::ReLu,             // ActivationFn
-    cutlass::bfloat16_t,                         // ElementOutput
-    float,                                       // ElementCompute
-    cutlass::bfloat16_t,                         // ElementBias
-    float                                        // ElementScalar
-  >;
-
-  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
-      cutlass::arch::Sm90, cutlass::arch::OpClassTensorOp,
-      TileShape_MNK, ClusterShape_MNK,
-      EpilogueTileType,
-      float, float,
-      cutlass::bfloat16_t, LayoutC, 16,
-      cutlass::bfloat16_t, LayoutC, 16,
-      EpilogueSchedule,
-      FusionCallbacks
-    >::CollectiveOp;
-
-  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-      cutlass::arch::Sm90, cutlass::arch::OpClassTensorOp,
-      cutlass::float_e4m3_t, LayoutA, 16,
-      cutlass::float_e4m3_t, LayoutB, 16,
-      float,
-      TileShape_MNK, ClusterShape_MNK,
-      cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
-      cutlass::gemm::KernelTmaWarpSpecialized
-    >::CollectiveOp;
-
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int,int,int,int>,
-      CollectiveMainloop,
-      CollectiveEpilogue
-  >;
-
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
-
-  // Host reference
-  using HostReference = test::gemm::device::HostScaledLinCombPerRowBiasEltActAmaxAux<
-    Gemm, cutlass::epilogue::thread::ReLu, cutlass::bfloat16_t
-  >;
-  bool passed = test::gemm::device::TestAllEVT<Gemm, HostReference>(true);
-  EXPECT_TRUE(passed);
-}
-#endif // defined(CUTLASS_ARCH_MMA_SM90_SUPPORTED)
+// TEST(XE_Device_Gemm_e4m3t_e4m3n_bf16n_tensor_op_gmma_f32_epilogue, 64x128x128_4x1x1_LinCombEltAct) {
+//   using LayoutA = cutlass::layout::RowMajor;
+//   using LayoutB = cutlass::layout::ColumnMajor;
+//   using LayoutC = cutlass::layout::ColumnMajor;
+//   using TileShape_MNK = Shape<_64,_128,_128>;
+//   using ClusterShape_MNK = Shape<_2,_4,_1>;
+//
+//   using EpilogueSchedule = cutlass::epilogue::collective::EpilogueScheduleAuto;
+//   using EpilogueTileType = cutlass::epilogue::collective::EpilogueTileAuto;
+//   using EpilogueDescriptor = cutlass::epilogue::collective::detail::EpilogueDescriptor<
+//     TileShape_MNK, EpilogueTileType, cutlass::bfloat16_t, cutlass::bfloat16_t, EpilogueSchedule>;
+//   using AuxStoreDescriptor = cutlass::epilogue::collective::detail::AuxStoreDescriptor<
+//     EpilogueDescriptor, cutlass::layout::RowMajor, cutlass::bfloat16_t>;
+//
+//   using FusionCallbacks = cutlass::epilogue::fusion::Sm90LinCombEltAct<
+//     TileShape_MNK,                               // CtaTileShapeMNK
+//     typename EpilogueDescriptor::EpilogueTile,   // EpilogueTile
+//     EpilogueDescriptor::StagesD,                 // StagesD
+//     typename AuxStoreDescriptor::Stride,         // StrideAux
+//     typename AuxStoreDescriptor::SmemLayoutAtom, // SmemLayoutAtom
+//     typename AuxStoreDescriptor::CopyOpR2S,      // CopyOpR2S
+//     cutlass::epilogue::thread::ReLu,             // ActivationFn
+//     cutlass::bfloat16_t,                         // ElementOutput
+//     float,                                       // ElementCompute
+//     cutlass::bfloat16_t,                         // ElementBias
+//     float                                        // ElementScalar
+//   >;
+//
+//   using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+//       cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+//       TileShape_MNK, ClusterShape_MNK,
+//       EpilogueTileType,
+//       float, float,
+//       cutlass::bfloat16_t, LayoutC, 16,
+//       cutlass::bfloat16_t, LayoutC, 16,
+//       EpilogueSchedule,
+//       FusionCallbacks
+//     >::CollectiveOp;
+//
+//   using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+//       cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+//       cutlass::float_e4m3_t, LayoutA, 16,
+//       cutlass::float_e4m3_t, LayoutB, 16,
+//       float,
+//       TileShape_MNK, ClusterShape_MNK,
+//       cutlass::gemm::collective::StageCountAuto,
+//       cutlass::gemm::collective::KernelScheduleAuto
+//     >::CollectiveOp;
+//
+//   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
+//       Shape<int,int,int,int>,
+//       CollectiveMainloop,
+//       CollectiveEpilogue
+//   >;
+//
+//   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+//
+//   // Host reference
+//   using HostReference = test::gemm::device::HostLinCombEltAct<
+//     Gemm, cutlass::epilogue::thread::ReLu, cutlass::bfloat16_t
+//   >;
+//   bool passed = test::gemm::device::TestAllEVT<Gemm, HostReference>(true);
+//   EXPECT_TRUE(passed);
+// }
