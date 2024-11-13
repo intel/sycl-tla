@@ -376,7 +376,9 @@ int main(int argc, const char** argv)
   >;
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
-
+  //TODO(joe): Added this temporarily to verify that the GmemTiledCopyA is a genuine TiledCopy
+  static int constexpr kAlignmentA = cutlass::detail::get_alignment_count_from_gmem_tiled_copy<
+      typename CollectiveMainloop::GmemTiledCopyA, ElementInputA, typename CollectiveMainloop::TiledMma::ValTypeA>();
   ExampleRunner<Gemm> runner;
 
   runner.run(options, hw_info);
