@@ -126,20 +126,8 @@ struct CollectiveMma<
   using PrefetchBTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchBThrShape{}));
   
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
-  using traits_load_A = Copy_Traits<GmemTiledCopyA>;
-  using atom_load_A = Copy_Atom<traits_load_A, ElementA>;
-  using XE_Copy_A = decltype(make_tiled_copy(atom_load_A{}
-                                            .with(static_cast<ElementA const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)), 
-                                            Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                            make_layout(make_shape(get<0>(typename traits_load_A::Shape_MN{}),
-                                                                   get<1>(typename traits_load_A::Shape_MN{}) / Int<SubgroupSize>{}))));
-  using traits_load_B = Copy_Traits<GmemTiledCopyB>;
-  using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
-  using XE_Copy_B = decltype(make_tiled_copy(atom_load_B{}
-                                            .with(static_cast<ElementB const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
-                                            Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                            make_layout(make_shape(get<0>(typename traits_load_B::Shape_MN{}),
-                                                                   get<1>(typename traits_load_B::Shape_MN{}) / Int<SubgroupSize>{}))));
+  using XE_Copy_A = GmemTiledCopyA;
+  using XE_Copy_B = GmemTiledCopyB;
 
   using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize, ElementA>());
   using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize, ElementB>());
@@ -172,14 +160,9 @@ struct CollectiveMma<
     auto problem_shape_MNKL = append<4>(problem_shape, 1);
     auto [M,N,K,L] = problem_shape_MNKL;
 
-    XE_Copy_A copyA = make_tiled_copy(Copy_Atom<Copy_Traits<GmemTiledCopyA>, ElementA>{}.with(args.ptr_A, K, M, K),
-                                      Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                      make_layout(make_shape(get<0>(typename traits_load_A::Shape_MN{}),
-                                                             get<1>(typename traits_load_A::Shape_MN{}) / Int<SubgroupSize>{})));
-    XE_Copy_B copyB = make_tiled_copy(Copy_Atom<Copy_Traits<GmemTiledCopyB>, ElementB>{}.with(args.ptr_B, N, K, N),
-                                      Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                      make_layout(make_shape(get<0>(typename traits_load_B::Shape_MN{}),
-                                                             get<1>(typename traits_load_B::Shape_MN{}) / Int<SubgroupSize>{})));
+    XE_Copy_A copyA{XE_Copy_A{}.with(args.ptr_A, K, M, K)};
+    XE_Copy_B copyB{XE_Copy_B{}.with(args.ptr_B, N, K, N)};
+
     XE_Prefetch_A prefetchA = cute::detail::prefetch_selector<PrefetchATileSize,ElementA>((void *)args.ptr_A, K, M, K);
     XE_Prefetch_B prefetchB = cute::detail::prefetch_selector<PrefetchBTileSize,ElementB>((void *)args.ptr_B, N, K, N);
     return Params{copyA, copyB, prefetchA, prefetchB};

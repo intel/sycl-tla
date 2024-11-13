@@ -92,10 +92,27 @@ struct CollectiveBuilder<
       static constexpr int PipelineStages = 3;
       using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
 
-      using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-      using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+      static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
+      using CopyAtomA = Copy_Atom<Copy_Traits<XE_2D_U16x32x32_LD_N>, ElementA>;
+      using CopyAtomB = Copy_Atom<Copy_Traits<XE_2D_U16x32x32_LD_V>, ElementB>;
 
-      //PVC pipeline does not use shared memory
+      using GmemTiledCopyA = decltype(make_tiled_copy(
+          CopyAtomA{}.with(static_cast<ElementA const *>(nullptr), int32_t(0),
+                             int32_t(0), int32_t(0)),
+          Layout<Shape<_1, Int<SubgroupSize>>>{},
+          make_layout(make_shape(get<0>(typename CopyAtomA::Shape_MN{}),
+                                 get<1>(typename CopyAtomA::Shape_MN{}) /
+                                     Int<SubgroupSize>{}))));
+
+      using GmemTiledCopyB = decltype(make_tiled_copy(
+          CopyAtomB{}.with(static_cast<ElementB const *>(nullptr), int32_t(0),
+                             int32_t(0), int32_t(0)),
+          Layout<Shape<_1, Int<SubgroupSize>>>{},
+          make_layout(make_shape(get<0>(typename CopyAtomB::Shape_MN{}),
+                                 get<1>(typename CopyAtomB::Shape_MN{}) /
+                                     Int<SubgroupSize>{}))));
+
+      // PVC pipeline does not use shared memory
       using SmemLayoutAtomA = void; 
       using SmemLayoutAtomB = void; 
       using SmemCopyAtomA = void;
