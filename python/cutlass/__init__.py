@@ -95,6 +95,8 @@ if (sys.version_info.major == 3 and sys.version_info.major > 8) or sys.version_i
 else:
     this.use_rmm = False
 
+this._use_sycl = False
+
 
 def set_log_level(level: int):
     """
@@ -175,7 +177,6 @@ def initialize_cuda_context():
 import dpctl
 
 this._sycl_device: dpctl.SyclDevice = None
-this._use_sycl = False
 
 def initialize_sycl_context():
     if this._device_id is not None and this._sycl_device is not None:
@@ -197,8 +198,10 @@ def device_id() -> int:
         initialize_sycl_context()
         this._use_sycl = True
     else:
+        this._use_sycl= False
         initialize_cuda_context()
     return this._device_id
+
 
 
 def sycl_device() -> dpctl.SyclDevice:

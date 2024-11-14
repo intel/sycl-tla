@@ -35,6 +35,7 @@ Utility functions for interacting with the device
 """
 
 from cuda import cuda, cudart
+import dpctl
 
 import cutlass
 from cutlass.utils.datatypes import is_cupy_tensor, is_numpy_tensor, is_torch_tensor
@@ -129,3 +130,9 @@ def to_device_ptr(tensor) -> cuda.CUdeviceptr:
         raise NotImplementedError(tensor)
 
     return ptr
+
+
+def default_stream():
+    if cutlass._use_sycl:
+        return dpctl.SyclQueue(cutlass._sycl_device)
+    return cuda.CUstream(0)

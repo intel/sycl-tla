@@ -908,6 +908,9 @@ ${operation_name}(${operation_name}${operation_suffix}::Params params) {
         return 0
 
     def initialize(self):
+        if self.operation.arch == 11:
+            return
+
         err, = cuda.cuFuncSetAttribute(
             self.kernel,
             attrib=cuda.CUfunction_attribute.CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,
