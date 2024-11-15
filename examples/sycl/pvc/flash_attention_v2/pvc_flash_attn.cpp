@@ -385,9 +385,8 @@ struct ExampleRunner {
 
       float cute_time = timer.seconds() / options.iterations;
       double flops_qk = 2.0 * options.batch * options.num_heads * options.seq_len * options.seq_len * options.head_size;
-      double flops_softmax = 5.0 * options.seq_len * options.seq_len; // seq_len^2 + seq_len^2 + 3 * seq_len^2
       double flops_pv = 2.0 * options.batch * options.num_heads * options.seq_len * options.head_size * options.seq_len;
-      double tflops = (flops_qk + flops_softmax + flops_pv) * 1e-12;
+      double tflops = (flops_qk + flops_pv) * 1e-12;
       std::cout << "Problem Size: " << options.batch << 'x' << options.num_heads << 'x' << options.seq_len << 'x' << options.head_size << std::endl;
       printf("Cutlass Flash Attention Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
     }
