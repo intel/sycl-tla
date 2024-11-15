@@ -108,10 +108,10 @@ void Kernel2(typename Operator::Params params) {
 
 /// Generic CUTLASS kernel template.
 template <typename Operator>
-CUTLASS_GLOBAL
 #if defined(CUTLASS_ENABLE_SYCL)
-void device_kernel(typename Operator::Params const& params, sycl::local_ptr<char> smem) {
+void device_kernel(typename Operator::Params const params, sycl::local_ptr<char> smem) {
 #else
+CUTLASS_GLOBAL
 #ifdef __CUDACC__
 // Enclosing this in __CUDACC__ suppresses MSVC warnings.
 __launch_bounds__(Operator::MaxThreadsPerBlock, Operator::MinBlocksPerMultiprocessor)

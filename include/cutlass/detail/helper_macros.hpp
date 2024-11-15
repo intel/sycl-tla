@@ -62,7 +62,7 @@
 
 #if defined(CUTLASS_ENABLE_SYCL)
 #define CUTLASS_HOST
-#define CUTLASS_GLOBAL __attribute__((always_inline)) inline
+#define CUTLASS_GLOBAL
 #define CUTLASS_SHARED
 #else
 #define CUTLASS_HOST __host__
