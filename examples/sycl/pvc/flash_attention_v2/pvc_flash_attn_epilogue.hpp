@@ -270,26 +270,20 @@ public:
 
     copy(params.xe_store_o, out, tOi(_,_,_,l_coord));
 
-    /*const int lse_offset = seq_coord + (num_heads_coord + batch_coord * num_heads) * seq_len;
+    const int lse_offset = m_offset + l_coord * seq_len;
 
     auto lse_ptr = params.ptr_LSE + lse_offset;
 
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
     const int lane_id = static_cast<int>(sg.get_local_linear_id());
 
-    // use only 1 work item per sub_group to write lse since all
+    // use the entire sub_group to write lse since all
     // work items within subgroup have the same sum() data stored
     // in registers
-    if(lane_id == 0) {
-      int count = 0;
-      CUTLASS_PRAGMA_UNROLL
-      for (int x = 0; x < FragsM; x++) {
-        CUTLASS_PRAGMA_UNROLL
-        for (int y = 0; y < FragmentSize; y++) {
-          *(lse_ptr + count++) = tLSEr(y, x);
-        }
-      }
-    }*/
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < cute::size(tLSEr); i += SubgroupSize) {
+      *(lse_ptr + i + lane_id) = tLSEr(i);
+    }
   }
 
 private:
