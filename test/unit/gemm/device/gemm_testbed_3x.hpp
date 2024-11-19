@@ -154,6 +154,12 @@ struct IsDefaultEpilogue<cutlass::epilogue::collective::detail::Sm90TmaWarpSpeci
   static constexpr bool value = true;
 };
 
+template <typename T>
+struct IsLegacyEpiloguePolicy : std::false_type{};
+
+template <auto ...Ts>
+struct IsLegacyEpiloguePolicy<cutlass::epilogue::Sm90TmaWarpSpecializedBiasElementwise<Ts...>> : std::true_type{};
+
 // The number of splits to test.
 //
 // This class makes it harder to confuse the order of arguments
@@ -691,12 +697,8 @@ struct HostCollectiveEpilogue {
   // FusionOperation derived types/queries
   //
   using EpiloguePolicy = typename Epilogue::DispatchPolicy;
-  static constexpr bool IsLegacy =
-  cute::is_same_v<
-    EpiloguePolicy,
-    cutlass::epilogue::Sm90TmaWarpSpecializedBiasElementwise<
-      EpiloguePolicy::StagesC, EpiloguePolicy::StagesD, EpiloguePolicy::FragmentSize>
-  >;
+  //TODO(joe): test this correctly catches the legacy case...
+  static constexpr bool IsLegacy = IsLegacyEpiloguePolicy<EpiloguePolicy>::value;
 
   using FusionOp = typename Gemm::EpilogueOutputOp;
   static_assert(cute::is_base_of_v<cutlass::epilogue::fusion::FusionOperation, FusionOp>);
@@ -1779,6 +1781,30 @@ bool TestAll(double alpha = 1.0, double beta = 0.0, CheckEquality check_relative
 
   return passed;
 }
+
+template <
+  typename Gemm,
+  template <class T> class ActivationFunctor = cutlass::epilogue::thread::Identity
+>
+bool TestSingleShapeXe(double alpha = 1.0, double beta = 0.0, CheckEquality check_relative_equality = CheckEquality::RELATIVE) {
+  using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
+  ProblemShapeType problem_size{256, 256, 32, 1};
+  Testbed3x<Gemm, ActivationFunctor> testbed(check_relative_equality, ScalarLoc::ON_HOST, VectorBeta::DISABLED);
+
+  using ElementScalar = typename Gemm::EpilogueOutputOp::ElementScalar;
+  using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
+
+  bool passed = true;
+
+  passed = testbed.run(
+    problem_size,
+      cutlass::from_real<ElementScalar>(alpha),
+    cutlass::from_real<ElementScalar>(beta)
+  );
+
+  return passed;
+}
+
 
 template <typename Gemm>
 bool TestAllBiasElementwise(double alpha = 1.0, double beta = 0.0, CheckEquality check_relative_equality = CheckEquality::EXACT) {
