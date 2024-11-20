@@ -90,7 +90,7 @@ struct Options {
     bool k_valid = k > 0 && k % 32 == 0;
     bool l_valid = l > 0;
     if (!(m_valid && n_valid && k_valid && l_valid)) {
-      std::cout << "invalid arguments. Must be a multiple of (8, 16, 16)\n";
+      std::cout << "invalid arguments. Must be a multiple of (16, 32, 32)\n";
       std::exit(1);
     }
   }
