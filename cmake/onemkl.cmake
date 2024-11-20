@@ -40,7 +40,7 @@ ExternalProject_Add(
 
     PREFIX                  ${ONEMKL_INSTALL_DIR}
     GIT_REPOSITORY          "https://github.com/oneapi-src/oneMKL.git"
-    GIT_TAG                 "v0.5"
+    GIT_TAG                 "v0.6"
 
     CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
