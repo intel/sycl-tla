@@ -340,7 +340,8 @@ public:
 
         auto acc_frag_mn = acc_frag(_, epi_m, epi_n);
 
-        trD_frag(0) = cst_callbacks.visit(acc_frag_mn(0), epi_v, epi_m, epi_n);
+        // TODO look further into why this is acceptable
+        trD_frag(0) = cst_callbacks.visit(acc_frag_mn(0), 0, epi_m, epi_n);
         copy(params.xe_store_d, trD, rw_coord(_, epi_m, epi_n));
       }
     }
