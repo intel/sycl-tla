@@ -81,7 +81,7 @@ struct Options {
 
     cmd.get_cmd_line_argument("batch", batch, 4);
     cmd.get_cmd_line_argument("num_heads", num_heads, 8);
-    cmd.get_cmd_line_argument("seq_len", seq_len, 16384);
+    cmd.get_cmd_line_argument("seq_len", seq_len, 4096);
     cmd.get_cmd_line_argument("head_size", head_size, 64);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
 
