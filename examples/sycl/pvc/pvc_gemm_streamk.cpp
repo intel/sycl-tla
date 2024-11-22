@@ -164,9 +164,9 @@ struct ExampleRunner {
   StrideD stride_D;
   uint64_t seed = 0;
 
-  std::vector<cutlass::DeviceAllocation<ElementA>> block_A;
-  std::vector<cutlass::DeviceAllocation<ElementB>> block_B;
-  std::vector<cutlass::DeviceAllocation<ElementC>> block_C;
+  cutlass::DeviceAllocation<ElementA> block_A;
+  cutlass::DeviceAllocation<ElementB> block_B;
+  cutlass::DeviceAllocation<ElementC> block_C;
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
 
@@ -177,9 +177,9 @@ struct ExampleRunner {
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-    cutlass::TensorRef ref_A(block_A[0].get(), LayoutA::packed({M, K}));
-    cutlass::TensorRef ref_B(block_B[0].get(), LayoutB::packed({K, N}));
-    cutlass::TensorRef ref_C(block_C[0].get(), LayoutC::packed({M, N}));
+    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
+    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
+    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
     cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
     cutlass::reference::device::GemmComplex(
@@ -219,24 +219,12 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    std::size_t mem_occupied_ABC = (M * K * L * sizeof(ElementA)) + (K * N * L * sizeof(ElementB)) + 
-                                   (M * N * L * sizeof(ElementC));
-    count = std::ceil(static_cast<float>(get_llc_size()) / static_cast<float>(mem_occupied_ABC));
-
-    for(int i = 0; i < count; i++) {
-      block_A.emplace_back();
-      block_B.emplace_back();
-      block_C.emplace_back();
-    }
-
-    for (int i = 0; i < count; i++) {
-      block_A[i].reset(M * K * L);
-      block_B[i].reset(K * N * L);
-      block_C[i].reset(M * N * L);
-      initialize_block(block_A[i], seed + i);
-      initialize_block(block_B[i], seed + i);
-      initialize_block(block_C[i], seed + i);
-    }
+    block_A.reset(M * K * L);
+    block_B.reset(K * N * L);
+    block_C.reset(M * N * L);
+    initialize_block(block_A, seed + 2023);
+    initialize_block(block_B, seed + 2022);
+    initialize_block(block_C, seed + 2021);
 
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
@@ -250,8 +238,8 @@ struct ExampleRunner {
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A[0].get(), stride_A, block_B[0].get(), stride_B},
-      {{options.alpha, options.beta}, block_C[0].get(), stride_C, block_D.get(), stride_D},
+      {block_A.get(), stride_A, block_B.get(), stride_B},
+      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
       hw_info,
       {options.splits, 
       options.dp ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::DataParallel :
@@ -281,12 +269,11 @@ struct ExampleRunner {
       GPU_Clock timer;
       float elapsed_time_seconds = 0.f;
       for (int i = 0; i < options.iterations; ++i) {
-        int32_t idx = std::max(int(0), (i % count) - 1);
         typename Gemm::GemmKernel::Arguments arguments{
           cutlass::gemm::GemmUniversalMode::kGemm,
           problem_size,
-          {block_A[idx].get(), stride_A, block_B[idx].get(), stride_B},
-          {{options.alpha, options.beta}, block_C[idx].get(), stride_C, block_D.get(), stride_D},
+          {block_A.get(), stride_A, block_B.get(), stride_B},
+          {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
           hw_info,
           {options.splits, 
           options.dp ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::DataParallel :
@@ -342,8 +329,6 @@ int main(int argc, const char** argv)
   // Change device_id to another value if you are running on a machine with multiple GPUs and wish
   // to use a GPU other than that with device ID 0.
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
-
-  bool passed;
 
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
