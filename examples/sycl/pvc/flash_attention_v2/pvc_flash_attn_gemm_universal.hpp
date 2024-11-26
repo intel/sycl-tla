@@ -320,7 +320,12 @@ public:
       Tensor tPr = make_tensor<typename TiledMma::ValTypeA>(shape(tSr));
       CUTLASS_PRAGMA_UNROLL
       for (int p_idx = 0; p_idx < size(tPr); p_idx++) {
-        tPr(p_idx) = static_cast<typename TiledMma::ValTypeA>(tSr(p_idx));
+        #ifdef __SYCL_DEVICE_ONLY__
+        // Temporary patch to avoid linking in the devicelib fallback unconditionally.
+        tPr(p_idx).storage = __spirv_ConvertFToBF16INTEL(tSr(p_idx));
+        #else
+         tPr(p_idx) = static_cast<typename TiledMma::ValTypeA>(tSr(p_idx));
+        #endif
       }
 
       // 8) Scale out_reg with l

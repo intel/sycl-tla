@@ -37,6 +37,23 @@
 #include <sycl/sycl.hpp>
 #include "cutlass/cutlass.h"
 
+#ifdef __SYCL_DEVICE_ONLY__
+#define SYCL_DEVICE_OCL_FMA(x, y) SYCL_EXTERNAL x
+#else
+#define SYCL_DEVICE_OCL_FMA(x, y)                                                     \
+  inline x { assert(false); return (y)0; }
+#endif
+
+
+#define EXP sycl::native::exp
+#define DIV sycl::native::divide
+
+
+SYCL_DEVICE_OCL_FMA(float sub_group_reduce_add(float i) , float);
+SYCL_DEVICE_OCL_FMA(float sub_group_reduce_max(float i), float);
+
+#undef SYCL_DEVICE_OCL_FMA
+
 namespace flash {
 
 template<typename T>
@@ -127,10 +144,7 @@ struct Softmax {
         for(int x = 0; x < SizeA; x++) {
             CUTLASS_PRAGMA_UNROLL
             for(int y = 0; y < SizeB; y++) {
-                CUTLASS_PRAGMA_UNROLL
-                for(uint laneMask = 8; laneMask >= 1; laneMask /= 2) {
-                    dst(x,y) = op(dst(x, y), syclcompat::permute_sub_group_by_xor(sg, dst(x, y), laneMask, 16));
-                }
+                dst(x, y) = std::is_same_v<Op, SumOp<float>> ? sub_group_reduce_add(dst(x, y)) : sub_group_reduce_max(dst(x, y));
             }
         }
     }
