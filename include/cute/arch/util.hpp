@@ -31,7 +31,6 @@
 #pragma once
 
 #include <cute/config.hpp>
-
 #include <cute/numeric/integer_sequence.hpp>
 
 #if defined(__clang__) && defined(__CUDA__)
@@ -260,87 +259,47 @@ explode(Fn fn,
 
 #if defined(CUTLASS_ENABLE_SYCL)
 template <class MMA_Op,
-          class PtrA, int... I>
-CUTE_HOST_DEVICE constexpr
-void
-explode_mma(PtrA&& a, int_sequence<I...>)
-{
-  return MMA_Op::fma(a[I]...);
-}
-
-template <class MMA_Op,
-          class PtrS, int... Is,
-          class PtrD, int... Id>
-CUTE_HOST_DEVICE constexpr
-void
-explode_mma(PtrS&& s, int_sequence<Is...>,
-            PtrD&& d, int_sequence<Id...>)
-{
-  return MMA_Op::fma(s[Is]..., d[Id]...);
-}
-
-template <class MMA_Op,
-          class PtrA, int... Ia,
-          class PtrB, int... Ib,
-          class PtrC, int... Ic>
-CUTE_HOST_DEVICE constexpr
-void
-explode_mma(PtrA&& a, int_sequence<Ia...>,
-            PtrB&& b, int_sequence<Ib...>,
-            PtrC&& c, int_sequence<Ic...>)
-{
-  return MMA_Op::fma(a[Ia]..., b[Ib]..., c[Ic]...);
-}
-
-template <class MMA_Op,
-          class PtrD, int... Id,
-          class PtrA, int... Ia,
-          class PtrB, int... Ib,
-          class PtrC, int... Ic>
-CUTE_HOST_DEVICE constexpr
-void
-explode_mma(PtrD&& d, int_sequence<Id...>,
-            PtrA&& a, int_sequence<Ia...>,
-            PtrB&& b, int_sequence<Ib...>,
-            PtrC&& c, int_sequence<Ic...>)
-{
-  return MMA_Op::fma(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]...);
-}
-
-template <class MMA_Op,
           class PtrD, int... Id,
           class PtrA, int... Ia,
           class PtrB, int... Ib,
           class PtrC, int... Ic,
-          class PtrE, int... Ie>
+          class PtrE, int... Ie,
+          class PtrF, int... If,
+          class PtrG, int... Ig>
 CUTE_HOST_DEVICE constexpr
 void
-explode_mma(PtrD&& d, int_sequence<Id...>,
-            PtrA&& a, int_sequence<Ia...>,
-            PtrB&& b, int_sequence<Ib...>,
-            PtrC&& c, int_sequence<Ic...>,
-            PtrE&& e, int_sequence<Ie...>)
+explode(Fn fn,
+        PtrD&& d, int_sequence<Id...>,
+        PtrA&& a, int_sequence<Ia...>,
+        PtrB&& b, int_sequence<Ib...>,
+        PtrC&& c, int_sequence<Ic...>,
+        PtrE&& e, int_sequence<Ie...>,
+        PtrF&& f, int_sequence<If...>,
+        PtrG&& g, int_sequence<Ig...>)
 {
-  return MMA_Op::fma(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]..., e[Ie]...);
+  return MMA_Op::fma(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]..., e[Ie]..., f[If]..., g[Ig]...);
 }
-
-template <class MMA_Op,
-          class PtrD,   int... Id,
-          class PtrA,   int... Ia,
-          class PtrB,   int... Ib,
-          class PtrC,   int... Ic,
-          class PtrSFA, int... Isfa,
-          class PtrSFB, int... Isfb>
+#else
+template <class Fn,
+          class PtrD, int... Id,
+          class PtrA, int... Ia,
+          class PtrB, int... Ib,
+          class PtrC, int... Ic,
+          class PtrE, int... Ie,
+          class PtrF, int... If,
+          class PtrG, int... Ig>
 CUTE_HOST_DEVICE constexpr
 void
-explode_mma(PtrD&& d,     int_sequence<Id...>,
-            PtrA&& a,     int_sequence<Ia...>,
-            PtrB&& b,     int_sequence<Ib...>,
-            PtrC&& c,     int_sequence<Ic...>,
-            PtrSFA&& sfa, int_sequence<Isfa...>,
-            PtrSFB&& sfb, int_sequence<Isfb...>)
+explode(Fn fn,
+        PtrD&& d, int_sequence<Id...>,
+        PtrA&& a, int_sequence<Ia...>,
+        PtrB&& b, int_sequence<Ib...>,
+        PtrC&& c, int_sequence<Ic...>,
+        PtrE&& e, int_sequence<Ie...>,
+        PtrF&& f, int_sequence<If...>,
+        PtrG&& g, int_sequence<Ig...>)
 {
-  return MMA_Op::fma(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]..., sfa[Isfa]..., sfb[Isfb]...);
+  return fn(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]..., e[Ie]..., f[If]..., g[Ig]...);
 }
 #endif
 

@@ -582,6 +582,12 @@ struct alignas(1) float_e4m3_t : float8_base<FloatEncoding::E4M3> {
     int mantissa() const {
         return int(storage & Base::FP8_MANTISSA_MASK);
     }
+
+    CUTLASS_HOST_DEVICE
+    friend bool isnan(float_e4m3_t const& x) {
+      return x.storage == uint8_t(0x7f);
+    }
+
 };
 ///////////////////////////////////////////////////////////////
 ///
@@ -795,6 +801,12 @@ struct alignas(1) float_e5m2_t : float8_base<FloatEncoding::E5M2> {
     int mantissa() const {
         return int(storage & Base::FP8_MANTISSA_MASK);
     }
+    
+    CUTLASS_HOST_DEVICE
+    friend bool isnan(float_e5m2_t const& x) {
+      return x.storage == uint8_t(0x7f);
+    }
+
 };
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
