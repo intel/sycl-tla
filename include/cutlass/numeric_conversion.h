@@ -3638,7 +3638,8 @@ private:
                   "Invalid PackedSrcType/PackedResultType must be 2 or 4 to use private convert dispatch.");
 
     PackedResultType r;
-  #if defined __CUDA_ARCH__ && __CUDA_ARCH__ <= 800
+  #if (defined __CUDA_ARCH__ && __CUDA_ARCH__ <= 800) || \
+       (defined __SYCL_CUDA_ARCH__ && __SYCL_CUDA_ARCH__ <= 800)
     // View the input as reg
     uint32_t src_reg = to_reg(source);
     static constexpr int fp32_base = 0x4B400000;
@@ -3663,7 +3664,11 @@ private:
 
     CUTLASS_PRAGMA_UNROLL
     for (int ii = 0; ii < PackedResultType::kElements; ++ii) {
+#if defined(__CUDA_ARCH__)
       t[ii] = __dp4a(x, mask[ii], 0);
+#else
+      t[ii] = x * mask[ii];
+#endif
       r[ii] = static_cast<float>(t[ii]);
     }
   #endif

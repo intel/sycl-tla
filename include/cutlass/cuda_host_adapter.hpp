@@ -85,7 +85,7 @@ namespace cutlass {
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-#if !defined(__CUDACC_RTC__)
+#if !defined(__CUDACC_RTC__) && !defined(CUTLASS_ENABLE_SYCL)
 
 #include <cudaTypedefs.h>
 #include <driver_types.h>

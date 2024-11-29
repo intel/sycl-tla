@@ -257,29 +257,6 @@ explode(Fn fn,
   return fn(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]..., e[Ie]..., f[If]...);
 }
 
-#if defined(CUTLASS_ENABLE_SYCL)
-template <class MMA_Op,
-          class PtrD, int... Id,
-          class PtrA, int... Ia,
-          class PtrB, int... Ib,
-          class PtrC, int... Ic,
-          class PtrE, int... Ie,
-          class PtrF, int... If,
-          class PtrG, int... Ig>
-CUTE_HOST_DEVICE constexpr
-void
-explode(Fn fn,
-        PtrD&& d, int_sequence<Id...>,
-        PtrA&& a, int_sequence<Ia...>,
-        PtrB&& b, int_sequence<Ib...>,
-        PtrC&& c, int_sequence<Ic...>,
-        PtrE&& e, int_sequence<Ie...>,
-        PtrF&& f, int_sequence<If...>,
-        PtrG&& g, int_sequence<Ig...>)
-{
-  return MMA_Op::fma(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]..., e[Ie]..., f[If]..., g[Ig]...);
-}
-#else
 template <class Fn,
           class PtrD, int... Id,
           class PtrA, int... Ia,
@@ -300,6 +277,22 @@ explode(Fn fn,
         PtrG&& g, int_sequence<Ig...>)
 {
   return fn(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]..., e[Ie]..., f[If]..., g[Ig]...);
+}
+
+#if defined(CUTLASS_ENABLE_SYCL)
+template <class MMA_Op,
+          class PtrD, int... Id,
+          class PtrA, int... Ia,
+          class PtrB, int... Ib,
+          class PtrC, int... Ic>
+CUTE_HOST_DEVICE constexpr
+void
+explode_mma(PtrD&& d, int_sequence<Id...>,
+        PtrA&& a, int_sequence<Ia...>,
+        PtrB&& b, int_sequence<Ib...>,
+        PtrC&& c, int_sequence<Ic...>)
+{
+  return MMA_Op::fma(d[Id]..., a[Ia]..., b[Ib]..., c[Ic]...);
 }
 #endif
 

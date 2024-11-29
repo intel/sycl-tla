@@ -199,11 +199,13 @@ public:
     return (float(*this) != 0.0f);
   }
 
+#if !defined(CUTLASS_ENABLE_SYCL)
   /// Bitcasts to CUDA's bf16 type
   CUTLASS_DEVICE
   __nv_bfloat16 to_nv_bfloat16() const {
     return reinterpret_cast<__nv_bfloat16 const &>(storage);
   }
+#endif
 
   /// Obtains raw bits
   CUTLASS_HOST_DEVICE
@@ -676,12 +678,12 @@ bfloat16_t operator--(bfloat16_t & lhs, int) {
 //
 
 CUTLASS_HOST_DEVICE
-cutlass::bfloat16_t operator "" _bf16(long double x) {
+cutlass::bfloat16_t operator ""_bf16(long double x) {
   return cutlass::bfloat16_t(float(x));
 }
 
 CUTLASS_HOST_DEVICE
-cutlass::bfloat16_t operator "" _bf16(unsigned long long int x) {
+cutlass::bfloat16_t operator ""_bf16(unsigned long long int x) {
   return cutlass::bfloat16_t(int(x));
 }
 
