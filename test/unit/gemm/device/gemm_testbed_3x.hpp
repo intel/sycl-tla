@@ -1416,9 +1416,13 @@ struct TestbedImpl {
       }
     }
 
-    //TODO(joe): exception handling here?
 #if defined(CUTLASS_ENABLE_SYCL)
-    syclcompat::wait();
+    try {
+      syclcompat::wait_and_throw();
+    } catch (std::exception const &e) {
+      ADD_FAILURE() << "Error at Kernel Sync.";
+      return false;
+    }
 #else
     cudaError_t result;
     result = cudaDeviceSynchronize();
@@ -1520,9 +1524,14 @@ struct TestbedImpl {
     else {
       status = gemm_op.initialize(arguments, workspace.get());
       status = gemm_op.run();
-      //TODO(joe): exception handling here?
+
 #if defined(CUTLASS_ENABLE_SYCL)
-    syclcompat::wait();
+      try {
+        syclcompat::wait_and_throw();
+      } catch (std::exception const &e) {
+        ADD_FAILURE() << "Error at Kernel Sync.";
+        return false;
+      }
 #else
       cudaError_t result;
       result = cudaDeviceSynchronize();
