@@ -1360,9 +1360,13 @@ struct TestbedImpl {
     // Determine SMEM requirements and waive if not satisfied
     //
 
-    //TODO(joe): Add equivalent SYCLcompat logic
-#if !defined(CUTLASS_ENABLE_SYCL)
     size_t smem_size = static_cast<size_t>(Gemm::GemmKernel::SharedStorageSize);
+    size_t device_smem_size;
+#if defined(CUTLASS_ENABLE_SYCL)
+    syclcompat::device_info info = syclcompat::get_current_device().get_device_info();
+    this->sm_count = info.get_max_compute_units();
+    device_smem_size = info.get_local_mem_size();
+#else
 
     int device_idx;
     cudaError_t result = cudaGetDevice(&device_idx);
@@ -1378,13 +1382,13 @@ struct TestbedImpl {
     if (result != cudaSuccess) {
       throw std::runtime_error("cudaGetDeviceProperties() failed");
     }
-
-    if (properties.sharedMemPerBlockOptin < smem_size) {
+    device_smem_size = properties.sharedMemPerBlockOptin;
+#endif
+    if (device_smem_size < smem_size) {
       printf("failed due to smem_size\n");
-      printf("hardware smem_size: %d, required smem_size: %d\n\n", int(properties.sharedMemPerBlockOptin), int(smem_size));
+      printf("hardware smem_size: %d, required smem_size: %d\n\n", int(device_smem_size), int(smem_size));
       return false;
     }
-#endif
     return true;
   }
 
