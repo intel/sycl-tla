@@ -30,7 +30,7 @@ include_guard()
 
 include(ExternalProject)
 
-option(CUTLASS_SYCL_DISCONNECT_ONEMKL_UPDATE "Option is passed to the UPDATE_DISCONNECTED parameter of ExternalProject_Add for onemkl" YES)
+option(CUTLASS_SYCL_DISCONNECT_ONEMKL_UPDATE "Stop onemkl from updating when the git tag is not changed" YES)
 
 set(ONEMKL_INSTALL_DIR ${CMAKE_BINARY_DIR}/deps/oneMKL)
 set(ONEMKL_INCLUDE_DIR ${ONEMKL_INSTALL_DIR}/include)
