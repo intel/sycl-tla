@@ -697,7 +697,6 @@ struct HostCollectiveEpilogue {
   // FusionOperation derived types/queries
   //
   using EpiloguePolicy = typename Epilogue::DispatchPolicy;
-  //TODO(joe): test this correctly catches the legacy case...
   static constexpr bool IsLegacy = IsLegacyEpiloguePolicy<EpiloguePolicy>::value;
 
   using FusionOp = typename Gemm::EpilogueOutputOp;
