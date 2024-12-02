@@ -1794,29 +1794,46 @@ bool TestAll(double alpha = 1.0, double beta = 0.0, CheckEquality check_relative
   return passed;
 }
 
-template <
-  typename Gemm,
-  template <class T> class ActivationFunctor = cutlass::epilogue::thread::Identity
->
-bool TestSingleShapeXe(double alpha = 1.0, double beta = 0.0, CheckEquality check_relative_equality = CheckEquality::RELATIVE) {
-  using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
-  ProblemShapeType problem_size{256, 256, 32, 1};
-  Testbed3x<Gemm, ActivationFunctor> testbed(check_relative_equality, ScalarLoc::ON_HOST, VectorBeta::DISABLED);
-
+template <typename Gemm, template <class T> class ActivationFunctor =
+                             cutlass::epilogue::thread::Identity>
+bool TestXe(
+    double alpha = 1.0, double beta = 0.0,
+    CheckEquality check_relative_equality = CheckEquality::RELATIVE) {
   using ElementScalar = typename Gemm::EpilogueOutputOp::ElementScalar;
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
+  Testbed3x<Gemm, ActivationFunctor> testbed(
+    check_relative_equality, ScalarLoc::ON_HOST, VectorBeta::DISABLED);
+
+  // For M & N we test a small and a big size
+  // For K, we currently only support K = TileShapeK
+  // We set L = 1 throughout
+  int max_alignment = 4; //std::max(Gemm::kAlignmentA, Gemm::kAlignmentB);
+  std::vector<int> problem_size_m = {max_alignment, 512 - 3 * max_alignment};
+  std::vector<int> problem_size_n = {max_alignment, 512 - 2 * max_alignment};
+
+  constexpr int TileShapeK = cute::size<2>(typename Gemm::GemmKernel::TileShape{});
+  std::vector<int> problem_size_k = {TileShapeK};
+
   bool passed = true;
 
-  passed = testbed.run(
-    problem_size,
-      cutlass::from_real<ElementScalar>(alpha),
-    cutlass::from_real<ElementScalar>(beta)
-  );
-
+  for (int m : problem_size_m) {
+    for (int n : problem_size_n) {
+      for (int k : problem_size_k) {
+        ProblemShapeType problem_size{m, n, k, 1};
+        passed =
+            testbed.run(problem_size, cutlass::from_real<ElementScalar>(alpha),
+                        cutlass::from_real<ElementScalar>(beta));
+        if (!passed) {
+          std::cout << __FILE__ << ':' << __LINE__ << " : GEMM MNK " << m << " "
+                    << n << " " << k << " FAILED.\n";
+          return false;
+        }
+      }
+    }
+  }
   return passed;
 }
-
 
 template <typename Gemm>
 bool TestAllBiasElementwise(double alpha = 1.0, double beta = 0.0, CheckEquality check_relative_equality = CheckEquality::EXACT) {
