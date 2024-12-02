@@ -83,16 +83,6 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
-
-    // validate the arguments
-    bool m_valid = m > 0 && m % 16 == 0;
-    bool n_valid = n > 0 && n % 32 == 0;
-    bool k_valid = k > 0 && k % 32 == 0;
-    bool l_valid = l > 0;
-    if (!(m_valid && n_valid && k_valid && l_valid)) {
-      std::cout << "invalid arguments. Must be a multiple of (16, 32, 32)\n";
-      std::exit(1);
-    }
   }
 
   /// Prints the usage statement.
@@ -237,7 +227,10 @@ struct ExampleRunner {
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    gemm_op.can_implement(arguments);
+    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
+      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      std::exit(1);
+    }
 
     gemm_op.initialize(arguments, workspace.get());
 
@@ -348,7 +341,7 @@ int main(int argc, const char** argv)
           XE_2D_U32x8x16_ST_N,
           void, void>;
 
-// Mainloop
+  // Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
