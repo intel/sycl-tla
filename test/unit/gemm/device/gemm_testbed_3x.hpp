@@ -1808,7 +1808,8 @@ bool TestXe(
   // For M & N we test a small and a big size
   // For K, we currently only support K = TileShapeK
   // We set L = 1 throughout
-  int max_alignment = 4; //std::max(Gemm::kAlignmentA, Gemm::kAlignmentB);
+  // TODO(codeplay): unhardcode max_alignment
+  int max_alignment = 4;
   std::vector<int> problem_size_m{max_alignment, 512 - 3 * max_alignment};
   std::vector<int> problem_size_n{max_alignment, 512 - 2 * max_alignment};
 
