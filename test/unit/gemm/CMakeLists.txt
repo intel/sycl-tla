@@ -27,41 +27,41 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 if(NOT CUTLASS_ENABLE_SYCL)
-add_subdirectory(thread)
-add_subdirectory(warp)
-add_subdirectory(threadblock)
-add_subdirectory(device)
+  add_subdirectory(thread)
+  add_subdirectory(warp)
+  add_subdirectory(threadblock)
+  add_subdirectory(device)
 
-add_custom_target(
-  cutlass_test_unit_gemm
-  DEPENDS
-  cutlass_test_unit_gemm_thread
-  cutlass_test_unit_gemm_warp
-  cutlass_test_unit_gemm_threadblock
-  cutlass_test_unit_gemm_device
+  add_custom_target(
+    cutlass_test_unit_gemm
+    DEPENDS
+    cutlass_test_unit_gemm_thread
+    cutlass_test_unit_gemm_warp
+    cutlass_test_unit_gemm_threadblock
+    cutlass_test_unit_gemm_device
   )
 
-add_custom_target(
-  test_unit_gemm
-  DEPENDS
-  test_unit_gemm_thread
-  test_unit_gemm_warp
-  test_unit_gemm_threadblock
-  test_unit_gemm_device
+  add_custom_target(
+    test_unit_gemm
+    DEPENDS
+    test_unit_gemm_thread
+    test_unit_gemm_warp
+    test_unit_gemm_threadblock
+    test_unit_gemm_device
   )
 else()
 
-add_subdirectory(device)
+  add_subdirectory(device)
 
-add_custom_target(
-  cutlass_test_unit_gemm
-  DEPENDS
-  cutlass_test_unit_gemm_device
+  add_custom_target(
+    cutlass_test_unit_gemm
+    DEPENDS
+    cutlass_test_unit_gemm_device
   )
 
-add_custom_target(
-  test_unit_gemm
-  DEPENDS
-  test_unit_gemm_device
+  add_custom_target(
+    test_unit_gemm
+    DEPENDS
+    test_unit_gemm_device
   )
 endif()
