@@ -79,7 +79,7 @@ template <
                         cutlass::epilogue::fusion::LinearCombination<ElementD,ElementCompute,ElementC,ElementCompute>> ||
         cute::is_same_v<FusionOpOrCallbacks,
                         cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu,
-                        ElementD,ElementCompute,ElementC,ElementCompute>> ||
+                        ElementD, ElementCompute, ElementC, ElementCompute>> ||
         cute::is_same_v<FusionOpOrCallbacks,
                         cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::Identity,
                         ElementD,ElementCompute,ElementC,ElementCompute>>)

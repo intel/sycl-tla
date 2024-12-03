@@ -1809,11 +1809,11 @@ bool TestXe(
   // For K, we currently only support K = TileShapeK
   // We set L = 1 throughout
   int max_alignment = 4; //std::max(Gemm::kAlignmentA, Gemm::kAlignmentB);
-  std::vector<int> problem_size_m = {max_alignment, 512 - 3 * max_alignment};
-  std::vector<int> problem_size_n = {max_alignment, 512 - 2 * max_alignment};
+  std::vector<int> problem_size_m{max_alignment, 512 - 3 * max_alignment};
+  std::vector<int> problem_size_n{max_alignment, 512 - 2 * max_alignment};
 
   constexpr int TileShapeK = cute::size<2>(typename Gemm::GemmKernel::TileShape{});
-  std::vector<int> problem_size_k = {TileShapeK};
+  std::vector<int> problem_size_k{TileShapeK};
 
   bool passed = true;
 

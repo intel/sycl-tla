@@ -350,10 +350,10 @@ cutlass_test_unit_add_executable(
 )
 
 if(SYCL_INTEL_TARGET)
-cutlass_test_unit_add_executable(
-  cutlass_test_unit_gemm_device_tensorop_epilogue_fusion_xe
-  xe_gemm_bf16_bf16_fp32_tensor_op_fp32_evt.cpp
-)
+  cutlass_test_unit_add_executable(
+    cutlass_test_unit_gemm_device_tensorop_epilogue_fusion_xe
+    xe_gemm_bf16_bf16_fp32_tensor_op_fp32_evt.cpp
+  )
 endif()
 
 cutlass_test_unit_add_executable(
