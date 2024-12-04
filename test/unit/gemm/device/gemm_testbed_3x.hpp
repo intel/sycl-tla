@@ -194,18 +194,11 @@ struct IsDefaultEpilogue<cutlass::epilogue::collective::detail::Sm90TmaWarpSpeci
   static constexpr bool value = true;
 };
 
-template <typename Epilogue, typename = void>
-struct IsLegacyEpiloguePolicy {
-  static constexpr bool value = false;
-};
+template <typename T>
+struct IsLegacyEpiloguePolicy : std::false_type{};
 
-template <typename Epilogue>
-struct IsLegacyEpiloguePolicy<Epilogue, cute::void_t<typename Epilogue::DispatchPolicy>> {
-  using EpiloguePolicy = typename Epilogue::DispatchPolicy;
-  static constexpr bool value = cute::is_same_v<
-                                      EpiloguePolicy,
-                                      cutlass::epilogue::Sm90TmaWarpSpecializedBiasElementwise<Ts...>>;
-};
+template <auto ...Ts>
+struct IsLegacyEpiloguePolicy<cutlass::epilogue::Sm90TmaWarpSpecializedBiasElementwise<Ts...>> : std::true_type{};
 
 // The number of splits to test.
 //
@@ -2469,7 +2462,7 @@ bool TestXe(
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
   Testbed3x<Gemm, ActivationFunctor> testbed(
-    check_relative_equality, ScalarLoc::ON_HOST, VectorBeta::DISABLED);
+    check_relative_equality, ScalarLoc::ON_HOST, VectorScale::DISABLED);
 
   // For M & N we test a small and a big size
   // For K, we currently only support K = TileShapeK
