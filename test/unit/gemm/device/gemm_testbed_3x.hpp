@@ -754,12 +754,20 @@ struct HostCollectiveMainloopSparse
 
     status = compressor_op.run();
 
+#if defined(CUTLASS_ENABLE_SYCL)
+    try {
+      syclcompat::wait_and_throw();
+    } catch (std::exception const &e) {
+      ADD_FAILURE() << "Error at Kernel Sync.";
+      return false;
+    }
+#else
     auto result = cudaDeviceSynchronize();
     if (result != cudaSuccess) {
       EXPECT_EQ(result, cudaSuccess) << "Error at Kernel Sync.";
       return false;
     }
-
+#endif
     layout_a = SparseConfig::fill_layoutA(problem_shape_MNKL);
     layout_e = SparseConfig::fill_layoutE(problem_shape_MNKL);
 
@@ -2109,15 +2117,18 @@ struct TestbedImpl {
       return profile(problem_size, static_cast<int>(iterations), gemm_op, arguments, workspace);
     }
     else {
-      cudaError_t result;
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
       CUTLASS_TRACE_HOST("TestbedImpl::run: Calling gemm_op.initialize");
 #endif
       status = gemm_op.initialize(arguments, workspace.get());
       if (status != cutlass::Status::kSuccess) {
+#if defined(CUTLASS_ENABLE_SYCL)
+      std::cerr << "This test is not supported." << "\n";
+#else
         cudaError_t error = cudaGetLastError();
         const auto error_str = cudaGetErrorString(error);
         CUTLASS_TRACE_HOST("TestbedImpl::run: cudaGetLastError() is " << error_str);
+#endif
       }
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
       CUTLASS_TRACE_HOST("TestbedImpl::run: Calling gemm_op.run");
@@ -2158,9 +2169,11 @@ struct TestbedImpl {
       bool passed = this->verify(problem_size, alpha, beta);
       if (!passed) {
         CUTLASS_TRACE_HOST("TestbedImpl::run: this->verify FAILED");
+#if !defined(CUTLASS_ENABLE_SYCL)
         cudaError_t error = cudaGetLastError();
         const auto error_str = cudaGetErrorString(error);
         CUTLASS_TRACE_HOST("TestbedImpl::run: cudaGetLastError() is " << error_str);
+#endif
 
         std::cout << "Error : Failed : with alpha: " << alpha << ", beta: " << beta
                   << "\n";
