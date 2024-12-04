@@ -44,6 +44,10 @@ if(CUTLASS_ENABLE_SYCL)
       DEPENDS
       test_unit_gemm_device_tensorop_epilogue_fusion_xe
     )
+  else()
+    # Dummy targets if not building for Intel
+    add_custom_target(cutlass_test_unit_gemm_device)
+    add_custom_target(test_unit_gemm_device)
   endif()
 else()
 
