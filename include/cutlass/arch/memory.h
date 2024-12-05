@@ -108,6 +108,8 @@ struct global_load<AccessType,
         : "l"(ptr), "r"((int)pred_guard), "r"(data[0].x), "r"(data[0].y),
           "r"(data[0].z), "r"(data[0].w), "r"(data[1].x), "r"(data[1].y),
           "r"(data[1].z), "r"(data[1].w), "l"(((uint8_t *)ptr) + 16));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -141,6 +143,8 @@ struct global_load<AccessType,
         : "l"(ptr), "r"((int)pred_guard), "r"(data[0].x), "r"(data[0].y),
           "r"(data[0].z), "r"(data[0].w), "r"(data[1].x), "r"(data[1].y),
           "r"(data[1].z), "r"(data[1].w), "l"(((uint8_t *)ptr) + 16));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -170,6 +174,8 @@ struct global_load<AccessType,
         "}\n"
         : "=r"(data.x), "=r"(data.y), "=r"(data.z), "=r"(data.w)
         : "l"(ptr), "r"((int)pred_guard), "r"(data.x), "r"(data.y), "r"(data.z), "r"(data.w));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -195,6 +201,8 @@ struct global_load<AccessType,
         "}\n"
         : "=r"(data.x), "=r"(data.y), "=r"(data.z), "=r"(data.w)
         : "l"(ptr), "r"((int)pred_guard), "r"(data.x), "r"(data.y), "r"(data.z), "r"(data.w));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -222,6 +230,8 @@ struct global_load<AccessType,
         "}\n"
         : "=r"(data.x), "=r"(data.y)
         : "l"(ptr), "r"((int)pred_guard), "r"(data.x), "r"(data.y));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -245,6 +255,8 @@ struct global_load<AccessType,
         "}\n"
         : "=r"(data.x), "=r"(data.y)
         : "l"(ptr), "r"((int)pred_guard), "r"(data.x), "r"(data.y));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -271,6 +283,8 @@ struct global_load<AccessType,
         "}\n"
         : "=r"(data)
         : "l"(ptr), "r"((int)pred_guard), "r"(data));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -293,6 +307,8 @@ struct global_load<AccessType,
         "}\n"
         : "=r"(data)
         : "l"(ptr), "r"((int)pred_guard), "r"(data));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -319,6 +335,8 @@ struct global_load<AccessType,
         "}\n"
         : "=h"(data)
         : "l"(ptr), "r"((int)pred_guard), "h"(data));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -341,6 +359,8 @@ struct global_load<AccessType,
         "}\n"
         : "=h"(data)
         : "l"(ptr), "r"((int)pred_guard), "h"(data));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -396,6 +416,8 @@ struct global_store<AccessType, 64> {
         "r"(data[2].x), "r"(data[2].y), "r"(data[2].z), "r"(data[2].w),
         "l"(((uint8_t *)ptr) + 48),
         "r"(data[3].x), "r"(data[3].y), "r"(data[3].z), "r"(data[3].w));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -418,6 +440,8 @@ struct global_store<AccessType, 32> {
       : "l"(ptr), "r"(data[0].x), "r"(data[0].y), "r"(data[0].z),
         "r"(data[0].w), "r"((int)pred_guard), "l"(((uint8_t *)ptr) + 16),
         "r"(data[1].x), "r"(data[1].y), "r"(data[1].z), "r"(data[1].w));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -436,6 +460,8 @@ struct global_store<AccessType, 16> {
       "}\n"
       :
       : "l"(ptr), "r"(data.x), "r"(data.y), "r"(data.z), "r"(data.w), "r"((int)pred_guard));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -454,6 +480,8 @@ struct global_store<AccessType, 8> {
       "}\n"
       :
       : "l"(ptr), "r"(data.x), "r"(data.y), "r"((int)pred_guard));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -472,6 +500,8 @@ struct global_store<AccessType, 4> {
       "}\n"
       :
       : "l"(ptr), "r"(data), "r"((int)pred_guard));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -490,6 +520,8 @@ struct global_store<AccessType, 2> {
       "}\n"
       :
       : "l"(ptr), "h"(data), "r"((int)pred_guard));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
   }
 };
@@ -518,6 +550,8 @@ void shared_load<2>(void *dst, uint32_t ptr) {
   asm volatile("ld.shared.u16 %0, [%1];\n"
     : "=h"(*reinterpret_cast<uint16_t *>(dst))
     : "r"(ptr));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
 }
 
@@ -529,6 +563,8 @@ void shared_load<4>(void *dst, uint32_t ptr) {
   asm volatile("ld.shared.u32 %0, [%1];\n"
     : "=r"(*reinterpret_cast<uint32_t *>(dst))
     : "r"(ptr));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
 }
 
@@ -543,6 +579,8 @@ void shared_load<8>(void *dst, uint32_t ptr) {
       "=r"(dst_u64->x),
       "=r"(dst_u64->y)
     : "r"(ptr));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
 }
 
@@ -559,6 +597,8 @@ void shared_load<16>(void *dst, uint32_t ptr) {
       "=r"(dst_u128->z),
       "=r"(dst_u128->w)
     : "r"(ptr));
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
 }
 
@@ -580,6 +620,8 @@ void shared_store<2>(uint32_t ptr, void const *src) {
     "r"(ptr),
     "h"(*reinterpret_cast<uint16_t const *>(src))
   );
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
 }
 
@@ -593,6 +635,8 @@ void shared_store<4>(uint32_t ptr, void const *src) {
     "r"(ptr),
     "r"(*reinterpret_cast<uint32_t const  *>(src))
   );
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
 }
 
@@ -608,6 +652,8 @@ void shared_store<8>(uint32_t ptr, void const *src) {
       "r"(dst_u64->x),
       "r"(dst_u64->y)
     );
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
 }
 
@@ -625,6 +671,8 @@ void shared_store<16>(uint32_t ptr, void const *src) {
       "r"(dst_u128->z),
       "r"(dst_u128->w)
     );
+#else
+  CUTE_GCC_UNREACHABLE;
 #endif
 }
 
