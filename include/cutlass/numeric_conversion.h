@@ -3664,10 +3664,10 @@ private:
 
     CUTLASS_PRAGMA_UNROLL
     for (int ii = 0; ii < PackedResultType::kElements; ++ii) {
-#if defined(__CUDA_ARCH__)
-      t[ii] = __dp4a(x, mask[ii], 0);
+#if defined(CUTLASS_ENABLE_SYCL)
+      t[ii] = syclcompat::dp4a(x, mask[ii], 0);
 #else
-      t[ii] = x * mask[ii];
+      t[ii] = __dp4a(x, mask[ii], 0);
 #endif
       r[ii] = static_cast<float>(t[ii]);
     }
