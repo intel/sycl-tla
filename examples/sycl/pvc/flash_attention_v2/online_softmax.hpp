@@ -93,13 +93,14 @@ struct Softmax {
     CUTLASS_DEVICE static constexpr 
     void scale_exp_log2(FragAcc &acc, FragMax const max, Element const scale) {
         CUTLASS_PRAGMA_UNROLL
-        for(int x = 0; x < SizeA; x++) {
+        for(int y = 0; y < SizeB; y++) { //size B = 4
             CUTLASS_PRAGMA_UNROLL
-            for(int y = 0; y < SizeB; y++) {
+            for(int x = 0; x < SizeA; x++) { //size A =8
                 Element max_scale = !CheckInf ? max(x, y) : max(x, y) == -INFINITY ? Element{0} : max(x, y);
                 CUTLASS_PRAGMA_UNROLL
-                for(int z = 0; z < SizeC; z++) {
-                    acc(x, y, z) = sycl::native::exp2((acc(x, y, z) - max_scale) * scale);
+                for(int z = 0; z < SizeC; z++) { // size C equal to 2
+                    Element eq = (acc(x, y, z) - max_scale) * scale;
+                    acc(x, y, z) =  sycl::native::exp2(eq);
                 }
             }
         }
@@ -117,9 +118,9 @@ struct Softmax {
     CUTLASS_DEVICE static void workitem_reduce(FragSrc const &src, FragDst &dst, Op op) {
         // reduction per work item
         CUTLASS_PRAGMA_UNROLL
-        for(int x = 0; x < SizeA; x++) {
+        for(int y = 0; y < SizeB; y++) {
             CUTLASS_PRAGMA_UNROLL
-            for(int y = 0; y < SizeB; y++) {
+            for(int x = 0; x < SizeA; x++) {
                 dst(x, y) = zero_init ? src(x, y, 0) : op(dst(x, y), src(x, y, 0));
                 CUTLASS_PRAGMA_UNROLL
                 for(int z = 1; z < SizeC; z++) {
@@ -224,13 +225,13 @@ struct Softmax {
         cute::Tensor max_prev = cute::make_fragment_like(max);
         cute::copy(max, max_prev);
         reduce_max<is_first, SizeA, SizeB, SizeC>(frag_s, max);
-
         CUTLASS_PRAGMA_UNROLL
         for(int x = 0; x < SizeA; x++) {
             CUTLASS_PRAGMA_UNROLL
             for(int y = 0; y < SizeB; y++) {
                 Element curr_max = !CheckInf ? max(x, y) : max(x, y) == -INFINITY ? 0.0f : max(x, y);
-                Element curr_scale = sycl::native::exp2((max_prev(x, y) - curr_max) * params.scale);
+                Element eq = (max_prev(x, y) - curr_max) *params.scale;
+                Element curr_scale = sycl::native::exp2(eq);
                 sum(x, y) *= curr_scale;
                 CUTLASS_PRAGMA_UNROLL
                 for(int z = 0; z < SizeC; z++) {
