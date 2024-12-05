@@ -1110,7 +1110,8 @@ struct HostCollectiveEpilogue {
   //
   // FusionOperation derived types/queries
   //
-  static constexpr bool IsLegacy = detail::IsLegacyEpiloguePolicy<Epilogue>::value;
+  using EpiloguePolicy = typename Epilogue::DispatchPolicy;
+  static constexpr bool IsLegacy = detail::IsLegacyEpiloguePolicy<EpiloguePolicy>::value;
 
   // FFMA2 SGEMM uses ThreadEpilogueOp for bias and relu support instead of FusionOp, so we compose LinCombPerRowBiasEltAct FusionOp by hand to test the functionality.
   static constexpr bool IsFfma2Kernel = cute::is_same_v<ScheduleType, cutlass::gemm::KernelMultistage>;
