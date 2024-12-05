@@ -49,8 +49,10 @@ int LaneId() {
   int ret;
 #if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
   asm ("mov.u32 %0, %%laneid;" : "=r"(ret) : );
-#endif
   return ret;
+#else
+  CUTE_GCC_UNREACHABLE;
+#endif
 }
 
 /// Computes SM number the thread is running on
@@ -59,8 +61,10 @@ int SmId() {
   int ret;
 #if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
   asm ("mov.u32 %0, %%smid;" : "=r"(ret) : );
-#endif
   return ret;
+#else
+  CUTE_GCC_UNREACHABLE;
+#endif
 }
 
 #endif
