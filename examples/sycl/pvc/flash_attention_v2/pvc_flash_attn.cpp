@@ -194,9 +194,8 @@ struct ExampleRunner {
 
     syclcompat::wait();
 
-    int host_size = batch_size *seq_len *seq_len;
-    ElementOutput *host_S = new ElementOutput[host_size];
-    syclcompat::memcpy<ElementOutput>(host_S, block_S.get(), host_size);
+    std::vector<ElementOutput> host_S(batch_size * seq_len * seq_len);
+    syclcompat::memcpy<ElementOutput>(host_S.data(), block_S.get(), host_S.size());
     syclcompat::wait();
 
     if(is_causal) {
@@ -212,8 +211,7 @@ struct ExampleRunner {
     }
 
     // compute max element per row of S
-    ElementOutput *max_vec = new ElementOutput[batch_size * seq_len];
-    std::memset(max_vec, -INFINITY, batch_size * seq_len);
+    std::vector<ElementOutput> max_vec(batch_size * seq_len, -INFINITY);
     for (int b = 0; b < batch_size; b++) {
       for (int row = 0; row < seq_len; row++) {
         int idx = (b * seq_len + row) * seq_len;
@@ -238,8 +236,7 @@ struct ExampleRunner {
     }
 
     // compute sum per row of S
-    ElementOutput *sum_vec = new ElementOutput[batch_size * seq_len];
-    std::memset(sum_vec, 0.0f, batch_size * seq_len);
+    std::vector<ElementOutput> sum_vec(batch_size * seq_len, ElementOutput{0});
     for (int b = 0; b < batch_size; b++) {
       for (int row = 0; row < seq_len; row++) {
         int idx = (b * seq_len + row) * seq_len;
@@ -257,13 +254,13 @@ struct ExampleRunner {
       } 
     }
 
-    ElementV *host_P = new ElementV[host_size];
-    for(int p = 0; p < host_size; p++) host_P[p] = static_cast<ElementV>(host_S[p]);
+    std::vector<ElementV> host_P(host_S.size());
+    for(int p = 0; p < host_P.size(); p++) host_P[p] = static_cast<ElementV>(host_S[p]);
 
     cutlass::DeviceAllocation<ElementV> block_P;
-    block_P.reset(host_size);
+    block_P.reset(host_P.size());
 
-    syclcompat::memcpy<ElementV>(block_P.get(), host_P, host_size);
+    syclcompat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
     syclcompat::wait();
 
     cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len, seq_len}));
@@ -289,17 +286,15 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
-    bool passed =cutlass::reference::device::BlockCompareRelativelyEqual(
+    bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(
       block_ref_O.get(), block_O.get(), block_O.size(), 0.5f, 0.5f);
-    delete[] host_P;
-    delete[] host_S;
-    delete[] sum_vec;
-    delete[] max_vec;
+
     return passed;
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(const ProblemShapeType& problem_size) {
+    // auto problem_shape = cute::append<4>(problem_size, 1);
     auto [batch, num_heads, seq_len, head_size] = problem_size;
 
     stride_Q = cutlass::make_cute_packed_stride(StrideQ{}, cute::make_shape(seq_len, head_size, batch * num_heads));
