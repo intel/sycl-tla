@@ -96,13 +96,11 @@ struct Softmax {
         for(int y = 0; y < SizeB; y++) { //size B = 4
             CUTLASS_PRAGMA_UNROLL
             for(int x = 0; x < SizeA; x++) { //size A =8
-                Element max_scale =  max(x, y);
+                const Element max_scaled =!CheckInf ? max(x, y) * scale : max(x, y) == -INFINITY ? 0.f : (max(x, y) * scale );
                 CUTLASS_PRAGMA_UNROLL
                for(int z = 0; z < SizeC; z+=2) { // size C = 2
-                    Element eq0 = (acc(x, y, z) - max_scale);
-                    Element eq1 = (acc(x, y, z+1) - max_scale);
-                    eq0 *= scale;
-                    eq1 *= scale;
+                    Element eq0 = (acc(x, y, z) * scale - max_scaled);
+                    Element eq1 = (acc(x, y, z+1) * scale - max_scaled);
                     acc(x, y, z) =  sycl::native::exp2(eq0);
                     acc(x, y, z+1) = sycl::native::exp2(eq1);
                }
@@ -233,9 +231,8 @@ struct Softmax {
         for(int x = 0; x < SizeA; x++) {
             CUTLASS_PRAGMA_UNROLL
             for(int y = 0; y < SizeB; y++) {
-                Element curr_max = max(x, y);
-                Element eq = (max_prev(x, y) - curr_max);
-                eq*=params.scale;
+                const Element curr_max_scaled = !CheckInf ? max(x, y) * params.scale: max(x, y) == -INFINITY ? 0.f : (max(x, y) * params.scale);
+                const Element eq = (max_prev(x, y) * params.scale - curr_max_scaled);
                 Element curr_scale = sycl::native::exp2(eq);
                 sum(x, y) *= curr_scale;
                 CUTLASS_PRAGMA_UNROLL
