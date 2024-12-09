@@ -35,6 +35,7 @@
 #pragma once
 
 #include "cutlass/cutlass.h"
+#include "cutlass/platform/platform.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -51,7 +52,7 @@ int LaneId() {
   asm ("mov.u32 %0, %%laneid;" : "=r"(ret) : );
   return ret;
 #else
-  CUTE_GCC_UNREACHABLE;
+  CUTLASS_GCC_UNREACHABLE;
 #endif
 }
 
@@ -63,7 +64,7 @@ int SmId() {
   asm ("mov.u32 %0, %%smid;" : "=r"(ret) : );
   return ret;
 #else
-  CUTE_GCC_UNREACHABLE;
+  CUTLASS_GCC_UNREACHABLE;
 #endif
 }
 
