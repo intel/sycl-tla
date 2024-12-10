@@ -48,8 +48,6 @@
 #include "cutlass/tensor_view.h"
 #include "cutlass/coord.h"
 
-#include "common.hpp"
-
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -191,6 +189,18 @@ struct ExampleRunner {
       block_ref_D.get(), block_D.get(), block_D.size());
 
     return passed;
+  }
+
+  template <typename T>
+  void initialize_block(cutlass::DeviceAllocation<T> block_device, uint64_t seed) {
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_real_distribution<> dist(0.0f, 1.0f);
+    rng.seed(seed);
+
+    auto block_host = std::vector<ElementA>(block_device.size());
+    for (auto& element : block_host) {
+      element = static_cast<T>(dist(rng)); // Cast to ElementA type if needed
+    }
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM

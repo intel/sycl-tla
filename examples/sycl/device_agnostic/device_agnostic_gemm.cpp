@@ -36,6 +36,7 @@
 #include "cutlass/util/GPU_Clock.hpp"
 
 #include <cute/tensor.hpp>
+#include <vector>
 #include <random>
 
 #include "cutlass/util/command_line.h"
@@ -43,7 +44,6 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "common.hpp"
 
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/sycl_tensor_fill.h"
@@ -106,9 +106,7 @@ struct Options {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <
-  class Gemm
->
+template <class Gemm>
 struct ExampleRunner {
 
   using StrideA = typename Gemm::GemmKernel::StrideA;
@@ -189,6 +187,18 @@ struct ExampleRunner {
     return passed;
   }
 
+  template <typename T>
+  void initialize_block(cutlass::DeviceAllocation<T> block_device, uint64_t seed) {
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_real_distribution<> dist(0.0f, 1.0f);
+    rng.seed(seed);
+
+    auto block_host = std::vector<ElementA>(block_device.size());
+    for (auto& element : block_host) {
+      element = static_cast<T>(dist(rng)); // Cast to ElementA type if needed
+    }
+  }
+
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(const ProblemShapeType& problem_size) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
@@ -204,6 +214,14 @@ struct ExampleRunner {
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
+
+    auto block_A_host = std::vector<ElementA>(block_A.size());
+    auto block_B_host = std::vector<ElementA>(block_B.size());
+    auto block_C_host = std::vector<ElementA>(block_C.size());
+    auto block_D_host = std::vector<ElementA>(block_D.size());
+    auto block_ref_D_host = std::vector<ElementA>(block_ref_D.size());
+
+
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
@@ -356,15 +374,15 @@ int main(int argc, const char** argv)
   >;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-  Shape<int, int, int, int>,
-  CollectiveMainloop,
-  CollectiveEpilogue
-  >;
+    Shape<int, int, int, int>,
+    CollectiveMainloop,
+    CollectiveEpilogue>;
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
   ExampleRunner<Gemm> runner;
 
   runner.run(options, hw_info);
+
   return 0;
 }
