@@ -97,7 +97,12 @@ protected:
   {
     int state = 0;
 
-#if (__CUDA_ARCH__ >= 700)
+#if defined (SYCL_INTEL_TARGET)
+    auto atm = sycl::atomic_ref<int, sycl::memory_order::acq_rel, 
+                                     sycl::memory_scope::device, 
+                                     sycl::access::address_space::global_space>(*ptr);
+    return atm.load(sycl::memory_order::acquire);
+#elif (__CUDA_ARCH__ >= 700)
     /// SM70 and newer use memory consistency qualifiers
 
     // Acquire pattern using acquire modifier
@@ -276,7 +281,7 @@ private:
   CUTLASS_DEVICE
   static void
   check_barrier_in_range([[maybe_unused]] uint32_t idx) {
-    assert((idx >= MaxNumNamedBarriers) && "Index exceeds barrier count");
+    assert((idx < MaxNumNamedBarriers) && "Index exceeds barrier count");
   }
 
   template <uint32_t... Idx>

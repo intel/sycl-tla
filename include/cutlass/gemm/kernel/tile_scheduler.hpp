@@ -40,6 +40,9 @@
 #include "cutlass/gemm/kernel/sm90_tile_scheduler.hpp"
 #include "cutlass/gemm/kernel/sm90_tile_scheduler_stream_k.hpp"
 #include "cutlass/gemm/kernel/sm90_tile_scheduler_group.hpp"
+#if defined (SYCL_INTEL_TARGET)
+#include "cutlass/gemm/kernel/xe_tile_scheduler_streamk.hpp"
+#endif
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm {
@@ -86,10 +89,10 @@ template <
   class ClusterShape
 >
 struct TileSchedulerSelector<
-  PersistentScheduler,
-  ArchTag,
-  TileShape,
-  ClusterShape
+    PersistentScheduler,
+    ArchTag,
+    TileShape,
+    ClusterShape
   > {
   using Scheduler = PersistentTileSchedulerSm90;
 };
@@ -101,16 +104,16 @@ template <
   class ClusterShape
 >
 struct TileSchedulerSelector<
-  void,
-  ArchTag,
-  TileShape,
-  ClusterShape
-  > {
-  using Scheduler = typename TileSchedulerSelector<
-    PersistentScheduler,
+    void,
     ArchTag,
     TileShape,
     ClusterShape
+  > {
+  using Scheduler = typename TileSchedulerSelector<
+      PersistentScheduler,
+      ArchTag,
+      TileShape,
+      ClusterShape
   >::Scheduler;
 };
 
@@ -119,13 +122,28 @@ template <
   class ClusterShape
 >
 struct TileSchedulerSelector<
-  StreamKScheduler,
-  arch::Sm90,
-  TileShape,
-  ClusterShape
+    StreamKScheduler,
+    arch::Sm90,
+    TileShape,
+    ClusterShape
   > {
   using Scheduler = PersistentTileSchedulerSm90StreamK<TileShape, ClusterShape>;
 };
+
+#if defined (SYCL_INTEL_TARGET)
+template <
+  class TileShape,
+  class ClusterShape
+>
+struct TileSchedulerSelector<
+  StreamKScheduler,
+  arch::IntelPVC,
+  TileShape,
+  ClusterShape
+  > {
+  using Scheduler = PersistentTileSchedulerXeStreamK<TileShape>;
+};
+#endif
 
 template <
   class TileShape,
@@ -133,11 +151,11 @@ template <
   , class GroupProblemShape
 >
 struct TileSchedulerSelector<
-  GroupScheduler,
-  arch::Sm90,
-  TileShape,
-  ClusterShape
-  , GroupProblemShape
+    GroupScheduler,
+    arch::Sm90,
+    TileShape,
+    ClusterShape
+    , GroupProblemShape
   > {
   using Scheduler = PersistentTileSchedulerSm90Group<GroupProblemShape>;
 };

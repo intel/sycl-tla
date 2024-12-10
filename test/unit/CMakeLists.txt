@@ -92,7 +92,7 @@ function(cutlass_test_unit_add_executable NAME)
     target_link_libraries(
       ${NAME}
       PUBLIC
-      GTest::gtest
+      GTest::gtest 
     )
   else()
     target_link_libraries(
@@ -135,6 +135,7 @@ add_custom_target(test_unit)
 if (CUTLASS_ENABLE_SYCL)
   set(SUBDIRS
     cute
+    gemm
   )
 else()
   set(SUBDIRS
