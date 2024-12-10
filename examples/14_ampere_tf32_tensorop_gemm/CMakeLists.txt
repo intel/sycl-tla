@@ -34,7 +34,7 @@ if (NOT CUTLASS_ENABLE_SYCL)
     )
 endif()
 
-if (SYCL_NVIDIA_TARGET)
+if (NOT SYCL_INTEL_TARGET)
   cutlass_example_add_executable(
     14_ampere_tf32_tensorop_gemm_cute
     ampere_tf32_tensorop_gemm_cute.cu
