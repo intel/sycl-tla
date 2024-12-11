@@ -26,7 +26,32 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-add_custom_target(
+if(CUTLASS_ENABLE_SYCL)
+  if(SYCL_INTEL_TARGET)
+    cutlass_test_unit_add_executable(
+      cutlass_test_unit_gemm_device_tensorop_epilogue_fusion_xe
+      xe_gemm_bf16_bf16_fp32_tensor_op_fp32_evt.cpp
+    )
+
+    add_custom_target(
+      cutlass_test_unit_gemm_device
+      DEPENDS
+      cutlass_test_unit_gemm_device_tensorop_epilogue_fusion_xe
+    )
+
+    add_custom_target(
+      test_unit_gemm_device
+      DEPENDS
+      test_unit_gemm_device_tensorop_epilogue_fusion_xe
+    )
+  else()
+    # Dummy targets if not building for Intel
+    add_custom_target(cutlass_test_unit_gemm_device)
+    add_custom_target(test_unit_gemm_device)
+  endif()
+else()
+
+  add_custom_target(
   cutlass_test_unit_gemm_device
   DEPENDS
   cutlass_test_unit_gemm_device_simt
@@ -42,6 +67,7 @@ add_custom_target(
   cutlass_test_unit_gemm_device_sparse_tensorop_sm80
   cutlass_test_unit_gemv_device
   cutlass_test_unit_gemm_device_tensorop_sm90
+  cutlass_test_unit_sparse_gemm_device_tensorop_sm90
   cutlass_test_unit_gemm_device_tensorop_cluster_multicast_sm90
 )
 
@@ -251,14 +277,38 @@ cutlass_test_unit_add_executable(
   BATCH_SIZE 4
 
   # Upcast on Operand A
-  gemm_universal_u8t_f16n_f16t_mixed_input_tensor_op_f16_sm80.cu
-  gemm_universal_s8t_f16n_f16t_mixed_input_tensor_op_f16_sm80.cu
+  gemm_universal_s8t_f16n_f32t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_u8t_f16n_f32t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_s8t_f16n_f16t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_u8t_f16n_f16t_mixed_input_tensor_op_f32_sm80.cu
+
+  gemm_universal_s8t_bf16n_f32t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_u8t_bf16n_f32t_mixed_input_tensor_op_f32_sm80.cu
   gemm_universal_s8t_bf16n_bf16t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_u8t_bf16n_bf16t_mixed_input_tensor_op_f32_sm80.cu
+
+  gemm_universal_s8t_f16n_f16t_mixed_input_tensor_op_f16_sm80.cu
+  gemm_universal_u8t_f16n_f16t_mixed_input_tensor_op_f16_sm80.cu
+
+  gemm_universal_s4t_s8n_s32t_mixed_input_tensor_op_s32_sm80.cu
+  gemm_universal_s4t_s8n_s8t_mixed_input_tensor_op_s32_sm80.cu
 
   # Upcast on Operand B
-  gemm_universal_f16t_u8n_f16t_mixed_input_tensor_op_f16_sm80.cu
-  gemm_universal_f16t_s8n_f16t_mixed_input_tensor_op_f16_sm80.cu
+  gemm_universal_f16t_s8n_f32t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_f16t_u8n_f32t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_f16t_s8n_f16t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_f16t_u8n_f16t_mixed_input_tensor_op_f32_sm80.cu
+
+  gemm_universal_bf16t_s8n_f32t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_bf16t_u8n_f32t_mixed_input_tensor_op_f32_sm80.cu
   gemm_universal_bf16t_s8n_bf16t_mixed_input_tensor_op_f32_sm80.cu
+  gemm_universal_bf16t_u8n_bf16t_mixed_input_tensor_op_f32_sm80.cu
+
+  gemm_universal_f16t_s8n_f16t_mixed_input_tensor_op_f16_sm80.cu
+  gemm_universal_f16t_u8n_f16t_mixed_input_tensor_op_f16_sm80.cu
+
+  gemm_universal_s8t_s4n_s32t_mixed_input_tensor_op_s32_sm80.cu
+  gemm_universal_s8t_s4n_s8t_mixed_input_tensor_op_s32_sm80.cu
 )
 
 cutlass_test_unit_add_executable(
@@ -314,13 +364,40 @@ cutlass_test_unit_add_executable(
 cutlass_test_unit_add_executable(
   cutlass_test_unit_gemm_device_tensorop_sm90_ptr_array
   sm90_gemm_f16_f16_f16_tensor_op_f32_ptr_array.cu
+  sm90_gemm_f16_f16_f16_tensor_op_f32_ptr_array_pingpong.cu
 )
 
 # Group Gemm test
 cutlass_test_unit_add_executable(
   cutlass_test_unit_gemm_device_tensorop_sm90_group_gemm
   sm90_gemm_f16_f16_f16_tensor_op_f32_group_gemm.cu
+  sm90_gemm_f16_f16_f16_tensor_op_f32_group_gemm_pingpong.cu
 )
+
+# Sparse tests
+# Sparse kernels trigger an ICE in gcc 7.5
+if (NOT (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.0))
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_sparse_gemm_device_tensorop_sm90
+
+  # No batching of source to control compiler memory usage
+  BATCH_SOURCES ON
+  BATCH_SIZE 1
+
+  sm90_sparse_gemm_s8_s8_s32_tensor_op_s32.cu
+  sm90_sparse_gemm_f8_f8_f32_tensor_op_f32.cu
+  sm90_sparse_gemm_f16_f16_f32_tensor_op_f32.cu
+  sm90_sparse_gemm_tf32_tf32_f32_tensor_op_f32.cu
+)
+else()
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_sparse_gemm_device_tensorop_sm90
+
+  # No batching of source to control compiler memory usage
+  BATCH_SOURCES ON
+  BATCH_SIZE 1
+)
+endif()
 
 # Fused epilogue tests
 cutlass_test_unit_add_executable(
@@ -348,7 +425,8 @@ cutlass_test_unit_add_executable(
   sm90_gemm_f8_f8_bf16_tensor_op_fp32_evt.cu
   sm90_gemm_f8_f8_f32_tensor_op_f32_cluster_warpspecialized_cooperative_evt.cu
 )
-cutlass_test_unit_add_executable(
+
+  cutlass_test_unit_add_executable(
   cutlass_test_unit_gemm_device_tensorop_cluster_multicast_sm90
 
   BATCH_SOURCES ON
@@ -815,4 +893,4 @@ cutlass_test_unit_add_executable(
 )
 
 endif()
-
+endif()

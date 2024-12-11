@@ -49,6 +49,7 @@ static const int NumWarpsPerWarpGroup = NumThreadsPerWarpGroup / NumThreadsPerWa
 static const int NumThreadsPerHalfWarp = NumThreadsPerWarp / 2;
 static const int NumThreadsPerQuad = 4;
 static const int NumThreadsPerQuadPair = NumThreadsPerQuad * 2;
+static constexpr int MaxNumThreadsPerBlock = 1024;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -295,6 +296,22 @@ unsigned int shfl_sync(
 #endif
 }
 
+CUTLASS_DEVICE
+unsigned int shfl_xor_sync(
+  unsigned int const mask,
+  unsigned int const var,
+  int const laneMask,
+  int const width = NumThreadsPerWarp) {
+#if defined(__CUDA_ARCH__)
+  return __shfl_xor_sync(mask, var, laneMask, width);
+#elif defined(__SYCL_DEVICE_ONLY__)
+  auto g = syclcompat::get_nd_item<1>().get_sub_group();
+  return syclcompat::permute_sub_group_by_xor(g, var, laneMask);
+#else
+  return 0;
+#endif
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*
@@ -314,19 +331,20 @@ using cudaStream_t = void *;
 using dim3 = syclcompat::dim3;
 
 // Atomic
-
-CUTLASS_DEVICE int atomicAdd(int *address, int val) {
+template <typename T>
+CUTLASS_DEVICE T atomicAdd(T *address, T val) {
 #if defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::atomic_fetch_add(address, val);
+  return syclcompat::atomic_fetch_add<sycl::access::address_space::global_space>(address, val);
 #endif
   return 0;
 }
 
 CUTLASS_DEVICE int atomicCAS(int *address, int compare, int val) {
+  int result = 0;
 #if defined(__SYCL_DEVICE_ONLY__)
-  syclcompat::atomic_compare_exchange_strong(address, compare, val);
+  result = syclcompat::atomic_compare_exchange_strong(address, compare, val);
 #endif
-  return 0;
+  return result;
 }
 
 // Error

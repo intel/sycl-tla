@@ -69,6 +69,9 @@ function(cutlass_example_add_executable NAME)
     )
 
   if (CUTLASS_ENABLE_SYCL)
+    add_dependencies(${NAME} onemkl_project)
+    target_include_directories(${NAME} PRIVATE ${ONEMKL_INCLUDE_DIR})
+    target_link_libraries(${NAME} PUBLIC ${ONEMKL_LIB})
     add_sycl_to_target(TARGET ${NAME})
   endif()
 
@@ -149,12 +152,16 @@ if (NOT CUTLASS_ENABLE_SYCL)
     57_hopper_grouped_gemm
     58_ada_fp8_gemm
     59_ampere_gather_scatter_conv
+    61_hopper_gemm_with_topk_and_softmax
+    62_hopper_sparse_gemm
+    63_hopper_gemm_with_weight_prefetch
     )
     add_subdirectory(${EXAMPLE})
   endforeach()
 else()
   foreach(EXAMPLE
     14_ampere_tf32_tensorop_gemm
+    35_gemm_softmax
     cute
     sycl
     )
