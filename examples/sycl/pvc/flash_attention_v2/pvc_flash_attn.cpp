@@ -62,7 +62,7 @@ struct Options {
     help(false),
     error(false),
     is_causal(false),
-    batch(4), num_heads(8), seq_len(4096), head_size(64), iterations(20),
+    batch(32), num_heads(16), seq_len(512), head_size(128), iterations(100),
     softmax_scale(1.f)
   { }
 
@@ -79,10 +79,10 @@ struct Options {
       is_causal = true;
     }
 
-    cmd.get_cmd_line_argument("batch", batch, 4);
-    cmd.get_cmd_line_argument("num_heads", num_heads, 8);
-    cmd.get_cmd_line_argument("seq_len", seq_len, 4096);
-    cmd.get_cmd_line_argument("head_size", head_size, 64);
+    cmd.get_cmd_line_argument("batch", batch, 32);
+    cmd.get_cmd_line_argument("num_heads", num_heads, 16);
+    cmd.get_cmd_line_argument("seq_len", seq_len, 512);
+    cmd.get_cmd_line_argument("head_size", head_size, 128);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
 
     softmax_scale = 1 / sqrt(static_cast<float>(head_size));
