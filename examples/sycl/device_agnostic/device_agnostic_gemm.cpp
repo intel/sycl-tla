@@ -195,8 +195,10 @@ struct ExampleRunner {
 
     auto block_host = std::vector<ElementA>(block_device.size());
     for (auto& element : block_host) {
-      element = static_cast<T>(dist(rng)); // Cast to ElementA type if needed
+      element = static_cast<T>(dist(rng));
     }
+
+    block_device.copy_from_host(block_host.data());
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
@@ -214,14 +216,6 @@ struct ExampleRunner {
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
-
-    auto block_A_host = std::vector<ElementA>(block_A.size());
-    auto block_B_host = std::vector<ElementA>(block_B.size());
-    auto block_C_host = std::vector<ElementA>(block_C.size());
-    auto block_D_host = std::vector<ElementA>(block_D.size());
-    auto block_ref_D_host = std::vector<ElementA>(block_ref_D.size());
-
-
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);

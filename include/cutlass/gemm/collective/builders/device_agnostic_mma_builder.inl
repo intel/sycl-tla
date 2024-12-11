@@ -39,7 +39,8 @@
 
 
 namespace cutlass::gemm::collective {
-    template <
+
+template <
   class ElementA,
   class GmemLayoutATag,
   int AlignmentA,
@@ -67,61 +68,61 @@ struct CollectiveBuilder<
   cute::enable_if_t<
      cute::is_same_v<KernelScheduleType, KernelScheduleAuto>>
 >{
-      #ifndef CUTLASS_ENABLE_SYCL 
-        static_assert(cutlass::detail::dependent_false<arch::Agnostic>, 
-          "Trying to use device Agnostic pipeline without SYCL enabled");
-      #endif
+#ifndef CUTLASS_ENABLE_SYCL
+  static_assert(cutlass::detail::dependent_false<arch::Agnostic>,
+    "Trying to use device Agnostic pipeline without SYCL enabled");
+#endif
 
-      using TiledMMA = TiledMMA<MMA_Atom<UniversalFMA<ElementAccumulator, ElementA, ElementB, ElementAccumulator>>,
-                            Layout<Shape<_4, _4, _1>>>;
+  using TiledMMA = TiledMMA<MMA_Atom<UniversalFMA<ElementAccumulator, ElementA, ElementB, ElementAccumulator>>,
+                        Layout<Shape<_4, _4, _1>>>;
 
-      using DispatchPolicy = MainloopDeviceAgnostic;
-      using GmemTiledCopyA = decltype(
-            make_tiled_copy(Copy_Atom<UniversalCopy<ElementA>, ElementA>{},
-                            Layout<Shape<_4, _4>, Stride<_4, _1>>{},
-                            Layout<Shape<_1, _1>>{}
-            ));
+  using DispatchPolicy = MainloopDeviceAgnostic;
+  using GmemTiledCopyA = decltype(
+        make_tiled_copy(Copy_Atom<UniversalCopy<ElementA>, ElementA>{},
+                        Layout<Shape<_4, _4>, Stride<_4, _1>>{},
+                        Layout<Shape<_1, _1>>{}
+        ));
 
-      using GmemTiledCopyB = decltype(
-            make_tiled_copy(Copy_Atom<UniversalCopy<ElementB>, ElementB>{},
-                            Layout<Shape<_4, _4>, Stride<_1, _4>>{},
-                            Layout<Shape<_1, _1>>{}
-            ));
-      
-      using SmemCopyAtomA = Copy_Atom<UniversalCopy<ElementA>, ElementA>;
-      using SmemCopyAtomB = Copy_Atom<UniversalCopy<ElementB>, ElementB>;
+  using GmemTiledCopyB = decltype(
+        make_tiled_copy(Copy_Atom<UniversalCopy<ElementB>, ElementB>{},
+                        Layout<Shape<_4, _4>, Stride<_1, _4>>{},
+                        Layout<Shape<_1, _1>>{}
+        ));
 
-      // 
-      using SmemLayoutAtomA = decltype(
-        make_layout(make_shape(get<0>(TileShape_MNK{}), get<2>(TileShape_MNK{})), 
-                    make_stride(_1{}, get<0>(TileShape_MNK{})))
-      );
+  using SmemCopyAtomA = Copy_Atom<UniversalCopy<ElementA>, ElementA>;
+  using SmemCopyAtomB = Copy_Atom<UniversalCopy<ElementB>, ElementB>;
 
-      using SmemLayoutAtomB = decltype(
-        make_layout(make_shape(get<1>(TileShape_MNK{}), get<2>(TileShape_MNK{})), 
-                    make_stride(_1{}, get<1>(TileShape_MNK{})))
-      );
+  //
+  using SmemLayoutAtomA = decltype(
+    make_layout(make_shape(get<0>(TileShape_MNK{}), get<2>(TileShape_MNK{})),
+                make_stride(_1{}, get<0>(TileShape_MNK{})))
+  );
 
-      using TransformA = cute::identity;
-      using TransformB = cute::identity;
+  using SmemLayoutAtomB = decltype(
+    make_layout(make_shape(get<1>(TileShape_MNK{}), get<2>(TileShape_MNK{})),
+                make_stride(_1{}, get<1>(TileShape_MNK{})))
+  );
 
-      using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
-        MainloopDeviceAgnostic,
-        TileShape_MNK,
-        ElementA,
-        cutlass::gemm::TagToStrideA_t<GmemLayoutATag>,
-        ElementB,
-        cutlass::gemm::TagToStrideB_t<GmemLayoutBTag>,
-        TiledMMA,
-        GmemTiledCopyA,
-        SmemLayoutAtomA,
-        SmemCopyAtomA,
-        TransformA,
-        GmemTiledCopyB,
-        SmemLayoutAtomB,
-        SmemCopyAtomB,
-        TransformB
-      >;
+  using TransformA = cute::identity;
+  using TransformB = cute::identity;
+
+  using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
+    MainloopDeviceAgnostic,
+    TileShape_MNK,
+    ElementA,
+    cutlass::gemm::TagToStrideA_t<GmemLayoutATag>,
+    ElementB,
+    cutlass::gemm::TagToStrideB_t<GmemLayoutBTag>,
+    TiledMMA,
+    GmemTiledCopyA,
+    SmemLayoutAtomA,
+    SmemCopyAtomA,
+    TransformA,
+    GmemTiledCopyB,
+    SmemLayoutAtomB,
+    SmemCopyAtomB,
+    TransformB
+  >;
 };
 
-}
+} // namespace cutlass::gemm::collective
