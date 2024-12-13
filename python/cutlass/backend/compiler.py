@@ -496,7 +496,9 @@ class ArtifactManager:
             for operation, key in zip(operation_list, operation_key):
                 # get device kernels
                 if self._is_sycl():
-                    operation.kernel = program.get_sycl_kernel(operation.name())
+                    # Free function kernels always have a name prefix.
+                    fnName = f"__sycl_kernel_{operation.name()}"
+                    operation.kernel = program.get_sycl_kernel(fnName)
                 else:
                     err, operation.kernel = cuda.cuModuleGetFunction(
                         module,
