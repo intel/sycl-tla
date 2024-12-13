@@ -463,7 +463,7 @@ class ArtifactManager:
             # step 1: check if the operation is in cache
             compiled_kernel = self.compiled_cache_device.get(key)
 
-            if compiled_kernel is None and not bypass_cache:
+            if compiled_kernel is None and not bypass_cache and not self._is_sycl():
                 hit = self.load_operation(key, getattr( operation.rt_module, "extra_funcs", {}))
                 if hit:
                     compiled_kernel = self.compiled_cache_device.get(key)
