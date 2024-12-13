@@ -1119,7 +1119,9 @@ extern "C"
 SYCL_EXTERNAL SYCL_EXT_ONEAPI_FUNCTION_PROPERTY(
     (sycl::ext::oneapi::experimental::nd_range_kernel<
         3>))
-void ${operation_name}(typename Operator::Params const params, char* smem) {
+void ${operation_name}(typename Operator::Params const params, 
+                       sycl::ext::oneapi::experimental::work_group_memory<char[]> mem) {
+  auto* smem = &mem[0];
 #else
 __global__ __launch_bounds__(Operator::MaxThreadsPerBlock, Operator::MinBlocksPerMultiprocessor)
 void ${operation_name}(__grid_constant__ typename Operator::Params const params) {
