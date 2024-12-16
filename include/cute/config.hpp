@@ -130,7 +130,7 @@
 #define CUTE_STATIC_ASSERT_V(x,...) static_assert(decltype(x)::value, ##__VA_ARGS__)
 
 // Fail and print a message. Typically used for notification of a compiler misconfiguration.
-#if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
+#if defined(__CUDA_ARCH__)
 #  define CUTE_INVALID_CONTROL_PATH(x) assert(0 && x); printf(x); __brkpt()
 #elif defined(__has_builtin) && __has_builtin(__builtin_unreachable)
 #  define CUTE_INVALID_CONTROL_PATH(x) assert(0 && x); printf(x); __builtin_unreachable()
