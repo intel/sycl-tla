@@ -160,6 +160,9 @@
 #  endif
 #endif
 
+#if !defined(CUTLASS_SYCL_UNUSED)
+#  define CUTLASS_SYCL_UNUSED assert(false); CUTLASS_GCC_UNREACHABLE
+#endif
 //-----------------------------------------------------------------------------
 // Keywords
 //-----------------------------------------------------------------------------
