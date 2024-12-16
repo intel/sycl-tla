@@ -52,7 +52,7 @@ int LaneId() {
   asm ("mov.u32 %0, %%laneid;" : "=r"(ret) : );
   return ret;
 #else
-  CUTLASS_SYCL_UNUSED;
+  CUTLASS_INVALID_CONTROL_PATH("Attempting to use Nvidia-specific code path on non-Nvidia hardware.");
 #endif
 }
 
@@ -64,7 +64,7 @@ int SmId() {
   asm ("mov.u32 %0, %%smid;" : "=r"(ret) : );
   return ret;
 #else
-  CUTLASS_SYCL_UNUSED;
+  CUTLASS_INVALID_CONTROL_PATH("Attempting to use Nvidia-specific code path on non-Nvidia hardware.");
 #endif
 }
 

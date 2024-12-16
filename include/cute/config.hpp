@@ -102,10 +102,6 @@
 #  endif
 #endif
 
-#if !defined(CUTE_SYCL_UNUSED)
-#  define CUTE_SYCL_UNUSED assert(false); CUTE_GCC_UNREACHABLE
-#endif
-
 #if defined(_MSC_VER)
 // Provides support for alternative operators 'and', 'or', and 'not'
 #  include <iso646.h>

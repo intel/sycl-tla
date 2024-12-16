@@ -160,8 +160,13 @@
 #  endif
 #endif
 
-#if !defined(CUTLASS_SYCL_UNUSED)
-#  define CUTLASS_SYCL_UNUSED assert(false); CUTLASS_GCC_UNREACHABLE
+// Fail and print a message. Typically used for notification of a compiler misconfiguration.
+#if defined(__CUDA_ARCH__)
+#  define CUTLASS_INVALID_CONTROL_PATH(x) assert(0 && x); printf(x); __brkpt()
+#elif defined(__has_builtin) && __has_builtin(__builtin_unreachable)
+#  define CUTLASS_INVALID_CONTROL_PATH(x) assert(0 && x); printf(x); __builtin_unreachable()
+#else
+#  define CUTLASS_INVALID_CONTROL_PATH(x) assert(0 && x); printf(x)
 #endif
 //-----------------------------------------------------------------------------
 // Keywords
