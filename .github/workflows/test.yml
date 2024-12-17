@@ -88,39 +88,160 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          mkdir ~/dpcpp
-          pushd ~/dpcpp
-          echo "Will use DPCPP ${{ inputs.DPCPP_VERSION }}."
-          if [[ "${{ inputs.DPCPP_VERSION }}" != "" ]]; then \
-            echo "Downloading DPCPP from https://github.com/intel/llvm/releases/download/${{ inputs.DPCPP_VERSION }}/sycl_linux.tar.gz"; \
-            wget -q https://github.com/intel/llvm/releases/download/${{ inputs.DPCPP_VERSION }}/sycl_linux.tar.gz; \
-          else
-            latest=$(curl -sS https://api.github.com/repos/intel/llvm/releases | jq -r '[.[].tag_name|select(match("nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}"))][0]') && \
-            echo "Downloading DPCPP from https://github.com/intel/llvm/releases/download/${latest}/sycl_linux.tar.gz"; \
-            wget -q https://github.com/intel/llvm/releases/download/${latest}/sycl_linux.tar.gz; \
-          fi
-          tar -xf sycl_linux.tar.gz
-          rm sycl_linux.tar.gz
-          popd
-          export REPO_RELEASE="jammy unified"
-          export KEY_URL=https://repositories.intel.com/gpu/intel-graphics.key
-          sudo wget -q ${KEY_URL} -O /usr/share/keyrings/intel-graphics.asc
-          echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.asc] https://repositories.intel.com/gpu/ubuntu $REPO_RELEASE" | \
-            sudo tee  /etc/apt/sources.list.d/intel.gpu.list
           sudo apt update
+          sudo apt upgrade -y
           sudo apt install -y level-zero intel-ocloc intel-opencl-icd libze-intel-gpu1
-
+          wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB  && \
+          rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt update
+          sudo apt install -y intel-dpcpp-cpp-compiler-2025.0
 
       # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
       # for example using the tag: 'nightly-2024-04-22'
       - name: Build
         shell: bash
         run: |
-          export PATH=~/dpcpp/bin/:$PATH
-          export C_INCLUDE_PATH=~/dpcpp/include/:$C_INCLUDE_PATH
-          export CPLUS_INCLUDE_PATH=~/dpcpp/include/:$CPLUS_INCLUDE_PATH
-          export LD_LIBRARY_PATH=~/dpcpp/lib/:$LD_LIBRARY_PATH
-          export CC=clang
-          export CXX=clang++
+          source /opt/intel/oneapi/setvars.sh
+          which sycl-ls
+          sycl-ls
+
+  run-tests-intel-cpu:
+    name: Run tests with Intel CPU
+    runs-on: cp-ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
+            sudo gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+          echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | \
+            sudo tee /etc/apt/sources.list.d/intel.gpu.list
+          sudo apt update
+          sudo apt upgrade -y
+          sudo apt install -y level-zero intel-ocloc intel-opencl-icd libze-intel-gpu1
+          wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB  && \
+          rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt update
+          sudo apt install -y intel-dpcpp-cpp-compiler-2025.0
+
+      # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
+      # for example using the tag: 'nightly-2024-04-22'
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          which sycl-ls
+          sycl-ls
+  run-tests-intel-cpu2:
+    name: Run tests with Intel CPU 2
+    runs-on: cp-ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
+            sudo gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+          echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | \
+            sudo tee /etc/apt/sources.list.d/intel.gpu.list
+          sudo apt update
+          sudo apt upgrade -y
+          sudo apt install -y level-zero intel-ocloc intel-opencl-icd libze-intel-gpu1
+          wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB  && \
+          rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt update
+          sudo apt install -y intel-dpcpp-cpp-compiler-2025.0
+
+      # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
+      # for example using the tag: 'nightly-2024-04-22'
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          which sycl-ls
+          sycl-ls
+  run-tests-intel-cpu3:
+    name: Run tests with Intel CPU 3
+    runs-on: cp-ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
+            sudo gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+          echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | \
+            sudo tee /etc/apt/sources.list.d/intel.gpu.list
+          sudo apt update
+          sudo apt upgrade -y
+          sudo apt install -y level-zero intel-ocloc intel-opencl-icd libze-intel-gpu1
+          wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB  && \
+          rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt update
+          sudo apt install -y intel-dpcpp-cpp-compiler-2025.0
+
+      # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
+      # for example using the tag: 'nightly-2024-04-22'
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          which sycl-ls
+          sycl-ls
+
+  run-tests-intel-docker:
+    name: Run tests with docker on Intel GPU
+    runs-on: cp-gpumax-1100-gpu
+    timeout-minutes: 30
+    container:
+      image: intel/oneapi-basekit:2025.0.0-0-devel-ubuntu22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          # wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
+          #   gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+          # echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | \
+          #   tee /etc/apt/sources.list.d/intel.gpu.list
+          apt update
+          apt upgrade -y
+          apt install -y level-zero intel-ocloc intel-opencl-icd libze-intel-gpu1
+          # wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          # sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB  && \
+          # rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+          # echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          # sudo apt update
+          apt install -y intel-dpcpp-cpp-compiler-2025.0
+
+      # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
+      # for example using the tag: 'nightly-2024-04-22'
+      - name: Build
+        shell: bash
+        run: |
           which sycl-ls
           sycl-ls
