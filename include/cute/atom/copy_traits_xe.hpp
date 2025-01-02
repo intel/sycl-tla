@@ -44,6 +44,10 @@ struct ShapeMNL {};
 struct ShapeNKL {};
 using  ShapeMKL = ShapeMNL;
 
+static constexpr auto subgroup_size = 16;
+
+
+// ==========  ShapeIndicator  ==========
 template <class ShapeIndicator>
 static constexpr bool is_MNL_shape = std::is_same_v<ShapeIndicator, ShapeMNL>;
 
@@ -53,6 +57,8 @@ static constexpr bool is_NKL_shape = std::is_same_v<ShapeIndicator, ShapeNKL>;
 template <class ShapeIndicator>
 static constexpr bool is_MKL_shape = is_MNL_shape<ShapeIndicator>;
 
+
+// ==========  size_of_inst  ==========
 template <class, class = void>
 static constexpr bool has_inst_dtype = false;
 
@@ -65,6 +71,30 @@ static constexpr auto size_of_inst = sizeof(dtype);
 template <class T, class dtype>
 static constexpr auto size_of_inst<T, dtype, std::enable_if_t<has_inst_dtype<T>>> = sizeof(typename T::inst_dtype);
 
+
+// ==========  value_layout_t  ==========
+template <class, class = void>
+static constexpr bool has_dst_shape = false;
+
+template <class T>
+static constexpr bool has_dst_shape<T, cute::void_t<typename T::Value_Shape_MN>> = true;
+
+template <class T, class = void>
+struct value_layout_t {
+  using type = decltype(make_layout(make_shape(get<0>(typename T::Shape_MN{}),
+                                                            get<1>(typename T::Shape_MN{})
+                                                                / Int<detail::subgroup_size>{})));
+};
+
+template <class T>
+struct value_layout_t<T, std::enable_if_t<has_dst_shape<T>>> {
+  using type = decltype(make_layout(make_shape(get<0>(typename T::Value_Shape_MN{}),
+                                                            get<1>(typename T::Value_Shape_MN{})
+                                                                / Int<detail::subgroup_size>{})));
+};
+
+
+// ==========  is_transpose_load  ==========
 template <class ShapeIndicator, class Stride>
 static constexpr bool is_transpose_load = (is_MKL_shape<ShapeIndicator> &&
                                               std::is_same_v<cutlass::detail::StrideToLayoutTagA_t<Stride>,
@@ -73,6 +103,8 @@ static constexpr bool is_transpose_load = (is_MKL_shape<ShapeIndicator> &&
                                               std::is_same_v<cutlass::detail::StrideToLayoutTagB_t<Stride>,
                                                   cutlass::layout::ColumnMajor>);
 
+
+// ==========  IndicatorToStride  ==========
 template <class LayoutIndicator,
           class ShapeIndicator, class = void>
 struct IndicatorToStride {
@@ -103,6 +135,7 @@ struct IndicatorToStride<LayoutIndicator, ShapeIndicator,
 
 } // end namespace detail
 
+
 template <uint32_t dim, class Tensor_t>
 static constexpr auto append_pvc_tensor(Tensor_t const &t0, uint32_t shape, uint32_t stride) {
   return make_tensor(make_inttuple_iter(t0.data()), append(t0.layout(), make_layout(shape, E<dim>{} * stride)));
@@ -118,6 +151,7 @@ struct XE_2D_LD_Unpack {
   uint32_t pitch;
   
   using Shape_MN = CopyOp::Shape_MN;
+  using Value_Layout = typename detail::value_layout_t<CopyOp>::type;
 
   using GStride = typename detail::IndicatorToStride<LayoutIndicator, ShapeIndicator>::type;
 
@@ -205,14 +239,12 @@ struct XE_2D_LD_Unpack {
     auto R = rank(GShape{});
     static_assert(R == 3, "mismatch rank");
 
-    using basis_t =  make_seq<rank(typename CopyOp::Shape_MN{})>;
+    using basis_t =  make_seq<rank(Shape_MN{})>;
 
-    using shape_mn = CopyOp::Shape_MN;
-    using rvs_shape_mn = decltype(reverse(shape_mn{}));
-    using use_shape_mn = std::conditional_t<is_mkl, shape_mn, rvs_shape_mn>;
+    using shape_mn = std::conditional_t<is_mkl, Shape_MN, decltype(reverse(Shape_MN{}))>;
 
     auto new_shape = cute::tuple_cat(make_shape(_1{}), take<R - 2, R>(shape));
-    auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, use_shape_mn{},
+    auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, shape_mn{},
                                                                   [&](auto i, auto s){
                                                                       return E<i>{} * s;
                                                                   }));
@@ -233,6 +265,10 @@ template <class CopyOp, class... ArgTs> struct XE_2D_ST_Unpack {
   uint32_t pitch;
 
   using Shape_MN = CopyOp::Shape_MN;
+
+  using Value_Layout = decltype(make_layout(make_shape(get<0>(Shape_MN{}),
+                                                       get<1>(Shape_MN{})
+                                                          / Int<detail::subgroup_size>{})));
 
   static constexpr bool is_nkl = false;
 
@@ -273,12 +309,10 @@ template <class CopyOp, class... ArgTs> struct XE_2D_ST_Unpack {
     auto R = rank(GShape{});
     static_assert(R == 3, "mismatch rank");
 
-    using basis_t =  make_seq<rank(typename CopyOp::Shape_MN{})>;
-
-    using shape_mn = CopyOp::Shape_MN;
+    using basis_t =  make_seq<rank(Shape_MN{})>;
 
     auto new_shape = cute::tuple_cat(make_shape(_1{}), take<R - 2, R>(shape));
-    auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, shape_mn{},
+    auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, Shape_MN{},
                                                                   [&](auto i, auto s){
                                                                       return E<i>{} * s;
                                                                   }));
@@ -1146,8 +1180,8 @@ struct Copy_Traits<XE_2D_TF32x16x16_LD_N, args_t...>
   using SrcLayout = Layout<Shape <_16,_32>,
                            Stride< _0, _1>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <Shape < _8,  _2>,Shape <_32,  _2,  _16>>,
-                           Stride<Stride<_32,_512>,Stride< _1,_256,_1024>>>;
+  using DstLayout = Layout<Shape <_16,Shape <_16,  _32>>,
+                           Stride<_0,Stride< _512, _1>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
@@ -1164,8 +1198,8 @@ struct Copy_Traits<XE_2D_TF32x32x16_LD_N, args_t...>
   using SrcLayout = Layout<Shape <_16,_32>,
                            Stride< _0, _1>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <Shape < _8,  _2>,Shape <_32,  _2,  _32>>,
-                           Stride<Stride<_32,_512>,Stride< _1,_256,_1024>>>;
+  using DstLayout = Layout<Shape <_16, Shape <_16, _2, _32>>,
+                           Stride< _0, Stride<_512, Int<512 * 16>, _1>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
@@ -2074,7 +2108,7 @@ struct Xe2DTiledCopy : TiledCopy<Copy_Atom, LayoutCopy_TV, ShapeTiler_MN>{
 
 template <class... Args,
           class ThrLayout,
-          class ValLayout = Layout<_1>>
+          class ValLayout = typename Copy_Atom<Args...>::Value_Layout>
 CUTE_HOST_DEVICE
 auto
 make_xe_2d_copy(Copy_Atom<Args...> const& copy_atom,

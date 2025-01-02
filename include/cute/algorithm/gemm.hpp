@@ -528,9 +528,9 @@ gemm(MMA_Atom<MMA>       const& mma,
   static constexpr auto m_step = size<0>(typename ATraits::Shape_MN{})
                                       / size<0>(typename MMA_Atom<MMA>::Shape_MNK{});
   static constexpr auto A_k_step = size<1>(typename ATraits::Shape_MN{})
-                                      / size<1>(typename MMA_Atom<MMA>::Shape_MNK{});
+                                      / size<2>(typename MMA_Atom<MMA>::Shape_MNK{});
   static constexpr auto B_k_step = size<0>(typename BTraits::Shape_MN{})
-                                      / size<1>(typename MMA_Atom<MMA>::Shape_MNK{});
+                                      / size<2>(typename MMA_Atom<MMA>::Shape_MNK{});
 
   auto retiled_a = make_tensor(A.data(),
                                make_shape(size<0>(A.shape()),

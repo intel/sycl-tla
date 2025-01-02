@@ -56,3 +56,30 @@ TEST(PVC_CuTe_Xe, gemm_float_fp16_fp16_float) {
       64, 128, 32, 32, 32, half_t, half_t, float, XE_2D_U16x32x32_LD_N,
       XE_2D_U16x32x32_LD_V, XE_2D_U32x8x16_ST_N, XE_8x16x16_F32F16F16F32_TT>>(16, 256, 64);
 }
+
+// TODO: don't know how to enable this
+#if 0
+TEST(PVC_CuTe_Xe, gemm_float_tf32_tf32_float_XE_1x16x8_F32TF32TF32F32_TT) {
+  run<gemm_device_partition_fragment_abc<
+      64, 64, 64, 64, 128, tfloat32_t, tfloat32_t, float, XE_2D_TF32x32x16_LD_N,
+      XE_2D_U32x32x16_LD_N, XE_2D_U32x1x16_ST_N, XE_1x16x8_F32TF32TF32F32_TT>>(256, 512, 1024);
+}
+#endif
+
+TEST(PVC_CuTe_Xe, gemm_float_tf32_tf32_float_XE_2x16x8_F32TF32TF32F32_TT) {
+  run<gemm_device_partition_fragment_abc<
+      64, 64, 64, 64, 128, tfloat32_t, tfloat32_t, float, XE_2D_TF32x32x16_LD_N,
+      XE_2D_U32x32x16_LD_N, XE_2D_U32x2x16_ST_N, XE_2x16x8_F32TF32TF32F32_TT>>(256, 512, 1024);
+}
+
+TEST(PVC_CuTe_Xe, gemm_float_tf32_tf32_float_XE_4x16x8_F32TF32TF32F32_TT) {
+  run<gemm_device_partition_fragment_abc<
+      64, 64, 64, 64, 128, tfloat32_t, tfloat32_t, float, XE_2D_TF32x32x16_LD_N,
+      XE_2D_U32x32x16_LD_N, XE_2D_U32x4x16_ST_N, XE_4x16x8_F32TF32TF32F32_TT>>(256, 512, 1024);
+}
+
+TEST(PVC_CuTe_Xe, gemm_float_tf32_tf32_float_XE_8x16x8_F32TF32TF32F32_TT) {
+  run<gemm_device_partition_fragment_abc<
+      64, 64, 64, 64, 128, tfloat32_t, tfloat32_t, float, XE_2D_TF32x32x16_LD_N,
+      XE_2D_U32x32x16_LD_N, XE_2D_U32x8x16_ST_N, XE_8x16x8_F32TF32TF32F32_TT>>(256, 512, 1024);
+}

@@ -80,26 +80,17 @@ struct gemm_device_partition_fragment_abc {
     using traits_load_A = Copy_Traits<traits_a, ShapeMKL, layout_a>;
     using atom_load_A = Copy_Atom<traits_load_A, TA>;
     auto copy_a = make_xe_2d_copy(
-        atom_load_A{}.with(A, m, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
-        make_layout(make_shape(get<0>(typename traits_load_A::Shape_MN{}),
-                               get<1>(typename traits_load_A::Shape_MN{}) /
-                                   Int<SUBGROUP_SIZE>{})));
+        atom_load_A{}.with(A, m, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
     using traits_load_B = Copy_Traits<traits_b, ShapeNKL, layout_b>;
     using atom_load_B = Copy_Atom<traits_load_B, TB>;
     auto copy_b = make_xe_2d_copy(
-        atom_load_B{}.with(B, n, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
-        make_layout(make_shape(get<0>(typename traits_load_B::Shape_MN{}),
-                               get<1>(typename traits_load_B::Shape_MN{}) /
-                                   Int<SUBGROUP_SIZE>{})));
+        atom_load_B{}.with(B, n, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
     using traits_store_C = Copy_Traits<traits_c>;
     using atom_store_C = Copy_Atom<traits_store_C, TC>;
     auto copy_c = make_xe_2d_copy(
-        atom_store_C{}.with(C, m, n), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
-        make_layout(make_shape(get<0>(typename traits_store_C::Shape_MN{}),
-                               get<1>(typename traits_store_C::Shape_MN{}) /
-                                   Int<SUBGROUP_SIZE>{})));
+        atom_store_C{}.with(C, m, n), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
     auto thread_idx = ThreadIdxX();
 

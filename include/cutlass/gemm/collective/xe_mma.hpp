@@ -204,13 +204,9 @@ struct CollectiveMma<
     auto K = mainloop.K;
 
     auto gmem_tiled_copy_a = make_xe_2d_copy(atom_load_A{}.with(mainloop.args.ptr_A, M, K),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                             make_layout(make_shape(get<0>(typename atom_load_A::Shape_MN{}),
-                                                                    get<1>(typename atom_load_A::Shape_MN{}) / Int<SubgroupSize>{})));
+                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
     auto gmem_tiled_copy_b = make_xe_2d_copy(atom_load_B{}.with(mainloop.args.ptr_B, N, K),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                             make_layout(make_shape(get<0>(typename atom_load_B::Shape_MN{}),
-                                                                    get<1>(typename atom_load_B::Shape_MN{}) / Int<SubgroupSize>{})));
+                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
 
     // Instantiate the MMA object
     TiledMma tiled_mma;

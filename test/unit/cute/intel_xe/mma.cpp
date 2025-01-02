@@ -287,3 +287,23 @@ TEST(PVC_CuTe_Xe, FMA_XE_UniversalFMA_F32F32F32F32) {
   MMA_Test<UniversalFMA<float, float, float, float>, 64, 64, 8, 16, 16, float,
            float, float>(512, 512, 256);
 }
+
+TEST(PVC_CuTe_Xe, MMA_XE_1x16x8_F32TF32TF32F32_TT) {
+  MMA_Test<XE_1x16x8_F32TF32TF32F32_TT, 64, 64, 8, 16, 16, tfloat32_t,
+           tfloat32_t, float>(512, 512, 256);
+}
+
+TEST(PVC_CuTe_Xe, MMA_XE_2x16x8_F32TF32TF32F32_TT) {
+  MMA_Test<XE_2x16x8_F32TF32TF32F32_TT, 64, 64, 8, 16, 16, tfloat32_t,
+           tfloat32_t, float>(512, 512, 256);
+}
+
+TEST(PVC_CuTe_Xe, MMA_XE_4x16x8_F32TF32TF32F32_TT) {
+  MMA_Test<XE_4x16x8_F32TF32TF32F32_TT, 64, 64, 8, 16, 16, tfloat32_t,
+           tfloat32_t, float>(512, 512, 256);
+}
+
+TEST(PVC_CuTe_Xe, MMA_XE_8x16x8_F32TF32TF32F32_TT) {
+  MMA_Test<XE_8x16x8_F32TF32TF32F32_TT, 64, 64, 8, 16, 32, tfloat32_t,
+           tfloat32_t, float>(512, 512, 256);
+}
