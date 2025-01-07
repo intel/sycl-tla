@@ -586,6 +586,23 @@ void shared_load<4>(void *dst, uint32_t ptr) {
 #endif
 }
 
+/// ld.shared - 64b
+template <>
+CUTLASS_DEVICE
+void shared_load<8>(void *dst, uint32_t ptr) {
+  uint2 *dst_u64 = reinterpret_cast<uint2 *>(dst);
+#if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
+  asm volatile("ld.shared.v2.u32 {%0, %1}, [%2];\n"
+    :
+      "=r"(dst_u64->x),
+      "=r"(dst_u64->y)
+    : "r"(ptr));
+#else
+  CUTLASS_INVALID_CONTROL_PATH(
+      "Attempting to use Nvidia-specific code path on non-Nvidia hardware.");
+#endif
+}
+
 /// ld.shared - 128b
 template <>
 CUTLASS_DEVICE
