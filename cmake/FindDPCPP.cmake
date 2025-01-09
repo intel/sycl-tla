@@ -42,7 +42,7 @@ set(DPCPP_FLAGS "-fsycl;")
 set(DPCPP_COMPILE_ONLY_FLAGS "")
 
 if(NOT "${DPCPP_SYCL_TARGET}" STREQUAL "")
-  list(APPEND DPCPP_FLAGS "-fsycl-targets=${DPCPP_SYCL_TARGET};-Xspirv-translator;-spirv-ext=+SPV_INTEL_split_barrier;")
+  list(APPEND DPCPP_FLAGS "-fsycl-targets=${DPCPP_SYCL_TARGET}")
 endif()
 
 if(NOT "${DPCPP_USER_FLAGS}" STREQUAL "")
@@ -58,7 +58,7 @@ if(NOT "${DPCPP_SYCL_ARCH}" STREQUAL "")
 endif()
 
 if("${DPCPP_SYCL_TARGET}" STREQUAL "intel_gpu_pvc")
-  list(APPEND DPCPP_FLAGS "-Xspirv-translator;--spirv-ext=+SPV_INTEL_split_barrier")
+  list(APPEND DPCPP_FLAGS "-Xspirv-translator;-spirv-ext=+SPV_INTEL_split_barrier")
 endif()
 
 if(UNIX)
