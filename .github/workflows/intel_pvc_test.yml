@@ -1,4 +1,4 @@
-name: "Intel Test"
+name: "Intel PVC Test"
 
 on:
   push:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   run-tests:
-    name: Run tests
+    name: Run Intel PVC tests
     runs-on: cp-gpumax-1100-runner
     timeout-minutes: 30
 
