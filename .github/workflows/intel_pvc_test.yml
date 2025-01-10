@@ -20,7 +20,7 @@ concurrency:
 jobs:
   run-tests:
     name: Run Intel PVC tests
-    runs-on: cp-gpumax-1100-runner
+    runs-on: cp-gpumax-1100-gpu
     timeout-minutes: 30
 
     steps:
