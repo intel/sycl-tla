@@ -270,18 +270,6 @@ public:
     auto k_residue   = head_size - get<2>(subgroup_shape) * (head_size / get<2>(subgroup_shape));  // K - SUB_K * k_coord_max
     auto residue_mnk = make_tuple(m_max_coord, n_max_coord, k_residue);
 
-    // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
-    TiledMma tiled_mma;
-
-    Tensor out_reg = partition_fragment_C(tiled_mma, take<0,2>(blk_shape)); 
-    // the max reg and sum reg each contains a 2d tesnor for 8 x 4 This is number of sequence lenght process per subgroup  
-    Tensor max_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
-    Tensor sum_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
-
-    fill(max_reg, -INFINITY);
-    clear(sum_reg);
-    clear(out_reg);
-
     static constexpr size_t cacheline_bytes = 64;
     static constexpr auto block_size_w_a = cute::min(SG_K, cacheline_bytes / sizeof(ElementQ)); //32
     static constexpr auto block_size_w_b = cute::min(SG_N, cacheline_bytes / sizeof(ElementK)); //32
@@ -296,9 +284,6 @@ public:
     using PrefetchQTileSize = decltype(ceil_div(Shape<Int<SG_M>, Int<SG_K>>{},PrefetchQThrShape{})); //16x32
     using PrefetchKTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchKThrShape{})); //8x32
     using PrefetchVTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchVThrShape{})); // 8x32
-
-    // Perform the collective scoped MMA
-    CollectiveMainloop collective_mma;
 
     const int causal_seq_len = seq_coord + get<0>(subgroup_shape);
     const int non_causal_seq_len = seq_len;
@@ -364,12 +349,25 @@ public:
         prefetch(params.mainloop.gmem_tiled_copy_v, prefetch_iter_v(_, _, _, i));
       }
     }
+
+    // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
+    TiledMma tiled_mma;
+    Tensor out_reg = partition_fragment_C(tiled_mma, take<0, 2>(blk_shape));
+    // the max reg and sum reg each contains a 2d tesnor for 8 x 4 This is number of sequence lenght process per subgroup
+    Tensor max_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
+    Tensor sum_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
+
+    fill(max_reg, -INFINITY);
+    clear(sum_reg);
+    clear(out_reg);
+    // Perform the collective scoped MMA
+    CollectiveMainloop collective_mma;
     // when causal mask is true.It is not possible to set the scope
     // of the barrier to workgroup level as the number n block is
     // different for each subgroup due to triangular nature of causal based operation
     static constexpr int barrier_scope = CausalMask ? 3 : 2;
 
-    // loop over K and V, perform fused attention + online softmax
+    // MAIN LOOP: loop over K and V, perform fused attention + online softmax
     for (int nblock = 0, load_idx = 0; nblock < nblock_limit; nblock++,
               load_idx += get<1>(subgroup_shape)) {
       barrier_arrive(barrier_scope);
@@ -404,13 +402,9 @@ public:
           }
         }
       }
-      if (nblock == 0)
-        flash::Softmax<ElementAccumulator>::template run<true, CausalMask, Vec, FragsM, FragsN>(
-            tSr, max_reg, sum_reg, out_reg, params.softmax);
-      else
-        flash::Softmax<ElementAccumulator>::template run<false, CausalMask, Vec, FragsM, FragsN>(
-            tSr, max_reg, sum_reg, out_reg, params.softmax);
-
+      
+      flash::Softmax<ElementAccumulator>::template run<CausalMask, Vec, FragsM, FragsN>(nblock == 0, tSr,
+                                                                                        max_reg, sum_reg, out_reg, params.softmax);
       // 7) Convert S to P (FP32 -> BF16)
       Tensor tPr = make_tensor<typename TiledMma::ValTypeA>(shape(tSr));
       CUTLASS_PRAGMA_UNROLL
@@ -441,7 +435,7 @@ public:
 
     // Reduce the sum of exponents across the subgroup before scaling/normalizing output
     flash::SumOp<ElementAccumulator> op;
-    flash::Softmax<ElementAccumulator>::template subgroup_allreduce<false, Vec, FragsM, FragsN>(sum_reg, op);
+    flash::Softmax<ElementAccumulator>::template subgroup_allreduce<Vec, FragsM, FragsN>(sum_reg, op);
 
     CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
 
