@@ -223,8 +223,7 @@ public:
   }
 
   CUTLASS_DEVICE
-  void
-  operator()(Params const& params, char* smem_buf) {
+  void operator()(Params const& params, char* smem_buf) {
     SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(smem_buf);
     // Preconditions
     CUTE_STATIC_ASSERT(is_static<WorkgroupTileShape>::value);
@@ -240,8 +239,8 @@ public:
 
     int thread_idx = int(ThreadIdxX());
     int sub_group_id = thread_idx / SubgroupSize;
-    constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
-    constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
+    constexpr auto workgroup_shape = WorkgroupTileShape{};  // (SUB_M,SUB_N,SUB_K)
+    constexpr auto subgroup_shape = SubgroupTileShape{};     // (SUB_M,SUB_N,SUB_K)
 
     auto blk_shape = TileShape{};
     auto blk_m_coord = BlockIdxY();
@@ -249,12 +248,15 @@ public:
     auto blk_l_coord = BlockIdxZ();
     auto blk_coord_mnkl = make_coord(blk_m_coord, blk_n_coord, _, blk_l_coord);
 
-    Tensor mQ_mkl = make_tensor(make_gmem_ptr(static_cast<ElementQ const*>(nullptr)), make_shape(seq_len, head_size, batch * num_heads), StrideQ{});   //(m,k,l)
-    Tensor mK_nkl = make_tensor(make_gmem_ptr(static_cast<ElementK const*>(nullptr)), make_shape(seq_len, head_size, batch * num_heads), StrideK{});   //(n,k,l)
-    Tensor mV_nkl = make_tensor(make_gmem_ptr(static_cast<ElementV const*>(nullptr)), make_shape(head_size, seq_len, batch * num_heads), StrideV{});   //(n,k,l)
-    Tensor mQ_mk = mQ_mkl(_,_,blk_l_coord);                                                                        // (m,k)
-    Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                                        // (n,k)
-    Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                                        // (n,k)
+    Tensor mQ_mkl = make_tensor(make_gmem_ptr(static_cast<ElementQ const*>(nullptr)),
+                                make_shape(seq_len, head_size, batch * num_heads), StrideQ{});   //(m,k,l)
+    Tensor mK_nkl = make_tensor(make_gmem_ptr(static_cast<ElementK const*>(nullptr)),
+                                make_shape(seq_len, head_size, batch * num_heads), StrideK{});   //(n,k,l)
+    Tensor mV_nkl = make_tensor(make_gmem_ptr(static_cast<ElementV const*>(nullptr)),
+                                make_shape(head_size, seq_len, batch * num_heads), StrideV{});   //(n,k,l)
+    Tensor mQ_mk = mQ_mkl(_,_,blk_l_coord);                                                      // (m,k)
+    Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                      // (n,k)
+    Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                      // (n,k)
 
     auto gQ = local_tile(mQ_mk, blk_shape, make_coord(blk_m_coord, 0, _), Step<_1,  X, _1>{});
 
@@ -279,17 +281,21 @@ public:
     fill(max_reg, -INFINITY);
     clear(sum_reg);
     clear(out_reg);
-  static constexpr size_t cacheline_bytes = 64;
-  static constexpr auto block_size_w_a = cute::min(SG_K, cacheline_bytes / sizeof(ElementQ)); //32
-  static constexpr auto block_size_w_b = cute::min(SG_N, cacheline_bytes / sizeof(ElementK)); //32
-  static constexpr auto nums_block_w_a = ceil_div(SG_K, block_size_w_a); // 1
-  static constexpr auto nums_block_w_b = ceil_div(SG_N, block_size_w_b); // 1
-  using PrefetchQThrShape = Shape<Int<ATOM_N /cute::gcd(ATOM_N, nums_block_w_a)>, Int<cute::gcd(ATOM_N, nums_block_w_a)>>; //shape<2,1>
-  using PrefetchKThrShape = Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,1>
-  using PrefetchVThrShape = Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,1>
-  using PrefetchQTileSize = decltype(ceil_div(Shape<Int<SG_M>, Int<SG_K>>{},PrefetchQThrShape{})); //16x32
-  using PrefetchKTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchKThrShape{})); //8x32
-  using PrefetchVTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchVThrShape{})); // 8x32
+
+    static constexpr size_t cacheline_bytes = 64;
+    static constexpr auto block_size_w_a = cute::min(SG_K, cacheline_bytes / sizeof(ElementQ)); //32
+    static constexpr auto block_size_w_b = cute::min(SG_N, cacheline_bytes / sizeof(ElementK)); //32
+    static constexpr auto nums_block_w_a = ceil_div(SG_K, block_size_w_a); // 1
+    static constexpr auto nums_block_w_b = ceil_div(SG_N, block_size_w_b); // 1
+    using PrefetchQThrShape =
+        Shape<Int<ATOM_N /cute::gcd(ATOM_N, nums_block_w_a)>, Int<cute::gcd(ATOM_N, nums_block_w_a)>>; //shape<2,1>
+    using PrefetchKThrShape =
+        Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,1>
+    using PrefetchVThrShape =
+        Shape<Int<ATOM_M /cute::gcd(ATOM_M, nums_block_w_b)>, Int<cute::gcd(ATOM_M, nums_block_w_b)>>; //shape <4,1>
+    using PrefetchQTileSize = decltype(ceil_div(Shape<Int<SG_M>, Int<SG_K>>{},PrefetchQThrShape{})); //16x32
+    using PrefetchKTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchKThrShape{})); //8x32
+    using PrefetchVTileSize = decltype(ceil_div(Shape<Int<SG_K>, Int<SG_N>>{},PrefetchVThrShape{})); // 8x32
 
     // Perform the collective scoped MMA
     CollectiveMainloop collective_mma;
@@ -311,9 +317,9 @@ public:
       append<3>(make_shape(_, _), BLK_K), seq<0, 0, 1>{});
     // The Key point is 1 is horisontal and zero is vertical
     // the iteration over K dimention of B matrix (head_size) should be :
-     auto iter_over_head_count = head_size / BLK_N;   
+    auto iter_over_head_count = head_size / BLK_N;
     // k, n
-     Tensor prefetch_iter_b = params.mainloop.gmem_prefetch_k.get_pvc_tensor(
+    Tensor prefetch_iter_b = params.mainloop.gmem_prefetch_k.get_pvc_tensor(
          make_coord(sub_group_id * get<0>(PrefetchKTileSize{}),            // iteration 0/K/Hight/vertical
                     (sub_group_id % ATOM_N) * get<1>(PrefetchKTileSize{}), //  iteration 1/N/W/Horisontal
                     blk_l_coord),                                          // batch
@@ -326,7 +332,7 @@ public:
       // V is a transposed matrix, So here the Sequense length is consumed, it is transposed so the consumed dimension looks like B matrix
       // Hence, the Head size is the fast moving dimention and horisontal and sequence length is vertical.
      // The prefetch only move along the sequence lenth. Here we call sequence length K since it get consumed and head size N since it stay
-     Tensor prefetch_iter_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
+    Tensor prefetch_iter_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
          make_coord((sub_group_id / ATOM_N) * get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
                     head_size_coord,                                       //  iteration 1/N/W/Horisontal / Head size
                     blk_l_coord),
@@ -335,84 +341,86 @@ public:
          // first one is to use the intrinsic along the vertical , Second one is N/M  and third one is K
          append<3>(make_shape(_, _), BLK_K), seq<0, 1, 0>{});
 
-     CUTLASS_PRAGMA_UNROLL
-     for (int i = 0; i < k_tile_count; i++)
-     {
-       if constexpr (cute::detail::has_prefetch<typename CollectiveMainloop::GmemTiledCopyQ>)
-         prefetch(params.mainloop.gmem_tiled_copy_q, prefetch_iter_a(_, _, _, i));
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < k_tile_count; i++) {
+      if constexpr (cute::detail::has_prefetch<typename CollectiveMainloop::GmemTiledCopyQ>) {
+        prefetch(params.mainloop.gmem_tiled_copy_q, prefetch_iter_a(_, _, _, i));
+      }
     }
     auto Prefetch_per_workgroup = cute::min(nblock_limit, DispatchPolicy::Stages);
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < Prefetch_per_workgroup; i++) {
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < iter_over_head_count; j++) {
-        if constexpr (cute::detail::has_prefetch<typename CollectiveMainloop::GmemTiledCopyK>)
-          prefetch(params.mainloop.gmem_tiled_copy_k, prefetch_iter_b(_, _, i, j));   
+        if constexpr (cute::detail::has_prefetch<typename CollectiveMainloop::GmemTiledCopyK>) {
+          prefetch(params.mainloop.gmem_tiled_copy_k, prefetch_iter_b(_, _, i, j));
+        }
       }
     }
 
-      CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < Prefetch_per_workgroup; i++) {
-             if constexpr(cute::detail::has_prefetch<typename CollectiveMainloop::GmemTiledCopyK>)
-            prefetch(params.mainloop.gmem_tiled_copy_v, prefetch_iter_v(_, _, _, i));
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < Prefetch_per_workgroup; i++) {
+      if constexpr(cute::detail::has_prefetch<typename CollectiveMainloop::GmemTiledCopyK>) {
+        prefetch(params.mainloop.gmem_tiled_copy_v, prefetch_iter_v(_, _, _, i));
       }
-      // when causal mask is true.It is not possible to set the scope
-      // of the barrier to workgroup level as the number n block is 
-      // different for each subgroup due to triangular nature of causal based operation
-      static constexpr int barrier_scope = CausalMask ? 3 : 2;
+    }
+    // when causal mask is true.It is not possible to set the scope
+    // of the barrier to workgroup level as the number n block is
+    // different for each subgroup due to triangular nature of causal based operation
+    static constexpr int barrier_scope = CausalMask ? 3 : 2;
 
-          // loop over K and V, perform fused attention + online softmax
-      for (int nblock = 0, load_idx = 0; nblock < nblock_limit; nblock++,
-                load_idx += get<1>(subgroup_shape))
+    // loop over K and V, perform fused attention + online softmax
+    for (int nblock = 0, load_idx = 0; nblock < nblock_limit; nblock++,
+              load_idx += get<1>(subgroup_shape)) {
+      barrier_arrive(barrier_scope);
+      // 1) Load K (performed inside mmaQK)
+      // 2) Create Tensor S
+      auto gK = local_tile(mK_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
+      Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
+      clear(tSr);
+
+      // 3) Perform GEMM S = Q*K
+      auto tile_coord_QK = make_coord(seq_coord, load_idx, _, blk_l_coord);
+      collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, head_size / get<1>(subgroup_shape), params.mainloop);
+
+      // Apply causal mask
+      if constexpr (CausalMask)
       {
-        barrier_arrive(barrier_scope);
-        // 1) Load K (performed inside mmaQK)
-        // 2) Create Tensor S
-        auto gK = local_tile(mK_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
-        Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
-        clear(tSr);
-
-        // 3) Perform GEMM S = Q*K
-        auto tile_coord_QK = make_coord(seq_coord, load_idx, _, blk_l_coord);
-        collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, head_size / get<1>(subgroup_shape), params.mainloop);
-
-        // Apply causal mask
-        if constexpr (CausalMask)
+        // mask the elements of each tile where j > i
+        int col_idx = item_id + load_idx;
+        CUTLASS_PRAGMA_UNROLL
+        for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape()))
         {
-          // mask the elements of each tile where j > i
-          int col_idx = item_id + load_idx;
           CUTLASS_PRAGMA_UNROLL
-          for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape()))
+          for (int m = 0; m < FragsM; m++)
           {
+            int row_idx = m * Vec + seq_coord;
             CUTLASS_PRAGMA_UNROLL
-            for (int m = 0; m < FragsM; m++)
+            for (int row = 0; row < Vec; row++, row_idx++)
             {
-              int row_idx = m * Vec + seq_coord;
-              CUTLASS_PRAGMA_UNROLL
-              for (int row = 0; row < Vec; row++, row_idx++)
-              {
-                if (col_idx > row_idx)
-                  tSr(row, m, n) = -INFINITY;
-              }
+              if (col_idx > row_idx)
+                tSr(row, m, n) = -INFINITY;
             }
           }
         }
-        if (nblock == 0)
-          flash::Softmax<ElementAccumulator>::template run<true, CausalMask, Vec, FragsM, FragsN>(tSr,
-                                                                                                  max_reg, sum_reg, out_reg, params.softmax);
-        else
-          flash::Softmax<ElementAccumulator>::template run<false, CausalMask, Vec, FragsM, FragsN>(tSr,
-                                                                                                   max_reg, sum_reg, out_reg, params.softmax);
-        // 7) Convert S to P (FP32 -> BF16)
-        Tensor tPr = make_tensor<typename TiledMma::ValTypeA>(shape(tSr));
-        CUTLASS_PRAGMA_UNROLL
-        for (int p_idx = 0; p_idx < size(tPr); p_idx++)
-        {
+      }
+      if (nblock == 0)
+        flash::Softmax<ElementAccumulator>::template run<true, CausalMask, Vec, FragsM, FragsN>(
+            tSr, max_reg, sum_reg, out_reg, params.softmax);
+      else
+        flash::Softmax<ElementAccumulator>::template run<false, CausalMask, Vec, FragsM, FragsN>(
+            tSr, max_reg, sum_reg, out_reg, params.softmax);
+
+      // 7) Convert S to P (FP32 -> BF16)
+      Tensor tPr = make_tensor<typename TiledMma::ValTypeA>(shape(tSr));
+      CUTLASS_PRAGMA_UNROLL
+      for (int p_idx = 0; p_idx < size(tPr); p_idx++)
+      {
         #ifdef __SYCL_DEVICE_ONLY__
         // Temporary patch to avoid linking in the devicelib fallback unconditionally.
         tPr(p_idx).storage = __spirv_ConvertFToBF16INTEL(tSr(p_idx));
         #else
-         tPr(p_idx) = static_cast<typename TiledMma::ValTypeA>(tSr(p_idx));
+        tPr(p_idx) = static_cast<typename TiledMma::ValTypeA>(tSr(p_idx));
         #endif
       }
       // 8) Scale out_reg with l
@@ -420,16 +428,16 @@ public:
       auto gV = local_tile(mV_nk, blk_shape, make_coord(0, 0, _), Step< X, _1, _1>{});
       auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
       collective_mma.mmaPV(tile_coord_PV, out_reg, tPr, gV, out_reg, 1, nblock, params.mainloop);
-        if(nblock + Prefetch_per_workgroup < nblock_limit ) {
-       CUTLASS_PRAGMA_UNROLL
-       for (int j = 0; j < iter_over_head_count; j++) {
+      if(nblock + Prefetch_per_workgroup < nblock_limit ) {
+        CUTLASS_PRAGMA_UNROLL
+        for (int j = 0; j < iter_over_head_count; j++) {
           if constexpr(cute::detail::has_prefetch<typename CollectiveMainloop::GmemTiledCopyK>)
-         prefetch(params.mainloop.gmem_tiled_copy_k, prefetch_iter_b(_,_,nblock + Prefetch_per_workgroup, j));  
-       }
-       prefetch(params.mainloop.gmem_tiled_copy_v, prefetch_iter_v(_,_,_,nblock + Prefetch_per_workgroup));
+            prefetch(params.mainloop.gmem_tiled_copy_k, prefetch_iter_b(_,_,nblock + Prefetch_per_workgroup, j));
+        }
+        prefetch(params.mainloop.gmem_tiled_copy_v, prefetch_iter_v(_,_,_,nblock + Prefetch_per_workgroup));
       }
       barrier_wait(barrier_scope);
-      }
+    }
 
     // Reduce the sum of exponents across the subgroup before scaling/normalizing output
     flash::SumOp<ElementAccumulator> op;

@@ -69,14 +69,14 @@ template <
   class CopyOpO_
 >
 class CollectiveEpilogueAttention<
-    IntelPVCEpilogue,
-    CtaTileMNK_,
-    ElementO_,
-    StrideO_,
-    ElementLSE_,
-    StrideLSE_,
-    FusionCallbacks_,
-    CopyOpO_
+  IntelPVCEpilogue,
+  CtaTileMNK_,
+  ElementO_,
+  StrideO_,
+  ElementLSE_,
+  StrideLSE_,
+  FusionCallbacks_,
+  CopyOpO_
 > {
 public:
   //
@@ -105,10 +105,10 @@ public:
 
   using Trait_O = Copy_Traits<GmemTiledCopyO>;
   using XE_Copy_O = decltype(make_tiled_copy(Copy_Atom<Trait_O, ElementO>{}
-                                             .with(static_cast<ElementO const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                             make_layout(make_shape(get<0>(typename Trait_O::Shape_MN{}),
-                                                                    get<1>(typename Trait_O::Shape_MN{}) / Int<SubgroupSize>{}))));
+                               .with(static_cast<ElementO const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
+                               Layout<Shape<_1, Int<SubgroupSize>>>{},
+                               make_layout(make_shape(get<0>(typename Trait_O::Shape_MN{}),
+                                                      get<1>(typename Trait_O::Shape_MN{}) / Int<SubgroupSize>{}))));
 private:
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementO>;
 

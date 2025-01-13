@@ -79,19 +79,19 @@ template <
   class GmemTiledCopyV_,
   bool CausalMask_>
 struct CollectiveMmaAttention<
-    MainloopIntelPVC<Stages>,
-    TileShape_,
-    ElementQ_,
-    StrideQ_,
-    ElementK_,
-    StrideK_,
-    ElementV_,
-    StrideV_,
-    TiledMma_,
-    GmemTiledCopyQ_,
-    GmemTiledCopyK_,
-    GmemTiledCopyV_,
-    CausalMask_>
+  MainloopIntelPVC<Stages>,
+  TileShape_,
+  ElementQ_,
+  StrideQ_,
+  ElementK_,
+  StrideK_,
+  ElementV_,
+  StrideV_,
+  TiledMma_,
+  GmemTiledCopyQ_,
+  GmemTiledCopyK_,
+  GmemTiledCopyV_,
+  CausalMask_>
 {
   //
   // Type Aliases
@@ -293,7 +293,7 @@ struct CollectiveMmaAttention<
       make_coord(0, n_coord, l_coord), append<4>(tCrB_copy_view.shape(), k_tile_count),
       append<3>(typename XE_Copy_K::Shape_MN{}, BLK_K), seq<0,1,0>{});
 
-CUTLASS_PRAGMA_UNROLL
+    CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
       // Copy gmem to rmem for the first k_tile
       copy(params.gmem_tiled_copy_q, iter_a(_,_,_,k_tile), tCrA_copy_view);
@@ -351,7 +351,7 @@ CUTLASS_PRAGMA_UNROLL
         print(" PrefetchVThrShape :    ");print(PrefetchVThrShape{});print("\n");
         print(" PrefetchVTileSize :    ");print(PrefetchVTileSize{});print("\n");
       }
-    #endif
+  #endif
 
     //
     // Mainloop
