@@ -34,11 +34,7 @@
 #include <cute/util/type_traits.hpp> // cute::is_valid
 #include <cute/numeric/numeric_types.hpp> 
 
-#if defined(CUTLASS_ENABLE_SYCL)
-#define printf sycl::ext::oneapi::experimental::printf
-#endif
-
-#if defined(CUTLASS_ENABLE_SYCL)
+#if !defined(__CUDA_ARCH__) && defined(CUTLASS_ENABLE_SYCL)
 #define printf sycl::ext::oneapi::experimental::printf
 #endif
 

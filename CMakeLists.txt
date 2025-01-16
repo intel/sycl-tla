@@ -485,6 +485,7 @@ elseif(NOT CUTLASS_ENABLE_SYCL)
   endif()
 endif()
 
+message("cuda compiler" ${CUDA_COMPILER})
 if(CUDA_COMPILER MATCHES "[Cc]lang")
   if( NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
     message(FATAL_ERROR "Clang CUDA compilation requires Clang CXX compilation. Currently CMAKE_CXX_COMPILER is ${CMAKE_CXX_COMPILER_ID}" )
@@ -506,6 +507,8 @@ if(CUDA_COMPILER MATCHES "[Cc]lang")
   list(GET CUDA_VERSION_PARTS 0 CUDA_VERSION_MAJOR)
   list(GET CUDA_VERSION_PARTS 1 CUDA_VERSION_MINOR)
   list(APPEND CUTLASS_CUDA_CLANG_FLAGS -D__CUDACC_VER_MAJOR__=${CUDA_VERSION_MAJOR} -D__CUDACC_VER_MINOR__=${CUDA_VERSION_MINOR})
+  message(version ${CUDA_VERSION_MAJOR})
+  message(version ${CUDA_VERSION_MINOR})
 
 
   # needed for libcublasLt.so in case it's installed in the same location as libcudart.so
