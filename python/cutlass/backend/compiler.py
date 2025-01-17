@@ -360,12 +360,32 @@ class ArtifactManager:
 
             # Find SPIR-V device code in temporary directory
             spv_files = list(pathlib.Path(temp_dump_dir.name).glob("*.spv"))
-            if len(spv_files) != 1:
-                raise RuntimeError("More than one SPIR-V files generated")
+            
+            # TODO(Lukas): Bring this back then we delete the loop to find the right kernel.
+            # if len(spv_files) != 1:
+            #     raise RuntimeError("More than one SPIR-V files generated")
 
+            # TODO(Lukas): This is a temporary solution to be removed. 
+            # When specifying a specific subgroup size, DPC++ currently
+            # generates multiple SPIR-V files. We create a kernel from each of
+            # them to find the one with the correct subgroup size. This is
+            # rather efficient, as we need to create all these programs first.
+            q = dpctl.SyclQueue(cutlass.sycl_device())
+            op_name = f"__sycl_kernel_{operation_list[0].name()}"
+            for f in spv_files:
+                with open(f, "rb") as spirv_file:
+                    spirv_image = spirv_file.read()
+                    program = dpctl.program.create_program_from_spirv(q, spirv_image)
+                    spirv_kernel = program.get_sycl_kernel(op_name)
+                    print(spirv_kernel.max_sub_group_size)
+                    if spirv_kernel.max_sub_group_size == 16:
+                        cubin_image = spirv_image
+                        break
+
+            # TODO(Lukas): Bring this back when we delete the loop to find the right kernel.
             # Load the SPIR-V image
-            with open(spv_files[0], "rb") as file:
-                cubin_image = file.read()
+            # with open(spv_files[0], "rb") as file:
+            #    cubin_image = file.read()
 
         else:  # with nvcc backend
             # emit code

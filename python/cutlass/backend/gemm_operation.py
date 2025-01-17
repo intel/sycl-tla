@@ -1118,7 +1118,7 @@ extern "C"
 #if defined(CUTLASS_ENABLE_SYCL)
 SYCL_EXTERNAL SYCL_EXT_ONEAPI_FUNCTION_PROPERTY(
     (sycl::ext::oneapi::experimental::nd_range_kernel<
-        3>))
+     3>)) [[sycl::reqd_sub_group_size(16)]]
 void ${operation_name}(typename Operator::Params const params, 
                        sycl::ext::oneapi::experimental::work_group_memory<char[]> mem) {
   auto* smem = &mem[0];
