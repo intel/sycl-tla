@@ -42,6 +42,8 @@ from cutlass.backend.memory_manager import DevicePtrWrapper
 from cutlass.backend.utils.device import default_stream
 from cutlass.utils.datatypes import is_cupy_tensor, is_numpy_tensor, is_torch_tensor
 
+import dpctl
+
 
 class ArgumentBase:
     """
@@ -95,23 +97,32 @@ class ArgumentBase:
         elif is_cupy_tensor(tensor):
             return CupyFrontend.argument(tensor)
         else:
-            raise TypeError("Unsupported Frontend. Only support numpy and torch")
+            raise TypeError(
+                "Unsupported Frontend. Only support numpy and torch")
 
     def sync(self, stream_sync=True):
+        is_sycl = isinstance(self.stream, dpctl.SyclQueue)
         if stream_sync:
-            (err,) = cudart.cudaDeviceSynchronize()
-            if err != cuda.CUresult.CUDA_SUCCESS:
-                raise RuntimeError("CUDA Error %s" % str(err))
+            if is_sycl:
+                self.stream.wait()
+            else:
+                (err,) = cudart.cudaDeviceSynchronize()
+                if err != cuda.CUresult.CUDA_SUCCESS:
+                    raise RuntimeError("CUDA Error %s" % str(err))
 
         for key in self.host_tensors.keys():
             host_tensor = self.host_tensors[key]
-            (err,) = cuda.cuMemcpyDtoH(
-                host_tensor,
-                self.buffers[key].ptr,
-                host_tensor.size * host_tensor.itemsize,
-            )
-            if err != cuda.CUresult.CUDA_SUCCESS:
-                raise RuntimeError("CUDA Error %s" % str(err))
+            if is_sycl:
+                self.stream.memcpy(host_tensor, self.buffers[key].usm_mem,
+                                   host_tensor.size * host_tensor.itemsize)
+            else:
+                (err,) = cuda.cuMemcpyDtoH(
+                    host_tensor,
+                    self.buffers[key].ptr,
+                    host_tensor.size * host_tensor.itemsize,
+                )
+                if err != cuda.CUresult.CUDA_SUCCESS:
+                    raise RuntimeError("CUDA Error %s" % str(err))
 
         self.free()
 

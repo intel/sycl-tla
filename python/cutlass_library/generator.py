@@ -6905,7 +6905,7 @@ def GenerateSM90(manifest, cuda_version):
 def GeneratePVC_TensorOp_16b_gemm(manifest, cuda_version):
     # TODO: Add remaining supported configurations
     layouts = [
-      [[LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8]]
+      [[LayoutType.RowMajor, 2], [LayoutType.RowMajor, 2], [LayoutType.RowMajor, 4]]
     ]
 
     math_instructions = [
@@ -6921,7 +6921,7 @@ def GeneratePVC_TensorOp_16b_gemm(manifest, cuda_version):
 
     for math_inst in math_instructions:
       tile_descriptions = [
-        TileDescription([math_inst.instruction_shape[0] * 16, math_inst.instruction_shape[1] * 16, math_inst.instruction_shape[2] * 2],
+        TileDescription([math_inst.instruction_shape[0] * 16, math_inst.instruction_shape[1] * 32, math_inst.instruction_shape[2] * 2],
             0, [4, 1, 1], math_inst, min_cc, max_cc, [1, 1, 1])
       ]
       

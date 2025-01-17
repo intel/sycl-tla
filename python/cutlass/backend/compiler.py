@@ -163,7 +163,8 @@ class ArtifactManager:
                                        "-DCUTLASS_ENABLE_SYCL",
                                        "-fsycl-rtc-mode",
                                        "-DSYCL_INTEL_TARGET",
-                                       "-shared", "-fPIC"]
+                                       "-shared", "-fPIC",
+                                       "-fno-sycl-dead-args-optimization"]
         self.nvcc()
         self.compiled_cache_device = {}
         self.compiled_cache_host = {}

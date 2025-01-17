@@ -210,7 +210,9 @@ def get_mainloop_arguments_3x(
     # Currently all 3.x kernels (CpAsync and Tma) have the same argument structure.
     # Should that become not the case, this is the place to return custom ctypes
     # structures based on selected kernel schedule.
-    return _MainloopArgumentsTma
+
+    # TODO(Lukas): Need to distinguish Intel and Nvidia GPU here.
+    return _MainloopArgumentsMultistage
 
 
 def get_gemm_arguments_3x(mainloop_arguments, epilogue_functor, scheduler_args, default_epilogue):
