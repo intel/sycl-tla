@@ -91,7 +91,7 @@ class ArgumentBase:
                 self.host_tensors[name] = tensor
             return self.buffers[name].ptr
         elif is_torch_tensor(tensor):
-            return TorchFrontend.argument(tensor)
+            return TorchFrontend.argument(tensor, self.stream)
         elif isinstance(tensor, cuda.CUdeviceptr):
             return tensor
         elif is_cupy_tensor(tensor):

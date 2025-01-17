@@ -33,8 +33,10 @@
 from cuda import cuda
 import numpy as np
 
+import dpctl
+
 from cutlass.backend.memory_manager import device_mem_alloc, todevice
-from cutlass.utils.datatypes import is_cupy_tensor, is_numpy_tensor, is_torch_tensor
+from cutlass.utils.datatypes import is_cupy_tensor, is_numpy_tensor, is_torch_tensor, is_xpu_tensor
 
 
 class NumpyFrontend:
@@ -43,7 +45,7 @@ class NumpyFrontend:
     """
 
     @staticmethod
-    def argument(np_tensor: "np.ndarray", is_output: "bool", stream = None):
+    def argument(np_tensor: "np.ndarray", is_output: "bool", stream=None):
         """Convert the input numpy tensor to CUDA device pointer
 
         :param np_tensor: input numpy nd array
@@ -64,7 +66,7 @@ class TorchFrontend:
     """
 
     @staticmethod
-    def argument(torch_tensor: "torch.Tensor") -> cuda.CUdeviceptr:
+    def argument(torch_tensor: "torch.Tensor", stream=None) -> cuda.CUdeviceptr:
         """Convert the input torch tensor to CUDA device pointer
 
         :param torch_tensor: input torch tensor
@@ -72,6 +74,12 @@ class TorchFrontend:
 
         :return: CUDA device pointer
         """
+
+        if isinstance(stream, dpctl.SyclQueue):
+            if not is_xpu_tensor(torch_tensor):
+                torch_tensor = torch_tensor.to("xpu")
+
+            return torch_tensor.data_ptr()
 
         # check the device of torch_tensor
         if not torch_tensor.is_cuda:
