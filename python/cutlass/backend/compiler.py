@@ -377,7 +377,6 @@ class ArtifactManager:
                     spirv_image = spirv_file.read()
                     program = dpctl.program.create_program_from_spirv(q, spirv_image)
                     spirv_kernel = program.get_sycl_kernel(op_name)
-                    print(spirv_kernel.max_sub_group_size)
                     if spirv_kernel.max_sub_group_size == 16:
                         cubin_image = spirv_image
                         break
