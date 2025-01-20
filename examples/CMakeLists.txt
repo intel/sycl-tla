@@ -30,6 +30,11 @@
 
 set(CUTLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 
+SET(SYCL_CUDA_COMPAT "${DPCPP_SYCL_TARGET}" STREQUAL "nvptx64-nvidia-cuda")
+if (${SYCL_CUDA_COMPAT})
+  find_package(CUDAToolkit)
+endif()
+
 add_custom_target(cutlass_examples)
 add_custom_target(test_examples)
 
@@ -48,9 +53,7 @@ function(cutlass_example_add_executable NAME)
 
   add_dependencies(cutlass_examples ${NAME})
 
-  if (NOT CUTLASS_ENABLE_SYCL)
-    SET(ADD_CUDA ON)
-  endif()
+  SET(ADD_CUDA NOT CUTLASS_ENABLE_SYCL)
 
   target_link_libraries(
     ${NAME}
@@ -60,6 +63,14 @@ function(cutlass_example_add_executable NAME)
     $<$<BOOL:${CUTLASS_ENABLE_CUBLAS}>:nvidia::cublas>
     $<$<BOOL:${ADD_CUDA}>:cuda>
     )
+
+  if (${SYCL_CUDA_COMPAT})
+    target_link_libraries(
+      ${NAME}
+      PRIVATE
+      CUDA::cudart
+    )
+  endif()
 
   target_include_directories(
     ${NAME}
