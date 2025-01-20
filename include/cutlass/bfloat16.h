@@ -47,7 +47,7 @@
 
 #if defined(__CUDA__)
 #include <cuda_bf16.h>
-#endif
+#endif // defined(__CUDA__)
 
 #include "cutlass/cutlass.h"
 #include "cutlass/platform/platform.h"
@@ -114,7 +114,7 @@ public:
     std::memcpy(&storage, &raw.x, sizeof(storage));
     #endif
   }
-#endif
+#endif // defined(__CUDA__)
 
   /// Floating-point conversion - round toward nearest
   CUTLASS_HOST_DEVICE
@@ -205,7 +205,7 @@ public:
   __nv_bfloat16 to_nv_bfloat16() const {
     return reinterpret_cast<__nv_bfloat16 const &>(storage);
   }
-#endif
+#endif // defined(__CUDA__)
 
   /// Obtains raw bits
   CUTLASS_HOST_DEVICE
