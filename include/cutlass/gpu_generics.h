@@ -335,10 +335,6 @@ namespace cutlass {
 using cudaStream_t = void *;
 
 using dim3 = syclcompat::dim3;
-// Expose dim3 in the cute namespace
-namespace cute {
-  using dim3 = syclcompat::dim3;
-}
 
 // Atomic
 template <typename T>
@@ -447,6 +443,10 @@ cudaError_t cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
 
 } // cutlass namespace
 
+// Expose dim3 in the cute namespace
+namespace cute {
+  using dim3 = syclcompat::dim3;
+}
 #endif // defined(CUTLASS_ENABLE_SYCL)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
