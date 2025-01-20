@@ -38,6 +38,8 @@ from cuda import cuda, cudart
 from cutlass_library import SubstituteTemplate
 import numpy as np
 
+import dpctl
+
 from cutlass_library import (
     ComplexTransformTag,
     DataType,
@@ -512,12 +514,14 @@ class GemmArguments3x(GemmArguments2x):
         super().__init__(operation, problem_size, A, B, C, D, gemm_mode, **kwargs)
 
     def get_arguments(self):
+        use_sycl = isinstance(self.stream, dpctl.SyclQueue)
         mainloop_args = get_mainloop_arguments_3x(
             self.operation.tile_description.kernel_schedule,
             self.operation.A.element,
             self.operation.B.element,
             self.operation.A.alignment,
-            self.operation.B.alignment
+            self.operation.B.alignment,
+            use_sycl
         )
         scheduler_args = get_tile_scheduler_arguments_3x(self.operation.tile_description.tile_scheduler)
         uses_default_epilogue = self.operation.rt_module.uses_default_epilogue()
