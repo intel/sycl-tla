@@ -33,7 +33,7 @@ set(CUTLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 if(${DPCPP_SYCL_TARGET} STREQUAL "nvptx64-nvidia-cuda")
 	set(SYCL_CUDA_COMPAT ON)
 endif()
-message(SYCL_CUDA_COMPAT " " ${SYCL_CUDA_COMPAT})
+
 if (${SYCL_CUDA_COMPAT})
   find_package(CUDAToolkit)
 endif()
