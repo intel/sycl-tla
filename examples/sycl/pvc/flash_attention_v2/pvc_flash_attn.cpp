@@ -165,6 +165,8 @@ struct ExampleRunner {
 
     int batch_size = batch * num_heads;
 
+    // loop over the batch dimension to compute the output
+    // to avoid the risk of running out of device memory
     for(int b = 0, offset = 0; b < batch_size; b++, offset += seq_len * head_size) {
 
       cutlass::DeviceAllocation<ElementOutput> block_S;
@@ -200,6 +202,7 @@ struct ExampleRunner {
       syclcompat::memcpy<ElementOutput>(host_S.data(), block_S.get(), host_S.size());
       syclcompat::wait();
 
+      // delete this memory as it is no longer needed
       block_S.reset();
 
       if(is_causal) {
@@ -279,6 +282,8 @@ struct ExampleRunner {
             seq_len * head_size  // batch_stride_O
           );
 
+      syclcompat::wait();
+      // delete this memory as it is no longer needed
       block_P.reset();
 
     }
