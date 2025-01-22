@@ -36,7 +36,13 @@ import numpy as np
 import dpctl
 
 from cutlass.backend.memory_manager import device_mem_alloc, todevice
-from cutlass.utils.datatypes import is_cupy_tensor, is_numpy_tensor, is_torch_tensor, is_xpu_tensor
+from cutlass.utils.datatypes import (
+    is_cupy_tensor,
+    is_numpy_tensor,
+    is_torch_tensor,
+    is_xpu_tensor,
+    is_xpu_available
+)
 
 
 class NumpyFrontend:
@@ -76,6 +82,8 @@ class TorchFrontend:
         """
 
         if isinstance(stream, dpctl.SyclQueue):
+            if not is_xpu_available():
+                raise Exception("No XPU support in Torch available")
             if not is_xpu_tensor(torch_tensor):
                 torch_tensor = torch_tensor.to("xpu")
 
