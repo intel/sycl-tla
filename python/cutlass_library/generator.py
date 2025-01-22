@@ -6910,7 +6910,7 @@ def GeneratePVC_TensorOp_16b_gemm(manifest, cuda_version):
 
     math_instructions = [
       MathInstruction(
-          [16, 8, 16],
+          [8, 16, 16],
           DataType.bf16, DataType.bf16, DataType.f32,
           OpcodeClass.TensorOp,
           MathOperation.multiply_add)
@@ -6921,7 +6921,7 @@ def GeneratePVC_TensorOp_16b_gemm(manifest, cuda_version):
 
     for math_inst in math_instructions:
       tile_descriptions = [
-        TileDescription([math_inst.instruction_shape[0] * 16, math_inst.instruction_shape[1] * 32, math_inst.instruction_shape[2] * 2],
+        TileDescription([math_inst.instruction_shape[0] * 32, math_inst.instruction_shape[1] * 16, math_inst.instruction_shape[2] * 2],
             0, [4, 1, 1], math_inst, min_cc, max_cc, [1, 1, 1])
       ]
       
