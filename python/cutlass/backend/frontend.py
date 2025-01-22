@@ -72,13 +72,13 @@ class TorchFrontend:
     """
 
     @staticmethod
-    def argument(torch_tensor: "torch.Tensor", stream=None) -> cuda.CUdeviceptr:
+    def argument(torch_tensor: "torch.Tensor", stream=None):
         """Convert the input torch tensor to CUDA device pointer
 
         :param torch_tensor: input torch tensor
         :param is_output: whether the tensor is output
 
-        :return: CUDA device pointer
+        :return: Device pointer
         """
 
         if isinstance(stream, dpctl.SyclQueue):

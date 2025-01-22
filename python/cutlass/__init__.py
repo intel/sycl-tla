@@ -198,10 +198,9 @@ def device_id() -> int:
         initialize_sycl_context()
         this._use_sycl = True
     else:
-        this._use_sycl= False
+        this._use_sycl = False
         initialize_cuda_context()
     return this._device_id
-
 
 
 def sycl_device() -> dpctl.SyclDevice:
