@@ -26,45 +26,24 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+include(FetchContent)
 
-cutlass_example_add_executable(
-  pvc_gemm
-  pvc_gemm.cpp
-)
+set(GOOGLEBENCHMARK_DIR "" CACHE STRING "Location of local GoogleBenchmark repo to build against")
 
-cutlass_example_add_executable(
-  pvc_gemm_with_epilogue_relu
-  pvc_gemm_with_epilogue_relu.cpp
-)
+if(GOOGLEBENCHMARK_DIR)
+  set(FETCHCONTENT_SOURCE_DIR_GOOGLEBENCHMARK ${GOOGLEBENCHMARK_DIR} CACHE STRING "GoogleBenchmark source directory override")
+endif()
 
-cutlass_example_add_executable(
-  pvc_gemm_with_epilogue_gelu
-  pvc_gemm_with_epilogue_gelu.cpp
-)
+set(GBENCH_REPOSITORY "https://github.com/google/benchmark.git" CACHE STRING "GoogleBench repo to fetch")
+FetchContent_Declare(
+  googlebenchmark
+  GIT_REPOSITORY ${GBENCH_REPOSITORY}
+  GIT_TAG        v1.9.0
+  )
 
-cutlass_example_add_executable(
-  pvc_gemm_with_epilogue_lincombdeeltact
-  pvc_gemm_with_epilogue_lincombdeeltact.cpp
-)
+FetchContent_GetProperties(googlebenchmark)
 
-cutlass_example_add_executable(
-  pvc_gemm_with_per_row_bias
-  pvc_gemm_with_per_row_bias.cpp
-)
-
-cutlass_example_add_executable(
-  pvc_collective_builder
-  pvc_collective_builder.cpp
-)
-
-cutlass_example_add_executable(
-  pvc_gemm_streamk
-  pvc_gemm_streamk.cpp
-)
-
-add_subdirectory(flash_attention_v2)
-
-cutlass_example_add_executable(
-  pvc_gemm_mixed_dtype
-  pvc_gemm_mixed_dtype.cpp
-)
+if(NOT googlebenchmark_POPULATED)
+  FetchContent_Populate(googlebenchmark)
+  add_subdirectory(${googlebenchmark_SOURCE_DIR} ${googlebenchmark_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()

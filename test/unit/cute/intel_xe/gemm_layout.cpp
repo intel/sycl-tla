@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,32 +28,42 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-#pragma once
 
-#include "cutlass/gemm/collective/collective_mma_decl.hpp"
+#include "gemm_common.hpp"
+#include "utils.hpp"
 
+TEST(PVC_CuTe_Xe, gemm_RowMajor_RowMajor) {
+  run<gemm_device_partition_fragment_abc<
+      256, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
+      XE_2D_U16x16x32_LD_N, XE_2D_U16x32x32_LD_V,
+      XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
+      cute::LayoutRight, cute::LayoutLeft>>(
+      512, 256, 1024);
+}
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+TEST(PVC_CuTe_Xe, gemm_RowMajor_ColumnMajor) {
+  run<gemm_device_partition_fragment_abc<
+      64, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
+      XE_2D_U16x16x32_LD_N, XE_2D_U16x16x16_LD_T,
+      XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
+      cute::LayoutRight, cute::LayoutRight>>(
+      128, 256, 512);
+}
 
-#include "cutlass/gemm/collective/sm70_mma_twostage.hpp"
-#include "cutlass/gemm/collective/sm80_mma_multistage.hpp"
-#include "cutlass/gemm/collective/sm90_mma_multistage_gmma_ss_warpspecialized.hpp"
-#include "cutlass/gemm/collective/sm90_mma_multistage_gmma_rs_warpspecialized.hpp"
-#include "cutlass/gemm/collective/sm90_mma_tma_gmma_ss.hpp"
-#include "cutlass/gemm/collective/sm90_mma_tma_gmma_rs_warpspecialized.hpp"
-#include "cutlass/gemm/collective/sm90_mma_tma_gmma_rs_warpspecialized_mixed_input.hpp"
-#include "cutlass/gemm/collective/sm90_mma_tma_gmma_ss_warpspecialized.hpp"
-#include "cutlass/gemm/collective/sm90_sparse_mma_tma_gmma_ss_warpspecialized.hpp"
-#include "cutlass/gemm/collective/sm90_mma_array_tma_gmma_ss_warpspecialized.hpp"
-#include "cutlass/gemm/collective/sm90_mma_tma_gmma_ss_warpspecialized_fp8.hpp"
+TEST(PVC_CuTe_Xe, gemm_ColumnMajor_RowMajor) {
+  run<gemm_device_partition_fragment_abc<
+      256, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
+      XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_V,
+      XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
+      cute::LayoutLeft, cute::LayoutLeft>>(
+      256, 512, 1024);
+}
 
-#if defined(SYCL_INTEL_TARGET)
-#include "cutlass/gemm/collective/xe_mma.hpp"
-#include "cutlass/gemm/collective/xe_mma_mixed_input.hpp"
-#endif
-
-#if defined(CUTLASS_ENABLE_SYCL)
-#include "cutlass/gemm/collective/device_agnostic_mma.hpp"
-#endif
-
-/////////////////////////////////////////////////////////////////////////////////////////////////
+TEST(PVC_CuTe_Xe, gemm_ColumnMajor_ColumnMajor) {
+  run<gemm_device_partition_fragment_abc<
+      128, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
+      XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T,
+      XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
+      cute::LayoutLeft, cute::LayoutRight>>(
+      256, 512, 1024);
+}

@@ -65,7 +65,6 @@ template <
   class StrideO_,
   class ElementLSE_,
   class StrideLSE_,
-  class FusionCallbacks_,
   class CopyOpO_
 >
 class CollectiveEpilogueAttention<
@@ -75,7 +74,6 @@ class CollectiveEpilogueAttention<
   StrideO_,
   ElementLSE_,
   StrideLSE_,
-  FusionCallbacks_,
   CopyOpO_
 > {
 public:
@@ -84,7 +82,6 @@ public:
   //
   using DispatchPolicy = IntelPVCEpilogue;
   using CtaTileMNK = CtaTileMNK_;
-  using FusionCallbacks = FusionCallbacks_;
   using ElementO = ElementO_;
   using ElementAccumulator = ElementO_;
   using StrideO = StrideO_;
@@ -92,23 +89,20 @@ public:
   using StrideLSE = StrideLSE_;
   using CopyOpO = CopyOpO_;
 
-  using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
   using GmemTiledCopyO = CopyOpO;
-  using ElementOutput = typename FusionCallbacks::ElementOutput;
-  using ElementCompute = typename FusionCallbacks::ElementCompute;
+  using ElementOutput = ElementO_;
+  using ElementCompute = ElementO_;
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
   static_assert(cute::rank(CtaTileMNK{}) == 3, "CtaTileMNK must be rank-3: [CTA_M, CTA_N, CTA_K]");
-  static_assert(cute::rank(StrideO{}) == 3, "StrideO must be rank-4: [batch, num_heads, seq_len, head_size]");
+  static_assert(cute::rank(StrideO{}) == 3, "StrideO must be rank-3: [seq_len, head_size, batch * num_heads]");
   static_assert(cute::rank(StrideLSE{}) == 3, "StrideLSE must be rank-3: [batch, num_heads, seq_len]");
 
   using Trait_O = Copy_Traits<GmemTiledCopyO>;
-  using XE_Copy_O = decltype(make_tiled_copy(Copy_Atom<Trait_O, ElementO>{}
-                               .with(static_cast<ElementO const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
-                               Layout<Shape<_1, Int<SubgroupSize>>>{},
-                               make_layout(make_shape(get<0>(typename Trait_O::Shape_MN{}),
-                                                      get<1>(typename Trait_O::Shape_MN{}) / Int<SubgroupSize>{}))));
+  using XE_Copy_O = decltype(make_xe_2d_copy(Copy_Atom<Copy_Traits<CopyOpO, StrideO>, ElementO>{}.with(
+            make_tensor(make_gmem_ptr(static_cast<ElementO const*>(nullptr)), make_layout(make_shape(0, 0, 0), StrideO{}))),
+                                Layout<Shape<_1, Int<SubgroupSize>>>{}));
 private:
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementO>;
 
@@ -116,10 +110,7 @@ public:
 
   using EmptyType = cute::tuple<>;
 
-  struct TensorStorageImpl: cute::tuple<EmptyType, EmptyType> {
-    using FusionStorage = typename FusionCallbacks::SharedStorage;
-    FusionStorage thread;
-  };
+  struct TensorStorageImpl: cute::tuple<EmptyType, EmptyType> {};
 
   struct SharedStorage {
     using TensorStorage = TensorStorageImpl;
@@ -130,7 +121,6 @@ public:
 
   // Host side epilogue arguments
   struct Arguments {
-    typename FusionCallbacks::Arguments thread{};
     ElementO const* ptr_O;
     StrideO dO;
     ElementLSE* ptr_LSE;
@@ -139,7 +129,6 @@ public:
 
   // Device side epilogue params
   struct Params {
-    typename FusionCallbacks::Params thread{};
     XE_Copy_O xe_store_o;
     ElementLSE* ptr_LSE;
   };
@@ -157,14 +146,11 @@ public:
     auto [batch, num_heads, seq_len, head_size] = problem_shape;
 
     XE_Copy_O xe_store_o = {};
-    xe_store_o = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpO>, ElementO>{}.with(
-                                args.ptr_O, head_size, seq_len, head_size),
-                                Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                make_layout(make_shape(get<0>(typename Trait_O::Shape_MN{}),
-                                                        get<1>(typename Trait_O::Shape_MN{}) / Int<SubgroupSize>{})));
+    xe_store_o = make_xe_2d_copy(Copy_Atom<Copy_Traits<CopyOpO, StrideO>, ElementO>{}.with(
+            make_tensor(make_gmem_ptr(static_cast<ElementO const*>(args.ptr_O)), make_layout(make_shape(seq_len, head_size, batch * num_heads), args.dO))),
+                                Layout<Shape<_1, Int<SubgroupSize>>>{});
 
     return {
-      FusionCallbacks::to_underlying_arguments(problem_shape, args.thread, workspace),
       xe_store_o,
       args.ptr_LSE
     };
@@ -192,8 +178,8 @@ public:
   }
 
   CUTLASS_HOST_DEVICE
-  CollectiveEpilogueAttention(Params const& params_, TensorStorage const& shared_storage_)
-      : params(params_), fusion_callbacks(params_.thread, shared_storage_.thread) {}
+  CollectiveEpilogueAttention(Params const& params_, TensorStorage const&)
+      : params(params_) {}
 
   template <
   class ProblemShape,
@@ -263,11 +249,10 @@ public:
     auto [batch, num_heads, seq_len, head_size] = problem_shape;
 
     Tensor tOi = params.xe_store_o.get_pvc_tensor(
-            make_coord(m_offset, n_offset, 0),
-            make_shape(_, Int<FragsM>{}, Int<FragsN>{}, batch * num_heads),
-            make_stride(Int<get<0>(MmaAtomShape{})>{}, Int<get<1>(MmaAtomShape{})>{}, _1{}));
+            make_coord(m_offset, n_offset, l_coord),
+            make_shape(_, Int<FragsM>{}, Int<FragsN>{}));
 
-    copy(params.xe_store_o, out, tOi(_,_,_,l_coord));
+    copy(params.xe_store_o, out, tOi);
 
     const int lse_offset = m_offset + l_coord * seq_len;
 
@@ -287,7 +272,6 @@ public:
 
 private:
   Params const& params;
-  FusionCallbacks fusion_callbacks;
 };
 
 
