@@ -212,14 +212,11 @@ class ArtifactManager:
             if self._is_sycl():
                 q = dpctl.SyclQueue(cutlass.sycl_device())
                 module = dpctl.program.create_program_from_spirv(q, cubin_image)
+                kernel = module.get_sycl_kernel(operation_name)
             else:
                 err, module = cuda.cuModuleLoadData(cubin_image)
                 if err != cuda.CUresult.CUDA_SUCCESS:
                     raise RuntimeError("Cuda Error: {}".format(err))
-
-            if self._is_sycl():
-                kernel = module.get_sycl_kernel(operation_name)
-            else:
                 err, kernel = cuda.cuModuleGetFunction(
                     module, bytes(str.encode(operation_name)))
 
@@ -296,7 +293,7 @@ class ArtifactManager:
                 operation.HostTemplate, values)
 
         # 3. compile
-        if self.backend == "nvrtc":  # with nvrtc backend
+        if self.backend == "nvrtc":
             err, program = nvrtc.nvrtcCreateProgram(
                 str.encode(source_buffer_device),
                 bytes(str.encode("module.cu")),
@@ -335,7 +332,7 @@ class ArtifactManager:
             if err != nvrtc.nvrtcResult.NVRTC_SUCCESS:
                 raise RuntimeError("NVRTC Error: {}".format(err))
 
-        elif self.backend == "dpcpp":  # with DPC++ backend
+        elif self.backend == "dpcpp":
             # Emit code to file
             tempfile.tempdir = "./"
             temp_cpp = tempfile.NamedTemporaryFile(
