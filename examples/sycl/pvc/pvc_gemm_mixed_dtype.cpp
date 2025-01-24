@@ -28,6 +28,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/***************************************
+* Mixed Precision PVC Gemm Example
+*
+* This example demonstrates how to dispatch a mixed precision GEMM on PVC, with optional dequantization.
+* The GemmMode enum describes the 3 modes of operation:
+*
+* - ConvertOnly: Narrower type is simply converted to the wider type before MMA
+* - ConvertAndScale:   Narrower type is converted to wider type, then scaled
+* - ConvertAndScaleWithZeroPoint:   Narrower type is converted to wider type, then scaled and shifted by zero point
+*/
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
@@ -52,12 +62,19 @@ using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+enum GemmMode {
+  ConvertOnly,
+  ConvertAndScale,
+  ConvertAndScaleWithZeroPoint
+};
+
 // Command line options parsing
 struct Options {
 
   bool help;
   bool error;
 
+  int mode = 2;
   int m, n, k, l, iterations;
   float alpha, beta;
 
@@ -81,6 +98,7 @@ struct Options {
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
+    cmd.get_cmd_line_argument("mode", mode);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
@@ -364,18 +382,25 @@ int main(int argc, const char** argv)
 
   bool passed;
 
+  using MmaType = bfloat16_t;
+  using QuantType = cutlass::int8_t;
+
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = cutlass::int8_t;         // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
+  using ElementInputA = QuantType;         // <- data type of elements in input matrix A
+  using ElementInputB = MmaType;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
+
+  using ElementZero = MmaType;
+  using ElementScale = MmaType;
+  using LayoutScale = cutlass::layout::RowMajor;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
   using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
@@ -414,10 +439,10 @@ int main(int argc, const char** argv)
           void, void>;
 
   // Mainloop
-  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
+  using CollectiveMainloopConvertOnly = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
-          ElementInputA,
+          cute::tuple<ElementInputA>,
           cutlass::gemm::TagToStrideA_t<LayoutA>,
           ElementInputB,
           cutlass::gemm::TagToStrideB_t<LayoutB>,
@@ -426,17 +451,92 @@ int main(int argc, const char** argv)
           GmemTiledCopyB, void, void, cute::identity   // B
   >;
 
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
+  using GemmKernelConvertOnly = cutlass::gemm::kernel::GemmUniversal<
   Shape<int, int, int, int>,
-  CollectiveMainloop,
+  CollectiveMainloopConvertOnly,
   CollectiveEpilogue
   >;
 
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+  using GemmConvertOnly = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelConvertOnly>;
 
-  ExampleRunner<Gemm> runner;
+  using CollectiveMainloopConvertAndScale = cutlass::gemm::collective::CollectiveMma<
+          GEMMDispatchPolicy,
+          TileShape,
+          cute::tuple<ElementInputA, ElementScale>,
+          cutlass::gemm::TagToStrideA_t<LayoutA>,
+          ElementInputB,
+          cutlass::gemm::TagToStrideB_t<LayoutB>,
+          TiledMma,
+          GmemTiledCopyA, void, void, cute::identity,  // A
+          GmemTiledCopyB, void, void, cute::identity   // B
+  >;
 
-  runner.run(options, hw_info);
+  using GemmKernelConvertAndScale = cutlass::gemm::kernel::GemmUniversal<
+  Shape<int, int, int, int>,
+  CollectiveMainloopConvertAndScale,
+  CollectiveEpilogue
+  >;
+
+  using GemmConvertAndScale = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelConvertAndScale>;
+
+  using CollectiveMainloopConvertAndScaleWithZeroPoint = cutlass::gemm::collective::CollectiveMma<
+          GEMMDispatchPolicy,
+          TileShape,
+          cute::tuple<ElementInputA, ElementScale, ElementZero>,
+          cutlass::gemm::TagToStrideA_t<LayoutA>,
+          ElementInputB,
+          cutlass::gemm::TagToStrideB_t<LayoutB>,
+          TiledMma,
+          GmemTiledCopyA, void, void, cute::identity,  // A
+          GmemTiledCopyB, void, void, cute::identity   // B
+  >;
+
+  using GemmKernelConvertAndScaleWithZeroPoint = cutlass::gemm::kernel::GemmUniversal<
+  Shape<int, int, int, int>,
+  CollectiveMainloopConvertAndScaleWithZeroPoint,
+  CollectiveEpilogue
+  >;
+
+  using GemmConvertAndScaleWithZeroPoint = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelConvertAndScaleWithZeroPoint>;
+
+
+  // TODO(joe): Decide if we're incorporating a B example here or just in unit tests 
+ // TODO(joe): fix this example! Currently B is wider!
+  using CollectiveMainloopConvertAndScaleWithZeroPointB = cutlass::gemm::collective::CollectiveMma<
+          GEMMDispatchPolicy,
+          TileShape,
+          ElementInputA,
+          cutlass::gemm::TagToStrideA_t<LayoutA>,
+          cute::tuple<ElementInputB, ElementScale, ElementZero>,
+          cutlass::gemm::TagToStrideB_t<LayoutB>,
+          TiledMma,
+          GmemTiledCopyA, void, void, cute::identity,  // A
+          GmemTiledCopyB, void, void, cute::identity   // B
+  >;
+
+  using GemmKernelConvertAndScaleWithZeroPointB = cutlass::gemm::kernel::GemmUniversal<
+  Shape<int, int, int, int>,
+  CollectiveMainloopConvertAndScaleWithZeroPointB,
+  CollectiveEpilogue
+  >;
+
+  using GemmConvertAndScaleWithZeroPointB = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelConvertAndScaleWithZeroPointB>;
+
+  if (options.mode == GemmMode::ConvertOnly) {
+    std::cout << "Running in ConvertOnly mode." << std::endl;
+    ExampleRunner<GemmConvertOnly> runner;
+    runner.run(options, hw_info);
+  } else if (options.mode == GemmMode::ConvertAndScale) {
+    std::cout << "Running in ConvertAndScale mode." << std::endl;
+    ExampleRunner<GemmConvertAndScale> runner;
+    runner.run(options, hw_info);
+  }
+  else if (options.mode == GemmMode::ConvertAndScaleWithZeroPoint) {
+    std::cout << "Running in ConvertAndScaleWithZeroPoint mode." << std::endl;
+    ExampleRunner<GemmConvertAndScaleWithZeroPoint> runner;
+    runner.run(options, hw_info);
+  }
+
 
   return 0;
 }

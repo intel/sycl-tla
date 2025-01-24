@@ -63,9 +63,9 @@ template <
 struct CollectiveMma<
     MainloopIntelPVCMixedPrecision<Stages>,
     TileShape_,
-    ElementA_,
+    ElementAOptionalTuple,
     StrideA_,
-    ElementB_,
+    ElementBOptionalTuple,
     StrideB_,
     TiledMma_,
     GmemTiledCopyA_,
@@ -77,19 +77,54 @@ struct CollectiveMma<
     SmemCopyAtomB_,
     TransformB_>
 {
+private:
+  enum class ConversionMode {
+    DirectConvert,
+    ConvertAndScale,
+    ConvertAndScaleWithZero
+  };
+
+  using ScaleA = detail::deduce_mixed_width_dtype_t<1, ElementAOptionalTuple>;
+  using ScaleB = detail::deduce_mixed_width_dtype_t<1, ElementBOptionalTuple>;
+  using ZeroA = detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>;
+  using ZeroB = detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>;
+
+public:
   //
   // Type Aliases
   //
   using DispatchPolicy = MainloopIntelPVCMixedPrecision<Stages>;
   using WorkgroupTileShape = TileShape_;
-  using ElementA = ElementA_;
+
+  
+  static_assert(cute::is_tuple<ElementAOptionalTuple>::value ^ cute::is_tuple<ElementBOptionalTuple>::value, 
+    "Either A OR B must be a tuple. It must take the from {ElementOperand, [ElementScale],"
+    "[ElementZero]}. Inputs in [] are optional.");
+
+  using ElementA = detail::deduce_mixed_width_dtype_t<0, ElementAOptionalTuple>;
+  using ElementB = detail::deduce_mixed_width_dtype_t<0, ElementBOptionalTuple>;
+  static constexpr bool IsATransformed = cute::is_tuple<ElementAOptionalTuple>::value;
+  using ElementScale = cute::conditional_t<IsATransformed, ScaleA, ScaleB>;
+  using ElementZero = cute::conditional_t<IsATransformed, ZeroA, ZeroB>;
+  // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
+  using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, float, ElementScale>;
+  using NonVoidElementZero = cute::conditional_t<cute::is_void_v<ElementZero>, float, ElementZero>;
+
   using StrideA = StrideA_;
-  using ElementB = ElementB_;
   using StrideB = StrideB_;
+
+  // These are always MN major
+  using StrideScale = cute::Stride<cute::Int<1>, int64_t, int64_t>;
+  // For cases where we can't have a void scale, we can use this to allow the code to compile when the scale is void.
+  using NonVoidStrideScale = cute::conditional_t<
+      cute::is_void_v<StrideScale>, cute::Stride<_1, int64_t, int64_t>, StrideScale>;
   using TiledMma = TiledMma_;
   using ElementAccumulator = typename TiledMma::ValTypeC;
+
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
+  using GmemTiledCopyScale = GmemTiledCopyA_;  // TODO(joe): This is likely wrong/ungeneral
+
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;
   using SmemCopyAtomA = SmemCopyAtomA_;
@@ -98,10 +133,31 @@ struct CollectiveMma<
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
 
-  static_assert(
-      sizeof(ElementA) < sizeof(ElementB),
-      "MainloopIntelPVCMixedPrecision requires that A is narrower than B.");
+  static_assert(cute::sizeof_bits_v<ElementA> >= 8 &&
+                    cute::sizeof_bits_v<ElementB> >= 8,
+                "Subbyte types not supported.");
+  static_assert(!cute::is_same_v<ElementA, ElementB>, "Mixed precision GEMM requires different types for A and B!");
 
+private:
+   
+  static constexpr ConversionMode 
+  get_conversion_mode() {
+    if constexpr (cute::is_void_v<ElementScale>) {
+      return ConversionMode::DirectConvert;
+    } 
+    else if constexpr (cute::is_void_v<ElementZero>) {
+      return ConversionMode::ConvertAndScale;
+    }
+    else {
+      return ConversionMode::ConvertAndScaleWithZero;
+    }
+  }
+
+  static constexpr ConversionMode KernelConversionMode = get_conversion_mode();
+  static constexpr bool ModeHasScales = KernelConversionMode == ConversionMode::ConvertAndScale ||
+                                        KernelConversionMode == ConversionMode::ConvertAndScaleWithZero;
+
+public:
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
   using MmaAtomShape = typename TiledMma::AtomShape_MNK;
@@ -148,6 +204,10 @@ struct CollectiveMma<
     StrideA dA;
     ElementB const* ptr_B;
     StrideB dB;
+    ElementScale const* ptr_S = nullptr;
+    NonVoidStrideScale dS{};
+    int group_size = 0;
+    ElementZero const* ptr_Z = nullptr;
   };
 
   struct Params {
