@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,10 +45,6 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "cutlass/util/reference/device/tensor_relu.h"
-#include "cutlass/tensor_view.h"
-#include "cutlass/coord.h"
-
 #include "common.hpp"
 #include "helper.h"
 
@@ -68,7 +64,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(100),
+    m(5120), n(4096), k(4096), l(1), iterations(20),
     alpha(1.f), beta(0.f)
   { }
 
@@ -93,7 +89,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "PVC GEMM Example\n\n"
+    out << "PVC GEMM Mixed Type Example\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
@@ -150,6 +146,7 @@ struct ExampleRunner {
 
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
+  cutlass::DeviceAllocation<ElementB> block_A_dq; // Dequantized copy of A for validation
   cutlass::DeviceAllocation<ElementC> block_C;
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
@@ -158,45 +155,108 @@ struct ExampleRunner {
   // Methods
   //
 
-  bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
-    auto [M, N, K, L] = problem_size;
+  bool verify(const Options &options) {
+      
+    //
+    // Compute reference output (default gemm kernel w/ ElementA == ElementB)
+    //
+    using ElementRefA = ElementB;          // <- data type of ElementA in reference implementation
 
-    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
-    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+    using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+    using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
 
-    cutlass::reference::device::GemmComplex(
-          {M, N, K},
-          alpha,
-          ref_A,
-          cutlass::ComplexTransform::kNone,
-          ref_B,
-          cutlass::ComplexTransform::kNone,
-          beta,
-          ref_C,
-          ref_D,
-          ElementAccumulator(0),
-          L,     // batch_count
-          M * K, // batch_stride_A
-          K * N, // batch_stride_B
-          M * N, // batch_stride_C
-          M * N  // batch_stride_D
-        );
+    // Workgroup-level tile
+    using TileShape = Shape<_256, _256, _32>;
 
-    syclcompat::wait();
+    using TiledMma =
+      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+               Layout<Shape<_8, _4, _1>>,
+               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                    Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
 
-    using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
-    cutlass::reference::device::TensorReLu(TensorView(block_ref_D.get(), LayoutD::packed({M, N}),
-                                                      cutlass::make_Coord(M, N)));
+    constexpr int PipelineStages = 3;
+    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
+    using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
-    syclcompat::wait();
+    using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementCompute,
+            ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
-    // Check if output from CUTLASS kernel and reference kernel are equal or not
-    bool passed = cutlass::reference::device::BlockCompareEqual(
-      block_ref_D.get(), block_D.get(), block_D.size());
+    using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
+            decltype(tile_shape(TiledMma()))>;
 
+    using CollectiveEpilogueRef = cutlass::epilogue::collective::CollectiveEpilogue<
+            EpilogueDispatchPolicy,
+            TileShape,
+            ElementAccumulator,
+            cutlass::gemm::TagToStrideC_t<LayoutC>,
+            ElementOutput,
+            cutlass::gemm::TagToStrideC_t<LayoutD>,
+            FusionCallBacks,
+            XE_2D_U32x8x16_LD_N,
+            void, void,
+            XE_2D_U32x8x16_ST_N,
+            void, void>;
+
+    // Mainloop
+    using CollectiveMainloopRef = cutlass::gemm::collective::CollectiveMma<
+            GEMMDispatchPolicy,
+            TileShape,
+            ElementRefA,
+            cutlass::gemm::TagToStrideA_t<LayoutA>,
+            ElementB,
+            cutlass::gemm::TagToStrideB_t<LayoutB>,
+            TiledMma,
+            GmemTiledCopyA, void, void, cute::identity,  // A
+            GmemTiledCopyB, void, void, cute::identity   // B
+    >;
+
+    using GemmKernelRef = cutlass::gemm::kernel::GemmUniversal<
+    Shape<int, int, int, int>,
+    CollectiveMainloopRef,
+    CollectiveEpilogueRef
+    >;
+
+    using GemmRef = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelRef>;
+
+    typename GemmRef::Arguments arguments{
+      cutlass::gemm::GemmUniversalMode::kGemm,
+      {options.m, options.n, options.k, options.l},
+      {block_A_dq.get(), stride_A, block_B.get(), stride_B},
+      {{options.alpha, options.beta}, block_C.get(), stride_C, block_ref_D.get(), stride_D}
+    };
+
+    // Run the gemm where the scaling is performed outside of the kernel.
+    GemmRef gemm_ref;
+    size_t workspace_size = GemmRef::get_workspace_size(arguments);
+    cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
+    CUTLASS_CHECK(gemm_ref.can_implement(arguments));
+    CUTLASS_CHECK(gemm_ref.initialize(arguments, workspace.get()));
+    CUTLASS_CHECK(gemm_ref.run());
+
+    // compare_reference
+    ElementOutput const epsilon(1e-2f);
+    ElementOutput const non_zero_floor(1e-4f);
+    bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_D.get(), block_D.get(), block_D.size(), epsilon, non_zero_floor);
     return passed;
+  }
+
+  template <typename T1, typename T2> 
+  void initialize_block_A(cutlass::DeviceAllocation<T1>& block_device, cutlass::DeviceAllocation<T2>& block_device_dq,  uint64_t seed) {
+    using Limits = cutlass::platform::numeric_limits<T1>;
+    static_assert(Limits::is_integer, "initialize_block_A requires integer types");
+    std::ranlux24_base rng(std::random_device{}());
+    std::uniform_int_distribution<> dist(Limits::lowest(), Limits::max());
+    rng.seed(seed);
+
+    auto block_host = std::vector<T1>(block_device.size());
+    auto block_host_dq = std::vector<T2>(block_device.size());
+    for (int i = 0; i < block_host.size(); ++i) {
+      block_host[i] = static_cast<T1>(dist(rng));
+      block_host_dq[i] = static_cast<T2>(block_host[i]);
+    }
+
+    block_device.copy_from_host(block_host.data());
+    block_device_dq.copy_from_host(block_host_dq.data());
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
@@ -210,17 +270,18 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
     block_A.reset(M * K * L);
+    block_A_dq.reset(M * K * L);
     block_B.reset(K * N * L);
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
-    initialize_block(block_A, seed + 2023);
+    initialize_block_A(block_A, block_A_dq, seed+2023);
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
   }
 
-  cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
+  void run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
     initialize(problem_size);
@@ -239,7 +300,6 @@ struct ExampleRunner {
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
     CUTLASS_CHECK(gemm_op.can_implement(arguments));
-
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 
     // Run the GEMM
@@ -248,16 +308,14 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
+    bool passed = verify(options);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
-
-    if (options.iterations > 0) {
+    if (passed && options.iterations > 0) {
       GPU_Clock timer;
       timer.start();
       for (int i = 0; i < options.iterations; ++i) {
-        gemm_op.run();
+        CUTLASS_CHECK(gemm_op.run());
       }
       syclcompat::wait();
 
@@ -267,7 +325,7 @@ struct ExampleRunner {
       printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
     }
 
-    return cutlass::Status::kSuccess;
+    return;
   }
 
 };
@@ -310,7 +368,7 @@ int main(int argc, const char** argv)
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
+  using ElementInputA = cutlass::int8_t;         // <- data type of elements in input matrix A
   using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
@@ -319,24 +377,24 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x8x16_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
+  // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile
-  using TileShape = Shape<_256, _128, _16>;
+  using TileShape = Shape<_256, _256, _32>;
 
-  using TiledMma =
-      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-               Layout<Shape<_8, _2, _1>>,
-               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                    Layout<Shape<_16, _2, _4>, Stride<_1, _64, _16>>, _16>>;
+  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+          Layout<Shape<_8,_4,_1>>,
+          Tile<_64,_64,_32>>; // Subgroup level-tile
 
   constexpr int PipelineStages = 3;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, ElementOutput,
-          ElementComputeEpilogue, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
+          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
@@ -353,7 +411,7 @@ int main(int argc, const char** argv)
           XE_2D_U32x8x16_ST_N,
           void, void>;
 
-// Mainloop
+  // Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
@@ -376,7 +434,7 @@ int main(int argc, const char** argv)
 
   ExampleRunner<Gemm> runner;
 
-  CUTLASS_CHECK(runner.run(options, hw_info));
+  runner.run(options, hw_info);
 
   return 0;
 }
