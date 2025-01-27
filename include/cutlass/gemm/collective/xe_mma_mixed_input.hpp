@@ -47,9 +47,9 @@ using namespace cute;
 template <
   int Stages,
   class TileShape_,
-  class ElementA_,
+  class ElementAOptionalTuple,
   class StrideA_,
-  class ElementB_,
+  class ElementBOptionalTuple,
   class StrideB_,
   class TiledMma_,
   class GmemTiledCopyA_,
@@ -107,8 +107,9 @@ public:
   using ElementScale = cute::conditional_t<IsATransformed, ScaleA, ScaleB>;
   using ElementZero = cute::conditional_t<IsATransformed, ZeroA, ZeroB>;
   // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
-  using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, float, ElementScale>;
-  using NonVoidElementZero = cute::conditional_t<cute::is_void_v<ElementZero>, float, ElementZero>;
+  // TODO(joe): Can we pick a better non-void scale default type? The wider of ElementA and ElementB for example?
+  using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, bfloat16_t, ElementScale>;
+  using NonVoidElementZero = cute::conditional_t<cute::is_void_v<ElementZero>, bfloat16_t, ElementZero>;
 
   using StrideA = StrideA_;
   using StrideB = StrideB_;
@@ -197,6 +198,8 @@ public:
 
   using  TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), StrideA{}));   //(m, k)
   using  TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), StrideB{}));   //(n, k)
+  using  TensorScale = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementScale const*>(nullptr)), make_shape(0,0,0), StrideScale{}));   //(m OR n, k)
+  using  TensorZero = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const*>(nullptr)), make_shape(0,0,0), StrideScale{}));   //(m OR n, k)
  
   // Host side kernel arguments
   struct Arguments {
@@ -205,14 +208,20 @@ public:
     ElementB const* ptr_B;
     StrideB dB;
     ElementScale const* ptr_S = nullptr;
-    NonVoidStrideScale dS{};
-    int group_size = 0;
+    NonVoidStrideScale dS;
+    int group_size = 1; // Avoid /0 when no scales // TODO(joe): Is this needed?
     ElementZero const* ptr_Z = nullptr;
   };
 
+  // TODO(joe): Can/should I specialize the Params struct based on `ConversionMode`?
+  // Could this save passing some args & registers etc?
   struct Params {
     TensorMKL mA;
     TensorNKL mB;
+    TensorScale mScale;
+    TensorZero mZero;
+    int64_t scale_k;
+    int group_size;
   };
 
   //
@@ -223,18 +232,31 @@ public:
 
   template <class ProblemShape>
   static constexpr Params
-  to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
-    (void) workspace;
+  to_underlying_arguments(ProblemShape const &problem_shape,
+                          Arguments const &args, void *workspace) {
+    (void)workspace;
 
-    auto [M,N,K,L] = problem_shape;
+    auto [M, N, K, L] = problem_shape;
 
-    auto mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.ptr_A)),
-                              make_layout(make_shape(M, K, L), args.dA));
+    auto mA_mkl =
+        make_tensor(make_gmem_ptr(static_cast<ElementA const *>(args.ptr_A)),
+                    make_layout(make_shape(M, K, L), args.dA));
 
-    auto mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.ptr_B)),
-                              make_layout(make_shape(N, K, L), args.dB));
+    auto mB_nkl =
+        make_tensor(make_gmem_ptr(static_cast<ElementB const *>(args.ptr_B)),
+                    make_layout(make_shape(N, K, L), args.dB));
 
-    return Params{mA_mkl, mB_nkl};
+    // These are unused in ConversionMode::DirectConvert
+    auto scale_k = (K + args.group_size - 1) / args.group_size;
+    auto mScale = make_tensor(
+        make_gmem_ptr(static_cast<NonVoidElementScale const *>(args.ptr_S)),
+        make_layout(make_shape(M, scale_k, L), args.dS));
+
+    auto mZero =
+        make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
+                    make_layout(make_shape(M, scale_k, L), args.dS));
+    
+    return Params{mA_mkl, mB_nkl, mScale, mZero, scale_k, args.group_size};
   }
 
   // Helper functions to select packing for conversion

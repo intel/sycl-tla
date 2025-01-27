@@ -68,6 +68,9 @@ enum GemmMode {
   ConvertAndScaleWithZeroPoint
 };
 
+using MmaType = bfloat16_t;
+using QuantType = cutlass::int8_t;
+
 // Command line options parsing
 struct Options {
 
@@ -76,6 +79,7 @@ struct Options {
 
   int mode = 2;
   int m, n, k, l, iterations;
+  int g = 128;
   float alpha, beta;
 
   Options():
@@ -98,6 +102,7 @@ struct Options {
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
+    cmd.get_cmd_line_argument("g", g);
     cmd.get_cmd_line_argument("mode", mode);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
@@ -114,6 +119,8 @@ struct Options {
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+      << "  --g=<int>                   The size of each group for the scales and zeros. To broadcast a vector of scales or zeros, set the group size to K.\n"
+      << "  --mode=<int>                The mode to run the gemm. 0 is Convert Only, 1 is Convert and Scale, 2 is Convert and Scale with Zero Point\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
       << "  --iterations=<int>          Iterations\n\n";
@@ -129,6 +136,9 @@ template <
 >
 struct ExampleRunner {
 
+  using CollectiveMainloop = typename Gemm::CollectiveMainloop;
+  using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
+
   using StrideA = typename Gemm::GemmKernel::StrideA;
   using StrideB = typename Gemm::GemmKernel::StrideB;
   using StrideC = typename Gemm::GemmKernel::StrideC;
@@ -143,13 +153,20 @@ struct ExampleRunner {
   using ElementB = typename Gemm::ElementB;
   using ElementAcc = typename Gemm::ElementAccumulator;
 
-  using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
+  using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
+  using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
+  // Scale and Zero share a stride since the layout and shapes must be the same.
+  using StrideScale = typename CollectiveMainloop::StrideScale;
+  using StrideZero = StrideScale; 
+
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
+
+  static constexpr bool AIsQuantized = CollectiveMainloop::IsATransformed;
 
   //
   // Data members
@@ -160,11 +177,14 @@ struct ExampleRunner {
   StrideB stride_B;
   StrideC stride_C;
   StrideD stride_D;
+  StrideScale stride_S;
   uint64_t seed = 0;
 
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
   cutlass::DeviceAllocation<ElementB> block_A_dq; // Dequantized copy of A for validation
+  cutlass::DeviceAllocation<ElementScale> block_scale;
+  cutlass::DeviceAllocation<ElementZero> block_zero;
   cutlass::DeviceAllocation<ElementC> block_C;
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
@@ -276,11 +296,54 @@ struct ExampleRunner {
     block_device.copy_from_host(block_host.data());
     block_device_dq.copy_from_host(block_host_dq.data());
   }
+    
+  template <class Element>
+  bool initialize_scale(
+    cutlass::DeviceAllocation<Element>& block, 
+    Options const& options) {
+    
+    if (options.mode == GemmMode::ConvertOnly) {
+      // No scales, so just initialize with 1 so we can use the same kernel to dequantize the data.
+      std::vector<Element> stage(block.size(), Element(1.0f));
+      block.copy_from_host(stage.data());
+    } 
+    else {
+      float elt_max_f = float(cutlass::platform::numeric_limits<QuantType>::max());
+      const float max_dequant_val = 4.f;
+      const float min_dequant_val = 0.5f;
+
+      float scope_max(max_dequant_val / elt_max_f);
+      float scope_min(min_dequant_val / elt_max_f);
+
+      cutlass::reference::device::BlockFillRandomUniform(
+        block.get(), block.size(), seed, Element(scope_max), Element(scope_min));
+    }
+    return true;
+  }
+
+  template <class Element>
+  bool initialize_zero(
+    cutlass::DeviceAllocation<Element>& block,
+    Options const& options) {
+    
+    if (options.mode == GemmMode::ConvertAndScaleWithZeroPoint) {
+      cutlass::reference::device::BlockFillRandomUniform(
+        block.get(), block.size(), seed, Element(2.0f), Element(-2.0f));
+    } else {
+      // No bias, so just initialize with 1 so we can use the same kernel to dequantize the data.
+      std::vector<Element> stage(block.size(), Element(0.0f));
+      block.copy_from_host(stage.data());
+    }
+    return true;
+  }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
-  void initialize(const ProblemShapeType& problem_size) {
-    auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
-    auto [M, N, K, L] = problem_shape_MNKL;
+  void initialize(Options const& options) {
+    auto [M, N, K, L] = ProblemShapeType{options.m, options.n, options.k, options.l};
+
+    // TODO(joe): probably change to A
+    auto shape_b = cute::make_shape(options.n, options.k, options.l);
+    int const scale_k = (options.k + options.g - 1) / options.g;
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
@@ -294,23 +357,39 @@ struct ExampleRunner {
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
+    if(AIsQuantized){
+      block_scale.reset(scale_k * options.l * options.m);
+      block_zero.reset(scale_k * options.l * options.m);
+    }else{
+      block_scale.reset(scale_k * options.l * options.n);
+      block_zero.reset(scale_k * options.l * options.n);
+    }
+
     initialize_block_A(block_A, block_A_dq, seed+2023);
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
+
+    initialize_scale(block_scale, options);
+    initialize_zero(block_zero, options);
+
   }
 
   void run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
-    initialize(problem_size);
+    initialize(options);
 
     typename Gemm::GemmKernel::Arguments arguments{
-      cutlass::gemm::GemmUniversalMode::kGemm,
-      problem_size,
-      {block_A.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
-      hw_info
-    };
+        cutlass::gemm::GemmUniversalMode::kGemm,
+        problem_size,
+        {block_A.get(), stride_A, block_B.get(), stride_B, block_scale.get(),
+         stride_S, options.g, block_zero.get()},
+        {{options.alpha, options.beta},
+         block_C.get(),
+         stride_C,
+         block_D.get(),
+         stride_D},
+        hw_info};
 
     Gemm gemm_op;
 
@@ -381,9 +460,6 @@ int main(int argc, const char** argv)
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
   bool passed;
-
-  using MmaType = bfloat16_t;
-  using QuantType = cutlass::int8_t;
 
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
