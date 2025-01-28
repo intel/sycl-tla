@@ -1,4 +1,4 @@
-name: "Test"
+name: "SYCL Nvidia Test"
 
 on:
   push:

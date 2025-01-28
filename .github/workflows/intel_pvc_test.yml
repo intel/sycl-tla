@@ -1,4 +1,4 @@
-name: "Intel PVC Test"
+name: "SYCL Intel PVC Test"
 
 on:
   push:
