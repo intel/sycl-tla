@@ -261,7 +261,7 @@ T shfl_up_sync(
 #elif defined(__SYCL_DEVICE_ONLY__)
   return syclcompat::shift_sub_group_right(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
 #else
-  return 0;
+  return static_cast<T>(0);
 #endif
 }
 
@@ -277,7 +277,7 @@ T shfl_down_sync(
 #elif defined(__SYCL_DEVICE_ONLY__)
   return syclcompat::shift_sub_group_left(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
 #else
-  return 0;
+  return static_cast<T>(0);
 #endif
 }
 
@@ -295,7 +295,7 @@ T shfl_sync(
   unsigned int start_index = (g.get_local_linear_id() / width) * width;
   return sycl::select_from_group(g, var, start_index + delta % width);
 #else
-  return 0;
+  return static_cast<T>(0);
 #endif
 }
 
@@ -312,7 +312,7 @@ T shfl_xor_sync(
   auto g = syclcompat::get_nd_item<1>().get_sub_group();
   return syclcompat::permute_sub_group_by_xor(g, var, laneMask);
 #else
-  return 0;
+  return static_cast<T>(0);
 #endif
 }
 
@@ -340,7 +340,7 @@ CUTLASS_DEVICE T atomicAdd(T *address, T val) {
 #if defined(__SYCL_DEVICE_ONLY__)
   return syclcompat::atomic_fetch_add<sycl::access::address_space::global_space>(address, val);
 #endif
-  return 0;
+  return static_cast<T>(0);
 }
 
 CUTLASS_DEVICE int atomicCAS(int *address, int compare, int val) {
