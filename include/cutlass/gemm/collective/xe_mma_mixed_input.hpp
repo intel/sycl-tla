@@ -106,6 +106,12 @@ public:
   static constexpr bool IsATransformed = cute::is_tuple<ElementAOptionalTuple>::value;
   using ElementScale = cute::conditional_t<IsATransformed, ScaleA, ScaleB>;
   using ElementZero = cute::conditional_t<IsATransformed, ZeroA, ZeroB>;
+  using ElementMMA = cute::conditional_t<IsATransformed, ElementB, ElementA>;
+  using ElementQuant = cute::conditional_t<IsATransformed, ElementA, ElementB>;
+
+  static_assert(cute::is_same_v<ElementMMA, ElementScale> || cute::is_same_v<ElementScale, void>, "Quantization scale type must match MMA type.");
+  static_assert(cute::is_same_v<ElementMMA, ElementZero> || cute::is_same_v<ElementZero, void>, "Quantization zero point must match MMA type.");
+
   // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
   // TODO(joe): Can we pick a better non-void scale default type? The wider of ElementA and ElementB for example?
   using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, bfloat16_t, ElementScale>;
@@ -115,7 +121,7 @@ public:
   using StrideB = StrideB_;
 
   // These are always MN major
-  using StrideScale = cute::Stride<cute::Int<1>, int64_t, int64_t>;
+  using StrideScale = cute::Stride<_1, int64_t, int64_t>;
   // For cases where we can't have a void scale, we can use this to allow the code to compile when the scale is void.
   using NonVoidStrideScale = cute::conditional_t<
       cute::is_void_v<StrideScale>, cute::Stride<_1, int64_t, int64_t>, StrideScale>;
@@ -124,7 +130,7 @@ public:
 
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
-  using GmemTiledCopyScale = GmemTiledCopyA_;  // TODO(joe): This is likely wrong/ungeneral
+  using GmemTiledCopyScale = XE_2D_U16x1x32_LD_N;  // TODO(joe): generalize
 
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;
@@ -193,6 +199,9 @@ public:
   using traits_load_B = Copy_Traits<GmemTiledCopyB, StrideB>;
   using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
 
+  using traits_load_scale = Copy_Traits<GmemTiledCopyScale, StrideScale>;
+  using atom_load_scale = Copy_Atom<traits_load_scale, NonVoidElementScale>;
+
   using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize, ElementA>());
   using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize, ElementB>());
 
@@ -208,7 +217,7 @@ public:
     ElementB const* ptr_B;
     StrideB dB;
     ElementScale const* ptr_S = nullptr;
-    NonVoidStrideScale dS;
+    StrideScale dS;
     int group_size = 1; // Avoid /0 when no scales // TODO(joe): Is this needed?
     ElementZero const* ptr_Z = nullptr;
   };
@@ -247,14 +256,14 @@ public:
                     make_layout(make_shape(N, K, L), args.dB));
 
     // These are unused in ConversionMode::DirectConvert
-    auto scale_k = (K + args.group_size - 1) / args.group_size;
+    auto scale_k = cute::ceil_div(K, args.group_size);
     auto mScale = make_tensor(
         make_gmem_ptr(static_cast<NonVoidElementScale const *>(args.ptr_S)),
-        make_layout(make_shape(M, scale_k, L), args.dS));
+        make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
 
     auto mZero =
         make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
-                    make_layout(make_shape(M, scale_k, L), args.dS));
+                    make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
     
     return Params{mA_mkl, mB_nkl, mScale, mZero, scale_k, args.group_size};
   }
@@ -341,24 +350,43 @@ public:
     (void)thread_idx;
     (void)smem_buf;
 
+    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
+  #ifdef CUTLASS_SYCL_SWITCH_WG
+    const int m_coord = n_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
+    const int n_coord = m_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
+  #else
+    const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
+    const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
+  #endif
+    const int l_coord = l_idx;
+
     auto tiled_copy_a = make_xe_2d_copy(atom_load_A{}.with(mainloop.mA),
                                              Layout<Shape<_1, Int<SubgroupSize>>>{});
     auto tiled_copy_b = make_xe_2d_copy(atom_load_B{}.with(mainloop.mB),
+                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
+    auto tiled_copy_scale = make_xe_2d_copy(atom_load_scale{}.with(mainloop.mScale),
                                              Layout<Shape<_1, Int<SubgroupSize>>>{});
 
     // Partition the copying of A and B tiles across the threads
     auto thr_copy_A = tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = tiled_copy_b.get_slice(thread_idx);
+    auto thr_copy_scale = tiled_copy_scale.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
     auto thr_mma = tiled_mma.get_slice(thread_idx);
 
     // Partition fragment
-    Tensor fragment_A = thr_mma.partition_fragment_A(gA(_, _, 0));
-    Tensor fragment_B = thr_mma.partition_fragment_B(gB(_, _, 0));
+    Tensor fragment_A = thr_mma.partition_fragment_A(gA(_, _, 0)); // (M_atom, M_iter, K_iter)
+    Tensor fragment_B = thr_mma.partition_fragment_B(gB(_, _, 0)); // (K_atom, N_iter, K_iter)
+
+    // If IsATransformed, we need modes M_atom, and M_iter from fragment_A layout
+    // Else we need mode N_iter from fragment_B layout.
+    // TODO(joe): handle B version (!IsATransformed), and generalize/cuteify!
+    Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(make_layout(Shape<_2, _1, _1>{}));
+
     // narrow input fragment
-    Tensor tCrA_input = make_tensor<ElementA>(fragment_A.shape());
+    Tensor tCrA_input = make_tensor<ElementA>(fragment_A.layout());
 
     static_assert(std::is_same_v<typename decltype(tCrA_input)::value_type, ElementA>);
     static_assert(std::is_same_v<typename decltype(fragment_A)::value_type, ElementB>);
@@ -366,6 +394,7 @@ public:
     // Retile for copy
     auto copy_tCrA = thr_copy_A.retile_D(tCrA_input);
     Tensor copy_tCrB = thr_copy_B.retile_D(fragment_B);
+    Tensor copy_tCrS = thr_copy_scale.retile_D(fragment_scale_input);
 
     // Retile for cute::gemm
     Tensor mma_tCrA = thr_copy_A.retile_MMA(thr_mma, fragment_A);
@@ -397,20 +426,15 @@ public:
     //
     // Mainloop
     //
-    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
-  #ifdef CUTLASS_SYCL_SWITCH_WG
-    const int m_coord = n_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
-    const int n_coord = m_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
-  #else
-    const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
-    const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
-  #endif
-    const int l_coord = l_idx;
     Tensor block2d_copy_iter_a = tiled_copy_a.get_pvc_tensor(make_coord(m_coord, 0, l_coord), copy_tCrA.shape());
     auto copy_iter_a = append_pvc_tensor<1>(block2d_copy_iter_a, k_tile_count, BLK_K);
 
     Tensor block2d_copy_iter_b = tiled_copy_b.get_pvc_tensor(make_coord(n_coord, 0, l_coord), copy_tCrB.shape());
     auto copy_iter_b = append_pvc_tensor<1>(block2d_copy_iter_b, k_tile_count, BLK_K);
+
+    Tensor copy_iter_s = make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
+                                             make_layout(make_shape(_1{}, _1{}, _1{}, k_tile_count), 
+                                                         make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
 
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
     int prefetch_k = 0;
@@ -438,6 +462,8 @@ public:
         prefetch(tiled_copy_b, prefetch_iter_b(_,_,_,prefetch_k));
       }
     }
+
+    const int k_reload_factor = mainloop.group_size / BLK_K; 
 
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
