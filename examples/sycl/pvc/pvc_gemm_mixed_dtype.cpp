@@ -37,6 +37,10 @@
 * - ConvertOnly: Narrower type is simply converted to the wider type before MMA
 * - ConvertAndScale:   Narrower type is converted to wider type, then scaled
 * - ConvertAndScaleWithZeroPoint:   Narrower type is converted to wider type, then scaled and shifted by zero point
+// TODO(joe): Check these:
+* - Limitations:
+*    - group must be multiple of k-block size
+*    - scales & zeros must be MN-major
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
@@ -343,12 +347,13 @@ struct ExampleRunner {
 
     // TODO(joe): probably change to A
     auto shape_b = cute::make_shape(options.n, options.k, options.l);
-    int const scale_k = (options.k + options.g - 1) / options.g;
+    int const scale_k = cute::ceil_div(options.k, options.g);
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
+    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, cute::make_shape(AIsQuantized ? M : N, scale_k, L));
 
     block_A.reset(M * K * L);
     block_A_dq.reset(M * K * L);
