@@ -113,9 +113,8 @@ public:
   static_assert(cute::is_same_v<ElementMMA, ElementZero> || cute::is_same_v<ElementZero, void>, "Quantization zero point must match MMA type.");
 
   // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
-  // TODO(joe): Can we pick a better non-void scale default type? The wider of ElementA and ElementB for example?
-  using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, bfloat16_t, ElementScale>;
-  using NonVoidElementZero = cute::conditional_t<cute::is_void_v<ElementZero>, bfloat16_t, ElementZero>;
+  using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, ElementMMA, ElementScale>;
+  using NonVoidElementZero = cute::conditional_t<cute::is_void_v<ElementZero>, ElementMMA, ElementZero>;
 
   using StrideA = StrideA_;
   using StrideB = StrideB_;
@@ -281,13 +280,16 @@ public:
   /// Utilities to transform A.
   template <class EngineIn,
             class EngineOut, 
+            class EngineScales, 
             class LayoutIn,
             class LayoutOut,
+            class LayoutScales,
             class... Ts>
   CUTLASS_DEVICE
   void transform_A(
     Tensor<EngineIn, LayoutIn> const& tCrA_load, 
-    Tensor<EngineOut, LayoutOut>& tCrA_mma) {
+    Tensor<EngineOut, LayoutOut>& tCrA_mma,
+    Tensor<EngineScales, LayoutScales>& tCrS_input) {
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
     static_assert(is_rmem<EngineOut>::value, "Output tensor for A conversion must come from registers");
@@ -314,6 +316,14 @@ public:
       SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
       DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
       *pDstArr = Converter::convert(*pSrcArr);
+    }
+    if(ModeHasScales){
+      for (int i = 0; i < 16; ++i){
+        for (int j = 0; j < 2; ++j){
+          // TODO(joe): Finish this off...
+         tCrA_mma(_,_,j)[i] *= shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+        }
+      }
     }
   }
 
@@ -470,7 +480,12 @@ public:
       // Copy gmem to rmem for the first k_tile
       copy(tiled_copy_a, copy_iter_a(_,_,_,k), copy_tCrA);
       copy(tiled_copy_b, copy_iter_b(_,_,_,k), copy_tCrB);
-      transform_A(tCrA_input, mma_tCrA);
+
+      if constexpr(ModeHasScales){
+        copy(tiled_copy_scale, copy_iter_s(_, _, _, k_reload_factor), copy_tCrS);
+      }
+      transform_A(tCrA_input, mma_tCrA, fragment_scale_input);
+
       if(prefetch_k < k_tile_count) {
         if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
           prefetch(tiled_copy_a, prefetch_iter_a(_,_,_,prefetch_k));
