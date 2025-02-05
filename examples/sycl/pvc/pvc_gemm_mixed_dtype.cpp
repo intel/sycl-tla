@@ -172,6 +172,13 @@ struct ExampleRunner {
 
   static constexpr bool AIsQuantized = CollectiveMainloop::IsATransformed;
 
+  // TODO(joe): Deal with this...
+  using LayoutScale = cutlass::layout::RowMajor;
+  using StrideScale_ref =
+      cute::conditional<AIsQuantized,
+                        cutlass::detail::TagToStrideA_t<LayoutScale>,
+                        cutlass::detail::TagToStrideB_t<LayoutScale>>;
+
   //
   // Data members
   //
@@ -182,6 +189,8 @@ struct ExampleRunner {
   StrideC stride_C;
   StrideD stride_D;
   StrideScale stride_S;
+  StrideScale_ref stride_S_ref;
+
   uint64_t seed = 0;
 
   cutlass::DeviceAllocation<ElementA> block_A;
@@ -294,6 +303,7 @@ struct ExampleRunner {
     auto block_host_dq = std::vector<T2>(block_device.size());
     for (int i = 0; i < block_host.size(); ++i) {
       block_host[i] = static_cast<T1>(dist(rng));
+      // TODO(joe): call host-side dequantize function here
       block_host_dq[i] = static_cast<T2>(block_host[i]);
     }
 
