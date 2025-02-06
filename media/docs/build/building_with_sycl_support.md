@@ -41,7 +41,7 @@ Only Linux platforms are supported.
 ### Requirements (SYCL for Intel GPU)
 
 To build CUTLASS SYCL support for Intel GPUs, you need the Intel SYCL compiler,
-you can use the latest [[nighly build](https://github.com/intel/llvm/releases)] 
+you can use the latest [[nightly build](https://github.com/intel/llvm/releases)] 
 or a oneAPI toolkit from 2025.0 onwards.
 
 Building the tests and the examples requires oneMKL for random number generation.
@@ -79,7 +79,7 @@ $ cd examples/sycl/pvc/
 $ ./pvc_gemm
 Disposition: Passed
 Problem Size: 5120x4096x4096x1
-Cutlass GEMM Performance:     [196.264]TFlop/s  (0.8753)ms
+Cutlass GEMM Performance:     [247.159]TFlop/s  (0.6951)ms
 ```
 
 ## Support for NVIDIA GPUs (validation only)
@@ -90,8 +90,8 @@ purposes and not intended for production.
 
 ### Requirements 
  
-To build CUTLASS SYCL support you need the latest version of DPC++ compiler. You can either use a recent [nighly build](https://github.com/intel/llvm/releases)
-or build the compiler from source as described in [oneAPI DPC++ guidline]((https://github.com/intel/llvm/blob/sycl/sycl/doc/GetStartedGuide.md#build-dpc-toolchain-with-support-for-nvidia-cuda)).
+To build CUTLASS SYCL support you need the latest version of DPC++ compiler. You can either use a recent [nightly build](https://github.com/intel/llvm/releases)
+or build the compiler from source as described in [oneAPI DPC++ guideline]((https://github.com/intel/llvm/blob/sycl/sycl/doc/GetStartedGuide.md#build-dpc-toolchain-with-support-for-nvidia-cuda)).
 
 ### Building with SYCL for NVIDIA support
 Once you have your compiler installed, you need to point the
@@ -100,7 +100,6 @@ This enables the compilation of SYCL sources without altering the current NVCC p
 
 ```
 cmake -G Ninja  \
-  -DCMAKE_CUDA_HOST_COMPILER=/path/to/clang++  \
   -DCUTLASS_ENABLE_SYCL=ON \
   -DDPCPP_SYCL_TARGET=nvptx64-nvidia-cuda \
   -DDPCPP_SYCL_ARCH=sm_80
