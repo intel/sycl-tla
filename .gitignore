@@ -3,4 +3,4 @@ __pycache__/
 cutlass_library.egg-info/
 
 # Build directory
-build*/
+/build*/
