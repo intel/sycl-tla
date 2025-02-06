@@ -13,7 +13,8 @@ changes at the atom and pipeline level.
 
 SYCL[1] is a royalty-free, cross-platform abstraction layer that enables
 code for heterogeneous and offload processors to be written with modern 
-ISO C++, and provides API and abstractions to find devices and manage 
+ISO C++, and provides API a
+nd abstractions to find devices and manage 
 resources for GPUs. 
 
 ## Support for NVIDIA GPUs using CUDA
@@ -29,10 +30,11 @@ as we can.
 ## Support for Intel GPUs
 
 The SYCL backend supports running CUTLASS on Intel GPUs.
-Currently, Intel Data Center Max 1550 and 1100 (a.k.a PVC) are supported.
+Currently, Intel Data Center Max 1550 and 1100 (a.k.a Ponte Vecchio - PVC) are supported.
 Intel Arc B570 is known to work but not optimized yet.
 
-The sycl folder within the examples directory shows a number of GEMM algorithms and examples of CUTLASS running on PVC, including flash attention V2.
+The `examples/sycl` directory shows a number of GEMM algorithms and examples of 
+CUTLASS running on PVC, including flash attention V2.
 
 Only Linux platforms are supported.
 
@@ -50,7 +52,7 @@ The following instructions show how to use the nightly build to build the cutlas
 
 
 ```
-# Download the nightly of DPCPP compiler (any latest should work)
+# Download the nightly of DPCPP compiler
 $ wget https://github.com/intel/llvm/releases/tag/nightly-2025-01-31
 # Setup the environment variables
 $ export PATH_TO_DPCPP=/path/to/your/dpcpp/installation
