@@ -45,7 +45,6 @@ void check_tiled_mma(){
 
 TEST(PVC_CuTe_Xe, tiled_mma_1) {
 
-  // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
   using SubgroupLayout = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>;
   using ExpectedTiledMMA = 
@@ -53,5 +52,19 @@ TEST(PVC_CuTe_Xe, tiled_mma_1) {
                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
                Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
                     Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
-  check_tiled_mma<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, TileShape, SubgroupLayout, ExpectedTiledMMA>();
+  check_tiled_mma<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, TileShape,
+                  SubgroupLayout, ExpectedTiledMMA>();
+}
+
+TEST(PVC_CuTe_Xe, tiled_mma_2) {
+
+  using TileShape = Shape<_128, _64, _32>;
+  using SubgroupLayout = Layout<Shape<_4, _2, _1>, Stride<_2, _1, _0>>;
+  using ExpectedTiledMMA =
+      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+               Layout<Shape<_4, _2, _1>, Stride<_2, _1, _0>>,
+               Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
+                    Layout<Shape<_16, _2, _2>, Stride<_1, _32, _16>>, _32>>;
+  check_tiled_mma<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, TileShape,
+                  SubgroupLayout, ExpectedTiledMMA>();
 }
