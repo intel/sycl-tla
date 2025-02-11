@@ -18,7 +18,7 @@ resources for GPUs.
 
 ## Support for NVIDIA GPUs using CUDA
 
-The support for NVIDIA GPUs using CUTLASS is unmodified, you can still use this repository as a drop-in replacement of the upstream NVIDIA repository.
+The support for NVIDIA GPUs using CUTLASS is unmodified; you can still use this repository as a drop-in replacement for the upstream NVIDIA repository.
 The SYCL support does not conflict with the original NVIDIA CUDA path.
 Only some portions of the common headers and the build system are slightly modified
 to enable the SYCL compilation mode.
