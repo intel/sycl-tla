@@ -13,8 +13,7 @@ changes at the atom and pipeline level.
 
 SYCL[1] is a royalty-free, cross-platform abstraction layer that enables
 code for heterogeneous and offload processors to be written with modern 
-ISO C++, and provides API a
-nd abstractions to find devices and manage 
+ISO C++, and provides API and abstractions to find devices and manage 
 resources for GPUs. 
 
 ## Support for NVIDIA GPUs using CUDA
