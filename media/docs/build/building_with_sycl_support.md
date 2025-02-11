@@ -47,7 +47,7 @@ Building the tests and the examples requires oneMKL for random number generation
 
 ### Building with SYCL for Intel GPU support
 
-The following instructions show how to use the nightly build to build the cutlass example
+The following instructions show how to use the nightly build to build the cutlass examples
 
 
 ```
