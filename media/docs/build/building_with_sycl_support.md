@@ -30,7 +30,7 @@ as we can.
 
 The SYCL backend supports running CUTLASS on Intel GPUs.
 Currently, Intel Data Center Max 1550 and 1100 (a.k.a Ponte Vecchio - PVC) are supported.
-Intel Arc B570 is known to work but not optimized yet.
+Intel Arc B580 is known to work but is not yet optimized.
 
 The `examples/sycl` directory shows a number of GEMM algorithms and examples of 
 CUTLASS running on PVC, including flash attention V2.
