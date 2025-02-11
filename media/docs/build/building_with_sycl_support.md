@@ -68,7 +68,7 @@ $ CC=clang CXX=clang++ cmake .. -G Ninja \
 ```
 
 CMake will check that DPC++ compiler is available in the system,
-and it will download MKL library if it cannot find it.
+and it will download the MKL library if it cannot find it.
 
 To build and run a simple PVC gemm example run the commands below.
 
