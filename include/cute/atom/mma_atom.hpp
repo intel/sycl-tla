@@ -599,6 +599,41 @@ make_tiled_mma(MMA_Op       const&,
   return make_tiled_mma(MMA_Atom<MMA_Op>{}, thr_layout, permutations);
 }
 
+// TODO(joe): Document, rename, refactor this
+// TODO(joe): Stride option
+// TODO(joe): Test
+// TODO(joe): static_asserts - divisibility
+template <typename MMA_Atom, typename CTATileShape, typename SubgroupLayout>
+struct Xe_Tiler_Helper{
+   using AtomShape = typename MMA_Atom::Shape_MNK;
+   using DefaultTiledMMA = TiledMMA<MMA_Atom, SubgroupLayout>;
+  
+  static constexpr int AtomM = get<0>(AtomShape{});
+  static constexpr int AtomN = get<1>(AtomShape{});
+  static constexpr int AtomK = get<2>(AtomShape{});
+
+  static constexpr int def_tile_M = DefaultTiledMMA{}.template tile_size_mnk<0>();
+  static constexpr int def_tile_N = DefaultTiledMMA{}.template tile_size_mnk<1>();
+  static constexpr int def_tile_K = DefaultTiledMMA{}.template tile_size_mnk<2>();
+
+  static constexpr int IterM = get<0>(CTATileShape{}) / def_tile_M;
+  static constexpr int IterN = get<1>(CTATileShape{}) / def_tile_N;
+  static constexpr int IterK = get<2>(CTATileShape{}) / def_tile_K;
+
+  using TilerShapeM = Shape<tuple_element_t<0, AtomShape>, decltype(shape<0>(SubgroupLayout{})), Int<IterM>>;
+  using TilerShapeN = Shape<tuple_element_t<1, AtomShape>, decltype(shape<1>(SubgroupLayout{})), Int<IterN>>;
+  using TilerShapeK = Shape<tuple_element_t<2, AtomShape>, decltype(shape<2>(SubgroupLayout{})), Int<IterK>>;
+
+  using TilerStrideM = Stride<_1,  Int<AtomM * IterM>, Int<AtomM>>;
+  using TilerStrideN = Stride<_1,  Int<AtomN * IterN>, Int<AtomN>>;
+  using TilerStrideK = Stride<_1,  Int<AtomK * IterK>, Int<AtomK>>;
+
+  using Tiler = Tile<Layout<TilerShapeM, TilerStrideM>,
+                             Layout<TilerShapeN, TilerStrideN>,
+                             decltype(get<2>(CTATileShape{}))>;
+  using TiledMMA = TiledMMA<MMA_Atom, SubgroupLayout, Tiler>;
+};
+
 //
 // partition_fragment_C -- static context
 //
