@@ -120,7 +120,7 @@ LD_LIBRARY_PATH=/path/to/sycl/install/lib ./examples/cute/tutorial/[EXAMPLE_NAME
 ```
 
 #### CUTLASS Example
- Currently, the the example `14_amper_tf32_tensorop_gemm` has been implemented for SYCL on Nvidia Ampere architecture. You can build this from your build directory by running :
+ Currently, the example `14_amper_tf32_tensorop_gemm` has been implemented for SYCL on Nvidia Ampere architecture. You can build this from your build directory by running :
  ```
   ninja 14_ampere_tf32_tensorop_gemm_cute
  ```
