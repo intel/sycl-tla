@@ -599,39 +599,44 @@ make_tiled_mma(MMA_Op       const&,
   return make_tiled_mma(MMA_Atom<MMA_Op>{}, thr_layout, permutations);
 }
 
-// TODO(joe): Document, rename, refactor this
-// TODO(joe): Stride option
-// TODO(joe): Test
-// TODO(joe): static_asserts - divisibility
+// This helper fn adopts the approach described in
+// media/docs/cute/0t_mma_atom.md#tiledmmas to construct a scatter
+// permutation which ensures all sub-groups operate on contiguous
+// chunks of the MMA. The docs describe how the Layout
+// (i.e. SubgroupLayout) implies a repetition of the atom across additional
+// hardware. Permutations, in the simplest form, imply additional iterations
+// to cover a larger tile (i.e. CTATileShape) than the hardware can handle
+// at once. By specifying additional modes and strides, we can achieve 
+// arbitrary TiledMMA layouts.
 template <typename MMA_Atom, typename CTATileShape, typename SubgroupLayout>
-struct Xe_Tiler_Helper{
-   using AtomShape = typename MMA_Atom::Shape_MNK;
-   using DefaultTiledMMA = TiledMMA<MMA_Atom, SubgroupLayout>;
-  
-  static constexpr int AtomM = get<0>(AtomShape{});
-  static constexpr int AtomN = get<1>(AtomShape{});
-  static constexpr int AtomK = get<2>(AtomShape{});
+struct ContigBlockMMAHelper{
+private:
+  using AtomShape = typename MMA_Atom::Shape_MNK;
 
-  static constexpr int def_tile_M = DefaultTiledMMA{}.template tile_size_mnk<0>();
-  static constexpr int def_tile_N = DefaultTiledMMA{}.template tile_size_mnk<1>();
-  static constexpr int def_tile_K = DefaultTiledMMA{}.template tile_size_mnk<2>();
+  // Represents the canonical MMA block which would be handled
+  // by these subgroups without permutation info...
+  static constexpr auto DefaultBlock =
+      blocked_product(Layout<AtomShape>{}, SubgroupLayout{});
 
-  static constexpr int IterM = get<0>(CTATileShape{}) / def_tile_M;
-  static constexpr int IterN = get<1>(CTATileShape{}) / def_tile_N;
-  static constexpr int IterK = get<2>(CTATileShape{}) / def_tile_K;
+  // Discard strides and internal modes, e.g. (8,8):(1,8) -> 64
+  static constexpr auto DefaultTiler =
+      make_shape(size<0>(DefaultBlock), size<1>(DefaultBlock),
+                size<2>(DefaultBlock));
 
-  using TilerShapeM = Shape<tuple_element_t<0, AtomShape>, decltype(shape<0>(SubgroupLayout{})), Int<IterM>>;
-  using TilerShapeN = Shape<tuple_element_t<1, AtomShape>, decltype(shape<1>(SubgroupLayout{})), Int<IterN>>;
-  using TilerShapeK = Shape<tuple_element_t<2, AtomShape>, decltype(shape<2>(SubgroupLayout{})), Int<IterK>>;
+  // Construct the default tiled MMA, to extract the iteration count per dim below
+  static constexpr auto DefaultTiling = logical_divide(Layout<CTATileShape>{}, DefaultTiler);
 
-  using TilerStrideM = Stride<_1,  Int<AtomM * IterM>, Int<AtomM>>;
-  using TilerStrideN = Stride<_1,  Int<AtomN * IterN>, Int<AtomN>>;
-  using TilerStrideK = Stride<_1,  Int<AtomK * IterK>, Int<AtomK>>;
-
-  using Tiler = Tile<Layout<TilerShapeM, TilerStrideM>,
-                             Layout<TilerShapeN, TilerStrideN>,
-                             decltype(get<2>(CTATileShape{}))>;
-  using TiledMMA = TiledMMA<MMA_Atom, SubgroupLayout, Tiler>;
+  static constexpr auto permutation =
+      transform(AtomShape{}, SubgroupLayout{}.shape(), DefaultTiling.shape(),
+                [](auto a, auto sg, auto dt) {
+                  constexpr auto iters = get<1>(dt);
+                  auto tiler_shape = make_shape(a, sg, iters);                     // atom, hardware, iteration
+                  auto tiler_stride = make_stride(_1{}, Int<a*iters>{}, Int<a>{}); // atom, hardware, iteration
+                  return coalesce(make_layout(tiler_shape, tiler_stride));
+                });
+public:
+  using Permutation = decltype(permutation);
+  using TiledMMA = TiledMMA<MMA_Atom, SubgroupLayout, Permutation>;
 };
 
 //

@@ -39,7 +39,7 @@ using namespace cute;
 
 template <typename MMA_Atom, typename CTATileShape, typename SubgroupLayout, typename ExpectedTiledMMA>
 void check_tiled_mma(){
-  using TiledMMA = typename Xe_Tiler_Helper<MMA_Atom, CTATileShape, SubgroupLayout>::TiledMMA;
+  using TiledMMA = typename ContigBlockMMAHelper<MMA_Atom, CTATileShape, SubgroupLayout>::TiledMMA;
   static_assert(std::is_same_v<TiledMMA, ExpectedTiledMMA>, "Error in construction of contiguous tiled MMA");
 };
 
@@ -47,11 +47,12 @@ TEST(PVC_CuTe_Xe, tiled_mma_1) {
 
   using TileShape = Shape<_256, _256, _32>;
   using SubgroupLayout = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>;
-  using ExpectedTiledMMA = 
-      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
-               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                    Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
+  using ExpectedTiledMMA = TiledMMA<
+      MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
+      const Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                 Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>,
+                 decltype(coalesce(Layout<Shape<_32>, Stride<_1>>{}))>>;
   check_tiled_mma<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, TileShape,
                   SubgroupLayout, ExpectedTiledMMA>();
 }
@@ -60,11 +61,12 @@ TEST(PVC_CuTe_Xe, tiled_mma_2) {
 
   using TileShape = Shape<_128, _64, _32>;
   using SubgroupLayout = Layout<Shape<_4, _2, _1>, Stride<_2, _1, _0>>;
-  using ExpectedTiledMMA =
-      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-               Layout<Shape<_4, _2, _1>, Stride<_2, _1, _0>>,
-               Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
-                    Layout<Shape<_16, _2, _2>, Stride<_1, _32, _16>>, _32>>;
+  using ExpectedTiledMMA = TiledMMA<
+      MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+      Layout<Shape<_4, _2, _1>, Stride<_2, _1, _0>>,
+      const Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
+                 Layout<Shape<_16, _2, _2>, Stride<_1, _32, _16>>,
+                 decltype(coalesce(Layout<Shape<_32>, Stride<_1>>{}))>>;
   check_tiled_mma<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, TileShape,
                   SubgroupLayout, ExpectedTiledMMA>();
 }
