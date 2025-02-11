@@ -39,7 +39,7 @@ Only Linux platforms are supported.
 
 ### Requirements (SYCL for Intel GPU)
 
-To build CUTLASS SYCL support for Intel GPUs, you need the Intel SYCL compiler,
+To build CUTLASS SYCL support for Intel GPUs, you need the Intel SYCL compiler;
 you can use the latest [[nightly build](https://github.com/intel/llvm/releases)] 
 or a oneAPI toolkit from 2025.0 onwards.
 
