@@ -31,3 +31,4 @@ cutlass_example_add_executable(
   pvc_flash_attention
   pvc_flash_attn.cpp
 )
+
