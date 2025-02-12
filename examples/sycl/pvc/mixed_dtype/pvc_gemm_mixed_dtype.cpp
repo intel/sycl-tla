@@ -61,6 +61,7 @@
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "../common.hpp"
 #include "helper.h"
+#include "unfused_weight_dequantize.hpp"
 
 using namespace cute;
 
