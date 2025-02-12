@@ -1,4 +1,4 @@
-# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+# Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,40 +28,6 @@
 
 
 cutlass_example_add_executable(
-  pvc_gemm
-  pvc_gemm.cpp
+  pvc_gemm_mixed_dtype
+  pvc_gemm_mixed_dtype.cpp
 )
-
-cutlass_example_add_executable(
-  pvc_gemm_with_epilogue_relu
-  pvc_gemm_with_epilogue_relu.cpp
-)
-
-cutlass_example_add_executable(
-  pvc_gemm_with_epilogue_gelu
-  pvc_gemm_with_epilogue_gelu.cpp
-)
-
-cutlass_example_add_executable(
-  pvc_gemm_with_epilogue_lincombdeeltact
-  pvc_gemm_with_epilogue_lincombdeeltact.cpp
-)
-
-cutlass_example_add_executable(
-  pvc_gemm_with_per_row_bias
-  pvc_gemm_with_per_row_bias.cpp
-)
-
-cutlass_example_add_executable(
-  pvc_collective_builder
-  pvc_collective_builder.cpp
-)
-
-cutlass_example_add_executable(
-  pvc_gemm_streamk
-  pvc_gemm_streamk.cpp
-)
-
-add_subdirectory(flash_attention_v2)
-add_subdirectory(mixed_dtype)
-
