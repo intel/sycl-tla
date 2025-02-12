@@ -1,4 +1,4 @@
-# Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,64 +26,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
 
-add_custom_target(cutlass_benchmarks)
-
-function(cutlass_benchmark_add_executable NAME)
-
-  set(options)
-  set(oneValueArgs DISABLE_TESTS)
-  set(multiValueArgs DEPENDS DEPENDEES TEST_COMMAND_OPTIONS)
-  cmake_parse_arguments(_ "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-  set(__DISABLE_TESTS ON)
-
-  cutlass_add_executable(${NAME} ${__UNPARSED_ARGUMENTS} BATCH_SOURCES OFF)
-
-  add_dependencies(cutlass_benchmarks ${NAME})
-
-  if (NOT CUTLASS_ENABLE_SYCL)
-    SET(ADD_CUDA ON)
-  endif()
-
-  target_link_libraries(
-    ${NAME}
-    PRIVATE
-    CUTLASS
-    cutlass_tools_util_includes
-    $<$<BOOL:${CUTLASS_ENABLE_CUBLAS}>:nvidia::cublas>
-    $<$<BOOL:${ADD_CUDA}>:cuda>
-    benchmark::benchmark
-  )
-
-  target_include_directories(
-    ${NAME}
-    PRIVATE
-    ${CUTLASS_APPLICATIONS_DIR}
-  )
-
-  if (CUTLASS_ENABLE_SYCL)
-    add_onemkl_to_target(TARGET ${NAME})
-    add_sycl_to_target(TARGET ${NAME})
-  endif()
-
-  install(
-    TARGETS ${NAME}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-  )
-endfunction()
-
-if (CUTLASS_ENABLE_SYCL)
-  cutlass_benchmark_add_executable(
-    benchmarks
-    main.cpp
-    )
-  if (SYCL_INTEL_TARGET)
-    add_subdirectory(pvc/flash_attention_v2)
-  endif()
-else()
-  cutlass_benchmark_add_executable(
-    benchmarks
-    main.cu
-    )
-endif()
+cutlass_benchmark_add_executable(
+  flash_attention_benchmark
+  main.cpp
+)

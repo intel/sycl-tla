@@ -1,5 +1,5 @@
 /***************************************************************************************************
-* Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+* Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,11 +34,7 @@
 #include "cutlass/util/command_line.h"
 
 #include "benchmark_runner.hpp"
-#if defined(SYCL_NVIDIA_TARGET) || !defined(CUTLASS_ENABLE_SYCL)
-#include "ampere/benchmarks.hpp"
-#elif defined(SYCL_INTEL_TARGET)
-#include "pvc/benchmarks.hpp"
-#endif
+#include "benchmarks.hpp"
 
 #include <benchmark/benchmark.h>
 #include <iostream>
@@ -86,7 +82,7 @@ struct BenckmarkOptions {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 auto benchmark_main(int argc, const char **argv) -> int {
-  cutlass::benchmark::GEMMOptions options;
+  cutlass::benchmark::FMHAOptions options;
 
   options.parse(argc, argv);
 
@@ -98,7 +94,7 @@ auto benchmark_main(int argc, const char **argv) -> int {
   cutlass::KernelHardwareInfo hw_info;
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
   const auto benchmark_config = argv[0];
-  auto runner = cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::GEMMOptions>::get_benchmark(benchmark_config);
+  auto runner = cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::FMHAOptions>::get_benchmark(benchmark_config);
 
   std::stringstream benchmark_name;
   benchmark_name << benchmark_config << "/" << options.benchmark_name();
