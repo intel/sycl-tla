@@ -35,7 +35,6 @@
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
 
-#include "../applications/pvc/flash_attention_v2/utils/online_softmax.hpp"
 #include "../applications/pvc/flash_attention_v2/collective/pvc_flash_attn_mma.hpp"
 
 #ifdef __SYCL_DEVICE_ONLY__
@@ -53,12 +52,12 @@ SYCL_DEVICE_SPV_SPLIT_BARRIER(void __spirv_ControlBarrierWaitINTEL(int execution
 #undef SYCL_DEVICE_SPV_SPLIT_BARRIER
 namespace cutlass::gemm::kernel {
 
-template <class ProblemShape, class CollectiveMainloop, class CollectiveEpilogue, class TileScheduler_ = void>
+template <class ProblemShape, class CollectiveMainloop, class CollectiveSoftmaxEpilogue_, class CollectiveEpilogue, class TileScheduler_ = void>
 class GemmUniversalAttention;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-template <class ProblemShape_, class CollectiveMainloop_, class CollectiveEpilogue_, class TileScheduler_>
+template <class ProblemShape_, class CollectiveMainloop_, class CollectiveSoftmaxEpilogue_, class CollectiveEpilogue_, class TileScheduler_>
 class GemmUniversalAttention {
 // 3 is for subgroup, 2 is for workgroup
 #define barrier_arrive(scope) __spirv_ControlBarrierArriveINTEL(scope, 0, 0);
@@ -89,8 +88,9 @@ public:
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
 
-  using SoftmaxArguments = typename flash::Softmax<ElementAccumulator>::Arguments;
-  using SoftmaxParams = typename flash::Softmax<ElementAccumulator>::Params;
+  using CollectiveSoftmaxEpilogue = CollectiveSoftmaxEpilogue_;
+  using SoftmaxArguments = typename CollectiveSoftmaxEpilogue::Arguments;
+  using SoftmaxParams = typename CollectiveSoftmaxEpilogue::Params;
 
   static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler>,
                 "Intel PVC does not support specializing the tile scheduler.");
@@ -160,7 +160,7 @@ public:
     GemmUniversalMode mode;
     ProblemShape problem_shape;
     MainloopParams mainloop;
-    SoftmaxArguments softmax;
+    SoftmaxParams softmax;
     EpilogueParams epilogue;
   };
 
@@ -173,7 +173,7 @@ public:
     (void)workspace;
     return {args.mode, args.problem_shape,
             CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
-            flash::Softmax<ElementAccumulator>::to_underlying_arguments(args.softmax),
+            CollectiveSoftmaxEpilogue::to_underlying_arguments(args.softmax),
             CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace)};
   }
 
@@ -372,9 +372,9 @@ public:
           }
         }
       }
-      
-      flash::Softmax<ElementAccumulator>::template run<CausalMask, Vec, FragsM, FragsN>(
-          nblock == 0, tSr, max_reg, sum_reg, out_reg, params.softmax);
+
+      CollectiveSoftmaxEpilogue softmax(params.softmax);
+      softmax.template operator()<Vec, FragsM, FragsN>(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
       auto gV = local_tile(mV_nk, blk_shape, make_coord(0, 0, _), Step< X, _1, _1>{});
       auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
