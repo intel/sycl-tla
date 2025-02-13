@@ -1,4 +1,5 @@
 /***************************************************************************************************
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
@@ -34,6 +35,7 @@
 #include "cute/tensor.hpp"
 
 #include "helper.h"
+#include <syclcompat.hpp> 
 
 template <class QuantizedElement, 
           class DequantizedElement,
@@ -42,13 +44,13 @@ template <class QuantizedElement,
           class ElementZero,
           class ScaleBroadCastLayout,
           class ThrLayout>
-__global__ void dequantize_weight_kernel(DequantizedElement* dq_buffer,
-                                         QuantizedElement const* q_buffer,
-                                         OperandLayout const operand_layout,
-                                         ElementScale const* scale_buffer,
-                                         ElementZero const* zero_buffer,
-                                         ScaleBroadCastLayout const broadcasted_scale_layout,
-                                         ThrLayout thr_layout) {
+void dequantize_weight_kernel(DequantizedElement* dq_buffer,
+                              QuantizedElement const* q_buffer,
+                              OperandLayout const operand_layout,
+                              ElementScale const* scale_buffer,
+                              ElementZero const* zero_buffer,
+                              ScaleBroadCastLayout const broadcasted_scale_layout,
+                              ThrLayout thr_layout) {
   using namespace cute;
 
   // Represent the full tensors to gmem elements. 
@@ -69,7 +71,7 @@ __global__ void dequantize_weight_kernel(DequantizedElement* dq_buffer,
 
   // Assign 1 thread per element in the thread block
   auto blk_shape = make_shape(size<0>(thr_layout), _1{}, _1{}); // 
-  auto blk_coord = make_coord(_, blockIdx.x, blockIdx.y);  // (MN, K, L)
+  auto blk_coord = make_coord(_, BlockIdxX(), BlockIdxY());  // (MN, K, L)
 
   // Tile across the block
   auto gOp_dq = local_tile(gmem_op_dq, blk_shape, blk_coord);
@@ -77,10 +79,10 @@ __global__ void dequantize_weight_kernel(DequantizedElement* dq_buffer,
   auto gZero  = local_tile(gmem_zero_broadcasted,  blk_shape, blk_coord);
   auto gOp_q  = local_tile(gmem_op_q, blk_shape, blk_coord);
   
-  auto tOpDq_gOpDq = local_partition(gOp_dq, thr_layout, threadIdx.x);
-  auto tScale_gScale = local_partition(gScale, thr_layout, threadIdx.x);
-  auto tZero_gZero = local_partition(gZero, thr_layout, threadIdx.x);
-  auto tOpQ_gOpQ = local_partition(gOp_q, thr_layout, threadIdx.x);
+  auto tOpDq_gOpDq = local_partition(gOp_dq, thr_layout, ThreadIdxX());
+  auto tScale_gScale = local_partition(gScale, thr_layout, ThreadIdxX());
+  auto tZero_gZero = local_partition(gZero, thr_layout, ThreadIdxX());
+  auto tOpQ_gOpQ = local_partition(gOp_q, thr_layout, ThreadIdxX());
 
   // Make a fragment of registers to hold gmem loads
   Tensor rmem_op_q = make_fragment_like(tOpQ_gOpQ(_, _, _, 0));
@@ -92,7 +94,7 @@ __global__ void dequantize_weight_kernel(DequantizedElement* dq_buffer,
 
   Tensor pred_id = make_identity_tensor(shape(operand_layout));
   auto pred_blk_tile = local_tile(pred_id, blk_shape, blk_coord);
-  auto pred_thr_partition = local_partition(pred_blk_tile, thr_layout, threadIdx.x);
+  auto pred_thr_partition = local_partition(pred_blk_tile, thr_layout, ThreadIdxX());
 
   const auto num_iters = size<3>(tOpDq_gOpDq);
   
@@ -102,11 +104,11 @@ __global__ void dequantize_weight_kernel(DequantizedElement* dq_buffer,
       copy(tOpQ_gOpQ(_, _, _, ii), rmem_op_q);
       copy(tScale_gScale(_, _, _, ii), rmem_scale);
       copy(tZero_gZero(_, _, _, ii), rmem_zero);
-      transform(rmem_op_q, rmem_op_scaled, [] (const QuantizedElement& elt) { return ElementScale(elt); } );
-      transform(rmem_zero, rmem_zero_buf, [] (const ElementZero& elt) { return ElementScale(elt); } );
-      transform(rmem_op_scaled, rmem_scale, rmem_op_scaled, multiplies{});
-      transform(rmem_op_scaled, rmem_zero_buf, rmem_op_scaled, plus{});
-      transform(rmem_op_scaled, rmem_op_dq, [] (const ElementScale& elt) { return DequantizedElement(elt); } );
+      cute::transform(rmem_op_q, rmem_op_scaled, [] (const QuantizedElement& elt) { return ElementScale(elt); } );
+      cute::transform(rmem_zero, rmem_zero_buf, [] (const ElementZero& elt) { return ElementScale(elt); } );
+      cute::transform(rmem_op_scaled, rmem_scale, rmem_op_scaled, cute::multiplies{});
+      cute::transform(rmem_op_scaled, rmem_zero_buf, rmem_op_scaled, cute::plus{});
+      cute::transform(rmem_op_scaled, rmem_op_dq, [] (const ElementScale& elt) { return DequantizedElement(elt); } );
       copy(rmem_op_dq, tOpDq_gOpDq(_, _, _, ii));
     }
   }
@@ -155,6 +157,11 @@ void dequantize_weight(DequantizedElement* dq_buffer,
   const auto blocks_y = batches;
 
   dim3 blocks(blocks_x, blocks_y, 1);
-  dequantize_weight_kernel<<<blocks, tpb>>>(dq_buffer, q_buffer, operand_layout, scale_buffer, zero_buffer, scale_layout_bcast, thr_layout);
-  CUDA_CHECK(cudaDeviceSynchronize());
+  syclcompat::launch<dequantize_weight_kernel<
+      QuantizedElement, DequantizedElement, OperandLayout, ElementScale,
+      ElementZero, decltype(scale_layout_bcast), decltype(thr_layout)>>(
+      blocks, tpb, dq_buffer, q_buffer, operand_layout, scale_buffer,
+      zero_buffer, scale_layout_bcast, thr_layout);
+
+  syclcompat::wait_and_throw();
 }
