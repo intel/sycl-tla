@@ -176,7 +176,7 @@ struct ExampleRunner {
   // TODO(joe): Deal with this...
   using LayoutScale = cutlass::layout::RowMajor;
   using StrideScale_ref =
-      cute::conditional<AIsQuantized,
+      cute::conditional_t<AIsQuantized,
                         cutlass::detail::TagToStrideA_t<LayoutScale>,
                         cutlass::detail::TagToStrideB_t<LayoutScale>>;
 
@@ -197,6 +197,7 @@ struct ExampleRunner {
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
   cutlass::DeviceAllocation<ElementB> block_A_dq; // Dequantized copy of A for validation
+  cutlass::DeviceAllocation<ElementB> block_B_dq; // Dequantized copy of B for validation
   cutlass::DeviceAllocation<ElementScale> block_scale;
   cutlass::DeviceAllocation<ElementZero> block_zero;
   cutlass::DeviceAllocation<ElementC> block_C;
@@ -292,31 +293,11 @@ struct ExampleRunner {
     return passed;
   }
 
-  template <typename T1, typename T2> 
-  void initialize_block_A(cutlass::DeviceAllocation<T1>& block_device, cutlass::DeviceAllocation<T2>& block_device_dq,  uint64_t seed) {
-    using Limits = cutlass::platform::numeric_limits<T1>;
-    static_assert(Limits::is_integer, "initialize_block_A requires integer types");
-    std::ranlux24_base rng(std::random_device{}());
-    std::uniform_int_distribution<> dist(Limits::lowest(), Limits::max());
-    rng.seed(seed);
-
-    auto block_host = std::vector<T1>(block_device.size());
-    auto block_host_dq = std::vector<T2>(block_device.size());
-    for (int i = 0; i < block_host.size(); ++i) {
-      block_host[i] = static_cast<T1>(dist(rng));
-      // TODO(joe): call host-side dequantize function here
-      block_host_dq[i] = static_cast<T2>(block_host[i]);
-    }
-
-    block_device.copy_from_host(block_host.data());
-    block_device_dq.copy_from_host(block_host_dq.data());
-  }
-    
   template <class Element>
   bool initialize_scale(
     cutlass::DeviceAllocation<Element>& block, 
     Options const& options) {
-    
+
     if (options.mode == GemmMode::ConvertOnly) {
       // No scales, so just initialize with 1 so we can use the same kernel to dequantize the data.
       std::vector<Element> stage(block.size(), Element(1.0f));
@@ -345,7 +326,7 @@ struct ExampleRunner {
       cutlass::reference::device::BlockFillRandomUniform(
         block.get(), block.size(), seed, Element(2.0f), Element(-2.0f));
     } else {
-      // No bias, so just initialize with 1 so we can use the same kernel to dequantize the data.
+      // No bias, so just initialize with 0 so we can use the same kernel to dequantize the data.
       std::vector<Element> stage(block.size(), Element(0.0f));
       block.copy_from_host(stage.data());
     }
@@ -356,38 +337,57 @@ struct ExampleRunner {
   void initialize(Options const& options) {
     auto [M, N, K, L] = ProblemShapeType{options.m, options.n, options.k, options.l};
 
-    // TODO(joe): probably change to A
-    auto shape_b = cute::make_shape(options.n, options.k, options.l);
     int const scale_k = cute::ceil_div(options.k, options.g);
+    const int dq_mn_size = AIsQuantized ? options.m : options.n;
+    auto shape_a = cute::make_shape(options.m, options.k, options.l);
+    auto shape_b = cute::make_shape(options.n, options.k, options.l);
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
-    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, cute::make_shape(AIsQuantized ? M : N, scale_k, L));
+    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, cute::make_shape(dq_mn_size, scale_k, L));
 
     block_A.reset(M * K * L);
-    block_A_dq.reset(M * K * L);
     block_B.reset(K * N * L);
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
-    if(AIsQuantized){
-      block_scale.reset(scale_k * options.l * options.m);
-      block_zero.reset(scale_k * options.l * options.m);
+    if constexpr(AIsQuantized){
+      block_A_dq.reset(M * K * L);
     }else{
-      block_scale.reset(scale_k * options.l * options.n);
-      block_zero.reset(scale_k * options.l * options.n);
+      block_B_dq.reset(N * K * L);
     }
 
-    initialize_block_A(block_A, block_A_dq, seed+2023);
+    block_scale.reset(scale_k * options.l * dq_mn_size);
+    block_zero.reset(scale_k * options.l * dq_mn_size);
+
+    initialize_block(block_A, seed + 2023); // TODO(joe): ref impl uses separate initialize_quant_tensor
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
 
     initialize_scale(block_scale, options);
     initialize_zero(block_zero, options);
 
+    auto layout_A = make_layout(shape_a, stride_A);
+    auto layout_B = make_layout(shape_b, stride_B);
+
+    auto shape_scale_zero = cute::make_shape(dq_mn_size, scale_k, options.l);
+    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, cute::make_shape(dq_mn_size, scale_k, options.l));
+    stride_S_ref = cutlass::make_cute_packed_stride(StrideScale_ref{}, cute::make_shape(dq_mn_size, scale_k, options.l));
+
+    auto layout_scale_zero = make_layout(shape_scale_zero, stride_S_ref);
+
+    if constexpr (AIsQuantized) {
+      dequantize_weight(block_A_dq.get(), block_A.get(), layout_A,
+                        block_scale.get(), block_zero.get(), layout_scale_zero,
+                        options.g);
+    } else {
+      dequantize_weight(block_B_dq.get(), block_B.get(), layout_B,
+                        block_scale.get(), block_zero.get(), layout_scale_zero,
+                        options.g);
+    }
   }
 
   void run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
