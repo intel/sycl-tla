@@ -29,7 +29,7 @@
  *
  **************************************************************************************************/
 
-#include "pvc_flash_attn_ruuner.hpp"
+#include "pvc_flash_attn_runner.hpp"
 
 int main(int argc, const char **argv) {
   //
