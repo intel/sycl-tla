@@ -119,7 +119,7 @@ public:
   using StrideA = StrideA_;
   using StrideB = StrideB_;
 
-  // These are always MN major
+  // These are always MN major, and we use the same for Scale and Zero
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
   // For cases where we can't have a void scale, we can use this to allow the code to compile when the scale is void.
   using NonVoidStrideScale = cute::conditional_t<
@@ -281,15 +281,19 @@ public:
   template <class EngineIn,
             class EngineOut, 
             class EngineScales, 
+            class EngineZeros, 
             class LayoutIn,
             class LayoutOut,
             class LayoutScales,
+            class LayoutZeros,
             class... Ts>
   CUTLASS_DEVICE
   void transform_A(
     Tensor<EngineIn, LayoutIn> const& tCrA_load, 
     Tensor<EngineOut, LayoutOut>& tCrA_mma,
-    Tensor<EngineScales, LayoutScales>& tCrS_input) {
+    Tensor<EngineScales, LayoutScales>& tCrS_input,
+    Tensor<EngineZeros, LayoutZeros>& tCrZ_input
+  ) {
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
     static_assert(is_rmem<EngineOut>::value, "Output tensor for A conversion must come from registers");
@@ -297,6 +301,9 @@ public:
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
     static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineScales::value_type>);
+    static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineZeros::value_type>);
+    static_assert(std::is_same_v<LayoutScales, LayoutZeros>);
+
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
@@ -318,14 +325,20 @@ public:
       DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
       *pDstArr = Converter::convert(*pSrcArr);
     }
-    if(ModeHasScales){
+
+    if (ModeHasScales) {
       CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < 16; ++i){
+      for (int i = 0; i < 16; ++i) {
         CUTLASS_PRAGMA_UNROLL
-        for (int j = 0; j < 2; ++j){
-         auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
-         tCrA_mma(_,_,0)[j*16 + i] *= scale; 
-         tCrA_mma(_,_,1)[j*16 + i] *= scale;
+        for (int j = 0; j < 2; ++j) {
+          auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+          tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
+          tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
+          if (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
+            auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
+            tCrA_mma(_, _, 0)[j * 16 + i] += zero;
+            tCrA_mma(_, _, 1)[j * 16 + i] += zero;
+          }
         }
       }
     }
@@ -380,11 +393,14 @@ public:
                                              Layout<Shape<_1, Int<SubgroupSize>>>{});
     auto tiled_copy_scale = make_xe_2d_copy(atom_load_scale{}.with(mainloop.mScale),
                                              Layout<Shape<_1, Int<SubgroupSize>>>{});
+    auto tiled_copy_zero = make_xe_2d_copy(atom_load_scale{}.with(mainloop.mZero),
+                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
 
     // Partition the copying of A and B tiles across the threads
     auto thr_copy_A = tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = tiled_copy_b.get_slice(thread_idx);
     auto thr_copy_scale = tiled_copy_scale.get_slice(thread_idx);
+    auto thr_copy_zero = tiled_copy_zero.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
@@ -398,6 +414,7 @@ public:
     // Else we need mode N_iter from fragment_B layout.
     // TODO(joe): handle B version (!IsATransformed), and generalize/cuteify!
     Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(make_layout(Shape<_2, _1, _1>{}));
+    Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (make_layout(Shape<_2, _1, _1>{}));
 
     // narrow input fragment
     Tensor tCrA_input = make_tensor<ElementA>(fragment_A.layout());
@@ -409,6 +426,7 @@ public:
     auto copy_tCrA = thr_copy_A.retile_D(tCrA_input);
     Tensor copy_tCrB = thr_copy_B.retile_D(fragment_B);
     Tensor copy_tCrS = thr_copy_scale.retile_D(fragment_scale_input);
+    Tensor copy_tCrZ = thr_copy_zero.retile_D(fragment_zero_input);
 
     // Retile for cute::gemm
     Tensor mma_tCrA = thr_copy_A.retile_MMA(thr_mma, fragment_A);
@@ -488,7 +506,10 @@ public:
       if constexpr(ModeHasScales){
         copy(tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
       }
-      transform_A(tCrA_input, mma_tCrA, fragment_scale_input);
+      if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
+        copy(tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
+      }
+      transform_A(tCrA_input, mma_tCrA, fragment_scale_input, fragment_zero_input);
 
       if(prefetch_k < k_tile_count) {
         if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
