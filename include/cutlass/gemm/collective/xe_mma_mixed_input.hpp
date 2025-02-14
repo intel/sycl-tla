@@ -296,6 +296,7 @@ public:
     static_assert(cosize_v<LayoutIn> == cosize_v<LayoutOut>);
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
+    static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineScales::value_type>);
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
@@ -482,7 +483,7 @@ public:
       copy(tiled_copy_b, copy_iter_b(_,_,_,k), copy_tCrB);
 
       if constexpr(ModeHasScales){
-        copy(tiled_copy_scale, copy_iter_s(_, _, _, k_reload_factor), copy_tCrS);
+        copy(tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
       }
       transform_A(tCrA_input, mma_tCrA, fragment_scale_input);
 

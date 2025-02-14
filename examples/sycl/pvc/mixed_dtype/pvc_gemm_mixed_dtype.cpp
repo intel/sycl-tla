@@ -173,13 +173,6 @@ struct ExampleRunner {
 
   static constexpr bool AIsQuantized = CollectiveMainloop::IsATransformed;
 
-  // TODO(joe): Deal with this...
-  using LayoutScale = cutlass::layout::RowMajor;
-  using StrideScale_ref =
-      cute::conditional_t<AIsQuantized,
-                        cutlass::detail::TagToStrideA_t<LayoutScale>,
-                        cutlass::detail::TagToStrideB_t<LayoutScale>>;
-
   //
   // Data members
   //
@@ -190,7 +183,6 @@ struct ExampleRunner {
   StrideC stride_C;
   StrideD stride_D;
   StrideScale stride_S;
-  StrideScale_ref stride_S_ref;
 
   uint64_t seed = 0;
 
@@ -271,6 +263,7 @@ struct ExampleRunner {
 
     using GemmRef = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelRef>;
 
+    // TODO(joe): AIsQuantized
     typename GemmRef::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       {options.m, options.n, options.k, options.l},
@@ -341,6 +334,7 @@ struct ExampleRunner {
     const int dq_mn_size = AIsQuantized ? options.m : options.n;
     auto shape_a = cute::make_shape(options.m, options.k, options.l);
     auto shape_b = cute::make_shape(options.n, options.k, options.l);
+    auto shape_scale_zero = cute::make_shape(dq_mn_size, scale_k, options.l);
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
@@ -372,13 +366,7 @@ struct ExampleRunner {
 
     auto layout_A = make_layout(shape_a, stride_A);
     auto layout_B = make_layout(shape_b, stride_B);
-
-    auto shape_scale_zero = cute::make_shape(dq_mn_size, scale_k, options.l);
-    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, cute::make_shape(dq_mn_size, scale_k, options.l));
-    stride_S_ref = cutlass::make_cute_packed_stride(StrideScale_ref{}, cute::make_shape(dq_mn_size, scale_k, options.l));
-
-    auto layout_scale_zero = make_layout(shape_scale_zero, stride_S_ref);
-
+    auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
     if constexpr (AIsQuantized) {
       dequantize_weight(block_A_dq.get(), block_A.get(), layout_A,
                         block_scale.get(), block_zero.get(), layout_scale_zero,
@@ -492,7 +480,6 @@ int main(int argc, const char** argv)
 
   using ElementZero = MmaType;
   using ElementScale = MmaType;
-  using LayoutScale = cutlass::layout::RowMajor;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
   using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
