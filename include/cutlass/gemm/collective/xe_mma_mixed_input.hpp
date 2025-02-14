@@ -319,10 +319,13 @@ public:
       *pDstArr = Converter::convert(*pSrcArr);
     }
     if(ModeHasScales){
+      CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < 16; ++i){
+        CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < 2; ++j){
-          // TODO(joe): Finish this off...
-         tCrA_mma(_,_,j)[i] *= shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+         auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+         tCrA_mma(_,_,0)[j*16 + i] *= scale; 
+         tCrA_mma(_,_,1)[j*16 + i] *= scale;
         }
       }
     }
