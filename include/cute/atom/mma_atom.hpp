@@ -606,31 +606,60 @@ make_tiled_mma(MMA_Op       const&,
 // (i.e. SubgroupLayout) implies a repetition of the atom across additional
 // hardware. Permutations, in the simplest form, imply additional iterations
 // to cover a larger tile (i.e. CTATileShape) than the hardware can handle
-// at once. By specifying additional modes and strides, we can achieve 
-// arbitrary TiledMMA layouts.
+// at once. Consider this example from the section of the docs linked above:
+//
+//    TiledMMA mma = make_tiled_mma(SM70_8x8x4_F32F16F16F32_NT{},
+//                                Layout<Shape <_2,_2>,
+//                                       Stride<_2,_1>>{},  // 2x2 n-major layout of Atoms
+//                                Tile<_32,_32,_4>{});      // 32x32x4 tiler
+//
+// The second arg (Layout) defines a repetition of the atom across *additional threads*,
+// i.e. iterating across more hardware. The third arg (Tile) defines a repetition of this
+// MMA across *additional values*. For this example, in the M dimension, the atom produces
+// 8 values of C, the hardware repetition (2) scales this up to 16 values in M, and the
+// requested permutation (32) scales this up to 32 values (implying two iterations in the 
+// M direction). 
+//
+// By cute convention, the repetition of the atom across hardware is the inner
+// iteration, while the repetition across values is the outer. We can use a more complex
+// permutation to *swap* the 'hardware' and 'iteration' in the layout, so that each 'unit'
+// of hardware (quadpair, sub-group, single thread) processes contiguous blocks of A, B and C.
+//
+// For the given example (again from the docs):
+//     TiledMMA mma = make_tiled_mma(SM70_8x8x4_F32F16F16F32_NT{},
+//                                Layout<Shape <_2,_2>,
+//                                       Stride<_2,_1>>{},       // 2x2 n-major layout of Atoms
+//                                Tile<Layout<Shape <_4,_4,_2>,
+//                                            Stride<_1,_8,_4>>, // Permutation on M, size 32
+//                                     _32,                      // Permutation on N, size 32 identity
+//                                     _4>{});
+//
+// This permutation (for the M dimension only) maintains blocks of 4 contiguous values from 
+// the canonical tiling (mode 0 is 4:1).
+// It scatters 4 of these blocks of 4 to a spacing of 8 values (mode 1 is 4:8), leaving a gap of 4.
+// These gaps of 4 are filled by repeating the preceding pattern twice, at a spacing of 4 values 
+// (mode 2 is 2:4).
+// In this manner, the tiling has been permuted so that the values handled by each thread are
+// closer togehter.
 template <typename MMA_Atom, typename CTATileShape, typename SubgroupLayout>
 struct ContigBlockMMAHelper{
 private:
   using AtomShape = typename MMA_Atom::Shape_MNK;
 
-  // Represents the canonical MMA block which would be handled
-  // by these subgroups without permutation info...
-  static constexpr auto DefaultBlock =
-      blocked_product(Layout<AtomShape>{}, SubgroupLayout{});
-
-  // Discard strides and internal modes, e.g. (8,8):(1,8) -> 64
-  static constexpr auto DefaultTiler =
-      make_shape(size<0>(DefaultBlock), size<1>(DefaultBlock),
-                size<2>(DefaultBlock));
+  // Represents the canonical MMA block which would be handled by these subgroups without permutation.
+  // product_each(shape(...)) converts the layout into a tiler by taking only the shapes
+  // e.g. (8,8):(1,8) -> 64
+  static constexpr auto CanonicalBlock =
+      product_each(shape(blocked_product(Layout<AtomShape>{}, SubgroupLayout{})));
 
   // Construct the default tiled MMA, to extract the iteration count per dim below
-  static constexpr auto DefaultTiling = logical_divide(Layout<CTATileShape>{}, DefaultTiler);
+  static constexpr auto CanonicalTiling = logical_divide(Layout<CTATileShape>{}, CanonicalBlock);
 
   static constexpr auto permutation =
-      transform(AtomShape{}, SubgroupLayout{}.shape(), DefaultTiling.shape(),
-                [](auto a, auto sg, auto dt) {
-                  constexpr auto iters = get<1>(dt);
-                  auto tiler_shape = make_shape(a, sg, iters);                     // atom, hardware, iteration
+      transform(AtomShape{}, SubgroupLayout{}.shape(), CanonicalTiling.shape(),
+                [](auto atom_size, auto sg_count, auto ct) {
+                  constexpr auto iters = get<1>(ct);
+                  auto tiler_shape = make_shape(atom_size, sg_count, iters);   // atom, hardware, iteration
                   return coalesce(make_ordered_layout(tiler_shape, Step<_0, _2, _1>{}));
                 });
 public:
