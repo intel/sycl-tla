@@ -1404,7 +1404,7 @@ template <int SizeK>
 struct DefaultGemm_TensorOpXe_OperandA<bfloat16_t, layout::ColumnMajor, 32, SizeK>
 {
   // Gmem
-  using GmemTiledCopy = XE_2D_U16x32x32_LD_N;
+  using GmemTiledCopy = XE_2D_U16x16x16_LD_T;
 };
 
 /// Operand B - Row-major (N-Major)
@@ -1419,14 +1419,14 @@ template <int SizeK>
 struct DefaultGemm_TensorOpXe_OperandB<bfloat16_t, layout::ColumnMajor, 32, SizeK>
 {
   // Gmem
-  using GmemTiledCopy = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopy = XE_2D_U16x16x16_LD_T;
 };
 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Ampere MMA F32F16
+// Intel XE MMA F32BF16
 template <typename LayoutA, typename LayoutB, typename LayoutC>
 struct DefaultGemmConfigurationToCutlass3Types<
     arch::OpClassTensorOp, arch::IntelPVC,
@@ -1466,13 +1466,23 @@ struct DefaultGemmConfigurationToCutlass3Types<
     GmemTiledCopyB, void, void, cute::identity   // B
   >;
 
-  // Epilogue
-  using CollectiveEpilogue = epilogue::collective::DefaultEpilogue<
-    float,
-    TagToStrideC_t<LayoutC>,
-    TagToStrideC_t<LayoutC>,
-    epilogue::thread::LinearCombination<float, 1, float, float>,
-    cutlass::gemm::EpilogueDefault>;
+  using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
+
+  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
+    epilogue::IntelPVCEpilogue,
+    EpilogueOp,
+    TileShape,
+    decltype(tile_shape(TiledMma()))
+  >;
+
+  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
+    epilogue::IntelPVCEpilogue,
+    TileShape,
+    float, TagToStrideC_t<LayoutC>,
+    float, TagToStrideC_t<LayoutC>,
+    FusionCallBacks,
+    XE_2D_U32x8x16_LD_N, void, void,
+    XE_2D_U32x8x16_ST_N, void, void>;
 };
 
 #endif
