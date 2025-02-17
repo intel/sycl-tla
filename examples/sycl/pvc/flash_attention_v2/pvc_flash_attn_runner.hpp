@@ -32,9 +32,9 @@
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
-#include "../applications/pvc/flash_attention_v2/kernel/pvc_flash_attn_gemm_universal.hpp"
-#include "../applications/pvc/flash_attention_v2/collective/pvc_flash_attn_epilogue.hpp"
-#include "../applications/pvc/flash_attention_v2/collective/pvc_softmax_epilogue.hpp"
+#include "applications/pvc/flash_attention_v2/kernel/pvc_flash_attn_gemm_universal.hpp"
+#include "applications/pvc/flash_attention_v2/collective/pvc_flash_attn_epilogue.hpp"
+#include "applications/pvc/flash_attention_v2/collective/pvc_softmax_epilogue.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
 

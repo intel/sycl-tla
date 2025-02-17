@@ -35,7 +35,7 @@
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/kernel_hardware_info.hpp"
 
-#include "../applications/pvc/flash_attention_v2/collective/pvc_flash_attn_mma.hpp"
+#include "applications/pvc/flash_attention_v2/collective/pvc_flash_attn_mma.hpp"
 
 #ifdef __SYCL_DEVICE_ONLY__
 #define SYCL_DEVICE_SPV_SPLIT_BARRIER(x) SYCL_EXTERNAL x

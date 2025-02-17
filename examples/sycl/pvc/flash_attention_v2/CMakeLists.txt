@@ -27,6 +27,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+list(APPEND CUTLASS_EXAMPLES_COMMON_SOURCE_DIR ${CMAKE_SOURCE_DIR})
+
 cutlass_example_add_executable(
   pvc_flash_attention
   pvc_flash_attn.cpp
