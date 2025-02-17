@@ -636,7 +636,7 @@ private:
                 });
 public:
   using Permutation = decltype(permutation);
-  using TiledMMA = TiledMMA<MMA_Atom, SubgroupLayout, Permutation>;
+  using TiledMMA = cute::TiledMMA<MMA_Atom, SubgroupLayout, Permutation>;
 };
 
 //
