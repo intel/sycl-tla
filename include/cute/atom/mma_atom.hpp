@@ -631,8 +631,7 @@ private:
                 [](auto a, auto sg, auto dt) {
                   constexpr auto iters = get<1>(dt);
                   auto tiler_shape = make_shape(a, sg, iters);                     // atom, hardware, iteration
-                  auto tiler_stride = make_stride(_1{}, Int<a*iters>{}, Int<a>{}); // atom, hardware, iteration
-                  return coalesce(make_layout(tiler_shape, tiler_stride));
+                  return coalesce(make_ordered_layout(tiler_shape, Step<_0, _2, _1>{}));
                 });
 public:
   using Permutation = decltype(permutation);
