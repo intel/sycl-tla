@@ -45,7 +45,7 @@
 
 using namespace cute;
 
-TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 64x64x32) {
+TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 256x256x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     half_t, cutlass::layout::RowMajor,
@@ -63,7 +63,7 @@ TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 64x64x32) {
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
-TEST(XE_Device_Gemm_tf32n_tf32t_f32t_tensor_op_f32, 64x64x32) {
+TEST(XE_Device_Gemm_tf32n_tf32t_f32t_tensor_op_f32, 256x256x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     half_t, cutlass::layout::ColumnMajor,
@@ -81,7 +81,7 @@ TEST(XE_Device_Gemm_tf32n_tf32t_f32t_tensor_op_f32, 64x64x32) {
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
-TEST(XE_Device_Gemm_tf32t_tf32n_f32t_tensor_op_f32, 64x64x32) {
+TEST(XE_Device_Gemm_tf32t_tf32n_f32t_tensor_op_f32, 256x256x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     half_t, cutlass::layout::RowMajor,
@@ -99,7 +99,7 @@ TEST(XE_Device_Gemm_tf32t_tf32n_f32t_tensor_op_f32, 64x64x32) {
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
-TEST(XE_Device_Gemm_tf32n_tf32n_f32t_tensor_op_f32, 64x64x32) {
+TEST(XE_Device_Gemm_tf32n_tf32n_f32t_tensor_op_f32, 256x256x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     half_t, cutlass::layout::ColumnMajor,

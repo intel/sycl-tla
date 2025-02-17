@@ -1759,7 +1759,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
     float, LayoutC,
     float>
 {
-  using TileShape = Shape<_64, _64, _32>;
+  using TileShape = Shape<_256, _256, _32>;
 
   using DispatchPolicy = MainloopIntelPVC<3>;
   using TiledMma =
