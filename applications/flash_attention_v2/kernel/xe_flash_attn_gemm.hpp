@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,7 @@
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/kernel_hardware_info.hpp"
 
-#include "applications/pvc/flash_attention_v2/collective/pvc_flash_attn_mma.hpp"
+#include "flash_attention_v2/collective/xe_flash_attn_mma.hpp"
 
 #ifdef __SYCL_DEVICE_ONLY__
 #define SYCL_DEVICE_SPV_SPLIT_BARRIER(x) SYCL_EXTERNAL x
