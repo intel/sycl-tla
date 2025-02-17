@@ -1379,6 +1379,105 @@ struct DefaultGemmConfigurationToCutlass3Types<
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTLASS_ENABLE_SYCL)
+namespace detail {
+
+template <typename Element, typename Layout, int Alignment, int SizeK>
+struct DefaultGemm_TensorOpXe_OperandA;
+
+template <typename Element, typename Layout, int Alignment, int SizeK>
+struct DefaultGemm_TensorOpXe_OperandB;
+
+//
+// Bfloat16
+//
+
+/// Operand A - Row-major (K-Major)
+template <>
+struct DefaultGemm_TensorOpXe_OperandA<bfloat16_t, layout::RowMajor, 32, 32>
+{
+  using GmemTiledCopy = XE_2D_U16x32x32_LD_N;
+};
+
+/// Operand A - Column-major (M-major)
+template <int SizeK>
+struct DefaultGemm_TensorOpXe_OperandA<bfloat16_t, layout::ColumnMajor, 32, SizeK>
+{
+  // Gmem
+  using GmemTiledCopy = XE_2D_U16x32x32_LD_N;
+};
+
+/// Operand B - Row-major (N-Major)
+template <>
+struct DefaultGemm_TensorOpXe_OperandB<bfloat16_t, layout::RowMajor, 32, 32>
+{
+  using GmemTiledCopy = XE_2D_U16x32x32_LD_V;
+};
+
+/// Operand B - Column-major (K-major)
+template <int SizeK>
+struct DefaultGemm_TensorOpXe_OperandB<bfloat16_t, layout::ColumnMajor, 32, SizeK>
+{
+  // Gmem
+  using GmemTiledCopy = XE_2D_U16x32x32_LD_V;
+};
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+// Ampere MMA F32F16
+template <typename LayoutA, typename LayoutB, typename LayoutC>
+struct DefaultGemmConfigurationToCutlass3Types<
+    arch::OpClassTensorOp, arch::IntelPVC,
+    bfloat16_t, LayoutA,
+    bfloat16_t, LayoutB,
+    float, LayoutC,
+    float>
+{
+  using TileShape = Shape<_256, _256, _32>;
+
+  using DispatchPolicy = MainloopIntelPVC<3>;
+  using TiledMma =
+      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
+               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                    Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
+
+  // A
+  static constexpr int kAlignmentA = 32;
+  using DefaultOperandA = detail::DefaultGemm_TensorOpXe_OperandA<
+    bfloat16_t, LayoutA, kAlignmentA, 32>;
+  using GmemTiledCopyA = typename DefaultOperandA::GmemTiledCopy;
+
+  // B
+  static constexpr int kAlignmentB = 32;
+  using DefaultOperandB = detail::DefaultGemm_TensorOpXe_OperandB<
+    bfloat16_t, LayoutB, kAlignmentB, 32>;
+  using GmemTiledCopyB = typename DefaultOperandB::GmemTiledCopy;
+
+  // Mainloop
+  using CollectiveMainloop = collective::CollectiveMma<
+    DispatchPolicy, TileShape,
+    bfloat16_t, TagToStrideA_t<LayoutA>,
+    bfloat16_t, TagToStrideB_t<LayoutB>,
+    TiledMma,
+    GmemTiledCopyA, void, void, cute::identity,  // A
+    GmemTiledCopyB, void, void, cute::identity   // B
+  >;
+
+  // Epilogue
+  using CollectiveEpilogue = epilogue::collective::DefaultEpilogue<
+    float,
+    TagToStrideC_t<LayoutC>,
+    TagToStrideC_t<LayoutC>,
+    epilogue::thread::LinearCombination<float, 1, float, float>,
+    cutlass::gemm::EpilogueDefault>;
+};
+
+#endif
+///////////////////////////////////////////////////////////////////////////////
+
 } // namespace device
 } // namespace gemm
 } // namespace cutlass

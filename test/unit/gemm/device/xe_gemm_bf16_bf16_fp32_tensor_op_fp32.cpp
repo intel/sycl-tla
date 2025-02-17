@@ -39,66 +39,26 @@
 
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/kernel/gemm_universal.hpp"
-#include "cutlass/epilogue/collective/collective_builder.hpp"
-#include "cutlass/gemm/collective/collective_builder.hpp"
+#include "default_gemm_configuration.hpp"
 
 #include "gemm_testbed_3x.hpp"
 
 using namespace cute;
 
 TEST(XE_Device_Gemm_bf16t_bf16t_f32t_tensor_op_f32, 256x256x32) {
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-  using LayoutC = cutlass::layout::RowMajor;
-  using LayoutD = cutlass::layout::RowMajor;
-
-  using TileShape_MNK = Shape<_256, _256, _32>;
-  using ClusterShape_MNK = Shape<_1, _1, _1>;
-
-  using EpilogueSchedule = cutlass::epilogue::collective::EpilogueScheduleAuto;
-  using ElementAccumulator = float;
-  using ElementComputeEpilogue = float;
-  using ElementInputA = bfloat16_t;
-  using ElementInputB = bfloat16_t;
-  using ElementOutput = float;
-
-  constexpr int AlignmentA = sizeof(ElementInputA);
-  constexpr int AlignmentB = sizeof(ElementInputB);
-  constexpr int AlignmentC = sizeof(ElementAccumulator);
-  constexpr int AlignmentD = sizeof(ElementOutput);
-
-  using FusionCallbacks = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
-        ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
-
-  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
-      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
-      TileShape_MNK, ClusterShape_MNK,
-      cutlass::epilogue::collective::EpilogueTileAuto,
-      ElementComputeEpilogue, ElementAccumulator,
-      ElementAccumulator, LayoutC, AlignmentC,
-      ElementOutput, LayoutD, AlignmentD,
-      EpilogueSchedule,
-      FusionCallbacks
-    >::CollectiveOp;
-
-  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
-      ElementInputA, LayoutA, AlignmentA,
-      ElementInputB, LayoutB, AlignmentB,
-      ElementAccumulator,
-      TileShape_MNK, ClusterShape_MNK,
-      cutlass::gemm::collective::StageCountAuto,
-      cutlass::gemm::collective::KernelScheduleAuto
-    >::CollectiveOp;
+  using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
+    cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
+    bfloat16_t, cutlass::layout::RowMajor,
+    bfloat16_t, cutlass::layout::RowMajor,
+    float, cutlass::layout::RowMajor,
+    float>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int, int, int, int>,
-      CollectiveMainloop,
-      CollectiveEpilogue
+      Shape<int,int,int,int>,
+      Config::CollectiveMainloop,
+      Config::CollectiveEpilogue
   >;
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
-
-  bool passed = test::gemm::device::TestXe<Gemm>(1.0, 1.0);
-  EXPECT_TRUE(passed);
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
