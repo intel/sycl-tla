@@ -32,6 +32,7 @@ if(CUTLASS_ENABLE_SYCL)
       cutlass_test_unit_gemm_device_tensorop_xe
       xe_gemm_bf16_bf16_fp32_tensor_op_fp32.cpp
       xe_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp
+      xe_gemm_s8_s8_s32_tensor_op_s32.cpp
     )
 
     cutlass_test_unit_add_executable(

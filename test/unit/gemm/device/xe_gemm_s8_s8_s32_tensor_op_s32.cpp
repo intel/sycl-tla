@@ -30,7 +30,7 @@
  **************************************************************************************************/
 
 /*! \file
-    \brief Tests for Xe bf16_bf16_fp32
+    \brief Tests for Xe s8_s8_s32
 */
 
 #include <iostream>
@@ -45,13 +45,13 @@
 
 using namespace cute;
 
-TEST(XE_Device_Gemm_bf16t_bf16t_f32t_tensor_op_f32, 256x256x32) {
+TEST(XE_Device_Gemm_s8t_s8t_s32t_tensor_op_s32, 64x128x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
-    bfloat16_t, cutlass::layout::RowMajor,
-    bfloat16_t, cutlass::layout::RowMajor,
-    float, cutlass::layout::RowMajor,
-    float>;
+    int8_t, cutlass::layout::RowMajor,
+    int8_t, cutlass::layout::RowMajor,
+    int32_t, cutlass::layout::RowMajor,
+    int32_t>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
       Shape<int,int,int,int>,
@@ -63,13 +63,14 @@ TEST(XE_Device_Gemm_bf16t_bf16t_f32t_tensor_op_f32, 256x256x32) {
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
-TEST(XE_Device_Gemm_bf16n_bf16t_f32t_tensor_op_f32, 256x256x32) {
+/* TODO Transposed copy are not implemented
+TEST(XE_Device_Gemm_s8n_s8t_s32t_tensor_op_s32, 64x128x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
-    bfloat16_t, cutlass::layout::ColumnMajor,
-    bfloat16_t, cutlass::layout::RowMajor,
-    float, cutlass::layout::RowMajor,
-    float>;
+    int8_t, cutlass::layout::ColumnMajor,
+    int8_t, cutlass::layout::RowMajor,
+    int32_t, cutlass::layout::RowMajor,
+    int32_t>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
       Shape<int,int,int,int>,
@@ -81,13 +82,13 @@ TEST(XE_Device_Gemm_bf16n_bf16t_f32t_tensor_op_f32, 256x256x32) {
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
-TEST(XE_Device_Gemm_bf16t_bf16n_f32t_tensor_op_f32, 256x256x32) {
+TEST(XE_Device_Gemm_s8t_s8n_s32t_tensor_op_s32, 64x128x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
-    bfloat16_t, cutlass::layout::RowMajor,
-    bfloat16_t, cutlass::layout::ColumnMajor,
-    float, cutlass::layout::RowMajor,
-    float>;
+    int8_t, cutlass::layout::RowMajor,
+    int8_t, cutlass::layout::ColumnMajor,
+    int32_t, cutlass::layout::RowMajor,
+    int32_t>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
       Shape<int,int,int,int>,
@@ -99,13 +100,13 @@ TEST(XE_Device_Gemm_bf16t_bf16n_f32t_tensor_op_f32, 256x256x32) {
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
-TEST(XE_Device_Gemm_bf16n_bf16n_f32t_tensor_op_f32, 256x256x32) {
+TEST(XE_Device_Gemm_s8n_s8n_s32t_tensor_op_s32, 64x128x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
-    bfloat16_t, cutlass::layout::ColumnMajor,
-    bfloat16_t, cutlass::layout::ColumnMajor,
-    float, cutlass::layout::RowMajor,
-    float>;
+    int8_t, cutlass::layout::ColumnMajor,
+    int8_t, cutlass::layout::ColumnMajor,
+    int32_t, cutlass::layout::RowMajor,
+    int32_t>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
       Shape<int,int,int,int>,
@@ -116,3 +117,4 @@ TEST(XE_Device_Gemm_bf16n_bf16n_f32t_tensor_op_f32, 256x256x32) {
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
+*/

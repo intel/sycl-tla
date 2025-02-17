@@ -1593,6 +1593,116 @@ struct DefaultGemmConfigurationToCutlass3Types<
 };
 
 ///////////////////////////////////////////////////////////////////////////////
+
+namespace detail {
+
+template <typename Element, typename Layout, int Alignment, int SizeK>
+struct DefaultGemm_TensorOpXe_OperandA;
+
+template <typename Element, typename Layout, int Alignment, int SizeK>
+struct DefaultGemm_TensorOpXe_OperandB;
+
+//
+// int8
+//
+
+/// Operand A - Row-major (K-Major)
+template <>
+struct DefaultGemm_TensorOpXe_OperandA<int8_t, layout::RowMajor, 32, 32>
+{
+  using GmemTiledCopy = XE_2D_U8x32x32_LD_N;
+};
+
+/// Operand A - Column-major (M-major)
+template <int SizeK>
+struct DefaultGemm_TensorOpXe_OperandA<int8_t, layout::ColumnMajor, 32, SizeK>
+{
+  // Gmem
+  // TODO: transposed version is not implemented
+  using GmemTiledCopy = XE_2D_U8x32x32_LD_N;
+};
+
+/// Operand B - Row-major (N-Major)
+template <>
+struct DefaultGemm_TensorOpXe_OperandB<int8_t, layout::RowMajor, 32, 32>
+{
+  using GmemTiledCopy = XE_2D_U8x32x32_LD_V;
+};
+
+/// Operand B - Column-major (K-major)
+template <int SizeK>
+struct DefaultGemm_TensorOpXe_OperandB<int8_t, layout::ColumnMajor, 32, SizeK>
+{
+  // Gmem
+  // TODO: transposed version is not implemented
+  using GmemTiledCopy = XE_2D_U8x32x32_LD_V;
+};
+
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+// Intel XE MMA S32S8
+template <typename LayoutA, typename LayoutB, typename LayoutC>
+struct DefaultGemmConfigurationToCutlass3Types<
+    arch::OpClassTensorOp, arch::IntelPVC,
+    int8_t, LayoutA,
+    int8_t, LayoutB,
+    int32_t, LayoutC,
+    int32_t>
+{
+  using TileShape = Shape<_64, _128, _32>;
+
+  using DispatchPolicy = MainloopIntelPVC<3>;
+  using TiledMma =
+      TiledMMA<MMA_Atom<XE_8x16x32_S32S8S8S32_TT>,
+               Layout<Shape<_2, _4, _1>, Stride<_4, _1, _0>>,
+               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                    Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
+
+  // A
+  static constexpr int kAlignmentA = 32;
+  using DefaultOperandA = detail::DefaultGemm_TensorOpXe_OperandA<
+    int8_t, LayoutA, kAlignmentA, 32>;
+  using GmemTiledCopyA = typename DefaultOperandA::GmemTiledCopy;
+
+  // B
+  static constexpr int kAlignmentB = 32;
+  using DefaultOperandB = detail::DefaultGemm_TensorOpXe_OperandB<
+    int8_t, LayoutB, kAlignmentB, 32>;
+  using GmemTiledCopyB = typename DefaultOperandB::GmemTiledCopy;
+
+  // Mainloop
+  using CollectiveMainloop = collective::CollectiveMma<
+    DispatchPolicy, TileShape,
+    int8_t, TagToStrideA_t<LayoutA>,
+    int8_t, TagToStrideB_t<LayoutB>,
+    TiledMma,
+    GmemTiledCopyA, void, void, cute::identity,  // A
+    GmemTiledCopyB, void, void, cute::identity   // B
+  >;
+
+  using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
+
+  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
+    epilogue::IntelPVCEpilogue,
+    EpilogueOp,
+    TileShape,
+    decltype(tile_shape(TiledMma()))
+  >;
+
+  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
+    epilogue::IntelPVCEpilogue,
+    TileShape,
+    int32_t, TagToStrideC_t<LayoutC>,
+    int32_t, TagToStrideC_t<LayoutC>,
+    FusionCallBacks,
+    XE_2D_U32x8x16_LD_N, void, void,
+    XE_2D_U32x8x16_ST_N, void, void>;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 #endif // SYCL INTEL TARGET
 
 } // namespace device

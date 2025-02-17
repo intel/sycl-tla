@@ -30,7 +30,7 @@
  **************************************************************************************************/
 
 /*! \file
-    \brief Tests for Xe fp16t_fp16t_f32
+    \brief Tests for Xe fp16_fp16_fp32
 */
 
 #include <iostream>
