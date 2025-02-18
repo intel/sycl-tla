@@ -82,15 +82,17 @@ struct Options {
   bool help;
   bool error;
 
-  int mode = 2;
+  int a_narrower;
+  int mode;
   int m, n, k, l, iterations;
-  int g = 128;
+  int g;
   float alpha, beta;
 
   Options():
     help(false),
     error(false),
     m(5120), n(4096), k(4096), l(1), iterations(20),
+    g(128), mode(2), a_narrower(0),
     alpha(1.f), beta(0.f)
   { }
 
@@ -107,8 +109,9 @@ struct Options {
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
-    cmd.get_cmd_line_argument("g", g);
-    cmd.get_cmd_line_argument("mode", mode);
+    cmd.get_cmd_line_argument("g", g, 128);
+    cmd.get_cmd_line_argument("mode", mode, 2);
+    cmd.get_cmd_line_argument("a_narrower", a_narrower, 0);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
@@ -126,6 +129,7 @@ struct Options {
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
       << "  --g=<int>                   The size of each group for the scales and zeros. To broadcast a vector of scales or zeros, set the group size to K.\n"
       << "  --mode=<int>                The mode to run the gemm. 0 is Convert Only, 1 is Convert and Scale, 2 is Convert and Scale with Zero Point\n"
+      << "  --a_narrower=<0/1>          Whether A is the narrower type.\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
       << "  --iterations=<int>          Iterations\n\n";
@@ -144,6 +148,8 @@ struct ExampleRunner {
   using CollectiveMainloop = typename Gemm::CollectiveMainloop;
   using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
 
+  static constexpr bool AIsNarrower = CollectiveMainloop::IsATransformed;
+
   using StrideA = typename Gemm::GemmKernel::StrideA;
   using StrideB = typename Gemm::GemmKernel::StrideB;
   using StrideC = typename Gemm::GemmKernel::StrideC;
@@ -157,6 +163,7 @@ struct ExampleRunner {
   using ElementA = typename Gemm::ElementA;
   using ElementB = typename Gemm::ElementB;
   using ElementAcc = typename Gemm::ElementAccumulator;
+  using ElementMMA = std::conditional_t<AIsNarrower, ElementB, ElementA>;
 
   using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
   using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
@@ -171,7 +178,6 @@ struct ExampleRunner {
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
-  static constexpr bool AIsQuantized = CollectiveMainloop::IsATransformed;
 
   //
   // Data members
@@ -188,8 +194,8 @@ struct ExampleRunner {
 
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
-  cutlass::DeviceAllocation<ElementB> block_A_dq; // Dequantized copy of A for validation
-  cutlass::DeviceAllocation<ElementB> block_B_dq; // Dequantized copy of B for validation
+  cutlass::DeviceAllocation<ElementMMA> block_A_dq; // Dequantized copy of A for validation
+  cutlass::DeviceAllocation<ElementMMA> block_B_dq; // Dequantized copy of B for validation
   cutlass::DeviceAllocation<ElementScale> block_scale;
   cutlass::DeviceAllocation<ElementZero> block_zero;
   cutlass::DeviceAllocation<ElementC> block_C;
@@ -205,7 +211,6 @@ struct ExampleRunner {
     //
     // Compute reference output (default gemm kernel w/ ElementA == ElementB)
     //
-    using ElementRefA = ElementB;          // <- data type of ElementA in reference implementation
 
     using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
     using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
@@ -246,9 +251,9 @@ struct ExampleRunner {
     using CollectiveMainloopRef = cutlass::gemm::collective::CollectiveMma<
             GEMMDispatchPolicy,
             TileShape,
-            ElementRefA,
+            ElementMMA,
             cutlass::gemm::TagToStrideA_t<LayoutA>,
-            ElementB,
+            ElementMMA,
             cutlass::gemm::TagToStrideB_t<LayoutB>,
             TiledMma,
             GmemTiledCopyA, void, void, cute::identity,  // A
@@ -263,13 +268,26 @@ struct ExampleRunner {
 
     using GemmRef = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelRef>;
 
-    // TODO(joe): AIsQuantized
-    typename GemmRef::Arguments arguments{
-      cutlass::gemm::GemmUniversalMode::kGemm,
-      {options.m, options.n, options.k, options.l},
-      {block_A_dq.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_ref_D.get(), stride_D}
-    };
+    typename GemmRef::Arguments arguments;
+    if constexpr (AIsNarrower) {
+      arguments = {cutlass::gemm::GemmUniversalMode::kGemm,
+                   {options.m, options.n, options.k, options.l},
+                   {block_A_dq.get(), stride_A, block_B.get(), stride_B},
+                   {{options.alpha, options.beta},
+                    block_C.get(),
+                    stride_C,
+                    block_ref_D.get(),
+                    stride_D}};
+    } else {
+      arguments = {cutlass::gemm::GemmUniversalMode::kGemm,
+                   {options.m, options.n, options.k, options.l},
+                   {block_A.get(), stride_A, block_B_dq.get(), stride_B},
+                   {{options.alpha, options.beta},
+                    block_C.get(),
+                    stride_C,
+                    block_ref_D.get(),
+                    stride_D}};
+    }
 
     // Run the gemm where the scaling is performed outside of the kernel.
     GemmRef gemm_ref;
@@ -331,7 +349,7 @@ struct ExampleRunner {
     auto [M, N, K, L] = ProblemShapeType{options.m, options.n, options.k, options.l};
 
     int const scale_k = cute::ceil_div(options.k, options.g);
-    const int dq_mn_size = AIsQuantized ? options.m : options.n;
+    const int dq_mn_size = AIsNarrower ? options.m : options.n;
     auto shape_a = cute::make_shape(options.m, options.k, options.l);
     auto shape_b = cute::make_shape(options.n, options.k, options.l);
     auto shape_scale_zero = cute::make_shape(dq_mn_size, scale_k, options.l);
@@ -348,7 +366,7 @@ struct ExampleRunner {
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
-    if constexpr(AIsQuantized){
+    if constexpr(AIsNarrower){
       block_A_dq.reset(M * K * L);
     }else{
       block_B_dq.reset(N * K * L);
@@ -367,7 +385,7 @@ struct ExampleRunner {
     auto layout_A = make_layout(shape_a, stride_A);
     auto layout_B = make_layout(shape_b, stride_B);
     auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
-    if constexpr (AIsQuantized) {
+    if constexpr (AIsNarrower) {
       dequantize_weight(block_A_dq.get(), block_A.get(), layout_A,
                         block_scale.get(), block_zero.get(), layout_scale_zero,
                         options.g);
@@ -584,13 +602,13 @@ int main(int argc, const char** argv)
   using CollectiveMainloopConvertAndScaleWithZeroPointB = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
-          ElementInputA,
+          ElementInputB,
           cutlass::gemm::TagToStrideA_t<LayoutA>,
-          cute::tuple<ElementInputB, ElementScale, ElementZero>,
+          cute::tuple<ElementInputA, ElementScale, ElementZero>,
           cutlass::gemm::TagToStrideB_t<LayoutB>,
           TiledMma,
-          GmemTiledCopyA, void, void, cute::identity,  // A
-          GmemTiledCopyB, void, void, cute::identity   // B
+          GmemTiledCopyB, void, void, cute::identity,  // A // TODO(joe): Is this right? Just a swap?
+          GmemTiledCopyA, void, void, cute::identity   // B
   >;
 
   using GemmKernelConvertAndScaleWithZeroPointB = cutlass::gemm::kernel::GemmUniversal<
@@ -601,7 +619,12 @@ int main(int argc, const char** argv)
 
   using GemmConvertAndScaleWithZeroPointB = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelConvertAndScaleWithZeroPointB>;
 
-  if (options.mode == GemmMode::ConvertOnly) {
+  // TODO(joe): refactor & fill in support for all modes&AB combinations
+  if (!options.a_narrower){
+    std::cout << "B is narrower" << std::endl;
+    ExampleRunner<GemmConvertAndScaleWithZeroPointB> runner;
+    runner.run(options, hw_info);
+  } else if (options.mode == GemmMode::ConvertOnly) {
     std::cout << "Running in ConvertOnly mode." << std::endl;
     ExampleRunner<GemmConvertOnly> runner;
     runner.run(options, hw_info);
@@ -609,13 +632,11 @@ int main(int argc, const char** argv)
     std::cout << "Running in ConvertAndScale mode." << std::endl;
     ExampleRunner<GemmConvertAndScale> runner;
     runner.run(options, hw_info);
-  }
-  else if (options.mode == GemmMode::ConvertAndScaleWithZeroPoint) {
+  } else if (options.mode == GemmMode::ConvertAndScaleWithZeroPoint) {
     std::cout << "Running in ConvertAndScaleWithZeroPoint mode." << std::endl;
     ExampleRunner<GemmConvertAndScaleWithZeroPoint> runner;
     runner.run(options, hw_info);
   }
-
 
   return 0;
 }

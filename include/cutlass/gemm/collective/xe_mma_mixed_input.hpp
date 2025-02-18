@@ -217,7 +217,7 @@ public:
     StrideB dB;
     ElementScale const* ptr_S = nullptr;
     StrideScale dS;
-    int group_size = 1; // Avoid /0 when no scales // TODO(joe): Is this needed?
+    int group_size;
     ElementZero const* ptr_Z = nullptr;
   };
 
@@ -263,7 +263,7 @@ public:
     auto mZero =
         make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
                     make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
-    
+
     return Params{mA_mkl, mB_nkl, mScale, mZero, scale_k, args.group_size};
   }
 
@@ -288,7 +288,7 @@ public:
             class LayoutZeros,
             class... Ts>
   CUTLASS_DEVICE
-  void transform_A(
+  void transform_quant(
     Tensor<EngineIn, LayoutIn> const& tCrA_load, 
     Tensor<EngineOut, LayoutOut>& tCrA_mma,
     Tensor<EngineScales, LayoutScales>& tCrS_input,
@@ -327,17 +327,36 @@ public:
     }
 
     if (ModeHasScales) {
-      CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < 16; ++i) {
+      if constexpr(IsATransformed){
+        // The current scale load atom (1x32) gives 2 scale values to
+        // each thread. All threads need access to all other threads
+        // scale values, and each scale value is reused twice (unrolled)
         CUTLASS_PRAGMA_UNROLL
-        for (int j = 0; j < 2; ++j) {
-          auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
-          tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
-          tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
-          if (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-            auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
-            tCrA_mma(_, _, 0)[j * 16 + i] += zero;
-            tCrA_mma(_, _, 1)[j * 16 + i] += zero;
+        for (int i = 0; i < 16; ++i) {
+          CUTLASS_PRAGMA_UNROLL
+          for (int j = 0; j < 2; ++j) {
+            auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+            tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
+            tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
+            if (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
+              auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
+              tCrA_mma(_, _, 0)[j * 16 + i] += zero;
+              tCrA_mma(_, _, 1)[j * 16 + i] += zero;
+            }
+          }
+        }
+      } else {
+        // 16 x 4 x 2 values for B
+        // 16 x 2 of these are same K
+        // 4 different scale/zero values per thread, no exchange needed
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < 4; ++i) {
+          CUTLASS_PRAGMA_UNROLL
+          for (int j = 0; j < 32; ++j) {
+            tCrA_mma(_, i, _)[j] *= tCrS_input(j);
+            if (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
+              tCrA_mma(_, i, _)[j] += tCrZ_input(j);
+            }
           }
         }
       }
@@ -410,21 +429,32 @@ public:
     Tensor fragment_A = thr_mma.partition_fragment_A(gA(_, _, 0)); // (M_atom, M_iter, K_iter)
     Tensor fragment_B = thr_mma.partition_fragment_B(gB(_, _, 0)); // (K_atom, N_iter, K_iter)
 
-    // If IsATransformed, we need modes M_atom, and M_iter from fragment_A layout
-    // Else we need mode N_iter from fragment_B layout.
-    // TODO(joe): handle B version (!IsATransformed), and generalize/cuteify!
-    Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(make_layout(Shape<_2, _1, _1>{}));
-    Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (make_layout(Shape<_2, _1, _1>{}));
+    // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
+    // layout else we need mode N_iter from fragment_B layout.
+    using FragScaleLayout = std::conditional_t<IsATransformed,
+                                               Layout<Shape<_2, _1, _1>>,
+                                               Layout<Shape<_4, _1, _1>>>;
+    Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(FragScaleLayout{});
+    Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragScaleLayout{});
 
     // narrow input fragment
-    Tensor tCrA_input = make_tensor<ElementA>(fragment_A.layout());
+    Tensor tCrAB_input = make_tensor<ElementQuant>(
+        std::conditional_t<IsATransformed, decltype(fragment_A.layout()),
+                           decltype(fragment_B.layout())>{});
 
-    static_assert(std::is_same_v<typename decltype(tCrA_input)::value_type, ElementA>);
-    static_assert(std::is_same_v<typename decltype(fragment_A)::value_type, ElementB>);
+    static_assert(std::is_same_v<typename decltype(tCrAB_input)::value_type, ElementQuant>);
+    static_assert(std::is_same_v<typename decltype(fragment_A)::value_type, ElementMMA>);
+    static_assert(std::is_same_v<typename decltype(fragment_B)::value_type, ElementMMA>);
 
     // Retile for copy
-    auto copy_tCrA = thr_copy_A.retile_D(tCrA_input);
-    Tensor copy_tCrB = thr_copy_B.retile_D(fragment_B);
+    auto [copy_tCrA, copy_tCrB] = [&](){
+      if constexpr (IsATransformed) {
+        return std::make_pair(thr_copy_A.retile_D(tCrAB_input), thr_copy_A.retile_D(fragment_B));
+      } else {
+        return std::make_pair(thr_copy_A.retile_D(fragment_A), thr_copy_A.retile_D(tCrAB_input));
+      }
+    }();
+
     Tensor copy_tCrS = thr_copy_scale.retile_D(fragment_scale_input);
     Tensor copy_tCrZ = thr_copy_zero.retile_D(fragment_zero_input);
 
@@ -509,7 +539,13 @@ public:
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
         copy(tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
       }
-      transform_A(tCrA_input, mma_tCrA, fragment_scale_input, fragment_zero_input);
+      if constexpr (IsATransformed) {
+        transform_quant(tCrAB_input, mma_tCrA, fragment_scale_input,
+                        fragment_zero_input);
+      } else {
+        transform_quant(tCrAB_input, mma_tCrB, fragment_scale_input,
+                        fragment_zero_input);
+      }
 
       if(prefetch_k < k_tile_count) {
         if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
