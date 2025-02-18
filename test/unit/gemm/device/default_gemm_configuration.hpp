@@ -1618,7 +1618,7 @@ template <int SizeK>
 struct DefaultGemm_TensorOpXe_OperandA<int8_t, layout::ColumnMajor, 32, SizeK>
 {
   // Gmem
-  // TODO: transposed version is not implemented
+  // TODO(Codeplay): transposed version is not implemented
   using GmemTiledCopy = XE_2D_U8x32x32_LD_N;
 };
 
@@ -1634,7 +1634,7 @@ template <int SizeK>
 struct DefaultGemm_TensorOpXe_OperandB<int8_t, layout::ColumnMajor, 32, SizeK>
 {
   // Gmem
-  // TODO: transposed version is not implemented
+  // TODO(Codeplay): transposed version is not implemented
   using GmemTiledCopy = XE_2D_U8x32x32_LD_V;
 };
 
@@ -1727,7 +1727,7 @@ template <int SizeK>
 struct DefaultGemm_TensorOpXe_OperandA<tfloat32_t, layout::ColumnMajor, 32, SizeK>
 {
   // Gmem
-  // TODO: transposed version is not implemented but the test is passing.
+  // TODO(Codeplay): transposed version is not implemented.
   using GmemTiledCopy = XE_2D_TF32x32x16_LD_N;
 };
 

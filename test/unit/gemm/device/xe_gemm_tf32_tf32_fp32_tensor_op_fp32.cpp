@@ -45,8 +45,7 @@
 
 using namespace cute;
 
-/* TODO issue with prefetch
-   TODO missing copy transpose builtin
+/* TODO(Codeplay): missing copy transpose builtin and prefetch builtin
 TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 256x256x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,

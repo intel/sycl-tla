@@ -63,7 +63,7 @@ TEST(XE_Device_Gemm_s8t_s8t_s32t_tensor_op_s32, 64x128x32) {
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
-/* TODO Transposed copy are not implemented
+/* TODO(Codeplay): Transposed copy are not implemented
 TEST(XE_Device_Gemm_s8n_s8t_s32t_tensor_op_s32, 64x128x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
