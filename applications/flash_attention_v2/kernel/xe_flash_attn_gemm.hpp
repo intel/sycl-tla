@@ -348,7 +348,7 @@ public:
       collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, head_size / get<1>(subgroup_shape), params.mainloop);
 
       CollectiveSoftmaxEpilogue softmax(params.softmax);
-      softmax.template operator()<Vec, FragsM, FragsN>(nblock == 0, tSr, max_reg, sum_reg, out_reg);
+      softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
       auto gV = local_tile(mV_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
       auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
@@ -388,7 +388,7 @@ public:
       }
 
       CollectiveSoftmaxEpilogue softmax(params.softmax);
-      softmax.template operator()<Vec, FragsM, FragsN>((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
+      softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
       auto gV = local_tile(mV_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
       auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);

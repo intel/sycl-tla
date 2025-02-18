@@ -139,9 +139,13 @@ public:
     }
   }
 
-  template <int Vec, int FragsM, int FragsN, class FragAcc, class FragMax, class FragSum, class FragOut>
+  template <class FragAcc, class FragMax, class FragSum, class FragOut>
   CUTLASS_DEVICE void operator()(bool is_first, FragAcc &frag_s, FragMax &max, FragSum &sum, FragOut &out) {
     auto max_prev = max;
+    using FragAccLayout = typename FragAcc::layout_type;
+    constexpr int Vec = get<0>(FragAccLayout{}.shape());
+    constexpr int FragsM = get<1>(FragAccLayout{}.shape());
+    constexpr int FragsN = get<2>(FragAccLayout{}.shape());
     reduce_max<Vec, FragsM, FragsN>(frag_s, max);
     static_assert(Vec * FragsM == 16, " the number of reg_max per workitem should be adopted accordingly.");
     if (!is_first) {
