@@ -45,7 +45,6 @@
 
 using namespace cute;
 
-/* TODO(Codeplay): missing copy transpose builtin and prefetch builtin
 TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 256x256x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
@@ -64,6 +63,7 @@ TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 256x256x32) {
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
+/* TODO(Codeplay): missing copy transpose builtin and prefetch builtin
 TEST(XE_Device_Gemm_tf32n_tf32t_f32t_tensor_op_f32, 256x256x32) {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
