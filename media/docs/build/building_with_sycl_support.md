@@ -5,8 +5,8 @@
 
 This repository contains a development version of the CUTLASS repository
 with experimental SYCL support enabled. The aim is to
-support other SYCL-enabled devices with minimal source code modifications by using the same CUTLASS features.
-possible, facilitating maintenance.
+support other SYCL-enabled devices with minimal source code modifications by using the same CUTLASS features and concepts.
+
 Given that most of the backend work happens in the CUTE implementation,
 the CUTLASS interface remains the same, and the SYCL support only needs 
 changes at the atom and pipeline level.
@@ -39,7 +39,7 @@ Only Linux platforms are supported.
 
 ### Requirements (SYCL for Intel GPU)
 
-To build CUTLASS SYCL support for Intel GPUs, you need the Intel SYCL compiler;
+To build CUTLASS SYCL support for Intel GPUs, you need the DPC++ compiler;
 you can use the latest [[nightly build](https://github.com/intel/llvm/releases)] 
 or a oneAPI toolkit from 2025.0 onwards.
 
@@ -64,7 +64,7 @@ $ CC=clang CXX=clang++ cmake .. -G Ninja \
   -DCUTLASS_ENABLE_SYCL=ON \
   -DDPCPP_SYCL_TARGET=intel_gpu_pvc \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-  -DCMAKE_CXX_FLAGS="-ftemplate-backtrace-limit=0 -fdiagnose-colors=always"  
+  -DCMAKE_CXX_FLAGS="-ftemplate-backtrace-limit=0 -fdiagnostics-color=always"  
 ```
 
 CMake will check that DPC++ compiler is available in the system,
@@ -95,7 +95,8 @@ or build the compiler from source as described in [oneAPI DPC++ guideline]((http
 ### Building with SYCL for NVIDIA support
 Once you have your compiler installed, you need to point the
 `CMAKE_CUDA_HOST_COMPILER` flag to the clang++ provided by it.
-This enables the compilation of SYCL sources without altering the current NVCC path.
+This enables the compilation of SYCL sources without altering the current NVCC path. For example, to build SYCL support for SM 80
+GPUs, you can use the following command:
 
 ```
 cmake -G Ninja  \
@@ -126,7 +127,7 @@ LD_LIBRARY_PATH=/path/to/sycl/install/lib ./examples/cute/tutorial/[EXAMPLE_NAME
  ```
  You can run it like this from your build directory
  ```
-  NVIDIA_TF32_OVERRIDE=1 LD_LIBRARY_PATH=/path/to/sycl/install/lib ./examples/14_ampere_tf32_tensorop_gemm/14_ampere_tf32_tensorop_gemm_cute
+  LD_LIBRARY_PATH=/path/to/sycl/install/lib ./examples/14_ampere_tf32_tensorop_gemm/14_ampere_tf32_tensorop_gemm_cute
  ```
 
 # References
