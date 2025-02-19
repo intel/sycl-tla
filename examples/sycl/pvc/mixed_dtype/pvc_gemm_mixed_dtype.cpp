@@ -596,9 +596,6 @@ int main(int argc, const char** argv)
 
   using GemmConvertAndScaleWithZeroPoint = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelConvertAndScaleWithZeroPoint>;
 
-
-  // TODO(joe): Decide if we're incorporating a B example here or just in unit tests 
- // TODO(joe): fix this example! Currently B is wider!
   using CollectiveMainloopConvertAndScaleWithZeroPointB = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
@@ -607,7 +604,7 @@ int main(int argc, const char** argv)
           cute::tuple<ElementInputA, ElementScale, ElementZero>,
           cutlass::gemm::TagToStrideB_t<LayoutB>,
           TiledMma,
-          GmemTiledCopyB, void, void, cute::identity,  // A // TODO(joe): Is this right? Just a swap?
+          GmemTiledCopyB, void, void, cute::identity,  // A
           GmemTiledCopyA, void, void, cute::identity   // B
   >;
 
