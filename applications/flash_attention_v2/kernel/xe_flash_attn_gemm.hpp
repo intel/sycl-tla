@@ -119,8 +119,9 @@ public:
                 "The QKV multiplication in this implementation requires the squar block computation in per subgroup.");
 
   static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize; // 8
-  static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(MmaAtomShape());          // 2
-  static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(MmaAtomShape());          // 4
+  using FragsShape = decltype(cute::shape_div(take<0, 2>(SubgroupTileShape{}), take<0, 2>(MmaAtomShape())));
+  static constexpr int FragsM = get<0>(FragsShape{});                                          // 2
+  static constexpr int FragsN = get<1>(FragsShape{});                                          // 4
 
   // Kernel level shared memory storage
   struct SharedStorage {

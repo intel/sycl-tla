@@ -162,13 +162,15 @@ public:
     static constexpr auto ATOM_N = get<2>(typename TiledMma::ThrLayoutVMNK{}.shape());
     static constexpr auto ATOM_K = get<3>(typename TiledMma::ThrLayoutVMNK{}.shape());
 
-    static constexpr auto SG_M = ceil_div(BLK_M, ATOM_M);
-    static constexpr auto SG_N = ceil_div(BLK_N, ATOM_N);
-    static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
-    using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
+    using SubgroupTileShape = decltype(cute::shape_div(CtaTileMNK{}, take<1, 4>(typename TiledMma::ThrLayoutVMNK{}.shape())));
 
-    static constexpr int FragsM = get<0>(SubgroupTileShape{}) / get<0>(MmaAtomShape()); // A frags per sub_group
-    static constexpr int FragsN = get<1>(SubgroupTileShape{}) / get<1>(MmaAtomShape()); // B frags per sub_group
+    static constexpr auto SG_M = get<0>(SubgroupTileShape{});
+    static constexpr auto SG_N = get<1>(SubgroupTileShape{});
+    static constexpr auto SG_K = get<2>(SubgroupTileShape{});
+
+    using FragsShape = decltype(cute::shape_div(take<0, 2>(SubgroupTileShape{}), take<0, 2>(MmaAtomShape())));
+    static constexpr int FragsM = get<0>(FragsShape{}); // A frags per sub_group
+    static constexpr int FragsN = get<1>(FragsShape{}); // B frags per sub_group
 
     static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize;
 
