@@ -121,9 +121,6 @@ public:
 
   // These are always MN major, and we use the same for Scale and Zero
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
-  // For cases where we can't have a void scale, we can use this to allow the code to compile when the scale is void.
-  using NonVoidStrideScale = cute::conditional_t<
-      cute::is_void_v<StrideScale>, cute::Stride<_1, int64_t, int64_t>, StrideScale>;
   using TiledMma = TiledMma_;
   using ElementAccumulator = typename TiledMma::ValTypeC;
 
