@@ -137,7 +137,7 @@ struct XE_1D_LDSM {
       auto sg =
           sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_sub_group();
       sycl::ext::oneapi::experimental::group_load(
-          sg, &*&src, *reinterpret_cast<sycl::vec<S_, N> *>(&dst), props);
+          sg, &src, *reinterpret_cast<sycl::vec<S_, N> *>(&dst), props);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif 
@@ -209,7 +209,7 @@ struct XE_1D_LOAD_GLOBAL {
           sycl::ext::oneapi::experimental::contiguous_memory,
           sycl::ext::oneapi::experimental::alignment<sizeof(D)>};
       sycl::ext::oneapi::experimental::group_load(
-          sg, &*&src, *reinterpret_cast<sycl::vec<S_, N> *>(&dst), props);
+          sg, &src, *reinterpret_cast<sycl::vec<S_, N> *>(&dst), props);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif 
@@ -239,7 +239,7 @@ struct XE_1D_STSM {
           sycl::ext::oneapi::experimental::contiguous_memory,
           sycl::ext::oneapi::experimental::alignment<sizeof(S)>};
       sycl::ext::oneapi::experimental::group_store(
-          sg, *reinterpret_cast<sycl::vec<D_, N> const *>(&src), &*&dst, props);
+          sg, *reinterpret_cast<sycl::vec<D_, N> const *>(&src), &dst, props);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
@@ -266,7 +266,7 @@ struct XE_1D_STORE_GLOBAL {
           sycl::ext::oneapi::experimental::contiguous_memory,
           sycl::ext::oneapi::experimental::alignment<sizeof(S)>};
       sycl::ext::oneapi::experimental::group_store(
-          sg, *reinterpret_cast<sycl::vec<D_, N> const *>(&src), &*&dst, props);
+          sg, *reinterpret_cast<sycl::vec<D_, N> const *>(&src), &dst, props);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
