@@ -31,26 +31,13 @@
 #pragma once
 
 #include "cutlass/cutlass.h"
-#include "cutlass/kernel_hardware_info.hpp"
-#include "cutlass/gemm/gemm.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
+#include "cutlass/gemm/gemm.h"
+#include "cutlass/kernel_hardware_info.hpp"
 
 #include "online_softmax.hpp"
 #include "pvc_flash_attn_mma.hpp"
 
-#ifdef __SYCL_DEVICE_ONLY__
-#define SYCL_DEVICE_SPV_SPLIT_BARRIER(x) SYCL_EXTERNAL x
-#else
-#define SYCL_DEVICE_SPV_SPLIT_BARRIER(x)                                                                               \
-  inline x { assert(false); }
-#endif
-
-SYCL_DEVICE_SPV_SPLIT_BARRIER(void __spirv_ControlBarrierArriveINTEL(int execution_scope, int memory_scope,
-                                                                     int memory_semantics));
-SYCL_DEVICE_SPV_SPLIT_BARRIER(void __spirv_ControlBarrierWaitINTEL(int execution_scope, int memory_scope,
-                                                                   int memory_semantics));
-
-#undef SYCL_DEVICE_SPV_SPLIT_BARRIER
 namespace cutlass::gemm::kernel {
 
 template <class ProblemShape, class CollectiveMainloop, class CollectiveEpilogue, class TileScheduler_ = void>
@@ -60,9 +47,6 @@ class GemmUniversalAttention;
 
 template <class ProblemShape_, class CollectiveMainloop_, class CollectiveEpilogue_, class TileScheduler_>
 class GemmUniversalAttention {
-// 3 is for subgroup, 2 is for workgroup
-#define barrier_arrive(scope) __spirv_ControlBarrierArriveINTEL(scope, 0, 0);
-#define barrier_wait(scope) __spirv_ControlBarrierWaitINTEL(scope, 0, 0);
 
 public:
   //
@@ -220,9 +204,7 @@ public:
 
     auto blk_shape = TileShape{};
     auto blk_m_coord = BlockIdxY();
-    auto blk_n_coord = BlockIdxX();
     auto blk_l_coord = BlockIdxZ();
-    auto blk_coord_mnkl = make_coord(blk_m_coord, blk_n_coord, _, blk_l_coord);
 
     Tensor mQ_mkl = make_tensor(make_gmem_ptr(static_cast<ElementQ const *>(nullptr)),
                                 make_shape(seq_len, head_size, batch * num_heads), StrideQ{}); //(m,k,l)
@@ -239,13 +221,6 @@ public:
     const int seq_coord = BlockIdxY() * BLK_M + (sub_group_id / ATOM_N) * SG_M;
     const int head_size_coord = BlockIdxX() * BLK_N + (sub_group_id % ATOM_N) * SG_N;
     const int l_coord = BlockIdxZ();
-
-    // Compute tile residues for predication
-    auto m_max_coord = seq_len - get<0>(subgroup_shape) * seq_coord; // M - SUB_M * m_coord
-    auto n_max_coord = seq_len - get<1>(subgroup_shape) * seq_coord; // N - SUB_N * n_coord
-    auto k_residue =
-        head_size - get<2>(subgroup_shape) * (head_size / get<2>(subgroup_shape)); // K - SUB_K * k_coord_max
-    auto residue_mnk = make_tuple(m_max_coord, n_max_coord, k_residue);
 
     using PrefetchQThrShape = typename CollectiveMainloop::PrefetchQThrShape; // shape<4,2> // (8,2)
     using PrefetchKThrShape = typename CollectiveMainloop::PrefetchKThrShape; // shape<4,2> // (4,4)
@@ -343,7 +318,8 @@ public:
     static constexpr int barrier_scope = CausalMask ? 3 : 2;
 
     // MAIN LOOP: loop over K and V, perform fused attention + online softmax
-    for (int nblock = 0, load_idx = 0; nblock < nblock_limit; nblock++, load_idx += get<1>(subgroup_shape)) {
+    for (int nblock = 0, load_idx = 0; nblock < nblock_limit - static_cast<int>(CausalMask);
+         nblock++, load_idx += get<1>(subgroup_shape)) {
       barrier_arrive(barrier_scope);
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
@@ -355,42 +331,12 @@ public:
       auto tile_coord_QK = make_coord(seq_coord, load_idx, _, blk_l_coord);
       collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, head_size / get<1>(subgroup_shape), params.mainloop);
 
-      // Apply causal mask
-      if (CausalMask && nblock == nblock_limit - 1) {
-        // mask the elements of each tile where j > i
-        int col_idx = item_id + load_idx;
-        CUTLASS_PRAGMA_UNROLL
-        for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) {
-          CUTLASS_PRAGMA_UNROLL
-          for (int m = 0; m < FragsM; m++) {
-            int row_idx = m * Vec + seq_coord;
-            CUTLASS_PRAGMA_UNROLL
-            for (int row = 0; row < Vec; row++, row_idx++) {
-              if (col_idx > row_idx)
-                tSr(row, m, n) = -INFINITY;
-            }
-          }
-        }
-      }
-
       flash::Softmax<ElementAccumulator>::template run<CausalMask, Vec, FragsM, FragsN>(
           nblock == 0, tSr, max_reg, sum_reg, out_reg, params.softmax);
-      // 7) Convert S to P (FP32 -> BF16)
-      Tensor tPr = make_tensor<typename TiledMma::ValTypeA>(shape(tSr));
-      CUTLASS_PRAGMA_UNROLL
-      for (int p_idx = 0; p_idx < size(tPr); p_idx++) {
-#ifdef __SYCL_DEVICE_ONLY__
-        // Temporary patch to avoid linking in the devicelib fallback unconditionally.
-        tPr(p_idx).storage = __spirv_ConvertFToBF16INTEL(tSr(p_idx));
-#else
-        tPr(p_idx) = static_cast<typename TiledMma::ValTypeA>(tSr(p_idx));
-#endif
-      }
-      // 8) Scale out_reg with l
-      // 10) Perform GEMM O =
+
       auto gV = local_tile(mV_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
       auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
-      collective_mma.mmaPV(tile_coord_PV, out_reg, tPr, gV, out_reg, 1, nblock, params.mainloop);
+      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, 1, nblock, params.mainloop);
       if (nblock + DispatchPolicy::Stages < nblock_limit) {
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < iter_over_head_count; j++) {
@@ -400,9 +346,42 @@ public:
       }
       barrier_wait(barrier_scope);
     }
+    if constexpr (CausalMask) {
+      // BAND Matrix
+      // 1) Load K (performed inside mmaQK)
+      // 2) Create Tensor S
+      auto gK = local_tile(mK_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
+      Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
+      clear(tSr);
+      // 3) Perform GEMM S = Q*K
+      auto tile_coord_QK = make_coord(seq_coord, (nblock_limit - 1) * get<1>(subgroup_shape), _, blk_l_coord);
+      collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, head_size / get<1>(subgroup_shape), params.mainloop);
+      // mask the elements of each tile where j > i
+      int col_idx = item_id + (nblock_limit - 1) * get<1>(subgroup_shape);
+      CUTLASS_PRAGMA_UNROLL
+      for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
+        CUTLASS_PRAGMA_UNROLL
+        for (int m = 0; m < FragsM; m++) { // 2
+          int row_idx = m * Vec + seq_coord;
+          CUTLASS_PRAGMA_UNROLL
+          for (int row = 0; row < Vec; row++, row_idx++) { // 8
+            if (col_idx > row_idx)
+              tSr(row, m, n) = -INFINITY;
+          }
+        }
+      }
+
+      flash::Softmax<ElementAccumulator>::template run<CausalMask, Vec, FragsM, FragsN>(
+          (nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg, params.softmax);
+
+      auto gV = local_tile(mV_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
+      auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
+      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, 1, nblock_limit - 1, params.mainloop);
+    }
 
     CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
-
+    auto blk_n_coord = BlockIdxX();
+    auto blk_coord_mnkl = make_coord(blk_m_coord, blk_n_coord, _, blk_l_coord);
     epilogue(params.problem_shape, blk_coord_mnkl, out_reg, max_reg, sum_reg, tiled_mma, params.softmax.scale);
   }
 };

@@ -82,11 +82,9 @@ struct FusionOperation {
   using ElementAmax = void;
   static constexpr bool IsAbsMaxSupported = false;
 
-  
   using ElementBlockScaleFactor = void;
   static constexpr int SFVecSize = 0;
   static constexpr bool IsBlockScaleSupported = false;               // Umbrella variable to check BlockScaling support in the epilogues
-  
   using GmemLayoutTagScalefactor = void;
 };
 
@@ -147,6 +145,18 @@ struct LinCombTopKSoftmaxCol
     : LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
 };
 
+// D = softmax(alpha * acc + beta * C)
+template<
+  class ElementOutput_,
+  class ElementCompute_,
+  class CopyOpR2G_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct LinCombSoftmaxRow
+    : LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
+};
 
 // D = alpha * acc + beta * C + per-row bias
 template<
@@ -483,7 +493,6 @@ struct LinCombDeEltActDePerRowBias
   static constexpr int AlignmentBias = AlignmentBias_;
   static constexpr bool IsDePerRowBiasSupported = true;
 };
-
 
 template<
   int SFVecSize_,
