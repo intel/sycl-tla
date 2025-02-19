@@ -353,9 +353,9 @@ public:
         for (int i = 0; i < 4; ++i) {
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < 32; ++j) {
-            tCrA_mma(_, i, _)[j] *= tCrS_input(j);
+            tCrA_mma(_, i, _)[j] *= tCrS_input(i);
             if (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              tCrA_mma(_, i, _)[j] += tCrZ_input(j);
+              tCrA_mma(_, i, _)[j] += tCrZ_input(i);
             }
           }
         }
@@ -433,7 +433,7 @@ public:
     // layout else we need mode N_iter from fragment_B layout.
     using FragScaleLayout = std::conditional_t<IsATransformed,
                                                Layout<Shape<_2, _1, _1>>,
-                                               Layout<Shape<_4, _1, _1>>>;
+                                               Layout<Shape<_2, _2, _1>>>;
     Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(FragScaleLayout{});
     Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragScaleLayout{});
 
@@ -494,9 +494,17 @@ public:
     Tensor block2d_copy_iter_b = tiled_copy_b.get_pvc_tensor(make_coord(n_coord, 0, l_coord), copy_tCrB.shape());
     auto copy_iter_b = append_pvc_tensor<1>(block2d_copy_iter_b, k_tile_count, BLK_K);
 
-    Tensor copy_iter_s = make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
-                                             make_layout(make_shape(_1{}, _1{}, _1{}, k_tile_count), 
-                                                         make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+    Tensor copy_iter_s = [&](){
+      if constexpr(IsATransformed){
+        return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
+                           make_layout(make_shape(_1{}, _1{}, _1{}, k_tile_count), 
+                                       make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+      }else{
+        return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
+                           make_layout(make_shape(_1{}, _2{}, _1{}, k_tile_count), 
+                                       make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+      }
+    }();
 
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
     int prefetch_k = 0;
