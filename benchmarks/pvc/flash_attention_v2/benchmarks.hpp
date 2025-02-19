@@ -34,56 +34,116 @@
 #include "benchmark_runner.hpp"
 #include "fmha_configuration.hpp"
 
-using TiledMma1 = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>,
+//bfloat16 benchmarks
+using TiledMmaBF16_1 = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>,
                             Tile<Layout<Shape<_8, _8, _2>, Stride<_1, _16, _8>>,
                                 Layout<Shape<_16, _1, _4>, Stride<_1, _64, _16>>,
                                 _64>>;
 
-using TiledMma2 = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>,
+using TiledMmaBF16_2 = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>,
                             Tile<Layout<Shape<_8, _8, _2>, Stride<_1, _16, _8>>,
                                 Layout<Shape<_16, _2, _4>, Stride<_1, _64, _16>>,
                                 _64>>;
 
 using PvcFMHABF16BF16FP32_RCR_1 = cutlass::flash_attention::FMHAConfig<
+        cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t,
         cutlass::layout::RowMajor,
         cutlass::layout::ColumnMajor,
         cutlass::layout::RowMajor,
         cutlass::layout::RowMajor, 
         true, Shape<_128, _64, _64>,
-        TiledMma1>;
+        TiledMmaBF16_1>;
 
 using PvcFMHABF16BF16FP32_RCR_2 = cutlass::flash_attention::FMHAConfig<
+        cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t,
         cutlass::layout::RowMajor,
         cutlass::layout::ColumnMajor,
         cutlass::layout::RowMajor,
         cutlass::layout::RowMajor,
         false, Shape<_128, _64, _64>,
-        TiledMma1>;
+        TiledMmaBF16_1>;
 
 using PvcFMHABF16BF16FP32_RCR_3 = cutlass::flash_attention::FMHAConfig<
+        cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t,
         cutlass::layout::RowMajor,
         cutlass::layout::ColumnMajor,
         cutlass::layout::RowMajor,
         cutlass::layout::RowMajor, 
         true, Shape<_128, _128, _64>,
-        TiledMma2>;
+        TiledMmaBF16_2>;
 
 using PvcFMHABF16BF16FP32_RCR_4 = cutlass::flash_attention::FMHAConfig<
+        cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t,
         cutlass::layout::RowMajor,
         cutlass::layout::ColumnMajor,
         cutlass::layout::RowMajor,
         cutlass::layout::RowMajor, 
         false, Shape<_128, _128, _64>,
-        TiledMma2>;
+        TiledMmaBF16_2>;
+
+//half benchmarks
+using TiledMmaFP16_1 = TiledMMA<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>,
+                            Tile<Layout<Shape<_8, _8, _2>, Stride<_1, _16, _8>>,
+                                Layout<Shape<_16, _1, _4>, Stride<_1, _64, _16>>,
+                                _64>>;
+
+using TiledMmaFP16_2 = TiledMMA<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>,
+                            Tile<Layout<Shape<_8, _8, _2>, Stride<_1, _16, _8>>,
+                                Layout<Shape<_16, _2, _4>, Stride<_1, _64, _16>>,
+                                _64>>;
+
+using PvcFMHAFP16FP16FP32_RCR_1 = cutlass::flash_attention::FMHAConfig<
+        cutlass::half_t, cutlass::half_t, cutlass::half_t,
+        cutlass::layout::RowMajor,
+        cutlass::layout::ColumnMajor,
+        cutlass::layout::RowMajor,
+        cutlass::layout::RowMajor, 
+        true, Shape<_128, _64, _64>,
+        TiledMmaFP16_1>;
+
+using PvcFMHAFP16FP16FP32_RCR_2 = cutlass::flash_attention::FMHAConfig<
+        cutlass::half_t, cutlass::half_t, cutlass::half_t,
+        cutlass::layout::RowMajor,
+        cutlass::layout::ColumnMajor,
+        cutlass::layout::RowMajor,
+        cutlass::layout::RowMajor,
+        false, Shape<_128, _64, _64>,
+        TiledMmaFP16_1>;
+
+using PvcFMHAFP16FP16FP32_RCR_3 = cutlass::flash_attention::FMHAConfig<
+        cutlass::half_t, cutlass::half_t, cutlass::half_t,
+        cutlass::layout::RowMajor,
+        cutlass::layout::ColumnMajor,
+        cutlass::layout::RowMajor,
+        cutlass::layout::RowMajor, 
+        true, Shape<_128, _128, _64>,
+        TiledMmaFP16_2>;
+
+using PvcFMHAFP16FP16FP32_RCR_4 = cutlass::flash_attention::FMHAConfig<
+        cutlass::half_t, cutlass::half_t, cutlass::half_t,
+        cutlass::layout::RowMajor,
+        cutlass::layout::ColumnMajor,
+        cutlass::layout::RowMajor,
+        cutlass::layout::RowMajor, 
+        false, Shape<_128, _128, _64>,
+        TiledMmaFP16_2>;
 
 CUTLASS_CREATE_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_1);
 CUTLASS_CREATE_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_2);
 CUTLASS_CREATE_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_3);
 CUTLASS_CREATE_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_4);
+CUTLASS_CREATE_FMHA_BENCHMARK(PvcFMHAFP16FP16FP32_RCR_1);
+CUTLASS_CREATE_FMHA_BENCHMARK(PvcFMHAFP16FP16FP32_RCR_2);
+CUTLASS_CREATE_FMHA_BENCHMARK(PvcFMHAFP16FP16FP32_RCR_3);
+CUTLASS_CREATE_FMHA_BENCHMARK(PvcFMHAFP16FP16FP32_RCR_4);
 
 static void register_benchmarks() {
   CUTLASS_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_1);
   CUTLASS_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_2);
   CUTLASS_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_3);
   CUTLASS_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_4);
+  CUTLASS_FMHA_BENCHMARK(PvcFMHAFP16FP16FP32_RCR_1);
+  CUTLASS_FMHA_BENCHMARK(PvcFMHAFP16FP16FP32_RCR_2);
+  CUTLASS_FMHA_BENCHMARK(PvcFMHAFP16FP16FP32_RCR_3);
+  CUTLASS_FMHA_BENCHMARK(PvcFMHAFP16FP16FP32_RCR_4);
 }
