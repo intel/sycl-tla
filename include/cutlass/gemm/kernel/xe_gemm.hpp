@@ -53,7 +53,8 @@ class GemmUniversal<
   CollectiveEpilogue_,
   TileScheduler_,
   cute::enable_if_t<cute::is_base_of_v<KernelPVC, typename CollectiveMainloop_::DispatchPolicy::Schedule> 
-                    && !cute::is_same_v<TileScheduler_, cutlass::gemm::StreamKScheduler>>>
+                    && !cute::is_same_v<TileScheduler_, cutlass::gemm::StreamKScheduler>
+                    && !cute::is_same_v<TileScheduler_, cutlass::gemm::GroupScheduler>>>
 {
 public:
   //

@@ -699,6 +699,15 @@ struct MainloopIntelPVC {
 };
 
 template<int Stages_>
+struct MainloopIntelPVCGroup {
+  constexpr static int Stages = Stages_;
+  constexpr static int SubgroupSize = 16;
+  using ArchTag = arch::IntelPVC;
+  using Schedule = KernelPVC;
+  using ClusterShape = Shape<_1,_1,_1>;
+};
+
+template<int Stages_>
 struct MainloopIntelPVCMixedPrecision {
   constexpr static int Stages = Stages_;
   constexpr static int SubgroupSize = 16;

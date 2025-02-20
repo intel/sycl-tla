@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,15 +56,15 @@ class GemmUniversal<
   CollectiveEpilogue_,
   TileScheduler_,
   cute::enable_if_t<cute::is_base_of_v<KernelPVC, typename CollectiveMainloop_::DispatchPolicy::Schedule> 
-                    && cute::is_same_v<TileScheduler_, cutlass::gemm::StreamKScheduler>
-                    && !cute::is_same_v<TileScheduler_, cutlass::gemm::GroupScheduler>>>
+                    && !cute::is_same_v<TileScheduler_, cutlass::gemm::StreamKScheduler>
+                    && cute::is_same_v<TileScheduler_, cutlass::gemm::GroupScheduler>>>
 {
 public:
   //
   // Type Aliases
   //
   using ProblemShape = ProblemShape_;
-  static_assert(cute::rank(ProblemShape{}) == 3 or cute::rank(ProblemShape{}) == 4,
+  static_assert(cute::rank(typename ProblemShape::UnderlyingProblemShape{}) == 3 or cute::rank(typename ProblemShape::UnderlyingProblemShape{}) == 4,
     "ProblemShape{} should be <M,N,K> or <M,N,K,L>");
 
   // Mainloop derived types
@@ -75,8 +75,10 @@ public:
   using ArchTag   = typename CollectiveMainloop::ArchTag;
   using ElementA  = typename CollectiveMainloop::ElementA;
   using StrideA   = typename CollectiveMainloop::StrideA;
+  using InternalStrideA   = typename CollectiveMainloop::InternalStrideA;
   using ElementB  = typename CollectiveMainloop::ElementB;
   using StrideB   = typename CollectiveMainloop::StrideB;
+  using InternalStrideB   = typename CollectiveMainloop::InternalStrideB;
   using DispatchPolicy = typename CollectiveMainloop::DispatchPolicy;
   using ElementAccumulator = typename CollectiveMainloop::ElementAccumulator;
   using ClusterShape = typename DispatchPolicy::ClusterShape;
@@ -87,14 +89,16 @@ public:
   using CollectiveEpilogue = CollectiveEpilogue_;
   using ElementC = typename CollectiveEpilogue::ElementC;
   using StrideC  = typename CollectiveEpilogue::StrideC;
+  using InternalStrideC = typename CollectiveEpilogue::InternalStrideC;
   using ElementD = typename CollectiveEpilogue::ElementD;
   using StrideD  = typename CollectiveEpilogue::StrideD;
+  using InternalStrideD = typename CollectiveEpilogue::InternalStrideD;
   using EpilogueArguments = typename CollectiveEpilogue::Arguments;
   using EpilogueParams = typename CollectiveEpilogue::Params;
 
   using TileSchedulerTag = TileScheduler_;
   using TileScheduler = typename detail::TileSchedulerSelector<
-    TileScheduler_, ArchTag, TileShape, ClusterShape>::Scheduler;
+    TileScheduler_, ArchTag, TileShape, ClusterShape, 0, ProblemShape>::Scheduler;
   using TileSchedulerArguments = typename TileScheduler::Arguments;
   using TileSchedulerParams = typename TileScheduler::Params;
 
@@ -110,6 +114,8 @@ public:
   };
 
   static constexpr int SharedStorageSize = sizeof(SharedStorage);
+
+  static_assert(cute::is_same_v<ClusterShape, cute::Shape<_1, _1, _1>>);
 
   // Device side arguments
   struct Arguments {
@@ -144,8 +150,6 @@ public:
 
     auto problem_shape = args.problem_shape;
 
-    auto problem_shape_MNKL = append<4>(problem_shape, 1);
-
     // Get SM count if needed, otherwise use user supplied SM count
     int sm_count = args.hw_info.sm_count;
     if (sm_count <= 0) {
@@ -162,7 +166,7 @@ public:
     uint8_t* workspace_ptr = reinterpret_cast<uint8_t*>(workspace);
 
     TileSchedulerParams scheduler = TileScheduler::to_underlying_arguments(
-      problem_shape_MNKL, TileShape{}, hw_info, args.scheduler, workspace_ptr);
+      problem_shape, TileShape{}, ClusterShape{}, hw_info, args.scheduler, workspace_ptr);
 
     return {
       args.mode,
@@ -177,16 +181,16 @@ public:
 
   static bool
   can_implement(Arguments const& args) {
-    bool mode_implementable = args.mode == GemmUniversalMode::kGemm or args.mode == GemmUniversalMode::kGrouped or
-          (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
+    bool mode_implementable = args.mode == GemmUniversalMode::kGrouped
+          && rank(typename ProblemShape::UnderlyingProblemShape{}) == 3;
     return mode_implementable && TileScheduler::can_implement(args.scheduler);
   }
 
   static size_t
   get_workspace_size(Arguments const& args) {
     size_t workspace_size = 0;
-    workspace_size += TileScheduler::template get_workspace_size<ProblemShape, ElementAccumulator>(
-      args.scheduler, args.problem_shape, args.hw_info);
+    workspace_size += TileScheduler::template get_workspace_size<typename ProblemShape::UnderlyingProblemShape, ElementAccumulator>(
+      args.scheduler, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info);
     return workspace_size;
   }
 
@@ -196,8 +200,8 @@ public:
     Status status = Status::kSuccess;
     uint8_t* workspace_ptr = reinterpret_cast<uint8_t*>(workspace);
 
-    status = TileScheduler::template initialize_workspace<ProblemShape, ElementAccumulator>(
-      args.scheduler, workspace_ptr, args.problem_shape, args.hw_info);
+    status = TileScheduler::template initialize_workspace<typename ProblemShape::UnderlyingProblemShape, ElementAccumulator>(
+      args.scheduler, workspace_ptr, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info);
 
     return status;
   }
@@ -206,7 +210,9 @@ public:
   static dim3
   get_grid_shape(Params const& params) {
     // Given device SM count, set grid size s.t. we do not launch more thread blocks than we can run concurrently
-    return TileScheduler::get_grid_shape(params.problem_shape, TileShape{}, params.hw_info);
+    TileSchedulerArguments args{};
+    args.raster_order = params.scheduler.raster_order_ == TileScheduler::RasterOrder::AlongN ? TileScheduler::RasterOrderOptions::AlongN : TileScheduler::RasterOrderOptions::AlongM;
+    return TileScheduler::get_grid_shape(params.scheduler, params.problem_shape, TileShape{}, ClusterShape{}, params.hw_info, args);
   }
 
   static dim3
@@ -220,53 +226,51 @@ public:
     // Preconditions
     CUTE_STATIC_ASSERT(is_static<WorkgroupTileShape>::value);
 
-    static_assert(cute::rank(StrideA{}) == 3, "StrideA must be rank-3: [M, K, L]. If batch mode is not needed, set L stride to Int<0>.");
-    static_assert(cute::rank(StrideB{}) == 3, "StrideB must be rank-3: [N, K, L]. If batch mode is not needed, set L stride to Int<0>.");
-    static_assert(cute::rank(StrideC{}) == 3, "StrideC must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
-    static_assert(cute::rank(StrideD{}) == 3, "StrideD must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(InternalStrideA{}) == 3, "StrideA must be rank-3: [M, K, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(InternalStrideB{}) == 3, "StrideB must be rank-3: [N, K, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(InternalStrideC{}) == 3, "StrideC must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
+    static_assert(cute::rank(InternalStrideD{}) == 3, "StrideD must be rank-3: [M, N, L]. If batch mode is not needed, set L stride to Int<0>.");
 
     // Kernel level shared memory storage
     SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(smem_buf);
 
+    TileScheduler scheduler{params.scheduler};
+    auto work_tile_info = scheduler.initial_work_tile_info(ClusterShape{});
+    constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (BLK_M,BLK_N,BLK_K)
     // Optionally append 1s until problem shape is rank-4 in case it is only rank-3 (MNK)
-    auto problem_shape_MNKL = append<4>(params.problem_shape, Int<1>{});
+    auto problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(work_tile_info.L_idx), 1);
     auto M = get<0>(problem_shape_MNKL);
     auto N = get<1>(problem_shape_MNKL);
     auto K = get<2>(problem_shape_MNKL);
     auto L = get<3>(problem_shape_MNKL);
 
-    TileScheduler scheduler{params.scheduler};
-    auto work_tile_info = scheduler.initial_work_tile_info();
+    Tensor mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,1), InternalStrideA{});   //(m,k,l)
+    Tensor mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,1), InternalStrideB{});   //(n,k,l)
+
+    auto gA_mkl = local_tile(mA_mkl, workgroup_shape, make_coord(_, _, _), Step<_1,  X, _1>{});
+    auto gB_nkl = local_tile(mB_nkl, workgroup_shape, make_coord(_, _, _), Step< X, _1, _1>{});
+
+    int32_t curr_batch = idx2crd(work_tile_info.L_idx, shape<4>(gB_nkl)); // Usually just returns work_tile_info.L_idx;
+    int32_t const xe_idx = BlockIdxX() + (BlockIdxY() * GridDimX());
+    int32_t const xe_count = params.hw_info.sm_count;
 
     int thread_idx = int(ThreadIdxX());
-    constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (BLK_M,BLK_N,BLK_K)
     constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
+    bool did_batch_change = true;
+    int32_t offsetA = M * K, offsetB = N * K;
+    auto new_mainloop_params = params.mainloop;
 
     while (work_tile_info.is_valid()) {
-      const int m_coord = work_tile_info.M_idx;
-      const int n_coord = work_tile_info.N_idx;
-      const int l_coord = work_tile_info.L_idx;
-      const auto tile_coord = make_coord(m_coord, n_coord, _, l_coord);
+      auto m_coord = work_tile_info.M_idx;
+      auto n_coord = work_tile_info.N_idx;
+      auto l_coord = work_tile_info.L_idx;
 
-      Tensor mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,L), StrideA{});   //(m,k,l)
-      Tensor mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,L), StrideB{});   //(n,k,l)
-      Tensor mA_mk = mA_mkl(_,_,l_coord);                                                                        // (m,k)
-      Tensor mB_nk = mB_nkl(_,_,l_coord);                                                                        // (n,k)
-
-      auto gA = local_tile(mA_mk, workgroup_shape, take<0, 3>(tile_coord), Step<_1,  X, _1>{});
-      auto gB = local_tile(mB_nk, workgroup_shape, take<0, 3>(tile_coord), Step< X, _1, _1>{});
+      auto tile_coord = make_coord(m_coord, n_coord, _, l_coord);
 
       // Get the number of K tiles to compute for this work as well as the starting K tile offset of the work.
-      const int work_k_tile_count = TileScheduler::get_work_k_tile_count(work_tile_info, problem_shape_MNKL, workgroup_shape);
-      const int work_k_tile_start = TileScheduler::get_work_k_tile_start(work_tile_info);
-      auto k_tile_iter = cute::make_coord_iterator(idx2crd(work_k_tile_start, make_shape(K)), make_shape(K));
-
-      auto k_residue = K - get<2>(subgroup_shape) * (K / get<2>(subgroup_shape));        // K - SUB_K * k_coord_max
-
-      // Compute tile residues for predication
-      auto m_max_coord = M - get<0>(subgroup_shape) * m_coord;                             // M - SUB_M * m_coord
-      auto n_max_coord = N - get<1>(subgroup_shape) * n_coord;                             // N - SUB_N * n_coord
-      auto residue_mnk = make_tuple(m_max_coord, n_max_coord, k_residue);
+      int work_k_tile_count = TileScheduler::get_work_k_tile_count(work_tile_info, problem_shape_MNKL, workgroup_shape);
+      int work_k_tile_start = TileScheduler::get_work_k_tile_start(work_tile_info);
+      auto k_tile_iter = cute::make_coord_iterator(idx2crd(work_k_tile_start, shape<3>(gA_mkl)), shape<3>(gA_mkl));
 
       TiledMma tiled_mma;
       Tensor accumulators = partition_fragment_C(tiled_mma, take<0,2>(workgroup_shape)); 
@@ -276,20 +280,19 @@ public:
       // Perform the collective scoped MMA
       collective_mma(
         accumulators,
-        gA,
-        gB,
+        gA_mkl,
+        gB_nkl,
         accumulators,
         k_tile_iter, work_k_tile_count,
-        residue_mnk,
         tile_coord,
-        K,
+        get<3>(gA_mkl.shape()),
         thread_idx,
         smem_buf,
-        params.mainloop
+        new_mainloop_params
       );
 
       // Perform reduction across splits, if needed
-      TileScheduler::template fixup<MaxThreadsPerBlock>(
+      TileScheduler::fixup(
         params.scheduler, work_tile_info, accumulators);
 
       if (TileScheduler::compute_epilogue(work_tile_info, params.scheduler)) {
@@ -301,7 +304,6 @@ public:
           tile_coord,
           accumulators,
           tiled_mma,
-          residue_mnk,
           thread_idx,
           smem_buf
         );
@@ -309,6 +311,30 @@ public:
 
       // Get next work tile
       work_tile_info = scheduler.fetch_next_work(work_tile_info);
+
+      did_batch_change = curr_batch != work_tile_info.L_idx;
+
+      if (work_tile_info.is_valid() && did_batch_change) {
+        curr_batch = work_tile_info.L_idx;
+
+        //TODO: update pointer address and strides for new batch
+        // Optionally append 1s until problem shape is rank-4 in case it is only rank-3 (MNK)
+        problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
+        M = get<0>(problem_shape_MNKL);
+        N = get<1>(problem_shape_MNKL);
+        K = get<2>(problem_shape_MNKL);
+        L = get<3>(problem_shape_MNKL);
+
+        mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,1), InternalStrideA{});   //(m,k,l)
+        mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,1), InternalStrideB{});   //(n,k,l)
+
+        gA_mkl = local_tile(mA_mkl, workgroup_shape, make_coord(_, _, _), Step<_1,  X, _1>{});
+        gB_nkl = local_tile(mB_nkl, workgroup_shape, make_coord(_, _, _), Step< X, _1, _1>{});
+
+        collective_mma.update_tensor_shape_stride(new_mainloop_params, curr_batch, offsetA, offsetB, problem_shape_MNKL);
+        offsetA += M * K;
+        offsetB += N * K;
+      }
     }
   }
 
