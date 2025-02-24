@@ -3518,7 +3518,7 @@ bool TestXe(
   int max_alignment = 4;
   std::vector<int> problem_size_m{max_alignment, 512 - 3 * max_alignment};
   std::vector<int> problem_size_n{max_alignment, 512 - 2 * max_alignment};
-  std::vector<int> problem_size_l = std::vector{1};
+  std::vector<int> problem_size_l = std::vector{1, 3, 4};
 
   constexpr int TileShapeK = cute::size<2>(typename Gemm::GemmKernel::TileShape{});
   std::vector<int> problem_size_k{TileShapeK};
