@@ -74,13 +74,11 @@ function(cutlass_benchmark_add_executable NAME)
 endfunction()
 
 if (CUTLASS_ENABLE_SYCL)
+  set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
   cutlass_benchmark_add_executable(
     benchmarks
     main.cpp
     )
-  if (SYCL_INTEL_TARGET)
-    add_subdirectory(pvc/flash_attention_v2)
-  endif()
 else()
   cutlass_benchmark_add_executable(
     benchmarks

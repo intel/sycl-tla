@@ -66,7 +66,7 @@ struct FMHAOptions {
 
   FMHAOptions()
       : error(false), batch(32), num_heads(16), seq_len(512), head_size(128),
-        iterations(100), softmax_scale(1.f), bm_name("unknown") {}
+        iterations(100), softmax_scale(1.f), bm_name("Flash Attention v2") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -77,7 +77,7 @@ struct FMHAOptions {
     cmd.get_cmd_line_argument("seq_len", seq_len, 512);
     cmd.get_cmd_line_argument("head_size", head_size, 128);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
-    cmd.get_cmd_line_argument("bm_name", bm_name, std::string("unknown"));
+    cmd.get_cmd_line_argument("bm_name", bm_name, std::string("Flash Attention v2"));
 
     softmax_scale = 1 / std::sqrt(static_cast<float>(head_size));
   }

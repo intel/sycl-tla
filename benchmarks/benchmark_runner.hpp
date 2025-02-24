@@ -115,7 +115,7 @@ struct GEMMOptions {
           error(false),
           m(5120), n(4096), k(4096), l(1),
           alpha(1.f), beta(0.f),
-          bm_name("unknown")
+          bm_name("GEMM")
   { }
 
   // Parses the command line
@@ -128,7 +128,7 @@ struct GEMMOptions {
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
-    cmd.get_cmd_line_argument("bm_name", bm_name, std::string("unknown"));
+    cmd.get_cmd_line_argument("bm_name", bm_name, std::string("GEMM"));
   }
 
   std::string benchmark_name() const {
