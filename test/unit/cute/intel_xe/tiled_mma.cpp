@@ -39,7 +39,7 @@ using namespace cute;
 
 template <typename MMA_Atom, typename CTATileShape, typename SubgroupLayout, typename ExpectedTiledMMA>
 void check_tiled_mma(){
-  using TiledMMA = typename ContigBlockMMAHelper<MMA_Atom, CTATileShape, SubgroupLayout>::TiledMMA;
+  using TiledMMA = typename ContigBlockMMAHelper<MMA_Atom, Layout<CTATileShape>, SubgroupLayout>::TiledMMA;
   static_assert(std::is_same_v<TiledMMA, ExpectedTiledMMA>, "Error in construction of contiguous tiled MMA");
 };
 

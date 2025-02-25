@@ -605,7 +605,7 @@ make_tiled_mma(MMA_Op       const&,
 // chunks of the MMA. The docs describe how the Layout
 // (i.e. SubgroupLayout) implies a repetition of the atom across additional
 // hardware. Permutations, in the simplest form, imply additional iterations
-// to cover a larger tile (i.e. CTATileShape) than the hardware can handle
+// to cover a larger tile (i.e. CTALayout) than the hardware can handle
 // at once. Consider this example from the section of the docs linked above:
 //
 //    TiledMMA mma = make_tiled_mma(SM70_8x8x4_F32F16F16F32_NT{},
@@ -641,7 +641,7 @@ make_tiled_mma(MMA_Op       const&,
 // (mode 2 is 2:4).
 // In this manner, the tiling has been permuted so that the values handled by each thread are
 // closer togehter.
-template <typename MMA_Atom, typename CTATileShape, typename SubgroupLayout>
+template <typename MMA_Atom, typename CTALayout, typename WarpLayout>
 struct ContigBlockMMAHelper{
 private:
   using AtomShape = typename MMA_Atom::Shape_MNK;
@@ -649,22 +649,22 @@ private:
   // Represents the canonical MMA block which would be handled by these subgroups without permutation.
   // product_each(shape(...)) converts the layout into a tiler by taking only the shapes
   // e.g. (8,8):(1,8) -> 64
-  static constexpr auto CanonicalBlock =
-      product_each(shape(blocked_product(Layout<AtomShape>{}, SubgroupLayout{})));
+  static constexpr auto CanonicalBlockShape =
+      product_each(shape(blocked_product(Layout<AtomShape>{}, WarpLayout{})));
 
   // Construct the default tiled MMA, to extract the iteration count per dim below
-  static constexpr auto CanonicalTiling = logical_divide(Layout<CTATileShape>{}, CanonicalBlock);
+  static constexpr auto CanonicalTiling = logical_divide(CTALayout{}, CanonicalBlockShape);
 
   static constexpr auto permutation =
-      transform(AtomShape{}, SubgroupLayout{}.shape(), CanonicalTiling.shape(),
-                [](auto atom_size, auto sg_count, auto ct) {
-                  constexpr auto iters = get<1>(ct);
+      transform(AtomShape{}, WarpLayout{}.shape(), CanonicalTiling.shape(),
+                [](auto atom_size, auto sg_count, auto canonical_tiling) {
+                  constexpr auto iters = get<1>(canonical_tiling);
                   auto tiler_shape = make_shape(atom_size, sg_count, iters);   // atom, hardware, iteration
                   return coalesce(make_ordered_layout(tiler_shape, Step<_0, _2, _1>{}));
                 });
 public:
   using Permutation = decltype(permutation);
-  using TiledMMA = cute::TiledMMA<MMA_Atom, SubgroupLayout, Permutation>;
+  using TiledMMA = cute::TiledMMA<MMA_Atom, WarpLayout, Permutation>;
 };
 
 //
