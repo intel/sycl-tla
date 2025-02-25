@@ -601,46 +601,50 @@ make_tiled_mma(MMA_Op       const&,
 
 // This helper fn adopts the approach described in
 // media/docs/cute/0t_mma_atom.md#tiledmmas to construct a scatter
-// permutation which ensures all sub-groups operate on contiguous
-// chunks of the MMA. The docs describe how the Layout
-// (i.e. SubgroupLayout) implies a repetition of the atom across additional
-// hardware. Permutations, in the simplest form, imply additional iterations
+// permutation which ensures hardware operates on contiguous
+// chunks of the TiledMMA. The docs describe how the Layout
+// implies a repetition of the atom across additional hardware. 
+// Permutations, in the simplest form, imply additional iterations
 // to cover a larger tile (i.e. CTALayout) than the hardware can handle
-// at once. Consider this example from the section of the docs linked above:
+// at once. 
 //
-//    TiledMMA mma = make_tiled_mma(SM70_8x8x4_F32F16F16F32_NT{},
-//                                Layout<Shape <_2,_2>,
-//                                       Stride<_2,_1>>{},  // 2x2 n-major layout of Atoms
-//                                Tile<_32,_32,_4>{});      // 32x32x4 tiler
+// Consider an example for PVC hardware:
+//   using TiledMma =
+//       TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+//                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
+//                Tile<_256, _256, _32>>;
 //
-// The second arg (Layout) defines a repetition of the atom across *additional threads*,
+// This MMA_Atom is performed by a whole warp and operates on an 8x16x16 chunk. 
+// The second arg (Layout) defines a repetition of the atom across *additional warps*,
 // i.e. iterating across more hardware. The third arg (Tile) defines a repetition of this
 // MMA across *additional values*. For this example, in the M dimension, the atom produces
-// 8 values of C, the hardware repetition (2) scales this up to 16 values in M, and the
-// requested permutation (32) scales this up to 32 values (implying two iterations in the 
+// 8 values of C, the hardware repetition (8) scales this up to 64 values in M, and the
+// requested permutation (256) scales this up to 256 values (implying 4 iterations in the 
 // M direction). 
 //
 // By cute convention, the repetition of the atom across hardware is the inner
 // iteration, while the repetition across values is the outer. We can use a more complex
 // permutation to *swap* the 'hardware' and 'iteration' in the layout, so that each 'unit'
-// of hardware (quadpair, sub-group, single thread) processes contiguous blocks of A, B and C.
+// of hardware (warp, in this case) processes contiguous blocks of A, B and C.
+// This has the advantage that we can use larger block load operations to load data without
+// relying on local memory.
 //
-// For the given example (again from the docs):
-//     TiledMMA mma = make_tiled_mma(SM70_8x8x4_F32F16F16F32_NT{},
-//                                Layout<Shape <_2,_2>,
-//                                       Stride<_2,_1>>{},       // 2x2 n-major layout of Atoms
-//                                Tile<Layout<Shape <_4,_4,_2>,
-//                                            Stride<_1,_8,_4>>, // Permutation on M, size 32
-//                                     _32,                      // Permutation on N, size 32 identity
-//                                     _4>{});
+// For the given example:
+//  using TiledMma =
+//    TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+//             Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>, // 8x4 n-major layout of warps
+//             Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>, // Permutation on M
+//                  Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, // Permutation on N
+//                  _32>>; // K unpermuted
 //
-// This permutation (for the M dimension only) maintains blocks of 4 contiguous values from 
-// the canonical tiling (mode 0 is 4:1).
-// It scatters 4 of these blocks of 4 to a spacing of 8 values (mode 1 is 4:8), leaving a gap of 4.
-// These gaps of 4 are filled by repeating the preceding pattern twice, at a spacing of 4 values 
-// (mode 2 is 2:4).
+// Consider only the M permutation (each mode's permutation is independent and in this 
+// example the M & N permutations are similar). This permutation maintains blocks of 8
+// contiguous values from the canonical tiling (mode 0 is 8:1).
+// It scatters 8 of these blocks of 8 to a spacing of 32 values (mode 1 is 8:32), leaving 
+// a 'gap' of 24. These gaps of 24 are filled by repeating the preceding pattern 4 times, 
+// at a spacing of 8 values (mode 2 is 4:8).
 // In this manner, the tiling has been permuted so that the values handled by each thread are
-// closer togehter.
+// closer together.
 template <typename MMA_Atom, typename CTALayout, typename WarpLayout>
 struct ContigBlockMMAHelper{
 private:
