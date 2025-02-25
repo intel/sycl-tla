@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,7 +43,8 @@
                     computational overhead
 */
 
-#pragma once
+#ifndef CUTLASS_LIBRARY_LIBRARY_H
+#define CUTLASS_LIBRARY_LIBRARY_H
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -103,7 +104,7 @@ public:
     void *device_workspace = nullptr,
     cudaStream_t stream = nullptr) const = 0;
 
-  // Originally designed for metadata, but should be useful for FP8/6/4 too.
+  // Originally designed for metadata, but should be useful for FP8/6/4 too.  
   virtual Status initialize_with_profiler_workspace(
     void const *configuration,
     void *host_workspace,
@@ -173,6 +174,9 @@ struct GemmArguments {
 
   /// Enumerant indicating whether alpha/beta point to host or device memory
   ScalarPointerMode pointer_mode{};
+  
+  /// Whether to use PDL when launching the kernel
+  bool use_pdl{false};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -253,6 +257,7 @@ struct GemmArrayArguments {
   void const *alpha{nullptr};
   void const *beta{nullptr};
   ScalarPointerMode pointer_mode{};
+  bool use_pdl{false};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -266,17 +271,28 @@ struct GemmUniversalConfiguration {
 
   GemmUniversalMode mode{GemmUniversalMode::kGemm};
   gemm::GemmCoord problem_size{};
+  gemm::GemmCoord cluster_shape{};           
+  gemm::GemmCoord cluster_shape_fallback{};  
   int batch_count{1};
 
   int64_t lda{0};
   int64_t ldb{0};
   int64_t ldc{0};
   int64_t ldd{0};
+
+  int device_count{1};
+};
+
+enum class Sm90MixedInputWiderOperand {
+  A = 0,
+  B = 1
 };
 
 struct GemmUniversalArguments {
   // NOTE: these are replicated for 3.0 interfaces
   gemm::GemmCoord problem_size{};
+  gemm::GemmCoord cluster_shape{};          
+  gemm::GemmCoord cluster_shape_fallback{}; 
   int batch_count{1};
 
   void const *A{nullptr};
@@ -302,8 +318,78 @@ struct GemmUniversalArguments {
   // Needed for some 3.x kernels
   int sm_count{0};
   library::RasterOrder raster_order{};
+  library::RuntimeDatatype runtime_input_datatype_a{};
+  library::RuntimeDatatype runtime_input_datatype_b{};
   int swizzle_size{1};
+  int split_k_slices{1};
+
+  // For mixed input dtype kernels
+  bool is_mixed_dtype{false};
+  Sm90MixedInputWiderOperand wider_operand{Sm90MixedInputWiderOperand::B};
+  bool generate_scale_and_zero{false};
+  bool generate_dequantized_AB{false};
+  bool *dequantized_AB_ready{nullptr};  // Carry the info back to gemm_operation_profiler.cu
+  void *Scale{nullptr};                 // Scale tensor
+  void *Zero{nullptr};                  // Zero tensor
+  void *dequantized_AB{nullptr};        // Dequantized A or B tensor for verification
+  void *encoded_AB{nullptr};            // Encoded A or B in int4 x fp8 or shuffle
+  void *packed_Scale{nullptr};          // Packed scale for int4 * fp8
+
+  int device_index{0};
+
+  bool use_pdl{false};
 };
+
+/// Block Scaled GEMM
+//
+// OperationKind: kBlockScaledGemm
+// GemmKind:      Universal
+
+struct BlockScaledGemmArguments {
+  // NOTE: these are replicated for 3.0 interfaces
+  gemm::GemmCoord problem_size{};
+  gemm::GemmCoord cluster_shape{};  
+  gemm::GemmCoord cluster_shape_fallback{}; 
+  int batch_count{1};
+
+  void const *A{nullptr};
+  void const *B{nullptr};
+  void const *SFA{nullptr};
+  void const *SFB{nullptr};
+  void const *C{nullptr};
+  void *D{nullptr};
+  void *SFD{nullptr}; 
+
+  void const *alpha{nullptr};
+  void const *beta{nullptr};
+  ScalarPointerMode pointer_mode{};
+
+  // NOTE: these are replicated for 3.0 interfaces
+  int64_t lda{0};
+  int64_t ldb{0};
+  int64_t ldc{0};
+  int64_t ldd{0};
+
+  int64_t batch_stride_A{0};
+  int64_t batch_stride_B{0};
+  int64_t batch_stride_C{0};
+  int64_t batch_stride_D{0};
+
+  // Needed for ScaleFactor Generation
+  void const *norm_constant{nullptr};
+
+  // Needed for some 3.x kernels
+  int sm_count{0};
+  library::RasterOrder raster_order{};
+  int swizzle_size{1};
+  int split_k_slices{1};
+
+  library::RuntimeDatatype runtime_input_datatype_a{library::RuntimeDatatype::kStatic}; 
+  library::RuntimeDatatype runtime_input_datatype_b{library::RuntimeDatatype::kStatic}; 
+
+  bool use_pdl{false};
+};
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -350,6 +436,7 @@ struct GemmPlanarComplexArguments {
   int64_t batch_stride_C_imag{0};
   int64_t batch_stride_D_real{0};
   int64_t batch_stride_D_imag{0};
+  bool use_pdl{false};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -390,6 +477,7 @@ struct GemmPlanarComplexArrayArguments {
   void const * alpha{nullptr};
   void const * beta{nullptr};
   ScalarPointerMode pointer_mode{};
+  bool use_pdl{false};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -401,26 +489,52 @@ struct GemmPlanarComplexArrayArguments {
 
 struct GemmGroupedConfiguration {
   int problem_count{0};
-  int threadblock_count{0};
+  // GemmGroupedConfiguration is passed to initialize(), which
+  // is responsible for allocating the device-side stride storage.
+  int64_t* lda;
+  int64_t* ldb;
+  int64_t* ldc;
+
+  cute::Shape<int, int, int>* problem_sizes_3x_host;
 };
 
 struct GemmGroupedArguments {
+  int problem_count{};
+  gemm::GemmCoord* problem_sizes{nullptr};
 
-  gemm::GemmCoord *problem_sizes{nullptr};
+  void* ptr_A{nullptr};
+  void* ptr_B{nullptr};
+  void* ptr_C{nullptr};
+  void* ptr_D{nullptr};
 
-  void * ptr_A{nullptr};
-  void * ptr_B{nullptr};
-  void * ptr_C{nullptr};
-  void * ptr_D{nullptr};
-
-  int64_t *lda{nullptr};
-  int64_t *ldb{nullptr};
-  int64_t *ldc{nullptr};
-  int64_t *ldd{nullptr};
+  int64_t* lda{nullptr};
+  int64_t* ldb{nullptr};
+  int64_t* ldc{nullptr};
+  int64_t* ldd{nullptr};
 
   void const *alpha{nullptr};
   void const *beta{nullptr};
   ScalarPointerMode pointer_mode{};
+  bool use_pdl{false};
+
+  gemm::GemmCoord cluster_shape{};
+  gemm::GemmCoord cluster_shape_fallback{};
+
+  // these should really be in the configuration but staying consistent with GEMM
+  int sm_count{0};
+  // The user is responsible for allocating storage for problem sizes.
+  // Since GemmGroupedArguments is used by both the 2.x and 3.x APIs, we
+  // unfortunately need to have both options in this struct, and the
+  // underlying operation uses the one it needs.
+  cute::Shape<int, int, int>* problem_sizes_3x;
+  cute::Shape<int, int, int>* problem_sizes_3x_host;
+};
+
+struct GroupedGemmBlockScaledArguments : GemmGroupedArguments {
+  void* SFA{nullptr};
+  void* SFB{nullptr};
+  void* SFD{nullptr};
+  void* norm_constant{nullptr};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -457,6 +571,7 @@ struct SparseGemmArguments {
   void const *beta{nullptr};       /// pointer to beta scalar
   ScalarPointerMode pointer_mode{}; /// enumerant indicating whether alpha/beta pointers are host
                                     ///   or device pointers.
+  bool use_pdl{false};              /// Whether to use PDL when launching the kernel
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -515,6 +630,7 @@ struct RankKArguments {
   int64_t batch_stride_B{0};
   int64_t batch_stride_C{0};
   int64_t batch_stride_D{0};
+  bool use_pdl{false};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -566,6 +682,7 @@ struct TrmmArguments {
   int64_t batch_stride_A{0};
   int64_t batch_stride_B{0};
   int64_t batch_stride_D{0};
+  bool use_pdl{false};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -624,6 +741,7 @@ struct SymmArguments {
   int64_t batch_stride_B{0};
   int64_t batch_stride_C{0};
   int64_t batch_stride_D{0};
+  bool use_pdl{false};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -740,6 +858,9 @@ struct ConvArguments {
 
   /// Enumerant indicating whether alpha/beta point to host or device memory
   ScalarPointerMode pointer_mode{};
+  
+  /// Whether to use PDL when launching the kernel
+  bool use_pdl{false};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -792,9 +913,14 @@ struct ReductionArguments {
 
   /// Enumerant indicating whether alpha/beta point to host or device memory
   ScalarPointerMode pointer_mode{};
+
+  /// Whether to use PDL when launching the kernel
+  bool use_pdl{false};
 };
 
 } // namespace library
 } // namespace cutlass
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
+
+#endif

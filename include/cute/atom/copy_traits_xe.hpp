@@ -487,7 +487,7 @@ struct Copy_Traits<XE_2D_U8x1x64_LD_N, args_t...>
 
 template <class... args_t>
 struct Copy_Traits<XE_2D_U8x1x64_LD_N::PREFETCH, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U8x1x64_LD_N, args_t...> {
+    : XE_2D_LD_Unpack<XE_2D_U8x1x64_LD_N::PREFETCH, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -522,7 +522,7 @@ struct Copy_Traits<XE_2D_U8x2x64_LD_N, args_t...>
 
 template <class... args_t>
 struct Copy_Traits<XE_2D_U8x2x64_LD_N::PREFETCH, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U8x2x64_LD_N, args_t...> {
+    : XE_2D_LD_Unpack<XE_2D_U8x2x64_LD_N::PREFETCH, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -556,7 +556,7 @@ struct Copy_Traits<XE_2D_U8x4x64_LD_N, args_t...>
 
 template <class... args_t>
 struct Copy_Traits<XE_2D_U8x4x64_LD_N::PREFETCH, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U8x4x64_LD_N, args_t...> {
+    : XE_2D_LD_Unpack<XE_2D_U8x4x64_LD_N::PREFETCH, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -2056,7 +2056,6 @@ namespace detail
                                            Layout<Shape<_2, _2, _8>>{});
     }
     else if constexpr (get<0>(PrefetchTileSize{}) == 16) {
-      // static_assert(false);
       using prefetch_trait = Copy_Traits<XE_2D_U8x16x64_LD_N>;
       using prefetch_atom = Copy_Atom<prefetch_trait, dtype>;
       return make_tiled_copy(prefetch_atom{}.with(static_cast<dtype const*>(ptr), width, height, pitch),
@@ -2101,6 +2100,10 @@ struct XePrefetchConstructor<float, row> {\
 };\
 template <>\
 struct XePrefetchConstructor<bfloat16_t, row> {\
+  using type_t = TYPE_BITS_bfloat16_t(row);\
+};\
+template <>\
+struct XePrefetchConstructor<half_t, row> {\
   using type_t = TYPE_BITS_bfloat16_t(row);\
 };\
 template <>\
@@ -2269,6 +2272,18 @@ auto
 size(Xe2DTiledCopy<Args...> const&)
 {
   return typename Xe2DTiledCopy<Args...>::TiledNumThr{};
+}
+
+template <class CopyAtom, class TV, class Tiler,
+          class SrcEngine, class SrcLayout,
+          class DstEngine, class DstLayout>
+CUTE_HOST_DEVICE
+void
+copy(Xe2DTiledCopy<CopyAtom, TV, Tiler> const& tiled_copy,
+     Tensor<SrcEngine, SrcLayout>   const& src,
+     Tensor<DstEngine, DstLayout>        & dst)
+{
+  return copy(static_cast<CopyAtom const&>(tiled_copy), src, dst);
 }
 
 } // end namespace cute

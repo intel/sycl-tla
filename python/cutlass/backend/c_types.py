@@ -1,6 +1,6 @@
 #################################################################################################
 #
-# Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -139,7 +139,7 @@ def get_tile_scheduler_arguments_3x(
     splits: int = 1):
     max_swizzle_size = 1
     raster_order_option = 0 # Heuristic
-    if tile_scheduler == TileSchedulerType.Persistent:
+    if tile_scheduler in [TileSchedulerType.Default, TileSchedulerType.Persistent]:
         return _PersistentTileSchedulerArguments(
             max_swizzle_size,
             raster_order_option,
@@ -538,29 +538,12 @@ def tuple_factory_(input_tuple, dtype, constants=[0,1]):
                 if first_non_empty_base is None:
                     first_non_empty_base = []
 
-    # Determine whether or not add an additional byte for empty base classes
-    additional_byte = False
-    # Special case for constant tuple
-    if first_non_empty_base is None:
-        additional_byte = False
-    else:
-        for base in first_non_empty_base:
-            if base in empty_bases:
-                additional_byte = True
-                break
-
-    if additional_byte:
-        ctype_fields = [("empty_byte", EmptyByte), ] + ctype_fields
-
     # Create the ctype tuple
     class TupleType(ctypes.Structure):
         _fields_ = ctype_fields
 
         def __init__(self, args) -> None:
-            if additional_byte:
-                fields = self._fields_[1:]
-            else:
-                fields = self._fields_
+            fields = self._fields_
 
             assert len(fields) == len(args)
             for field, arg in zip(fields, args):

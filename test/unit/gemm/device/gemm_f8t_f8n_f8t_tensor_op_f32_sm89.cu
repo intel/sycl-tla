@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2024 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,7 @@
 #include "testbed.h"
 #include "testbed_with_absmax.h"
 
-#if defined(CUTLASS_ARCH_MMA_SM89_SUPPORTED)
+#if defined(CUTLASS_ARCH_MMA_F32_SM89_SUPPORTED)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -427,4 +427,4 @@ TEST(SM89_Device_Gemm_fe4m3t_fe4m3n_fe4m3t_tensor_op_f32, identity_noAux_128x256
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#endif  // CUTLASS_ARCH_MMA_SM89_SUPPORTED
+#endif  // CUTLASS_ARCH_MMA_F32_SM89_SUPPORTED

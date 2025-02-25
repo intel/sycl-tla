@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,15 +36,17 @@
 #include <stdexcept>
 
 // Profiler includes
-#include "cutlass/profiler/cutlass_profiler.h"
-#include "cutlass/profiler/gemm_operation_profiler.h"
-#include "cutlass/profiler/rank_k_operation_profiler.h"
-#include "cutlass/profiler/rank_2k_operation_profiler.h"
-#include "cutlass/profiler/trmm_operation_profiler.h"
-#include "cutlass/profiler/symm_operation_profiler.h"
+#include "cutlass/profiler/block_scaled_gemm_operation_profiler.h"
 #include "cutlass/profiler/conv2d_operation_profiler.h"
 #include "cutlass/profiler/conv3d_operation_profiler.h"
+#include "cutlass/profiler/cutlass_profiler.h"
+#include "cutlass/profiler/gemm_operation_profiler.h"
+#include "cutlass/profiler/grouped_gemm_operation_profiler.h"
+#include "cutlass/profiler/rank_2k_operation_profiler.h"
+#include "cutlass/profiler/rank_k_operation_profiler.h"
 #include "cutlass/profiler/sparse_gemm_operation_profiler.h"
+#include "cutlass/profiler/symm_operation_profiler.h"
+#include "cutlass/profiler/trmm_operation_profiler.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -60,6 +62,8 @@ CutlassProfiler::CutlassProfiler(
 
   operation_profilers_.emplace_back(new GemmOperationProfiler(options));
 
+  operation_profilers_.emplace_back(new BlockScaledGemmOperationProfiler(options));   
+
   operation_profilers_.emplace_back(new SparseGemmOperationProfiler(options));
 
   operation_profilers_.emplace_back(new Conv2dOperationProfiler(options));
@@ -73,6 +77,8 @@ CutlassProfiler::CutlassProfiler(
   operation_profilers_.emplace_back(new TrmmOperationProfiler(options));
 
   operation_profilers_.emplace_back(new SymmOperationProfiler(options));
+
+  operation_profilers_.emplace_back(new GroupedGemmOperationProfiler(options));
 }
 
 CutlassProfiler::~CutlassProfiler() {
@@ -198,6 +204,7 @@ void CutlassProfiler::print_usage_(std::ostream &out) {
     << "  $ cutlass_profiler --operation=Conv3d --help\n\n"
     << "  $ cutlass_profiler --operation=Conv2d --help\n\n"
     << "  $ cutlass_profiler --operation=SparseGemm --help\n\n"
+    << "  $ cutlass_profiler --operation=GroupedGemm --help\n\n"
   ;
 }
 

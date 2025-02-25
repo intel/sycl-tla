@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -204,6 +204,10 @@ protected:
     }
     else {
       return Status::kErrorInvalidProblem;
+    }
+
+    if (arguments->use_pdl) {
+      return Status::kErrorNotSupported; 
     }
 
     operator_args.ref_A.reset(static_cast<ElementA const *>(arguments->A));
@@ -415,6 +419,10 @@ protected:
     operator_args.ref_D.reset(static_cast<ElementD *>(arguments->D));
     operator_args.ref_E.reset(static_cast<ElementE const *>(arguments->E));
 
+    if (arguments->use_pdl) {
+      return Status::kErrorNotSupported; 
+    }
+
     return Status::kSuccess;
   }
 
@@ -501,7 +509,7 @@ public:
     void *host_workspace, 
     void *device_workspace = nullptr, 
     cudaStream_t stream = nullptr) const {
-
+ 
     OperatorArguments args;
 
     Status status = update_arguments_(
@@ -623,6 +631,10 @@ protected:
     operator_args.batch_stride_B = arguments->batch_stride_B;
     operator_args.batch_stride_C = arguments->batch_stride_C;
     operator_args.batch_stride_D = arguments->batch_stride_D;
+    
+    if (arguments->use_pdl) {
+      return Status::kErrorNotSupported; 
+    }
     
     return Status::kSuccess;
   }
@@ -931,7 +943,6 @@ public:
     void *host_workspace,
     void *device_workspace = nullptr,
     cudaStream_t stream = nullptr) const {
-
     OperatorArguments args;
 
     Status status = update_arguments_(
@@ -1044,6 +1055,10 @@ protected:
     operator_args.ptr_N = arguments->N;
     operator_args.ptr_K = arguments->K;
     
+    if (arguments->use_pdl) {
+      return Status::kErrorNotSupported; 
+    }
+
     return Status::kSuccess;
   }
 
@@ -1185,26 +1200,42 @@ public:
   GemmGroupedOperation(char const *name = "unknown_gemm"):
     GemmOperationBase<Operator_>(name) {
 
-    this->description_.gemm_kind = GemmKind::kGrouped;
+    this->description_.kind = OperationKind::kGroupedGemm;
+    this->description_.provider = Provider::kCUTLASS;
+    this->threadblock_count = Operator::sufficient();
+
+    this->description_.gemm = GemmOperationBase<Operator_>::description_;
+    this->description_.gemm.gemm_kind = GemmKind::kGrouped;
+    this->description_.tile_description = this->description_.gemm.tile_description;
   }
+
+  /// Returns the description of the GroupedGEMM operation
+  virtual OperationDescription const & description() const override final {
+    return description_;
+  }
+
+
+private:
+  int threadblock_count;
+  GroupedGemmDescription description_;
 
 protected:
 
   /// Constructs the arguments structure given the configuration and arguments
-  static Status construct_arguments_(
+  Status construct_arguments_(
     OperatorArguments &op_args,
-    GemmGroupedConfiguration const *config) {
+    GemmGroupedConfiguration const *config) const {
 
     op_args.problem_count = config->problem_count;
-    op_args.threadblock_count = config->threadblock_count;
+    op_args.threadblock_count = threadblock_count;
 
     return Status::kSuccess;
   }
 
   /// Constructs the arguments structure given the configuration and arguments
-  static Status update_arguments_(
+  Status update_arguments_(
     OperatorArguments &op_args,
-    GemmGroupedArguments const *arguments) {
+    GemmGroupedArguments const *arguments) const {
 
     if (arguments->pointer_mode == ScalarPointerMode::kHost) {
 
@@ -1228,6 +1259,8 @@ protected:
       return Status::kErrorInvalidProblem;
     }
 
+    op_args.threadblock_count = threadblock_count;
+    op_args.problem_count = arguments->problem_count;
     op_args.problem_sizes = arguments->problem_sizes;
 
     op_args.ptr_A         = static_cast<ElementA **>(arguments->ptr_A);
@@ -1239,6 +1272,10 @@ protected:
     op_args.ldb           = arguments->ldb;
     op_args.ldc           = arguments->ldc;
     op_args.ldd           = arguments->ldd;
+
+    if (arguments->use_pdl) {
+      return Status::kErrorNotSupported; 
+    }
 
     return Status::kSuccess;
   }

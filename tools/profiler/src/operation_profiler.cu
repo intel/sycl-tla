@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,8 @@
 // sleep not supported
 #endif
 
+#include <cuda/atomic>
+
 #include "cutlass/profiler/options.h"
 #include "cutlass/profiler/operation_profiler.h"
 #include "cutlass/profiler/gpu_timer.h"
@@ -57,7 +59,6 @@
 
 namespace cutlass {
 namespace profiler {
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 OperationProfiler::OperationProfiler(): kind_(library::OperationKind::kInvalid) { }
@@ -80,6 +81,11 @@ OperationProfiler::OperationProfiler(
     {ArgumentTypeID::kInteger, {"cluster_m", "cluster-shape::m"}, "Cluster shape in the M dimension"},
     {ArgumentTypeID::kInteger, {"cluster_n", "cluster-shape::n"}, "Cluster shape in the N dimension"},
     {ArgumentTypeID::kInteger, {"cluster_k", "cluster-shape::k"}, "Cluster shape in the K dimension"},
+    
+    {ArgumentTypeID::kInteger, {"cluster_m_fallback", "cluster-shape-fallback::m"}, "Fallback Cluster shape in the M dimension"},
+    {ArgumentTypeID::kInteger, {"cluster_n_fallback", "cluster-shape-fallback::n"}, "Fallback Cluster shape in the N dimension"},
+    {ArgumentTypeID::kInteger, {"cluster_k_fallback", "cluster-shape-fallback::k"}, "Fallback Cluster shape in the K dimension"},
+    
     {ArgumentTypeID::kInteger, {"stages", "threadblock-stages"}, "Number of stages of threadblock-scoped matrix multiply"},
     {ArgumentTypeID::kInteger, {"warps_m", "warp-count::m"}, "Number of warps within threadblock along the M dimension"},
     {ArgumentTypeID::kInteger, {"warps_n", "warp-count::n"}, "Number of warps within threadblock along the N dimension"},
@@ -163,6 +169,11 @@ bool OperationProfiler::satisfies(
       return false;
     }
   }
+  
+  bool dynamic_cluster = int64_t(op_desc.tile_description.cluster_shape.m()) == 0 ||
+                         int64_t(op_desc.tile_description.cluster_shape.n()) == 0 ||
+                         int64_t(op_desc.tile_description.cluster_shape.k()) == 0;
+  
   int64_t int_value;
 
   if (arg_as_int(int_value, "inst_m", problem_space, problem)) {
@@ -201,6 +212,7 @@ bool OperationProfiler::satisfies(
     }
   }
 
+  if (!dynamic_cluster) { 
   if (arg_as_int(int_value, "cluster_m", problem_space, problem)) {
     if (int64_t(op_desc.tile_description.cluster_shape.m()) != int_value) {
       return false;
@@ -219,6 +231,7 @@ bool OperationProfiler::satisfies(
     }
   }
 
+  } 
   if (arg_as_int(int_value, "stages", problem_space, problem)) {
     if (int64_t(op_desc.tile_description.threadblock_stages) != int_value) {
       return false;
@@ -281,36 +294,42 @@ std::ostream& operator<<(std::ostream& out, library::Provider provider) {
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, library::OperationKind provider) {
-  if (provider == library::OperationKind::kGemm) {
+std::ostream& operator<<(std::ostream& out, library::OperationKind op_kind) {
+  if (op_kind == library::OperationKind::kGemm) {
     out << "kGemm";
   }
-  else if (provider == library::OperationKind::kRankK) {
+  else if (op_kind == library::OperationKind::kBlockScaledGemm) {
+    out << "kBlockScaledGemm";
+  }
+  else if (op_kind == library::OperationKind::kRankK) {
     out << "kRankK";
   }
-  else if (provider == library::OperationKind::kRank2K) {
+  else if (op_kind == library::OperationKind::kRank2K) {
     out << "kRank2K";
   }
-  else if (provider == library::OperationKind::kTrmm) {
+  else if (op_kind == library::OperationKind::kTrmm) {
     out << "kTrmm";
   }
-  else if (provider == library::OperationKind::kSymm) {
+  else if (op_kind == library::OperationKind::kSymm) {
     out << "kSymm";
   }
-  else if (provider == library::OperationKind::kConv2d) {
+  else if (op_kind == library::OperationKind::kConv2d) {
     out << "kConv2d";
   }
-  else if (provider == library::OperationKind::kConv3d) {
+  else if (op_kind == library::OperationKind::kConv3d) {
     out << "kConv3d";
   }
-  else if (provider == library::OperationKind::kEqGemm) {
+  else if (op_kind == library::OperationKind::kEqGemm) {
     out << "kEqGemm";
   }
-  else if (provider == library::OperationKind::kSparseGemm) {
+  else if (op_kind == library::OperationKind::kSparseGemm) {
     out << "kSparseGemm";
   }
-  else if (provider == library::OperationKind::kReduction) {
+  else if (op_kind == library::OperationKind::kReduction) {
     out << "kReduction";
+  }
+  else if (op_kind == library::OperationKind::kGroupedGemm) {
+    out << "kGroupedGemm";
   }
   else {
     out << "kInvalid";
@@ -632,6 +651,11 @@ void OperationProfiler::save_workspace(
 
     DeviceAllocation *allocation = named_allocation.second;
 
+    if (allocation->layout() == library::LayoutTypeID::kUnknown) {
+      continue; // write_tensor not set up to handle DeviceAllocations initialized using
+                // allocate_block()
+    }
+
     std::stringstream filename;
 
     filename << desc.name << "_" << library::to_string(provider) << "_";
@@ -656,79 +680,261 @@ void OperationProfiler::save_workspace(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+extern "C" {
+__global__ void delay(cuda::atomic<bool> const *release) {
+  while (release->load(cuda::memory_order_acquire) != true) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 700)
+    __nanosleep(100);
+#endif
+  }
+}
+}
+
+Status predict_iters(
+  int &iterations,
+  Options const &options,
+  const std::function<Status(cudaStream_t, int)> &func,
+  cudaStream_t stream) {
+  // always use profiling-iterations if requested
+  if (options.profiling.iterations != 0) {
+    iterations = options.profiling.iterations;
+    return Status::kSuccess;
+  }
+
+  // otherwise run for as many iterations as necessary to
+  // meet profiling-duration
+  constexpr int CALIBRATION_ITERS = 5;
+  GpuTimer timer;
+  timer.start(stream);
+  for (int i = 0; i < CALIBRATION_ITERS; i++) {
+    Status status = func(stream, i);
+    if (status != Status::kSuccess) {
+      return status;
+    }
+  }
+  timer.stop_and_wait(stream);
+
+  double est_iters             = options.profiling.duration / std::max(timer.duration(CALIBRATION_ITERS), 1e-6);
+  constexpr uint64_t MAX_ITERS = 1'000'000;
+  iterations = std::min(static_cast<uint64_t>(std::ceil(est_iters)), static_cast<uint64_t>(MAX_ITERS));
+  iterations = std::max(options.profiling.min_iterations, iterations);
+  return Status::kSuccess;
+};
+
+} // namespace
+
+/// This profiling method is designed to run a kernel on several GPUs to
+/// measure interference (e.g. due to power throttling).
+/// To encourage the kernels to start at the same time and minimize jitter,
+/// a spinloop kernel blocks each stream while work is being enqueued, which is
+/// later triggered from the host.
+/// CUDA graphs allows you to record the launch of large numbers of kernels without
+/// blocking and therefore avoids a deadlock which happens if you try to enqueue too
+/// many kernels behind the spinloop kernel.
+Status OperationProfiler::profile_kernel_w_cuda_graphs_(
+  PerformanceResult& result,
+  Options const& options,
+  std::function<Status(int, cudaStream_t, int)> const& func,
+  std::vector<cudaStream_t> const& streams) {
+
+  auto dev_count = streams.size();
+
+  cuda::atomic<bool> *release;
+
+  if (dev_count > 1) {
+    CUDA_CHECK(cudaHostAlloc(&release, sizeof(*release), cudaHostAllocPortable));
+    release->store(false, cuda::memory_order_release);
+  }
+
+  std::vector<GpuTimer> timer;
+  for (size_t i = 0; i < dev_count; ++i) {
+    CUDA_CHECK(cudaSetDevice(options.device.device_id(i)));
+    timer.emplace_back();
+  }
+
+  std::vector<cudaGraph_t> graphs;
+  graphs.resize(dev_count);
+  std::vector<cudaGraphExec_t> graphExecs;
+  graphExecs.resize(dev_count);
+
+  sleep(options.profiling.sleep_duration);
+
+  // predict time by running on device 0
+  int iterations;
+  CUDA_CHECK(cudaSetDevice(0));
+  Status status = predict_iters(
+    iterations,
+    options,
+    [&](cudaStream_t stream, int iter) { return func(0, stream, iter); },
+    streams[0]);
+  if (status != Status::kSuccess) {
+    return status;
+  }
+
+  for (size_t i = 0; i < dev_count; ++i) {
+    CUDA_CHECK(cudaSetDevice(options.device.device_id(i)));
+    CUDA_CHECK(cudaStreamBeginCapture(streams[i], cudaStreamCaptureModeGlobal));
+    if (dev_count > 1) {
+      // Halt execution until all GPUs are ready to precede.
+      // It allows the CPU to trigger the GPUs all start at the same time.
+      delay<<<1, 1, 0, streams[i]>>>(release);
+    }
+    for (int iteration = 0; iteration < options.profiling.warmup_iterations; ++iteration) {
+      Status status = func(i, streams[i], iteration);
+      if (status != Status::kSuccess) {
+        return status;
+      }
+    }
+
+    timer[i].start(streams[i], cudaEventRecordExternal);
+
+    int iteration = 0;
+    for (; iteration < iterations; ++iteration) {
+      Status status = func(i, streams[i], iteration + options.profiling.warmup_iterations);
+      if (status != Status::kSuccess) {
+        return status;
+      }
+    }
+    timer[i].stop(streams[i], cudaEventRecordExternal);
+    CUDA_CHECK(cudaStreamEndCapture(streams[i], &graphs[i]));
+    CUDA_CHECK(cudaGraphInstantiate(&graphExecs[i], graphs[i], nullptr, nullptr, 0));
+  }
+
+  for (size_t i = 0; i < dev_count; ++i) {
+    CUDA_CHECK(cudaSetDevice(options.device.device_id(i)));
+    CUDA_CHECK(cudaGraphLaunch(graphExecs[i], streams[i]));
+  }
+
+  if (dev_count > 1) {
+    // release the enqueued kernels
+    release->store(true, cuda::memory_order_release);
+  }
+
+  for (size_t i = 0; i < dev_count; ++i) {
+    CUDA_CHECK(cudaSetDevice(options.device.device_id(i)));
+    CUDA_CHECK(cudaStreamSynchronize(streams[i]));
+  }
+
+  result.runtime = 0;
+  for (size_t i = 0; i < dev_count; ++i) {
+    CUDA_CHECK(cudaSetDevice(options.device.device_id(i)));
+    result.runtime_vector[i] = timer[i].duration(iterations);
+    result.runtime += result.runtime_vector[i];
+  }
+  result.runtime /= static_cast<double>(dev_count);
+
+  if (dev_count > 1) {
+    CUDA_CHECK(cudaFreeHost(release));
+  }
+
+  for (size_t i = 0; i < dev_count; ++i) {
+    CUDA_CHECK(cudaSetDevice(options.device.device_id(i)));
+    CUDA_CHECK(cudaGraphExecDestroy(graphExecs[i]));
+    CUDA_CHECK(cudaGraphDestroy(graphs[i]));
+  }
+
+  for (size_t i = 0; i < dev_count; ++i) {
+    CUDA_CHECK(cudaSetDevice(options.device.device_id(dev_count - i - 1)));
+    timer.pop_back();
+  }
+
+  return Status::kSuccess;
+}
+
+Status OperationProfiler::profile_kernel_(
+  PerformanceResult &result,
+  Options const &options,
+  const std::function<Status(int, cudaStream_t, int)> &func,
+  const std::vector<cudaStream_t> &streams) {
+
+  if (options.profiling.use_cuda_graphs) {
+    return profile_kernel_w_cuda_graphs_(result, options, func, streams);
+  }
+  else if (streams.size() == 1) {
+    auto single_device_func = [&](cudaStream_t stream, int iteration) {
+      return func(0, stream, iteration);
+    };
+    return profile_kernel_no_cuda_graphs_(result, options, single_device_func, streams[0]);
+  }
+  return Status::kErrorNotSupported;
+}
+
+/// Method to profile GPU execution time of a kernel launched in func
+Status OperationProfiler::profile_kernel_(
+  PerformanceResult& result,
+  Options const& options,
+  std::function<Status(cudaStream_t, int)> const& func,
+  cudaStream_t stream) {
+
+  if (options.profiling.use_cuda_graphs) {
+    auto graph_func = [&](int dev_id, cudaStream_t stream, int iteration) {
+      return func(stream, iteration);
+    };
+    return profile_kernel_w_cuda_graphs_(result, options, graph_func, {stream});
+  } else {
+    return profile_kernel_no_cuda_graphs_(result, options, func, stream);
+  }
+  return Status::kSuccess;
+}
+
+/// Method to profile GPU execution time of a kernel launched in func
+Status OperationProfiler::profile_kernel_no_cuda_graphs_(
+  PerformanceResult& result,
+  Options const& options,
+  std::function<Status(cudaStream_t, int)> const& func,
+  cudaStream_t stream) {
+
+  GpuTimer timer;
+  // Optional sleep to limit power consumption and thermals
+  sleep(options.profiling.sleep_duration);
+
+  Status status = Status::kSuccess;
+
+  int iterations;
+  status = predict_iters(iterations, options, func, stream);
+  if (status != Status::kSuccess) {
+    return status;
+  }
+
+  for (int iteration = 0; iteration < options.profiling.warmup_iterations; ++iteration) {
+    status = func(stream, iteration);
+    if (status != Status::kSuccess) {
+      return status;
+    }
+  }
+
+  timer.start(stream);
+
+  int iteration = 0;
+  for (; iteration < iterations; ++iteration) {
+    status = func(stream, iteration + options.profiling.warmup_iterations);
+
+    if (status != Status::kSuccess) {
+      result.status = status;
+      return status;
+    }
+  }
+
+  timer.stop_and_wait(stream);
+
+  result.runtime = timer.duration(iteration);
+  result.status  = status;
+
+  return status;
+}
+
 /// Method to profile a CUTLASS Operation
 Status OperationProfiler::profile_cutlass_(
-  double &runtime,
+  PerformanceResult &result,
   Options const &options,
   library::Operation const *operation,
   void *arguments,
   void *host_workspace,
   void *device_workspace) {
 
-  GpuTimer timer;
-
-  //
-  // Optional sleep to limit power consumption and thermals
-  //
-
-  sleep(options.profiling.sleep_duration);
-
-  //
-  // Warmup loop
-  //
-
-  Status status;
-
-  for (int iteration = 0; iteration < options.profiling.warmup_iterations; ++iteration) {
-
-    status = operation->run(
-      arguments,
-      host_workspace,
-      device_workspace);
-
-    if (status != Status::kSuccess) {
-      return status;
-    }
-  }
-
-  //
-  // Initialize GPU timer
-  //
-
-  timer.start();
-
-  //
-  // Profiling loop
-  //
-
-  int Iterations = options.profiling.iterations;
-
-  int iteration = 0;
-  for (; iteration < Iterations; ++iteration) {
-
-    status = operation->run(
-      arguments,
-      host_workspace,
-      device_workspace);
-
-    if (status != Status::kSuccess) {
-      return status;
-    }
-  }
-
-  //
-  // Wait for completion
-  //
-
-  timer.stop_and_wait();
-
-  //
-  // Update performance result
-  //
-
-  runtime = timer.duration(iteration);
-
-  return status;
+  auto op = [=](cudaStream_t, int) { return operation->run(arguments, host_workspace, device_workspace); };
+  return profile_kernel_(result, options, op);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -748,9 +954,6 @@ void OperationProfiler::initialize_result_(
   set_argument(result, "cta_m", problem_space, operation_desc.tile_description.threadblock_shape.m());
   set_argument(result, "cta_n", problem_space, operation_desc.tile_description.threadblock_shape.n());
   set_argument(result, "cta_k", problem_space, operation_desc.tile_description.threadblock_shape.k());
-  set_argument(result, "cluster_m", problem_space, operation_desc.tile_description.cluster_shape.m());
-  set_argument(result, "cluster_n", problem_space, operation_desc.tile_description.cluster_shape.n());
-  set_argument(result, "cluster_k", problem_space, operation_desc.tile_description.cluster_shape.k());
   set_argument(result, "stages", problem_space, operation_desc.tile_description.threadblock_stages);
   set_argument(result, "warps_m", problem_space, operation_desc.tile_description.warp_count.m());
   set_argument(result, "warps_n", problem_space, operation_desc.tile_description.warp_count.n());

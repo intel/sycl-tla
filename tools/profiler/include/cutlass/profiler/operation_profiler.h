@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -232,12 +232,40 @@ protected:
 
   /// Method to profile an initialized CUTLASS operation
   virtual Status profile_cutlass_(
-    double &runtime,
+    PerformanceResult &result,
     Options const &options,
     library::Operation const *operation,
     void *arguments,
     void *host_workspace,
     void *device_workspace);
+
+  /// Profiles the GPU kernel launched in `func` running simultaneously on all
+  /// requested devices.
+  Status profile_kernel_w_cuda_graphs_(
+    PerformanceResult& result,
+    Options const& options,
+    std::function<Status(int, cudaStream_t, int)> const& func,
+    std::vector<cudaStream_t> const& streams);
+
+  Status profile_kernel_(
+    PerformanceResult& result,
+    Options const& options,
+    std::function<Status(int, cudaStream_t, int)> const& func,
+    std::vector<cudaStream_t> const& streams);
+
+  /// Profiles the GPU kernel launched in `func` on the `stream`
+  Status profile_kernel_(
+    PerformanceResult& result,
+    Options const& options,
+    std::function<Status(cudaStream_t, int)> const& func,
+    cudaStream_t stream = nullptr);
+
+  /// Profiles the GPU kernel launched in `func` on the `stream`
+  Status profile_kernel_no_cuda_graphs_(
+    PerformanceResult& result,
+    Options const& options,
+    std::function<Status(cudaStream_t, int)> const& func,
+    cudaStream_t stream = nullptr);
 
 private:
   /// finds string matches filter_string in operation_name

@@ -154,7 +154,7 @@ Tensor gA_mk = zipped_divide(mA, select<0,2>(cta_tiler));
 ```
 2. apply the coord to the second mode, the "Rest" mode, to extract out the correct tiles for this CTA.
 ```cpp
-// (BLK_M,BLK_N,k)
+// (BLK_M,BLK_K,k)
 Tensor gA = gA_mk(make_coord(_,_), select<0,2>(cta_coord));
 ```
 Because the projections of the tiler and coord are symmetric and the two steps (apply a tiler and then slice into the rest-mode to produce a partition) are so common, they are wrapped together into the projective `local_tile` interface.
@@ -202,7 +202,7 @@ Use of static layouts has a few advantages.
 
 As stated, the shared memory layouts can be anything that satisfy those conditions. Optimizing kernels like these is often performed by finding a good shared memory layout that provides good access patterns for both the writes to and the reads from shared memory. This includes the ability to vectorize reads and writes as well as avoid shared memory bank conflicts.
 
-Wih the static smem layouts, the `gemm_device` kernel can allocate the required shared memory and create the smem `Tensor`s.
+With the static smem layouts, the `gemm_device` kernel can allocate the required shared memory and create the smem `Tensor`s.
 
 ```cpp
   // Shared memory buffers

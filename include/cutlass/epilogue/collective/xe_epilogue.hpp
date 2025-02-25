@@ -41,6 +41,7 @@
 #include "cutlass/epilogue/collective/detail.hpp"
 #include "cutlass/epilogue/fusion/callbacks.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_tma_warpspecialized.hpp"
+#include "cutlass/epilogue/fusion/xe_vistor_softmax.hpp"
 #include "cutlass/detail/layout.hpp"
 
 #include "cute/tensor.hpp"
@@ -103,7 +104,8 @@ public:
 
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
   using GmemTiledCopyC = CopyOpG2R;
-  using GmemTiledCopyD = CopyOpR2G;
+  using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
+                                             CopyOpR2G, XE_2D_U32x8x16_ST_N>;
   using ElementOutput = typename FusionCallbacks::ElementOutput;
   using ElementCompute = typename FusionCallbacks::ElementCompute;
 
@@ -118,21 +120,25 @@ public:
   static_assert(std::is_same_v<SmemLayoutAtomC, void>, "Copy operation to shared memory is not supported");
   static_assert(std::is_same_v<SmemLayoutAtomD, void>, "Copy operation to shared memory is not supported");
 
-  using Trait_C = Copy_Traits<GmemTiledCopyC>;
-  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}
-                                             .with(static_cast<ElementC const*>(nullptr), int32_t(0), int32_t(0)),
+  using TensorC = decltype(make_tensor(make_gmem_ptr(static_cast<ElementC const*>(nullptr)),
+                           make_layout(make_shape((int32_t)0, (int32_t)0, (int32_t)0), StrideC{})));
+
+  using TensorD = decltype(make_tensor(make_gmem_ptr(static_cast<ElementD const*>(nullptr)),
+                           make_layout(make_shape((int32_t)0, (int32_t)0, (int32_t)0), StrideD{})));
+
+  using Trait_C = Copy_Traits<GmemTiledCopyC, TensorC>;
+  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(TensorC{}),
                                              Layout<Shape<_1, Int<SubgroupSize>>>{},
                                              make_layout(make_shape(get<0>(typename Trait_C::BlockShape{}),
                                                                     get<1>(typename Trait_C::BlockShape{}) / Int<SubgroupSize>{}))));
-  using Trait_D = Copy_Traits<GmemTiledCopyD>;
-  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}
-                                             .with(static_cast<ElementD const*>(nullptr),int32_t(0), int32_t(0)),
+  using Trait_D = Copy_Traits<GmemTiledCopyD, TensorD>;
+  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(TensorD{}),
                                              Layout<Shape<_1, Int<SubgroupSize>>>{},
                                              make_layout(make_shape(get<0>(typename Trait_D::BlockShape{}),
                                                                     get<1>(typename Trait_D::BlockShape{}) / Int<SubgroupSize>{}))));
 private:
   constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
-  constexpr static bool is_destination_supported = not cute::is_void_v<ElementD>;
+  constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
 
   constexpr static bool is_m_major_C = detail::is_m_major<StrideC>();
   constexpr static bool is_m_major_D = detail::is_m_major<StrideD>();
@@ -187,8 +193,10 @@ public:
 
     XE_Copy_C xe_load_c = {};
     if constexpr (is_source_supported) {
-      xe_load_c = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpG2R>, ElementC>{}.with(
-                                  args.ptr_C, M, N),
+      auto mC = make_tensor(make_gmem_ptr(static_cast<ElementC const*>(args.ptr_C)),
+                            make_layout(make_shape(M, N, L), args.dC));
+
+      xe_load_c = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpG2R, decltype(mC)>, ElementC>{}.with(mC),
                                   Layout<Shape<_1, Int<SubgroupSize>>>{},
                                   make_layout(make_shape(get<0>(typename Trait_C::BlockShape{}),
                                                          get<1>(typename Trait_C::BlockShape{}) / Int<SubgroupSize>{})));
@@ -196,8 +204,10 @@ public:
 
     XE_Copy_D xe_store_d = {};
     if constexpr (is_destination_supported) {
-      xe_store_d = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpR2G>, ElementD>{}.with(
-                                   args.ptr_D, M, N),
+      auto mD = make_tensor(make_gmem_ptr(static_cast<ElementD const*>(args.ptr_D)),
+                            make_layout(make_shape(M, N, L), args.dD));
+
+      xe_store_d = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpR2G, decltype(mD)>, ElementD>{}.with(mD),
                                    Layout<Shape<_1, Int<SubgroupSize>>>{},
                                    make_layout(make_shape(get<0>(typename Trait_D::BlockShape{}),
                                                           get<1>(typename Trait_D::BlockShape{}) / Int<SubgroupSize>{})));
@@ -360,7 +370,8 @@ public:
       FragsM * FragsN * FragmentSize * SubgroupSize * ATOM_M * ATOM_N * ATOM_K;
     constexpr int MN = get<0>(CtaTileMNK{}) * get<1>(CtaTileMNK{});
     static_assert(ValuesLoaded == MN, "the total elements loaded by all threads should be the same as MxN" );
-
+    
+    auto synchronize = [&] () {};
     CUTLASS_PRAGMA_UNROLL
     for (int epi_n = 0; epi_n < FragsN; epi_n++) {
       CUTLASS_PRAGMA_UNROLL
@@ -375,10 +386,14 @@ public:
         auto acc_frag_mn = acc_frag(_, epi_m, epi_n);
 
         CUTLASS_PRAGMA_UNROLL
-        for (int epi_v = 0; epi_v < size(trD_frag); ++epi_v) {
+        for (int epi_v = 0; epi_v < size<0>(trD_frag); ++epi_v) {
           trD_frag(epi_v) = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
         }
-        copy(params.xe_store_d, trD, rw_coord(_, epi_m, epi_n));
+        cst_callbacks.reduce(nullptr, synchronize, epi_m, epi_n, (epi_m == FragsM - 1 && epi_n == FragsN - 1), trD);
+        
+        if constexpr (is_destination_supported) {
+          copy(params.xe_store_d, trD, rw_coord(_, epi_m, epi_n));
+        }
       }
     }
 

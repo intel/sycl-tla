@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -100,16 +100,16 @@ struct Copy_Atom<Copy_Traits<Args...>, CopyInternalType>
     if constexpr (is_constant<NumValSrc, decltype(size(src))>::value ||
                   is_constant<NumValDst, decltype(size(dst))>::value) {
       // Dispatch to unpack to execute instruction
-      return copy_unpack(*this, src, dst);
-    } else
-    if constexpr (is_tuple<decltype(shape(src))>::value &&
-                  is_tuple<decltype(shape(dst))>::value) {
+      return copy_unpack(static_cast<Traits const&>(*this), src, dst);
+    } else if constexpr (is_tuple<decltype(shape(src))>::value &&
+                         is_tuple<decltype(shape(dst))>::value) {
       // If the size of the src/dst doesn't match the instruction,
       //   recurse this rank-1 layout by peeling off the mode
       //   ((A,B,C,...)) -> (A,B,C,...)
       return copy(*this, tensor<0>(src), tensor<0>(dst));
     } else {
-      static_assert(dependent_false<SEngine>, "No instruction match and no recursion possible.");
+      static_assert(dependent_false<SEngine>,
+                    "CopyAtom: Src/Dst partitioning does not match the instruction requirement.");
     }
   }
 
@@ -521,15 +521,6 @@ make_cotiled_copy(Copy_Atom<Args...> const& copy_atom,
   // Check validity
   CUTE_STATIC_ASSERT_V(coalesce(composition(data_layout, layout<1>(layout_tv_data))) == coalesce(layout<1>(atom_tv_layout)),
                        "The memory pointed to by AtomTVLayout does not exist in the DataLayout.");
-
-#if 0
-  if (thread0()) {
-    print("data_layout        : "); print(data_layout); print("\n");
-    print("atom_tv_layout     : "); print(atom_tv_layout); print("\n");
-    print("layout_tv_data     : "); print(layout_tv_data); print("\n");
-  }
-#endif
-
   //
   // Tiler -- Find the active elements in the DATA tensor and generate a tiler to extract them
   //
@@ -552,15 +543,6 @@ make_cotiled_copy(Copy_Atom<Args...> const& copy_atom,
 
   // (tid,vid) -> tile_coord
   auto layout_tv = composition(left_inverse(tile2data), layout_tv_data);
-
-#if 0
-  if (thread0()) {
-    print("tiler              : "); print(tiler); print("\n");
-    print("tile2data          : "); print(tile2data); print("\n");
-    print("layout_tv          : "); print(layout_tv); print("\n");
-  }
-#endif
-
   return make_tiled_copy_impl(copy_atom, layout_tv, tiler);
 }
 
@@ -751,15 +733,34 @@ print_latex_copy(LayoutS const& S, ThrIDS const& TS,  // (m,n) -> (tid,vid)  and
 #include <cute/atom/copy_traits_sm75.hpp>
 #include <cute/atom/copy_traits_sm80.hpp>
 #include <cute/atom/copy_traits_sm90.hpp>
+#include <cute/atom/copy_traits_sm100.hpp>
+
 
 // Config
 #if (__CUDACC_VER_MAJOR__ >= 12)
 #  define CUTE_COPY_ATOM_TMA_SM90_ENABLED
+#  define CUTE_COPY_ATOM_TMA_SM100_ENABLED
 #endif
+
+
+#if (!defined(CUTE_COPY_ATOM_TMA_SM90_ENABLED))
+#  define CUTE_COPY_ATOM_TMA_SM90_ENABLED
+#endif
+
+#if (!defined(CUTE_COPY_ATOM_TMA_SM100_ENABLED))
+#  define CUTE_COPY_ATOM_TMA_SM100_ENABLED
+#endif
+
 
 #if defined(CUTE_COPY_ATOM_TMA_SM90_ENABLED)
 #include <cute/atom/copy_traits_sm90_tma.hpp>
 #endif
+
+
+#if defined(CUTE_COPY_ATOM_TMA_SM100_ENABLED)
+#include <cute/atom/copy_traits_sm100_tma.hpp>
+#endif
+
 
 #if defined(SYCL_INTEL_TARGET)
 #include <cute/atom/copy_traits_xe.hpp>
