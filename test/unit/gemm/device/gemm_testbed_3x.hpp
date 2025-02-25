@@ -3504,7 +3504,7 @@ bool TestAll(double alpha = 1.0, double beta = cute::is_same_v<typename Gemm::Ge
 template <typename Gemm, template <class T> class ActivationFunctor =
                              cutlass::epilogue::thread::Identity>
 bool TestXe(
-    double alpha = 1.0, double beta = 0.0,
+    double alpha = 1.0, double beta = 0.0, bool test_batch = true,
     CheckEquality check_relative_equality = CheckEquality::RELATIVE) {
   using ElementScalar = typename Gemm::EpilogueOutputOp::ElementScalar;
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
@@ -3518,7 +3518,7 @@ bool TestXe(
   int max_alignment = 4;
   std::vector<int> problem_size_m{max_alignment, 512 - 3 * max_alignment};
   std::vector<int> problem_size_n{max_alignment, 512 - 2 * max_alignment};
-  std::vector<int> problem_size_l = std::vector{1, 3, 4};
+  std::vector<int> problem_size_l = test_batch ? std::vector{1, 3, 4} : std::vector{1};
 
   constexpr int TileShapeK = cute::size<2>(typename Gemm::GemmKernel::TileShape{});
   std::vector<int> problem_size_k{TileShapeK};
