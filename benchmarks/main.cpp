@@ -164,7 +164,7 @@ int main(int argc, const char** argv) {
       if(benchmark_config.find("Gemm") != std::string::npos) {
         benchmark_main<cutlass::benchmark::GEMMOptions>(line_argc, line_argv.data());
       } else {
-#ifdef SYCL_INTEL_TARGET
+#if defined SYCL_INTEL_TARGET
         benchmark_main<cutlass::benchmark::FMHAOptions>(line_argc, line_argv.data());
 #endif
       }
