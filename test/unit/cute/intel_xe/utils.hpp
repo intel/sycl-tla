@@ -112,7 +112,7 @@ template <typename T> static void fill_matrix(cutlass::host_vector<T> &M) {
     M[i] = static_cast<T>(dist(rng));
 }
 
-template <class kernel> void run(uint32_t m, uint32_t n, uint32_t k) {
+template <class kernel> void run(uint32_t m = 1024, uint32_t n = 1024, uint32_t k = 1024) {
 
   using TA = typename kernel::TA;
   using TB = typename kernel::TB;
