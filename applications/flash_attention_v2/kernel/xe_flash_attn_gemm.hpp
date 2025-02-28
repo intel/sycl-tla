@@ -200,10 +200,8 @@ public:
 
     int thread_idx = int(ThreadIdxX());
     int sub_group_id = thread_idx / SubgroupSize;
-    constexpr auto workgroup_shape = WorkgroupTileShape{}; // (SUB_M,SUB_N,SUB_K)
     constexpr auto subgroup_shape = SubgroupTileShape{};   // (SUB_M,SUB_N,SUB_K)
 
-    auto blk_shape = TileShape{};
     auto blk_m_coord = BlockIdxY();
     auto blk_n_coord = BlockIdxX();
     auto blk_l_coord = BlockIdxZ();
@@ -234,7 +232,6 @@ public:
     const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, get<1>(subgroup_shape))
                                         : cute::ceil_div(non_causal_seq_len, get<1>(subgroup_shape));
 
-    const int item_id = thread_idx % SubgroupSize;
     const int k_tile_count = head_size / (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{}));
     // m, k
     Tensor prefetch_iter_2d_q = params.mainloop.gmem_prefetch_q.get_pvc_tensor(
@@ -300,7 +297,7 @@ public:
 
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
     TiledMma tiled_mma;
-    Tensor out_reg = partition_fragment_C(tiled_mma, take<0, 2>(blk_shape));
+    Tensor out_reg = partition_fragment_C(tiled_mma, take<0, 2>(subgroup_shape));
     // There are 16 workitem and 32 max per subgroup, each worktime containt 2 max and cumulatively, they calculate the
     // max per subgroup
     ElementAccumulator max_reg{-INFINITY};
@@ -356,6 +353,7 @@ public:
       auto tile_coord_QK = make_coord(seq_coord, (nblock_limit - 1) * get<1>(subgroup_shape), _, blk_l_coord);
       collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, head_size / get<1>(subgroup_shape), params.mainloop);
       // mask the elements of each tile where j > i
+      const int item_id = thread_idx % SubgroupSize;
       int col_idx = item_id + (nblock_limit - 1) * get<1>(subgroup_shape);
       CUTLASS_PRAGMA_UNROLL
       for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
