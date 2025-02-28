@@ -670,7 +670,8 @@ private:
       transform(AtomShape{}, WarpLayout{}.shape(), CanonicalTiling.shape(),
                 [](auto atom_size, auto sg_count, auto canonical_tiling) {
                   constexpr auto iters = get<1>(canonical_tiling);
-                  auto tiler_shape = make_shape(atom_size, sg_count, iters);   // atom, hardware, iteration
+                  // atom, tile_over_hardware, tile_over_iteration
+                  auto tiler_shape = make_shape(atom_size, sg_count, iters);
                   return coalesce(make_ordered_layout(tiler_shape, Step<_0, _2, _1>{}));
                 });
 public:
