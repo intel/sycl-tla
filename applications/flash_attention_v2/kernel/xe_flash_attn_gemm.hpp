@@ -215,7 +215,7 @@ public:
     Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                      // (n,k)
     Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                      // (n,k)
 
-    auto gQ = local_tile(mQ_mk, blk_shape, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
+    auto gQ = local_tile(mQ_mk, subgroup_shape, make_coord(blk_m_coord * ATOM_M, _, _), Step<_1,  X, _1>{});
 
     const int seq_coord = blk_m_coord * BLK_M + (sub_group_id / ATOM_N) * SG_M;
     const int head_size_coord = blk_n_coord * BLK_N + (sub_group_id % ATOM_N) * SG_N;
@@ -333,9 +333,9 @@ public:
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
-      auto gV = local_tile(mV_nk, blk_shape, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
+      auto gV = local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, nblock), Step<X, _1, _1>{}); 
       auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
-      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, 1, nblock, params.mainloop);
+      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, params.mainloop);
       if (nblock + DispatchPolicy::Stages < nblock_limit) {
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < iter_over_head_count; j++) {
@@ -349,7 +349,7 @@ public:
       // BAND Matrix
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
-      auto gK = local_tile(mK_nk, subgroup_shape, make_coord(_, nblock_limit - 1, _), Step<X, _1, _1>{});
+      auto gK = local_tile(mK_nk, subgroup_shape, make_coord(0, nblock_limit - 1, _), Step<X, _1, _1>{});
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
       // 3) Perform GEMM S = Q*K
@@ -373,9 +373,9 @@ public:
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
-      auto gV = local_tile(mV_nk, blk_shape, make_coord(0, 0, _), Step<X, _1, _1>{});
+      auto gV = local_tile(mV_nk, subgroup_shape, make_coord(0, blk_n_coord * ATOM_N, nblock_limit - 1), Step<X, _1, _1>{});
       auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
-      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, 1, nblock_limit - 1, params.mainloop);
+      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, params.mainloop);
     }
 
     CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};

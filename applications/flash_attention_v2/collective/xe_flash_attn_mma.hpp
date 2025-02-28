@@ -218,12 +218,12 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
     TiledMma tiled_mma;
     // To make all threads in a warp have the same global tensors pass in the index of thread 0 in each warp
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
-    auto first_thread_in_sg_idx = sg.get_group_linear_id() * DispatchPolicy::SubgroupSize;
+    auto first_thread_in_sg_idx = sg.get_group_id()[0] * DispatchPolicy::SubgroupSize;
     auto thread_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
     // For partitioning tensor B we also want all subgroups in a row to load the same data.
     // We have the same TiledMMA for both MMAs in flash attention, but the first one should have different strides.
     // For now we have this hacky workaround
-    // TODO(Codeplay): we should use 2 TiledMMAs instead of this hack
+    // the K matrix consumed from both dimention, hence starts from 0.  
     auto thread_mma_b = tiled_mma.get_slice(0);
 
     // Partition
@@ -232,8 +232,8 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
 
     // Create fragments
     // TODO(Codeplay): fix this, this is probably not general
-    Tensor tCrA = make_tensor<ElementQ>(params.gmem_tiled_copy_q.make_fragment_layout(tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<ElementK>(params.gmem_tiled_copy_k.make_fragment_layout(tCgB(_,_,_,0).shape()));
+    Tensor tCrA = make_tensor<ElementQ>(params.gmem_tiled_copy_q.make_fragment_layout(take<0,3>(tCgA.shape())));
+    Tensor tCrB = make_tensor<ElementK>(params.gmem_tiled_copy_k.make_fragment_layout(take<0,3>(tCgB.shape())));
     
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
@@ -249,8 +249,8 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
       print("  gA : ");
       print(gA);
       print("\n");
-      print("tCrA_copy_view : ");
-      print(tCrA_copy_view);
+      print("tCgA : ");
+      print(tCgA);
       print("\n");
       print("  tCrA : ");
       print(tCrA);
@@ -303,15 +303,16 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
 
   template <class TileCoord, class FragAccum, class FragS, class TensorV, class FragSrc>
   CUTLASS_DEVICE void mmaPV(TileCoord tile_coord, FragAccum &accum, FragS const &tSr, TensorV gB,
-                            FragSrc const &frag_src, int const &k_tile_count, int const &load_idx,
-                            Params const &params) {
+                            FragSrc const &frag_src, Params const &params) {
 
     int thread_idx = static_cast<int>(ThreadIdxX());
     // Instantiate the MMA object
     TiledMma tiled_mma;
-    auto thread_mma = tiled_mma.get_slice(thread_idx & ~15);
+    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto first_thread_in_sg_idx = sg.get_group_id()[0] * DispatchPolicy::SubgroupSize;
+    auto thread_mma = tiled_mma.get_slice(first_thread_in_sg_idx);  
     Tensor tCgB = thread_mma.partition_B(gB);
-    Tensor tCrB = make_tensor<ElementV>(params.gmem_tiled_copy_v.make_fragment_layout(tCgB(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementV>(params.gmem_tiled_copy_v.make_fragment_layout(tCgB.shape()));
 
     // Partition the copying of A and B tiles across the threads
     auto gmem_thr_copy_B = params.gmem_tiled_copy_v.get_slice(thread_idx);
@@ -324,8 +325,8 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
       print("  gB : ");
       print(gB);
       print("\n");
-      print("tCrB_copy_view : ");
-      print(tCrB_copy_view);
+      print("tCgB : ");
+      print(tCgB);
       print("\n");
       print("  tCrB : ");
       print(tCrB);
@@ -354,7 +355,7 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
     //
     // Mainloop
     //
-    copy(params.gmem_tiled_copy_v, tBgB(_,_,_, load_idx), tBrB);
+    copy(params.gmem_tiled_copy_v, tBgB, tBrB);
     cute::gemm(tiled_mma, accum, tPr, tCrB, frag_src);
   }
 };
