@@ -330,14 +330,13 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
   CUTLASS_DEVICE void update_tensor_shape_stride(
     Params& mainloop_params,
     int32_t next_group,
-    int32_t offsetA, int32_t offsetB,
     ProblemShape_MNKL problem_shape_mnkl) {
       const int32_t M = get<0>(problem_shape_mnkl);
       const int32_t N = get<1>(problem_shape_mnkl);
       const int32_t K = get<2>(problem_shape_mnkl);
 
-      ElementA const* ptr_A_curr_batch = reinterpret_cast<ElementA const*>(mainloop_params.ptr_A + offsetA);
-      ElementB const* ptr_B_curr_batch = reinterpret_cast<ElementB const*>(mainloop_params.ptr_B + offsetB);
+      ElementA const* ptr_A_curr_batch = reinterpret_cast<ElementA const*>(mainloop_params.ptr_A[next_group]);
+      ElementB const* ptr_B_curr_batch = reinterpret_cast<ElementB const*>(mainloop_params.ptr_B[next_group]);
 
       mainloop_params.mA = make_tensor(make_gmem_ptr(ptr_A_curr_batch), make_shape(M, K,(int32_t)1), mainloop_params.dA[next_group]);
       mainloop_params.mB = make_tensor(make_gmem_ptr(ptr_B_curr_batch), make_shape(N, K,(int32_t)1), mainloop_params.dB[next_group]);

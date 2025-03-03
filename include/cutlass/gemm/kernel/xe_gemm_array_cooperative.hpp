@@ -244,11 +244,13 @@ public:
     auto K = get<2>(problem_shape_MNKL);
     auto L = get<3>(problem_shape_MNKL);
 
-    Tensor mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,1), InternalStrideA{});   //(m,k,l)
-    Tensor mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,1), InternalStrideB{});   //(n,k,l)
+    // Tensor mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,1), params.mainloop.dA[L]);   //(m,k,l)
+    // Tensor mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,1), params.mainloop.dB[L]);   //(n,k,l)
+    Tensor mA_mkl = make_counting_tensor(make_layout(make_shape(M, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
+    Tensor mB_nkl = make_counting_tensor(make_layout(make_shape(N, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
 
-    auto gA_mkl = local_tile(mA_mkl, workgroup_shape, make_coord(_, _, _), Step<_1,  X, _1>{});
-    auto gB_nkl = local_tile(mB_nkl, workgroup_shape, make_coord(_, _, _), Step< X, _1, _1>{});
+    auto gA_mkl = local_tile(mA_mkl, workgroup_shape, make_coord(_, _, _), Step<_1,  X, _1>{});  // (BLK_M,BLK_K,m,k,l)
+    auto gB_nkl = local_tile(mB_nkl, workgroup_shape, make_coord(_, _, _), Step< X, _1, _1>{});  // (BLK_N,BLK_K,n,k,l)
 
     int32_t curr_batch = idx2crd(work_tile_info.L_idx, shape<4>(gB_nkl)); // Usually just returns work_tile_info.L_idx;
     int32_t const xe_idx = BlockIdxX() + (BlockIdxY() * GridDimX());
@@ -257,7 +259,6 @@ public:
     int thread_idx = int(ThreadIdxX());
     constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     bool did_batch_change = true;
-    int32_t offsetA = M * K, offsetB = N * K;
     auto new_mainloop_params = params.mainloop;
 
     while (work_tile_info.is_valid()) {
@@ -323,17 +324,14 @@ public:
         M = get<0>(problem_shape_MNKL);
         N = get<1>(problem_shape_MNKL);
         K = get<2>(problem_shape_MNKL);
-        L = get<3>(problem_shape_MNKL);
 
-        mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,1), InternalStrideA{});   //(m,k,l)
-        mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,1), InternalStrideB{});   //(n,k,l)
+        mA_mkl = make_counting_tensor(make_layout(make_shape(M, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
+        mB_nkl = make_counting_tensor(make_layout(make_shape(N, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
 
         gA_mkl = local_tile(mA_mkl, workgroup_shape, make_coord(_, _, _), Step<_1,  X, _1>{});
         gB_nkl = local_tile(mB_nkl, workgroup_shape, make_coord(_, _, _), Step< X, _1, _1>{});
 
-        collective_mma.update_tensor_shape_stride(new_mainloop_params, curr_batch, offsetA, offsetB, problem_shape_MNKL);
-        offsetA += M * K;
-        offsetB += N * K;
+        collective_mma.update_tensor_shape_stride(new_mainloop_params, curr_batch, problem_shape_MNKL);
       }
     }
   }
