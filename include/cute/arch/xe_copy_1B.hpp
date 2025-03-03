@@ -393,7 +393,7 @@ struct XE_2D_U8x32x32_LD_T {
                                       int height, int pitch, intel::coord_t coord,
                                       T *dst) {
   #if defined(SYCL_INTEL_TARGET)
-      static_assert(sizeof(T) == 1, "Expected T to have size 2");
+      static_assert(sizeof(T) == 1, "Expected T to have size 1");
       *reinterpret_cast<intel::uint16 *>(dst) =
       __builtin_IB_subgroup_block_read_cacheopts_transpose_u32_m32k8(
               (long)(baseoffset), width - 1, height - 1, pitch - 1, coord, 0);
