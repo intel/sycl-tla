@@ -33,11 +33,15 @@
 #include <cute/arch/mma_xe.hpp>
 
 namespace cute {
-// use "XE_MIXED_DTYPE_8x16x16_F32F16F32_TT" as example
-// GEMM         : D = A x B + C
-// "8x16x16"    : dpas MNK
-// "F32F16F32"  : D is F32, dpas is F16, C is F32
-// "TT"         : A transpose and B transpose
+// Mixed data type for MMA are offten used in quantization processing, like (int4_t/int8_t)  -->  (bf16/fp16)
+
+// Use " XE_MIXED_DTYPE_8x16x16_F32F16F32_TT<int8_t, int4_t> " as example for GEMM(D = A x B + C)
+//    "8x16x16"    : dpas MNK
+//    "F32F16F32"  : the first 'F32' is data type of D, the second 'F16' is data type of DPAS (Xe required data type of A and B are same), the last 'F32' is data type of C
+//    "TT"         : A transpose and B transpose
+//    "int8_t"      : the data type of A in memory is int8_t, we must transform it to F16 before going to DPAS.
+//    "int4_t"      : the data type of B in memory is int4_t, we must shuffle the data, then transform it to F16 before going to DPAS
+
 
 
 // ====================  BF16 ====================
@@ -91,54 +95,6 @@ template <class TypeA, class TypeB>
 struct XE_MIXED_DTYPE_1x16x16_F32F16F32_TT : XE_1x16x16_F32F16F16F32_TT
 {
   using MMA_Op = XE_1x16x16_F32F16F16F32_TT;
-};
-
-
-
-
-// ====================  int8_t ====================
-template <class TypeA, class TypeB>
-struct XE_MIXED_DTYPE_8x16x32_S32S8S32_TT : XE_8x16x32_S32S8S8S32_TT
-{
-};
-
-template <class TypeA, class TypeB>
-struct XE_MIXED_DTYPE_4x16x32_S32S8S32_TT : XE_4x16x32_S32S8S8S32_TT
-{
-};
-
-template <class TypeA, class TypeB>
-struct XE_MIXED_DTYPE_2x16x32_S32S8S32_TT : XE_2x16x32_S32S8S8S32_TT
-{
-};
-
-template <class TypeA, class TypeB>
-struct XE_MIXED_DTYPE_1x16x32_S32S8S32_TT : XE_1x16x32_S32S8S8S32_TT
-{
-};
-
-
-
-
-// ====================  uint8_t ====================
-template <class TypeA, class TypeB>
-struct XE_MIXED_DTYPE_8x16x32_S32U8S32_TT : XE_8x16x32_S32U8U8S32_TT
-{
-};
-
-template <class TypeA, class TypeB>
-struct XE_MIXED_DTYPE_4x16x32_S32U8S32_TT : XE_4x16x32_S32U8U8S32_TT
-{
-};
-
-template <class TypeA, class TypeB>
-struct XE_MIXED_DTYPE_2x16x32_S32U8S32_TT : XE_2x16x32_S32U8U8S32_TT
-{
-};
-
-template <class TypeA, class TypeB>
-struct XE_MIXED_DTYPE_1x16x32_S32U8S32_TT : XE_1x16x32_S32U8U8S32_TT
-{
 };
 
 

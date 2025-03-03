@@ -230,16 +230,24 @@ struct CollectiveMma<
     }
   }
 
-  template <class tensor_t>
-  static auto shuffle_A_if_needed(tensor_t const& tensor) {
+  template <class EngineIn,
+            class LayoutIn>
+  static auto shuffle_A_if_needed(Tensor<EngineIn, LayoutIn> const& tensor) {
+    static_assert(rank(LayoutIn{}) == 3);
+    static_assert(is_rmem<EngineIn>::value, "Input tensor for shuffle must come from registers");
+
+    using tensor_t = Tensor<EngineIn, LayoutIn>;
+
     if constexpr (sizeof_bits_v<typename tensor_t::value_type> >= 8) {
       return tensor;
     } else {
+      // H  -->  height
+      // W  -->  width
       static constexpr auto DPAS = decltype(size<0>(tensor))::value;
-      static constexpr auto M = decltype(size<1>(tensor))::value;
-      static constexpr auto K = decltype(size<2>(tensor))::value;
-      static constexpr auto copy_M = decltype(size<0>(get<1>(tensor.layout())))::value;
-      static constexpr auto copy_K = decltype(size<0>(get<2>(tensor.layout())))::value;
+      static constexpr auto H = decltype(size<1>(tensor))::value;
+      static constexpr auto W = decltype(size<2>(tensor))::value;
+      static constexpr auto copy_H = decltype(size<0>(get<1>(tensor.layout())))::value;
+      static constexpr auto copy_W = decltype(size<0>(get<2>(tensor.layout())))::value;
 
       auto sg = syclcompat::get_nd_item<1>().get_sub_group();
 
@@ -247,39 +255,45 @@ struct CollectiveMma<
 
       auto shuffled_tensor = make_fragment_like(tensor);
 
-      for (int w = 0; w < copy_K; w++) {
-        auto remote_id = (id + w * SubgroupSize) / copy_K;
+      for (int cw = 0; cw < copy_W; cw++) {
+        auto remote_id = (id + cw * SubgroupSize) / copy_W;
 
         auto remote_tensor = select_from_group(sg, tensor, remote_id);
 
-        auto reshape_tensor = make_tensor(remote_tensor.data(), Shape<Int<copy_K>, Int<DPAS>, Int<copy_M>, Int<M / copy_M>, Int<K / copy_K>>{});
+        auto reshape_tensor = make_tensor(remote_tensor.data(), Shape<Int<copy_W>,
+                                          Int<DPAS>, Int<copy_H>, Int<H / copy_H>, Int<W / copy_W>>{});
 
         for (int d = 0; d < DPAS; d++) {
-          for (int h = 0; h < copy_M; h++) {
-            for (int n = 0; n < K / copy_K; n++) {
-              for (int m = 0; m < M / copy_M; m++) {
-                shuffled_tensor(d, m * copy_M + h, n * copy_K + w) = reshape_tensor(id % copy_K, d, h, m, n);
+          for (int ch = 0; ch < copy_H; ch++) {
+            for (int w = 0; w < W / copy_W; w++) {
+              for (int h = 0; h < H / copy_H; h++) {
+                shuffled_tensor(d, h * copy_H + ch, w * copy_W + cw) = reshape_tensor(id % copy_W, d, ch, h, w);
               }
             }
           }
         }
-
       }
 
       return shuffled_tensor;
     }
   }
 
-  template <class tensor_t>
-  static auto shuffle_B_if_needed(tensor_t const& tensor) {
+  template <class EngineIn,
+            class LayoutIn>
+  static auto shuffle_B_if_needed(Tensor<EngineIn, LayoutIn> const& tensor) {
+    static_assert(rank(LayoutIn{}) == 3);
+    static_assert(is_rmem<EngineIn>::value, "Input tensor for shuffle must come from registers");
+
+    using tensor_t = Tensor<EngineIn, LayoutIn>;
+
     if constexpr (sizeof_bits_v<typename tensor_t::value_type> >= 8) {
       return tensor;
     } else {
       static constexpr auto DPAS = decltype(size<0>(tensor))::value;
-      static constexpr auto N = decltype(size<1>(tensor))::value;
-      static constexpr auto K = decltype(size<2>(tensor))::value;
-      static constexpr auto copy_N = decltype(size<0>(get<1>(tensor.layout())))::value;
-      static constexpr auto copy_K = decltype(size<0>(get<2>(tensor.layout())))::value;
+      static constexpr auto W = decltype(size<1>(tensor))::value;
+      static constexpr auto H = decltype(size<2>(tensor))::value;
+      static constexpr auto copy_W = decltype(size<0>(get<1>(tensor.layout())))::value;
+      static constexpr auto copy_H = decltype(size<0>(get<2>(tensor.layout())))::value;
 
       auto sg = syclcompat::get_nd_item<1>().get_sub_group();
 
@@ -287,23 +301,23 @@ struct CollectiveMma<
 
       auto shuffled_tensor = make_fragment_like(tensor);
 
-      for (int w = 0; w < copy_N; w++) {
-        auto remote_id = (id + w * SubgroupSize) / copy_N;
+      for (int cw = 0; cw < copy_W; cw++) {
+        auto remote_id = (id + cw * SubgroupSize) / copy_W;
 
         auto remote_tensor = select_from_group(sg, tensor, remote_id);
 
-        auto reshape_tensor = make_tensor(remote_tensor.data(), Shape<Int<copy_N>, Int<DPAS>, Int<copy_K>, Int<N / copy_N>, Int<K / copy_K>>{});
+        auto reshape_tensor = make_tensor(remote_tensor.data(), Shape<Int<copy_W>,
+                                          Int<DPAS>, Int<copy_H>, Int<W / copy_W>, Int<H / copy_H>>{});
 
         for (int d = 0; d < DPAS; d++) {
-          for (int h = 0; h < copy_K; h++) {
-            for (int n = 0; n < N / copy_N; n++) {
-              for (int k = 0; k < K / copy_K; k++) {
-                shuffled_tensor(d, n * copy_N + w, k * copy_K + h) = reshape_tensor(id % copy_N, d, h, n, k);
+          for (int ch = 0; ch < copy_H; ch++) {
+            for (int w = 0; w < W / copy_W; w++) {
+              for (int h = 0; h < H / copy_H; h++) {
+                shuffled_tensor(d, w * copy_W + cw, h * copy_H + ch) = reshape_tensor(id % copy_W, d, ch, w, h);
               }
             }
           }
         }
-
       }
 
       return shuffled_tensor;
