@@ -126,7 +126,7 @@ public:
 
     #elif defined(CUTLASS_ENABLE_SYCL)
 
-    storage = bit_cast<decltype(storage)>(sycl::ext::oneapi::bfloat16(x));
+    storage = std::bit_cast<decltype(storage)>(sycl::ext::oneapi::bfloat16(x));
 
     #else
     uint32_t bits;
