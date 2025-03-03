@@ -83,9 +83,9 @@ TEST(XE_Device_GemmUniversal_f16n_f16t_f32n_tensor_op_f32, 256x256x32_LD32x32) {
   // This permutation (which can be thought of as a scatter operation on the default tiling) 
   // ensures that each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations)
   // See 0t_mma_atom.md#TiledMMAs for more info.
-  using TiledMma = ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<TileShape>, 
-                                      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+  using TiledMma =
+      typename ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
@@ -156,9 +156,9 @@ TEST(XE_Device_GemmUniversal_f16n_f16t_f32n_tensor_op_f32, 256x256x32_LD16x32) {
   // This permutation (which can be thought of as a scatter operation on the default tiling) 
   // ensures that each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations)
   // See 0t_mma_atom.md#TiledMMAs for more info.
-  using TiledMma = ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<TileShape>, 
-                                      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+  using TiledMma =
+      typename ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
@@ -229,9 +229,9 @@ TEST(XE_Device_GemmUniversal_f16n_f16t_f32n_tensor_op_f32, 256x256x32_LDA8x32_LD
   // This permutation (which can be thought of as a scatter operation on the default tiling) 
   // ensures that each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations)
   // See 0t_mma_atom.md#TiledMMAs for more info.
-  using TiledMma = ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<TileShape>, 
-                                      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+  using TiledMma =
+      typename ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
