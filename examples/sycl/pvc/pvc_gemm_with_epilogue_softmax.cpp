@@ -317,7 +317,7 @@ struct ExampleRunner {
     // Verify that the result is correct
     bool passed = verify(problem_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
-    if(!passed) return cutlass::Status::kErrorInternal;
+    if (!passed) return cutlass::Status::kErrorInternal;
 
     if (passed && options.iterations > 0) {
       GPU_Clock timer;
