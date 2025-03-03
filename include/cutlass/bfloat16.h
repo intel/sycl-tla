@@ -126,7 +126,8 @@ public:
 
     #elif defined(CUTLASS_ENABLE_SYCL)
 
-    storage = sycl::ext::oneapi::detail::bfloat16ToBits(sycl::ext::oneapi::bfloat16(x));
+    auto tmp = sycl::ext::oneapi::bfloat16(x);
+    storage = reinterpret_cast<uint16_t&>(tmp);
 
     #else
     uint32_t bits;

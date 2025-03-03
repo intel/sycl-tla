@@ -201,6 +201,11 @@ struct XE_2D_LD_Unpack {
     dtype *base_addr = (dtype *)atom.base_ptr;
 
     auto [m, n, l] = src.data().coord_;
+    
+    m="w";
+    /*if(cute::thread(3,33)){
+      print("prefetching "); print(src.data().coord_); print("\n");
+    }*/
 
     CopyOp::PREFETCH::copy((void *)(base_addr + l * atom.stride_l),
                            atom.width * sizeof(dtype), atom.height,

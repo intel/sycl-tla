@@ -277,6 +277,11 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
 
     auto tiled_prefetch_a = XE_Prefetch_A{mainloop.mA};
     auto tiled_prefetch_b = XE_Prefetch_B{mainloop.mB};
+    
+    auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
+    auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);
+    auto pAgA = thr_prefetch_A.partition_S(gA);
+    auto pBgB = thr_prefetch_B.partition_S(gB);
 
     auto prefetch_a_coordinate = make_coord(prefetch_a_coord_0 + (sub_group_id / get<1>(PrefetchAThrShape{})) * get<0>(PrefetchATileSize{}),
                                             prefetch_a_coord_1 + (sub_group_id % get<1>(PrefetchAThrShape{})) * get<1>(PrefetchATileSize{}),
@@ -301,6 +306,17 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     constexpr int barrier_scope = 2;
     int prefetch_k = 0;
 
+    /*if(cute::thread(3,33)){
+      //tiled_prefetch_a = "w2";
+
+      print("gA "); print(gA); print("\n");
+      print("tiled_prefetch_a "); print(tiled_prefetch_a); print("\n");
+      print("prefetch_iter_a "); print(prefetch_iter_a); print("\n");
+      print("pAgA "); print(pAgA); print("\n");
+      print("prefetch_iter_b "); print(prefetch_iter_b); print("\n");
+      print("pBgB "); print(pBgB); print("\n");
+    }*/
+
     CUTLASS_PRAGMA_UNROLL
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
       prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
@@ -315,8 +331,21 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
       copy(mainloop.copy_B, tBgB(_,_,_,k_tile), tBrB);
 
       if (prefetch_k < k_tile_count) {
+        /*if(cute::thread(3,33)){
+          print("prefetch_iter_a(_, _, _, prefetch_k) "); print(prefetch_iter_a(_, _, _, prefetch_k)); print("\n");
+        }*/
         prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
+        /*if(cute::thread(3,33)){
+          print("pAgA(_, _, _, prefetch_k) "); print(pAgA(_, _, _, prefetch_k)); print("\n");
+        }*/
+        //prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+        /*if(cute::thread(3,33)){
+          print("prefetch_iter_b(_, _, _, prefetch_k) "); print(prefetch_iter_b(_, _, _, prefetch_k)); print("\n");
+        }*/
         prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
+        /*if(cute::thread(3,33)){
+          print("iter done\n");
+        }*/
       }
 
       cute::gemm(tiled_mma, tCrA, tCrB, accum);
