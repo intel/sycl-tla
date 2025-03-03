@@ -378,7 +378,7 @@ struct XE_2D_U8x32x16_LD_T {
         __builtin_IB_subgroup_block_read_flat_transpose_u32_k8(
             (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on unsupported hardware");
 #endif
   }
 };
