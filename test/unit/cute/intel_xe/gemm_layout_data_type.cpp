@@ -122,8 +122,8 @@ TEST(PVC_CuTe_Xe, gemm_tf32_RowMajor_ColumnMajor) {
       cute::LayoutRight, cute::LayoutRight>>();
 }
 
-#if 0  // ColumnMajor A not support now
 TEST(PVC_CuTe_Xe, gemm_tf32_ColumnMajor_RowMajor) {
+  GTEST_SKIP() << "Not support tf32 column major A now";
   run<gemm_device_partition_fragment_abc<
       256, 128, 32, 64, 128, tfloat32_t, tfloat32_t, float,
       XE_2D_TF32x16x8_LD_T, XE_2D_U32x32x16_LD_N,
@@ -132,13 +132,13 @@ TEST(PVC_CuTe_Xe, gemm_tf32_ColumnMajor_RowMajor) {
 }
 
 TEST(PVC_CuTe_Xe, gemm_tf32_ColumnMajor_ColumnMajor) {
+  GTEST_SKIP() << "Not support tf32 column major A now";
   run<gemm_device_partition_fragment_abc<
       128, 128, 32, 64, 128, tfloat32_t, tfloat32_t, float,
       XE_2D_TF32x16x8_LD_T, XE_2D_U32x16x8_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x8_F32TF32TF32F32_TT,
       cute::LayoutLeft, cute::LayoutRight>>();
 }
-#endif
 
 
 
@@ -160,8 +160,8 @@ TEST(PVC_CuTe_Xe, gemm_int8_RowMajor_ColumnMajor) {
       cute::LayoutRight, cute::LayoutRight>>();
 }
 
-#if 0  // ColumnMajor A not support now
 TEST(PVC_CuTe_Xe, gemm_int8_ColumnMajor_RowMajor) {
+  GTEST_SKIP() << "Not support int8 column major A now";
   run<gemm_device_partition_fragment_abc<
       256, 128, 32, 64, 128, int8_t, int8_t, int32_t,
       XE_2D_U8x32x32_LD_T, XE_2D_U8x32x32_LD_V,
@@ -170,13 +170,13 @@ TEST(PVC_CuTe_Xe, gemm_int8_ColumnMajor_RowMajor) {
 }
 
 TEST(PVC_CuTe_Xe, gemm_int8_ColumnMajor_ColumnMajor) {
+  GTEST_SKIP() << "Not support int8 column major A now";
   run<gemm_device_partition_fragment_abc<
       128, 128, 32, 64, 128, int8_t, int8_t, int32_t,
       XE_2D_U8x32x32_LD_T, XE_2D_U8x32x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32S8S8S32_TT,
       cute::LayoutLeft, cute::LayoutRight>>();
 }
-#endif
 
 
 
@@ -198,8 +198,8 @@ TEST(PVC_CuTe_Xe, gemm_uint8_RowMajor_ColumnMajor) {
       cute::LayoutRight, cute::LayoutRight>>();
 }
 
-#if 0  // ColumnMajor A not support now
 TEST(PVC_CuTe_Xe, gemm_uint8_ColumnMajor_RowMajor) {
+  GTEST_SKIP() << "Not support uint8 column major A now";
   run<gemm_device_partition_fragment_abc<
       256, 128, 32, 64, 128, uint8_t, uint8_t, int32_t,
       XE_2D_U8x32x32_LD_T, XE_2D_U8x32x32_LD_V,
@@ -208,10 +208,10 @@ TEST(PVC_CuTe_Xe, gemm_uint8_ColumnMajor_RowMajor) {
 }
 
 TEST(PVC_CuTe_Xe, gemm_uint8_ColumnMajor_ColumnMajor) {
+  GTEST_SKIP() << "Not support uint8 column major A now";
   run<gemm_device_partition_fragment_abc<
       128, 128, 32, 64, 128, uint8_t, uint8_t, int32_t,
       XE_2D_U8x32x32_LD_T, XE_2D_U8x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32U8U8S32_TT,
       cute::LayoutLeft, cute::LayoutRight>>();
 }
-#endif
