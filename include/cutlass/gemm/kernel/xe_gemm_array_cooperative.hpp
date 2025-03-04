@@ -237,36 +237,40 @@ public:
     TileScheduler scheduler{params.scheduler};
     auto work_tile_info = scheduler.initial_work_tile_info(ClusterShape{});
     constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (BLK_M,BLK_N,BLK_K)
-    // Optionally append 1s until problem shape is rank-4 in case it is only rank-3 (MNK)
-    auto problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(work_tile_info.L_idx), 1);
-    auto M = get<0>(problem_shape_MNKL);
-    auto N = get<1>(problem_shape_MNKL);
-    auto K = get<2>(problem_shape_MNKL);
-    auto L = get<3>(problem_shape_MNKL);
-
-    // Tensor mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,1), params.mainloop.dA[L]);   //(m,k,l)
-    // Tensor mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,1), params.mainloop.dB[L]);   //(n,k,l)
-    Tensor mA_mkl = make_counting_tensor(make_layout(make_shape(M, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
-    Tensor mB_nkl = make_counting_tensor(make_layout(make_shape(N, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
-
-    auto gA_mkl = local_tile(mA_mkl, workgroup_shape, make_coord(_, _, _), Step<_1,  X, _1>{});  // (BLK_M,BLK_K,m,k,l)
-    auto gB_nkl = local_tile(mB_nkl, workgroup_shape, make_coord(_, _, _), Step< X, _1, _1>{});  // (BLK_N,BLK_K,n,k,l)
-
-    int32_t curr_batch = idx2crd(work_tile_info.L_idx, shape<4>(gB_nkl)); // Usually just returns work_tile_info.L_idx;
-    int32_t const xe_idx = BlockIdxX() + (BlockIdxY() * GridDimX());
-    int32_t const xe_count = params.hw_info.sm_count;
 
     int thread_idx = int(ThreadIdxX());
     constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     bool did_batch_change = true;
     auto new_mainloop_params = params.mainloop;
+    int32_t curr_batch = 0;
 
     while (work_tile_info.is_valid()) {
+      curr_batch = work_tile_info.L_idx;
+      // Optionally append 1s until problem shape is rank-4 in case it is only rank-3 (MNK)
+      auto problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
+      auto M = get<0>(problem_shape_MNKL);
+      auto N = get<1>(problem_shape_MNKL);
+      auto K = get<2>(problem_shape_MNKL);
+      auto L = get<3>(problem_shape_MNKL);
+
+      // Tensor mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,1), params.mainloop.dA[L]);   //(m,k,l)
+      // Tensor mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,1), params.mainloop.dB[L]);   //(n,k,l)
+      Tensor mA_mkl = params.mainloop.copy_A.get_pvc_tensor(make_shape(M,K,L));   //(m,k,l)
+      Tensor mB_nkl = params.mainloop.copy_B.get_pvc_tensor(make_shape(N,K,L));   //(n,k,l)
+
       auto m_coord = work_tile_info.M_idx;
       auto n_coord = work_tile_info.N_idx;
-      auto l_coord = work_tile_info.L_idx;
 
-      auto tile_coord = make_coord(m_coord, n_coord, _, l_coord);
+      auto gA_mkl = local_tile(mA_mkl, select<0,2>(blk_shape), make_coord(m_coord,_,curr_batch));
+      auto gB_nkl = local_tile(mB_nkl, select<1,2>(blk_shape), make_coord(n_coord,_,curr_batch));
+
+      CollectiveMainloop collective_mma;
+      if(did_batch_change) {
+        collective_mma.update_tensor_shape_stride(new_mainloop_params, curr_batch, problem_shape_MNKL);
+        did_batch_change = false;
+      }
+
+      auto tile_coord = make_coord(m_coord, n_coord, _, curr_batch);
 
       // Get the number of K tiles to compute for this work as well as the starting K tile offset of the work.
       int work_k_tile_count = TileScheduler::get_work_k_tile_count(work_tile_info, problem_shape_MNKL, workgroup_shape);
@@ -275,8 +279,6 @@ public:
 
       TiledMma tiled_mma;
       Tensor accumulators = partition_fragment_C(tiled_mma, take<0,2>(workgroup_shape)); 
-
-      CollectiveMainloop collective_mma;
 
       // Perform the collective scoped MMA
       collective_mma(
@@ -315,24 +317,24 @@ public:
 
       did_batch_change = curr_batch != work_tile_info.L_idx;
 
-      if (work_tile_info.is_valid() && did_batch_change) {
-        curr_batch = work_tile_info.L_idx;
+      // if (work_tile_info.is_valid() && did_batch_change) {
+      //   curr_batch = work_tile_info.L_idx;
 
-        //TODO: update pointer address and strides for new batch
-        // Optionally append 1s until problem shape is rank-4 in case it is only rank-3 (MNK)
-        problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
-        M = get<0>(problem_shape_MNKL);
-        N = get<1>(problem_shape_MNKL);
-        K = get<2>(problem_shape_MNKL);
+      //   //TODO: update pointer address and strides for new batch
+      //   // Optionally append 1s until problem shape is rank-4 in case it is only rank-3 (MNK)
+      //   problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
+      //   M = get<0>(problem_shape_MNKL);
+      //   N = get<1>(problem_shape_MNKL);
+      //   K = get<2>(problem_shape_MNKL);
 
-        mA_mkl = make_counting_tensor(make_layout(make_shape(M, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
-        mB_nkl = make_counting_tensor(make_layout(make_shape(N, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
+      //   // mA_mkl = make_counting_tensor(make_layout(make_shape(M, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
+      //   // mB_nkl = make_counting_tensor(make_layout(make_shape(N, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
 
-        gA_mkl = local_tile(mA_mkl, workgroup_shape, make_coord(_, _, _), Step<_1,  X, _1>{});
-        gB_nkl = local_tile(mB_nkl, workgroup_shape, make_coord(_, _, _), Step< X, _1, _1>{});
+      //   gA_mkl = local_tile(mA_mkl, workgroup_shape, make_coord(_, _, _), Step<_1,  X, _1>{});
+      //   gB_nkl = local_tile(mB_nkl, workgroup_shape, make_coord(_, _, _), Step< X, _1, _1>{});
 
-        collective_mma.update_tensor_shape_stride(new_mainloop_params, curr_batch, problem_shape_MNKL);
-      }
+      //   collective_mma.update_tensor_shape_stride(new_mainloop_params, curr_batch, problem_shape_MNKL);
+      // }
     }
   }
 
