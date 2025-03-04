@@ -180,7 +180,7 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
     ElementA const* ptr_A_first_batch = reinterpret_cast<ElementA const*>(args.ptr_A);
     ElementB const* ptr_B_first_batch = reinterpret_cast<ElementB const*>(args.ptr_B);
 
-    auto problem_shape_MNK = problem_shape.get_host_problem_shape(0);
+    auto problem_shape_MNK = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, int32_t(1));;
     auto init_M = get<0>(problem_shape_MNK);
     auto init_N = get<1>(problem_shape_MNK);
     auto init_K = get<2>(problem_shape_MNK);

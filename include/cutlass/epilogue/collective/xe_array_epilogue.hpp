@@ -184,13 +184,13 @@ public:
       Arguments const& args,
       [[maybe_unused]] void* workspace) {
     // Optionally append 1s until problem shape is rank-4 in case its is only rank-3 (MNK)
-    auto problem_shape_MNKL = append<4>(problem_shape.get_host_problem_shape(0), 1);
-    auto [M, N, K, L] = problem_shape_MNKL;
+    auto problem_shape_MNL = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, int32_t(1));; //append<4>(problem_shape.get_host_problem_shape(0), 1);
+    auto [M, N, L] = problem_shape_MNL;
 
     XE_Copy_C xe_load_c = {};
     if constexpr (is_source_supported) {
       ElementC const* ptr_C_first_batch = reinterpret_cast<ElementC const*>(args.ptr_C);
-      xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(ptr_C_first_batch, M, K),
+      xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(ptr_C_first_batch, M, N),
                                   Layout<CopyThreadShape>{},
                                   make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
     }
@@ -198,7 +198,7 @@ public:
     XE_Copy_D xe_store_d = {};
     if constexpr (is_destination_supported) {
       ElementD const* ptr_D_first_batch = reinterpret_cast<ElementD const*>(args.ptr_D);
-      xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(ptr_D_first_batch, N, K),
+      xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(ptr_D_first_batch, M, N),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
     }
@@ -405,9 +405,10 @@ public:
     Params& params,
     int32_t next_group,
     ProblemShape_MNKL problem_shape_mnkl) {
-      const int32_t M = get<0>(problem_shape_mnkl);
-      const int32_t N = get<1>(problem_shape_mnkl);
-      const int32_t K = get<2>(problem_shape_mnkl);
+      // const int32_t M = get<0>(problem_shape_mnkl);
+      // const int32_t N = get<1>(problem_shape_mnkl);
+      // const int32_t K = get<2>(problem_shape_mnkl);
+      auto [M, N, K, L] = problem_shape_mnkl;
 
       XE_Copy_C xe_load_c = {};
       if constexpr (is_source_supported) {

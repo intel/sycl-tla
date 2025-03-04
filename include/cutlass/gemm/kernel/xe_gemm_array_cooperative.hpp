@@ -242,6 +242,7 @@ public:
     constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     bool did_batch_change = true;
     auto new_mainloop_params = params.mainloop;
+    auto new_epilogue_params = params.epilogue;
     int32_t curr_batch = 0;
 
     while (work_tile_info.is_valid()) {
@@ -265,7 +266,6 @@ public:
       CollectiveMainloop collective_mma;
       if(did_batch_change) {
         collective_mma.update_tensor_shape_stride(new_mainloop_params, curr_batch, problem_shape_MNKL);
-        did_batch_change = false;
       }
 
       auto tile_coord = make_coord(m_coord, n_coord, _, curr_batch);
@@ -276,7 +276,12 @@ public:
       auto k_tile_iter = cute::make_coord_iterator(idx2crd(work_k_tile_start, make_shape(K)), make_shape(K));
 
       TiledMma tiled_mma;
-      Tensor accumulators = partition_fragment_C(tiled_mma, take<0,2>(workgroup_shape)); 
+      Tensor accumulators = partition_fragment_C(tiled_mma, take<0,2>(workgroup_shape));
+
+      if(thread_idx == 0) {
+        printf("BlockID.x: %lu | BlockID.y: %lu | BlockID.z: %lu | m_coord: %lu | n_coord: %lu | l_coord: %lu\n", BlockIdxX(), BlockIdxY(), BlockIdxZ(), m_coord, n_coord, curr_batch);
+      }
+      break;
 
       // Perform the collective scoped MMA
       collective_mma(
@@ -297,7 +302,12 @@ public:
         params.scheduler, work_tile_info, accumulators);
 
       if (TileScheduler::compute_epilogue(work_tile_info, params.scheduler)) {
-        CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
+        CollectiveEpilogue epilogue{new_epilogue_params, shared_storage.epilogue};
+
+        if(did_batch_change) {
+          epilogue.update_tensor_shape_stride(new_epilogue_params, curr_batch, problem_shape_MNKL);
+          did_batch_change = false;
+        }
 
         epilogue(
           problem_shape_MNKL,
