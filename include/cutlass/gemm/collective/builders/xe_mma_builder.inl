@@ -106,8 +106,8 @@ struct CollectiveBuilder<
       static constexpr int PipelineStages = 3;
       using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
 
-      using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-      using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+      using GmemTiledCopyA = XE_2D_U16x16x16_LD_N;
+      using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
 
       //PVC pipeline does not use shared memory
       using SmemLayoutAtomA = void; 

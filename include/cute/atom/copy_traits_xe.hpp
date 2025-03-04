@@ -202,8 +202,8 @@ struct XE_2D_LD_Unpack {
 
     auto [m, n, l] = src.data().coord_;
     
-    m="w";
-    /*if(cute::thread(3,33)){
+    //m="w";
+    /*if(cute::thread(33,3)){
       print("prefetching "); print(src.data().coord_); print("\n");
     }*/
 
@@ -996,11 +996,11 @@ struct Copy_Traits<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,Shape <_32,  _8>>,
-                           Stride<_32,Stride< _1,_512>>>;
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+                           Stride<_0,Stride< _1,_256,_512>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_32,  _8>>,
-                           Stride<_32,Stride< _1,_512>>>;
+  using DstLayout = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+                           Stride<_16,Stride< _1,_256,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
   using CopyInternalType = ushort;
@@ -2130,13 +2130,18 @@ namespace detail
   CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
     constexpr auto height = get<0>(PrefetchTileSize{});
     constexpr auto dtype_size_bits = sizeof_bits_v<dtype>;
+    using ThrLayoutVMNK = Layout<Shape<_16, _8, _4, _1>>;
+    using ThrShapeMN = Shape<_8, _4>;
+    //PrefetchTileSize a = shape_div(typename  Copy_Traits<XE_2D_U16x8x32_LD_N, Stride>::BlockShape{}, Shape<_1, Int<SubgroupSize>>{});
 
     #define RETURN_STATEMENT(HEIGHT, DTYPE_SIZE, DTYPE_COL_SIZE) \
       using prefetch_traits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##HEIGHT##x##DTYPE_COL_SIZE##_LD_N, Stride>; \
       using prefetch_atom = Copy_Atom<prefetch_traits, dtype>; \
       using CopyThreadShape = Shape<_1, Int<SubgroupSize>>; \
       return make_tiled_copy(prefetch_atom{}.with(tensor), \
-                             Layout<CopyThreadShape>{}, \
+                             /*Layout<Shape<_1, Int<SubgroupSize>>>{},*/ \
+                             Layout<Shape<_8, Int<SubgroupSize*4>>, Stride<_1,_8>>{}, \
+                             /*make_layout(ThrShapeMN{}));*/ \
                              make_layout(shape_div(typename prefetch_traits::BlockShape{}, CopyThreadShape{})));
 
     #define CHOOSE_PREFETCH_FOR_TYPE(HEIGHT) \
