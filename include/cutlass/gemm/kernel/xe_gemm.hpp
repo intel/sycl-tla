@@ -133,8 +133,6 @@ public:
   struct Params {
     GemmUniversalMode mode;
     ProblemShape problem_shape;
-    TensorMK mA_mk;
-    TensorNK mB_nk;
     MainloopParams mainloop;
     EpilogueParams epilogue;
   };
@@ -151,15 +149,9 @@ public:
 
     auto mainloop_args = CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace);
 
-    auto l_coord = BlockIdxZ();
-    Tensor mA_mk = mainloop_args.mA(_,_,l_coord);
-    Tensor mB_nk = mainloop_args.mB(_,_,l_coord);
-
     return {
       args.mode,
       args.problem_shape,
-      mA_mk,
-      mB_nk,
       mainloop_args,
       CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace)
     };
@@ -200,13 +192,8 @@ public:
       batch_count = cute::size<3>(params.problem_shape);
     }
     return dim3(
-        #ifdef CUTLASS_SYCL_SWITCH_WG
-            cute::size(cute::ceil_div(cute::shape<0>(params.problem_shape), cute::shape<0>(WorkgroupTileShape{}))),
-            cute::size(cute::ceil_div(cute::shape<1>(params.problem_shape), cute::shape<1>(WorkgroupTileShape{}))),
-        #else
             cute::size(cute::ceil_div(cute::shape<1>(params.problem_shape), cute::shape<1>(WorkgroupTileShape{}))),
             cute::size(cute::ceil_div(cute::shape<0>(params.problem_shape), cute::shape<0>(WorkgroupTileShape{}))),
-        #endif
             batch_count
     );
   }
@@ -240,22 +227,19 @@ public:
     // Get the appropriate blocks for this sub_group -- potential for sub_group locality
     int thread_idx = int(ThreadIdxX());
     auto blk_shape = TileShape{};
-    #ifdef CUTLASS_SYCL_SWITCH_WG
-    auto m_coord = BlockIdxX();
-    auto n_coord = BlockIdxY();
-    #else
     auto m_coord = BlockIdxY();
     auto n_coord = BlockIdxX();
-    #endif
     auto l_coord = BlockIdxZ();
 
     auto blk_coord_mnkl = make_coord(m_coord, n_coord, _, l_coord);
-    int sub_group_id = thread_idx / SubgroupSize;
     constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     constexpr auto subgroup_shape = SubgroupTileShape{};                   
 
-    auto gA = local_tile(params.mA_mk, blk_shape, take<0, 3>(blk_coord_mnkl), Step<_1,  X, _1>{});
-    auto gB = local_tile(params.mB_nk, blk_shape, take<0, 3>(blk_coord_mnkl), Step< X, _1, _1>{});
+    Tensor mA_mkl = params.mainloop.copy_A.get_pvc_tensor(make_shape(M,K,L));   //(m,k,l)
+    Tensor mB_nkl = params.mainloop.copy_B.get_pvc_tensor(make_shape(N,K,L));   //(n,k,l)
+
+    Tensor gA = local_tile(mA_mkl, select<0,2>(blk_shape), make_coord(m_coord,_,l_coord));
+    Tensor gB = local_tile(mB_nkl, select<1,2>(blk_shape), make_coord(n_coord,_,l_coord));
 
     // Compute tile residues for predication
     auto m_max_coord = M - get<0>(subgroup_shape) * m_coord;                             // M - SUB_M * m_coord

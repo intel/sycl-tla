@@ -30,6 +30,10 @@ cmake_policy(SET CMP0112 NEW)
 
 add_subdirectory(util)
 
+if (CUTLASS_ENABLE_SYCL)
+  add_subdirectory(copy_debug)
+endif()
+
 if (CUTLASS_ENABLE_LIBRARY)
   add_subdirectory(library)
 endif()

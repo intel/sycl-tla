@@ -186,11 +186,11 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
     auto init_K = get<2>(problem_shape_MNK);
 
     auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(
-                                   static_cast<ElementA const*>(ptr_A_first_batch), M, K),
+                                   static_cast<ElementA const*>(ptr_A_first_batch), init_M, init_K),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
     auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(
-                                   static_cast<ElementB const*>(ptr_B_first_batch), N, K),
+                                   static_cast<ElementB const*>(ptr_B_first_batch), init_N, init_K),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
 
@@ -210,16 +210,15 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
-  template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator, class ResidueMNK,
+  template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator,
             class BlkCoord>
   CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,
-                                 KTileIterator k_tile_iter, int k_tile_count, ResidueMNK residue_mnk,
+                                 KTileIterator k_tile_iter, int k_tile_count,
                                  BlkCoord const &blk_coord, int const &K_start, int thread_idx, char *smem_buf,
                                  Params const &mainloop) {
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
-    (void)residue_mnk;
     (void)thread_idx;
     (void)smem_buf;
     
@@ -277,7 +276,10 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
     // Mainloop
     //
     auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
-    
+
+    auto m_sg = get_sub_group_id() / ATOM_N;
+    auto n_sg = get_sub_group_id() % ATOM_N;
+
     const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
     const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
     const int l_coord = l_idx;
@@ -357,11 +359,11 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
       ElementA const* ptr_A_curr_batch = reinterpret_cast<ElementA const*>(mainloop_params.ptr_A[next_group]);
       ElementB const* ptr_B_curr_batch = reinterpret_cast<ElementB const*>(mainloop_params.ptr_B[next_group]);
 
-      mainloop_params.tiled_copy_a = make_tiled_copy(atom_load_A{}.with(
+      mainloop_params.copy_A = make_tiled_copy(atom_load_A{}.with(
                                                          static_cast<ElementA const *>(ptr_A_curr_batch), M, K),
                                                      Layout<CopyThreadShape>{},
                                                      make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
-      mainloop_params.tiled_copy_b = make_tiled_copy(atom_load_B{}.with(
+      mainloop_params.copy_B = make_tiled_copy(atom_load_B{}.with(
                                                          static_cast<ElementB const *>(ptr_B_curr_batch), N, K),
                                                      Layout<CopyThreadShape>{},
                                                      make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));

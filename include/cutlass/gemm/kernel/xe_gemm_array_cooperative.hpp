@@ -253,16 +253,14 @@ public:
       auto K = get<2>(problem_shape_MNKL);
       auto L = get<3>(problem_shape_MNKL);
 
-      // Tensor mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,1), params.mainloop.dA[L]);   //(m,k,l)
-      // Tensor mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,1), params.mainloop.dB[L]);   //(n,k,l)
       Tensor mA_mkl = params.mainloop.copy_A.get_pvc_tensor(make_shape(M,K,L));   //(m,k,l)
       Tensor mB_nkl = params.mainloop.copy_B.get_pvc_tensor(make_shape(N,K,L));   //(n,k,l)
 
       auto m_coord = work_tile_info.M_idx;
       auto n_coord = work_tile_info.N_idx;
 
-      auto gA_mkl = local_tile(mA_mkl, select<0,2>(blk_shape), make_coord(m_coord,_,curr_batch));
-      auto gB_nkl = local_tile(mB_nkl, select<1,2>(blk_shape), make_coord(n_coord,_,curr_batch));
+      auto gA_mkl = local_tile(mA_mkl, select<0,2>(workgroup_shape), make_coord(m_coord, _, curr_batch));
+      auto gB_nkl = local_tile(mB_nkl, select<1,2>(workgroup_shape), make_coord(n_coord, _, curr_batch));
 
       CollectiveMainloop collective_mma;
       if(did_batch_change) {
@@ -275,7 +273,7 @@ public:
       // Get the number of K tiles to compute for this work as well as the starting K tile offset of the work.
       int work_k_tile_count = TileScheduler::get_work_k_tile_count(work_tile_info, problem_shape_MNKL, workgroup_shape);
       int work_k_tile_start = TileScheduler::get_work_k_tile_start(work_tile_info);
-      auto k_tile_iter = cute::make_coord_iterator(idx2crd(work_k_tile_start, shape<3>(gA_mkl)), shape<3>(gA_mkl));
+      auto k_tile_iter = cute::make_coord_iterator(idx2crd(work_k_tile_start, make_shape(K)), make_shape(K));
 
       TiledMma tiled_mma;
       Tensor accumulators = partition_fragment_C(tiled_mma, take<0,2>(workgroup_shape)); 
@@ -288,7 +286,7 @@ public:
         accumulators,
         k_tile_iter, work_k_tile_count,
         tile_coord,
-        get<3>(gA_mkl.shape()),
+        K,
         thread_idx,
         smem_buf,
         new_mainloop_params
