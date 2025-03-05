@@ -58,7 +58,7 @@ struct KernelHardwareInfo {
   // Methods
   //
 
-#if defined (CUTLASS_ENABLE_SYCL)
+#if defined (CUTLASS_ENABLE_SYCL) && !defined(__CUDA__)
   static inline int
   query_device_multiprocessor_count(int device_id = 0) {
     syclcompat::device_ext& dev = syclcompat::get_device(device_id);

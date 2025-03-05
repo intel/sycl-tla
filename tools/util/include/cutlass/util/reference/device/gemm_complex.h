@@ -261,7 +261,7 @@ using syclcompat::dim3;
                       InnerProductOp,
                       kMblock,
                       kNblock
-                    >>(grid, block, 
+                    >>(syclcompat::dim3(grid.x, grid.y, grid.z), syclcompat::dim3(block.x, block.y, block.z),
                         problem_size,
                         alpha,
                         tensor_a,
@@ -338,7 +338,7 @@ using syclcompat::dim3;
                       InnerProductOp,
                       kBigMblock,
                       kBigNblock
-                    >>(Biggrid, Bigblock, 
+                    >>(syclcompat::dim3(Biggrid.x, Biggrid.y, Biggrid.z), syclcompat::dim3(Bigblock.x, Bigblock.y, Bigblock.z),
                         problem_size,
                         alpha,
                         tensor_a,

@@ -107,7 +107,7 @@ struct LayoutAwareConvertImpl<
       static constexpr uint32_t xor_mask = 0x43084308;
       static constexpr uint32_t lo_mask  = 0x000F000F;
       static constexpr uint32_t immLut   = (0xf0 & 0xcc) ^ 0xaa;
-#if defined(CUTLASS_ENABLE_SYCL)
+#if defined(CUTLASS_ENABLE_SYCL) && !defined(__CUDA__)
       CUTE_INVALID_CONTROL_PATH("Unimplemented");
 #else
       asm volatile(
@@ -159,7 +159,7 @@ struct LayoutAwareConvertImpl<
       static constexpr uint32_t or_mask = 0x43004300;
       static constexpr uint32_t lo_mask = 0x000F000F;
       static constexpr uint32_t immLut  = (0xf0 & 0xcc) | 0xaa;
-#if defined(CUTLASS_ENABLE_SYCL)
+#if defined(CUTLASS_ENABLE_SYCL) && !defined(__CUDA__)
       CUTE_INVALID_CONTROL_PATH("Unimplemented");
 #else
       asm volatile(
@@ -412,7 +412,7 @@ struct LayoutAwareConvertImpl<
       static constexpr uint32_t and_mask_0 = 0x007F007F;
       static constexpr uint32_t and_mask_1 = 0x00800080;
       static constexpr uint32_t immLut     = (0xf0 & 0xcc) | 0xaa;
-#if defined(CUTLASS_ENABLE_SYCL)
+#if defined(CUTLASS_ENABLE_SYCL) && !defined(__CUDA__)
       CUTE_INVALID_CONTROL_PATH("Unimplemented");
 #else
       asm volatile(

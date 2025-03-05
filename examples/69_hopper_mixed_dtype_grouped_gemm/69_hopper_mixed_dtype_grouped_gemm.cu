@@ -434,6 +434,41 @@ void initialize(Options &options) {
   problem_sizes.copy_from_host(options.problem_sizes_host.data());
 }
 
+void deinitialize() {
+  problem_sizes.reset();
+
+  block_A.reset();
+  block_B.reset();
+  block_B_dq.reset();
+  block_scale.reset();
+  block_zero.reset();
+  block_C.reset();
+  block_D.reset();
+  block_ref_D.reset();
+
+  ptr_A.reset();
+  ptr_B.reset();
+  ptr_B_dq.reset();
+  ptr_scale.reset();
+  ptr_zero.reset();
+  ptr_C.reset();
+  ptr_D.reset();
+
+  stride_A.reset();
+  stride_B.reset();
+  stride_C.reset();
+  stride_D.reset();
+  stride_C_ref.reset();
+  stride_D_ref.reset();
+  stride_S_ref.reset();
+  stride_S.reset();
+
+  alpha_device.reset();
+  beta_device.reset();
+  block_alpha.reset();
+  block_beta.reset();
+}
+
 /// Populates a Gemm::Arguments structure from the given commandline options
 template <typename Gemm>
 typename Gemm::Arguments args_from_options(Options const& options, bool host_problem_shapes_available = true)
@@ -596,6 +631,8 @@ int run(Options &options, bool host_problem_shapes_available = true)
 {
   allocate(options);
   initialize(options);
+  using defer = std::shared_ptr<void>;
+  defer _(nullptr, [](auto){ deinitialize(); }); // avoid siof
 
   // Instantiate CUTLASS kernel depending on templates
   Gemm gemm;

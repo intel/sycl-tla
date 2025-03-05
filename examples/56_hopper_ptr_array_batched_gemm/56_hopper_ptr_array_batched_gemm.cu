@@ -376,6 +376,20 @@ void initialize(const Options &options) {
   initialize_block(block_C, seed + 2021);
 }
 
+void deinitialize() {
+  block_A.reset();
+  block_B.reset();
+  block_C.reset();
+  block_D.reset();
+  block_ref_D.reset();
+
+  ptr_A.reset();
+  ptr_B.reset();
+  ptr_C.reset();
+  ptr_D.reset();
+  ptr_ref_D.reset();
+}
+
 /// Populates a Gemm::Arguments structure from the given commandline options
 template <typename GemmT>
 typename GemmT::Arguments args_from_options(const Options &options)
@@ -437,6 +451,8 @@ int run(Options &options)
 {
   allocate(options);
   initialize(options);
+  using defer = std::shared_ptr<void>;
+  defer _(nullptr, [](auto){ deinitialize(); }); // avoid siof
 
   // Instantiate CUTLASS kernel depending on templates
   GemmT gemm;

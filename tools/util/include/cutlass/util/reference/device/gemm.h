@@ -99,6 +99,25 @@ void compute_gemm(
   );
 
   // Launch a GEMM kernel
+#if defined(CUTLASS_ENABLE_SYCL)
+  syclcompat::launch<
+    kernel::Gemm<
+    TensorRef<ElementA, LayoutA>,
+    TensorRef<ElementB, LayoutB>,
+    TensorRef<ElementC, LayoutC>,
+    ScalarType,
+    AccumulatorType,
+    OutputTile,
+    InnerProductOp,
+    ConvertOp
+  >>(syclcompat::dim3(grid.x, grid.y, grid.z),
+                    syclcompat::dim3(block.x, block.y, block.z),
+                    problem_size,
+                    alpha, tensor_a,
+                    tensor_b, beta,
+                    tensor_c, tensor_d,
+                    initial_accum);
+#else
   kernel::Gemm<
     TensorRef<ElementA, LayoutA>,
     TensorRef<ElementB, LayoutB>,
@@ -118,6 +137,7 @@ void compute_gemm(
     tensor_d,
     initial_accum
   );
+#endif
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -333,6 +353,28 @@ void BatchedGemm(
     batch_count
   );
 
+#if defined(CUTLASS_ENABLE_SYCL)
+  syclcompat::launch<
+    kernel::BatchedGemm<
+    TensorRefCollectionA,
+    TensorRefCollectionB,
+    TensorRefCollectionC,
+    ScalarType,
+    AccumulatorType,
+    OutputTile,
+    InnerProductOp,
+    ConvertOp
+  >>(syclcompat::dim3(grid.x, grid.y, grid.z),
+                      syclcompat::dim3(block.x, block.y, block.z),
+                      problem_size,
+                      alpha,
+                      tensor_a,
+                      tensor_b,
+                      beta,
+                      tensor_c,
+                      initial_accum
+                    );
+#else
   // Launch a GEMM kernel
   kernel::BatchedGemm<
     TensorRefCollectionA,
@@ -352,6 +394,7 @@ void BatchedGemm(
     tensor_c,
     initial_accum
   );
+#endif
 }
 
 /// Computes a general matrix product among matrices (tensors of rank=2) pointed to by TensorRef

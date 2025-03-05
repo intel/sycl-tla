@@ -404,6 +404,16 @@ bool initialize(Options const& options) {
   return true;
 }
 
+void deinitialize() {
+  block_A.reset();
+  block_A_compressed.reset();
+  block_E.reset();
+  block_B.reset();
+  block_C.reset();
+  block_D.reset();
+  block_D_ref.reset();
+}
+
 /// Populates a Gemm::Arguments structure from the given commandline options
 typename Gemm::Arguments make_args(Options const& options)
 {
@@ -520,6 +530,9 @@ struct Runner
 /// Execute the example (verification and timing)
 void run(Options &options) {
   bool init = initialize(options);
+  using defer = std::shared_ptr<void>;
+  defer _(nullptr, [](auto){ deinitialize(); }); // avoid siof
+
   if (!init) {
     std::cout << "Initialization failure" << std::endl;
     exit(EXIT_FAILURE);

@@ -373,6 +373,19 @@ void initialize(Options const& options) {
   }
 }
 
+void deinitialize() {
+  block_A.reset();
+  block_B.reset();
+  block_B_modified.reset();
+  block_B_dq.reset();
+  block_scale.reset();
+  block_scale_packed.reset();
+  block_zero.reset();
+  block_C.reset();
+  block_D.reset();
+  block_ref_D.reset();
+}
+
 /// Populates a Gemm::Arguments structure from the given commandline options
 /// Swap the A and B tensors, as well as problem shapes here.
 template <typename Gemm>
@@ -465,6 +478,8 @@ template <typename Gemm>
 int run(Options &options)
 {
   initialize(options);
+  using defer = std::shared_ptr<void>;
+  defer _(nullptr, [](auto){ deinitialize(); }); // avoid siof
 
   // Instantiate CUTLASS kernel depending on templates
   Gemm gemm;

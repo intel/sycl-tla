@@ -311,6 +311,13 @@ void initialize(const Options &options) {
   tensor_D.sync_device();
 }
 
+void deinitialize() {
+  tensor_A.reset();
+  tensor_B.reset();
+  tensor_D.reset();
+  tensor_ref_D.reset();
+}
+
 /// Populates a Gemm::Arguments structure from the given commandline options
 typename Gemm::Arguments args_from_options(const Options &options) {
   typename Gemm::Arguments arguments{
@@ -433,6 +440,8 @@ bool verify(const Options &options) {
 template <typename Gemm>
 int run(Options &options) {
   initialize(options);
+  using defer = std::shared_ptr<void>;
+  defer _(nullptr, [](auto){ deinitialize(); }); // avoid siof
 
   // Instantiate CUTLASS kernel depending on templates
   Gemm gemm;

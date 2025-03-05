@@ -329,6 +329,18 @@ void initialize(MixedDtypeOptions const& options) {
   cutlass::dequantize(block_B_dq.get(), block_B.get(), layout_B, block_scale.get(), block_zero.get(), layout_scale_zero, options.g, stream);
 }
 
+void deinitialize() {
+  block_A.reset();
+  block_B.reset();
+  block_B_dq.reset();
+  block_C.reset();
+  block_D.reset();
+  block_ref_D.reset();
+
+  block_scale.reset();
+  block_zero.reset();
+}
+
 /// Populates a Gemm::Arguments structure from the given commandline options
 template <typename Args>
 Args args_from_options(MixedDtypeOptions const& options)
@@ -432,6 +444,8 @@ template <typename Gemm>
 int run(MixedDtypeOptions &options)
 {
   initialize(options);
+  using defer = std::shared_ptr<void>;
+  defer _(nullptr, [](auto){ deinitialize(); }); // avoid siof
 
   // Instantiate CUTLASS kernel depending on templates
   Gemm gemm;

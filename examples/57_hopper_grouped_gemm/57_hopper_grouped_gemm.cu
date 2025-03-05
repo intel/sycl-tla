@@ -546,6 +546,32 @@ void initialize(const Options &options) {
   block_beta.copy_from_host(beta_host.data());
 }
 
+void deinitialize() {
+  problem_sizes.reset();
+
+  block_A.reset();
+  block_B.reset();
+  block_C.reset();
+  block_D.reset();
+  block_ref_D.reset();
+
+  ptr_A.reset();
+  ptr_B.reset();
+  ptr_C.reset();
+  ptr_D.reset();
+  ptr_ref_D.reset();
+
+  stride_A.reset();
+  stride_B.reset();
+  stride_C.reset();
+  stride_D.reset();
+
+  alpha_device.reset();
+  beta_device.reset();
+  block_alpha.reset();
+  block_beta.reset();
+}
+
 /// Populates a Gemm::Arguments structure from the given commandline options
 template <typename GemmT>
 typename GemmT::Arguments args_from_options(const Options &options, bool host_problem_shapes_available = true)
@@ -652,6 +678,8 @@ int run(Options &options, bool host_problem_shapes_available = true)
 {
   allocate(options);
   initialize(options);
+  using defer = std::shared_ptr<void>;
+  defer _(nullptr, [](auto){ deinitialize(); }); // avoid siof
 
   // Instantiate CUTLASS kernel depending on templates
   GemmT gemm;

@@ -59,7 +59,7 @@ template <
   typename InnerProductOp,
   typename ConvertOp
 >
-__global__ void Gemm(
+CUTLASS_GLOBAL void Gemm(
   gemm::GemmCoord problem_size,
   ScalarType alpha,
   TensorRefA tensor_a,

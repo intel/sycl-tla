@@ -504,6 +504,33 @@ void initialize(const Options<RasterOrderOptions> &options) {
   }
 }
 
+void deinitialize() {
+  tensor_A.reset();
+  tensor_B.reset();
+  tensor_C.reset();
+  tensor_D.reset();
+
+  blockscale_tensor_A.reset();
+  blockscale_tensor_B.reset();
+  tensor_ref_D.reset();
+  tensor_aux.reset();
+  tensor_ref_aux.reset();
+
+  scalar_alpha.reset();
+  scalar_beta.reset();
+  scale_A.reset();
+  scale_B.reset();
+  scale_C.reset();
+  scale_D.reset();
+  scale_aux.reset();
+  abs_max_D.reset();
+  reference_abs_max_D.reset();
+  abs_max_aux.reset();
+  reference_abs_max_aux.reset();
+}
+
+
+
 /// Populates a Gemm::Arguments structure from the given commandline options
 template<typename GemmArguments>
 GemmArguments args_from_options(const Options<RasterOrderOptions> &options)
@@ -705,6 +732,8 @@ int run(Options<RasterOrderOptions> &options)
   const int ScaleNsPerTile    = GroupScaleConfig::ScaleNsPerTile;
 
   initialize<GroupScaleConfig>(options);
+  using defer = std::shared_ptr<void>;
+  defer _(nullptr, [](auto){ deinitialize(); }); // avoid siof
 
   // Instantiate CUTLASS kernel depending on templates
   Gemm gemm;
