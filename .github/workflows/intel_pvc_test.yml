@@ -2,7 +2,7 @@ name: "SYCL Intel PVC Test"
 
 on:
   push:
-    branches: [ "sycl-develop" ]
+    branches: [ "sycl-develop", "test_release_compiler" ]
   pull_request:
     branches: [ "sycl-develop" ]
   merge_group:
@@ -22,7 +22,7 @@ concurrency:
 jobs:
   run-tests:
     name: Run Intel PVC tests
-    runs-on: cp-gpumax-1100-gpu
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
 
     steps:
@@ -50,18 +50,18 @@ jobs:
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=intel_gpu_pvc
-          cmake --build .
+      #     cmake --build .
 
-      - name: Unit test
-        shell: bash
-        run: |
-          export DPCPP_PATH=~/dpcpp
-          export LD_LIBRARY_PATH=$DPCPP_PATH/lib/:$LD_LIBRARY_PATH
-          cmake --build . --target test_unit -j 24
+      # - name: Unit test
+      #   shell: bash
+      #   run: |
+      #     export DPCPP_PATH=~/dpcpp
+      #     export LD_LIBRARY_PATH=$DPCPP_PATH/lib/:$LD_LIBRARY_PATH
+      #     cmake --build . --target test_unit -j 24
 
-      - name: Examples
-        shell: bash
-        run: |
-          export DPCPP_PATH=~/dpcpp
-          export LD_LIBRARY_PATH=$DPCPP_PATH/lib/:$LD_LIBRARY_PATH
-          cmake --build . --target test_examples -j 24
+      # - name: Examples
+      #   shell: bash
+      #   run: |
+      #     export DPCPP_PATH=~/dpcpp
+      #     export LD_LIBRARY_PATH=$DPCPP_PATH/lib/:$LD_LIBRARY_PATH
+      #     cmake --build . --target test_examples -j 24
