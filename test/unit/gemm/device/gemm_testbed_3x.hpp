@@ -3502,7 +3502,7 @@ template <typename Gemm, template <class T> class ActivationFunctor =
                              cutlass::epilogue::thread::Identity>
 // TODO(Codeplay): remove the test_batch option once batching is enabled for all tests
 bool TestXe(
-    double alpha = 1.0, double beta = 0.0, bool test_batch = false,
+    double alpha = 1.0, double beta = 0.0, bool test_batch = true,
     CheckEquality check_relative_equality = CheckEquality::RELATIVE) {
   using ElementScalar = typename Gemm::EpilogueOutputOp::ElementScalar;
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
