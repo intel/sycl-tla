@@ -25,7 +25,7 @@ jobs:
     strategy:
       matrix:
         compiler: [ NIGHTLY, RELEASE ]
-    runs-on: ubuntu-22.04
+    runs-on: cp-gpumax-1100-gpu
     timeout-minutes: 60
 
     steps:

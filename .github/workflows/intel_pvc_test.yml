@@ -25,13 +25,13 @@ jobs:
       matrix:
         compiler: [ NIGHTLY, RELEASE ]
     name: Run Intel PVC tests
-    runs-on: ubuntu-22.04
+    runs-on: cp-gpumax-1100-gpu
     timeout-minutes: 30
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
-      - run: sudo apt update && sudo apt install -y cmake ninja-build
+      # - run: sudo apt update && sudo apt install -y cmake ninja-build
       # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
       # for example using the tag: 'nightly-2024-04-22'
       - name: Install DPC++
@@ -45,8 +45,8 @@ jobs:
           . setvars.sh
           # Persist environment variables to following steps
           env >> $GITHUB_ENV
-          which clang++
-          clang++ --version
+          which $CXX
+          $CXX --version
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=intel_gpu_pvc
@@ -55,7 +55,7 @@ jobs:
       - name: Unit test
         shell: bash
         run: |
-          which clang++
+          which $CXX
           cmake --build . --target test_unit -j 24
 
       - name: Examples
