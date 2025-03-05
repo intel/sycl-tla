@@ -281,7 +281,7 @@ public:
       if(thread_idx == 0) {
         printf("BlockID.x: %lu | BlockID.y: %lu | BlockID.z: %lu | m_coord: %lu | n_coord: %lu | l_coord: %lu\n", BlockIdxX(), BlockIdxY(), BlockIdxZ(), m_coord, n_coord, curr_batch);
       }
-      break;
+      // break;
 
       // Perform the collective scoped MMA
       collective_mma(

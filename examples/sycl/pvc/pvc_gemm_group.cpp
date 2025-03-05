@@ -70,15 +70,18 @@ struct Options {
   bool error = false;
   bool help = false;
 
-  float alpha = FLT_MAX;
-  float beta  = FLT_MAX;
-  int iterations = 100;
-  int m = 5120, n = 4096, k = 4096, groups = 2;
-  std::string benchmark_path;
+  float alpha, beta;
+  int iterations;
+  int m, n, k, groups;
   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes_host;
-  int const xe_alignment_bits = 64;
-  int const alignment = xe_alignment_bits / cutlass::sizeof_bits<ElementA>::value;
 
+  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100),
+              m(5120), n(4096), k(4096), groups(2) {
+    problem_sizes_host.reserve(groups);
+    for(int i = 0; i < groups; i++) {
+      problem_sizes_host.push_back({m, n, k});
+    }
+  }
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -89,93 +92,20 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m);
-    cmd.get_cmd_line_argument("n", n);
-    cmd.get_cmd_line_argument("k", k);
-    cmd.get_cmd_line_argument("groups", groups);
-    cmd.get_cmd_line_argument("alpha", alpha, FLT_MAX);
-    cmd.get_cmd_line_argument("beta",  beta,  FLT_MAX);
-    cmd.get_cmd_line_argument("iterations", iterations);
-    cmd.get_cmd_line_argument("benchmark", benchmark_path);
+    cmd.get_cmd_line_argument("m", m, 5120);
+    cmd.get_cmd_line_argument("n", n, 4096);
+    cmd.get_cmd_line_argument("k", k, 4096);
+    cmd.get_cmd_line_argument("groups", groups, 2);
+    cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+    cmd.get_cmd_line_argument("beta",  beta,  0.f);
+    cmd.get_cmd_line_argument("iterations", iterations, 100);
 
-    // Decide how to initialize the problems
-    if (!benchmark_path.empty()) {
-      if (!benchmark_problems()) {
-        problem_sizes_host.clear();
-        return;
-      }
-    }
-    else {
-      randomize_problems(cmd);
-    }
-  }
-
-  void randomize_problems(cutlass::CommandLine &cmd) {
-    int cmd_line_m = -1, cmd_line_n = -1, cmd_line_k = -1;
-    cmd.get_cmd_line_argument("m", cmd_line_m);
-    cmd.get_cmd_line_argument("n", cmd_line_n);
-    cmd.get_cmd_line_argument("k", cmd_line_k);
-
+    assert(groups > 0);
+    problem_sizes_host.clear();
     problem_sizes_host.reserve(groups);
-
-    for (int i = groups; i > 0; i--) {
-      int m = cmd_line_m;
-      int n = cmd_line_n;
-      int k = cmd_line_k;
-      if (m < 1) {
-        m = alignment * ((rand() % 64) + 1);
-      }
-      if (n < 1) {
-        n = alignment * ((rand() % 64) + 1);
-      }
-      if (k < 1) {
-        k = alignment * ((rand() % 64) + 1);
-      }
+    for(int i = 0; i < groups; i++) {
       problem_sizes_host.push_back({m, n, k});
     }
-  }
-
-  /// Load a benchmark
-  bool benchmark_problems() {
-    std::ifstream file(benchmark_path);
-    if (!file.good()) {
-      return false;
-    }
-
-    while (file.good()) {
-
-      int idx = -1;
-      std::string extent_str;
-
-      file >> idx >> extent_str;
-
-      if (idx < 0 || extent_str.empty()) {
-        break;
-      }
-
-      cutlass::gemm::GemmCoord extent;
-      std::vector<std::string> tokens;
-
-      cutlass::CommandLine::tokenize(tokens, extent_str, 'x');
-
-      for (int i = 0; i < int(tokens.size()); ++i) {
-        int x = std::atoi(tokens.at(i).c_str());
-
-        // round up
-        if (x % alignment) {
-          x += (alignment - (x % alignment));
-        }
-
-        extent.at(i) = x;
-      }
-
-      if (extent.product()) {
-        problem_sizes_host.push_back({extent.m(), extent.n(), extent.k()});
-      }
-    }
-    groups = static_cast<int>(problem_sizes_host.size());
-
-    return true;
   }
 
   /// Prints the usage statement.
@@ -190,8 +120,7 @@ struct Options {
       << "  --groups=<int>              Sets the number of individual GEMM problems for Grouped GEMM\n"
       << "  --alpha=<f32>               Epilogue scalar alpha\n"
       << "  --beta=<f32>                Epilogue scalar beta\n\n"
-      << "  --iterations=<int>          Number of profiling iterations to perform\n\n"
-      << "  --benchmark=<str>           Executes a benchmark problem size.\n";
+      << "  --iterations=<int>          Number of profiling iterations to perform\n\n";
 
     out
       << "\n\nExamples:\n\n"

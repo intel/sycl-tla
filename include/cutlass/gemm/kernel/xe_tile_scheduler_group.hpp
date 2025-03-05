@@ -218,10 +218,11 @@ public:
 
   CUTLASS_DEVICE explicit PersistentTileSchedulerXeGroup(Params const& params_) : scheduler_params(params_) {
     if (scheduler_params.raster_order_ == RasterOrder::AlongN) {
-      current_work_linear_idx_ = uint64_t(BlockIdxX()) + uint64_t(BlockIdxY()) * uint64_t(GridDimZ());
+      current_work_linear_idx_ = uint64_t(BlockIdxX()) * uint64_t(GridDimY()) + uint64_t(BlockIdxY());
     }
     else {
-      current_work_linear_idx_ = uint64_t(BlockIdxX()) * uint64_t(GridDimY()) + uint64_t(BlockIdxY());
+      current_work_linear_idx_ = uint64_t(BlockIdxX()) + uint64_t(BlockIdxY()) * uint64_t(GridDimZ());
+
     }
 
     total_grid_size_ = uint64_t(GridDimZ()) * uint64_t(GridDimY()) * uint64_t(GridDimZ());
