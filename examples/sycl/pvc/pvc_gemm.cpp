@@ -246,7 +246,7 @@ struct ExampleRunner {
 
     if(!passed) return cutlass::Status::kErrorInternal;
 
-    if (options.iterations > 0) {
+    if (false && options.iterations > 0) {
       GPU_Clock timer;
       timer.start();
       for (int i = 0; i < options.iterations; ++i) {
@@ -312,8 +312,8 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopyA = XE_2D_U16x16x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x16x32_LD_V;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
