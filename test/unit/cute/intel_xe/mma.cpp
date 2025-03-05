@@ -89,6 +89,8 @@ void gemm_device(TA const *A, TB const *B, TC *C, uint32_t m, uint32_t n,
 
 #define CUTLASS_ENABLE_DEBUG_PRINTS (0)
 
+#define LOG_THREAD (16)
+
 #if CUTLASS_ENABLE_DEBUG_PRINTS
   if (thread(LOG_THREAD)) {
     print("=====================  A :\n");
