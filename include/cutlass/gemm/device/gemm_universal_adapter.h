@@ -379,6 +379,11 @@ public:
     dim3 const block = GemmKernel::get_block_shape();
     dim3 const grid = get_grid_shape(params);
 
+#if defined(CUTLASS_ENABLE_SYCL)
+    const syclcompat::dim3 sycl_block(block.x, block.y, block.z);
+    const syclcompat::dim3 sycl_grid(grid.x, grid.y, grid.z);
+#endif
+
     // configure smem size and carveout
     int smem_size = GemmKernel::SharedStorageSize;
 
@@ -535,31 +540,35 @@ public:
         }
       }
       else {
-        CUTLASS_ASSERT(cuda_adapter == nullptr);
 #if defined(CUTLASS_ENABLE_SYCL)
-        const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
-        const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
 
-        using namespace syclcompat::experimental;
 #if defined (SYCL_INTEL_TARGET)
-        if constexpr (cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>) {
-          auto event = launch<device_kernel<GemmKernel>>(launch_policy{
-            sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
-          }, params);
-          EventManager::getInstance().addEvent(event);
-        } else {
-          auto event = launch<device_kernel<GemmKernel>>(launch_policy{
-            sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
-            kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
-          }, params);
-          EventManager::getInstance().addEvent(event);
-        }
+#define ALLOW_SUBGROUP_SIZE_PROP 1
 #else
-        auto event = launch<device_kernel<GemmKernel>>(launch_policy{
-          sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}},
-          params);
-        EventManager::getInstance().addEvent(event);
+#define ALLOW_SUBGROUP_SIZE_PROP 0
 #endif
+
+        CUTLASS_ASSERT(cuda_adapter == nullptr);
+        auto kernel_props = [] () {
+          constexpr bool is_device_agnostic =
+            cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>;
+          if constexpr (!ALLOW_SUBGROUP_SIZE_PROP or is_device_agnostic) {
+            using EmptyProperties = decltype(sycl::ext::oneapi::experimental::properties());
+            return syclcompat::experimental::kernel_properties<EmptyProperties>{};
+          } else {
+            return syclcompat::experimental::kernel_properties{
+              syclcompat::experimental::sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>
+            };
+          }
+        }();
+        syclcompat::experimental::launch_properties launch_props {
+          sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
+        };
+
+        auto event = syclcompat::experimental::launch<device_kernel<GemmKernel>>(syclcompat::experimental::launch_policy{
+          sycl_grid, sycl_block, launch_props, kernel_props
+        }, params);
+        EventManager::getInstance().addEvent(event);
 #else
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
         CUTLASS_TRACE_HOST("GemmUniversal::run: Launching kernel with cutlass::kernel_launch");
