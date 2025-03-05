@@ -45,10 +45,9 @@
 
 #include "gemm_testbed_3x.hpp"
 
-using namespace cute;
-
 // D = activation(alpha * acc + beta * C)
 TEST(XE_Device_Gemm_bf16t_bf16t_f32t_tensor_op_gmma_f32_epilogue, 256x256x32_LinCombEltAct) {
+  using namespace cute;
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
@@ -107,6 +106,7 @@ TEST(XE_Device_Gemm_bf16t_bf16t_f32t_tensor_op_gmma_f32_epilogue, 256x256x32_Lin
 }
 
 TEST(Xe_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue_drelu, 256x256x32) {
+  using namespace cute;
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
@@ -162,11 +162,13 @@ TEST(Xe_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue_drelu, 256x256x32) {
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
+  // TODO(Codeplay): fix batch
   bool passed = test::gemm::device::TestXe<Gemm, cutlass::epilogue::thread::dReLU>(1.0, 1.0, false);
   EXPECT_TRUE(passed);
 }
 
 TEST(XE_Device_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue, 256x256x32_LinCombPerRowBias) {
+  using namespace cute;
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;

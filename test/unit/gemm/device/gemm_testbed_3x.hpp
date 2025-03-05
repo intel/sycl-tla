@@ -2362,8 +2362,6 @@ struct TestbedImpl {
     //
     // Run the GEMM
     //
-    cudaError_t result;
-
     for (int iter = 0; iter < iterations; ++iter) {
       status = gemm_op(arguments, workspace.get());
       if (status != cutlass::Status::kSuccess) {
@@ -2380,7 +2378,7 @@ struct TestbedImpl {
       return false;
     }
 #else
-    result = cudaDeviceSynchronize();
+    auto result = cudaDeviceSynchronize();
     if (result != cudaSuccess) {
       EXPECT_EQ(result, cudaSuccess) << "Error at Kernel Sync.";
       return false;
@@ -2531,7 +2529,6 @@ struct TestbedImpl {
       return profile(problem_size, static_cast<int>(iterations), gemm_op, arguments, workspace);
     }
     else {
-      cudaError_t result;
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
       CUTLASS_TRACE_HOST("TestbedImpl::run: Calling gemm_op.initialize");
 #endif
@@ -2565,7 +2562,7 @@ struct TestbedImpl {
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
       CUTLASS_TRACE_HOST("TestbedImpl::run: Calling cudaDeviceSynchronize");
 #endif
-      result = cudaDeviceSynchronize();
+      auto result = cudaDeviceSynchronize();
       if (result != cudaSuccess) {
         CUTLASS_TRACE_HOST("TestbedImpl::run: cudaDeviceSynchronize reports non-success");
         EXPECT_EQ(result, cudaSuccess) << "Error at Kernel Sync.";
@@ -3508,6 +3505,7 @@ bool TestAll(double alpha = 1.0, double beta = cute::is_same_v<typename Gemm::Ge
 #if defined(SYCL_INTEL_TARGET)
 template <typename Gemm, template <class T> class ActivationFunctor =
                              cutlass::epilogue::thread::Identity>
+// TODO(Codeplay): remove the test_batch option once batching is enabled for all tests
 bool TestXe(
     double alpha = 1.0, double beta = 0.0, bool test_batch = true,
     CheckEquality check_relative_equality = CheckEquality::RELATIVE) {
@@ -3619,8 +3617,8 @@ bool TestXe(
                     << "} failed";
 
                   if (!passed) {
-                    std::cout << __FILE__ << ':' << __LINE__ << " : GEMM MNK " << m
-                              << " " << n << " " << k << " FAILED.\n";
+                    std::cout << __FILE__ << ':' << __LINE__ << " : GEMM MNKL " << m
+                              << " " << n << " " << k << " " << l << " FAILED.\n";
                     return false;
                   }
                 } // splits

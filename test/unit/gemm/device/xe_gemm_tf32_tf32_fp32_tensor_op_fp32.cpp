@@ -33,7 +33,6 @@
     \brief Tests for Xe tf32_tf32_fp32
 */
 
-#include <iostream>
 
 #include "cutlass/cutlass.h"
 
@@ -43,9 +42,9 @@
 
 #include "gemm_testbed_3x.hpp"
 
-using namespace cute;
-
+/* TODO(Codeplay): TF32 copy builtins don't work well with GEMM. Needs more investigation
 TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 256x256x32) {
+  using namespace cute;
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     tfloat32_t, cutlass::layout::RowMajor,
@@ -63,8 +62,9 @@ TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 256x256x32) {
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
-/* TODO(Codeplay): missing copy transpose builtin and prefetch builtin
+ TODO(Codeplay): missing copy transpose builtin and prefetch builtin
 TEST(XE_Device_Gemm_tf32n_tf32t_f32t_tensor_op_f32, 256x256x32) {
+  using namespace cute;
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     tfloat32_t, cutlass::layout::ColumnMajor,
@@ -83,6 +83,7 @@ TEST(XE_Device_Gemm_tf32n_tf32t_f32t_tensor_op_f32, 256x256x32) {
 }
 
 TEST(XE_Device_Gemm_tf32t_tf32n_f32t_tensor_op_f32, 256x256x32) {
+  using namespace cute;
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     tfloat32_t, cutlass::layout::RowMajor,
@@ -101,6 +102,7 @@ TEST(XE_Device_Gemm_tf32t_tf32n_f32t_tensor_op_f32, 256x256x32) {
 }
 
 TEST(XE_Device_Gemm_tf32n_tf32n_f32t_tensor_op_f32, 256x256x32) {
+  using namespace cute;
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     tfloat32_t, cutlass::layout::ColumnMajor,

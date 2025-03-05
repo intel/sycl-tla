@@ -1656,7 +1656,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using DispatchPolicy = MainloopIntelPVC<3>;
   using TiledMma =
       TiledMMA<MMA_Atom<XE_8x16x32_S32S8S8S32_TT>,
-               Layout<Shape<_2, _4, _1>, Stride<_4, _1, _0>>,
+               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
                Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
                     Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
 
