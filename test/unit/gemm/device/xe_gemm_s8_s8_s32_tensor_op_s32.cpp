@@ -33,7 +33,6 @@
     \brief Tests for Xe s8_s8_s32
 */
 
-#include <iostream>
 
 #include "cutlass/cutlass.h"
 
