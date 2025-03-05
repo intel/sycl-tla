@@ -2,7 +2,7 @@ name: "SYCL Intel PVC Python Interface Test"
 
 on:
   push:
-    branches: [ "sycl-develop", "test_release_compiler" ]
+    branches: [ "sycl-develop" ]
   pull_request:
     branches: [ "sycl-develop" ]
   merge_group:
