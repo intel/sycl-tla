@@ -126,9 +126,9 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
   using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
 
   // The prefetch copy is different from the main copy here we use the subgroup collectively to load the data
-  using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize, ElementA, StrideA, typename TiledMma::ThrLayoutVMNK>(
+  using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize, PrefetchAThrShape, ElementA, StrideA, typename TiledMma::ThrLayoutVMNK>(
       make_tensor(make_gmem_ptr(static_cast<ElementA const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideA{}))));
-  using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize, ElementB, StrideB, typename TiledMma::ThrLayoutVMNK>(
+  using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize, PrefetchBThrShape, ElementB, StrideB, typename TiledMma::ThrLayoutVMNK>(
       make_tensor(make_gmem_ptr(static_cast<ElementB const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideB{}))));
 
   using  TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), StrideA{}));   //(m, k)
@@ -312,14 +312,22 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     if(cute::thread(145,3)){
       //tiled_prefetch_a = "w2";
 
+      print("ThrLayoutVMNK "); print(typename TiledMma::ThrLayoutVMNK{}); print("\n");
       print("gA "); print(gA); print("\n");
       print("tiled_prefetch_a "); print(tiled_prefetch_a); print("\n");
       print("prefetch_iter_a "); print(prefetch_iter_a); print("\n");
       print("pAgA "); print(pAgA); print("\n");
-      print("ThrLayoutVMNK "); print(typename TiledMma::ThrLayoutVMNK{}); print("\n");
-      
-      //print("prefetch_iter_b "); print(prefetch_iter_b); print("\n");
-      //print("pBgB "); print(pBgB); print("\n");
+      print("PrefetchAThrShape "); print(PrefetchAThrShape{}); print("\n");
+      print("PrefetchATileSize "); print(PrefetchATileSize{}); print("\n");
+
+      print("\n");
+      print("gB "); print(gB); print("\n");
+      print("tiled_prefetch_b "); print(tiled_prefetch_b); print("\n");
+      print("prefetch_iter_b "); print(prefetch_iter_b); print("\n");
+      print("pBgB "); print(pBgB); print("\n");
+      print("PrefetchBThrShape "); print(PrefetchBThrShape{}); print("\n");
+      print("PrefetchBTileSize "); print(PrefetchBTileSize{}); print("\n");
+      print("\n");
     }
 
     CUTLASS_PRAGMA_UNROLL
@@ -339,8 +347,10 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
 
       /*if(t_i%2==0 && cute::thread(t_i * 8,0)){
         print("thread_idx "); print(thread_idx); print("\n");
-        print("prefetch_iter_a "); print(prefetch_iter_a); print("\n");
-        print("pAgA "); print(pAgA); print("\n");
+        //print("prefetch_iter_a "); print(prefetch_iter_a); print("\n");
+        //print("pAgA "); print(pAgA); print("\n");
+        print("prefetch_iter_b "); print(prefetch_iter_b); print("\n");
+        print("pBgB "); print(pBgB); print("\n");
         print("\n");
       }
       t_i++;*/

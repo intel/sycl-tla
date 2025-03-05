@@ -2126,14 +2126,16 @@ namespace detail
     }
   }
 
-  template<class PrefetchTileSize, class dtype, class TensorStride, class ThrLayoutVMNK, class Tensor>
+  template<class PrefetchTileSize, class SGLayoutShape, class dtype, class TensorStride, class ThrLayoutVMNK, class Tensor>
   CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
     constexpr auto height = get<0>(PrefetchTileSize{});
     constexpr auto dtype_size_bits = sizeof_bits_v<dtype>;
     //using ThrLayoutVMNK = Layout<Shape<_16, _8, _4, _1>>;
     //using ThrShapeMN = Shape<_8, _4>;
     constexpr int SubgroupSize = size<0>(ThrLayoutVMNK{});
-    constexpr int NumSubgroups = size<1>(group<1,3>(ThrLayoutVMNK{}));
+    //constexpr int NumSubgroups = size<1>(group<1,3>(ThrLayoutVMNK{}));
+    constexpr int sgs_M = size<0>(SGLayoutShape{});
+    constexpr int sgs_N = size<1>(SGLayoutShape{});
     //ThrLayout a = "w";
     //PrefetchTileSize a = shape_div(typename  Copy_Traits<XE_2D_U16x8x32_LD_N, TensorStride>::BlockShape{}, Shape<_1, Int<SubgroupSize>>{});
 
@@ -2143,8 +2145,8 @@ namespace detail
       using CopyThreadShape = Shape<_1, Int<SubgroupSize>>; \
       return make_tiled_copy(prefetch_atom{}.with(tensor), \
                              /*Layout<Shape<_1, Int<SubgroupSize>>>{},*/ \
-                             Layout<Shape<Int<NumSubgroups>, Int<SubgroupSize>>, \
-                                    Stride<Int<SubgroupSize>,_1>>{}, \
+                             Layout<Shape<Int<sgs_M>,        Shape<Int<SubgroupSize>,Int<sgs_N>> >, \
+                                    Stride<Int<SubgroupSize>,Stride<_1,              Int<SubgroupSize * sgs_M>> > >{}, \
                              /*ThrLayout{},*/ \
                              /*make_layout(ThrShapeMN{}));*/ \
                              make_layout(shape_div(typename prefetch_traits::BlockShape{}, CopyThreadShape{})));
