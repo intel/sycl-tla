@@ -37,10 +37,10 @@ runs:
         ls -l
         popd
         cat <<EOF | tee setvars.sh
-        PATH=$DPCPP_PATH/bin/:$PATH
-        C_INCLUDE_PATH=$DPCPP_PATH/include/:$C_INCLUDE_PATH
-        CPLUS_INCLUDE_PATH=$DPCPP_PATH/include/:$CPLUS_INCLUDE_PATH
-        LD_LIBRARY_PATH=$DPCPP_PATH/lib/:$LD_LIBRARY_PATH
+        PATH=$DPCPP_PATH/bin:$PATH
+        C_INCLUDE_PATH=$DPCPP_PATH/include:$C_INCLUDE_PATH
+        CPLUS_INCLUDE_PATH=$DPCPP_PATH/include:$CPLUS_INCLUDE_PATH
+        LD_LIBRARY_PATH=$DPCPP_PATH/lib:$LD_LIBRARY_PATH
         CC=clang
         CXX=clang++
         EOF

@@ -2,7 +2,7 @@ name: "SYCL Intel PVC Test"
 
 on:
   push:
-    branches: [ "sycl-develop" ]
+    branches: [ "sycl-develop", "test_release_compiler"]
   pull_request:
     branches: [ "sycl-develop" ]
   merge_group:
@@ -25,19 +25,13 @@ jobs:
       matrix:
         compiler: [ NIGHTLY, RELEASE ]
     name: Run Intel PVC tests
-    runs-on: cp-gpumax-1100-gpu
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
-      - name: Debug
-        shell: bash
-        run: |
-          echo "Run with ${{ matrix.compiler }} [${{ inputs.DPCPP_VERSION }}]"
-          sudo apt update
-          sudo apt install -y ninja-build cmake
-
+      - run: sudo apt update && sudo apt install -y cmake ninja-build
       # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
       # for example using the tag: 'nightly-2024-04-22'
       - name: Install DPC++
@@ -49,6 +43,8 @@ jobs:
         shell: bash
         run: |
           . setvars.sh
+          # Persist environment variables to following steps
+          env >> $GITHUB_ENV
           which clang++
           clang++ --version
           cmake -G Ninja  \
@@ -59,13 +55,10 @@ jobs:
       - name: Unit test
         shell: bash
         run: |
-          export DPCPP_PATH=~/dpcpp
-          export LD_LIBRARY_PATH=$DPCPP_PATH/lib/:$LD_LIBRARY_PATH
+          which clang++
           cmake --build . --target test_unit -j 24
 
       - name: Examples
         shell: bash
         run: |
-          export DPCPP_PATH=~/dpcpp
-          export LD_LIBRARY_PATH=$DPCPP_PATH/lib/:$LD_LIBRARY_PATH
           cmake --build . --target test_examples -j 24
