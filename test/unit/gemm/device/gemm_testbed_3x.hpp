@@ -3532,8 +3532,8 @@ bool TestXe(
                                cutlass::from_real<ElementScalar>(alpha),
                                cutlass::from_real<ElementScalar>(beta));
           if (!passed) {
-            std::cout << __FILE__ << ':' << __LINE__ << " : GEMM MNK " << m
-                      << " " << n << " " << k << " FAILED.\n";
+            std::cout << __FILE__ << ':' << __LINE__ << " : GEMM MNKL " << m
+                      << " " << n << " " << k << " " << l << " FAILED.\n";
             return false;
           }
         }
