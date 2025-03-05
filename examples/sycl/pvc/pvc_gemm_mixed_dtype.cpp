@@ -378,7 +378,7 @@ int main(int argc, const char** argv)
   using LayoutD = cutlass::layout::RowMajor;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
-  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
   using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 

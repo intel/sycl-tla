@@ -77,7 +77,7 @@ SYCL_DEVICE_BUILTIN(
         long baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
-    intel::ushort32 __builtin_IB_subgroup_block_read_flat_u8_m32k32v1(
+    intel::uchar64 __builtin_IB_subgroup_block_read_flat_u8_m32k16v2(
         long baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, intel::coord_t coord));
 
@@ -354,8 +354,8 @@ struct XE_2D_U8x32x32_LD_N {
                                     T *dst) {
 #if defined(SYCL_INTEL_TARGET)
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
-    *reinterpret_cast<intel::ushort32 *>(dst) =
-        __builtin_IB_subgroup_block_read_flat_u8_m32k32v1(
+    *reinterpret_cast<intel::uchar64 *>(dst) =
+        __builtin_IB_subgroup_block_read_flat_u8_m32k16v2(
             (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");

@@ -49,6 +49,7 @@ typedef unsigned char uchar;
 using uchar2 = vector_t<uchar, 2>;
 using uchar4 = vector_t<uchar, 4>;
 using uchar8 = vector_t<uchar, 8>;
+using uchar64 = vector_t<uchar, 64>;
 
 using float2 = vector_t<float, 2>;
 using float4 = vector_t<float, 4>;
