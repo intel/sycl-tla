@@ -185,17 +185,16 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
     auto init_N = get<1>(problem_shape_MNK);
     auto init_K = get<2>(problem_shape_MNK);
 
-    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(
-                                   static_cast<ElementA const*>(ptr_A_first_batch), init_M, init_K),
+    Tensor mA_mkl = make_tensor(make_gmem_ptr(ptr_A_first_batch), make_layout(make_shape(init_M,init_K,mock_L), InternalStrideA{}/*args.dA*/));
+    Tensor mB_nkl = make_tensor(make_gmem_ptr(ptr_B_first_batch), make_layout(make_shape(init_N,init_K,mock_L), InternalStrideB{}/*args.dB*/));
+
+    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(mA_mkl),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
-    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(
-                                   static_cast<ElementB const*>(ptr_B_first_batch), init_N, init_K),
+    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(mB_nkl),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
 
-    Tensor mA_mkl = make_tensor(make_gmem_ptr(ptr_A_first_batch), make_layout(make_shape(init_M,init_K,mock_L), InternalStrideA{}/*args.dA*/));
-    Tensor mB_nkl = make_tensor(make_gmem_ptr(ptr_B_first_batch), make_layout(make_shape(init_N,init_K,mock_L), InternalStrideB{}/*args.dB*/));
 
     return Params{
       tiled_copy_a,
@@ -359,17 +358,16 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
       ElementA const* ptr_A_curr_batch = reinterpret_cast<ElementA const*>(mainloop_params.ptr_A[next_group]);
       ElementB const* ptr_B_curr_batch = reinterpret_cast<ElementB const*>(mainloop_params.ptr_B[next_group]);
 
-      mainloop_params.copy_A = make_tiled_copy(atom_load_A{}.with(
-                                                         static_cast<ElementA const *>(ptr_A_curr_batch), M, K),
+      mainloop_params.mA = make_tensor(make_gmem_ptr(ptr_A_curr_batch), make_shape(M, K,(int32_t)1), mainloop_params.dA[next_group]);
+      mainloop_params.mB = make_tensor(make_gmem_ptr(ptr_B_curr_batch), make_shape(N, K,(int32_t)1), mainloop_params.dB[next_group]);
+
+      mainloop_params.copy_A = make_tiled_copy(atom_load_A{}.with(mainloop_params.mA),
                                                      Layout<CopyThreadShape>{},
                                                      make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
-      mainloop_params.copy_B = make_tiled_copy(atom_load_B{}.with(
-                                                         static_cast<ElementB const *>(ptr_B_curr_batch), N, K),
+      mainloop_params.copy_B = make_tiled_copy(atom_load_B{}.with(mainloop_params.mB),
                                                      Layout<CopyThreadShape>{},
                                                      make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
 
-      mainloop_params.mA = make_tensor(make_gmem_ptr(ptr_A_curr_batch), make_shape(M, K,(int32_t)1), mainloop_params.dA[next_group]);
-      mainloop_params.mB = make_tensor(make_gmem_ptr(ptr_B_curr_batch), make_shape(N, K,(int32_t)1), mainloop_params.dB[next_group]);
     }
 };
 

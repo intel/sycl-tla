@@ -190,7 +190,8 @@ public:
     XE_Copy_C xe_load_c = {};
     if constexpr (is_source_supported) {
       ElementC const* ptr_C_first_batch = reinterpret_cast<ElementC const*>(args.ptr_C);
-      xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(ptr_C_first_batch, M, N),
+      Tensor mC_mnl = make_tensor(make_gmem_ptr(ptr_C_first_batch), make_layout(make_shape(M, N, L), InternalStrideC{}));
+      xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(mC_mnl),
                                   Layout<CopyThreadShape>{},
                                   make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
     }
@@ -198,7 +199,8 @@ public:
     XE_Copy_D xe_store_d = {};
     if constexpr (is_destination_supported) {
       ElementD const* ptr_D_first_batch = reinterpret_cast<ElementD const*>(args.ptr_D);
-      xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(ptr_D_first_batch, M, N),
+      Tensor mD_mnl = make_tensor(make_gmem_ptr(ptr_D_first_batch), make_layout(make_shape(M, N, L), InternalStrideD{}));
+      xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(mD_mnl),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
     }
@@ -413,7 +415,8 @@ public:
       XE_Copy_C xe_load_c = {};
       if constexpr (is_source_supported) {
         ElementC const* ptr_C_curr_batch = reinterpret_cast<ElementC const*>(params.ptr_C[next_group]);
-        xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(ptr_C_curr_batch, M, N),
+        Tensor mC_mnl = make_tensor(make_gmem_ptr(ptr_C_curr_batch), make_layout(make_shape(M, N, L), InternalStrideC{}));
+        xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(mC_mnl),
                                     Layout<CopyThreadShape>{},
                                     make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
       }
@@ -421,7 +424,8 @@ public:
       XE_Copy_D xe_store_d = {};
       if constexpr (is_destination_supported) {
         ElementD const* ptr_D_curr_batch = reinterpret_cast<ElementD const*>(params.ptr_D[next_group]);
-        xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(ptr_D_curr_batch, M, N),
+        Tensor mD_mnl = make_tensor(make_gmem_ptr(ptr_D_curr_batch), make_layout(make_shape(M, N, L), InternalStrideD{}));
+        xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(mD_mnl),
                                     Layout<CopyThreadShape>{},
                                     make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
       }
