@@ -261,6 +261,19 @@ struct TiledCopy : Copy_Atom
     // Transform the tile mode
     auto v_tensor = t_tensor.compose(frg_layout_v, _);
     // ((atom_vals,rest_vals),(1,RM,RN,...))
+    if (cute::thread0()) {
+      cute::print("\n");
+      PRINT(tensor);
+      PRINT(TiledNumThr{});
+      PRINT(TiledLayout_TV{});
+      PRINT(V);
+      PRINT(frg_layout_mn);
+      PRINT(frg_layout_v);
+      PRINT(t_tensor);
+      PRINT(v_tensor);
+      PRINT(v_tensor(_, append<R>(Int<0>{},_)));
+      cute::print("\n");
+    }
 
     // Unfold and return
     return v_tensor(_, append<R>(Int<0>{},_));

@@ -1,3 +1,4 @@
+#define PRINT(x) print(#x ": "); print(x); print("\n");
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
