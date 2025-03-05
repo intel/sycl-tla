@@ -200,6 +200,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     (void)residue_mnk;
     (void)thread_idx;
     (void)smem_buf;
+
+    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
     
     auto thr_copy_A = mainloop.copy_A.get_slice(thread_idx);
     auto thr_copy_B = mainloop.copy_B.get_slice(thread_idx);
@@ -218,42 +220,43 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
     Tensor tCrA = make_tensor<ElementA>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
     Tensor tCrB = make_tensor<ElementB>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
+
+    Tensor gA_gmem = local_tile(mainloop.mA, select<0,2>(WorkgroupTileShape{}), make_coord(m_idx,_,l_idx));
+    Tensor gB_gmem = local_tile(mainloop.mB, select<0,2>(WorkgroupTileShape{}), make_coord(n_idx,_,l_idx));
+
+    Tensor fragment_A = thr_mma.partition_fragment_A(gA_gmem(_,_,0));
+    Tensor fragment_B = thr_mma.partition_fragment_B(gB_gmem(_,_,0));
   
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
     Tensor tBrB = thr_copy_B.retile_D(tCrB);
     
+    Tensor copy_tCrA = thr_copy_A.retile_D(fragment_A);
+    Tensor copy_tCrB = thr_copy_B.retile_D(fragment_B);
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
+    #define CUTLASS_ENABLE_DEBUG_PRINTS 1 
+    #define LOG_THREAD 0
+    #define LOG_GROUP 0
 #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
-        print("======================= A: \n");
-        print("  gA : "); print(gA); print("\n");
-        print("tCgA : "); print(tCgA); print("\n");
-        print("tAgA : "); print(tAgA); print("\n");
+      PRINT(tCrA);
+      PRINT(fragment_A);
+      PRINT(tArA);
+      PRINT(copy_tCrA);
 
-        print("=====================  B :\n");
-        print("  gB : "); print(gB); print("\n");
-        print("tCgB : "); print(tCgB); print("\n");
-        print("tBgB : "); print(tBgB); print("\n");
-
-        print("=====================  Config: \n");
-        print("  threads per workgroup : "); print(MaxThreadsPerBlock); print("\n");
-        print("  SubgroupTileShape : "); print(SubgroupTileShape{}); print("\n");
-
-        print(" PrefetchAThrShape :    ");print(PrefetchAThrShape{});print("\n");
-        print(" PrefetchBThrShape :    ");print(PrefetchBThrShape{});print("\n");
-        print(" PrefetchATileSize :    ");print(PrefetchATileSize{});print("\n");
-        print(" PrefetchBTileSize :    ");print(PrefetchBTileSize{});print("\n");
+      PRINT(tCrB);
+      PRINT(fragment_B);
+      PRINT(tBrB);
+      PRINT(copy_tCrB);
       }
 #endif
 
     //
     // Mainloop
     //
-    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
     
     const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
     const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
