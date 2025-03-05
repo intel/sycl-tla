@@ -33,7 +33,6 @@
     \brief Tests for Xe tf32_tf32_fp32
 */
 
-#include <iostream>
 
 #include "cutlass/cutlass.h"
 
