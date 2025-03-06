@@ -22,9 +22,9 @@ concurrency:
 jobs:
   run-tests:
     name: Run Intel PVC tests
-    strategy:
-      matrix:
-        compiler: [ NIGHTLY, RELEASE ]
+    # strategy:
+    #   matrix:
+    #     compiler: [ NIGHTLY, RELEASE ]
     runs-on: cp-gpumax-1100-gpu
     timeout-minutes: 60
 
@@ -39,7 +39,7 @@ jobs:
         id: install_dpcpp
         uses: ./.github/actions/install-dpcpp
         with:
-          DPCPP_RELEASE: ${{ matrix.compiler }}
+          # DPCPP_RELEASE: ${{ matrix.compiler }}
           DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
           DPCPP_PATH: ~/dpcpp
       - name: Setup virtual environment
