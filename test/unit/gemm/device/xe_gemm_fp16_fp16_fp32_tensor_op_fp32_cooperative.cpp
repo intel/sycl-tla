@@ -44,7 +44,6 @@
 #include "gemm_testbed_3x.hpp"
 
 TEST(XE_Device_Gemm_fp16t_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
-  using namespace cute;
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     half_t, cutlass::layout::RowMajor,
@@ -53,7 +52,7 @@ TEST(XE_Device_Gemm_fp16t_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
     float>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int,int,int,int>,
+      cute::Shape<int,int,int,int>,
       Config::CollectiveMainloop,
       Config::CollectiveEpilogue,
       cutlass::gemm::StreamKScheduler
@@ -65,7 +64,6 @@ TEST(XE_Device_Gemm_fp16t_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
 }
 
 TEST(XE_Device_Gemm_fp16n_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
-  using namespace cute;
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     half_t, cutlass::layout::ColumnMajor,
@@ -74,7 +72,7 @@ TEST(XE_Device_Gemm_fp16n_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
     float>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int,int,int,int>,
+      cute::Shape<int,int,int,int>,
       Config::CollectiveMainloop,
       Config::CollectiveEpilogue,
       cutlass::gemm::StreamKScheduler
@@ -86,7 +84,6 @@ TEST(XE_Device_Gemm_fp16n_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
 }
 
 TEST(XE_Device_Gemm_fp16t_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
-  using namespace cute;
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     half_t, cutlass::layout::RowMajor,
@@ -95,7 +92,7 @@ TEST(XE_Device_Gemm_fp16t_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
     float>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int,int,int,int>,
+      cute::Shape<int,int,int,int>,
       Config::CollectiveMainloop,
       Config::CollectiveEpilogue,
       cutlass::gemm::StreamKScheduler
@@ -107,7 +104,6 @@ TEST(XE_Device_Gemm_fp16t_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
 }
 
 TEST(XE_Device_Gemm_fp16n_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
-  using namespace cute;
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     half_t, cutlass::layout::ColumnMajor,
@@ -116,7 +112,7 @@ TEST(XE_Device_Gemm_fp16n_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
     float>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int,int,int,int>,
+      cute::Shape<int,int,int,int>,
       Config::CollectiveMainloop,
       Config::CollectiveEpilogue,
       cutlass::gemm::StreamKScheduler
