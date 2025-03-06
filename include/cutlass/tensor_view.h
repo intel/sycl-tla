@@ -147,11 +147,15 @@ class TensorView : public TensorRef<Element_, Layout_> {
   }
 
   /// Converting constructor from TensorRef to non-constant data.
-  // default constructor needed to make this device_copyable
   CUTLASS_HOST_DEVICE
   TensorView(
     NonConstTensorView const &view        ///< TensorView to non-const data
+#if defined(CUTLASS_ENABLE_SYCL)
+  // default constructor needed to make this device_copyable
   ) = default;
+#else
+  ): Base(view), extent_(view.extent_) { }
+#endif
 
   /// Updates the pointer and layout object
   CUTLASS_HOST_DEVICE
