@@ -2219,6 +2219,26 @@ BUILD_XE_NAME(32)
   }
 } // end namespace detail
 
+template <class TiledCopy, class MMA, class MMATensor>
+CUTE_HOST_DEVICE
+auto
+retile_MMA(TiledCopy const&, MMA const&, MMATensor&& mma_tensor) {
+    static constexpr auto m = decltype(size<1>(mma_tensor.shape()))::value;
+    static constexpr auto k = decltype(size<2>(mma_tensor.shape()))::value;
+    static constexpr auto m_step = size<0>(typename TiledCopy::BlockShape{})
+                                      / size<0>(typename MMA::Shape_MNK{});
+    static constexpr auto k_step = size<1>(typename TiledCopy::BlockShape{})
+                                      / size<2>(typename MMA::Shape_MNK{});
+
+    auto retiled_tensor = make_tensor(mma_tensor.data(),
+                                      make_shape(size<0>(mma_tensor.shape()),
+                                                  Int<m_step>{},
+                                                  Int<k_step>{},
+                                                  Int<m / m_step>{},
+                                                  Int<k / k_step>{}));
+    return make_tensor(mma_tensor.data(),group<2, 4>(group<1, 3>(select<0, 1, 3, 2, 4>(retiled_tensor.layout()))));
+}
+
 template <class TiledCopy, class ThrIdx>
 class Xe2DThrCopy : ThrCopy<TiledCopy, ThrIdx> {
 

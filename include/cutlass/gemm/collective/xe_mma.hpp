@@ -126,6 +126,9 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   using traits_load_B = Copy_Traits<GmemTiledCopyB, StrideB>;
   using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
 
+  using traits_load_B_SWAP = Copy_Traits<XE_2D_U16x16x32_LD_N_SWAP, StrideB>;
+  using atom_load_B_SWAP = Copy_Atom<traits_load_B_SWAP, ElementB>;
+
   // The prefetch copy is different from the main copy here we use the subgroup collectively to load the data
   using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize, ElementA, StrideA, SubgroupSize>(
       make_tensor(make_gmem_ptr(static_cast<ElementA const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideA{}))));
@@ -143,6 +146,12 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   using Copy_B = decltype(make_tiled_copy(atom_load_B{},
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{}))));
+  using Copy_B_SWAP = decltype(make_tiled_copy(atom_load_B_SWAP{},
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_B_SWAP::BlockShape{}, CopyThreadShape{}))));
+
+  using Copy_TV_Layout_B_SWAP = typename atom_load_B_SWAP::ValLayoutDst;
+
   using Copy_TV_Layout = typename atom_load_A::ValLayoutDst;
   using Copy_Tiler = Shape<_16, _32>;
   using Copy_A_new = decltype(make_tiled_copy_impl(atom_load_A{}, Copy_TV_Layout{}, Copy_Tiler{}));
@@ -216,8 +225,12 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
     auto copy_a_new = make_tiled_copy_impl(atom_load_A{}.with(mainloop.mA), Copy_TV_Layout{}, Copy_Tiler{});
     auto copy_b_new = make_tiled_copy_impl(atom_load_B{}.with(mainloop.mB), Copy_TV_Layout{}, Copy_Tiler{});
+
+    auto copy_b_SWAP = make_tiled_copy_impl(atom_load_B_SWAP{}.with(mainloop.mB), Copy_TV_Layout_B_SWAP{}, Copy_Tiler{});
+
     auto thr_copy_A_new = copy_a_new.get_slice(thread_idx);
     auto thr_copy_B_new = copy_b_new.get_slice(thread_idx);
+    auto thr_copy_B_SWAP = copy_b_SWAP.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
@@ -245,11 +258,15 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     Tensor tBrB = thr_copy_B.retile_D(tCrB);
     
     Tensor copy_tCrA = thr_copy_A_new.retile_D(fragment_A);
-    Tensor copy_tCrB = thr_copy_B_new.retile_D(fragment_B);
+    Tensor copy_tCrB = thr_copy_B_SWAP.retile_D(fragment_B);
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
+    Tensor tBgB_new = thr_copy_B_SWAP.retile_S(tCgB);
 
+    Tensor mma_tCrB = retile_MMA(copy_b_SWAP, thr_mma, fragment_B);
+
+    // Tensor mma_tCrB = thr_copy_B_SWAP.retile_MMA(thr_mma, fragment_B);
     #define CUTLASS_ENABLE_DEBUG_PRINTS 1 
     #define LOG_THREAD 0
     #define LOG_GROUP 0
@@ -259,11 +276,13 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
       PRINT(fragment_A);
       PRINT(tArA);
       PRINT(copy_tCrA);
+      PRINT(tAgA);
 
       PRINT(tCrB);
       PRINT(fragment_B);
       PRINT(tBrB);
       PRINT(copy_tCrB);
+      PRINT(tBgB_new);
       }
 #endif
 
@@ -327,13 +346,14 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.copy_A, tAgA(_,_,_,k_tile), tArA);
       copy(mainloop.copy_B, tBgB(_,_,_,k_tile), tBrB);
+      copy(copy_b_SWAP, tBgB_new(_,_,_,k_tile), copy_tCrB);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
       }
 
-      cute::gemm(tiled_mma, tCrA, tCrB, accum);
+      cute::gemm(tiled_mma, tCrA, mma_tCrB, accum);
       barrier_wait(barrier_scope);
     }
   }
