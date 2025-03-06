@@ -1012,6 +1012,7 @@ struct Copy_Traits<XE_2D_U16x16x32_LD_N, args_t...>
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
                            Stride<_16,Stride< _1,_256,_512>>>;
+  // TODO(joe): ^- ordered(1, 0, 2, 3)
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
@@ -1026,10 +1027,11 @@ struct Copy_Traits<XE_2D_U16x16x32_LD_N_SWAP, args_t...>
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                           Stride< _0,Stride< _1,_256,_512>>>;
+                           Stride<_0,Stride< _1,_4096,_16>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                           Stride<_16,Stride< _1,_256,_512>>>;
+                           Stride<_256,Stride< _1,_4096,_16>>>;
+  // TODO(joe): ^- ordered(1, 3, 0, 2)
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 

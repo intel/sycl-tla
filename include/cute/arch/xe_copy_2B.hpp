@@ -570,7 +570,7 @@ struct XE_2D_U16x16x32_LD_N {
 };
 
 struct XE_2D_U16x16x32_LD_N_SWAP {
-  using BlockShape = Shape<_16, _32>;
+  using BlockShape = Shape<_32, _16>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
