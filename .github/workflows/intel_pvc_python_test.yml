@@ -68,7 +68,6 @@ jobs:
       - name: Run Python Interface GEMM Tests
         shell: bash
         run: |
-          . setvars.sh
           source ~/.venv/bin/activate
           pip install -e .
           export CUTLASS_USE_SYCL=1
