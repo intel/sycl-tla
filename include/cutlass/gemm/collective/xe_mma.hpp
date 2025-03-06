@@ -143,6 +143,11 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   using Copy_B = decltype(make_tiled_copy(atom_load_B{},
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{}))));
+  using Copy_TV_Layout = typename atom_load_A::ValLayoutDst;
+  using Copy_Tiler = Shape<_16, _32>;
+  using Copy_A_new = decltype(make_tiled_copy_impl(atom_load_A{}, Copy_TV_Layout{}, Copy_Tiler{}));
+  using Copy_B_new = decltype(make_tiled_copy_impl(atom_load_B{}, Copy_TV_Layout{}, Copy_Tiler{}));
+
   // Host side kernel arguments
   struct Arguments {
     ElementA const* ptr_A;
@@ -170,6 +175,9 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     (void) workspace;
 
     auto [M,N,K,L] = problem_shape;
+
+    auto tiled_copy_a = Copy_A{}.with(static_cast<ElementA const *>(args.ptr_A), M, K);
+    auto tiled_copy_b = Copy_B{}.with(static_cast<ElementB const *>(args.ptr_B), N, K);
 
     auto mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.ptr_A)),
                               make_layout(make_shape(M, K, L), args.dA));
@@ -206,6 +214,11 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     auto thr_copy_A = mainloop.copy_A.get_slice(thread_idx);
     auto thr_copy_B = mainloop.copy_B.get_slice(thread_idx);
 
+    auto copy_a_new = make_tiled_copy_impl(atom_load_A{}.with(mainloop.mA), Copy_TV_Layout{}, Copy_Tiler{});
+    auto copy_b_new = make_tiled_copy_impl(atom_load_B{}.with(mainloop.mB), Copy_TV_Layout{}, Copy_Tiler{});
+    auto thr_copy_A_new = copy_a_new.get_slice(thread_idx);
+    auto thr_copy_B_new = copy_b_new.get_slice(thread_idx);
+
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
     // TODO(Codeplay): see if we can make this nicer
@@ -231,8 +244,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     Tensor tArA = thr_copy_A.retile_D(tCrA);
     Tensor tBrB = thr_copy_B.retile_D(tCrB);
     
-    Tensor copy_tCrA = thr_copy_A.retile_D(fragment_A);
-    Tensor copy_tCrB = thr_copy_B.retile_D(fragment_B);
+    Tensor copy_tCrA = thr_copy_A_new.retile_D(fragment_A);
+    Tensor copy_tCrB = thr_copy_B_new.retile_D(fragment_B);
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
