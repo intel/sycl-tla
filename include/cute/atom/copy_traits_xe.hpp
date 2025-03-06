@@ -2189,6 +2189,7 @@ template<typename PrefetchShape, class Stride, class dtype, int subgroupsize, cl
 #define TYPE_BITS_float(row) XE_2D_U32##x##row##x##16_LD_N
 #define TYPE_BITS_bfloat16_t(row) XE_2D_U16##x##row##x##32_LD_N
 #define TYPE_BITS_int8_t(row) XE_2D_U8##x##row##x##64_LD_N
+#define TYPE_BITS_tfloat32_t(row) XE_2D_TF32##x##row##x##16_LD_N
 
 #define SELECT_BITS(type, row) TYPE_BITS_##type(row)
 // Template to dynamically construct and return the type
