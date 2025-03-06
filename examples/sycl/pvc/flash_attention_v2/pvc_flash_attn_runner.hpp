@@ -304,8 +304,11 @@ template <class GemmKernel> struct ExampleRunner {
     const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
 
     using namespace syclcompat::experimental;
+    syclcompat::experimental::launch_properties launch_props {
+      sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
+    };
     auto event = launch<cutlass::device_kernel<GemmKernel>>(
-        launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
+        launch_policy{sycl_grid, sycl_block, launch_props,
                       kernel_properties{sycl_exp::sub_group_size<GemmKernel::DispatchPolicy::SubgroupSize>}},
         params);
 
