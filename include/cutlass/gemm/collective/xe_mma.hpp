@@ -126,9 +126,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   using traits_load_B = Copy_Traits<GmemTiledCopyB, StrideB>;
   using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
 
-  using traits_load_B_SWAP = Copy_Traits<XE_2D_U16x16x32_LD_N_SWAP, StrideB>;
-  using atom_load_B_SWAP = Copy_Atom<traits_load_B_SWAP, ElementB>;
-
   // The prefetch copy is different from the main copy here we use the subgroup collectively to load the data
   using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize, ElementA, StrideA, SubgroupSize>(
       make_tensor(make_gmem_ptr(static_cast<ElementA const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideA{}))));
@@ -146,14 +143,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   using Copy_B = decltype(make_tiled_copy(atom_load_B{},
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{}))));
-  using Copy_B_SWAP = decltype(make_tiled_copy(atom_load_B_SWAP{},
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_B_SWAP::BlockShape{}, CopyThreadShape{}))));
-
-  using Copy_TV_Layout_B_SWAP = typename atom_load_B_SWAP::ValLayoutDst;
-
-  using Copy_TV_Layout = typename atom_load_A::ValLayoutDst;
-  using Copy_Tiler = Shape<_16, _32>;
 
   // Host side kernel arguments
   struct Arguments {
@@ -221,10 +210,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     auto thr_copy_A = mainloop.copy_A.get_slice(thread_idx);
     auto thr_copy_B = mainloop.copy_B.get_slice(thread_idx);
 
-    auto copy_b_SWAP = make_tiled_copy_impl(atom_load_B_SWAP{}.with(mainloop.mB), Copy_TV_Layout_B_SWAP{}, Copy_Tiler{});
-
-    auto thr_copy_B_SWAP = copy_b_SWAP.get_slice(thread_idx);
-
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
     // TODO(Codeplay): see if we can make this nicer
@@ -245,13 +230,13 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   
     // Retile registers for copies
     Tensor copy_tCrA = thr_copy_A.retile_D(fragment_A);
-    Tensor copy_tCrB = thr_copy_B_SWAP.retile_D(fragment_B);
+    Tensor copy_tCrB = thr_copy_B.retile_D(fragment_B);
     // Retile global tile for copies
     Tensor tAgA_new = thr_copy_A.retile_S(tCgA);
-    Tensor tBgB_new = thr_copy_B_SWAP.retile_S(tCgB);
+    Tensor tBgB_new = thr_copy_B.retile_S(tCgB);
 
     Tensor mma_tCrA = retile_MMA(mainloop.copy_A, thr_mma, fragment_A);
-    Tensor mma_tCrB = retile_MMA(copy_b_SWAP, thr_mma, fragment_B);
+    Tensor mma_tCrB = retile_MMA(mainloop.copy_B, thr_mma, fragment_B);
 
     // Tensor mma_tCrB = thr_copy_B_SWAP.retile_MMA(thr_mma, fragment_B);
     #define CUTLASS_ENABLE_DEBUG_PRINTS 1 
@@ -276,11 +261,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
     const int l_coord = l_idx;
 
-    Tensor block2d_copy_iter_a = mainloop.copy_A.get_pvc_tensor(make_coord(m_coord, 0, l_coord), tArA.shape());
-    auto copy_iter_a = append_pvc_tensor<1>(block2d_copy_iter_a, k_tile_count, BLK_K);
-
-    Tensor block2d_copy_iter_b = mainloop.copy_B.get_pvc_tensor(make_coord(n_coord, 0, l_coord), tBrB.shape());
-    auto copy_iter_b = append_pvc_tensor<1>(block2d_copy_iter_b, k_tile_count, BLK_K);
     const auto k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
 
     auto sub_group_id = get_sub_group_id();
@@ -327,7 +307,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.copy_A, tAgA_new(_,_,_,k_tile), copy_tCrA);
-      copy(copy_b_SWAP, tBgB_new(_,_,_,k_tile), copy_tCrB);
+      copy(mainloop.copy_B, tBgB_new(_,_,_,k_tile), copy_tCrB);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
