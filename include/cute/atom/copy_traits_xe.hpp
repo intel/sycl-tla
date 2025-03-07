@@ -1005,41 +1005,35 @@ struct Copy_Traits<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
 template <class StrideIndicator>
 struct Copy_Traits<XE_2D_U16x16x32_LD_N, StrideIndicator>
     : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator> {
-  static_assert(XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN);
-  using ThrID = Layout<_16>;
-  // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                           Stride< _0,Stride< _1,_256,_512>>>;
-  // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                           Stride<_16,Stride< _1,_256,_512>>>;
-  // TODO(joe): ^- ordered(1, 0, 2, 3)
-  // Reference map from (thr,val) to bit
-  using RefLayout = DstLayout;
+  static constexpr bool is_convention_MN = XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN;
 
-  template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
-      : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>(args...) {}
-};
-
-template <class StrideIndicator>
-struct Copy_Traits<XE_2D_U16x16x32_LD_N_SWAP, StrideIndicator>
-    : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N_SWAP, StrideIndicator> {
-  static_assert(!XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN);
+  // static_assert(XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN);
   using ThrID = Layout<_16>;
+  using BlockShape = std::conditional_t<is_convention_MN, Shape<_16, _32>,Shape<_32, _16>>;
+
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                           Stride<_0,Stride< _1,_4096,_16>>>;
+  using SrcLayout = std::conditional_t<is_convention_MN,
+        Layout<Shape <_16,Shape <_16,  _2, _16>>,
+                           Stride< _0,Stride< _1,_256,_512>>>,
+        Layout<Shape <_16,Shape <_16,  _2, _16>>,
+                                  Stride<_0,Stride< _1,_4096,_16>>>>;
+
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                           Stride<_256,Stride< _1,_4096,_16>>>;
+  using DstLayout = std::conditional_t<is_convention_MN,
+        Layout<Shape <_16,Shape <_16,  _2, _16>>,
+                                Stride<_16,Stride< _1,_256,_512>>>,
+        // TODO(joe): ^- ordered(1, 0, 2, 3)
+        // Reference map from (thr,val) to bit
+        Layout<Shape <_16,Shape <_16,  _2, _16>>,
+                                  Stride<_256,Stride< _1,_4096,_16>>>>;
+
   // TODO(joe): ^- ordered(1, 3, 0, 2)
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
   Copy_Traits(ArgTs... args)
-      : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N_SWAP, StrideIndicator>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>(args...) {}
 };
 
 template <class... args_t>

@@ -313,7 +313,7 @@ int main(int argc, const char** argv)
   using LayoutD = cutlass::layout::RowMajor;
 
   using GmemTiledCopyA = XE_2D_U16x16x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x32_LD_N_SWAP;
+  using GmemTiledCopyB = XE_2D_U16x16x32_LD_N;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
