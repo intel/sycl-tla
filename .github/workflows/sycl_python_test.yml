@@ -1,4 +1,4 @@
-name: "SYCL Intel PVC Python Interface Test"
+name: "SYCL Python Interface Test"
 
 on:
   push:
@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   run-tests:
-    name: Run Intel PVC tests
+    name: Run Python Interface tests on Intel PVC
     # strategy:
     #   matrix:
     #     compiler: [ NIGHTLY, RELEASE ]
