@@ -161,13 +161,31 @@ struct XE_2D_LD_Unpack {
 
   XE_2D_LD_Unpack() {}
 
-  template<class PrefetchTileSize, class SGLayoutShape, class dtype, class Tensor>
+  template<class BLK, int Total_SG, class dtype, class Tensor>
   CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) const {
+    static constexpr size_t cacheline_bytes = 64;
+    constexpr int BLK_0 = size<0>(BLK{});
+    constexpr int BLK_1 = size<1>(BLK{});
+    // min(32,32)-> 32 (256, 32) -> 32
+    static constexpr auto block_size_w = cute::min(!is_convention_MN ? BLK_0 : BLK_1, cacheline_bytes / sizeof(dtype));
+    // A: 1 -> trans or B 256/32 = 8
+    static constexpr auto nums_block_w = ceil_div(!is_convention_MN ? BLK_0 : BLK_1, block_size_w);
+    
+    //TODO do we need ternary or should it be always false?
+    //layout of sub groups
+    // A shape<32,1> / trans or B shap<4,8>
+    using PrefetchSGLayoutShape =
+      Shape<Int<!is_convention_MN ? cute::gcd(Total_SG, nums_block_w) : Total_SG / cute::gcd(Total_SG, nums_block_w)>, 
+            Int<!is_convention_MN ? Total_SG / cute::gcd(Total_SG, nums_block_w) : cute::gcd(Total_SG, nums_block_w)>>;
+
+    // 8x32
+    using PrefetchTileSize = decltype(ceil_div(BLK{}, PrefetchSGLayoutShape{}));
+
     constexpr auto height = !is_convention_MN ? get<1>(PrefetchTileSize{}) : get<0>(PrefetchTileSize{});
     constexpr auto dtype_size_bits = sizeof_bits_v<dtype>;
     constexpr int SubgroupSize = size(typename Traits_LD_t::ThrID{});
-    constexpr int sgs_M = size<0>(SGLayoutShape{});
-    constexpr int sgs_N = size<1>(SGLayoutShape{});
+    constexpr int sgs_M = size<0>(PrefetchSGLayoutShape{});
+    constexpr int sgs_N = size<1>(PrefetchSGLayoutShape{});
 
     #define RETURN_STATEMENT(HEIGHT, DTYPE_SIZE, DTYPE_COL_SIZE) \
       using prefetch_traits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##HEIGHT##x##DTYPE_COL_SIZE##_LD_N, StrideIndicator>; \
