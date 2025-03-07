@@ -1002,9 +1002,10 @@ struct Copy_Traits<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
   using CopyInternalType = ushort;
 };
 
-template <class... args_t>
-struct Copy_Traits<XE_2D_U16x16x32_LD_N, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, args_t...> {
+template <class StrideIndicator>
+struct Copy_Traits<XE_2D_U16x16x32_LD_N, StrideIndicator>
+    : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator> {
+  static_assert(XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN);
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
@@ -1018,12 +1019,13 @@ struct Copy_Traits<XE_2D_U16x16x32_LD_N, args_t...>
 
   template <class... ArgTs>
   Copy_Traits(ArgTs... args)
-      : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>(args...) {}
 };
 
-template <class... args_t>
-struct Copy_Traits<XE_2D_U16x16x32_LD_N_SWAP, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N_SWAP, args_t...> {
+template <class StrideIndicator>
+struct Copy_Traits<XE_2D_U16x16x32_LD_N_SWAP, StrideIndicator>
+    : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N_SWAP, StrideIndicator> {
+  static_assert(!XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN);
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
@@ -1037,7 +1039,7 @@ struct Copy_Traits<XE_2D_U16x16x32_LD_N_SWAP, args_t...>
 
   template <class... ArgTs>
   Copy_Traits(ArgTs... args)
-      : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N_SWAP, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N_SWAP, StrideIndicator>(args...) {}
 };
 
 template <class... args_t>
