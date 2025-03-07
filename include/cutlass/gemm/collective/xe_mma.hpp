@@ -152,10 +152,10 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
   using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
 
   // The prefetch copy is different from the main copy here we use the subgroup collectively to load the data
-  using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize2, PrefetchSGLayoutShapeA, is_A_transposed ^ is_A_reversed, ElementA, StrideA, typename TiledMma::ThrLayoutVMNK>(
-      make_tensor(make_gmem_ptr(static_cast<ElementA const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideA{}))));
-  using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize2, PrefetchSGLayoutShapeB, is_B_transposed ^ is_B_reversed, ElementB, StrideB, typename TiledMma::ThrLayoutVMNK>(
-      make_tensor(make_gmem_ptr(static_cast<ElementB const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideB{}))));
+  //using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize2, PrefetchSGLayoutShapeA, is_A_transposed ^ is_A_reversed, ElementA, StrideA, typename TiledMma::ThrLayoutVMNK>(
+    //  make_tensor(make_gmem_ptr(static_cast<ElementA const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideA{}))));
+  //using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize2, PrefetchSGLayoutShapeB, is_B_transposed ^ is_B_reversed, ElementB, StrideB, typename TiledMma::ThrLayoutVMNK>(
+    //  make_tensor(make_gmem_ptr(static_cast<ElementB const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideB{}))));
 
   using  TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), StrideA{}));   //(m, k)
   using  TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), StrideB{}));   //(n, k)
@@ -301,8 +301,12 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     const int prefetch_a_coord_1 =  is_A_transposed ? m_idx * BLK_M : k_start_idx * BLK_K;
     constexpr int ld_a = is_A_transposed ? 0 : 1;
 
-    auto tiled_prefetch_a = XE_Prefetch_A{mainloop.mA};
-    auto tiled_prefetch_b = XE_Prefetch_B{mainloop.mB};
+    //auto tiled_prefetch_a = XE_Prefetch_A{mainloop.mA};
+    //auto tiled_prefetch_b = XE_Prefetch_B{mainloop.mB};
+    auto tiled_prefetch_a = mainloop.copy_A.template prefetch_selector<PrefetchATileSize2, PrefetchSGLayoutShapeA, ElementA>(
+      mainloop.mA);
+    auto tiled_prefetch_b = mainloop.copy_B.template prefetch_selector<PrefetchBTileSize2, PrefetchSGLayoutShapeB, ElementB>(
+      mainloop.mB);
     
     auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
     auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);

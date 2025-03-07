@@ -161,6 +161,61 @@ struct XE_2D_LD_Unpack {
 
   XE_2D_LD_Unpack() {}
 
+  template<class PrefetchTileSize, class SGLayoutShape, class dtype, class Tensor>
+  CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) const {
+    constexpr auto height = !is_convention_MN ? get<1>(PrefetchTileSize{}) : get<0>(PrefetchTileSize{});
+    constexpr auto dtype_size_bits = sizeof_bits_v<dtype>;
+    constexpr int SubgroupSize = size(typename Traits_LD_t::ThrID{});
+    constexpr int sgs_M = size<0>(SGLayoutShape{});
+    constexpr int sgs_N = size<1>(SGLayoutShape{});
+
+    #define RETURN_STATEMENT(HEIGHT, DTYPE_SIZE, DTYPE_COL_SIZE) \
+      using prefetch_traits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##HEIGHT##x##DTYPE_COL_SIZE##_LD_N, StrideIndicator>; \
+      using prefetch_atom = Copy_Atom<prefetch_traits, dtype>; \
+      using CopyThreadShape = Shape<_1, Int<SubgroupSize>>; \
+      using PrefetchTilingLayout = std::conditional_t<!is_convention_MN, \
+        Layout<Shape<Shape<Int<SubgroupSize>, Int<sgs_M>>, Int<sgs_N>>, \
+               Stride<Stride<_1, Int<SubgroupSize>>,       Int<SubgroupSize * sgs_M>>>, \
+        Layout<Shape<Int<sgs_M>,        Shape<Int<SubgroupSize>, Int<sgs_N>>>, \
+               Stride<Int<SubgroupSize>,Stride<_1,               Int<SubgroupSize * sgs_M>>>> \
+      >; \
+      using PrefetchValLayoutBase = decltype(make_layout(shape_div(typename prefetch_traits::BlockShape{}, CopyThreadShape{}))); \
+      using PrefetchValLayout = std::conditional_t<!is_convention_MN /*TODO check condition*/, \
+                                                   decltype(make_layout(make_shape(size<1>(PrefetchValLayoutBase{}), size<0>(PrefetchValLayoutBase{})), LayoutRight{})), \
+                                                   PrefetchValLayoutBase>; \
+      return make_tiled_copy(prefetch_atom{}.with(tensor), \
+                             PrefetchTilingLayout{}, \
+                             PrefetchValLayout{});
+
+    #define CHOOSE_PREFETCH_FOR_TYPE(HEIGHT) \
+      if constexpr (dtype_size_bits == 8){ \
+        RETURN_STATEMENT(HEIGHT, 8, 64); \
+      } else if constexpr (dtype_size_bits == 16){ \
+        RETURN_STATEMENT(HEIGHT, 16, 32); \
+      } else if constexpr (dtype_size_bits == 32){ \
+        RETURN_STATEMENT(HEIGHT, 32, 16); \
+      } else { \
+        static_assert(dependent_false<dtype> && "Invalid PrefetchTileSize and type"); \
+      }
+
+    if constexpr (height == 1){
+      CHOOSE_PREFETCH_FOR_TYPE(1)
+    } else if constexpr (height == 2) {
+      CHOOSE_PREFETCH_FOR_TYPE(2)
+    } else if constexpr (height == 4) {
+      CHOOSE_PREFETCH_FOR_TYPE(4)
+    } else if constexpr (height == 8) {
+      CHOOSE_PREFETCH_FOR_TYPE(8)
+    } else if constexpr (height == 16) {
+      CHOOSE_PREFETCH_FOR_TYPE(16)
+    } else if constexpr (height == 32) {
+      CHOOSE_PREFETCH_FOR_TYPE(32)
+    } else {
+      static_assert(dependent_false<PrefetchTileSize> && "Invalid PrefetchTileSize[0]");
+    }
+    #undef CHOOSE_PREFETCH_FOR_TYPE
+    #undef RETURN_STATEMENT
+  }
 
   template <class TS, class SLayout, class TD, class DLayout>
   CUTE_HOST_DEVICE friend constexpr void
@@ -170,7 +225,7 @@ struct XE_2D_LD_Unpack {
     constexpr int dtype_bits = sizeof_bits_v<dtype>;
 
     static_assert(is_rmem<TD>::value);
-    // TODO(Codeplay): rnable this check once the coordinate refactoring is complete
+    // TODO(Codeplay): enable this check once the coordinate refactoring is complete
     //static_assert(size(SLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::SrcLayout{}),
       //            "Src tensor size does not match copy atom size");
     static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::DstLayout{}),
@@ -2203,67 +2258,6 @@ BUILD_XE_NAME(32)
       return make_prefetch<typename XePrefetchConstructor<dtype, 32>::type_t, Stride, dtype, SubgroupSize>(tensor); 
     else
       static_assert(dependent_false<PrefetchTileSize> && "Invalid PrefetchTileSize[0]");
-  }
-
-  template<class PrefetchTileSize, class SGLayoutShape, bool IsTransposedXorReversed, class dtype, class TensorStride, class ThrLayoutVMNK, class Tensor>
-  CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
-    constexpr auto height = IsTransposedXorReversed ? get<1>(PrefetchTileSize{}) : get<0>(PrefetchTileSize{});
-    constexpr auto dtype_size_bits = sizeof_bits_v<dtype>;
-    //using ThrLayoutVMNK = Layout<Shape<_16, _8, _4, _1>>;
-    //using ThrShapeMN = Shape<_8, _4>;
-    constexpr int SubgroupSize = size<0>(ThrLayoutVMNK{});
-    //constexpr int NumSubgroups = size<1>(group<1,3>(ThrLayoutVMNK{}));
-    constexpr int sgs_M = size<0>(SGLayoutShape{});
-    constexpr int sgs_N = size<1>(SGLayoutShape{});
-    //ThrLayout a = "w";
-    //PrefetchTileSize a = shape_div(typename  Copy_Traits<XE_2D_U16x8x32_LD_N, TensorStride>::BlockShape{}, Shape<_1, Int<SubgroupSize>>{});
-
-    #define RETURN_STATEMENT(HEIGHT, DTYPE_SIZE, DTYPE_COL_SIZE) \
-      using prefetch_traits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##HEIGHT##x##DTYPE_COL_SIZE##_LD_N, TensorStride>; \
-      using prefetch_atom = Copy_Atom<prefetch_traits, dtype>; \
-      using CopyThreadShape = Shape<_1, Int<SubgroupSize>>; \
-      using PrefetchTilingLayout = std::conditional_t<IsTransposedXorReversed, \
-        Layout<Shape<Shape<Int<SubgroupSize>, Int<sgs_M>>, Int<sgs_N>>, \
-               Stride<Stride<_1, Int<SubgroupSize>>,       Int<SubgroupSize * sgs_M>>>, \
-        Layout<Shape<Int<sgs_M>,        Shape<Int<SubgroupSize>, Int<sgs_N>>>, \
-               Stride<Int<SubgroupSize>,Stride<_1,               Int<SubgroupSize * sgs_M>>>> \
-      >; \
-      using PrefetchValLayoutBase = decltype(make_layout(shape_div(typename prefetch_traits::BlockShape{}, CopyThreadShape{}))); \
-      using PrefetchValLayout = std::conditional_t<IsTransposedXorReversed /*TODO check condition*/, \
-                                                   decltype(make_layout(make_shape(size<1>(PrefetchValLayoutBase{}), size<0>(PrefetchValLayoutBase{})), LayoutRight{})), \
-                                                   PrefetchValLayoutBase>; \
-      return make_tiled_copy(prefetch_atom{}.with(tensor), \
-                             PrefetchTilingLayout{}, \
-                             PrefetchValLayout{});
-
-    #define CHOOSE_PREFETCH_FOR_TYPE(HEIGHT) \
-      if constexpr (dtype_size_bits == 8){ \
-        RETURN_STATEMENT(HEIGHT, 8, 64); \
-      } else if constexpr (dtype_size_bits == 16){ \
-        RETURN_STATEMENT(HEIGHT, 16, 32); \
-      } else if constexpr (dtype_size_bits == 32){ \
-        RETURN_STATEMENT(HEIGHT, 32, 16); \
-      } else { \
-        static_assert(dependent_false<dtype> && "Invalid PrefetchTileSize and type"); \
-      }
-
-    if constexpr (height == 1){
-      CHOOSE_PREFETCH_FOR_TYPE(1)
-    } else if constexpr (height == 2) {
-      CHOOSE_PREFETCH_FOR_TYPE(2)
-    } else if constexpr (height == 4) {
-      CHOOSE_PREFETCH_FOR_TYPE(4)
-    } else if constexpr (height == 8) {
-      CHOOSE_PREFETCH_FOR_TYPE(8)
-    } else if constexpr (height == 16) {
-      CHOOSE_PREFETCH_FOR_TYPE(16)
-    } else if constexpr (height == 32) {
-      CHOOSE_PREFETCH_FOR_TYPE(32)
-    } else {
-      static_assert(dependent_false<PrefetchTileSize> && "Invalid PrefetchTileSize[0]");
-    }
-    #undef CHOOSE_PREFETCH_FOR_TYPE
-    #undef RETURN_STATEMENT
   }
 } // end namespace detail
 
