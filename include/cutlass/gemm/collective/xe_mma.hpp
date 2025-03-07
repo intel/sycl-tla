@@ -154,8 +154,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
   using Copy_TV_Layout = typename atom_load_A::ValLayoutDst;
   using Copy_Tiler = Shape<_16, _32>;
-  using Copy_A_new = decltype(make_tiled_copy_impl(atom_load_A{}, Copy_TV_Layout{}, Copy_Tiler{}));
-  using Copy_B_new = decltype(make_tiled_copy_impl(atom_load_B{}, Copy_TV_Layout{}, Copy_Tiler{}));
 
   // Host side kernel arguments
   struct Arguments {
@@ -223,13 +221,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     auto thr_copy_A = mainloop.copy_A.get_slice(thread_idx);
     auto thr_copy_B = mainloop.copy_B.get_slice(thread_idx);
 
-    auto copy_a_new = make_tiled_copy_impl(atom_load_A{}.with(mainloop.mA), Copy_TV_Layout{}, Copy_Tiler{});
-    auto copy_b_new = make_tiled_copy_impl(atom_load_B{}.with(mainloop.mB), Copy_TV_Layout{}, Copy_Tiler{});
-
     auto copy_b_SWAP = make_tiled_copy_impl(atom_load_B_SWAP{}.with(mainloop.mB), Copy_TV_Layout_B_SWAP{}, Copy_Tiler{});
 
-    auto thr_copy_A_new = copy_a_new.get_slice(thread_idx);
-    auto thr_copy_B_new = copy_b_new.get_slice(thread_idx);
     auto thr_copy_B_SWAP = copy_b_SWAP.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
@@ -244,9 +237,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
-    Tensor tCrA = make_tensor<ElementA>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<ElementB>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
-
     Tensor gA_gmem = local_tile(mainloop.mA, select<0,2>(WorkgroupTileShape{}), make_coord(m_idx,_,l_idx));
     Tensor gB_gmem = local_tile(mainloop.mB, select<0,2>(WorkgroupTileShape{}), make_coord(n_idx,_,l_idx));
 
@@ -254,16 +244,13 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     Tensor fragment_B = thr_mma.partition_fragment_B(gB_gmem(_,_,0));
   
     // Retile registers for copies
-    Tensor tArA = thr_copy_A.retile_D(tCrA);
-    Tensor tBrB = thr_copy_B.retile_D(tCrB);
-    
-    Tensor copy_tCrA = thr_copy_A_new.retile_D(fragment_A);
+    Tensor copy_tCrA = thr_copy_A.retile_D(fragment_A);
     Tensor copy_tCrB = thr_copy_B_SWAP.retile_D(fragment_B);
     // Retile global tile for copies
-    Tensor tAgA = thr_copy_A.retile_S(tCgA);
-    Tensor tBgB = thr_copy_B.retile_S(tCgB);
+    Tensor tAgA_new = thr_copy_A.retile_S(tCgA);
     Tensor tBgB_new = thr_copy_B_SWAP.retile_S(tCgB);
 
+    Tensor mma_tCrA = retile_MMA(mainloop.copy_A, thr_mma, fragment_A);
     Tensor mma_tCrB = retile_MMA(copy_b_SWAP, thr_mma, fragment_B);
 
     // Tensor mma_tCrB = thr_copy_B_SWAP.retile_MMA(thr_mma, fragment_B);
@@ -272,15 +259,10 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     #define LOG_GROUP 0
 #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
-      PRINT(tCrA);
       PRINT(fragment_A);
-      PRINT(tArA);
       PRINT(copy_tCrA);
-      PRINT(tAgA);
 
-      PRINT(tCrB);
       PRINT(fragment_B);
-      PRINT(tBrB);
       PRINT(copy_tCrB);
       PRINT(tBgB_new);
       }
@@ -344,8 +326,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.copy_A, tAgA(_,_,_,k_tile), tArA);
-      copy(mainloop.copy_B, tBgB(_,_,_,k_tile), tBrB);
+      copy(mainloop.copy_A, tAgA_new(_,_,_,k_tile), copy_tCrA);
       copy(copy_b_SWAP, tBgB_new(_,_,_,k_tile), copy_tCrB);
 
       if (prefetch_k < k_tile_count) {
@@ -353,7 +334,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
         prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
       }
 
-      cute::gemm(tiled_mma, tCrA, mma_tCrB, accum);
+      cute::gemm(tiled_mma, mma_tCrA, mma_tCrB, accum);
       barrier_wait(barrier_scope);
     }
   }
