@@ -92,6 +92,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
 
   static constexpr bool is_A_transposed = cute::detail::is_transpose_load<GmemTiledCopyA_>;
   static constexpr bool is_B_transposed = cute::detail::is_transpose_load<GmemTiledCopyB_>;
+  static constexpr bool is_A_reversed = cute::detail::is_stride_leftmost<StrideA>;
+  static constexpr bool is_B_reversed = cute::detail::is_stride_leftmost<StrideB>;
   static constexpr size_t cacheline_bytes = 64;
   // min(32,32)-> 32 (256, 32) -> 32
   static constexpr auto block_size_w_a = cute::min(is_A_transposed ? BLK_M : BLK_K, cacheline_bytes / sizeof(ElementA));
@@ -117,6 +119,30 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
   using PrefetchBTileSize = decltype(ceil_div(
       Shape<Int<is_B_transposed ? BLK_N : BLK_K>, Int<is_B_transposed ? BLK_K : BLK_N>>{}, PrefetchBThrShape{}));
 
+
+  // min(32,32)-> 32 (256, 32) -> 32
+  static constexpr auto block_size_w_a2 = cute::min(is_A_transposed ? BLK_M : BLK_K, cacheline_bytes / sizeof(ElementA));
+  // 1 -> trans 256/32 = 8
+  static constexpr auto nums_block_w_a2 = ceil_div(is_A_transposed ? BLK_M : BLK_K, block_size_w_a);
+  // min(32, 32) ->32  (256, 32)
+  static constexpr auto block_size_w_b2 = cute::min(is_B_transposed ? BLK_K : BLK_N, cacheline_bytes / sizeof(ElementB));
+  // 8  -> trans 1
+
+
+  // shape<32,1> / trans shap<4,8>
+  //TODO do we need ternary or should it be always false?
+  using PrefetchSGLayoutShapeA =
+      Shape<Int<is_A_transposed ^ is_A_reversed ? cute::gcd(Total_SG, nums_block_w_a) : Total_SG / cute::gcd(Total_SG, nums_block_w_a)>, 
+            Int<is_A_transposed ^ is_A_reversed ? Total_SG / cute::gcd(Total_SG, nums_block_w_a) : cute::gcd(Total_SG, nums_block_w_a)>>;
+  // shape<4,8> / trans shap<32,1>
+  using PrefetchSGLayoutShapeB =
+      Shape<Int<is_B_transposed ^ is_B_reversed ? cute::gcd(Total_SG, nums_block_w_b) : Total_SG / cute::gcd(Total_SG, nums_block_w_b)>, 
+            Int<is_B_transposed ^ is_B_reversed ? Total_SG / cute::gcd(Total_SG, nums_block_w_b) : cute::gcd(Total_SG, nums_block_w_b)>>;
+  // 8x32
+  using PrefetchATileSize2 = decltype(ceil_div(Shape<Int<BLK_M>, Int<BLK_K>>{}, PrefetchSGLayoutShapeA{}));
+  // 8x32
+  using PrefetchBTileSize2 = decltype(ceil_div(Shape<Int<BLK_N>, Int<BLK_K>>{}, PrefetchSGLayoutShapeB{}));
+
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
   using traits_load_A = Copy_Traits<GmemTiledCopyA, StrideA>;
@@ -126,9 +152,9 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
   using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
 
   // The prefetch copy is different from the main copy here we use the subgroup collectively to load the data
-  using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize, PrefetchAThrShape, ElementA, StrideA, typename TiledMma::ThrLayoutVMNK>(
+  using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize2, PrefetchSGLayoutShapeA, is_A_transposed ^ is_A_reversed, ElementA, StrideA, typename TiledMma::ThrLayoutVMNK>(
       make_tensor(make_gmem_ptr(static_cast<ElementA const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideA{}))));
-  using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize, PrefetchBThrShape, ElementB, StrideB, typename TiledMma::ThrLayoutVMNK>(
+  using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize2, PrefetchSGLayoutShapeB, is_B_transposed ^ is_B_reversed, ElementB, StrideB, typename TiledMma::ThrLayoutVMNK>(
       make_tensor(make_gmem_ptr(static_cast<ElementB const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideB{}))));
 
   using  TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), StrideA{}));   //(m, k)
@@ -309,31 +335,80 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     constexpr int barrier_scope = 2;
     int prefetch_k = 0;
 
-    if(cute::thread(145,3)){
+    /*if(cute::thread(145,3)){
       //tiled_prefetch_a = "w2";
 
       print("ThrLayoutVMNK "); print(typename TiledMma::ThrLayoutVMNK{}); print("\n");
+      print("WorkgroupTileShape "); print(WorkgroupTileShape{}); print("\n");
       print("gA "); print(gA); print("\n");
+      print("StrideA "); print(StrideA{}); print("\n");
+      print("mainloop.copy_A "); print(mainloop.copy_A); print("\n");
+      //print("mainloop.copy_A.width "); print(mainloop.copy_A.width); print("\n");
+      //print("mainloop.copy_A.height "); print(mainloop.copy_A.height); print("\n");
+      //print("mainloop.copy_A.pitch "); print(mainloop.copy_A.pitch); print("\n");
+      //print("mainloop.copy_A.stride_l "); print(mainloop.copy_A.stride_l); print("\n");
+      print("mainloop.copy_A.is_need_reversed "); print(decltype(mainloop.copy_A)::is_need_reversed); print("\n");
       print("tiled_prefetch_a "); print(tiled_prefetch_a); print("\n");
       print("prefetch_iter_a "); print(prefetch_iter_a); print("\n");
       print("pAgA "); print(pAgA); print("\n");
       print("PrefetchAThrShape "); print(PrefetchAThrShape{}); print("\n");
       print("PrefetchATileSize "); print(PrefetchATileSize{}); print("\n");
+      print("PrefetchSGLayoutShapeA "); print(PrefetchSGLayoutShapeA{}); print("\n");
+      print("PrefetchATileSize2 "); print(PrefetchATileSize2{}); print("\n");
+      print("is_A_transposed "); print(is_A_transposed); print("\n");
+
+
+      
+      constexpr int sgs_M = size<0>(PrefetchSGLayoutShapeB{});
+      constexpr int sgs_N = size<1>(PrefetchSGLayoutShapeB{});
+      auto thr_layout = Layout<Shape<Int<sgs_M>,        Shape<Int<SubgroupSize>, Int<sgs_N>>>,
+                               Stride<Int<SubgroupSize>,Stride<_1,               Int<SubgroupSize * sgs_M>>>>{};
+      //auto val_layout = make_layout(shape_div(typename XE_Prefetch_B::BlockShape{}, CopyThreadShape{}));
+      
+      using PrefetchValLayoutBase = decltype(make_layout(shape_div(typename XE_Prefetch_B::BlockShape{}, CopyThreadShape{})));
+      using PrefetchValLayout = std::conditional_t<is_B_transposed ^ is_B_reversed,
+                                                   decltype(make_layout(make_shape(size<1>(PrefetchValLayoutBase{}), size<0>(PrefetchValLayoutBase{})), LayoutRight{})),
+                                                   PrefetchValLayoutBase>;
+      auto val_layout = PrefetchValLayout{};
+      auto layout_mn = cute::raked_product(thr_layout, val_layout);
+      // (thr_idx, val_idx) -> (M,N)
+      auto layout_tv = right_inverse(layout_mn).with_shape(make_shape(size(thr_layout), size(val_layout)));
+      // Tiler for extracting relevant elements
+      // (M,N) -> tensor coord
+      auto tiler = product_each(shape(layout_mn));
 
       print("\n");
       print("gB "); print(gB); print("\n");
+      print("StrideB "); print(StrideB{}); print("\n");
+      //print("mainloop.copy_B.width "); print(mainloop.copy_B.width); print("\n");
+      //print("mainloop.copy_B.height "); print(mainloop.copy_B.height); print("\n");
+      //print("mainloop.copy_B.pitch "); print(mainloop.copy_B.pitch); print("\n");
+      //print("mainloop.copy_B.stride_l "); print(mainloop.copy_B.stride_l); print("\n");
+      print("mainloop.copy_B.is_need_reversed "); print(decltype(mainloop.copy_B)::is_need_reversed); print("\n");
       print("tiled_prefetch_b "); print(tiled_prefetch_b); print("\n");
       print("prefetch_iter_b "); print(prefetch_iter_b); print("\n");
       print("pBgB "); print(pBgB); print("\n");
       print("PrefetchBThrShape "); print(PrefetchBThrShape{}); print("\n");
       print("PrefetchBTileSize "); print(PrefetchBTileSize{}); print("\n");
+      print("PrefetchSGLayoutShapeB "); print(PrefetchSGLayoutShapeB{}); print("\n");
+      print("PrefetchBTileSize2 "); print(PrefetchBTileSize2{}); print("\n");
+      print("BLK_M "); print(BLK_M); print("\n");
+      print("BLK_N "); print(BLK_N); print("\n");
+      print("BLK_K "); print(BLK_K); print("\n");
+      print("is_B_transposed "); print(is_B_transposed); print("\n");
+      print("thr_layout "); print(thr_layout); print("\n");
+      print("PrefetchValLayoutBase{} "); print(PrefetchValLayoutBase{}); print("\n");
+      print("val_layout "); print(val_layout); print("\n");
+      print("layout_mn "); print(layout_mn); print("\n");
+      print("layout_tv "); print(layout_tv); print("\n");
+      print("tiler "); print(tiler); print("\n");
       print("\n");
-    }
+    }*/
 
     CUTLASS_PRAGMA_UNROLL
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
       prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
-      prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
+      prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
     }
 
 
@@ -367,7 +442,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
         /*if(cute::thread(33,3)){
           print("prefetch_iter_b(_, _, _, prefetch_k) "); print(prefetch_iter_b(_, _, _, prefetch_k)); print("\n");
         }*/
-        prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
+        prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
         /*if(cute::thread(33,3)){
           print("iter done\n");
         }*/

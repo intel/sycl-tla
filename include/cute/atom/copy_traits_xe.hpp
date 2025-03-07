@@ -195,6 +195,7 @@ struct XE_2D_LD_Unpack {
   prefetch(Copy_Atom<Traits_LD_t, CA_Args...> const &atom,
            Tensor<TS, SLayout> const &src) {
     static_assert(detail::has_prefetch<CopyOp>);
+    //TODO(Codeplay) add asserts on size
 
     using dtype = typename Copy_Atom<Traits_LD_t, CA_Args...>::ValType;
 
@@ -202,6 +203,8 @@ struct XE_2D_LD_Unpack {
 
     auto [m, n, l] = src.data().coord_;
     
+    int x = is_need_reversed ? m : n;
+    int y = is_need_reversed ? n : m;
     //m="w";
     /*if(cute::thread(81,3)){
       print("prefetching "); print(src.data().coord_); print("\n");
@@ -210,7 +213,7 @@ struct XE_2D_LD_Unpack {
     CopyOp::PREFETCH::copy((void *)(base_addr + l * atom.stride_l),
                            atom.width * sizeof(dtype), atom.height,
                            atom.pitch * sizeof(dtype),
-                           intel::coord_t{(int)n, (int)m});
+                           intel::coord_t{x, y});
   }
 
   template <class Coord, class GShape>
@@ -2126,9 +2129,9 @@ namespace detail
     }
   }
 
-  template<class PrefetchTileSize, class SGLayoutShape, class dtype, class TensorStride, class ThrLayoutVMNK, class Tensor>
+  template<class PrefetchTileSize, class SGLayoutShape, bool IsTransposedXorReversed, class dtype, class TensorStride, class ThrLayoutVMNK, class Tensor>
   CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
-    constexpr auto height = get<0>(PrefetchTileSize{});
+    constexpr auto height = IsTransposedXorReversed ? get<1>(PrefetchTileSize{}) : get<0>(PrefetchTileSize{});
     constexpr auto dtype_size_bits = sizeof_bits_v<dtype>;
     //using ThrLayoutVMNK = Layout<Shape<_16, _8, _4, _1>>;
     //using ThrShapeMN = Shape<_8, _4>;
@@ -2143,13 +2146,19 @@ namespace detail
       using prefetch_traits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##HEIGHT##x##DTYPE_COL_SIZE##_LD_N, TensorStride>; \
       using prefetch_atom = Copy_Atom<prefetch_traits, dtype>; \
       using CopyThreadShape = Shape<_1, Int<SubgroupSize>>; \
+      using PrefetchTilingLayout = std::conditional_t<IsTransposedXorReversed, \
+        Layout<Shape<Shape<Int<SubgroupSize>, Int<sgs_M>>, Int<sgs_N>>, \
+               Stride<Stride<_1, Int<SubgroupSize>>,       Int<SubgroupSize * sgs_M>>>, \
+        Layout<Shape<Int<sgs_M>,        Shape<Int<SubgroupSize>, Int<sgs_N>>>, \
+               Stride<Int<SubgroupSize>,Stride<_1,               Int<SubgroupSize * sgs_M>>>> \
+      >; \
+      using PrefetchValLayoutBase = decltype(make_layout(shape_div(typename prefetch_traits::BlockShape{}, CopyThreadShape{}))); \
+      using PrefetchValLayout = std::conditional_t<IsTransposedXorReversed /*TODO check condition*/, \
+                                                   decltype(make_layout(make_shape(size<1>(PrefetchValLayoutBase{}), size<0>(PrefetchValLayoutBase{})), LayoutRight{})), \
+                                                   PrefetchValLayoutBase>; \
       return make_tiled_copy(prefetch_atom{}.with(tensor), \
-                             /*Layout<Shape<_1, Int<SubgroupSize>>>{},*/ \
-                             Layout<Shape<Int<sgs_M>,        Shape<Int<SubgroupSize>,Int<sgs_N>> >, \
-                                    Stride<Int<SubgroupSize>,Stride<_1,              Int<SubgroupSize * sgs_M>> > >{}, \
-                             /*ThrLayout{},*/ \
-                             /*make_layout(ThrShapeMN{}));*/ \
-                             make_layout(shape_div(typename prefetch_traits::BlockShape{}, CopyThreadShape{})));
+                             PrefetchTilingLayout{}, \
+                             PrefetchValLayout{});
 
     #define CHOOSE_PREFETCH_FOR_TYPE(HEIGHT) \
       if constexpr (dtype_size_bits == 8){ \
