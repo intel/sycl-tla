@@ -261,7 +261,8 @@ struct TiledCopy : Copy_Atom
     // Transform the tile mode
     auto v_tensor = t_tensor.compose(frg_layout_v, _);
     // ((atom_vals,rest_vals),(1,RM,RN,...))
-    if (cute::thread0()) {
+  // TODO(joe): Tidy this up
+    if (false && cute::thread0()) {
       cute::print("\n");
       PRINT(tensor);
       PRINT(TiledNumThr{});

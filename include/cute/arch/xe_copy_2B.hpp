@@ -504,7 +504,6 @@ struct XE_2D_U16x4x32_LD_N {
 };
 
 struct XE_2D_U16x8x32_LD_N {
-  using BlockShape = Shape<_8, _32>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -537,40 +536,6 @@ struct XE_2D_U16x8x32_LD_N {
 };
 
 struct XE_2D_U16x16x32_LD_N {
-  using BlockShape = Shape<_16, _32>;
-
-  template <class T>
-  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, intel::coord_t coord,
-                                    T *dst) {
-#if defined(SYCL_INTEL_TARGET)
-    static_assert(sizeof(T) == 2, "Expected T to have size 2");
-    *reinterpret_cast<intel::ushort32 *>(dst) =
-        __builtin_IB_subgroup_block_read_flat_u16_m16k16v2(
-            (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
-#else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
-#endif
-  }
-
-  struct PREFETCH {
-    CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                      int height, int pitch,
-                                      intel::coord_t coord) {
-#if defined(SYCL_INTEL_TARGET)
-      __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
-          (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          CacheControl::kL1C_L3C);
-#else
-      CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
-#endif
-    }
-  };
-};
-
-struct XE_2D_U16x16x32_LD_N_SWAP {
-  using BlockShape = Shape<_32, _16>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -703,7 +668,6 @@ struct XE_2D_U16x32x16_LD_V {
 };
 
 struct XE_2D_U16x16x32_LD_V {
-  using BlockShape = Shape<_16, _32>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,

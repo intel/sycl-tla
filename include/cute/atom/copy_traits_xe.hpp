@@ -94,8 +94,6 @@ static constexpr auto append_pvc_tensor(Tensor_t const &t0, uint32_t shape, uint
 template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<1>, int64_t>>
 struct XE_2D_LD_Unpack {
 
-  using BlockShape = typename CopyOp::BlockShape;
-  using Value_Layout = typename detail::value_layout_t<CopyOp>::type;
   using Traits_LD_t = Copy_Traits<CopyOp, StrideIndicator>;
 
   static constexpr auto stride_rank = rank(StrideIndicator{});
@@ -209,25 +207,26 @@ struct XE_2D_LD_Unpack {
                            intel::coord_t{(int)n, (int)m});
   }
 
-  template <class Coord, class GShape>
-  CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(Coord const &coord,
-                                                 GShape const &shape) const {
-
-    auto R = rank(GShape{});
-    static_assert(R == 3, "mismatch rank");
-
-    using basis_t =  make_seq<rank(BlockShape{})>;
-
-    using shape_mn = std::conditional_t<is_convention_MN, BlockShape, decltype(reverse(BlockShape{}))>;
-
-    auto new_shape = cute::tuple_cat(make_shape(_1{}), take<R - 2, R>(shape));
-    auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, shape_mn{},
-                                                                  [&](auto i, auto s){
-                                                                      return E<i>{} * s;
-                                                                  }));
-    return make_tensor(make_inttuple_iter(coord),
-                        make_layout(new_shape, new_stride));
-  }
+  // TODO(joe): Tidy this up
+  // template <class Coord, class GShape>XE_2D
+  // CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(Coord const &coord,
+  //                                                GShape const &shape) const {
+  //
+  //   auto R = rank(GShape{});
+  //   static_assert(R == 3, "mismatch rank");
+  //
+  //   using basis_t =  make_seq<rank(BlockShape{})>;
+  //
+  //   using shape_mn = std::conditional_t<is_convention_MN, BlockShape, decltype(reverse(BlockShape{}))>;
+  //
+  //   auto new_shape = cute::tuple_cat(make_shape(_1{}), take<R - 2, R>(shape));
+  //   auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, shape_mn{},
+  //                                                                 [&](auto i, auto s){
+  //                                                                     return E<i>{} * s;
+  //                                                                 }));
+  //   return make_tensor(make_inttuple_iter(coord),
+  //                       make_layout(new_shape, new_stride));
+  // }
 
   template <class GCoord, class GShape, class GStride, class Basis = decltype(make_seq<rank(GStride{})>{})>
   CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(GCoord const &coord,
@@ -254,6 +253,7 @@ struct XE_2D_LD_Unpack {
     return make_counting_tensor(make_layout(g_shape, make_stride(E<0>(), E<1>(), E<2>())));
   }
 
+  // TODO(joe): adapt this
   template <class TLShape>
   CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TLShape&& fragment_top_level_shape) const {
     auto [mma_atom_size, total_mma_atom_iters_M, total_mma_atom_iters_N] = fragment_top_level_shape;
@@ -971,13 +971,23 @@ struct Copy_Traits<XE_2D_U16x4x32_LD_N::PREFETCH, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U16x8x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x8x32_LD_N, args_t...> {
+  static constexpr bool is_convention_MN = XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, args_t...>::is_convention_MN;
+
   using ThrID = Layout<_16>;
+  using BlockShape = std::conditional_t<is_convention_MN, Shape<_8, _32>, Shape<_32, _8>>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
-                           Stride< _0,Stride< _1,_256,_512>>>;
+  // TODO(joe): These need to be modified
+  using SrcLayout = std::conditional_t<is_convention_MN, 
+                          Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+                           Stride< _0,Stride< _1,_256,_512>>>,
+                          Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+                           Stride< _0,Stride< _1,_256,_512>>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
-                           Stride<_16,Stride< _1,_256,_512>>>;
+  using DstLayout = std::conditional_t<is_convention_MN,
+                          Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+                           Stride<_16,Stride< _1,_256,_512>>>,
+                          Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+                           Stride<_16,Stride< _1,_256,_512>>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
@@ -989,6 +999,7 @@ struct Copy_Traits<XE_2D_U16x8x32_LD_N, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x8x32_LD_N, args_t...> {
+  using BlockShape = Shape<_8, _32>;
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1359,6 +1370,7 @@ struct Copy_Traits<XE_2D_U32x4x16_LD_N, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U32x8x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x8x16_LD_N, args_t...> {
+  using BlockShape = Shape<_8, _16>;
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1538,6 +1550,7 @@ struct Copy_Traits<XE_2D_U16x32x32_LD_V, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U16x16x32_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_V, args_t...> {
+  using BlockShape = Shape<_16, _32>;
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
