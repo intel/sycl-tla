@@ -910,8 +910,7 @@ struct Copy_Traits<XE_2D_U16x4x32_LD_N::PREFETCH, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U16x8x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x8x32_LD_N, args_t...> {
-  static constexpr bool is_convention_MN = XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, args_t...>::is_convention_MN;
-
+  using XE_2D_LD_Unpack<XE_2D_U16x8x32_LD_N, args_t...>::is_convention_MN;
   using ThrID = Layout<_16>;
 private:
   using BlockShape_ = Shape<_8, _32>;
@@ -953,9 +952,7 @@ struct Copy_Traits<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
 template <class StrideIndicator>
 struct Copy_Traits<XE_2D_U16x16x32_LD_N, StrideIndicator>
     : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator> {
-  static constexpr bool is_convention_MN = XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN;
-
-  // static_assert(XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN);
+  using XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN;
   using ThrID = Layout<_16>;
 private:
   using BlockShape_ = Shape<_16, _32>;
