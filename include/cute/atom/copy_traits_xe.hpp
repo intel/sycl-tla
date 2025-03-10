@@ -2422,4 +2422,13 @@ copy(Xe2DTiledCopy<CopyAtom, TV, Tiler> const& tiled_copy,
   return copy(static_cast<CopyAtom const&>(tiled_copy), src, dst);
 }
 
+// Generate the PVC coordinate tensor
+template <class GShape>
+CUTE_HOST_DEVICE constexpr
+auto
+get_pvc_tensor(GShape const& g_shape) {
+  static_assert(rank(GShape{}) == 3, "get_pvc_tensor only supports rank-3 tensors");
+  return make_counting_tensor(make_layout(g_shape, make_stride(E<0>(), E<1>(), E<2>())));
+}
+
 } // end namespace cute

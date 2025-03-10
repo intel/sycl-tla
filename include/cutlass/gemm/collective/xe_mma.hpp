@@ -92,26 +92,17 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
   // 32
   static constexpr auto Total_SG = ATOM_N * ATOM_M * ATOM_K;
-
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
+  using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
   using traits_load_A = Copy_Traits<GmemTiledCopyA, StrideA>;
   using atom_load_A = Copy_Atom<traits_load_A, ElementA>;
-
   using traits_load_B = Copy_Traits<GmemTiledCopyB, StrideB>;
   using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
 
   using  TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), StrideA{}));   //(m, k)
   using  TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), StrideB{}));   //(n, k)
 
-  using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
-  using Copy_A = decltype(make_tiled_copy(atom_load_A{},
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{}))));
-          
-  using Copy_B = decltype(make_tiled_copy(atom_load_B{},
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{}))));
   // Host side kernel arguments
   struct Arguments {
     ElementA const* ptr_A;
@@ -121,8 +112,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   };
 
   struct Params {
-    Copy_A copy_A;
-    Copy_B copy_B;
     TensorMKL mA;
     TensorNKL mB;
   };
@@ -146,14 +135,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     auto mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.ptr_B)),
                               make_layout(make_shape(N, K, L), args.dB));
 
-    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(mA_mkl),
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
-    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(mB_nkl),
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
-
-    return Params{tiled_copy_a, tiled_copy_b, mA_mkl, mB_nkl};
+    return Params{mA_mkl, mB_nkl};
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
@@ -170,8 +152,14 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     (void)thread_idx;
     (void)smem_buf;
     
-    auto thr_copy_A = mainloop.copy_A.get_slice(thread_idx);
-    auto thr_copy_B = mainloop.copy_B.get_slice(thread_idx);
+    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(mainloop.mA),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
+    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(mainloop.mB),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
+    auto thr_copy_A = tiled_copy_a.get_slice(thread_idx);
+    auto thr_copy_B = tiled_copy_b.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
@@ -185,8 +173,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
-    Tensor tCrA = make_tensor<ElementA>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<ElementB>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
+    Tensor tCrA = make_tensor<ElementA>(tiled_copy_a.make_fragment_layout(tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementB>(tiled_copy_b.make_fragment_layout(tCgB(_,_,_,0).shape()));
   
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
@@ -196,9 +184,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
     
-    auto tiled_prefetch_a = mainloop.copy_A.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Total_SG, ElementA>(mainloop.mA);
-    auto tiled_prefetch_b = mainloop.copy_B.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Total_SG, ElementB>(mainloop.mB);
-    
+    auto tiled_prefetch_a = tiled_copy_a.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Total_SG, ElementA>(mainloop.mA);
+    auto tiled_prefetch_b = tiled_copy_b.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Total_SG, ElementB>(mainloop.mB);
     auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
     auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);
     
@@ -247,8 +234,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.copy_A, tAgA(_,_,_,k_tile), tArA);
-      copy(mainloop.copy_B, tBgB(_,_,_,k_tile), tBrB);
+      copy(tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
+      copy(tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
