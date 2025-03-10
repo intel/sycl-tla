@@ -44,7 +44,11 @@ using PvcGemmBF16BF16FP32_RRR_1 = cutlass::gemm::device::GemmConfiguration<
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
         float, cutlass::layout::RowMajor,
         float, Shape<_256, _256, _32>,
-        TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>>>,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, 
+                      _32>>,
         XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_V,
         Scheduler::Gemm>;
 
@@ -54,7 +58,11 @@ using PvcGemmBF16BF16FP32_RRR_2 = cutlass::gemm::device::GemmConfiguration<
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
         float, cutlass::layout::RowMajor,
         float, Shape<_128, _512, _32>,
-        TiledMMA<MMAAtom, Layout<Shape<_4,_8,_1>>>,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_4,_8,_1>, Stride<_8,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _8, _4>, Stride<_1, _64, _16>>, 
+                      _32>>,
         XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_V,
         Scheduler::Gemm>;
 
@@ -64,7 +72,11 @@ using PvcGemmBF16BF16FP32_RRR_3 = cutlass::gemm::device::GemmConfiguration<
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
         float, cutlass::layout::RowMajor,
                 float, Shape<_256, _128, _32>,
-        TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>>>,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _4, _2>, Stride<_1, _32, _16>>, 
+                      _32>>,
         XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_V,
         Scheduler::Gemm>;
 
@@ -74,8 +86,12 @@ using PvcGemmBF16BF16FP32_RRR_4 = cutlass::gemm::device::GemmConfiguration<
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
         float, cutlass::layout::RowMajor,
         float, Shape<_128, _256, _16>,
-        TiledMMA<MMAAtom, Layout<Shape<_4,_8,_1>>>,
-        XE_2D_U16x32x16_LD_N, XE_2D_U16x16x32_LD_V,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_4,_8,_1>, Stride<_8,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _8, _1>, Stride<_1, _16, _0>>, 
+                      _16>>,
+        XE_2D_U16x32x16_LD_N, XE_2D_U16x16x16_LD_V,
         Scheduler::Gemm>;
 
 using PvcGemmBF16BF16FP32_RRR_5 = cutlass::gemm::device::GemmConfiguration<
@@ -84,7 +100,11 @@ using PvcGemmBF16BF16FP32_RRR_5 = cutlass::gemm::device::GemmConfiguration<
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
         float, cutlass::layout::RowMajor,
         float, Shape<_8, _128, _32>,
-        TiledMMA<MMAAtom, Layout<Shape<_1,_4,_1>>>,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_1,_4,_1>, Stride<_0,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _1, _1>, Stride<_1, _0, _0>>,
+                      Layout<Shape<_16, _4, _2>, Stride<_1, _32, _16>>, 
+                      _32>>,
         XE_2D_U16x8x32_LD_N, XE_2D_U16x32x32_LD_V,
         Scheduler::Gemm>;
 
@@ -94,7 +114,11 @@ using PvcGemmBF16BF16FP32_RCR_6 = cutlass::gemm::device::GemmConfiguration<
         cutlass::bfloat16_t, cutlass::layout::ColumnMajor,
         float, cutlass::layout::RowMajor,
         float, Shape<_256, _256, _32>,
-        TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>>>,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, 
+                      _32>>,
         XE_2D_U16x8x32_LD_N, XE_2D_U16x16x16_LD_T,
         Scheduler::Gemm>;
 
@@ -104,7 +128,11 @@ using PvcGemmBF16BF16FP32_CRR_7 = cutlass::gemm::device::GemmConfiguration<
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
         float, cutlass::layout::RowMajor,
         float, Shape<_256, _256, _32>,
-        TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>>>,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, 
+                      _32>>,
         XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_V,
         Scheduler::Gemm>;
 
@@ -114,7 +142,11 @@ using PvcGemmBF16BF16FP32_CCR_8 = cutlass::gemm::device::GemmConfiguration<
         cutlass::bfloat16_t, cutlass::layout::ColumnMajor,
         float, cutlass::layout::RowMajor,
         float, Shape<_256, _256, _32>,
-        TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>>>,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, 
+                      _32>>,
         XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T,
         Scheduler::Gemm>;
 
@@ -133,7 +165,11 @@ using PvcGemmBF16BF16FP32_StreamK_RRR_1 = cutlass::gemm::device::GemmConfigurati
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
         float, cutlass::layout::RowMajor,
         float, Shape<_256, _256, _32>,
-        TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>>>,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, 
+                      _32>>,
         XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_V,
         Scheduler::GemmStreamK>;
 
@@ -145,7 +181,11 @@ using PvcGemmBF16BF16FP32_SplitK_RRR_1 = cutlass::gemm::device::GemmConfiguratio
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
         float, cutlass::layout::RowMajor,
         float, Shape<_256, _256, _32>,
-        TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>>>,
+        TiledMMA<MMAAtom, 
+                 Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, 
+                 Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, 
+                      _32>>,
         XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_V,
         Scheduler::GemmSplitK>;
 
