@@ -165,8 +165,8 @@ struct XE_2D_LD_Unpack {
   CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) const {
     constexpr size_t cacheline_bytes = 64;
     constexpr size_t dtype_size_bits = sizeof_bits_v<dtype>;
-    constexpr int soubgroup_size = size(typename Traits_LD_t::ThrID{});
-    using CopyThreadShape = Shape<_1, Int<soubgroup_size>>;
+    constexpr int subgroup_size  = size(typename Traits_LD_t::ThrID{});
+    using CopyThreadShape = Shape<_1, Int<subgroup_size >>;
 
     constexpr int tile_contig_size = is_need_reversed ? size<0>(TileShape{}) : size<1>(TileShape{});
     constexpr int tile_non_contig_size = is_need_reversed ? size<1>(TileShape{}) : size<0>(TileShape{});
@@ -178,17 +178,17 @@ struct XE_2D_LD_Unpack {
     static constexpr auto nums_blocks_contig = ceil_div(tile_contig_size, block_contig_size);
     
     // layout of sub groups
-    // A shape<32,1> / trans or B shap<4,8>
+    // A shape<32,1> / trans or B shape<4,8>
     constexpr int sgs_contig = cute::gcd(Num_SGs, nums_blocks_contig);
     constexpr int sgs_non_contig = Num_SGs / sgs_contig;
 
     constexpr auto block_non_contig_size = tile_non_contig_size / sgs_non_contig;
 
     using PrefetchTilingLayout = std::conditional_t<is_need_reversed,
-      Layout<Shape<Shape<Int<soubgroup_size>, Int<sgs_contig>>, Int<sgs_non_contig>>,
-             Stride<Stride<_1, Int<soubgroup_size>>,            Int<soubgroup_size * sgs_contig>>>,
-      Layout<Shape<Int<sgs_non_contig>, Shape<Int<soubgroup_size>, Int<sgs_contig>>>,
-             Stride<Int<soubgroup_size>,  Stride<_1, Int<soubgroup_size * sgs_non_contig>>>>
+      Layout<Shape<Shape<Int<subgroup_size >, Int<sgs_contig>>, Int<sgs_non_contig>>,
+             Stride<Stride<_1, Int<subgroup_size >>,            Int<subgroup_size  * sgs_contig>>>,
+      Layout<Shape<Int<sgs_non_contig>, Shape<Int<subgroup_size >, Int<sgs_contig>>>,
+             Stride<Int<subgroup_size >,  Stride<_1, Int<subgroup_size  * sgs_non_contig>>>>
     >;
 
     #define RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, CONTIG) \
@@ -272,14 +272,11 @@ struct XE_2D_LD_Unpack {
     dtype *base_addr = (dtype *)atom.base_ptr;
 
     auto [m, n, l] = src.data().coord_;
-    
-    int x = is_need_reversed ? m : n;
-    int y = is_need_reversed ? n : m;
 
     CopyOp::PREFETCH::copy((void *)(base_addr + l * atom.stride_l),
                            atom.width * sizeof(dtype), atom.height,
                            atom.pitch * sizeof(dtype),
-                           intel::coord_t{x, y});
+                           intel::coord_t{m, n});
   }
 
   template <class Coord, class GShape>
