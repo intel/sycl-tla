@@ -51,6 +51,7 @@ int main(int argc, const char **argv) {
   }
 
   if (options.head_size == 64) {
+
     using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>,
                               // Atom, Hardware(NUMBER OF CONCURRENT MMA), Iteration
                               Tile<Layout<Shape<_8, _8, _2>, Stride<_1, _16, _8>>,   // Vec Iteration, Hardware Jump,
@@ -60,7 +61,7 @@ int main(int argc, const char **argv) {
                                    _64>>;                                            // K is going to be 64
     return options.is_causal ? FMHAConfig<true, Shape<_128, _64, _64>, TiledMma>::run(options)
                              : FMHAConfig<false, Shape<_128, _64, _64>, TiledMma>::run(options);
-  } if (options.head_size == 96 || options.head_size == 192) {
+  } else if (options.head_size == 96 || options.head_size == 192) {
 
     using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>,
                               // Atom, Hardware(NUMBER OF CONCURRENT MMA), Iteration
