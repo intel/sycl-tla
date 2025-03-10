@@ -217,26 +217,6 @@ struct XE_2D_LD_Unpack {
                            intel::coord_t{(int)n, (int)m});
   }
 
-  // TODO(joe): Tidy this up
-  // template <class Coord, class GShape>XE_2D
-  // CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(Coord const &coord,
-  //                                                GShape const &shape) const {
-  //
-  //   auto R = rank(GShape{});
-  //   static_assert(R == 3, "mismatch rank");
-  //
-  //   using basis_t =  make_seq<rank(BlockShape{})>;
-  //
-  //   using shape_mn = std::conditional_t<is_convention_MN, BlockShape, decltype(reverse(BlockShape{}))>;
-  //
-  //   auto new_shape = cute::tuple_cat(make_shape(_1{}), take<R - 2, R>(shape));
-  //   auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, shape_mn{},
-  //                                                                 [&](auto i, auto s){
-  //                                                                     return E<i>{} * s;
-  //                                                                 }));
-  //   return make_tensor(make_inttuple_iter(coord),
-  //                       make_layout(new_shape, new_stride));
-  // }
 
   template <class GCoord, class GShape, class GStride, class Basis = decltype(make_seq<rank(GStride{})>{})>
   CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(GCoord const &coord,
@@ -262,23 +242,6 @@ struct XE_2D_LD_Unpack {
     static_assert(rank(GShape{}) == 3, "get_pvc_tensor only supports rank-3 tensors");
     return make_counting_tensor(make_layout(g_shape, make_stride(E<0>(), E<1>(), E<2>())));
   }
-
-  // TODO(joe): adapt this
-  template <class TLShape>
-  CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TLShape&& fragment_top_level_shape) const {
-    auto [mma_atom_size, total_mma_atom_iters_M, total_mma_atom_iters_N] = fragment_top_level_shape;
-    auto copy_size_M = size<0>(BlockShape{}); //TODO(Codeplay): We could use ValLayoutDst once it is consistent
-    auto copy_size_N = size<1>(BlockShape{}) / size(typename Traits_LD_t::ThrID{});
-    assert(copy_size_M >= mma_atom_size);
-    auto mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size;
-    auto mma_atom_iters_in_copy_N = copy_size_N;
-    auto copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
-    auto copy_iters_N = total_mma_atom_iters_N / mma_atom_iters_in_copy_N;
-    auto order = std::conditional_t<is_convention_MN, Step<_0, Step<_1,_3>, Step<_2,_4>>, Step<_0, Step<_2,_4>, Step<_1,_3>>>{};
-    return make_ordered_layout(make_shape(mma_atom_size, 
-                                          make_shape(mma_atom_iters_in_copy_M, copy_iters_M), 
-                                          make_shape(mma_atom_iters_in_copy_N, copy_iters_N)), order);
-  };
 
   template <class... TensorArgs>
   static constexpr auto with(Tensor<TensorArgs...> const &tensor) {
@@ -360,39 +323,6 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
                  intel::coord_t{(int)n, (int)m}, &*src.data());
   }
 
-  template <class Coord, class GShape>
-  CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(Coord const &coord,
-                                                 GShape const &shape) const {
-
-    auto R = rank(GShape{});
-    static_assert(R == 3, "mismatch rank");
-
-    using basis_t =  make_seq<rank(BlockShape{})>;
-
-    auto new_shape = cute::tuple_cat(make_shape(_1{}), take<R - 2, R>(shape));
-    auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, BlockShape{},
-                                                                  [&](auto i, auto s){
-                                                                      return E<i>{} * s;
-                                                                  }));
-    return make_tensor(make_inttuple_iter(coord),
-                        make_layout(new_shape, new_stride));
-  }
-
-  template <class GCoord, class GShape, class GStride, class Basis = decltype(make_seq<rank(GStride{})>{})>
-  CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(GCoord const &coord,
-                                                 GShape const &shape,
-                                                 GStride const &stride, 
-                                                 Basis const & basis = {}) const {
-
-    auto R = rank(GShape{});
-    static_assert(R == 3 || R == 4, "mismatch rank");
-    auto t_shape = cute::tuple_cat(make_shape(_1{}), take<1, R>(shape));
-    auto t_stride =  cute::tuple_cat(make_stride(_1{}), transform(basis, stride, [&](auto i, auto s){
-        return E<i>{} * s;
-    }));
-    return make_tensor(make_inttuple_iter(coord),
-                       make_layout(t_shape, t_stride));
-  }
 
   // Generate the PVC coord tensor
   template <class GShape>
@@ -2252,149 +2182,4 @@ retile_MMA(TiledCopy const&, MMA const&, MMATensor&& mma_tensor) {
                                                   Int<k / k_step>{}));
     return make_tensor(mma_tensor.data(),group<2, 4>(group<1, 3>(select<0, 1, 3, 2, 4>(retiled_tensor.layout()))));
 }
-
-template <class TiledCopy, class ThrIdx>
-class Xe2DThrCopy : ThrCopy<TiledCopy, ThrIdx> {
-
-public:
-
-  CUTE_HOST_DEVICE
-  Xe2DThrCopy(ThrIdx const& thr_idx) : ThrCopy<TiledCopy, ThrIdx> (thr_idx) {}
-
-  template <class DTensor>
-  CUTE_HOST_DEVICE
-  auto
-  retile_D(DTensor&& dtensor) {
-    if constexpr (!TiledCopy::is_convention_MN) {
-      return retile_D_nkl(dtensor);
-    } else {
-      return retile_D_mkl(dtensor);
-    }
-  }
-
-  template <class MMA, class MMATensor>
-  CUTE_HOST_DEVICE
-  auto
-  retile_MMA(MMA const&, MMATensor&& mma_tensor) {
-    if constexpr (TiledCopy::is_convention_MN) {
-      static constexpr auto m = decltype(size<1>(mma_tensor.shape()))::value;
-      static constexpr auto k = decltype(size<2>(mma_tensor.shape()))::value;
-      static constexpr auto m_step = size<0>(typename TiledCopy::BlockShape{})
-                                        / size<0>(typename MMA::Shape_MNK{});
-      static constexpr auto k_step = size<1>(typename TiledCopy::BlockShape{})
-                                        / size<2>(typename MMA::Shape_MNK{});
-
-      auto retiled_tensor = make_tensor(mma_tensor.data(),
-                                        make_shape(size<0>(mma_tensor.shape()),
-                                                   Int<m_step>{},
-                                                   Int<k_step>{},
-                                                   Int<m / m_step>{},
-                                                   Int<k / k_step>{}));
-      return make_tensor(mma_tensor.data(),group<2, 4>(group<1, 3>(select<0, 1, 3, 2, 4>(retiled_tensor.layout()))));
-    } else {
-      static constexpr auto k = decltype(size<2>(mma_tensor.shape()))::value;
-      static constexpr auto k_step = size<0>(typename TiledCopy::BlockShape{})
-                                      / size<2>(typename MMA::Shape_MNK{});
-
-      auto retiled_tensor = make_tensor(mma_tensor.data(),
-                                        make_shape(size<0>(mma_tensor.shape()),
-                                                   Int<k_step>{},
-                                                   size<1>(mma_tensor.shape()),
-                                                   Int<k / k_step>{}));
-      return make_tensor(mma_tensor.data(),group<2, 4>(select<0, 2, 1, 3>(retiled_tensor.layout())));
-    }
-  }
-
-private:
-
-  template <class DTensor>
-  CUTE_HOST_DEVICE static
-  auto
-  retile_D_mkl(DTensor&& dtensor) {
-    auto tmp = ThrCopy<TiledCopy, ThrIdx>::retile_D(dtensor);
-    return make_tensor(static_cast<decltype(tmp) &&>(tmp).data(),
-                           tmp.shape());
-  }
-
-  template <class DTensor>
-  CUTE_HOST_DEVICE static
-  auto
-  retile_D_nkl(DTensor&& dtensor) {
-    auto b_tensor = make_tensor(dtensor.data(),
-                               make_shape(size<0>(dtensor.shape()),
-                                         size<2>(dtensor.shape()),
-                                         size<1>(dtensor.shape())));
-    auto tmp = ThrCopy<TiledCopy, ThrIdx>::retile_D(b_tensor);
-    return make_tensor(static_cast<decltype(tmp) &&>(tmp).data(),
-                       make_shape(size<0>(tmp.shape()),
-                                  size<2>(tmp.shape()),
-                                  size<1>(tmp.shape())));
-  }
-};
-
-template <class Copy_Atom,
-          class LayoutCopy_TV,  // (tid,vid) -> coord   [Need not be 2D...]
-          class ShapeTiler_MN>  // coord space
-struct Xe2DTiledCopy : TiledCopy<Copy_Atom, LayoutCopy_TV, ShapeTiler_MN>{
-
-  template <class ThrIdx,
-            __CUTE_REQUIRES(is_integral<ThrIdx>::value)>
-  CUTE_HOST_DEVICE
-  auto
-  get_slice(ThrIdx const& thr_idx) const
-  {
-    return Xe2DThrCopy<Xe2DTiledCopy, ThrIdx>(thr_idx);
-  }
-};
-
-template <class... Args,
-          class ThrLayout,
-          class ValLayout = typename Copy_Atom<Args...>::Value_Layout>
-CUTE_HOST_DEVICE
-auto
-make_xe_2d_copy(Copy_Atom<Args...> const& copy_atom,
-                ThrLayout          const& thr_layout = {},     // (m,n) -> thr_idx
-                ValLayout          const& val_layout = {})     // (m,n) -> val_idx
-{
-  // Take the raked_products to compute the Layout_MN
-  // (M,N) -> (thr_idx, val_idx)
-  auto layout_mn = raked_product(thr_layout, val_layout);
-  // (thr_idx, val_idx) -> (M,N)
-  auto layout_tv = right_inverse(layout_mn).with_shape(make_shape(size(thr_layout), size(val_layout)));
-  // Tiler for extracting relevant elements
-  // (M,N) -> tensor coord
-  auto tiler = product_each(shape(layout_mn));
-
-#if 0
-  print("thr_layout: "); print(thr_layout); print("\n");
-  print("val_layout: "); print(val_layout); print("\n");
-  print("layout_mn : "); print(layout_mn);  print("\n");
-  print("layout_tv : "); print(layout_tv);  print("\n");
-  print("tiler     : "); print(tiler);      print("\n");
-#endif
-
-  return Xe2DTiledCopy<Copy_Atom<Args...>, decltype(layout_tv), decltype(tiler)>{copy_atom};
-}
-
-// The number of threads involved in a Xe2DTiledCopy
-template <class... Args>
-CUTE_HOST_DEVICE constexpr
-auto
-size(Xe2DTiledCopy<Args...> const&)
-{
-  return typename Xe2DTiledCopy<Args...>::TiledNumThr{};
-}
-
-template <class CopyAtom, class TV, class Tiler,
-          class SrcEngine, class SrcLayout,
-          class DstEngine, class DstLayout>
-CUTE_HOST_DEVICE
-void
-copy(Xe2DTiledCopy<CopyAtom, TV, Tiler> const& tiled_copy,
-     Tensor<SrcEngine, SrcLayout>   const& src,
-     Tensor<DstEngine, DstLayout>        & dst)
-{
-  return copy(static_cast<CopyAtom const&>(tiled_copy), src, dst);
-}
-
 } // end namespace cute
