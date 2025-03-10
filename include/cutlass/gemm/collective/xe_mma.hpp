@@ -1,4 +1,3 @@
-#define PRINT(x) print(#x ": "); print(x); print("\n");
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
@@ -218,38 +217,43 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     auto first_thread_in_sg_idx = sg.get_group_linear_id() * DispatchPolicy::SubgroupSize;
     auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
 
-    // Partition
+    // Partition global counting tensors for MMA
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
+    // Retile global counting tensors for copies
+    Tensor tAgA = thr_copy_A.retile_S(tCgA);
+    Tensor tBgB = thr_copy_B.retile_S(tCgB);
+
+    // TODO(joe): We only need this here because `partition_fragment_A/B` doesn't currently accept
+    // a counting tensor
     Tensor gA_gmem = local_tile(mainloop.mA, select<0,2>(WorkgroupTileShape{}), make_coord(m_idx,_,l_idx));
     Tensor gB_gmem = local_tile(mainloop.mB, select<0,2>(WorkgroupTileShape{}), make_coord(n_idx,_,l_idx));
 
+    // Define the fragments for the MMA
     Tensor fragment_A = thr_mma.partition_fragment_A(gA_gmem(_,_,0));
     Tensor fragment_B = thr_mma.partition_fragment_B(gB_gmem(_,_,0));
   
-    // Retile registers for copies
+    // Retile fragmens for copies
     Tensor copy_tCrA = thr_copy_A.retile_D(fragment_A);
     Tensor copy_tCrB = thr_copy_B.retile_D(fragment_B);
-    // Retile global tile for copies
-    Tensor tAgA_new = thr_copy_A.retile_S(tCgA);
-    Tensor tBgB_new = thr_copy_B.retile_S(tCgB);
 
+    // Work around the fact that Xe copies don't respect atom layout info
     Tensor mma_tCrA = retile_MMA(mainloop.copy_A, thr_mma, fragment_A);
     Tensor mma_tCrB = retile_MMA(mainloop.copy_B, thr_mma, fragment_B);
 
     // Tensor mma_tCrB = thr_copy_B_SWAP.retile_MMA(thr_mma, fragment_B);
-    #define CUTLASS_ENABLE_DEBUG_PRINTS 1 
-    #define LOG_THREAD 0
-    #define LOG_GROUP 0
 #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
-      PRINT(fragment_A);
-      PRINT(copy_tCrA);
+      print("======================= A: \n");
+      print("  fragment_A : "); print(fragment_A); print("\n");
+      print("  copy_tCrA : "); print(copy_tCrA); print("\n");
+      print("  mma_tCrA : "); print(mma_tCrA); print("\n");
 
-      PRINT(fragment_B);
-      PRINT(copy_tCrB);
-      PRINT(tBgB_new);
+      print("======================= B: \n");
+      print("  fragment_B : "); print(fragment_B); print("\n");
+      print("  copy_tCrB : "); print(copy_tCrB); print("\n");
+      print("  mma_tCrB : "); print(mma_tCrB); print("\n");
       }
 #endif
 
@@ -315,8 +319,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.copy_A, tAgA_new(_,_,_,k_tile), copy_tCrA);
-      copy(mainloop.copy_B, tBgB_new(_,_,_,k_tile), copy_tCrB);
+      copy(mainloop.copy_A, tAgA(_,_,_,k_tile), copy_tCrA);
+      copy(mainloop.copy_B, tBgB(_,_,_,k_tile), copy_tCrB);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
