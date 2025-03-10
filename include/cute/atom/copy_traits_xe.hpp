@@ -167,21 +167,21 @@ struct XE_2D_LD_Unpack {
     constexpr int BLK_0 = size<0>(BLK{});
     constexpr int BLK_1 = size<1>(BLK{});
     // min(32,32)-> 32 (256, 32) -> 32
-    static constexpr auto block_size_w = cute::min(!is_convention_MN ? BLK_0 : BLK_1, cacheline_bytes / sizeof(dtype));
+    static constexpr auto block_size_w = cute::min(is_need_reversed ? BLK_0 : BLK_1, cacheline_bytes / sizeof(dtype));
     // A: 1 -> trans or B 256/32 = 8
-    static constexpr auto nums_block_w = ceil_div(!is_convention_MN ? BLK_0 : BLK_1, block_size_w);
+    static constexpr auto nums_block_w = ceil_div(is_need_reversed ? BLK_0 : BLK_1, block_size_w);
     
     //TODO do we need ternary or should it be always false?
     //layout of sub groups
     // A shape<32,1> / trans or B shap<4,8>
     using PrefetchSGLayoutShape =
-      Shape<Int<!is_convention_MN ? cute::gcd(Total_SG, nums_block_w) : Total_SG / cute::gcd(Total_SG, nums_block_w)>, 
-            Int<!is_convention_MN ? Total_SG / cute::gcd(Total_SG, nums_block_w) : cute::gcd(Total_SG, nums_block_w)>>;
+      Shape<Int<is_need_reversed ? cute::gcd(Total_SG, nums_block_w) : Total_SG / cute::gcd(Total_SG, nums_block_w)>, 
+            Int<is_need_reversed ? Total_SG / cute::gcd(Total_SG, nums_block_w) : cute::gcd(Total_SG, nums_block_w)>>;
 
     // 8x32
     using PrefetchTileSize = decltype(ceil_div(BLK{}, PrefetchSGLayoutShape{}));
 
-    constexpr auto height = !is_convention_MN ? get<1>(PrefetchTileSize{}) : get<0>(PrefetchTileSize{});
+    constexpr auto height = is_need_reversed ? get<1>(PrefetchTileSize{}) : get<0>(PrefetchTileSize{});
     constexpr auto dtype_size_bits = sizeof_bits_v<dtype>;
     constexpr int SubgroupSize = size(typename Traits_LD_t::ThrID{});
     constexpr int sgs_M = size<0>(PrefetchSGLayoutShape{});
@@ -191,14 +191,14 @@ struct XE_2D_LD_Unpack {
       using prefetch_traits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##HEIGHT##x##DTYPE_COL_SIZE##_LD_N, StrideIndicator>; \
       using prefetch_atom = Copy_Atom<prefetch_traits, dtype>; \
       using CopyThreadShape = Shape<_1, Int<SubgroupSize>>; \
-      using PrefetchTilingLayout = std::conditional_t<!is_convention_MN, \
+      using PrefetchTilingLayout = std::conditional_t<is_need_reversed, \
         Layout<Shape<Shape<Int<SubgroupSize>, Int<sgs_M>>, Int<sgs_N>>, \
                Stride<Stride<_1, Int<SubgroupSize>>,       Int<SubgroupSize * sgs_M>>>, \
         Layout<Shape<Int<sgs_M>,        Shape<Int<SubgroupSize>, Int<sgs_N>>>, \
                Stride<Int<SubgroupSize>,Stride<_1,               Int<SubgroupSize * sgs_M>>>> \
       >; \
       using PrefetchValLayoutBase = decltype(make_layout(shape_div(typename prefetch_traits::BlockShape{}, CopyThreadShape{}))); \
-      using PrefetchValLayout = std::conditional_t<!is_convention_MN /*TODO check condition*/, \
+      using PrefetchValLayout = std::conditional_t<is_need_reversed /*TODO check condition*/, \
                                                    decltype(make_layout(make_shape(size<1>(PrefetchValLayoutBase{}), size<0>(PrefetchValLayoutBase{})), LayoutRight{})), \
                                                    PrefetchValLayoutBase>; \
       return make_tiled_copy(prefetch_atom{}.with(tensor), \
