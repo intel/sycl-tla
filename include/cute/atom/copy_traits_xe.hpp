@@ -273,10 +273,13 @@ struct XE_2D_LD_Unpack {
 
     auto [m, n, l] = src.data().coord_;
 
+    int x = is_need_reversed ? m : n;
+    int y = is_need_reversed ? n : m;
+
     CopyOp::PREFETCH::copy((void *)(base_addr + l * atom.stride_l),
                            atom.width * sizeof(dtype), atom.height,
                            atom.pitch * sizeof(dtype),
-                           intel::coord_t{m, n});
+                           intel::coord_t{x, y});
   }
 
   template <class Coord, class GShape>
