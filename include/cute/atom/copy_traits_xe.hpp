@@ -171,7 +171,6 @@ struct XE_2D_LD_Unpack {
     // A: 1 -> trans or B 256/32 = 8
     static constexpr auto nums_block_w = ceil_div(is_need_reversed ? BLK_0 : BLK_1, block_size_w);
     
-    //TODO do we need ternary or should it be always false?
     //layout of sub groups
     // A shape<32,1> / trans or B shap<4,8>
     using PrefetchSGLayoutShape =
@@ -198,7 +197,7 @@ struct XE_2D_LD_Unpack {
                Stride<Int<SubgroupSize>,Stride<_1,               Int<SubgroupSize * sgs_M>>>> \
       >; \
       using PrefetchValLayoutBase = decltype(make_layout(shape_div(typename prefetch_traits::BlockShape{}, CopyThreadShape{}))); \
-      using PrefetchValLayout = std::conditional_t<is_need_reversed /*TODO check condition*/, \
+      using PrefetchValLayout = std::conditional_t<is_need_reversed, \
                                                    decltype(make_layout(make_shape(size<1>(PrefetchValLayoutBase{}), size<0>(PrefetchValLayoutBase{})), LayoutRight{})), \
                                                    PrefetchValLayoutBase>; \
       return make_tiled_copy(prefetch_atom{}.with(tensor), \
