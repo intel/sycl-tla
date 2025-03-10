@@ -91,7 +91,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
 
   // 32
-  static constexpr auto Total_SG = ATOM_N * ATOM_M * ATOM_K;
+  static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
@@ -184,8 +184,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
     
-    auto tiled_prefetch_a = tiled_copy_a.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Total_SG, ElementA>(mainloop.mA);
-    auto tiled_prefetch_b = tiled_copy_b.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Total_SG, ElementB>(mainloop.mB);
+    auto tiled_prefetch_a = tiled_copy_a.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs, ElementA>(mainloop.mA);
+    auto tiled_prefetch_b = tiled_copy_b.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs, ElementB>(mainloop.mB);
     auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
     auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);
     

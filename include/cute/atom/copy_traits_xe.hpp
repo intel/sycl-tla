@@ -161,74 +161,72 @@ struct XE_2D_LD_Unpack {
 
   XE_2D_LD_Unpack() {}
 
-  template<class BLK, int Total_SG, class dtype, class Tensor>
+  template<class TileShape, int Num_SGs, class dtype, class Tensor>
   CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) const {
-    static constexpr size_t cacheline_bytes = 64;
-    constexpr int BLK_0 = size<0>(BLK{});
-    constexpr int BLK_1 = size<1>(BLK{});
+    constexpr size_t cacheline_bytes = 64;
+    constexpr size_t dtype_size_bits = sizeof_bits_v<dtype>;
+    constexpr int soubgroup_size = size(typename Traits_LD_t::ThrID{});
+    using CopyThreadShape = Shape<_1, Int<soubgroup_size>>;
+
+    constexpr int tile_contig_size = is_need_reversed ? size<0>(TileShape{}) : size<1>(TileShape{});
+    constexpr int tile_non_contig_size = is_need_reversed ? size<1>(TileShape{}) : size<0>(TileShape{});
+
+    // block here is what is prefetched in one atom execution
     // min(32,32)-> 32 (256, 32) -> 32
-    static constexpr auto block_size_w = cute::min(is_need_reversed ? BLK_0 : BLK_1, cacheline_bytes / sizeof(dtype));
+    static constexpr auto block_contig_size = cute::min(tile_contig_size, cacheline_bytes / sizeof(dtype));
     // A: 1 -> trans or B 256/32 = 8
-    static constexpr auto nums_block_w = ceil_div(is_need_reversed ? BLK_0 : BLK_1, block_size_w);
+    static constexpr auto nums_blocks_contig = ceil_div(tile_contig_size, block_contig_size);
     
-    //layout of sub groups
+    // layout of sub groups
     // A shape<32,1> / trans or B shap<4,8>
-    using PrefetchSGLayoutShape =
-      Shape<Int<is_need_reversed ? cute::gcd(Total_SG, nums_block_w) : Total_SG / cute::gcd(Total_SG, nums_block_w)>, 
-            Int<is_need_reversed ? Total_SG / cute::gcd(Total_SG, nums_block_w) : cute::gcd(Total_SG, nums_block_w)>>;
+    constexpr int sgs_contig = cute::gcd(Num_SGs, nums_blocks_contig);
+    constexpr int sgs_non_contig = Num_SGs / sgs_contig;
 
-    // 8x32
-    using PrefetchTileSize = decltype(ceil_div(BLK{}, PrefetchSGLayoutShape{}));
+    constexpr auto block_non_contig_size = tile_non_contig_size / sgs_non_contig;
 
-    constexpr auto height = is_need_reversed ? get<1>(PrefetchTileSize{}) : get<0>(PrefetchTileSize{});
-    constexpr auto dtype_size_bits = sizeof_bits_v<dtype>;
-    constexpr int SubgroupSize = size(typename Traits_LD_t::ThrID{});
-    constexpr int sgs_M = size<0>(PrefetchSGLayoutShape{});
-    constexpr int sgs_N = size<1>(PrefetchSGLayoutShape{});
+    using PrefetchTilingLayout = std::conditional_t<is_need_reversed,
+      Layout<Shape<Shape<Int<soubgroup_size>, Int<sgs_contig>>, Int<sgs_non_contig>>,
+             Stride<Stride<_1, Int<soubgroup_size>>,            Int<soubgroup_size * sgs_contig>>>,
+      Layout<Shape<Int<sgs_non_contig>, Shape<Int<soubgroup_size>, Int<sgs_contig>>>,
+             Stride<Int<soubgroup_size>,  Stride<_1, Int<soubgroup_size * sgs_non_contig>>>>
+    >;
 
-    #define RETURN_STATEMENT(HEIGHT, DTYPE_SIZE, DTYPE_COL_SIZE) \
-      using prefetch_traits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##HEIGHT##x##DTYPE_COL_SIZE##_LD_N, StrideIndicator>; \
-      using prefetch_atom = Copy_Atom<prefetch_traits, dtype>; \
-      using CopyThreadShape = Shape<_1, Int<SubgroupSize>>; \
-      using PrefetchTilingLayout = std::conditional_t<is_need_reversed, \
-        Layout<Shape<Shape<Int<SubgroupSize>, Int<sgs_M>>, Int<sgs_N>>, \
-               Stride<Stride<_1, Int<SubgroupSize>>,       Int<SubgroupSize * sgs_M>>>, \
-        Layout<Shape<Int<sgs_M>,        Shape<Int<SubgroupSize>, Int<sgs_N>>>, \
-               Stride<Int<SubgroupSize>,Stride<_1,               Int<SubgroupSize * sgs_M>>>> \
-      >; \
-      using PrefetchValLayoutBase = decltype(make_layout(shape_div(typename prefetch_traits::BlockShape{}, CopyThreadShape{}))); \
+    #define RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, CONTIG) \
+      using PrefetchTraits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##NON_CONTIG##x##CONTIG##_LD_N, StrideIndicator>; \
+      using PrefetchAtom = Copy_Atom<PrefetchTraits, dtype>; \
+      using PrefetchValLayoutBase = decltype(make_layout(shape_div(typename PrefetchTraits::BlockShape{}, CopyThreadShape{}))); \
       using PrefetchValLayout = std::conditional_t<is_need_reversed, \
                                                    decltype(make_layout(make_shape(size<1>(PrefetchValLayoutBase{}), size<0>(PrefetchValLayoutBase{})), LayoutRight{})), \
                                                    PrefetchValLayoutBase>; \
-      return make_tiled_copy(prefetch_atom{}.with(tensor), \
+      return make_tiled_copy(PrefetchAtom{}.with(tensor), \
                              PrefetchTilingLayout{}, \
                              PrefetchValLayout{});
 
-    #define CHOOSE_PREFETCH_FOR_TYPE(HEIGHT) \
+    #define CHOOSE_PREFETCH_FOR_TYPE(NON_CONTIG) \
       if constexpr (dtype_size_bits == 8){ \
-        RETURN_STATEMENT(HEIGHT, 8, 64); \
+        RETURN_STATEMENT(NON_CONTIG, 8, 64); \
       } else if constexpr (dtype_size_bits == 16){ \
-        RETURN_STATEMENT(HEIGHT, 16, 32); \
+        RETURN_STATEMENT(NON_CONTIG, 16, 32); \
       } else if constexpr (dtype_size_bits == 32){ \
-        RETURN_STATEMENT(HEIGHT, 32, 16); \
+        RETURN_STATEMENT(NON_CONTIG, 32, 16); \
       } else { \
-        static_assert(dependent_false<dtype> && "Invalid PrefetchTileSize and type"); \
+        static_assert(dependent_false<dtype> && "Invalid TileShape and dtype"); \
       }
 
-    if constexpr (height == 1){
+    if constexpr (block_non_contig_size == 1){
       CHOOSE_PREFETCH_FOR_TYPE(1)
-    } else if constexpr (height == 2) {
+    } else if constexpr (block_non_contig_size == 2) {
       CHOOSE_PREFETCH_FOR_TYPE(2)
-    } else if constexpr (height == 4) {
+    } else if constexpr (block_non_contig_size == 4) {
       CHOOSE_PREFETCH_FOR_TYPE(4)
-    } else if constexpr (height == 8) {
+    } else if constexpr (block_non_contig_size == 8) {
       CHOOSE_PREFETCH_FOR_TYPE(8)
-    } else if constexpr (height == 16) {
+    } else if constexpr (block_non_contig_size == 16) {
       CHOOSE_PREFETCH_FOR_TYPE(16)
-    } else if constexpr (height == 32) {
+    } else if constexpr (block_non_contig_size == 32) {
       CHOOSE_PREFETCH_FOR_TYPE(32)
     } else {
-      static_assert(dependent_false<PrefetchTileSize> && "Invalid PrefetchTileSize[0]");
+      static_assert(dependent_false<TileShape> && "Invalid TileShape[0]");
     }
     #undef CHOOSE_PREFETCH_FOR_TYPE
     #undef RETURN_STATEMENT
