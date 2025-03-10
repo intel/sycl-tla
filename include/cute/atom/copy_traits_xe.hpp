@@ -82,7 +82,17 @@ static constexpr bool is_stride_leftmost = std::is_same_v<_1, decltype(get<0>(T{
 template <class T>
 static constexpr bool is_stride_leftmost<T, cute::void_t<decltype(T{}.stride())>> = std::is_same_v<_1, decltype(get<0>(T{}.stride()))>;
 
-
+// Swap the Src or Dst Layout of a Copy_Traits if the logical/memory layouts differ 
+template <bool is_convention_MN, typename DstLayoutIn, typename BlockShape>
+auto get_logical_layout(DstLayoutIn &&, BlockShape &&) {
+  if constexpr (is_convention_MN) {
+    return DstLayoutIn{};
+  } else {
+    using RowMajorLayout =
+        decltype(make_ordered_layout(Shape<_16, BlockShape>{}, Step<_0, Step<_2, _1>>{}));
+    return right_inverse(RowMajorLayout{}).compose(DstLayoutIn{});
+  }
+}
 } // end namespace detail
 
 
@@ -974,20 +984,18 @@ struct Copy_Traits<XE_2D_U16x8x32_LD_N, args_t...>
   static constexpr bool is_convention_MN = XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, args_t...>::is_convention_MN;
 
   using ThrID = Layout<_16>;
-  using BlockShape = std::conditional_t<is_convention_MN, Shape<_8, _32>, Shape<_32, _8>>;
+private:
+  using BlockShape_ = Shape<_8, _32>;
   // Map from (src-thr,src-val) to bit
-  // TODO(joe): These need to be modified
-  using SrcLayout = std::conditional_t<is_convention_MN, 
-                          Layout<Shape <_16,Shape <_16,  _2,  _8>>,
-                           Stride< _0,Stride< _1,_256,_512>>>,
-                          Layout<Shape <_16,Shape <_16,  _2,  _8>>,
-                           Stride< _0,Stride< _1,_256,_512>>>>;
+  using SrcLayout_ = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+                           Stride< _0,Stride< _1,_256,_512>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = std::conditional_t<is_convention_MN,
-                          Layout<Shape <_16,Shape <_16,  _2,  _8>>,
-                           Stride<_16,Stride< _1,_256,_512>>>,
-                          Layout<Shape <_16,Shape <_16,  _2,  _8>>,
-                           Stride<_16,Stride< _1,_256,_512>>>>;
+  using DstLayout_ = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+                           Stride<_16,Stride< _1,_256,_512>>>;
+public:
+  using BlockShape = std::conditional_t<is_convention_MN, BlockShape_, decltype(cute::reverse(BlockShape_{}))>;
+  using SrcLayout = decltype(detail::get_logical_layout<is_convention_MN>(SrcLayout_{}, BlockShape{}));
+  using DstLayout = decltype(detail::get_logical_layout<is_convention_MN>(DstLayout_{}, BlockShape{}));
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
@@ -1020,25 +1028,22 @@ struct Copy_Traits<XE_2D_U16x16x32_LD_N, StrideIndicator>
 
   // static_assert(XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN);
   using ThrID = Layout<_16>;
-  using BlockShape = std::conditional_t<is_convention_MN, Shape<_16, _32>,Shape<_32, _16>>;
+private:
+  using BlockShape_ = Shape<_16, _32>;
 
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = std::conditional_t<is_convention_MN,
-        Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                           Stride< _0,Stride< _1,_256,_512>>>,
-        Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                                  Stride<_0,Stride< _1,_4096,_16>>>>;
+  using SrcLayout_ = Layout<Shape <_16,Shape <_16,  _2, _16>>,
+                           Stride< _0,Stride< _1,_256,_512>>>;
 
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = std::conditional_t<is_convention_MN,
-        Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                                Stride<_16,Stride< _1,_256,_512>>>,
-        // TODO(joe): ^- ordered(1, 0, 2, 3)
-        // Reference map from (thr,val) to bit
-        Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                                  Stride<_256,Stride< _1,_4096,_16>>>>;
+  using DstLayout_ = Layout<Shape <_16,Shape <_16,  _2, _16>>,
+                                Stride<_16,Stride< _1,_256,_512>>>;
 
-  // TODO(joe): ^- ordered(1, 3, 0, 2)
+public:
+  using BlockShape = std::conditional_t<is_convention_MN, BlockShape_, decltype(cute::reverse(BlockShape_{}))>;
+  using SrcLayout = decltype(detail::get_logical_layout<is_convention_MN>(SrcLayout_{}, BlockShape{}));
+  using DstLayout = decltype(detail::get_logical_layout<is_convention_MN>(DstLayout_{}, BlockShape{}));
+
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
