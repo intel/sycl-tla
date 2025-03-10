@@ -275,10 +275,6 @@ struct XE_2D_LD_Unpack {
     
     int x = is_need_reversed ? m : n;
     int y = is_need_reversed ? n : m;
-    //m="w";
-    /*if(cute::thread(81,3)){
-      print("prefetching "); print(src.data().coord_); print("\n");
-    }*/
 
     CopyOp::PREFETCH::copy((void *)(base_addr + l * atom.stride_l),
                            atom.width * sizeof(dtype), atom.height,
@@ -1069,11 +1065,11 @@ struct Copy_Traits<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
-                           Stride<_0,Stride< _1,_256,_512>>>;
+  using SrcLayout = Layout<Shape <_16,Shape <_32,  _8>>,
+                           Stride<_32,Stride< _1,_512>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
-                           Stride<_16,Stride< _1,_256,_512>>>;
+  using DstLayout = Layout<Shape <_16,Shape <_32,  _8>>,
+                           Stride<_32,Stride< _1,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
   using CopyInternalType = ushort;
