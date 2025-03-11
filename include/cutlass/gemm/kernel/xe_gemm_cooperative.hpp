@@ -177,7 +177,7 @@ public:
 
   static bool
   can_implement(Arguments const& args) {
-    bool mode_implementable = args.mode == GemmUniversalMode::kGemm or args.mode == GemmUniversalMode::kGrouped or
+    bool mode_implementable = args.mode == GemmUniversalMode::kGemm
           (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
     return mode_implementable && TileScheduler::can_implement(args.scheduler);
   }

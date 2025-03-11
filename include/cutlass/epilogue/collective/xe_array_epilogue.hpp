@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -110,6 +110,13 @@ public:
                                              CopyOpR2G, XE_2D_U32x8x16_ST_N>;
   using ElementOutput = typename FusionCallbacks::ElementOutput;
   using ElementCompute = typename FusionCallbacks::ElementCompute;
+  using ElementSource = typename FusionCallbacks::ElementSource;
+  using ElementScalar = typename FusionCallbacks::ElementScalar;
+  static constexpr FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest;
+
+  static_assert(cute::is_same_v<typename FusionCallbacks::Operation, 
+                                fusion::LinearCombination<ElementOutput, ElementCompute, ElementSource, ElementScalar, RoundStyle>>,
+  "Only Linear Combination Epilogue is supported for Grouped GEMM at the moment.");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -187,13 +194,13 @@ public:
       Arguments const& args,
       [[maybe_unused]] void* workspace) {
     // Optionally append 1s until problem shape is rank-4 in case its is only rank-3 (MNK)
-    auto problem_shape_MNL = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, int32_t(1));; //append<4>(problem_shape.get_host_problem_shape(0), 1);
+    auto problem_shape_MNL = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, int32_t(1));
     auto [M, N, L] = problem_shape_MNL;
 
     XE_Copy_C xe_load_c = {};
     if constexpr (is_source_supported) {
       ElementC const* ptr_C_first_batch = reinterpret_cast<ElementC const*>(args.ptr_C);
-      Tensor mC_mnl = make_tensor(make_gmem_ptr(ptr_C_first_batch), make_layout(make_shape(M, N, L), InternalStrideC{}));
+      TensorC mC_mnl = make_tensor(make_gmem_ptr(ptr_C_first_batch), make_layout(make_shape(M, N, L), InternalStrideC{}));
       xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(mC_mnl),
                                   Layout<CopyThreadShape>{},
                                   make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
@@ -202,7 +209,7 @@ public:
     XE_Copy_D xe_store_d = {};
     if constexpr (is_destination_supported) {
       ElementD* ptr_D_first_batch = reinterpret_cast<ElementD*>(args.ptr_D);
-      Tensor mD_mnl = make_tensor(make_gmem_ptr(ptr_D_first_batch), make_layout(make_shape(M, N, L), InternalStrideD{}));
+      TensorD mD_mnl = make_tensor(make_gmem_ptr(ptr_D_first_batch), make_layout(make_shape(M, N, L), InternalStrideD{}));
       xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(mD_mnl),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));

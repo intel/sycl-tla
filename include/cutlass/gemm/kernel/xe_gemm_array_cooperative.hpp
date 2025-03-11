@@ -94,6 +94,8 @@ public:
   using EpilogueArguments = typename CollectiveEpilogue::Arguments;
   using EpilogueParams = typename CollectiveEpilogue::Params;
 
+  static_assert(cute::is_same_v<TileScheduler_, GroupScheduler>,
+    "Only Group Scheduler is supported with this code.");
   using TileSchedulerTag = TileScheduler_;
   using TileScheduler = typename detail::TileSchedulerSelector<
     TileScheduler_, ArchTag, TileShape, ClusterShape, 0, ProblemShape>::Scheduler;
@@ -238,16 +240,16 @@ public:
 
     int thread_idx = int(ThreadIdxX());
     constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
-    bool did_batch_change = true;
-    int32_t curr_batch = -1;
+    bool did_group_change = true;
+    int32_t curr_group = -1;
     using ProblemShapeMNKL = Shape<int, int, int, int>;
     ProblemShapeMNKL problem_shape_MNKL;
     cute::tuple<typename CollectiveMainloop::TensorMKL, typename CollectiveMainloop::TensorNKL> AB_tensors;
     cute::tuple<typename CollectiveEpilogue::TensorC, typename CollectiveEpilogue::TensorD> CD_tensors;
 
     if (work_tile_info.is_valid()) {
-      curr_batch = work_tile_info.L_idx;
-      problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
+      curr_group = work_tile_info.L_idx;
+      problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_group), 1);
     }
 
     while (work_tile_info.is_valid()) {
@@ -266,8 +268,8 @@ public:
       auto gB_nkl = local_tile(mB_nkl, select<1,2>(workgroup_shape), make_coord(n_coord, _, 0));
 
       CollectiveMainloop collective_mma;
-      if(did_batch_change) {
-        AB_tensors = collective_mma.update_tensor_shape_stride(params.mainloop, curr_batch, problem_shape_MNKL);
+      if(did_group_change) {
+        AB_tensors = collective_mma.update_tensor_shape_stride(params.mainloop, curr_group, problem_shape_MNKL);
       }
       auto tile_coord = make_coord(m_coord, n_coord, _, 0);
 
@@ -300,9 +302,9 @@ public:
       if (TileScheduler::compute_epilogue(work_tile_info, params.scheduler)) {
         CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
 
-        if(did_batch_change) {
-          CD_tensors = epilogue.update_tensor_shape_stride(curr_batch, problem_shape_MNKL);
-          did_batch_change = false;
+        if(did_group_change) {
+          CD_tensors = epilogue.update_tensor_shape_stride(curr_group, problem_shape_MNKL);
+          did_group_change = false;
         }
 
         epilogue(
@@ -321,11 +323,11 @@ public:
       auto[next_work_tile_info, temp] = scheduler.fetch_next_work(work_tile_info);
       work_tile_info = next_work_tile_info;
 
-      did_batch_change = curr_batch != work_tile_info.L_idx;
+      did_group_change = curr_group != work_tile_info.L_idx;
 
-      if(did_batch_change && work_tile_info.is_valid()) {
-        curr_batch = work_tile_info.L_idx;
-        problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
+      if(did_group_change && work_tile_info.is_valid()) {
+        curr_group = work_tile_info.L_idx;
+        problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_group), 1);
       }
     }
   }
