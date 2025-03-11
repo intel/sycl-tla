@@ -158,19 +158,31 @@ struct TileSchedulerSelector<
 
 template <
   class TileShape,
-  class ClusterShape
-  , uint32_t SchedulerPipelineStageCount
-  , class GroupProblemShape
+  class ClusterShape,
+  uint32_t SchedulerPipelineStageCount,
+  class GroupProblemShape
 >
 struct TileSchedulerSelector<
     GroupScheduler,
     arch::IntelPVC,
     TileShape,
-    ClusterShape
-    , SchedulerPipelineStageCount
-    , GroupProblemShape
+    ClusterShape, 
+    SchedulerPipelineStageCount,
+    GroupProblemShape
   > {
   using Scheduler = PersistentTileSchedulerXeGroup<GroupProblemShape>;
+};
+template <
+  class TileShape,
+  class ClusterShape
+>
+struct TileSchedulerSelector<
+  PersistentScheduler,
+  arch::IntelPVC,
+  TileShape,
+  ClusterShape
+  > {
+  using Scheduler = PersistentTileSchedulerSm90;
 };
 #endif
 
