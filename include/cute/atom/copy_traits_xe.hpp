@@ -66,14 +66,19 @@ template <class T>
 static constexpr bool is_stride_leftmost<T, cute::void_t<decltype(T{}.stride())>> = std::is_same_v<_1, decltype(get<0>(T{}.stride()))>;
 
 // Swap the Src or Dst Layout of a Copy_Traits if the logical/memory layouts differ 
-template <bool is_convention_MN, typename DstLayoutIn, typename BlockShape>
-auto get_logical_layout(DstLayoutIn &&, BlockShape &&) {
+template <bool is_convention_MN, typename LayoutIn, typename BlockShape>
+auto get_logical_layout(LayoutIn &&, BlockShape &&) {
   if constexpr (is_convention_MN) {
-    return DstLayoutIn{};
+    return LayoutIn{};
   } else {
+    // (16, (32, 2))
+    //        ^-- the size of an element in bits
+    using ElemBitSize = decltype(cute::get<1, 0>(LayoutIn{}.shape()));
+    // Construct a generic row-major layout of the relevant size
     using RowMajorLayout =
-        decltype(make_ordered_layout(Shape<_16, BlockShape>{}, Step<_0, Step<_2, _1>>{}));
-    return right_inverse(RowMajorLayout{}).compose(DstLayoutIn{});
+        decltype(make_ordered_layout(Shape<ElemBitSize, BlockShape>{}, Step<_0, Step<_2, _1>>{}));
+    // Compose with LayoutIn to produce the transposed Copy_Traits layout
+    return right_inverse(RowMajorLayout{}).compose(LayoutIn{});
   }
 }
 } // end namespace detail
