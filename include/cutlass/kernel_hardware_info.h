@@ -61,8 +61,9 @@ struct KernelHardwareInfo {
 #if defined (CUTLASS_ENABLE_SYCL)
   static inline int
   query_device_multiprocessor_count(int device_id = 0) {
-    syclcompat::device_ext& dev = syclcompat::get_device(device_id);
-    int multiprocessor_count = dev.get_max_compute_units();
+    auto queue = syclcompat::get_default_queue();
+    auto device = queue.get_device();
+    int multiprocessor_count = static_cast<int>(device.get_info<sycl::ext::oneapi::info::device::num_compute_units>());
     return multiprocessor_count;
   }
 
