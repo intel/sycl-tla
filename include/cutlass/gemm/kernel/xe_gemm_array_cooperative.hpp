@@ -241,8 +241,6 @@ public:
     int thread_idx = int(ThreadIdxX());
     constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     bool did_batch_change = true;
-    auto new_mainloop_params = params.mainloop;
-    auto new_epilogue_params = params.epilogue;
     int32_t curr_batch = 0;
 
     while (work_tile_info.is_valid()) {
@@ -265,7 +263,7 @@ public:
 
       CollectiveMainloop collective_mma;
       if(did_batch_change) {
-        collective_mma.update_tensor_shape_stride(new_mainloop_params, curr_batch, problem_shape_MNKL);
+        // collective_mma.update_tensor_shape_stride(params.mainloop, curr_batch, problem_shape_MNKL);
       }
 
       auto tile_coord = make_coord(m_coord, n_coord, _, curr_batch);
@@ -278,10 +276,6 @@ public:
       TiledMma tiled_mma;
       Tensor accumulators = partition_fragment_C(tiled_mma, take<0,2>(workgroup_shape));
 
-      if(thread_idx == 0) {
-        printf("BlockID.x: %lu | BlockID.y: %lu | BlockID.z: %lu | m_coord: %lu | n_coord: %lu | l_coord: %lu\n", BlockIdxX(), BlockIdxY(), BlockIdxZ(), m_coord, n_coord, curr_batch);
-      }
-      // break;
 
       // Perform the collective scoped MMA
       collective_mma(
@@ -294,7 +288,10 @@ public:
         K,
         thread_idx,
         smem_buf,
-        new_mainloop_params
+        params.mainloop,
+        curr_batch,
+        problem_shape_MNKL,
+        did_batch_change
       );
 
       // Perform reduction across splits, if needed
@@ -302,10 +299,10 @@ public:
         params.scheduler, work_tile_info, accumulators);
 
       if (TileScheduler::compute_epilogue(work_tile_info, params.scheduler)) {
-        CollectiveEpilogue epilogue{new_epilogue_params, shared_storage.epilogue};
+        CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
 
         if(did_batch_change) {
-          epilogue.update_tensor_shape_stride(new_epilogue_params, curr_batch, problem_shape_MNKL);
+          // epilogue.update_tensor_shape_stride(params.epilogue, curr_batch, problem_shape_MNKL);
           did_batch_change = false;
         }
 
@@ -316,7 +313,9 @@ public:
           accumulators,
           tiled_mma,
           thread_idx,
-          smem_buf
+          smem_buf,
+          curr_batch,
+          did_batch_change
         );
       }
 
@@ -324,25 +323,6 @@ public:
       work_tile_info = scheduler.fetch_next_work(work_tile_info);
 
       did_batch_change = curr_batch != work_tile_info.L_idx;
-
-      // if (work_tile_info.is_valid() && did_batch_change) {
-      //   curr_batch = work_tile_info.L_idx;
-
-      //   //TODO: update pointer address and strides for new batch
-      //   // Optionally append 1s until problem shape is rank-4 in case it is only rank-3 (MNK)
-      //   problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
-      //   M = get<0>(problem_shape_MNKL);
-      //   N = get<1>(problem_shape_MNKL);
-      //   K = get<2>(problem_shape_MNKL);
-
-      //   // mA_mkl = make_counting_tensor(make_layout(make_shape(M, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
-      //   // mB_nkl = make_counting_tensor(make_layout(make_shape(N, K, 1), make_stride(E<0>(), E<1>(), E<2>())));
-
-      //   gA_mkl = local_tile(mA_mkl, workgroup_shape, make_coord(_, _, _), Step<_1,  X, _1>{});
-      //   gB_nkl = local_tile(mB_nkl, workgroup_shape, make_coord(_, _, _), Step< X, _1, _1>{});
-
-      //   collective_mma.update_tensor_shape_stride(new_mainloop_params, curr_batch, problem_shape_MNKL);
-      // }
     }
   }
 

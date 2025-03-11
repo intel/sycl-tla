@@ -198,7 +198,7 @@ public:
 
     XE_Copy_D xe_store_d = {};
     if constexpr (is_destination_supported) {
-      ElementD const* ptr_D_first_batch = reinterpret_cast<ElementD const*>(args.ptr_D);
+      ElementD* ptr_D_first_batch = reinterpret_cast<ElementD*>(args.ptr_D);
       Tensor mD_mnl = make_tensor(make_gmem_ptr(ptr_D_first_batch), make_layout(make_shape(M, N, L), InternalStrideD{}));
       xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(mD_mnl),
                                    Layout<CopyThreadShape>{},
@@ -262,7 +262,9 @@ public:
       Accumulator accumulators, 
       TiledMma tiled_mma,
       int thread_idx,
-      char* smem) {
+      char* smem,
+      int32_t const& group,
+      bool const& group_change) {
     
     (void) tiled_mma;
     (void) smem;
@@ -371,7 +373,9 @@ public:
       FragsM * FragsN * FragmentSize * SubgroupSize * ATOM_M * ATOM_N * ATOM_K;
     constexpr int MN = get<0>(CtaTileMNK{}) * get<1>(CtaTileMNK{});
     static_assert(ValuesLoaded == MN, "the total elements loaded by all threads should be the same as MxN" );
-    
+
+    auto init_tensors = update_tensor_shape_stride(group, problem_shape_mnkl);
+
     auto synchronize = [&] () {};
     CUTLASS_PRAGMA_UNROLL
     for (int epi_n = 0; epi_n < FragsN; epi_n++) {
@@ -380,7 +384,7 @@ public:
 
         if (is_C_load_needed) {
           //cordinates for C and D are the same
-          copy(params.xe_load_c, tCgD(_, epi_m, epi_n), trC);
+          copy(params.xe_load_c.with(get<0>(init_tensors)), tCgD(_, epi_m, epi_n), trC);
         }
 
         cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);
@@ -394,7 +398,7 @@ public:
         cst_callbacks.reduce(nullptr, synchronize, epi_m, epi_n, (epi_m == FragsM - 1 && epi_n == FragsN - 1), trD);
         
         if constexpr (is_destination_supported) {
-          copy(params.xe_store_d, trD, tCgD(_, epi_m, epi_n));
+          copy(params.xe_store_d.with(get<1>(init_tensors)), trD, tCgD(_, epi_m, epi_n));
         }
       }
     }
@@ -403,32 +407,26 @@ public:
   }
 
   template <typename ProblemShape_MNKL>
-  CUTLASS_DEVICE void update_tensor_shape_stride(
-    Params& params,
-    int32_t next_group,
-    ProblemShape_MNKL problem_shape_mnkl) {
-      // const int32_t M = get<0>(problem_shape_mnkl);
-      // const int32_t N = get<1>(problem_shape_mnkl);
-      // const int32_t K = get<2>(problem_shape_mnkl);
+  CUTLASS_DEVICE auto update_tensor_shape_stride(
+    int32_t const& next_group,
+    ProblemShape_MNKL const& problem_shape_mnkl) {
       auto [M, N, K, L] = problem_shape_mnkl;
 
-      XE_Copy_C xe_load_c = {};
+      using TensorC = decltype(make_tensor(make_gmem_ptr(static_cast<ElementC const*>(nullptr)), make_shape(0,0,0), InternalStrideC{}));   //(m, n)
+      using TensorD = decltype(make_tensor(make_gmem_ptr(static_cast<ElementD*>(nullptr)), make_shape(0,0,0), InternalStrideD{}));   //(m, n)
+
+      TensorC mC_mnl;
+      TensorD mD_mnl;
       if constexpr (is_source_supported) {
         ElementC const* ptr_C_curr_batch = reinterpret_cast<ElementC const*>(params.ptr_C[next_group]);
-        Tensor mC_mnl = make_tensor(make_gmem_ptr(ptr_C_curr_batch), make_layout(make_shape(M, N, L), InternalStrideC{}));
-        xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(mC_mnl),
-                                    Layout<CopyThreadShape>{},
-                                    make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
+        mC_mnl = make_tensor(make_gmem_ptr(ptr_C_curr_batch), make_layout(make_shape(M, N, L), params.dC[next_group]));
       }
 
-      XE_Copy_D xe_store_d = {};
       if constexpr (is_destination_supported) {
-        ElementD const* ptr_D_curr_batch = reinterpret_cast<ElementD const*>(params.ptr_D[next_group]);
-        Tensor mD_mnl = make_tensor(make_gmem_ptr(ptr_D_curr_batch), make_layout(make_shape(M, N, L), InternalStrideD{}));
-        xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(mD_mnl),
-                                    Layout<CopyThreadShape>{},
-                                    make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
+        ElementD* ptr_D_curr_batch = reinterpret_cast<ElementD*>(params.ptr_D[next_group]);
+        mD_mnl = make_tensor(make_gmem_ptr(ptr_D_curr_batch), make_layout(make_shape(M, N, L), params.dD[next_group]));
       }
+      return cute::make_tuple(mC_mnl, mD_mnl);
     }
 
 private:

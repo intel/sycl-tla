@@ -210,11 +210,11 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
   template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator,
-            class BlkCoord>
+            class BlkCoord, class ProblemShape>
   CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,
-                                 KTileIterator k_tile_iter, int k_tile_count,
-                                 BlkCoord const &blk_coord, int const &K_start, int thread_idx, char *smem_buf,
-                                 Params const &mainloop) {
+                                 KTileIterator k_tile_iter, int const& k_tile_count,
+                                 BlkCoord const &blk_coord, int const &K_start, int const& thread_idx, char *smem_buf,
+                                 Params const &mainloop, int32_t const& group, ProblemShape const& problem_shape, bool const& group_change) {
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
@@ -323,22 +323,24 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
     constexpr int barrier_scope = 2;
     int prefetch_k = 0;
 
+    auto load_tensors = update_tensor_shape_stride(mainloop, group, problem_shape);
+
     CUTLASS_PRAGMA_UNROLL
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
-      prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
-      prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
+      prefetch(tiled_prefetch_a.with(get<0>(load_tensors)), prefetch_iter_a(_, _, _, prefetch_k));
+      prefetch(tiled_prefetch_b.with(get<1>(load_tensors)), prefetch_iter_b(_, _, _, prefetch_k));
     }
 
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.copy_A, tAgA(_,_,_,k_tile), tArA);
-      copy(mainloop.copy_B, tBgB(_,_,_,k_tile), tBrB);
+      copy(mainloop.copy_A.with(get<0>(load_tensors)), tAgA(_,_,_,k_tile), tArA);
+      copy(mainloop.copy_B.with(get<1>(load_tensors)), tBgB(_,_,_,k_tile), tBrB);
 
       if (prefetch_k < k_tile_count) {
-        prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
-        prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
+        prefetch(tiled_prefetch_a.with(get<0>(load_tensors)), prefetch_iter_a(_, _, _, prefetch_k));
+        prefetch(tiled_prefetch_b.with(get<1>(load_tensors)), prefetch_iter_b(_, _, _, prefetch_k));
       }
 
       cute::gemm(tiled_mma, tCrA, tCrB, accum);
@@ -347,10 +349,10 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
   }
 
   template <typename ProblemShape_MNKL>
-  CUTLASS_DEVICE void update_tensor_shape_stride(
-    Params& mainloop_params,
-    int32_t next_group,
-    ProblemShape_MNKL problem_shape_mnkl) {
+  CUTLASS_DEVICE auto update_tensor_shape_stride(
+    Params const& mainloop_params,
+    int32_t const& next_group,
+    ProblemShape_MNKL const& problem_shape_mnkl) {
       const int32_t M = get<0>(problem_shape_mnkl);
       const int32_t N = get<1>(problem_shape_mnkl);
       const int32_t K = get<2>(problem_shape_mnkl);
@@ -358,16 +360,10 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
       ElementA const* ptr_A_curr_batch = reinterpret_cast<ElementA const*>(mainloop_params.ptr_A[next_group]);
       ElementB const* ptr_B_curr_batch = reinterpret_cast<ElementB const*>(mainloop_params.ptr_B[next_group]);
 
-      mainloop_params.mA = make_tensor(make_gmem_ptr(ptr_A_curr_batch), make_shape(M, K,(int32_t)1), mainloop_params.dA[next_group]);
-      mainloop_params.mB = make_tensor(make_gmem_ptr(ptr_B_curr_batch), make_shape(N, K,(int32_t)1), mainloop_params.dB[next_group]);
+      Tensor mA = make_tensor(make_gmem_ptr(ptr_A_curr_batch), make_shape(M, K,(int32_t)1), mainloop_params.dA[next_group]);
+      Tensor mB = make_tensor(make_gmem_ptr(ptr_B_curr_batch), make_shape(N, K,(int32_t)1), mainloop_params.dB[next_group]);
 
-      mainloop_params.copy_A = make_tiled_copy(atom_load_A{}.with(mainloop_params.mA),
-                                                     Layout<CopyThreadShape>{},
-                                                     make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
-      mainloop_params.copy_B = make_tiled_copy(atom_load_B{}.with(mainloop_params.mB),
-                                                     Layout<CopyThreadShape>{},
-                                                     make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
-
+      return cute::make_tuple(mA, mB);
     }
 };
 
