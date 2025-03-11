@@ -188,7 +188,7 @@ public:
   get_workspace_size(Arguments const& args) {
     size_t workspace_size = 0;
     workspace_size += TileScheduler::template get_workspace_size<typename ProblemShape::UnderlyingProblemShape, ElementAccumulator>(
-      args.scheduler, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info);
+      args.scheduler, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info, -1);
     return workspace_size;
   }
 
@@ -199,7 +199,7 @@ public:
     uint8_t* workspace_ptr = reinterpret_cast<uint8_t*>(workspace);
 
     status = TileScheduler::template initialize_workspace<typename ProblemShape::UnderlyingProblemShape, ElementAccumulator>(
-      args.scheduler, workspace_ptr, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info);
+      args.scheduler, workspace_ptr, stream, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info, -1);
 
     return status;
   }
@@ -279,7 +279,6 @@ public:
       TiledMma tiled_mma;
       Tensor accumulators = partition_fragment_C(tiled_mma, take<0,2>(workgroup_shape));
 
-
       // Perform the collective scoped MMA
       collective_mma(
         accumulators,
@@ -295,9 +294,8 @@ public:
         AB_tensors
       );
 
-      // Perform reduction across splits, if needed
       TileScheduler::fixup(
-        params.scheduler, work_tile_info, accumulators);
+        params.scheduler, work_tile_info, accumulators, -1, -1);
 
       if (TileScheduler::compute_epilogue(work_tile_info, params.scheduler)) {
         CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
@@ -320,7 +318,8 @@ public:
       }
 
       // Get next work tile
-      work_tile_info = scheduler.fetch_next_work(work_tile_info);
+      auto[next_work_tile_info, temp] = scheduler.fetch_next_work(work_tile_info);
+      work_tile_info = next_work_tile_info;
 
       did_batch_change = curr_batch != work_tile_info.L_idx;
 
