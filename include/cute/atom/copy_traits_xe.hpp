@@ -2421,8 +2421,7 @@ template <class GShape>
 CUTE_HOST_DEVICE constexpr
 auto
 get_pvc_tensor(GShape const& g_shape) {
-  static_assert(rank(GShape{}) == 3, "get_pvc_tensor only supports rank-3 tensors");
-  return make_counting_tensor(make_layout(g_shape, make_stride(E<0>(), E<1>(), E<2>())));
+  return make_counting_tensor(make_identity_layout(g_shape));
 }
 
 } // end namespace cute
