@@ -456,9 +456,9 @@ void initialize(const Options &options) {
       GPU_Clock timer;
       timer.start();
       for (int iter = 0; iter < options.iterations; ++iter) {
-        CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
         CUTLASS_CHECK(gemm_op.run());
       }
+      syclcompat::wait();
 
       float cute_time = timer.seconds() * 1000;
       double cute_average_time = double(cute_time) / double(options.iterations);

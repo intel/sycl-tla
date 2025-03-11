@@ -153,6 +153,9 @@ public:
   };
   using TensorStorage = typename SharedStorage::TensorStorage;
 
+  using TensorC = decltype(make_tensor(make_gmem_ptr(static_cast<ElementC const*>(nullptr)), make_shape(0,0,0), InternalStrideC{}));   //(m, n)
+  using TensorD = decltype(make_tensor(make_gmem_ptr(static_cast<ElementD*>(nullptr)), make_shape(0,0,0), InternalStrideD{}));         //(m, n)
+
   // Host side epilogue arguments
   struct Arguments {
     typename FusionCallbacks::Arguments thread{};
@@ -252,7 +255,8 @@ public:
     class TileShapeMNK,
     class TileCoordMNKL,
     class Accumulator,
-    class TiledMma
+    class TiledMma,
+    class LoadStoreTensor
   >
   CUTLASS_DEVICE void
   operator() (
@@ -263,8 +267,7 @@ public:
       TiledMma tiled_mma,
       int thread_idx,
       char* smem,
-      int32_t const& group,
-      bool const& group_change) {
+      LoadStoreTensor const& load_store_tensors) {
     
     (void) tiled_mma;
     (void) smem;
@@ -374,8 +377,6 @@ public:
     constexpr int MN = get<0>(CtaTileMNK{}) * get<1>(CtaTileMNK{});
     static_assert(ValuesLoaded == MN, "the total elements loaded by all threads should be the same as MxN" );
 
-    auto init_tensors = update_tensor_shape_stride(group, problem_shape_mnkl);
-
     auto synchronize = [&] () {};
     CUTLASS_PRAGMA_UNROLL
     for (int epi_n = 0; epi_n < FragsN; epi_n++) {
@@ -384,7 +385,7 @@ public:
 
         if (is_C_load_needed) {
           //cordinates for C and D are the same
-          copy(params.xe_load_c.with(get<0>(init_tensors)), tCgD(_, epi_m, epi_n), trC);
+          copy(params.xe_load_c.with(get<0>(load_store_tensors)), tCgD(_, epi_m, epi_n), trC);
         }
 
         cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);
@@ -398,7 +399,7 @@ public:
         cst_callbacks.reduce(nullptr, synchronize, epi_m, epi_n, (epi_m == FragsM - 1 && epi_n == FragsN - 1), trD);
         
         if constexpr (is_destination_supported) {
-          copy(params.xe_store_d.with(get<1>(init_tensors)), trD, tCgD(_, epi_m, epi_n));
+          copy(params.xe_store_d.with(get<1>(load_store_tensors)), trD, tCgD(_, epi_m, epi_n));
         }
       }
     }
@@ -411,9 +412,6 @@ public:
     int32_t const& next_group,
     ProblemShape_MNKL const& problem_shape_mnkl) {
       auto [M, N, K, L] = problem_shape_mnkl;
-
-      using TensorC = decltype(make_tensor(make_gmem_ptr(static_cast<ElementC const*>(nullptr)), make_shape(0,0,0), InternalStrideC{}));   //(m, n)
-      using TensorD = decltype(make_tensor(make_gmem_ptr(static_cast<ElementD*>(nullptr)), make_shape(0,0,0), InternalStrideD{}));   //(m, n)
 
       TensorC mC_mnl;
       TensorD mD_mnl;

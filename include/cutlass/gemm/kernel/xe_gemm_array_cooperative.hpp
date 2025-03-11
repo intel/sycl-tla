@@ -241,12 +241,18 @@ public:
     int thread_idx = int(ThreadIdxX());
     constexpr auto subgroup_shape = SubgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     bool did_batch_change = true;
-    int32_t curr_batch = 0;
+    int32_t curr_batch = -1;
+    using ProblemShapeMNKL = Shape<int, int, int, int>;
+    ProblemShapeMNKL problem_shape_MNKL;
+    cute::tuple<typename CollectiveMainloop::TensorMKL, typename CollectiveMainloop::TensorNKL> AB_tensors;
+    cute::tuple<typename CollectiveEpilogue::TensorC, typename CollectiveEpilogue::TensorD> CD_tensors;
+
+    if (work_tile_info.is_valid()) {
+      curr_batch = work_tile_info.L_idx;
+      problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
+    }
 
     while (work_tile_info.is_valid()) {
-      curr_batch = work_tile_info.L_idx;
-      // Optionally append 1s until problem shape is rank-4 in case it is only rank-3 (MNK)
-      auto problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
       auto M = get<0>(problem_shape_MNKL);
       auto N = get<1>(problem_shape_MNKL);
       auto K = get<2>(problem_shape_MNKL);
@@ -258,15 +264,14 @@ public:
       auto m_coord = work_tile_info.M_idx;
       auto n_coord = work_tile_info.N_idx;
 
-      auto gA_mkl = local_tile(mA_mkl, select<0,2>(workgroup_shape), make_coord(m_coord, _, curr_batch));
-      auto gB_nkl = local_tile(mB_nkl, select<1,2>(workgroup_shape), make_coord(n_coord, _, curr_batch));
+      auto gA_mkl = local_tile(mA_mkl, select<0,2>(workgroup_shape), make_coord(m_coord, _, 0));
+      auto gB_nkl = local_tile(mB_nkl, select<1,2>(workgroup_shape), make_coord(n_coord, _, 0));
 
       CollectiveMainloop collective_mma;
       if(did_batch_change) {
-        // collective_mma.update_tensor_shape_stride(params.mainloop, curr_batch, problem_shape_MNKL);
+        AB_tensors = collective_mma.update_tensor_shape_stride(params.mainloop, curr_batch, problem_shape_MNKL);
       }
-
-      auto tile_coord = make_coord(m_coord, n_coord, _, curr_batch);
+      auto tile_coord = make_coord(m_coord, n_coord, _, 0);
 
       // Get the number of K tiles to compute for this work as well as the starting K tile offset of the work.
       int work_k_tile_count = TileScheduler::get_work_k_tile_count(work_tile_info, problem_shape_MNKL, workgroup_shape);
@@ -289,9 +294,7 @@ public:
         thread_idx,
         smem_buf,
         params.mainloop,
-        curr_batch,
-        problem_shape_MNKL,
-        did_batch_change
+        AB_tensors
       );
 
       // Perform reduction across splits, if needed
@@ -302,7 +305,7 @@ public:
         CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
 
         if(did_batch_change) {
-          // epilogue.update_tensor_shape_stride(params.epilogue, curr_batch, problem_shape_MNKL);
+          CD_tensors = epilogue.update_tensor_shape_stride(curr_batch, problem_shape_MNKL);
           did_batch_change = false;
         }
 
@@ -314,8 +317,7 @@ public:
           tiled_mma,
           thread_idx,
           smem_buf,
-          curr_batch,
-          did_batch_change
+          CD_tensors
         );
       }
 
@@ -323,6 +325,11 @@ public:
       work_tile_info = scheduler.fetch_next_work(work_tile_info);
 
       did_batch_change = curr_batch != work_tile_info.L_idx;
+
+      if(did_batch_change && work_tile_info.is_valid()) {
+        curr_batch = work_tile_info.L_idx;
+        problem_shape_MNKL = append<4>(params.problem_shape.get_problem_shape(curr_batch), 1);
+      }
     }
   }
 

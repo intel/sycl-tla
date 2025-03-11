@@ -133,8 +133,8 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
   using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize, ElementB, InternalStrideB, SubgroupSize>(
       make_tensor(make_gmem_ptr(static_cast<ElementB const *>(nullptr)), make_layout(make_shape(0, 0, 0), InternalStrideB{}))));
 
-  using  TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), InternalStrideA{}));   //(m, k)
-  using  TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), InternalStrideB{}));   //(n, k)
+  using TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), InternalStrideA{}));   //(m, k)
+  using TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), InternalStrideB{}));   //(n, k)
 
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
   using Copy_A = decltype(make_tiled_copy(atom_load_A{},
@@ -185,8 +185,8 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
     auto init_N = get<1>(problem_shape_MNK);
     auto init_K = get<2>(problem_shape_MNK);
 
-    Tensor mA_mkl = make_tensor(make_gmem_ptr(ptr_A_first_batch), make_layout(make_shape(init_M,init_K,mock_L), InternalStrideA{}/*args.dA*/));
-    Tensor mB_nkl = make_tensor(make_gmem_ptr(ptr_B_first_batch), make_layout(make_shape(init_N,init_K,mock_L), InternalStrideB{}/*args.dB*/));
+    TensorMKL mA_mkl = make_tensor(make_gmem_ptr(ptr_A_first_batch), make_layout(make_shape(init_M,init_K,mock_L), InternalStrideA{}/*args.dA*/));
+    TensorNKL mB_nkl = make_tensor(make_gmem_ptr(ptr_B_first_batch), make_layout(make_shape(init_N,init_K,mock_L), InternalStrideB{}/*args.dB*/));
 
     auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(mA_mkl),
                                    Layout<CopyThreadShape>{},
@@ -210,11 +210,11 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
   template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator,
-            class BlkCoord, class ProblemShape>
+            class BlkCoord, class LoadTensors>
   CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,
                                  KTileIterator k_tile_iter, int const& k_tile_count,
                                  BlkCoord const &blk_coord, int const &K_start, int const& thread_idx, char *smem_buf,
-                                 Params const &mainloop, int32_t const& group, ProblemShape const& problem_shape, bool const& group_change) {
+                                 Params const &mainloop, LoadTensors const& load_tensors) {
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
@@ -322,8 +322,6 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages>, TileShape_, ElementA_, Strid
 
     constexpr int barrier_scope = 2;
     int prefetch_k = 0;
-
-    auto load_tensors = update_tensor_shape_stride(mainloop, group, problem_shape);
 
     CUTLASS_PRAGMA_UNROLL
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
