@@ -1672,7 +1672,7 @@ struct Copy_Traits_<XE_2D_U64x8x4_LD_T, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x2x32_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x2x32_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U8x2x32_ST_N, args_t...> {
   using BlockShape = Shape<_2,_32>;
   using ThrID = Layout<_16>;
@@ -1686,12 +1686,12 @@ struct Copy_Traits<XE_2D_U8x2x32_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U8x2x32_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x1x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x1x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U8x1x16_ST_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1705,12 +1705,12 @@ struct Copy_Traits<XE_2D_U8x1x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_ST_Unpack<XE_2D_U8x1x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x2x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x2x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U8x2x16_ST_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1724,12 +1724,12 @@ struct Copy_Traits<XE_2D_U8x2x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_ST_Unpack<XE_2D_U8x2x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x4x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x4x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U8x4x16_ST_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1744,7 +1744,7 @@ struct Copy_Traits<XE_2D_U8x4x16_ST_N, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x8x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x8x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U8x8x16_ST_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1759,12 +1759,12 @@ struct Copy_Traits<XE_2D_U8x8x16_ST_N, args_t...>
   using CopyInternalType = uint8_t;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U8x8x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x8x32_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x8x32_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U8x8x32_ST_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1779,12 +1779,12 @@ struct Copy_Traits<XE_2D_U8x8x32_ST_N, args_t...>
   using CopyInternalType = uint8_t;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U8x8x32_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x1x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x1x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U16x1x16_ST_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1798,12 +1798,12 @@ struct Copy_Traits<XE_2D_U16x1x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U16x1x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x2x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x2x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U16x2x16_ST_N, args_t...> {
   using BlockShape = Shape<_2, _16>;
   // Logical thread id to thread idx
@@ -1818,12 +1818,12 @@ struct Copy_Traits<XE_2D_U16x2x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U16x2x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x4x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x4x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U16x4x16_ST_N, args_t...> {
   using BlockShape = Shape<_4, _16>;
   // Logical thread id to thread idx
@@ -1838,12 +1838,12 @@ struct Copy_Traits<XE_2D_U16x4x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U16x4x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x8x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x8x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U16x8x16_ST_N, args_t...> {
   using BlockShape = Shape<_8, _16>;
   // Logical thread id to thread idx
@@ -1858,12 +1858,12 @@ struct Copy_Traits<XE_2D_U16x8x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U16x8x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x1x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x1x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U32x1x16_ST_N, args_t...> {
   using BlockShape = Shape<_1, _16>;
   // Logical thread id to thread idx
@@ -1878,12 +1878,12 @@ struct Copy_Traits<XE_2D_U32x1x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U32x1x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x2x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x2x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U32x2x16_ST_N, args_t...> {
   using BlockShape = Shape<_2, _16>;
   // Logical thread id to thread idx
@@ -1898,12 +1898,12 @@ struct Copy_Traits<XE_2D_U32x2x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U32x2x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x4x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x4x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U32x4x16_ST_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1917,12 +1917,12 @@ struct Copy_Traits<XE_2D_U32x4x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_ST_Unpack<XE_2D_U32x4x16_ST_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x8x16_ST_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x8x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U32x8x16_ST_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1936,7 +1936,7 @@ struct Copy_Traits<XE_2D_U32x8x16_ST_N, args_t...>
   using RefLayout = SrcLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_ST_Unpack<XE_2D_U32x8x16_ST_N, args_t...>(args...) {}
 };
 
@@ -2028,7 +2028,7 @@ struct Copy_Traits<XE_1D_STORE_GLOBAL<S, D>> {
 // Since we can't SFINAE this (Copy_Traits has no Enable = void template param), we are
 // obliged to define the actual Copy_Traits for each instruction individually
 // TODO(codeplay): Revisit this after SPIR-V copy builtins added
-#define COPY_TRAIT_DEF(COPY_OP) \
+#define COPY_TRAIT_LD_DEF(COPY_OP) \
 template <class StrideIndicator> \
 struct Copy_Traits<COPY_OP, StrideIndicator> : Copy_Traits_<COPY_OP, StrideIndicator>{ \
   using CopyOp = COPY_OP; \
@@ -2044,95 +2044,110 @@ struct Copy_Traits<COPY_OP, StrideIndicator> : Copy_Traits_<COPY_OP, StrideIndic
       : Copy_Traits_<CopyOp, StrideIndicator>(args...) {} \
 };
 
+#define COPY_TRAIT_ST_DEF(COPY_OP) \
+template <class StrideIndicator> \
+struct Copy_Traits<COPY_OP, StrideIndicator> : Copy_Traits_<COPY_OP, StrideIndicator>{ \
+  using CopyOp = COPY_OP; \
+  using Base = Copy_Traits_<CopyOp, StrideIndicator>; \
+  using XE_2D_ST_Unpack<CopyOp, StrideIndicator>::is_convention_MN; \
+  using typename Base::ThrID; \
+  using BlockShape = std::conditional_t<is_convention_MN, typename Base::BlockShape, decltype(cute::reverse(typename Base::BlockShape{}))>; \
+  using SrcLayout = decltype(detail::get_logical_layout<is_convention_MN>(typename Base::SrcLayout{}, typename Base::BlockShape{})); \
+  using DstLayout = decltype(detail::get_logical_layout<is_convention_MN>(typename Base::DstLayout{}, typename Base::BlockShape{})); \
+  using RefLayout = DstLayout; \
+  template <class... ArgTs> \
+  Copy_Traits(ArgTs... args) \
+      : Copy_Traits_<CopyOp, StrideIndicator>(args...) {} \
+};
 
-// COPY_TRAIT_DEF(XE_2D_U32x4x16_ST_N)
-COPY_TRAIT_DEF(XE_2D_U8x1x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x2x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x4x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x8x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x1x64_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x2x64_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x4x64_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x8x64_LD_N)
-COPY_TRAIT_DEF(XE_2D_U64x8x1_LD_T)
-COPY_TRAIT_DEF(XE_2D_U64x8x2_LD_T)
-COPY_TRAIT_DEF(XE_2D_U64x8x4_LD_T)
-// COPY_TRAIT_DEF(XE_2D_U8x2x32_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U8x1x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U8x2x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U8x4x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U8x8x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U8x8x32_ST_N)
-COPY_TRAIT_DEF(XE_2D_U8x16x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x32x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x16x64_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x32x64_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x1x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x2x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x4x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x8x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x1x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x2x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x4x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x8x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x16x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x1x8_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x2x8_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x4x8_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x8x8_LD_N)
-COPY_TRAIT_DEF(XE_2D_U32x1x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U32x2x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U32x4x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U32x8x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x32x16_LD_V)
-COPY_TRAIT_DEF(XE_2D_U8x32x32_LD_V)
-COPY_TRAIT_DEF(XE_2D_U8x32x64_LD_V)
-COPY_TRAIT_DEF(XE_2D_U16x16x8_LD_T)
-COPY_TRAIT_DEF(XE_2D_U32x16x2_LD_T)
-COPY_TRAIT_DEF(XE_2D_U32x16x4_LD_T)
-COPY_TRAIT_DEF(XE_2D_U32x16x8_LD_T)
-// COPY_TRAIT_DEF(XE_2D_U16x1x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U16x2x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U16x4x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U16x8x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U32x1x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U32x2x16_ST_N)
-// COPY_TRAIT_DEF(XE_2D_U32x8x16_ST_N)
-COPY_TRAIT_DEF(XE_2D_U16x16x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x32x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x32x32_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x16x8_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x32x8_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x1x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x2x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x4x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x8x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U32x16x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U32x32x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U16x16x16_LD_V)
-COPY_TRAIT_DEF(XE_2D_U16x32x16_LD_V)
-COPY_TRAIT_DEF(XE_2D_U16x32x32_LD_V)
-COPY_TRAIT_DEF(XE_2D_U16x16x32_LD_V)
-COPY_TRAIT_DEF(XE_2D_U16x16x16_LD_T)
-COPY_TRAIT_DEF(XE_2D_TF32x16x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_TF32x32x16_LD_N)
-COPY_TRAIT_DEF(XE_2D_U8x1x64_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U8x2x64_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U8x4x64_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U8x8x64_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U8x16x64_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U8x32x64_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U16x8x16_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U16x1x32_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U16x2x32_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U16x4x32_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U16x8x32_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U8x32x16_LD_V::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U32x16x8_LD_T::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U16x16x16_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U16x32x16_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U16x16x32_LD_N::PREFETCH)
-COPY_TRAIT_DEF(XE_2D_U16x32x32_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U8x1x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x2x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x4x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x8x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x1x64_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x2x64_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x4x64_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x8x64_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U64x8x1_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U64x8x2_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U64x8x4_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U8x16x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x32x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x16x64_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x32x64_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x1x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x2x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x4x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x8x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x1x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x2x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x4x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x8x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x1x8_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x2x8_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x4x8_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x8x8_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U32x1x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U32x2x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U32x4x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U32x8x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x32x16_LD_V)
+COPY_TRAIT_LD_DEF(XE_2D_U8x32x32_LD_V)
+COPY_TRAIT_LD_DEF(XE_2D_U8x32x64_LD_V)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x8_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U32x16x2_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U32x16x4_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U32x16x8_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x32x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x32x32_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x16x8_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x32x8_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x1x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x2x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x4x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x8x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U32x16x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U32x32x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_V)
+COPY_TRAIT_LD_DEF(XE_2D_U16x32x16_LD_V)
+COPY_TRAIT_LD_DEF(XE_2D_U16x32x32_LD_V)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x32_LD_V)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x16x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_TF32x32x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U8x1x64_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U8x2x64_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U8x4x64_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U8x8x64_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U8x16x64_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U8x32x64_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x8x16_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x1x32_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x2x32_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x4x32_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x8x32_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U8x32x16_LD_V::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U32x16x8_LD_T::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x32x16_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x32_LD_N::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x32x32_LD_N::PREFETCH)
+
+COPY_TRAIT_ST_DEF(XE_2D_U8x2x32_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U8x1x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U8x2x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U8x4x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U8x8x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U8x8x32_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U16x1x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U16x2x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U16x4x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U16x8x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U32x1x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U32x2x16_ST_N)
+COPY_TRAIT_ST_DEF(XE_2D_U32x8x16_ST_N)
 
 namespace detail
 {
