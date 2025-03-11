@@ -45,7 +45,7 @@ else()
 
   set(CUTLASS_USING_SYSTEM_ONEMKL FALSE)
   set(ONEMKL_INCLUDE_DIR ${ONEMKL_INSTALL_DIR}/include)
-  set(ONEMKL_LIB ${ONEMKL_INSTALL_DIR}/lib/libonemkl.so)
+  find_library(ONEMKL_LIB onemkl PATHS ${ONEMKL_INSTALL_DIR}/lib NO_DEFAULT_PATH)
 
   ExternalProject_Add(
     onemkl_project

@@ -55,7 +55,7 @@
 #endif
 
 // 8bits No transform No transpose
-SYCL_DEVICE_BUILTIN(ushort __builtin_IB_subgroup_block_read_flat_u8_m1k32v1(
+SYCL_DEVICE_BUILTIN(cute::intel::ushort __builtin_IB_subgroup_block_read_flat_u8_m1k32v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
@@ -140,7 +140,7 @@ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u8_m8k16v2(
 #undef __global
 #define __global __attribute__((opencl_global))
 // 8 bits No transform No transpose
-SYCL_DEVICE_OCL(ushort intel_sub_group_block_read_8b_1r32c(
+SYCL_DEVICE_OCL(cute::intel::ushort intel_sub_group_block_read_8b_1r32c(
     const __global void *base_address, int width, int height, int pitch,
     cute::intel::coord_t coord));
 SYCL_DEVICE_OCL(cute::intel::ushort2 intel_sub_group_block_read_8b_2r32c(
@@ -229,7 +229,7 @@ struct XE_2D_U8x1x32_LD_N {
                                     T *dst) {
 #if defined(SYCL_INTEL_TARGET)
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
-    *reinterpret_cast<ushort *>(dst) =
+    *reinterpret_cast<cute::intel::ushort *>(dst) =
         __builtin_IB_subgroup_block_read_flat_u8_m1k32v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #else

@@ -83,7 +83,7 @@ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
     int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
 
 // 16 bits No transform No transpose
-SYCL_DEVICE_BUILTIN(ushort __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
+SYCL_DEVICE_BUILTIN(cute::intel::ushort __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
@@ -153,7 +153,7 @@ SYCL_DEVICE_BUILTIN(
 // 16bits
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u16_m1k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, cute::intel::coord_t coord, ushort data));
+    int pitch_minus_one, cute::intel::coord_t coord, cute::intel::ushort data));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u16_m2k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, cute::intel::ushort2 data));
@@ -168,7 +168,7 @@ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u16_m8k16v1(
 #undef __global__
 #define __global __attribute__((opencl_global))
 // 16bits No transform No transpose
-SYCL_DEVICE_OCL(ushort intel_sub_group_block_read_16b_1r16c(
+SYCL_DEVICE_OCL(cute::intel::ushort intel_sub_group_block_read_16b_1r16c(
     const __global void *base_address, int width, int height, int pitch,
     cute::intel::coord_t coord));
 SYCL_DEVICE_OCL(cute::intel::ushort2 intel_sub_group_block_read_16b_2r16c(
@@ -223,7 +223,7 @@ SYCL_DEVICE_OCL(cute::intel::uint32 intel_sub_group_block_read_transform_16b_32r
 // 16bits store
 SYCL_DEVICE_OCL(void intel_sub_group_block_write_16b_1r16c(
     const __global void *base_address, int width, int height, int pitch,
-    cute::intel::coord_t coord, ushort data));
+    cute::intel::coord_t coord, cute::intel::ushort data));
 SYCL_DEVICE_OCL(void intel_sub_group_block_write_16b_2r16c(
     const __global void *base_address, int width, int height, int pitch,
     cute::intel::coord_t coord, cute::intel::ushort2 data));
@@ -263,7 +263,7 @@ struct XE_2D_U16x1x16_LD_N {
                                     T *dst) {
 #if defined(SYCL_INTEL_TARGET)
     static_assert(sizeof(T) == 2, "Expected T to have size 2");
-    *reinterpret_cast<ushort *>(dst) =
+    *reinterpret_cast<cute::intel::ushort *>(dst) =
         __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #else
@@ -788,7 +788,7 @@ struct XE_2D_U16x1x16_ST_N {
     // static_assert(sizeof(T) == 2, "Expected T to have size 2");
     __builtin_IB_subgroup_block_write_flat_u16_m1k16v1(
         (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord,
-        *(ushort *)(src));
+        *(cute::intel::ushort *)(src));
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
 #endif
