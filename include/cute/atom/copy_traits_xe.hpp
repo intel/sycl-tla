@@ -2087,12 +2087,14 @@ struct Copy_Traits<XE_1D_STORE_GLOBAL<S, D>> {
 // Since we can't SFINAE this (Copy_Traits has no Enable = void template param), we are
 // obliged to define the actual Copy_Traits for each instruction individually
 // TODO(codeplay): Revisit this after SPIR-V copy builtins added
+// TODO(codeplay): Is it safe that we default to row-major when constructing Copy_Traits,
+// or should we insist that the developer provide the stride?
 #define COPY_TRAIT_LD_DEF(COPY_OP) \
-template <class StrideIndicator> \
-struct Copy_Traits<COPY_OP, StrideIndicator> : Copy_Traits_<COPY_OP, StrideIndicator>{ \
+template <class... args_t> \
+struct Copy_Traits<COPY_OP, args_t...> : Copy_Traits_<COPY_OP, args_t...>{ \
   using CopyOp = COPY_OP; \
-  using Base = Copy_Traits_<CopyOp, StrideIndicator>; \
-  using XE_2D_LD_Unpack<CopyOp, StrideIndicator>::is_convention_MN; \
+  using Base = Copy_Traits_<CopyOp, args_t...>; \
+  using XE_2D_LD_Unpack<CopyOp, args_t...>::is_convention_MN; \
   using typename Base::ThrID; \
   using BlockShape = std::conditional_t<is_convention_MN, typename Base::BlockShape, decltype(cute::reverse(typename Base::BlockShape{}))>; \
   using SrcLayout = decltype(detail::get_logical_layout<is_convention_MN>(typename Base::SrcLayout{}, typename Base::BlockShape{})); \
@@ -2100,15 +2102,15 @@ struct Copy_Traits<COPY_OP, StrideIndicator> : Copy_Traits_<COPY_OP, StrideIndic
   using RefLayout = DstLayout; \
   template <class... ArgTs> \
   Copy_Traits(ArgTs... args) \
-      : Copy_Traits_<CopyOp, StrideIndicator>(args...) {} \
+      : Copy_Traits_<CopyOp, args_t...>(args...) {} \
 };
 
 #define COPY_TRAIT_ST_DEF(COPY_OP) \
-template <class StrideIndicator> \
-struct Copy_Traits<COPY_OP, StrideIndicator> : Copy_Traits_<COPY_OP, StrideIndicator>{ \
+template <class... args_t> \
+struct Copy_Traits<COPY_OP, args_t...> : Copy_Traits_<COPY_OP, args_t...>{ \
   using CopyOp = COPY_OP; \
-  using Base = Copy_Traits_<CopyOp, StrideIndicator>; \
-  using XE_2D_ST_Unpack<CopyOp, StrideIndicator>::is_convention_MN; \
+  using Base = Copy_Traits_<CopyOp, args_t...>; \
+  using XE_2D_ST_Unpack<CopyOp, args_t...>::is_convention_MN; \
   using typename Base::ThrID; \
   using BlockShape = std::conditional_t<is_convention_MN, typename Base::BlockShape, decltype(cute::reverse(typename Base::BlockShape{}))>; \
   using SrcLayout = decltype(detail::get_logical_layout<is_convention_MN>(typename Base::SrcLayout{}, typename Base::BlockShape{})); \
@@ -2116,7 +2118,7 @@ struct Copy_Traits<COPY_OP, StrideIndicator> : Copy_Traits_<COPY_OP, StrideIndic
   using RefLayout = SrcLayout; \
   template <class... ArgTs> \
   Copy_Traits(ArgTs... args) \
-      : Copy_Traits_<CopyOp, StrideIndicator>(args...) {} \
+      : Copy_Traits_<CopyOp, args_t...>(args...) {} \
 };
 
 COPY_TRAIT_LD_DEF(XE_2D_U8x1x32_LD_N)
