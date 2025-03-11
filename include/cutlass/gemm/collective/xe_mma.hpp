@@ -228,7 +228,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     // TODO(joe): We only need this here because `partition_fragment_A/B` doesn't currently accept
     // a counting tensor
     Tensor gA_gmem = local_tile(mainloop.mA, select<0,2>(WorkgroupTileShape{}), make_coord(m_idx,_,l_idx));
-    Tensor gB_gmem = local_tile(mainloop.mB, select<0,2>(WorkgroupTileShape{}), make_coord(n_idx,_,l_idx));
+    Tensor gB_gmem = local_tile(mainloop.mB, select<1,2>(WorkgroupTileShape{}), make_coord(n_idx,_,l_idx));
 
     // Define the fragments for the MMA
     Tensor fragment_A = thr_mma.partition_fragment_A(gA_gmem(_,_,0));
