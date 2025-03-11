@@ -965,9 +965,9 @@ struct Copy_Traits_<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
   using CopyInternalType = ushort;
 };
 
-template <class StrideIndicator>
-struct Copy_Traits_<XE_2D_U16x16x32_LD_N, StrideIndicator>
-    : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator> {
+template <class... args_t>
+struct Copy_Traits_<XE_2D_U16x16x32_LD_N, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   using BlockShape = Shape<_16, _32>;
@@ -983,7 +983,7 @@ struct Copy_Traits_<XE_2D_U16x16x32_LD_N, StrideIndicator>
 
   template <class... ArgTs>
   Copy_Traits_(ArgTs... args)
-      : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
@@ -1500,8 +1500,8 @@ struct Copy_Traits_<XE_2D_U16x32x32_LD_V, args_t...>
   using ThrID = Layout<_16>;
   using BlockShape = Shape<_32, _32>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_1024>,
-                           Stride< _0, _1>>;
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2,  _2,  _16>>,
+                           Stride<_0,Stride< _1,_512,_256,_1024>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16,Shape <_16,  _2,  _2,  _16>>,
                            Stride<_16,Stride< _1,_512,_256,_1024>>>;
