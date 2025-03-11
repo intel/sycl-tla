@@ -346,8 +346,13 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
 
 // clang-format off
 
+template <typename CopyOp, typename... Args>
+struct Copy_Traits_{
+  static_assert(cute::dependent_false<CopyOp>, "Copy_Traits_ not defined for this CopyOp");
+};
+
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x1x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x1x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x1x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -360,12 +365,12 @@ struct Copy_Traits<XE_2D_U8x1x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x1x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x2x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x2x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x2x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -378,12 +383,12 @@ struct Copy_Traits<XE_2D_U8x2x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x2x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x4x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x4x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x4x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -396,12 +401,12 @@ struct Copy_Traits<XE_2D_U8x4x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x4x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x8x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x8x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x8x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -414,12 +419,12 @@ struct Copy_Traits<XE_2D_U8x8x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x8x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x16x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x16x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x16x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -432,12 +437,12 @@ struct Copy_Traits<XE_2D_U8x16x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x16x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x32x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x32x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x32x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -450,12 +455,12 @@ struct Copy_Traits<XE_2D_U8x32x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x32x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x1x64_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x1x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x1x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -468,12 +473,12 @@ struct Copy_Traits<XE_2D_U8x1x64_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x1x64_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x1x64_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U8x1x64_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x1x64_LD_N::PREFETCH, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -489,7 +494,7 @@ struct Copy_Traits<XE_2D_U8x1x64_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x2x64_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x2x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x2x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -502,13 +507,13 @@ struct Copy_Traits<XE_2D_U8x2x64_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x2x64_LD_N, args_t...>(args...) {}
 };
 
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x2x64_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U8x2x64_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x2x64_LD_N::PREFETCH, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -524,7 +529,7 @@ struct Copy_Traits<XE_2D_U8x2x64_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x4x64_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x4x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x4x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -537,12 +542,12 @@ struct Copy_Traits<XE_2D_U8x4x64_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x4x64_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x4x64_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U8x4x64_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x4x64_LD_N::PREFETCH, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -558,7 +563,7 @@ struct Copy_Traits<XE_2D_U8x4x64_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x8x64_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x8x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x8x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -571,12 +576,12 @@ struct Copy_Traits<XE_2D_U8x8x64_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x8x64_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x8x64_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U8x8x64_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x8x64_LD_N::PREFETCH, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -593,7 +598,7 @@ struct Copy_Traits<XE_2D_U8x8x64_LD_N::PREFETCH, args_t...>
 
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x16x64_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x16x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x16x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -605,12 +610,12 @@ struct Copy_Traits<XE_2D_U8x16x64_LD_N, args_t...>
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x16x64_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x16x64_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U8x16x64_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x16x64_LD_N::PREFETCH, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -624,7 +629,7 @@ struct Copy_Traits<XE_2D_U8x16x64_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x32x64_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x32x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x32x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -636,12 +641,12 @@ struct Copy_Traits<XE_2D_U8x32x64_LD_N, args_t...>
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x32x64_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x32x64_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U8x32x64_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x32x64_LD_N::PREFETCH, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -655,7 +660,7 @@ struct Copy_Traits<XE_2D_U8x32x64_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x1x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x1x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x1x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -668,12 +673,12 @@ struct Copy_Traits<XE_2D_U16x1x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U16x1x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x2x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x2x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x2x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -686,12 +691,12 @@ struct Copy_Traits<XE_2D_U16x2x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U16x2x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x4x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x4x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x4x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -704,12 +709,12 @@ struct Copy_Traits<XE_2D_U16x4x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U16x4x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x8x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x8x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x8x16_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -723,12 +728,12 @@ struct Copy_Traits<XE_2D_U16x8x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x8x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x8x16_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U16x8x16_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x8x16_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -743,7 +748,7 @@ struct Copy_Traits<XE_2D_U16x8x16_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x16x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x16x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -756,12 +761,12 @@ struct Copy_Traits<XE_2D_U16x16x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x16x16_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U16x16x16_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -776,7 +781,7 @@ struct Copy_Traits<XE_2D_U16x16x16_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x32x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x32x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x32x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -789,12 +794,12 @@ struct Copy_Traits<XE_2D_U16x32x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x32x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x32x16_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U16x32x16_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x32x16_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -809,7 +814,7 @@ struct Copy_Traits<XE_2D_U16x32x16_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x1x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x1x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x1x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -822,12 +827,12 @@ struct Copy_Traits<XE_2D_U16x1x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x1x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x1x32_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U16x1x32_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x1x32_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -842,7 +847,7 @@ struct Copy_Traits<XE_2D_U16x1x32_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x2x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x2x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x2x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -855,12 +860,12 @@ struct Copy_Traits<XE_2D_U16x2x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x2x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x2x32_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U16x2x32_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x2x32_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -875,7 +880,7 @@ struct Copy_Traits<XE_2D_U16x2x32_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x4x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x4x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x4x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -888,12 +893,12 @@ struct Copy_Traits<XE_2D_U16x4x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x4x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x4x32_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U16x4x32_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x4x32_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -908,32 +913,27 @@ struct Copy_Traits<XE_2D_U16x4x32_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x8x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x8x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x8x32_LD_N, args_t...> {
-  using XE_2D_LD_Unpack<XE_2D_U16x8x32_LD_N, args_t...>::is_convention_MN;
   using ThrID = Layout<_16>;
-private:
-  using BlockShape_ = Shape<_8, _32>;
+
+  using BlockShape = Shape<_8, _32>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout_ = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
                            Stride< _0,Stride< _1,_256,_512>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout_ = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
+  using DstLayout = Layout<Shape <_16,Shape <_16,  _2,  _8>>,
                            Stride<_16,Stride< _1,_256,_512>>>;
-public:
-  using BlockShape = std::conditional_t<is_convention_MN, BlockShape_, decltype(cute::reverse(BlockShape_{}))>;
-  using SrcLayout = decltype(detail::get_logical_layout<is_convention_MN>(SrcLayout_{}, BlockShape{}));
-  using DstLayout = decltype(detail::get_logical_layout<is_convention_MN>(DstLayout_{}, BlockShape{}));
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x8x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x8x32_LD_N, args_t...> {
   using BlockShape = Shape<_8, _32>;
   // Logical thread id to thread idx
@@ -950,36 +950,29 @@ struct Copy_Traits<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
 };
 
 template <class StrideIndicator>
-struct Copy_Traits<XE_2D_U16x16x32_LD_N, StrideIndicator>
+struct Copy_Traits_<XE_2D_U16x16x32_LD_N, StrideIndicator>
     : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator> {
-  using XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>::is_convention_MN;
+  // Logical thread id to thread idx
   using ThrID = Layout<_16>;
-private:
-  using BlockShape_ = Shape<_16, _32>;
+
+  using BlockShape = Shape<_16, _32>;
 
   // Map from (src-thr,src-val) to bit
-  using SrcLayout_ = Layout<Shape <_16,Shape <_16,  _2, _16>>,
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
                            Stride< _0,Stride< _1,_256,_512>>>;
-
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout_ = Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                                Stride<_16,Stride< _1,_256,_512>>>;
-
-public:
-  using BlockShape = std::conditional_t<is_convention_MN, BlockShape_, decltype(cute::reverse(BlockShape_{}))>;
-  using SrcLayout = decltype(detail::get_logical_layout<is_convention_MN>(SrcLayout_{}, BlockShape{}));
-  using DstLayout = decltype(detail::get_logical_layout<is_convention_MN>(DstLayout_{}, BlockShape{}));
-
+  using DstLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
+                           Stride<_16,Stride< _1,_256,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, StrideIndicator>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x16x32_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U16x16x32_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -995,7 +988,7 @@ struct Copy_Traits<XE_2D_U16x16x32_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x32x32_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U16x32x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x32x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1008,12 +1001,12 @@ struct Copy_Traits<XE_2D_U16x32x32_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x32x32_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x32x32_LD_N::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U16x32x32_LD_N::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x32x32_LD_N, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1029,7 +1022,7 @@ struct Copy_Traits<XE_2D_U16x32x32_LD_N::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x1x8_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x1x8_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x1x8_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1042,12 +1035,12 @@ struct Copy_Traits<XE_2D_TF32x1x8_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x1x8_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x2x8_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x2x8_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x2x8_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1060,12 +1053,12 @@ struct Copy_Traits<XE_2D_TF32x2x8_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x2x8_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x4x8_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x4x8_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x4x8_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1078,12 +1071,12 @@ struct Copy_Traits<XE_2D_TF32x4x8_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x4x8_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x8x8_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x8x8_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x8x8_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1096,12 +1089,12 @@ struct Copy_Traits<XE_2D_TF32x8x8_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x8x8_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x16x8_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x16x8_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x16x8_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1114,12 +1107,12 @@ struct Copy_Traits<XE_2D_TF32x16x8_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x16x8_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x32x8_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x32x8_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x32x8_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1132,12 +1125,12 @@ struct Copy_Traits<XE_2D_TF32x32x8_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x32x8_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x1x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x1x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x1x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1150,12 +1143,12 @@ struct Copy_Traits<XE_2D_TF32x1x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x1x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x2x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x2x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x2x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1168,12 +1161,12 @@ struct Copy_Traits<XE_2D_TF32x2x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x2x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x4x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x4x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x4x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1186,12 +1179,12 @@ struct Copy_Traits<XE_2D_TF32x4x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x4x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x8x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x8x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x8x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1204,12 +1197,12 @@ struct Copy_Traits<XE_2D_TF32x8x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x8x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x16x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x16x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x16x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1222,12 +1215,12 @@ struct Copy_Traits<XE_2D_TF32x16x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x16x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_TF32x32x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_TF32x32x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x32x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1240,12 +1233,12 @@ struct Copy_Traits<XE_2D_TF32x32x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_TF32x32x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x1x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x1x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x1x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1258,12 +1251,12 @@ struct Copy_Traits<XE_2D_U32x1x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U32x1x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x2x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x2x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x2x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1276,12 +1269,12 @@ struct Copy_Traits<XE_2D_U32x2x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U32x2x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x4x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x4x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x4x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1294,12 +1287,12 @@ struct Copy_Traits<XE_2D_U32x4x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U32x4x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x8x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x8x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x8x16_LD_N, args_t...> {
   using BlockShape = Shape<_8, _16>;
   // Logical thread id to thread idx
@@ -1313,12 +1306,12 @@ struct Copy_Traits<XE_2D_U32x8x16_LD_N, args_t...>
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U32x8x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x16x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x16x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x16x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1331,12 +1324,12 @@ struct Copy_Traits<XE_2D_U32x16x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U32x16x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x32x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x32x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x32x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1349,12 +1342,12 @@ struct Copy_Traits<XE_2D_U32x32x16_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U32x32x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x32x16_LD_V, args_t...>
+struct Copy_Traits_<XE_2D_U8x32x16_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x32x16_LD_V, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1367,12 +1360,12 @@ struct Copy_Traits<XE_2D_U8x32x16_LD_V, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U8x32x16_LD_V, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x32x16_LD_V::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U8x32x16_LD_V::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x32x16_LD_V, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1387,7 +1380,7 @@ struct Copy_Traits<XE_2D_U8x32x16_LD_V::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x32x32_LD_V, args_t...>
+struct Copy_Traits_<XE_2D_U8x32x32_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x32x32_LD_V, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1400,12 +1393,12 @@ struct Copy_Traits<XE_2D_U8x32x32_LD_V, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U8x32x32_LD_V, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x32x64_LD_V, args_t...>
+struct Copy_Traits_<XE_2D_U8x32x64_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x32x64_LD_V, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1418,12 +1411,12 @@ struct Copy_Traits<XE_2D_U8x32x64_LD_V, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U8x32x64_LD_V, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x16x16_LD_V, args_t...>
+struct Copy_Traits_<XE_2D_U16x16x16_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_V, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1437,12 +1430,12 @@ struct Copy_Traits<XE_2D_U16x16x16_LD_V, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_V, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x32x16_LD_V, args_t...>
+struct Copy_Traits_<XE_2D_U16x32x16_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x32x16_LD_V, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1455,12 +1448,12 @@ struct Copy_Traits<XE_2D_U16x32x16_LD_V, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x32x16_LD_V, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x32x32_LD_V, args_t...>
+struct Copy_Traits_<XE_2D_U16x32x32_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x32x32_LD_V, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1474,12 +1467,12 @@ struct Copy_Traits<XE_2D_U16x32x32_LD_V, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x32x32_LD_V, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x16x32_LD_V, args_t...>
+struct Copy_Traits_<XE_2D_U16x16x32_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_V, args_t...> {
   using BlockShape = Shape<_16, _32>;
   // Logical thread id to thread idx
@@ -1494,12 +1487,12 @@ struct Copy_Traits<XE_2D_U16x16x32_LD_V, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_V, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x16x8_LD_T, args_t...>
+struct Copy_Traits_<XE_2D_U16x16x8_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x8_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1512,12 +1505,12 @@ struct Copy_Traits<XE_2D_U16x16x8_LD_T, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U16x16x8_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U16x16x16_LD_T, args_t...>
+struct Copy_Traits_<XE_2D_U16x16x16_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1530,7 +1523,7 @@ struct Copy_Traits<XE_2D_U16x16x16_LD_T, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_T, args_t...>(args...) {}
 };
 
@@ -1550,7 +1543,7 @@ struct Copy_Traits<XE_2D_U16x16x16_LD_T, args_t...>
 // };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x16x2_LD_T, args_t...>
+struct Copy_Traits_<XE_2D_U32x16x2_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x16x2_LD_T, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1564,12 +1557,12 @@ struct Copy_Traits<XE_2D_U32x16x2_LD_T, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U32x16x2_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x16x4_LD_T, args_t...>
+struct Copy_Traits_<XE_2D_U32x16x4_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x16x4_LD_T, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1583,12 +1576,12 @@ struct Copy_Traits<XE_2D_U32x16x4_LD_T, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U32x16x4_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x16x8_LD_T, args_t...>
+struct Copy_Traits_<XE_2D_U32x16x8_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x16x8_LD_T, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1602,12 +1595,12 @@ struct Copy_Traits<XE_2D_U32x16x8_LD_T, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U32x16x8_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x16x8_LD_T::PREFETCH, args_t...>
+struct Copy_Traits_<XE_2D_U32x16x8_LD_T::PREFETCH, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x16x8_LD_T, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1622,7 +1615,7 @@ struct Copy_Traits<XE_2D_U32x16x8_LD_T::PREFETCH, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U64x8x1_LD_T, args_t...>
+struct Copy_Traits_<XE_2D_U64x8x1_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U64x8x1_LD_T, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1636,12 +1629,12 @@ struct Copy_Traits<XE_2D_U64x8x1_LD_T, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U64x8x1_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U64x8x2_LD_T, args_t...>
+struct Copy_Traits_<XE_2D_U64x8x2_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U64x8x2_LD_T, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1655,12 +1648,12 @@ struct Copy_Traits<XE_2D_U64x8x2_LD_T, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U64x8x2_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U64x8x4_LD_T, args_t...>
+struct Copy_Traits_<XE_2D_U64x8x4_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U64x8x4_LD_T, args_t...> {
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
@@ -1674,7 +1667,7 @@ struct Copy_Traits<XE_2D_U64x8x4_LD_T, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgTs>
-  Copy_Traits(ArgTs... args)
+  Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U64x8x4_LD_T, args_t...>(args...) {}
 };
 
@@ -2029,6 +2022,117 @@ struct Copy_Traits<XE_1D_STORE_GLOBAL<S, D>> {
     // Reference map from (thr,val) to bit
     using RefLayout = SrcLayout;
 };
+
+// This is the Copy_Traits for Xe 2D Block copies, which inherits from `Copy_Traits_` and handles
+// transposing the traits depending on the layout of the tensor in memory (MN vs. K-major).
+// Since we can't SFINAE this (Copy_Traits has no Enable = void template param), we are
+// obliged to define the actual Copy_Traits for each instruction individually
+// TODO(codeplay): Revisit this after SPIR-V copy builtins added
+#define COPY_TRAIT_DEF(COPY_OP) \
+template <class StrideIndicator> \
+struct Copy_Traits<COPY_OP, StrideIndicator> : Copy_Traits_<COPY_OP, StrideIndicator>{ \
+  using CopyOp = COPY_OP; \
+  using Base = Copy_Traits_<CopyOp, StrideIndicator>; \
+  using XE_2D_LD_Unpack<CopyOp, StrideIndicator>::is_convention_MN; \
+  using typename Base::ThrID; \
+  using BlockShape = std::conditional_t<is_convention_MN, typename Base::BlockShape, decltype(cute::reverse(typename Base::BlockShape{}))>; \
+  using SrcLayout = decltype(detail::get_logical_layout<is_convention_MN>(typename Base::SrcLayout{}, typename Base::BlockShape{})); \
+  using DstLayout = decltype(detail::get_logical_layout<is_convention_MN>(typename Base::DstLayout{}, typename Base::BlockShape{})); \
+  using RefLayout = DstLayout; \
+  template <class... ArgTs> \
+  Copy_Traits(ArgTs... args) \
+      : Copy_Traits_<CopyOp, StrideIndicator>(args...) {} \
+};
+
+
+// COPY_TRAIT_DEF(XE_2D_U32x4x16_ST_N)
+COPY_TRAIT_DEF(XE_2D_U8x1x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x2x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x4x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x8x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x1x64_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x2x64_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x4x64_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x8x64_LD_N)
+COPY_TRAIT_DEF(XE_2D_U64x8x1_LD_T)
+COPY_TRAIT_DEF(XE_2D_U64x8x2_LD_T)
+COPY_TRAIT_DEF(XE_2D_U64x8x4_LD_T)
+// COPY_TRAIT_DEF(XE_2D_U8x2x32_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U8x1x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U8x2x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U8x4x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U8x8x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U8x8x32_ST_N)
+COPY_TRAIT_DEF(XE_2D_U8x16x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x32x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x16x64_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x32x64_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x1x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x2x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x4x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x8x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x1x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x2x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x4x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x8x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x16x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x1x8_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x2x8_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x4x8_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x8x8_LD_N)
+COPY_TRAIT_DEF(XE_2D_U32x1x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U32x2x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U32x4x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U32x8x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x32x16_LD_V)
+COPY_TRAIT_DEF(XE_2D_U8x32x32_LD_V)
+COPY_TRAIT_DEF(XE_2D_U8x32x64_LD_V)
+COPY_TRAIT_DEF(XE_2D_U16x16x8_LD_T)
+COPY_TRAIT_DEF(XE_2D_U32x16x2_LD_T)
+COPY_TRAIT_DEF(XE_2D_U32x16x4_LD_T)
+COPY_TRAIT_DEF(XE_2D_U32x16x8_LD_T)
+// COPY_TRAIT_DEF(XE_2D_U16x1x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U16x2x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U16x4x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U16x8x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U32x1x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U32x2x16_ST_N)
+// COPY_TRAIT_DEF(XE_2D_U32x8x16_ST_N)
+COPY_TRAIT_DEF(XE_2D_U16x16x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x32x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x32x32_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x16x8_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x32x8_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x1x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x2x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x4x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x8x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U32x16x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U32x32x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U16x16x16_LD_V)
+COPY_TRAIT_DEF(XE_2D_U16x32x16_LD_V)
+COPY_TRAIT_DEF(XE_2D_U16x32x32_LD_V)
+COPY_TRAIT_DEF(XE_2D_U16x16x32_LD_V)
+COPY_TRAIT_DEF(XE_2D_U16x16x16_LD_T)
+COPY_TRAIT_DEF(XE_2D_TF32x16x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_TF32x32x16_LD_N)
+COPY_TRAIT_DEF(XE_2D_U8x1x64_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U8x2x64_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U8x4x64_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U8x8x64_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U8x16x64_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U8x32x64_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U16x8x16_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U16x1x32_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U16x2x32_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U16x4x32_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U16x8x32_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U8x32x16_LD_V::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U32x16x8_LD_T::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U16x16x16_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U16x32x16_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U16x16x32_LD_N::PREFETCH)
+COPY_TRAIT_DEF(XE_2D_U16x32x32_LD_N::PREFETCH)
 
 namespace detail
 {
