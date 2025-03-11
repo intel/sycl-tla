@@ -239,7 +239,6 @@ struct XE_2D_U8x1x32_LD_N {
 };
 
 struct XE_2D_U8x2x32_LD_N {
-  using BlockShape = Shape<_2, _32>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -257,7 +256,6 @@ struct XE_2D_U8x2x32_LD_N {
 };
 
 struct XE_2D_U8x2x32_ST_N {
-  using BlockShape = Shape<_2, _32>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -275,7 +273,6 @@ struct XE_2D_U8x2x32_ST_N {
 };
 
 struct XE_2D_U8x4x32_LD_N {
-  using BlockShape = Shape<_4, _32>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -293,7 +290,6 @@ struct XE_2D_U8x4x32_LD_N {
 };
 
 struct XE_2D_U8x8x32_LD_N {
-  using BlockShape = Shape<_8, _32>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -311,7 +307,6 @@ struct XE_2D_U8x8x32_LD_N {
 };
 
 struct XE_2D_U8x16x32_LD_N {
-  using BlockShape = Shape<_16, _32>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -344,7 +339,6 @@ struct XE_2D_U8x16x32_LD_N {
 };
 
 struct XE_2D_U8x32x32_LD_N {
-  using BlockShape = Shape<_32, _32>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -362,7 +356,6 @@ struct XE_2D_U8x32x32_LD_N {
 };
 
 struct XE_2D_U8x1x64_LD_N {
-  using BlockShape = Shape<_1, _64>;
   
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -394,7 +387,6 @@ struct XE_2D_U8x1x64_LD_N {
 };
 
 struct XE_2D_U8x2x64_LD_N {
-  using BlockShape = Shape<_2, _64>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -426,7 +418,6 @@ struct XE_2D_U8x2x64_LD_N {
 };
 
 struct XE_2D_U8x4x64_LD_N {
-  using BlockShape = Shape<_4, _64>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -458,7 +449,6 @@ struct XE_2D_U8x4x64_LD_N {
 };
 
 struct XE_2D_U8x8x64_LD_N {
-  using BlockShape = Shape<_8, _64>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -490,7 +480,6 @@ struct XE_2D_U8x8x64_LD_N {
 };
 
 struct XE_2D_U8x16x64_LD_N {
-  using BlockShape = Shape<_16, _64>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -523,7 +512,6 @@ struct XE_2D_U8x16x64_LD_N {
 };
 
 struct XE_2D_U8x32x64_LD_N {
-  using BlockShape = Shape<_32, _64>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -558,7 +546,6 @@ struct XE_2D_U8x32x64_LD_N {
 
 
 struct XE_2D_U8x32x16_LD_V {
-  using BlockShape = Shape<_32, _16>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -590,7 +577,6 @@ struct XE_2D_U8x32x16_LD_V {
 };
 
 struct XE_2D_U8x32x32_LD_V {
-  using BlockShape = Shape<_32, _32>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -608,7 +594,6 @@ struct XE_2D_U8x32x32_LD_V {
 };
 
 struct XE_2D_U8x32x64_LD_V {
-  using BlockShape = Shape<_32, _64>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -626,7 +611,6 @@ struct XE_2D_U8x32x64_LD_V {
 };
 
 struct XE_2D_U8x1x16_ST_N {
-  using BlockShape = Shape<_1, _16>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(void *baseoffset, int width, int height,
@@ -644,7 +628,6 @@ struct XE_2D_U8x1x16_ST_N {
 };
 
 struct XE_2D_U8x2x16_ST_N {
-  using BlockShape = Shape<_2, _16>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(void *baseoffset, int width, int height,
@@ -662,7 +645,6 @@ struct XE_2D_U8x2x16_ST_N {
 };
 
 struct XE_2D_U8x4x16_ST_N {
-  using BlockShape = Shape<_4, _16>;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(void *baseoffset, int width, int height,
