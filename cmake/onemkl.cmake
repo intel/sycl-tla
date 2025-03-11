@@ -45,7 +45,11 @@ else()
 
   set(CUTLASS_USING_SYSTEM_ONEMKL FALSE)
   set(ONEMKL_INCLUDE_DIR ${ONEMKL_INSTALL_DIR}/include)
-  set(ONEMKL_LIB ${ONEMKL_INSTALL_DIR}/lib/${CMAKE_LINK_LIBRARY_PREFIX}onemkl${CMAKE_LINK_LIBRARY_SUFFIX})
+  if(WIN32)
+    set(ONEMKL_LIB ${ONEMKL_INSTALL_DIR}/lib/onemkl.lib)
+  else()
+    set(ONEMKL_LIB ${ONEMKL_INSTALL_DIR}/lib/libonemkl.so)
+  endif()
 
   ExternalProject_Add(
     onemkl_project
