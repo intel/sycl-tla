@@ -2108,7 +2108,7 @@ struct Copy_Traits<COPY_OP, StrideIndicator> : Copy_Traits_<COPY_OP, StrideIndic
   using BlockShape = std::conditional_t<is_convention_MN, typename Base::BlockShape, decltype(cute::reverse(typename Base::BlockShape{}))>; \
   using SrcLayout = decltype(detail::get_logical_layout<is_convention_MN>(typename Base::SrcLayout{}, typename Base::BlockShape{})); \
   using DstLayout = decltype(detail::get_logical_layout<is_convention_MN>(typename Base::DstLayout{}, typename Base::BlockShape{})); \
-  using RefLayout = DstLayout; \
+  using RefLayout = SrcLayout; \
   template <class... ArgTs> \
   Copy_Traits(ArgTs... args) \
       : Copy_Traits_<CopyOp, StrideIndicator>(args...) {} \
