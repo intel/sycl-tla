@@ -54,7 +54,7 @@
 #if defined(_MSC_VER) && defined(_M_AMD64)
 #define CUTLASS_INT128_ARITHMETIC
 #include <intrin.h>
-#if _MSC_VER >= 1920 && !defined(__CUDA_ARCH__)
+#if _MSC_VER >= 1920 && !defined(__CUDA_ARCH__) && !defined(__INTEL_LLVM_COMPILER)
 #define CUTLASS_INT128_ARITHMETIC_DIV
 #include <immintrin.h>
 #endif

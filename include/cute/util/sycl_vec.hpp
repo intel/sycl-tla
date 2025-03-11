@@ -33,6 +33,11 @@
 // fwd declare OCL function and OCL types
 #include <sycl/sycl.hpp> //for sycl::vec
 
+#if defined(_MSC_VER)
+using uint = unsigned int;
+using ushort = unsigned short;
+#endif
+
 namespace cute
 {
 namespace intel
