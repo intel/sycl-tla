@@ -62,8 +62,14 @@ struct KernelHardwareInfo {
   static inline int
   query_device_multiprocessor_count(int device_id = 0) {
     auto queue = syclcompat::get_default_queue();
-    auto device = queue.get_device();
-    int multiprocessor_count = static_cast<int>(device.get_info<sycl::ext::oneapi::info::device::num_compute_units>());
+    auto dev = queue.get_device();
+    int multiprocessor_count = 1;
+    //TODO (Codeplay): Replace with device.get_info<sycl::ext::oneapi::info::device::num_compute_units>() once available 
+#if defined __SYCL_CUDA_ARCH__
+    multiprocessor_count = dev.get_info<sycl::info::device::max_compute_units>();
+#elif defined SYCL_INTEL_TARGET
+    multiprocessor_count = static_cast<int>(dev.get_info<sycl::ext::intel::info::device::gpu_slices>() * dev.get_info<sycl::ext::intel::info::device::gpu_subslices_per_slice>());
+#endif
     return multiprocessor_count;
   }
 
