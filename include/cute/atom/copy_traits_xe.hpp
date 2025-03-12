@@ -84,11 +84,14 @@ static constexpr bool is_stride_leftmost<T, cute::void_t<decltype(T{}.stride())>
 // Swap the Src or Dst Layout of a Copy_Traits if the logical/memory layouts differ 
 template <bool is_convention_MN, typename LayoutIn, typename BlockShape>
 auto get_logical_layout(LayoutIn &&, BlockShape &&) {
+  static_assert(cute::rank(BlockShape{}) == 2, "Expected 2D BlockShape for XE_2D copy op.");
+  static_assert(cute::rank(LayoutIn{}) == 2, "Expected 2D LayoutIn for XE_2D copy op.");
   if constexpr (is_convention_MN) {
     return LayoutIn{};
   } else {
     // (16, (32, 2))
     //        ^-- the size of an element in bits
+    // TODO(codeplay): this may not be a safe assumption but SPIR-V builtins are coming.
     using ElemBitSize = decltype(cute::get<1, 0>(LayoutIn{}.shape()));
     // Construct a generic row-major layout of the relevant size
     using RowMajorLayout =
