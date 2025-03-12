@@ -1594,8 +1594,10 @@ struct Copy_Traits_<XE_2D_U16x16x16_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_256>,
-                           Stride< _0, _1>>;
+  // TODO(joe): Not convinced that changing from <_16, _256> should be required here
+  // but get_logical_layout assumes get<1,0>(layout.shape) is the type size
+  using SrcLayout = Layout<Shape < _16,Shape <_16,_16>>,
+                           Stride<_0,Stride< _1,_16>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape < _16,Shape <_16,_16>>,
                            Stride<_256,Stride< _1,_16>>>;
