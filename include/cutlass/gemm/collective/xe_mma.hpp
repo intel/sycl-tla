@@ -215,28 +215,17 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
+    Tensor tCrA = make_tensor<ElementA>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementB>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
+  
+    // Retile registers for copies
+    Tensor tArA = thr_copy_A.retile_D(tCrA);
+    Tensor tBrB = thr_copy_B.retile_D(tCrB);
+    
     // Retile global counting tensors for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
-    // TODO(joe): We only need this here because `partition_fragment_A/B` doesn't currently accept
-    // a counting tensor
-    Tensor gA_gmem = local_tile(mainloop.mA, select<0,2>(WorkgroupTileShape{}), make_coord(m_idx,_,l_idx));
-    Tensor gB_gmem = local_tile(mainloop.mB, select<1,2>(WorkgroupTileShape{}), make_coord(n_idx,_,l_idx));
-
-    // Define the fragments for the MMA
-    Tensor fragment_A = thr_mma.partition_fragment_A(gA_gmem(_,_,0));
-    Tensor fragment_B = thr_mma.partition_fragment_B(gB_gmem(_,_,0));
-  
-    // Retile fragmens for copies
-    Tensor copy_tCrA = thr_copy_A.retile_D(fragment_A);
-    Tensor copy_tCrB = thr_copy_B.retile_D(fragment_B);
-
-    // Work around the fact that Xe copies don't respect atom layout info
-    Tensor mma_tCrA = retile_MMA(mainloop.copy_A, thr_mma, fragment_A);
-    Tensor mma_tCrB = retile_MMA(mainloop.copy_B, thr_mma, fragment_B);
-
-    // Tensor mma_tCrB = thr_copy_B_SWAP.retile_MMA(thr_mma, fragment_B);
 #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
       print("======================= A: \n");
@@ -313,15 +302,15 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.copy_A, tAgA(_,_,_,k_tile), copy_tCrA);
-      copy(mainloop.copy_B, tBgB(_,_,_,k_tile), copy_tCrB);
+      copy(mainloop.copy_A, tAgA(_,_,_,k_tile), tArA);
+      copy(mainloop.copy_B, tBgB(_,_,_,k_tile), tBrB);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
       }
 
-      cute::gemm(tiled_mma, mma_tCrA, mma_tCrB, accum);
+      cute::gemm(tiled_mma, tCrA, tCrB, accum);
       barrier_wait(barrier_scope);
     }
   }
