@@ -314,7 +314,7 @@ int main(int argc, const char** argv)
 
   // TODO(joe): restore this to 32x32 after finished testing
   using GmemTiledCopyA = XE_2D_U16x16x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x16x32_LD_V;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;

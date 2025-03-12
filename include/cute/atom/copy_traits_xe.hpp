@@ -1555,8 +1555,8 @@ struct Copy_Traits_<XE_2D_U16x16x32_LD_V, args_t...>
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_512>,
-                           Stride< _0, _1>>;
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2,  _2,   _8>>,
+                           Stride<_0,Stride< _1,_512,_256,_1024>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16,Shape <_16,  _2,  _2,   _8>>,
                            Stride<_16,Stride< _1,_512,_256,_1024>>>;
