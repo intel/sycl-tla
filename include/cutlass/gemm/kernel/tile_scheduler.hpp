@@ -65,7 +65,6 @@ struct GroupScheduler { }; // Only used for Grouped GEMMs
 
 #if defined (SYCL_INTEL_TARGET)
 #include "cutlass/gemm/kernel/xe_tile_scheduler_streamk.hpp"
-#include "cutlass/gemm/kernel/xe_tile_scheduler_group.hpp"
 #endif
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -170,7 +169,7 @@ struct TileSchedulerSelector<
     SchedulerPipelineStageCount,
     GroupProblemShape
   > {
-  using Scheduler = PersistentTileSchedulerXeGroup<GroupProblemShape>;
+  using Scheduler = PersistentTileSchedulerSm90Group<GroupProblemShape>;
 };
 template <
   class TileShape,

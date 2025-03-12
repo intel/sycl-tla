@@ -403,6 +403,7 @@ void initialize(const Options &options) {
       fusion_args.dAlpha = {cute::_0{}, cute::_0{}, 1};
       fusion_args.dBeta = {cute::_0{}, cute::_0{}, 1};
     }
+    using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90Group<ProblemShape>::RasterOrderOptions;
 
     if (host_problem_shapes_available) {
       arguments = typename Gemm::Arguments {
@@ -410,7 +411,8 @@ void initialize(const Options &options) {
         {options.groups, problem_sizes.get(), options.problem_sizes_host.data()},
         {ptr_A.get(), stride_A.get(), ptr_B.get(), stride_B.get()},
         {fusion_args, ptr_C.get(), stride_C.get(), ptr_D.get(), stride_D.get()},
-        hw_info
+        hw_info,
+        {1, RasterOrderOptions::AlongN}
       };
     }
     else {
@@ -419,7 +421,8 @@ void initialize(const Options &options) {
         {options.groups, problem_sizes.get(), nullptr},
         {ptr_A.get(), stride_A.get(), ptr_B.get(), stride_B.get()},
         {fusion_args, ptr_C.get(), stride_C.get(), ptr_D.get(), stride_D.get()},
-        hw_info
+        hw_info,
+        {1, RasterOrderOptions::AlongN}
       };
     }
 
