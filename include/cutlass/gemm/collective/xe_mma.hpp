@@ -134,14 +134,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   using  TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), StrideA{}));   //(m, k)
   using  TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), StrideB{}));   //(n, k)
 
-  using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
-  using Copy_A = decltype(make_tiled_copy(atom_load_A{},
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{}))));
-          
-  using Copy_B = decltype(make_tiled_copy(atom_load_B{},
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{}))));
+  using Copy_A = decltype(make_tiled_copy_A(atom_load_A{}, TiledMma{}));
+  using Copy_B = decltype(make_tiled_copy_B(atom_load_B{}, TiledMma{}));
 
   // Host side kernel arguments
   struct Arguments {
@@ -171,8 +165,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
     auto [M,N,K,L] = problem_shape;
 
-    auto tiled_copy_a = Copy_A{}.with(static_cast<ElementA const *>(args.ptr_A), M, K);
-    auto tiled_copy_b = Copy_B{}.with(static_cast<ElementB const *>(args.ptr_B), N, K);
+    auto tiled_copy_a = make_tiled_copy_A(atom_load_A{}.with(static_cast<ElementA const *>(args.ptr_A), M, K), TiledMma{});
+    auto tiled_copy_b = make_tiled_copy_B(atom_load_B{}.with(static_cast<ElementB const *>(args.ptr_B), N, K), TiledMma{});
 
     auto mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.ptr_A)),
                               make_layout(make_shape(M, K, L), args.dA));
