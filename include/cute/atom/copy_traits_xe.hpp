@@ -261,8 +261,8 @@ struct XE_2D_LD_Unpack {
     Int mma_atom_size_N = Int<!is_convention_MN ? size<1>(mma_atom_shape_2d) : size<0>(mma_atom_shape_2d)>{};
     Int copy_size_M = Int<!is_convention_MN ? size<1>(BlockShape{}) / size(typename Traits_LD_t::ThrID{}) : size<0>(BlockShape{})>{}; //TODO(Codeplay): We could use ValLayoutDst once it is consistent
     Int copy_size_N = Int<!is_convention_MN ? size<0>(BlockShape{}) : size<1>(BlockShape{}) / size(typename Traits_LD_t::ThrID{})>{};
-    assert(copy_size_M >= mma_atom_size_M);
-    assert(copy_size_N >= mma_atom_size_N);
+    static_assert(copy_size_M >= mma_atom_size_M);
+    static_assert(copy_size_N >= mma_atom_size_N);
     Int mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size_M;
     Int mma_atom_iters_in_copy_N = copy_size_N / mma_atom_size_N;
     Int copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
