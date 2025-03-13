@@ -419,11 +419,9 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy, TLSh
   auto mma_atom_iters_in_copy_K = copy_size_K;
   auto copy_iters_MN = total_mma_atom_iters_MN / mma_atom_iters_in_copy_MN;
   auto copy_iters_K = total_mma_atom_iters_K / mma_atom_iters_in_copy_K;
-  // auto order = std::conditional_t<TiledCopy::is_convention_MN, Step<_0, Step<_1, _3>, Step<_2, _4>>,
-  //                                 Step<_0, Step<_2, _4>, Step<_1, _3>>>{};
-  auto order = Step<_0, Step<_1, _3>, Step<_2, _4>>{};
-  // auto order = Step<_0, Step<_2, _4>, Step<_1, _3>>{};
-    //                                 u
+  auto order = std::conditional_t<TiledCopy::is_convention_MN, 
+                                  Step<_0, Step<_1, _3>, Step<_2, _4>>,
+                                  Step<_0, Step<_2, _3>, Step<_1, _4>>>{};
   return make_ordered_layout(make_shape(mma_atom_size,
                                         make_shape(mma_atom_iters_in_copy_MN, copy_iters_MN),
                                         make_shape(mma_atom_iters_in_copy_K, copy_iters_K)),
