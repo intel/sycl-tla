@@ -215,37 +215,37 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
 
     // Partition global counting tensors for MMA
-    Tensor mma_coord_A = thr_mma.partition_A(gA);
-    Tensor mma_coord_B = thr_mma.partition_B(gB);
+    Tensor tCgA = thr_mma.partition_A(gA);
+    Tensor tCgB = thr_mma.partition_B(gB);
 
-    Tensor fragment_A = make_tensor<ElementA>(make_fragment_layout(mainloop.copy_A, mma_coord_A(_,_,_,0).shape()));
-    Tensor fragment_B = make_tensor<ElementB>(make_fragment_layout(mainloop.copy_B, mma_coord_B(_,_,_,0).shape()));
+    Tensor tCrA = make_tensor<ElementA>(make_fragment_layout(mainloop.copy_A, tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementB>(make_fragment_layout(mainloop.copy_B, tCgB(_,_,_,0).shape()));
 
     // Retile registers for copies
-    Tensor frag_A_copy = thr_copy_A.retile_D(fragment_A);
-    Tensor frag_B_copy = thr_copy_B.retile_D(fragment_B);
+    Tensor tArA = thr_copy_A.retile_D(tCrA);
+    Tensor tBrB = thr_copy_B.retile_D(tCrB);
     
     // Retile global counting tensors for copies
-    Tensor copy_coord_A = thr_copy_A.retile_S(mma_coord_A);
-    Tensor copy_coord_B = thr_copy_B.retile_S(mma_coord_B);
+    Tensor tAgA = thr_copy_A.retile_S(tCgA);
+    Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
 #if CUTLASS_ENABLE_DEBUG_PRINTS
 #define PRINT(x) print(#x ": "); print(x); print("\n");
     if (cute::thread(LOG_THREAD, LOG_GROUP)) {
       print("======================= A: \n");
-      PRINT(mma_coord_A);
-      PRINT(copy_coord_A);
+      PRINT(tCgA);
+      PRINT(tAgA);
 
-      PRINT(fragment_A);
-      PRINT(frag_A_copy);
+      PRINT(tCrA);
+      PRINT(tArA);
       PRINT(mainloop.copy_A);
 
       print("======================= B: \n");
-      PRINT(mma_coord_B);
-      PRINT(copy_coord_B);
+      PRINT(tCgB);
+      PRINT(tBgB);
 
-      PRINT(fragment_B);
-      PRINT(frag_B_copy);
+      PRINT(tCrB);
+      PRINT(tBrB);
       PRINT(mainloop.copy_B);
       }
 #undef PRINT
@@ -313,15 +313,15 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.copy_A, copy_coord_A(_,_,_,k_tile), frag_A_copy);
-      copy(mainloop.copy_B, copy_coord_B(_,_,_,k_tile), frag_B_copy);
+      copy(mainloop.copy_A, tAgA(_,_,_,k_tile), tArA);
+      copy(mainloop.copy_B, tBgB(_,_,_,k_tile), tBrB);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
       }
 
-      cute::gemm(tiled_mma, fragment_A, fragment_B, accum);
+      cute::gemm(tiled_mma, tCrA, tCrB, accum);
       barrier_wait(barrier_scope);
     }
   }
