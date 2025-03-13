@@ -312,9 +312,8 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  // TODO(joe): restore this to 32x32 after finished testing
-  using GmemTiledCopyA = XE_2D_U16x16x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x32_LD_V;
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
