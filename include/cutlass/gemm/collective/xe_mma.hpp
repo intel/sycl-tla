@@ -171,9 +171,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
     auto [M,N,K,L] = problem_shape;
 
-    auto tiled_copy_a = Copy_A{}.with(static_cast<ElementA const *>(args.ptr_A), M, K);
-    auto tiled_copy_b = Copy_B{}.with(static_cast<ElementB const *>(args.ptr_B), N, K);
-
     auto mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.ptr_A)),
                               make_layout(make_shape(M, K, L), args.dA));
 
