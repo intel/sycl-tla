@@ -118,6 +118,7 @@ public:
   static_assert(ATOM_K * BLK_N == ATOM_N * BLK_K,
                 "The QKV multiplication in this implementation requires the squar block computation in per subgroup.");
 
+  static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize; // 8
   using FragsShape = decltype(cute::shape_div(take<0, 2>(SubgroupTileShape{}), take<0, 2>(MmaAtomShape())));
   static constexpr int FragsM = get<0>(FragsShape{});                                          // 2
@@ -206,9 +207,9 @@ public:
     auto blk_n_coord = BlockIdxX();
     auto blk_l_coord = BlockIdxZ();
 
-    Tensor mQ_mkl = params.mainloop.gmem_tiled_copy_q.get_pvc_tensor(make_shape(seq_len, head_size, batch * num_heads));   //(m,k,l)
-    Tensor mK_nkl = params.mainloop.gmem_tiled_copy_k.get_pvc_tensor(make_shape(seq_len, head_size, batch * num_heads));   //(m,k,l)
-    Tensor mV_nkl = params.mainloop.gmem_tiled_copy_v.get_pvc_tensor(make_shape(head_size, seq_len, batch * num_heads));   //(n,k,l)
+    Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(seq_len, head_size, batch * num_heads));   //(m,k,l)
+    Tensor mK_nkl = cute::get_pvc_tensor(make_shape(seq_len, head_size, batch * num_heads));   //(m,k,l)
+    Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size, seq_len, batch * num_heads));   //(n,k,l)
     Tensor mQ_mk = mQ_mkl(_,_,blk_l_coord);                                                      // (m,k)
     Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                      // (n,k)
     Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                      // (n,k)
@@ -244,6 +245,14 @@ public:
         make_shape(_1{}, _1{}, _1{}));
     Tensor prefetch_iter_q = append_pvc_tensor<1>(prefetch_iter_2d_q, k_tile_count,
                                                   (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{})));
+    auto tiled_prefetch_q = params.mainloop.gmem_tiled_copy_q.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(params.mainloop.mQ);
+    auto tiled_prefetch_k = params.mainloop.gmem_tiled_copy_k.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mK);
+    auto tiled_prefetch_v = params.mainloop.gmem_tiled_copy_v.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mV);
+    auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
+    auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
+    auto thr_prefetch_V = tiled_prefetch_v.get_slice(thread_idx);
+    auto pQgQ = thr_prefetch_Q.partition_S(gQ);
+    
     // The Key point is 1 is horisontal and zero is vertical
     // the iteration over K dimention of B matrix (head_size) should be :
     const auto iter_over_head_count =
@@ -263,7 +272,6 @@ public:
     // Adding iterator for  the dimension K (head size) along /Horizontal
     Tensor prefetch_iter_k = append_pvc_tensor<1>(prefetch_iter_ndim, iter_over_head_count,
                                                   (get<1>(PrefetchKThrShape{}) * get<1>(PrefetchKTileSize{})));
-
     // V is a transposed matrix, So here the sequence length is consumed, it is transposed so the consumed dimension
     // looks like B matrix Hence, the Head size is the fast moving dimension and horizontal and sequence length is
     // vertical. The prefetch only move along the sequence length. Here we call sequence length K since it get consumed
@@ -276,23 +284,28 @@ public:
                    blk_l_coord),
         // We loop over the consuming dimension which is the iteration 0(N) here
         make_shape(_1{}, _1{}, _1{}));
-    Tensor prefetch_iter_v = append_pvc_tensor<0>(prefetch_iter_2d_v, nblock_limit,
+    Tensor prefetch_iter_v = append_pvc_tensor<1>(prefetch_iter_2d_v, nblock_limit,
                                                   (get<0>(PrefetchVThrShape{}) * get<0>(PrefetchVTileSize{})));
+
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < k_tile_count; i++) {
-      prefetch(params.mainloop.gmem_prefetch_q, prefetch_iter_q(_, _, _, i));
+      prefetch(tiled_prefetch_q, prefetch_iter_q(_, _, _, i));
+      //prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
     }
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < iter_over_head_count; j++) {
-        prefetch(params.mainloop.gmem_prefetch_k, prefetch_iter_k(_, _, _, i, j));
+        prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, i, j));
       }
     }
-
+    
+    //partition gV for nblock=0
+    auto pVgV_initial = thr_prefetch_V.partition_S(local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, 0), Step<X, _1, _1>{}));
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
-      prefetch(params.mainloop.gmem_prefetch_v, prefetch_iter_v(_, _, _, i));
+      prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, i));
+      //prefetch(tiled_prefetch_v, pVgV_initial(_, _, i));
     }
 
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
@@ -320,6 +333,7 @@ public:
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
       auto gK = local_tile(mK_nk, subgroup_shape, make_coord(_, nblock, _), Step<X, _1, _1>{});
+      auto pKgK = thr_prefetch_K.partition_S(gK);
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
 
@@ -330,15 +344,18 @@ public:
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
-      auto gV = local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, nblock), Step<X, _1, _1>{}); 
+      auto gV = local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, nblock), Step<X, _1, _1>{});
+      auto pVgV = thr_prefetch_V.partition_S(gV);
       auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
       collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, params.mainloop);
       if (nblock + DispatchPolicy::Stages < nblock_limit) {
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < iter_over_head_count; j++) {
-          prefetch(params.mainloop.gmem_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
+          prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
+          //prefetch(tiled_prefetch_k, pKgK(_, _, nblock + DispatchPolicy::Stages, j));
         }
-        prefetch(params.mainloop.gmem_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
+        prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
+        //prefetch(tiled_prefetch_v, pVgV(_, _, nblock + DispatchPolicy::Stages));
       }
       barrier_wait(barrier_scope);
     }

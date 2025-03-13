@@ -150,6 +150,12 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
       make_tensor(make_gmem_ptr(static_cast<ElementK const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideK{}))));
   using XE_Prefetch_V = decltype(cute::detail::prefetch_selector<PrefetchVTileSize, ElementV, StrideV, SubgroupSize>(
       make_tensor(make_gmem_ptr(static_cast<ElementV const *>(nullptr)), make_layout(make_shape(0, 0, 0), StrideV{}))));
+  using TensorQ_mkl = decltype(make_tensor(make_gmem_ptr(static_cast<ElementQ const *>(nullptr)),
+                                           make_layout(make_shape(0, 0, 0), StrideQ{})));
+  using TensorK_nkl = decltype(make_tensor(make_gmem_ptr(static_cast<ElementK const *>(nullptr)),
+                                           make_layout(make_shape(0, 0, 0), StrideK{})));
+  using TensorV_nkl = decltype(make_tensor(make_gmem_ptr(static_cast<ElementV const *>(nullptr)),
+                                           make_layout(make_shape(0, 0, 0), StrideV{})));
 
   // Host side kernel arguments
   struct Arguments {
@@ -169,6 +175,10 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
     XE_Prefetch_Q gmem_prefetch_q;
     XE_Prefetch_K gmem_prefetch_k;
     XE_Prefetch_V gmem_prefetch_v;
+
+    TensorQ_mkl mQ;
+    TensorK_nkl mK;
+    TensorV_nkl mV;
   };
 
   //
@@ -204,7 +214,7 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
     XE_Prefetch_Q prefetchQ {tensorQ};
     XE_Prefetch_K prefetchK {tensorK};
     XE_Prefetch_V prefetchV {tensorV};
-    return Params{copyQ, copyK, copyV, prefetchQ, prefetchK, prefetchV};
+    return Params{copyQ, copyK, copyV, prefetchQ, prefetchK, prefetchV, tensorQ, tensorK, tensorV};
   }
 
   template <class TileCoord, class FragAccum, class TensorQ, class TensorK, class FragSrc>
