@@ -200,8 +200,6 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     (void)residue_mnk;
     (void)thread_idx;
     (void)smem_buf;
-
-    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
     
     auto thr_copy_A = mainloop.copy_A.get_slice(thread_idx);
     auto thr_copy_B = mainloop.copy_B.get_slice(thread_idx);
@@ -254,7 +252,9 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     //
     // Mainloop
     //
-    
+
+    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
+
     const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
     const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
     const int l_coord = l_idx;
@@ -271,34 +271,25 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     auto tiled_prefetch_a = XE_Prefetch_A{mainloop.mA};
     auto tiled_prefetch_b = XE_Prefetch_B{mainloop.mB};
 
-    // TODO(joe): Prefetch isn't working (poor perf) but it compiles & runs...
-    auto thr_prefetch_copy_A = tiled_prefetch_a.get_slice(thread_idx);
-    auto thr_prefetch_copy_B = tiled_prefetch_b.get_slice(thread_idx);
-
-    auto prefetch_iter_a = thr_prefetch_copy_A.partition_S(gA);
-    auto prefetch_iter_b = thr_prefetch_copy_B.partition_S(gB);
-
-    // auto prefetch_a_coordinate = make_coord(prefetch_a_coord_0 + (sub_group_id / get<1>(PrefetchAThrShape{})) * get<0>(PrefetchATileSize{}),
-    //                                         prefetch_a_coord_1 + (sub_group_id % get<1>(PrefetchAThrShape{})) * get<1>(PrefetchATileSize{}),
-    //                                         l_coord);        
-    // Tensor block2d_prefetch_iter_a = tiled_prefetch_a.get_pvc_tensor(prefetch_a_coordinate, make_shape(_1{}, _1{}, _1{}));
-    //
-    // // no transpose prefetch size(8x32), prefetch shape is (32x1)
-    // Tensor prefetch_iter_a = append_pvc_tensor<ld_a>(block2d_prefetch_iter_a, k_tile_count,
-    //                                                 (get<ld_a>(PrefetchAThrShape{}) * get<ld_a>(PrefetchATileSize{})));
-
-    // // 0/Hight/vertical/ 
-    // const int prefetch_b_coord_0 =  is_B_transposed ? n_idx * BLK_N: k_start_idx * BLK_K;
-    // // 1/Width/Horisontal 
-    // const int prefetch_b_coord_1 =  is_B_transposed ? k_start_idx * BLK_K : n_idx * BLK_N;
-    // constexpr int ld_b = is_B_transposed ? 1 : 0;
-    // auto prefetch_b_coordinate = make_coord(prefetch_b_coord_0 + (sub_group_id / get<1>(PrefetchBThrShape{})) * get<0>(PrefetchBTileSize{}),
-    //                                         prefetch_b_coord_1 + (sub_group_id % get<1>(PrefetchBThrShape{})) * get<1>(PrefetchBTileSize{}),
-    //                                         l_coord);
-    // Tensor block2d_prefetch_iter_b = tiled_prefetch_b.get_pvc_tensor(prefetch_b_coordinate, make_shape(_1{}, _1{}, _1{}));
-    // // no transpose prefetch size(8x32), prefetch shape is (4x8)
-    // Tensor prefetch_iter_b = append_pvc_tensor<ld_b>(block2d_prefetch_iter_b, k_tile_count,
-    //                                                   (get<ld_b>(PrefetchBThrShape{}) * get<ld_b>(PrefetchBTileSize{})));
+    auto prefetch_a_coordinate = make_coord(prefetch_a_coord_0 + (sub_group_id / get<1>(PrefetchAThrShape{})) * get<0>(PrefetchATileSize{}),
+                                            prefetch_a_coord_1 + (sub_group_id % get<1>(PrefetchAThrShape{})) * get<1>(PrefetchATileSize{}),
+                                            l_coord);        
+    Tensor block2d_prefetch_iter_a = tiled_prefetch_a.get_pvc_tensor(prefetch_a_coordinate, make_shape(_1{}, _1{}, _1{}));
+    // no transpose prefetch size(8x32), prefetch shape is (32x1)
+    Tensor prefetch_iter_a = append_pvc_tensor<ld_a>(block2d_prefetch_iter_a, k_tile_count,
+                                                    (get<ld_a>(PrefetchAThrShape{}) * get<ld_a>(PrefetchATileSize{})));
+    // 0/Hight/vertical/ 
+    const int prefetch_b_coord_0 =  is_B_transposed ? n_idx * BLK_N: k_start_idx * BLK_K;
+    // 1/Width/Horisontal 
+    const int prefetch_b_coord_1 =  is_B_transposed ? k_start_idx * BLK_K : n_idx * BLK_N;
+    constexpr int ld_b = is_B_transposed ? 1 : 0;
+    auto prefetch_b_coordinate = make_coord(prefetch_b_coord_0 + (sub_group_id / get<1>(PrefetchBThrShape{})) * get<0>(PrefetchBTileSize{}),
+                                            prefetch_b_coord_1 + (sub_group_id % get<1>(PrefetchBThrShape{})) * get<1>(PrefetchBTileSize{}),
+                                            l_coord);
+    Tensor block2d_prefetch_iter_b = tiled_prefetch_b.get_pvc_tensor(prefetch_b_coordinate, make_shape(_1{}, _1{}, _1{}));
+    // no transpose prefetch size(8x32), prefetch shape is (4x8)
+    Tensor prefetch_iter_b = append_pvc_tensor<ld_b>(block2d_prefetch_iter_b, k_tile_count,
+                                                     (get<ld_b>(PrefetchBThrShape{}) * get<ld_b>(PrefetchBTileSize{})));
 
     constexpr int barrier_scope = 2;
     int prefetch_k = 0;
