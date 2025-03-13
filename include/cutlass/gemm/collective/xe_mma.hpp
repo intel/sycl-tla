@@ -232,10 +232,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     Tensor copy_coord_A = thr_copy_A.retile_S(mma_coord_A);
     Tensor copy_coord_B = thr_copy_B.retile_S(mma_coord_B);
 
-#define CUTLASS_ENABLE_DEBUG_PRINTS 1
-#define LOG_THREAD 0
-#define LOG_GROUP 0
 #if CUTLASS_ENABLE_DEBUG_PRINTS
+#define PRINT(x) print(#x ": "); print(x); print("\n");
     if (cute::thread(LOG_THREAD, LOG_GROUP)) {
       print("======================= A: \n");
       PRINT(mma_coord_A);
@@ -253,6 +251,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
       PRINT(frag_B_copy);
       PRINT(mainloop.copy_B);
       }
+#undef PRINT
 #endif
 
     //
