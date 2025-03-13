@@ -255,7 +255,7 @@ struct XE_2D_LD_Unpack {
 
   template <class TLShape>
   CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TLShape&& fragment_top_level_shape) const {
-    auto [mma_atom_shape, total_mma_atom_iters_M, total_mma_atom_iters_N] = fragment_top_level_shape; //This is checked
+    auto [mma_atom_shape, total_mma_atom_iters_M, total_mma_atom_iters_N] = fragment_top_level_shape;
     auto mma_atom_shape_2d = prepend<2>(mma_atom_shape, _1{});
     Int mma_atom_size_M = Int<!is_convention_MN ? size<0>(mma_atom_shape_2d) : size<1>(mma_atom_shape_2d)>{};
     Int mma_atom_size_N = Int<!is_convention_MN ? size<1>(mma_atom_shape_2d) : size<0>(mma_atom_shape_2d)>{};
