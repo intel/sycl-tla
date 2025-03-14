@@ -407,16 +407,6 @@ struct XE_2D_U4x32x64_LD_N {
     }
 
    *reinterpret_cast<intel::ushort32 *>(cute::raw_pointer_cast(dst_iter)) = *reinterpret_cast<intel::ushort32 *>(cute::raw_pointer_cast(dst_tmp.begin()));
-
-#if 0
-    if (cute::thread(3, 1)) {
-        print("XE_2D_U4x32x64_LD_N, ret: \n");
-      for (int i =0; i < (copy_W * copy_H); i++ ) {
-        print(i); print(",  "); print((float)(dst_iter[i].get())); print("\n");
-      }
-    }
-#endif
-
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
 #endif
@@ -466,16 +456,6 @@ struct XE_2D_U4x16x64_LD_N {
     }
 
    *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_iter)) = *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_tmp.begin()));
-
-#if 0
-    if (cute::thread(3, 1)) {
-        print("XE_2D_U4x16x64_LD_N, ret: \n");
-      for (int i =0; i < (copy_W * copy_H); i++ ) {
-        print(i); print(",  "); print((float)(dst_iter[i].get())); print("\n");
-      }
-    }
-#endif
-
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
 #endif
