@@ -311,8 +311,8 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
     }
   }
 
-  template <class TileCoord, class FragAccum, class FragS, class TensorV, class FragSrc>
-  CUTLASS_DEVICE void mmaPV(TileCoord tile_coord, FragAccum &accum, FragS const &tSr, TensorV gB,
+  template <class FragAccum, class FragS, class TensorV, class FragSrc>
+  CUTLASS_DEVICE void mmaPV(FragAccum &accum, FragS const &tSr, TensorV gB,
                             FragSrc const &frag_src, Params const &params) {
 
     int thread_idx = static_cast<int>(ThreadIdxX());

@@ -245,8 +245,8 @@ public:
         make_shape(_1{}, _1{}, _1{}));
     Tensor prefetch_iter_q = append_pvc_tensor<1>(prefetch_iter_2d_q, k_tile_count,
                                                   (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{})));
-    auto tiled_prefetch_q = params.mainloop.gmem_tiled_copy_q.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(params.mainloop.mQ);
-    auto tiled_prefetch_k = params.mainloop.gmem_tiled_copy_k.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mK);
+    auto tiled_prefetch_q = params.mainloop.gmem_tiled_copy_q.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_N>>, Num_SGs>(params.mainloop.mQ);
+    auto tiled_prefetch_k = params.mainloop.gmem_tiled_copy_k.template prefetch_selector<Shape<Int<BLK_K>,Int<BLK_N>>, Num_SGs>(params.mainloop.mK);
     auto tiled_prefetch_v = params.mainloop.gmem_tiled_copy_v.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mV);
     auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
     auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
@@ -289,8 +289,8 @@ public:
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < k_tile_count; i++) {
-      prefetch(tiled_prefetch_q, prefetch_iter_q(_, _, _, i));
-      //prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
+     // prefetch(tiled_prefetch_q, prefetch_iter_q(_, _, _, i));
+      prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
     }
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
@@ -300,12 +300,14 @@ public:
       }
     }
     
-    //partition gV for nblock=0
-    auto pVgV_initial = thr_prefetch_V.partition_S(local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, 0), Step<X, _1, _1>{}));
+    //partition gV for nblock=0 //N,K M,N<K
+     auto gV = local_tile(mV_nk, TileShape{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
+
+    auto pVgV = thr_prefetch_V.partition_S(gV); 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
-      prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, i));
-      //prefetch(tiled_prefetch_v, pVgV_initial(_, _, i));
+      //prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, i));
+      prefetch(tiled_prefetch_v, pVgV(_, _, _ , i));
     }
 
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
@@ -344,18 +346,16 @@ public:
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
-      auto gV = local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, nblock), Step<X, _1, _1>{});
-      auto pVgV = thr_prefetch_V.partition_S(gV);
-      auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
-      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, params.mainloop);
+      collective_mma.mmaPV(out_reg, tSr, gV(_, _ , nblock), out_reg, params.mainloop);
       if (nblock + DispatchPolicy::Stages < nblock_limit) {
+      //  auto pVgV = thr_prefetch_V.partition_S(gV(_, nblock + DispatchPolicy::Stages));
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < iter_over_head_count; j++) {
           prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
           //prefetch(tiled_prefetch_k, pKgK(_, _, nblock + DispatchPolicy::Stages, j));
         }
-        prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
-        //prefetch(tiled_prefetch_v, pVgV(_, _, nblock + DispatchPolicy::Stages));
+       // prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
+        prefetch(tiled_prefetch_v, pVgV(_, _, _, nblock + DispatchPolicy::Stages));
       }
       barrier_wait(barrier_scope);
     }
@@ -389,8 +389,7 @@ public:
       softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
       auto gV = local_tile(mV_nk, subgroup_shape, make_coord(0, blk_n_coord * ATOM_N, nblock_limit - 1), Step<X, _1, _1>{});
-      auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
-      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, params.mainloop);
+      collective_mma.mmaPV(out_reg, tSr, gV, out_reg, params.mainloop);
     }
 
     CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
