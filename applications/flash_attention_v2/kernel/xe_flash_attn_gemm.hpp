@@ -213,9 +213,10 @@ public:
     Tensor mQ_mk = mQ_mkl(_,_,blk_l_coord);                                                      // (m,k)
     Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                      // (n,k)
     Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                      // (n,k)
-
-    auto gQ = local_tile(mQ_mk, TileShape{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
-    auto gK = local_tile(mK_nk, TileShape{}, make_coord(_, _ , _), Step<X, _1, _1>{});
+    
+    using TileShapeQK = decltype(select<0,2,1>(TileShape{}));
+    auto gQ = local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
+    auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
     auto gV = local_tile(mV_nk, TileShape{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
 
     const int seq_coord = blk_m_coord * BLK_M + (sub_group_id / ATOM_N) * SG_M;
@@ -247,15 +248,22 @@ public:
         make_shape(_1{}, _1{}, _1{}));
     Tensor prefetch_iter_q = append_pvc_tensor<1>(prefetch_iter_2d_q, k_tile_count,
                                                   (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{}))); */
-    auto tiled_prefetch_q = params.mainloop.gmem_tiled_copy_q.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_N>>, Num_SGs>(params.mainloop.mQ);
-    auto tiled_prefetch_k = params.mainloop.gmem_tiled_copy_k.template prefetch_selector<Shape<Int<BLK_K>,Int<BLK_N>>, Num_SGs>(params.mainloop.mK);
-    auto tiled_prefetch_v = params.mainloop.gmem_tiled_copy_v.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mV);
+    auto tiled_prefetch_q =  prefetch_selector<Shape<Int<BLK_M>,Int<BLK_N>>, Num_SGs>(params.mainloop.mQ);   // <M=128(BLK_M), K=128(BLK_N)> // is_reverse_needed=0
+    auto tiled_prefetch_k =  prefetch_selector<Shape<Int<BLK_K>,Int<BLK_N>>, Num_SGs>(params.mainloop.mK); // <N=64(BLK_K), K=128(BLK_N)> // is_revese_needed=0
+    auto tiled_prefetch_v =  prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mV);  // <N=128(BLK_N), K=64(BLK_K)> // is_reverse_needed=1 
     auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
     auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
     auto thr_prefetch_V = tiled_prefetch_v.get_slice(thread_idx);
     auto pQgQ = thr_prefetch_Q.partition_S(gQ);
     auto pKgK = thr_prefetch_K.partition_S(gK);
     auto pVgV = thr_prefetch_V.partition_S(gV); 
+
+  /*   if(cute::thread(0)){
+      print(tiled_prefetch_v);
+      print("\t");
+      print(tiled_prefetch_k);
+      print("\n");
+    }  */  
     // The Key point is 1 is horisontal and zero is vertical
     // the iteration over K dimention of B matrix (head_size) should be :
     const auto iter_over_head_count =
@@ -336,12 +344,6 @@ public:
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
      /*  auto gK_1 = local_tile(mK_nk, subgroup_shape, make_coord(_, nblock, _), Step<X, _1, _1>{});*/
-     /*  if(cute::thread(0)){
-        print(gK(_,_,nblock,_));
-        print("\t");
-        print(pKgK);
-        print("\n");
-      }  */
       //auto pKgK = thr_prefetch_K.partition_S(gK_1);
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
