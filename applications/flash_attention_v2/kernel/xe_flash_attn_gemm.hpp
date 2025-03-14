@@ -235,7 +235,7 @@ public:
     const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, get<1>(subgroup_shape))
                                         : cute::ceil_div(non_causal_seq_len, get<1>(subgroup_shape));
 
-    const int k_tile_count = head_size / (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{}));
+    const int k_tile_count =  cutlass::nearest_up_pow2(head_size)  / (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{}));
     // m, k
   /*   Tensor prefetch_iter_2d_q = params.mainloop.gmem_prefetch_q.get_pvc_tensor(
         // subgroup arranged 4x2 to load 128x64 in 2 load load (each 32X32)
@@ -259,10 +259,10 @@ public:
     // The Key point is 1 is horisontal and zero is vertical
     // the iteration over K dimention of B matrix (head_size) should be :
     const auto iter_over_head_count =
-        head_size / (get<1>(PrefetchKThrShape{}) * get<1>(PrefetchKTileSize{})); // head_size / BLK_N;
+    cutlass::nearest_up_pow2(head_size) / (get<1>(PrefetchKThrShape{}) * get<1>(PrefetchKTileSize{})); // head_size / BLK_N;
     // subgroup arranged 4x2 to load (64x64) in one load(each 16x32)
     // Assume LD_T/LD_N will indicate ColumnMajor and RowMajor
-    auto k_prefetch_coordinate = make_coord(
+ /*    auto k_prefetch_coordinate = make_coord(
         (sub_group_id / get<1>(PrefetchKThrShape{})) * get<0>(PrefetchKTileSize{}), // iteration 0/N/Hight/vertical
         (sub_group_id % get<1>(PrefetchKThrShape{})) * get<1>(PrefetchKTileSize{}), // iteration 1/K//Horizontal
         blk_l_coord);
@@ -279,35 +279,35 @@ public:
     // looks like B matrix Hence, the Head size is the fast moving dimension and horizontal and sequence length is
     // vertical. The prefetch only move along the sequence length. Here we call sequence length K since it get consumed
     // and head size N since it stay subgroup arranged 4x2 to load (64x64) in one load(each 64x32)
-  //  Tensor prefetch_iter_2d_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
-      //  make_coord((sub_group_id / get<1>(PrefetchVThrShape{})) *
-                 //      get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
-                //   BlockIdxX() * BLK_N + ((sub_group_id % get<1>(PrefetchVThrShape{})) *
-             //                             get<1>(PrefetchVTileSize{})), //  iteration 1/N/W/Horisontal / Head size
-                //   blk_l_coord),
+    Tensor prefetch_iter_2d_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
+        make_coord((sub_group_id / get<1>(PrefetchVThrShape{})) *
+                       get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
+                   BlockIdxX() * BLK_N + ((sub_group_id % get<1>(PrefetchVThrShape{})) *
+                                          get<1>(PrefetchVTileSize{})), //  iteration 1/N/W/Horisontal / Head size
+                   blk_l_coord),
         // We loop over the consuming dimension which is the iteration 0(N) here
-   //     make_shape(_1{}, _1{}, _1{}));
-  //  Tensor prefetch_iter_v = append_pvc_tensor<1>(prefetch_iter_2d_v, nblock_limit,
-                                               //   (get<0>(PrefetchVThrShape{}) * get<0>(PrefetchVTileSize{})));
+        make_shape(_1{}, _1{}, _1{}));
+    Tensor prefetch_iter_v = append_pvc_tensor<1>(prefetch_iter_2d_v, nblock_limit,
+                                                  (get<0>(PrefetchVThrShape{}) * get<0>(PrefetchVTileSize{}))); */
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < k_tile_count; i++) {
      // prefetch(tiled_prefetch_q, prefetch_iter_q(_, _, _, i));
       prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
     }
- //   CUTLASS_PRAGMA_UNROLL
-  //  for (int i = 0; i < DispatchPolicy::Stages; i++) {
-   //   CUTLASS_PRAGMA_UNROLL
-    //  for (int j = 0; j < iter_over_head_count; j++) {
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < DispatchPolicy::Stages; i++) {
+      CUTLASS_PRAGMA_UNROLL
+      for (int j = 0; j < iter_over_head_count; j++) {
+          prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
       //  prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, i, j));
-     // }
-    //}
+      }
+    }
     
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
       //prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, i));
-      prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, _));
       prefetch(tiled_prefetch_v, pVgV(_, _, _ , i));
     }
 
@@ -356,11 +356,11 @@ public:
       if (nblock + DispatchPolicy::Stages < nblock_limit) {
         //  CUTLASS_PRAGMA_UNROLL
       //  auto pVgV = thr_prefetch_V.partition_S(gV(_, nblock + DispatchPolicy::Stages));
-       // for (int j = 0; j < iter_over_head_count; j++) {
+        for (int j = 0; j < iter_over_head_count; j++) {
         //prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
           //prefetch(tiled_prefetch_k, pKgK(_, _, nblock + DispatchPolicy::Stages, j));
-        prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, _));
-       // }
+        prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
+        }
        // prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
         prefetch(tiled_prefetch_v, pVgV(_, _, _, nblock + DispatchPolicy::Stages));
       }
