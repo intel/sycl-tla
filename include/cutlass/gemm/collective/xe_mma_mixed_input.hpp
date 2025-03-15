@@ -297,10 +297,14 @@ struct CollectiveMma<
 
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
+
+    // TODO: codeplay to fixed the hardcode here
     Tensor tBrB = thr_copy_B.retile_D(make_tensor(tCrB.data(), select<0, 2, 1>(tCrB.layout())));
-    
+
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
+
+    // TODO: codeplay to fixed the hardcode here
     Tensor tBgB = thr_copy_B.retile_S(make_tensor(tCgB.data(), select<0, 2, 1, 3>(tCgB.layout())));
 
   #if CUTLASS_ENABLE_DEBUG_PRINTS
