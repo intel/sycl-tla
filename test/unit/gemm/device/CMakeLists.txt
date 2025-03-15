@@ -34,6 +34,7 @@ if(CUTLASS_ENABLE_SYCL)
       xe_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp
       xe_gemm_s8_s8_s32_tensor_op_s32.cpp
       xe_gemm_tf32_tf32_fp32_tensor_op_fp32.cpp
+      gemm_universal_bf16n_bf16t_f32n_tensor_op_f32_xe.cpp
     )
 
     cutlass_test_unit_add_executable(
@@ -49,11 +50,6 @@ if(CUTLASS_ENABLE_SYCL)
     cutlass_test_unit_add_executable(
       cutlass_test_unit_gemm_device_mixed_input_tensorop_xe
       gemm_universal_s8t_bf16n_f32t_mixed_input_tensor_op_f32_xe.cpp
-    )
-
-    cutlass_test_unit_add_executable(
-      cutlass_test_unit_gemm_device_tensorop_xe
-      gemm_universal_bf16n_bf16t_f32n_tensor_op_f32_xe.cpp
     )
 
     add_custom_target(

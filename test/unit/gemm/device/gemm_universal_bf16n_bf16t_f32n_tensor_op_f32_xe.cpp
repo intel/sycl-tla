@@ -54,6 +54,7 @@
 
 #include "gemm_testbed_3x.hpp"
 
+using namespace cute;
 ////////////////////////////////////////////////////////////////////////////////
 
 #if defined(CUTLASS_ENABLE_SYCL) && defined(SYCL_INTEL_TARGET)
