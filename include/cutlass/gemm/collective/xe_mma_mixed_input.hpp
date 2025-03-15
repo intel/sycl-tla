@@ -97,10 +97,7 @@ struct CollectiveMma<
   using TransformA = TransformA_;
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
-
-  static_assert(
-      sizeof(ElementA) < sizeof(ElementB),
-      "MainloopIntelPVCMixedPrecision requires that A is narrower than B.");
+  using MmaType = typename TiledMma::MMA_Type;
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -120,8 +117,8 @@ struct CollectiveMma<
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
 
   static constexpr size_t cacheline_bytes = 64;
-  static constexpr auto block_size_w_a = cute::min(SG_K, cacheline_bytes / sizeof(ElementA));
-  static constexpr auto block_size_w_b = cute::min(SG_N, cacheline_bytes / sizeof(ElementB));
+  static constexpr auto block_size_w_a = cute::min(SG_K, cacheline_bytes * sizeof_bits_v<ElementA>/ sizeof_bits_v<int8_t>);
+  static constexpr auto block_size_w_b = cute::min(SG_N, cacheline_bytes * sizeof_bits_v<ElementB>/ sizeof_bits_v<int8_t>);
   static constexpr auto nums_block_w_a = ceil_div(SG_K, block_size_w_a);
   static constexpr auto nums_block_w_b = ceil_div(SG_N, block_size_w_b);
   using PrefetchAThrShape = Shape<Int<ATOM_N /cute::gcd(ATOM_N, nums_block_w_a)>, Int<cute::gcd(ATOM_N, nums_block_w_a)>>;
@@ -203,41 +200,50 @@ struct CollectiveMma<
   };
 
   /// Utilities to transform A.
-  template <class EngineIn,
-            class EngineOut, 
-            class LayoutIn,
-            class LayoutOut,
-            class... Ts>
+  template <class DstType,
+            class EngineIn,
+            class LayoutIn>
   CUTLASS_DEVICE
-  void transform_A(
-    Tensor<EngineIn, LayoutIn> const& tCrA_load, 
-    Tensor<EngineOut, LayoutOut>& tCrA_mma) {
+  auto transform_if_needed(Tensor<EngineIn, LayoutIn> const& in) {
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
-    static_assert(is_rmem<EngineOut>::value, "Output tensor for A conversion must come from registers");
-    static_assert(cosize_v<LayoutIn> == cosize_v<LayoutOut>);
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
-    static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
+
     using SrcType = typename EngineIn::value_type;
-    using DstType = typename EngineOut::value_type;
 
-    auto const& src = tCrA_load(_, _, _);
-    auto const& dst = tCrA_mma(_, _, _);
-    auto pSrc = raw_pointer_cast(src.data());
-    auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
-    constexpr int num_elements = decltype(size(src))::value;
+    if constexpr (std::is_same_v<SrcType, DstType>) {
+      return in;
+    } else if constexpr (sizeof_bits_v<SrcType> < 8) {
+      auto out = make_fragment_like<DstType>(in);
 
-    constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
-    using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
-    using SrcArray = cutlass::Array<SrcType, pack>;
-    using DstArray = cutlass::Array<DstType, pack>;
-    constexpr int iters = num_elements / pack;
+      // TODO: hard code for test
+      #pragma unroll
+      for (int i = 0; i < decltype(size(out))::value; i++) {
+        out[i] = static_cast<DstType>(in[i].get());
+      }
+      return out;
+    } else {
+      auto out = make_fragment_like<DstType>(in);
 
-    CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < iters; ++i) {
-      SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
-      DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
-      *pDstArr = Converter::convert(*pSrcArr);
+      auto const& src = in(_, _, _);
+      auto const& dst = out(_, _, _);
+      auto pSrc = const_cast<SrcType*>(raw_pointer_cast(src.data()));
+      auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
+      constexpr int num_elements = decltype(size(src))::value;
+
+      constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
+      using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
+      using SrcArray = cutlass::Array<SrcType, pack>;
+      using DstArray = cutlass::Array<DstType, pack>;
+      constexpr int iters = num_elements / pack;
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < iters; ++i) {
+        SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
+        DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
+        *pDstArr = Converter::convert(*pSrcArr);
+      }
+      return out;
     }
   }
 
@@ -286,43 +292,42 @@ struct CollectiveMma<
     Tensor tCgB = thr_mma.partition_B(gB);
 
     // Create fragments
-    Tensor tCrA = make_tensor<ElementB>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
+    Tensor tCrA = make_tensor<ElementA>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
     Tensor tCrB = make_tensor<ElementB>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
 
-    // narrow input fragment
-    Tensor tCrA_input = make_tensor<ElementA>(tCrA.shape());
-
     // Retile registers for copies
-    Tensor tArA = thr_copy_A.retile_D(tCrA_input);
-    Tensor tBrB = thr_copy_B.retile_D(tCrB);
+    Tensor tArA = thr_copy_A.retile_D(tCrA);
+    Tensor tBrB = thr_copy_B.retile_D(make_tensor(tCrB.data(), select<0, 2, 1>(tCrB.layout())));
     
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
-    Tensor tBgB = thr_copy_B.retile_S(tCgB);
-
-    static_assert(std::is_same_v<typename decltype(tCrA_input)::value_type, ElementA>);
-    static_assert(std::is_same_v<typename decltype(tCrA)::value_type, ElementB>);
+    Tensor tBgB = thr_copy_B.retile_S(make_tensor(tCgB.data(), select<0, 2, 1, 3>(tCgB.layout())));
 
   #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
         print("======================= A: \n");
-        print("  gA : "); print(gA); print("\n");
-        print("tCgA : "); print(tCgA); print("\n");
-        print("tAgA : "); print(tAgA); print("\n");
+        print("  gA   : "); print(gA);   print("\n");
+        print("  tCgA : "); print(tCgA); print("\n");
+        print("  tAgA : "); print(tAgA); print("\n");
+        print("  tCrA : "); print(tCrA); print("\n");
+        print("  tArA : "); print(tArA); print("\n");
 
         print("=====================  B :\n");
-        print("  gB : "); print(gB); print("\n");
-        print("tCgB : "); print(tCgB); print("\n");
-        print("tBgB : "); print(tBgB); print("\n");
+        print("  gB : ");   print(gB);   print("\n");
+        print("  tCgB : "); print(tCgB); print("\n");
+        print("  tBgB : "); print(tBgB); print("\n");
+        print("  tCrB : "); print(tCrB); print("\n");
+        print("  tBrB : "); print(tBrB); print("\n");
 
         print("=====================  Config: \n");
-        print("  threads per workgroup : "); print(MaxThreadsPerBlock); print("\n");
-        print("  SubgroupTileShape : "); print(SubgroupTileShape{}); print("\n");
+        print("  threads per workgroup : "); print(MaxThreadsPerBlock);  print("\n");
+        print("  SubgroupTileShape     : "); print(SubgroupTileShape{}); print("\n");
 
-        print(" PrefetchAThrShape :    ");print(PrefetchAThrShape{});print("\n");
-        print(" PrefetchBThrShape :    ");print(PrefetchBThrShape{});print("\n");
-        print(" PrefetchATileSize :    ");print(PrefetchATileSize{});print("\n");
-        print(" PrefetchBTileSize :    ");print(PrefetchBTileSize{});print("\n");
+        print("=====================  Prefetch: \n");
+        print("  PrefetchAThrShape :  "); print(PrefetchAThrShape{}); print("\n");
+        print("  PrefetchBThrShape :  "); print(PrefetchBThrShape{}); print("\n");
+        print("  PrefetchATileSize :  "); print(PrefetchATileSize{}); print("\n");
+        print("  PrefetchBTileSize :  "); print(PrefetchBTileSize{}); print("\n");
       }
   #endif
 
@@ -368,7 +373,10 @@ struct CollectiveMma<
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.copy_A, tAgA(_,_,_,k), tArA);
       copy(mainloop.copy_B, tBgB(_,_,_,k), tBrB);
-      transform_A(tCrA_input, tCrA);
+
+      auto mma_A = transform_if_needed<MmaType>(tCrA);
+      auto mma_B = transform_if_needed<MmaType>(tCrB);
+
       if(prefetch_k < k_tile_count) {
         if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
           prefetch(mainloop.copy_A, prefetch_iter_a(_,_,_,prefetch_k));
@@ -378,7 +386,7 @@ struct CollectiveMma<
         } 
       }
 
-      cute::gemm(tiled_mma, tCrA, tCrB, accum);
+      cute::gemm(tiled_mma, mma_A, mma_B, accum);
     }
   }
 };

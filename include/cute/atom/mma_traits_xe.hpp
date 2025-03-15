@@ -31,7 +31,6 @@
 #pragma once
 
 #include <cute/arch/mma_xe.hpp>
-#include <cute/arch/mma_xe_mixed_dtype.hpp>
 #include <cute/atom/mma_traits.hpp>
 
 #include <cute/layout.hpp>
@@ -347,21 +346,4 @@ struct MMA_Traits<XE_1x16x8_F32TF32TF32F32_TT>
   using CLayout = Layout<Shape<_16, _1>, Stride<_1, _1>>;
 };
 
-
-// mixed MMA begin
-template <class TypeA, class TypeB>
-struct MMA_Traits<XE_MIXED_DTYPE_8x16x16_F32F16F32_TT<TypeA, TypeB>>
-       : MMA_Traits<typename XE_MIXED_DTYPE_8x16x16_F32F16F32_TT<TypeA, TypeB>::MMA_Op>
-{
-  using ValTypeA = TypeA;
-  using ValTypeB = TypeB;
-};
-
-template <class TypeA, class TypeB>
-struct MMA_Traits<XE_MIXED_DTYPE_8x16x16_F32BF16F32_TT<TypeA, TypeB>>
-       : MMA_Traits<typename XE_MIXED_DTYPE_8x16x16_F32BF16F32_TT<TypeA, TypeB>::MMA_Op>
-{
-  using ValTypeA = TypeA;
-  using ValTypeB = TypeB;
-};
 }

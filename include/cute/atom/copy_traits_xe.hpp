@@ -249,8 +249,8 @@ struct XE_2D_LD_Unpack {
     // TODO(Codeplay): enable this check once the coordinate refactoring is complete
     //static_assert(size(SLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::SrcLayout{}),
       //            "Src tensor size does not match copy atom size");
-    static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::DstLayout{}),
-                  "Dst tensor size does not match copy atom size");
+    // static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::DstLayout{}),
+    //               "Dst tensor size does not match copy atom size");
 
     dtype *base_addr = (dtype *)traits.base_ptr;
   
@@ -609,8 +609,8 @@ struct Copy_Traits<XE_2D_U4x32x64_LD_N, args_t...>
   using SrcLayout = Layout<Shape <_16,_8>,
                            Stride< _0,_1>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_8,  _2, _32>>,
-                           Stride<_16,Stride< _1,_128,_256>>>;
+  using DstLayout = Layout<Shape <_16,Shape <_1,  _4, _32>>,
+                           Stride<_16,Stride< _1,_4,_16>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 

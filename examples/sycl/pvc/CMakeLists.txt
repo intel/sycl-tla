@@ -77,8 +77,3 @@ cutlass_example_add_executable(
   pvc_gemm_mixed_dtype
   pvc_gemm_mixed_dtype.cpp
 )
-
-cutlass_example_add_executable(
-  pvc_gemm_int4_quantization
-  pvc_gemm_int4_quantization.cpp
-)

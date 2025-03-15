@@ -714,15 +714,6 @@ struct MainloopIntelPVCMixedPrecision {
   using Schedule = KernelPVC;
   using ClusterShape = Shape<_1,_1,_1>;
 };
-
-template<int Stages_>
-struct MainloopIntelPVCInt4Quantization {
-  constexpr static int Stages = Stages_;
-  constexpr static int SubgroupSize = 16;
-  using ArchTag = arch::IntelPVC;
-  using Schedule = KernelPVC;
-  using ClusterShape = Shape<_1,_1,_1>;
-};
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)
