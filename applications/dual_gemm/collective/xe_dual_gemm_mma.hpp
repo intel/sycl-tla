@@ -90,27 +90,19 @@ struct DualGemmMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, St
   static constexpr bool is_A_transposed = cute::detail::is_transpose_load<GmemTiledCopyA_>;
   static constexpr bool is_B_transposed = cute::detail::is_transpose_load<GmemTiledCopyB_>;
   static constexpr size_t cacheline_bytes = 64;
-  // min(32,32)-> 32 (256, 32) -> 32
+
   static constexpr auto block_size_w_a = cute::min(is_A_transposed ? BLK_M : BLK_K, cacheline_bytes / sizeof(ElementA));
-  // 1 -> trans 256/32 = 8
   static constexpr auto nums_block_w_a = ceil_div(is_A_transposed ? BLK_M : BLK_K, block_size_w_a);
-  // min(32, 32) ->32  (256, 32)
   static constexpr auto block_size_w_b = cute::min(is_B_transposed ? BLK_K : BLK_N, cacheline_bytes / sizeof(ElementB));
-  // 8  -> trans 1
   static constexpr auto nums_block_w_b = ceil_div(is_B_transposed ? BLK_K : BLK_N, block_size_w_b);
-  // 32
   static constexpr auto Total_SG = ATOM_N * ATOM_M * ATOM_K;
 
-  // shape<32,1> / trans shap<4,8>
   using PrefetchAThrShape =
       Shape<Int<Total_SG / cute::gcd(Total_SG, nums_block_w_a)>, Int<cute::gcd(Total_SG, nums_block_w_a)>>;
-  // shape<4,8> / trans shap<32,1>
   using PrefetchBThrShape =
       Shape<Int<Total_SG / cute::gcd(Total_SG, nums_block_w_b)>, Int<cute::gcd(Total_SG, nums_block_w_b)>>;
-  // 8x32
   using PrefetchATileSize = decltype(ceil_div(
       Shape<Int<is_A_transposed ? BLK_K : BLK_M>, Int<is_A_transposed ? BLK_M : BLK_K>>{}, PrefetchAThrShape{}));
-  // 8x32
   using PrefetchBTileSize = decltype(ceil_div(
       Shape<Int<is_B_transposed ? BLK_N : BLK_K>, Int<is_B_transposed ? BLK_K : BLK_N>>{}, PrefetchBThrShape{}));
 
@@ -258,10 +250,6 @@ struct DualGemmMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, St
     // Mainloop
     //
     auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
-    
-    const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
-    const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
-    const int l_coord = l_idx;
 
     const auto k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
 
@@ -277,9 +265,9 @@ struct DualGemmMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, St
 
     auto prefetch_a_coordinate = make_coord(prefetch_a_coord_0 + (sub_group_id / get<1>(PrefetchAThrShape{})) * get<0>(PrefetchATileSize{}),
                                             prefetch_a_coord_1 + (sub_group_id % get<1>(PrefetchAThrShape{})) * get<1>(PrefetchATileSize{}),
-                                            l_coord);        
+                                            l_idx);        
     Tensor block2d_prefetch_iter_a = tiled_prefetch_a.get_pvc_tensor(prefetch_a_coordinate, make_shape(_1{}, _1{}, _1{}));
-     // no transpose prefetch size(8x32), prefetch shape is (32x1)
+
     Tensor prefetch_iter_a = append_pvc_tensor<ld_a>(block2d_prefetch_iter_a, k_tile_count,
                                                      (get<ld_a>(PrefetchAThrShape{}) * get<ld_a>(PrefetchATileSize{})));
      // 0/Hight/vertical/ 
@@ -289,9 +277,9 @@ struct DualGemmMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, St
     constexpr int ld_b = is_B_transposed ? 1 : 0;
     auto prefetch_b_coordinate = make_coord(prefetch_b_coord_0 + (sub_group_id / get<1>(PrefetchBThrShape{})) * get<0>(PrefetchBTileSize{}),
                                             prefetch_b_coord_1 + (sub_group_id % get<1>(PrefetchBThrShape{})) * get<1>(PrefetchBTileSize{}),
-                                            l_coord);
+                                            l_idx);
     Tensor block2d_prefetch_iter_b = tiled_prefetch_b.get_pvc_tensor(prefetch_b_coordinate, make_shape(_1{}, _1{}, _1{}));
-    // no transpose prefetch size(8x32), prefetch shape is (4x8)
+
     Tensor prefetch_iter_b = append_pvc_tensor<ld_b>(block2d_prefetch_iter_b, k_tile_count,
                                                      (get<ld_b>(PrefetchBThrShape{}) * get<ld_b>(PrefetchBTileSize{})));
 
