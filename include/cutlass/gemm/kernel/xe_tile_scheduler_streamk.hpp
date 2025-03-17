@@ -44,7 +44,8 @@ namespace cutlass::gemm::kernel::detail {
 
 // Persistent Thread Block (TB) scheduler leveraging stream-K decomposition
 template <
-  class TileShape
+  class TileShape,
+  uint32_t ThreadsPerBlock
 >
 class PersistentTileSchedulerXeStreamK {
   //
@@ -62,6 +63,8 @@ public:
   using Params = PersistentTileSchedulerXeStreamKParams;
   using ReductionMode = Params::ReductionMode;
   using DecompositionMode = Params::DecompositionMode;
+  using RasterOrder = Params::RasterOrder;
+  using RasterOrderOptions = Params::RasterOrderOptions;
 
   struct WorkTileInfo {
     int32_t M_idx = 0;
@@ -132,6 +135,7 @@ public:
     // If this is set to a value greater than 1, stream-K decomposition logic
     // is bypassed in favor of a split-K decomposition.
     int splits = 1;
+    RasterOrderOptions raster_order = RasterOrderOptions::Heuristic;
     ReductionMode reduction_mode = ReductionMode::Deterministic;
     DecompositionMode decomposition_mode = DecompositionMode::Heuristic;
   };
@@ -143,14 +147,17 @@ public:
   // Methods
   //
 
-  template <class ProblemShape>
+  template <class ProblemShape, class ClusterShape>
   static Params
   to_underlying_arguments(
     ProblemShape problem_shape,
     TileShape tile_shape,
+    [[maybe_unused]] ClusterShape cluster_shape,
     KernelHardwareInfo const& hw_info,
     Arguments const& args,
-    void* workspace) {
+    void* workspace,
+    [[maybe_unused]] const uint32_t epilogue_subtile = 1,
+    [[maybe_unused]] uint32_t ktile_start_alignment_count = 1u) {
 
     static_assert(cute::is_static<TileShape>::value);
 
@@ -254,13 +261,17 @@ public:
   }
 
   // Computes the physical grid we should launch.
-  template <class ProblemShape>
+  template <class ProblemShape, class ClusterShape>
   CUTLASS_HOST_DEVICE static
   dim3
   get_grid_shape(
+    [[maybe_unused]] Params const& params,
     ProblemShape problem_shape,
     TileShape tile_shape,
-    KernelHardwareInfo hw_info) {
+    [[maybe_unused]] ClusterShape cluster_shape,
+    KernelHardwareInfo hw_info,
+    [[maybe_unused]] Arguments arguments = Arguments{},
+    [[maybe_unused]] bool truncate_by_problem_size=true) {
 
     auto problem_shape_mnkl = cute::append<4>(problem_shape, cute::Int<1>{});
     dim3 problem_blocks = get_tiled_wg_shape_mnl(problem_shape_mnkl, tile_shape);
@@ -280,7 +291,7 @@ public:
   }
 
   // Performs the reduction across splits for a given output tile.
-template <int ThreadsPerBlock, class FrgTensorC>
+template <class FrgTensorC>
   CUTLASS_DEVICE
   static void
   fixup(
@@ -292,12 +303,12 @@ template <int ThreadsPerBlock, class FrgTensorC>
     static constexpr uint32_t Offset = static_cast<int>(cutlass::arch::ReservedNamedBarriers::StreamkBarrier0);
     static constexpr uint32_t MaxNumNamedBarriers = 1;
     using BarrierManager = NamedBarrierManager<ThreadsPerBlock, Offset, MaxNumNamedBarriers>;
-    return fixup_helper<ThreadsPerBlock, FrgTensorC, BarrierManager>(
+    return fixup_helper<FrgTensorC, BarrierManager>(
       params, work_tile_info, accumulators, num_barriers, barrier_idx);
   }
 
   // Helper for performing the reduction across splits for a given output tile.
-  template <int ThreadsPerBlock, class FrgTensorC, class BarrierManager>
+  template <class FrgTensorC, class BarrierManager>
   CUTLASS_DEVICE
   static void
   fixup_helper(
@@ -421,7 +432,10 @@ template <int ThreadsPerBlock, class FrgTensorC>
   get_workspace_size(
     Arguments const& args,
     ProblemShape problem_shape,
-    KernelHardwareInfo const& hw_info) {
+    KernelHardwareInfo const& hw_info,
+    [[maybe_unused]] uint32_t mma_warp_groups = 1,
+    [[maybe_unused]] const uint32_t epilogue_subtile = 1,
+    [[maybe_unused]] uint32_t num_accumulator_mtxs = 1) {
 
     auto problem_shape_mnkl = cute::append<4>(problem_shape, 1);
 
@@ -447,8 +461,13 @@ template <int ThreadsPerBlock, class FrgTensorC>
   initialize_workspace(
     Arguments const& args,
     void* workspace,
+    [[maybe_unused]] cudaStream_t stream,
     ProblemShape const& problem_shape,
-    KernelHardwareInfo const& hw_info) {
+    KernelHardwareInfo const& hw_info,
+    [[maybe_unused]] uint32_t mma_warp_groups = 1,
+    [[maybe_unused]] const uint32_t epilogue_subtile = 1,
+    [[maybe_unused]] uint32_t num_accumulator_mtxs = 1,
+    [[maybe_unused]] CudaHostAdapter* cuda_adapter = nullptr) {
 
     auto problem_shape_mnkl = cute::append<4>(problem_shape, 1);
 
@@ -488,17 +507,18 @@ template <int ThreadsPerBlock, class FrgTensorC>
   auto
   fetch_next_work(WorkTileInfo work_tile_info) {
     if (continue_current_work(work_tile_info)) {
-      return work_tile_info;
+      return cute::make_tuple(work_tile_info, true);
     }
 
     advance_to_next_work();
-    return get_current_work();
+    return cute::make_tuple(get_current_work(), true);
   }
 
   // Returns the initial work tile info that will be computed over
+  template <class ClusterShape>
   CUTLASS_DEVICE
   WorkTileInfo
-  initial_work_tile_info() {
+  initial_work_tile_info(ClusterShape cluster_shape) {
     return get_current_work();
   }
 

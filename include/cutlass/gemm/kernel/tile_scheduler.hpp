@@ -144,15 +144,30 @@ struct TileSchedulerSelector<
 #if defined (SYCL_INTEL_TARGET)
 template <
   class TileShape,
-  class ClusterShape
+  class ClusterShape,
+  uint32_t ThreadsPerBlock
 >
 struct TileSchedulerSelector<
   StreamKScheduler,
   arch::IntelPVC,
   TileShape,
+  ClusterShape,
+  ThreadsPerBlock
+  > {
+  using Scheduler = PersistentTileSchedulerXeStreamK<TileShape, ThreadsPerBlock>;
+};
+
+template <
+  class TileShape,
+  class ClusterShape
+>
+struct TileSchedulerSelector<
+  PersistentScheduler,
+  arch::IntelPVC,
+  TileShape,
   ClusterShape
   > {
-  using Scheduler = PersistentTileSchedulerXeStreamK<TileShape>;
+  using Scheduler = PersistentTileSchedulerSm90;
 };
 #endif
 

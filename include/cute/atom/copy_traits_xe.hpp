@@ -255,16 +255,22 @@ struct XE_2D_LD_Unpack {
 
   template <class TLShape>
   CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TLShape&& fragment_top_level_shape) const {
-    auto [mma_atom_size, total_mma_atom_iters_M, total_mma_atom_iters_N] = fragment_top_level_shape;
-    auto copy_size_M = size<0>(BlockShape{}); //TODO(Codeplay): We could use ValLayoutDst once it is consistent
-    auto copy_size_N = size<1>(BlockShape{}) / size(typename Traits_LD_t::ThrID{});
-    assert(copy_size_M >= mma_atom_size);
-    auto mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size;
-    auto mma_atom_iters_in_copy_N = copy_size_N;
-    auto copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
-    auto copy_iters_N = total_mma_atom_iters_N / mma_atom_iters_in_copy_N;
-    auto order = std::conditional_t<is_convention_MN, Step<_0, Step<_1,_3>, Step<_2,_4>>, Step<_0, Step<_2,_4>, Step<_1,_3>>>{};
-    return make_ordered_layout(make_shape(mma_atom_size, 
+    auto [mma_atom_shape, total_mma_atom_iters_M, total_mma_atom_iters_N] = fragment_top_level_shape;
+    auto mma_atom_shape_2d = prepend<2>(mma_atom_shape, _1{});
+    Int mma_atom_size_M = Int<!is_convention_MN ? size<0>(mma_atom_shape_2d) : size<1>(mma_atom_shape_2d)>{};
+    Int mma_atom_size_N = Int<!is_convention_MN ? size<1>(mma_atom_shape_2d) : size<0>(mma_atom_shape_2d)>{};
+    Int copy_size_M = Int<!is_convention_MN ? size<1>(BlockShape{}) / size(typename Traits_LD_t::ThrID{}) : size<0>(BlockShape{})>{}; //TODO(Codeplay): We could use ValLayoutDst once it is consistent
+    Int copy_size_N = Int<!is_convention_MN ? size<0>(BlockShape{}) : size<1>(BlockShape{}) / size(typename Traits_LD_t::ThrID{})>{};
+    static_assert(copy_size_M >= mma_atom_size_M);
+    static_assert(copy_size_N >= mma_atom_size_N);
+    Int mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size_M;
+    Int mma_atom_iters_in_copy_N = copy_size_N / mma_atom_size_N;
+    Int copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
+    Int copy_iters_N = total_mma_atom_iters_N / mma_atom_iters_in_copy_N;
+    auto order = std::conditional_t<is_convention_MN, Step<Step<_0,_1>, Step<_2,_4>, Step<_3,_5>>, 
+                                                      Step<Step<_0,_1>, Step<_3,_5>, Step<_2,_4>>>{};
+
+    return make_ordered_layout(make_shape(mma_atom_shape_2d, 
                                           make_shape(mma_atom_iters_in_copy_M, copy_iters_M), 
                                           make_shape(mma_atom_iters_in_copy_N, copy_iters_N)), order);
   };
@@ -2135,6 +2141,7 @@ template<typename PrefetchShape, class Stride, class dtype, int subgroupsize, cl
 #define TYPE_BITS_float(row) XE_2D_U32##x##row##x##16_LD_N
 #define TYPE_BITS_bfloat16_t(row) XE_2D_U16##x##row##x##32_LD_N
 #define TYPE_BITS_int8_t(row) XE_2D_U8##x##row##x##64_LD_N
+#define TYPE_BITS_tfloat32_t(row) XE_2D_TF32##x##row##x##16_LD_N
 
 #define SELECT_BITS(type, row) TYPE_BITS_##type(row)
 // Template to dynamically construct and return the type
@@ -2160,6 +2167,11 @@ template <>\
 struct XePrefetchConstructor<int8_t, row> {\
   using type_t = TYPE_BITS_int8_t(row);\
 };\
+template <>\
+struct XePrefetchConstructor<tfloat32_t, row> {\
+using type_t = TYPE_BITS_tfloat32_t(row);\
+};\
+
 
 BUILD_XE_NAME(1)
 BUILD_XE_NAME(2)
