@@ -320,8 +320,8 @@ public:
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < iter_over_head_count; j++) {
-        //prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
-        prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, i, j));
+        prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
+        //prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, i, j));
       }
     }
     
@@ -372,12 +372,11 @@ public:
         //  CUTLASS_PRAGMA_UNROLL
       //  auto pVgV = thr_prefetch_V.partition_S(gV(_, nblock + DispatchPolicy::Stages));
         for (int j = 0; j < iter_over_head_count; j++) {
-        prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
-        //prefetch(tiled_prefetch_k, pKgK(_, _, nblock + DispatchPolicy::Stages, j));
-        //prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
+        //prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
+        prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
         }
-        prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
-        //prefetch(tiled_prefetch_v, pVgV(_, _, _, nblock + DispatchPolicy::Stages));
+        //prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
+        prefetch(tiled_prefetch_v, pVgV(_, _, _, nblock + DispatchPolicy::Stages));
       }
       barrier_wait(barrier_scope);
     }
