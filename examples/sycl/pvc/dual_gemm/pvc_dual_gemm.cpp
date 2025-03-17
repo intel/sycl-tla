@@ -30,9 +30,9 @@
  **************************************************************************************************/
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
-#include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
+#include "dual_gemm/collective/xe_dual_gemm_epilogue.hpp"
 #include "dual_gemm/kernel/xe_dual_gemm.hpp"
 #include "dual_gemm/collective/xe_dual_gemm_epilogue_elementwise_activation.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
@@ -397,7 +397,7 @@ int main(int argc, const char** argv)
   using LinearFusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, LinearEpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
 
-  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
+  using CollectiveEpilogue = cutlass::epilogue::collective::DualGemmEpilogue<
           EpilogueDispatchPolicy,
           TileShape,
           ElementAccumulator,
@@ -406,9 +406,7 @@ int main(int argc, const char** argv)
           cutlass::gemm::TagToStrideC_t<LayoutD>,
           LinearFusionCallBacks,
           XE_2D_U32x8x16_LD_N,
-          void, void,
-          XE_2D_U32x8x16_ST_N,
-          void, void>;
+          XE_2D_U32x8x16_ST_N>;
 
   using ActivationEpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, ElementOutput,
           ElementComputeEpilogue, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
