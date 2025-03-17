@@ -238,7 +238,7 @@ public:
 
     const int k_tile_count =  cutlass::nearest_up_pow2(head_size)  / (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{}));
     // m, k
-  /*   Tensor prefetch_iter_2d_q = params.mainloop.gmem_prefetch_q.get_pvc_tensor(
+     Tensor prefetch_iter_2d_q = params.mainloop.gmem_prefetch_q.get_pvc_tensor(
         // subgroup arranged 4x2 to load 128x64 in 2 load load (each 32X32)
         make_coord(BlockIdxY() * BLK_M + ((sub_group_id / get<1>(PrefetchQThrShape{})) *
                                           get<0>(PrefetchQTileSize{})), // iteration 0/M/Hight/vertical
@@ -247,7 +247,7 @@ public:
                    blk_l_coord),
         make_shape(_1{}, _1{}, _1{}));
     Tensor prefetch_iter_q = append_pvc_tensor<1>(prefetch_iter_2d_q, k_tile_count,
-                                                  (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{}))); */
+                                                  (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{}))); 
     auto tiled_prefetch_q =  prefetch_selector<Shape<Int<BLK_M>,Int<BLK_N>>, Num_SGs>(params.mainloop.mQ);   // <M=128(BLK_M), K=128(BLK_N)> // is_reverse_needed=0
     auto tiled_prefetch_k =  prefetch_selector<Shape<Int<BLK_K>,Int<BLK_N>>, Num_SGs>(params.mainloop.mK); // <N=64(BLK_K), K=128(BLK_N)> // is_revese_needed=0
     auto tiled_prefetch_v =  prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mV);  // <N=128(BLK_N), K=64(BLK_K)> // is_reverse_needed=1 
@@ -270,7 +270,7 @@ public:
     cutlass::nearest_up_pow2(head_size) / (get<1>(PrefetchKThrShape{}) * get<1>(PrefetchKTileSize{})); // head_size / BLK_N;
     // subgroup arranged 4x2 to load (64x64) in one load(each 16x32)
     // Assume LD_T/LD_N will indicate ColumnMajor and RowMajor
- /*    auto k_prefetch_coordinate = make_coord(
+    auto k_prefetch_coordinate = make_coord(
         (sub_group_id / get<1>(PrefetchKThrShape{})) * get<0>(PrefetchKTileSize{}), // iteration 0/N/Hight/vertical
         (sub_group_id % get<1>(PrefetchKThrShape{})) * get<1>(PrefetchKTileSize{}), // iteration 1/K//Horizontal
         blk_l_coord);
@@ -296,27 +296,38 @@ public:
         // We loop over the consuming dimension which is the iteration 0(N) here
         make_shape(_1{}, _1{}, _1{}));
     Tensor prefetch_iter_v = append_pvc_tensor<1>(prefetch_iter_2d_v, nblock_limit,
-                                                  (get<0>(PrefetchVThrShape{}) * get<0>(PrefetchVTileSize{}))); */
+                                                  (get<0>(PrefetchVThrShape{}) * get<0>(PrefetchVTileSize{})));
+
+
+                                                  
+    /*if(cute::thread(16)){
+      print("prefetch_iter_q "); print(prefetch_iter_q); print("\n");
+      print("pQgQ "); print(pQgQ); print("\n");
+      print("prefetch_iter_k "); print(prefetch_iter_k); print("\n");
+      print("pKgK "); print(pKgK); print("\n");
+      print("prefetch_iter_v "); print(prefetch_iter_v); print("\n");
+      print("pVgV "); print(pVgV); print("\n");
+    }*/
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < k_tile_count; i++) {
-     // prefetch(tiled_prefetch_q, prefetch_iter_q(_, _, _, i));
-      prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
+      prefetch(tiled_prefetch_q, prefetch_iter_q(_, _, _, i));
+      //prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
     }
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < iter_over_head_count; j++) {
-          prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
-      //  prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, i, j));
+        //prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
+        prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, i, j));
       }
     }
     
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
-      //prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, i));
-      prefetch(tiled_prefetch_v, pVgV(_, _, _ , i));
+      prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, i));
+      //prefetch(tiled_prefetch_v, pVgV(_, _, _ , i));
     }
 
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
@@ -359,12 +370,12 @@ public:
         //  CUTLASS_PRAGMA_UNROLL
       //  auto pVgV = thr_prefetch_V.partition_S(gV(_, nblock + DispatchPolicy::Stages));
         for (int j = 0; j < iter_over_head_count; j++) {
-        //prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
-          //prefetch(tiled_prefetch_k, pKgK(_, _, nblock + DispatchPolicy::Stages, j));
-        prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
+        prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
+        //prefetch(tiled_prefetch_k, pKgK(_, _, nblock + DispatchPolicy::Stages, j));
+        //prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
         }
-       // prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
-        prefetch(tiled_prefetch_v, pVgV(_, _, _, nblock + DispatchPolicy::Stages));
+        prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
+        //prefetch(tiled_prefetch_v, pVgV(_, _, _, nblock + DispatchPolicy::Stages));
       }
       barrier_wait(barrier_scope);
     }
