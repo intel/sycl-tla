@@ -214,10 +214,16 @@ public:
     Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                      // (n,k)
     Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                      // (n,k)
     
-    using SubgroupTileShapeQK = decltype(select<0,2,1>(SubgroupTileShape{}));
-    auto gQ = local_tile(mQ_mk, subgroup_shape, make_coord(blk_m_coord * ATOM_M, _, _), Step<_1,  X, _1>{});
-    auto gK = local_tile(mK_nk, SubgroupTileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
-    auto gV = local_tile(mV_nk, SubgroupTileShapeQK{}, make_coord(_, blk_n_coord * ATOM_N, _), Step<X, _1, _1>{});
+    auto gQ = local_tile(mQ_mk, subgroup_shape, make_coord(blk_m_coord * ATOM_M, _, _), Step<_1,  X, _1>{}); // subgroup_shape<16, 64, 64> //Atom_M ->8   // 16x64
+    auto gK = local_tile(mK_nk, subgroup_shape, make_coord(_, _ , _), Step<X, _1, _1>{});                 // subgroup_shape<16, 64, 64>                       // 64x64
+    auto gV = local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, _), Step<X, _1, _1>{});     // subgroup_shape<16, 64, 64>  // Atom_N -> 2  // 64x64
+
+    using TileShapeQK = decltype(select<0,2,1>(TileShape{}));
+    auto gQ_block= local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{}); // TileShapeQK <128, 64, 128>  // 128x128
+    auto gK_block = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{}); //  TileShapeQK <128, 64, 128>       // 64x128
+    auto gV_block = local_tile(mV_nk, TileShape{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});  //TileShape <128, 128, 64>   // 128x64
+
+
     //print("gK2() "); print(gK(_,_,nblock,_)); print("\n");
     //print("gV2() "); print(gV(_,_,nblock)); print("\n");
 
@@ -259,6 +265,9 @@ public:
     auto pQgQ = thr_prefetch_Q.partition_S(gQ);
     auto pKgK = thr_prefetch_K.partition_S(gK);
     auto pVgV = thr_prefetch_V.partition_S(gV); 
+    auto pQgQ_1 = thr_prefetch_Q.partition_S(gQ_block);
+    auto pKgK_1 = thr_prefetch_K.partition_S(gK_block);
+    auto pVgV_1 = thr_prefetch_V.partition_S(gV_block);
 
   /*   if(cute::thread(0)){
       print(tiled_prefetch_v);
@@ -313,24 +322,49 @@ public:
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < k_tile_count; i++) {
-      prefetch(tiled_prefetch_q, prefetch_iter_q(_, _, _, i));
-      //prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
+     // prefetch(tiled_prefetch_q, prefetch_iter_q(_, _, _, i));
+      prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
+     /*  if(cute::thread(64, 0)) {
+        print(pQgQ(_, _, _ , i));
+        print ("\t");
+        print(pQgQ_1(_,_,_,i));
+        print("\t");
+        print(prefetch_iter_q(_, _, _, i));
+        print("\n");
+      } */
+
     }
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < iter_over_head_count; j++) {
         prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
+        /*  if(cute::thread(64,0)) {
+          print(pKgK(_, _, _ , i, j));
+          print ("\t");
+          print(pKgK_1(_, _, _ , i, j));
+          print("\t");
+          print(prefetch_iter_k(_, _, _ , i, j));
+          print("\n");
+        }  */
         //prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, i, j));
       }
     }
     
 
-    CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < DispatchPolicy::Stages; i++) {
-      prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, i));
-      //prefetch(tiled_prefetch_v, pVgV(_, _, _ , i));
-    }
+   // CUTLASS_PRAGMA_UNROLL
+   // for (int i = 0; i < DispatchPolicy::Stages; i++) {
+      //prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, i));
+      /*  if(cute::thread(64, 0)) {
+        print(pVgV(_, _, _ , i));
+        print ("\t");
+        print(pVgV_1(_,_,_,i));
+        print("\t");
+        print(prefetch_iter_v(_, _, _, i));
+        print("\n");
+      }  */
+    //  prefetch(tiled_prefetch_v, pVgV(_, _, _ , i));
+   // }
 
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
     TiledMma tiled_mma;
@@ -363,7 +397,7 @@ public:
 
       // 3) Perform GEMM S = Q*K
       collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size , get<1>(subgroup_shape)), params.mainloop);
-
+      prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock));
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
@@ -376,7 +410,7 @@ public:
         prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
         }
         //prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
-        prefetch(tiled_prefetch_v, pVgV(_, _, _, nblock + DispatchPolicy::Stages));
+      //  prefetch(tiled_prefetch_v, pVgV(_, _, _, nblock + DispatchPolicy::Stages));
       }
       barrier_wait(barrier_scope);
     }
@@ -389,6 +423,7 @@ public:
       clear(tSr);
       // 3) Perform GEMM S = Q*K
       collective_mma.mmaQK(tSr, gQ,  gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size , get<1>(subgroup_shape)), params.mainloop);
+      prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock_limit - 1));
       // mask the elements of each tile where j > i
       const int item_id = thread_idx % SubgroupSize;
       int col_idx = item_id + (nblock_limit - 1) * get<1>(subgroup_shape);
