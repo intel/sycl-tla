@@ -388,14 +388,14 @@ public:
         for (int epi_v = 0; epi_v < size<0>(acc_frag); ++epi_v) {
           acc_frag_mn(epi_v) = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
         }
+
+        if constexpr (is_destination_supported) {
+          copy(params.xe_store_d, accumulators(_, epi_m, epi_n), tCgD(_, epi_m, epi_n));
+        }
       }
     }
 
     cst_callbacks.end();
-
-    if constexpr (is_destination_supported) {
-      copy(params.xe_store_d, accumulators, tCgD);
-    }
   }
 
 private:

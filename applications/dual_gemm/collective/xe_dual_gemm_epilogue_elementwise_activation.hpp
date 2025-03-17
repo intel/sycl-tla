@@ -58,7 +58,6 @@ namespace collective {
       class StrideC_,
       class ElementD_,
       class StrideD_,
-      class FusionCallbacks_,
       class CopyOpG2R_,
       class CopyOpR2G_>
   class DualGemmElemActEpilogue;
@@ -71,7 +70,6 @@ namespace collective {
       class StrideC_,
       class ElementD_,
       class StrideD_,
-      class FusionCallbacks_,
       class CopyOpG2R_,
       class CopyOpR2G_>
   class DualGemmElemActEpilogue<
@@ -81,7 +79,6 @@ namespace collective {
       StrideC_,
       ElementD_,
       StrideD_,
-      FusionCallbacks_,
       CopyOpG2R_,
       CopyOpR2G_> {
 public:
@@ -90,7 +87,6 @@ public:
   //
   using DispatchPolicy = IntelPVCEpilogue;
   using CtaTileMNK = CtaTileMNK_;
-  using FusionCallbacks = FusionCallbacks_;
   using ElementC = ElementC_;
   using ElementAccumulator = ElementD_;
   using StrideC = StrideC_;
@@ -99,12 +95,11 @@ public:
   using CopyOpG2R = CopyOpG2R_;
   using CopyOpR2G = CopyOpR2G_;
 
-  using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
   using GmemTiledCopyC = CopyOpG2R;
   using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
                                              CopyOpR2G, XE_2D_U32x8x16_ST_N>;
-  using ElementOutput = typename FusionCallbacks::ElementOutput;
-  using ElementCompute = typename FusionCallbacks::ElementCompute;
+  using ElementOutput = ElementAccumulator;
+  using ElementCompute = ElementAccumulator;
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -129,25 +124,8 @@ private:
 
 public:
 
-  using EmptyType = cute::tuple<>;
-  using SmemCStorage = EmptyType;
-  using SmemDStorage = EmptyType;
-
-  struct TensorStorageImpl: cute::tuple<SmemCStorage, SmemDStorage> {
-    using FusionStorage = typename FusionCallbacks::SharedStorage;
-    FusionStorage thread;
-  };
-
-  struct SharedStorage {
-    using TensorStorage = TensorStorageImpl;
-
-    TensorStorage tensors;
-  };
-  using TensorStorage = typename SharedStorage::TensorStorage;
-
   // Host side epilogue arguments
   struct Arguments {
-    typename FusionCallbacks::Arguments thread{};
     ElementC const* ptr_C;
     StrideC dC;
     ElementD* ptr_D;
@@ -156,7 +134,6 @@ public:
 
   // Device side epilogue params
   struct Params {
-    typename FusionCallbacks::Params thread{};
     XE_Copy_D xe_store_d;
   };
 
@@ -184,7 +161,6 @@ public:
     }
 
     return {
-      FusionCallbacks::to_underlying_arguments(problem_shape, args.thread, workspace),
       xe_store_d
     };
   }
@@ -211,13 +187,13 @@ public:
   }
 
   CUTLASS_HOST_DEVICE
-  DualGemmElemActEpilogue(Params const& params_, TensorStorage const& shared_storage_)
-      : params(params_), fusion_callbacks(params_.thread, shared_storage_.thread) {}
+  DualGemmElemActEpilogue(Params const& params_)
+      : params(params_) {}
 
   CUTLASS_DEVICE
   bool
   is_producer_load_needed() const {
-    return fusion_callbacks.is_producer_load_needed();
+    return false;
   }
 
   template<
@@ -279,17 +255,6 @@ public:
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord_mnkl;
     auto m_sg = get_sub_group_id() / ATOM_N;
     auto n_sg = get_sub_group_id() % ATOM_N;
-
-    using EpilogueTile = decltype(get<0>(params.xe_store_d.get_layoutS_MN()).shape());
-
-    auto sg_local_m_coord = get_sub_group_id() / ATOM_N;
-    auto sg_local_n_coord = get_sub_group_id() % ATOM_N;
-
-    auto sg_m_coord = m_coord * ATOM_M + sg_local_m_coord;
-    auto sg_n_coord = n_coord * ATOM_N + sg_local_n_coord;
-    auto sg_coord = make_coord(sg_m_coord, sg_n_coord, k_coord, l_coord);
-
-    bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
     
     // Represent the full output tensor
     Tensor mD_mnl = params.xe_store_d.get_pvc_tensor(make_shape(M,N,L));
@@ -303,79 +268,36 @@ public:
     auto thread_xe_store_d = params.xe_store_d.get_thread_slice(thread_idx);
     Tensor tCgD = thread_xe_store_d.partition_D(gD);
 
-    Tensor trD = make_tensor<typename TiledMma::ValTypeD>(Shape<Int<FragmentSize>>{});
+    cutlass::epilogue::thread::SiLu<ElementCompute> silu;
+    cutlass::multiplies<ElementCompute> mul;
 
-    // Because Sm90 uses shared memory, they are not tied to using the same accumulator values
-    // for MMA and Epilogue. But because we are operating directly in the accumulators, we need to be
-    // sure that we are operating on the same values.
-    ThrCopy thread_g2r = params.xe_store_d.get_slice(thread_idx);
-
-    // OOB predication for tile quantization "residue"
-    // Absolute coordinate tensors (dynamic)
-    Tensor mD_crd = make_identity_tensor(make_shape(M,N));                                                     // (M,N)
-    Tensor cD = local_tile(mD_crd, take<0,2>(SubgroupTileShape{}), make_coord(sg_m_coord, sg_n_coord));
-    Tensor cD_mn = local_tile(mD_crd, take<0,2>(CtaTileMNK{}), make_coord(m_coord, n_coord));          // (CTA_M,CTA_N)
-    Tensor tRS_cD_mn = thread_g2r.partition_S(flat_divide(cD_mn, EpilogueTile{}));     // (G2R,G2R_M,G2R_N,EPI_M,EPI_N)
-
-    Tensor tRS_cD = make_counting_tensor(tRS_cD_mn.layout());                          // (G2R,G2R_M,G2R_N,EPI_M,EPI_N)
-
-    // Get the fusion callbacks
-    // Arguments passed here relate to sub-group tiles, rather than CTA (work-group) tiles
-    constexpr bool RefSrc = true;
-    auto residue_mn = make_coord(M, N); //TODO(Codeplay): this is not correct
-
-    auto acc_frag = recast<Array<ElementOutput, FragmentSize>>(accumulators0);
-    auto trD_frag = recast<Array<ElementOutput, FragmentSize>>(trD);
-
-    constexpr int ValuesLoaded =
-      FragsM * FragsN * FragmentSize * SubgroupSize * ATOM_M * ATOM_N * ATOM_K;
-    constexpr int MN = get<0>(CtaTileMNK{}) * get<1>(CtaTileMNK{});
-    static_assert(ValuesLoaded == MN, "the total elements loaded by all threads should be the same as MxN" );
-    
-    auto synchronize = [&] () {};
     CUTLASS_PRAGMA_UNROLL
-    for (int epi_n = 0; epi_n < FragsN; epi_n++) {
+    for(int j = 0; j < FragsN; j++) {
+
       CUTLASS_PRAGMA_UNROLL
-      for (int epi_m = 0; epi_m < FragsM; epi_m++) {
-
-        auto tCr = make_fragment_like(accumulators0(_, epi_m, epi_n));
-        auto cst_args = cutlass::epilogue::fusion::detail::ConsumerStoreArgs{
-                          problem_shape_mnkl,
-                          SubgroupTileShape{},
-                          sg_coord,
-                          tiled_mma,
-                          EpilogueTile{},
-                          params.xe_store_d,
-                          cD,
-                          residue_mn,
-                          tRS_cD,
-                          residue_mn,
-                          tCr,
-                          thread_idx,
-                        };
-        auto cst_callbacks = fusion_callbacks.template get_consumer_store_callbacks<RefSrc>(cst_args);
-
-        cst_callbacks.begin();
-
-        auto acc_frag_mn = acc_frag(_, epi_m, epi_n);
+      for(int i = 0; i < FragsM; i++) {
+        Tensor trD = make_tensor<ElementAccumulator>(Shape<Int<FragmentSize>>{});
 
         CUTLASS_PRAGMA_UNROLL
-        for (int epi_v = 0; epi_v < size<0>(trD_frag); ++epi_v) {
-          trD_frag(epi_v) = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
-        }
-        
-        if constexpr (is_destination_supported) {
-          copy(params.xe_store_d, trD, tCgD(_, epi_m, epi_n));
+        for (int k = 0; k < FragmentSize; k++) {
+          int offset = k + (i + j * FragsM) * FragmentSize;
+
+          ElementCompute const& const_accum0 = *reinterpret_cast<const ElementCompute*>(accumulators0.data() + offset);
+          ElementCompute const& const_accum1 = *reinterpret_cast<const ElementCompute*>(accumulators1.data() + offset);
+
+          auto silu_lhs = silu(const_accum0);
+          trD(k) = mul(silu_lhs, const_accum1);
         }
 
-        cst_callbacks.end();
+        if constexpr (is_destination_supported) {
+          copy(params.xe_store_d, trD, tCgD(_, i, j));
+        }
       }
     }
   }
 
 private:
   Params const& params;
-  FusionCallbacks fusion_callbacks;
 };
 
 

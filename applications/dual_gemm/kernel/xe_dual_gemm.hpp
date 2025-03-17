@@ -133,10 +133,8 @@ public:
   struct SharedStorage {
     using EpilogueTensorStorage0 = typename CollectiveEpilogue0::TensorStorage;
     using EpilogueTensorStorage1 = typename CollectiveEpilogue1::TensorStorage;
-    using ElemActEpilogueTensorStorage = typename DualGemmElemActEpilogue::TensorStorage;
     EpilogueTensorStorage0 epilogue0;
     EpilogueTensorStorage1 epilogue1;
-    ElemActEpilogueTensorStorage elem_act_epilogue;
   };
 
   // Device side arguments
@@ -334,7 +332,7 @@ public:
       smem_buf
     );
 
-    DualGemmElemActEpilogue elem_act_epilogue{params.elem_act_epilogue, shared_storage.elem_act_epilogue};
+    DualGemmElemActEpilogue elem_act_epilogue{params.elem_act_epilogue};
     elem_act_epilogue(
       problem_shape_MNKL,
       subgroup_shape,

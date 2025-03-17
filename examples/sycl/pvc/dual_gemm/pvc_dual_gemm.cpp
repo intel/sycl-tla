@@ -47,6 +47,7 @@
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "../common.hpp"
 #include "helper.h"
+#include "tensor_silu.h"
 
 using namespace cute;
 
@@ -213,6 +214,13 @@ struct ExampleRunner {
 
     syclcompat::wait();
 
+    using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
+    cutlass::reference::device::TensorSiLu(TensorView(block_ref_D2.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
+                                          TensorView(block_ref_D0.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
+                                          TensorView(block_ref_D1.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)));
+
+    syclcompat::wait();
+
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed_D0 = cutlass::reference::device::BlockCompareEqual(
       block_ref_D0.get(), block_D0.get(), block_D0.size());
@@ -220,7 +228,10 @@ struct ExampleRunner {
     bool passed_D1 = cutlass::reference::device::BlockCompareEqual(
       block_ref_D1.get(), block_D1.get(), block_D1.size());
 
-    return passed_D0 && passed_D1;
+    bool passed_D2 = cutlass::reference::device::BlockCompareRelativelyEqual(
+      block_ref_D2.get(), block_D2.get(), block_D2.size(), 0.5f, 0.5f);
+
+    return passed_D0 && passed_D1 && passed_D2;
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
@@ -283,7 +294,7 @@ struct ExampleRunner {
       {block_A.get(), stride_A, block_B0.get(), stride_B, block_B1.get(), stride_B},
       {{options.alpha0, options.beta0}, block_C0.get(), stride_C, block_D0.get(), stride_D},
       {{options.alpha1, options.beta1}, block_C1.get(), stride_C, block_D1.get(), stride_D},
-      {{1.f, 0.f}, nullptr, stride_C, block_D2.get(), stride_D},
+      {nullptr, stride_C, block_D2.get(), stride_D},
       hw_info
     };
 
@@ -408,12 +419,6 @@ int main(int argc, const char** argv)
           XE_2D_U32x8x16_LD_N,
           XE_2D_U32x8x16_ST_N>;
 
-  using ActivationEpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, ElementOutput,
-          ElementComputeEpilogue, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
-
-  using ActivationFusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, ActivationEpilogueOp, TileShape,
-          decltype(tile_shape(TiledMma()))>;
-
   using CollectiveEpilogueActivation = cutlass::epilogue::collective::DualGemmElemActEpilogue<
           EpilogueDispatchPolicy,
           TileShape,
@@ -421,7 +426,6 @@ int main(int argc, const char** argv)
           cutlass::gemm::TagToStrideC_t<LayoutC>,
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
-          ActivationFusionCallBacks,
           void,
           XE_2D_U32x8x16_ST_N>;
 
