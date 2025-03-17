@@ -214,10 +214,12 @@ public:
     Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                      // (n,k)
     Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                      // (n,k)
     
-    using TileShapeQK = decltype(select<0,2,1>(TileShape{}));
-    auto gQ = local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
-    auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
-    auto gV = local_tile(mV_nk, TileShape{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
+    using SubgroupTileShapeQK = decltype(select<0,2,1>(SubgroupTileShape{}));
+    auto gQ = local_tile(mQ_mk, subgroup_shape, make_coord(blk_m_coord * ATOM_M, _, _), Step<_1,  X, _1>{});
+    auto gK = local_tile(mK_nk, SubgroupTileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
+    auto gV = local_tile(mV_nk, SubgroupTileShapeQK{}, make_coord(_, blk_n_coord * ATOM_N, _), Step<X, _1, _1>{});
+    //print("gK2() "); print(gK(_,_,nblock,_)); print("\n");
+    //print("gV2() "); print(gV(_,_,nblock)); print("\n");
 
     const int seq_coord = blk_m_coord * BLK_M + (sub_group_id / ATOM_N) * SG_M;
     const int head_size_coord = blk_n_coord * BLK_N + (sub_group_id % ATOM_N) * SG_N;
