@@ -458,9 +458,9 @@ public:
     // Retile for copy
     auto [tArA, tBrB] = [&](){
       if constexpr (IsATransformed) {
-        return std::make_pair(thr_copy_A.retile_D(tCrAB_input), thr_copy_A.retile_D(tCrB));
+        return std::make_pair(thr_copy_A.retile_D(tCrAB_input), thr_copy_B.retile_D(tCrB));
       } else {
-        return std::make_pair(thr_copy_A.retile_D(tCrA), thr_copy_A.retile_D(tCrAB_input));
+        return std::make_pair(thr_copy_A.retile_D(tCrA), thr_copy_B.retile_D(tCrAB_input));
       }
     }();
 
