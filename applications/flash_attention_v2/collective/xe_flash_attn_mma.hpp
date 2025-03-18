@@ -207,8 +207,8 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
     return Params{copyQ, copyK, copyV, prefetchQ, prefetchK, prefetchV};
   }
 
-  template <class TileCoord, class FragAccum, class TensorQ, class TensorK, class FragSrc>
-  CUTLASS_DEVICE void mmaQK(TileCoord tile_coord, FragAccum &accum, TensorQ gA, TensorK gB, FragSrc const &frag_src,
+  template <class FragAccum, class TensorQ, class TensorK, class FragSrc>
+  CUTLASS_DEVICE void mmaQK(FragAccum &accum, TensorQ gA, TensorK gB, FragSrc const &frag_src,
                             int const &k_tile_count, Params const &params) {
 
     int thread_idx = static_cast<int>(ThreadIdxX());
@@ -232,8 +232,8 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
 
     // Create fragments
     // TODO(Codeplay): fix this, this is probably not general
-    Tensor tCrA = make_tensor<ElementQ>(params.gmem_tiled_copy_q.make_fragment_layout(take<0,3>(tCgA.shape())));
-    Tensor tCrB = make_tensor<ElementK>(params.gmem_tiled_copy_k.make_fragment_layout(take<0,3>(tCgB.shape())));
+    Tensor tCrA = make_tensor<ElementQ>(make_fragment_layout(params.gmem_tiled_copy_q, take<0,3>(tCgA.shape())));
+    Tensor tCrB = make_tensor<ElementK>(make_fragment_layout(params.gmem_tiled_copy_k, take<0,3>(tCgB.shape())));
     
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
@@ -301,8 +301,8 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
     }
   }
 
-  template <class TileCoord, class FragAccum, class FragS, class TensorV, class FragSrc>
-  CUTLASS_DEVICE void mmaPV(TileCoord tile_coord, FragAccum &accum, FragS const &tSr, TensorV gB,
+  template <class FragAccum, class FragS, class TensorV, class FragSrc>
+  CUTLASS_DEVICE void mmaPV(FragAccum &accum, FragS const &tSr, TensorV gB,
                             FragSrc const &frag_src, Params const &params) {
 
     int thread_idx = static_cast<int>(ThreadIdxX());
@@ -312,7 +312,7 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
     auto first_thread_in_sg_idx = sg.get_group_id()[0] * DispatchPolicy::SubgroupSize;
     auto thread_mma = tiled_mma.get_slice(first_thread_in_sg_idx);  
     Tensor tCgB = thread_mma.partition_B(gB);
-    Tensor tCrB = make_tensor<ElementV>(params.gmem_tiled_copy_v.make_fragment_layout(tCgB.shape()));
+    Tensor tCrB = make_tensor<ElementV>(make_fragment_layout(params.gmem_tiled_copy_v, tCgB.shape()));
 
     // Partition the copying of A and B tiles across the threads
     auto gmem_thr_copy_B = params.gmem_tiled_copy_v.get_slice(thread_idx);
