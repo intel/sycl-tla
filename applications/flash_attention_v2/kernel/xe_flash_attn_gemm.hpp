@@ -223,10 +223,6 @@ public:
     auto gK_block = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{}); //  TileShapeQK <128, 64, 128>       // 64x128
     auto gV_block = local_tile(mV_nk, TileShape{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});  //TileShape <128, 128, 64>   // 128x64
 
-
-    //print("gK2() "); print(gK(_,_,nblock,_)); print("\n");
-    //print("gV2() "); print(gV(_,_,nblock)); print("\n");
-
     const int seq_coord = blk_m_coord * BLK_M + (sub_group_id / ATOM_N) * SG_M;
     const int head_size_coord = blk_n_coord * BLK_N + (sub_group_id % ATOM_N) * SG_N;
     const int l_coord = blk_l_coord;
@@ -256,9 +252,9 @@ public:
         make_shape(_1{}, _1{}, _1{}));
     Tensor prefetch_iter_q = append_pvc_tensor<1>(prefetch_iter_2d_q, k_tile_count,
                                                   (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{}))); 
-    auto tiled_prefetch_q =  prefetch_selector<Shape<Int<BLK_M>,Int<BLK_N>>, Num_SGs>(params.mainloop.mQ);   // <M=128(BLK_M), K=128(BLK_N)> // is_reverse_needed=0
-    auto tiled_prefetch_k =  prefetch_selector<Shape<Int<BLK_K>,Int<BLK_N>>, Num_SGs>(params.mainloop.mK); // <N=64(BLK_K), K=128(BLK_N)> // is_revese_needed=0
-    auto tiled_prefetch_v =  prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mV);  // <N=128(BLK_N), K=64(BLK_K)> // is_reverse_needed=1 
+    auto tiled_prefetch_q =  params.mainloop.gmem_tiled_copy_q.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_N>>, Num_SGs>(params.mainloop.mQ);   // <M=128(BLK_M), K=128(BLK_N)> // is_reverse_needed=0
+    auto tiled_prefetch_k =  params.mainloop.gmem_tiled_copy_k.template prefetch_selector<Shape<Int<BLK_K>,Int<BLK_N>>, Num_SGs>(params.mainloop.mK); // <N=64(BLK_K), K=128(BLK_N)> // is_revese_needed=0
+    auto tiled_prefetch_v =  params.mainloop.gmem_tiled_copy_v.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mV);  // <N=128(BLK_N), K=64(BLK_K)> // is_reverse_needed=1 
     auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
     auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
     auto thr_prefetch_V = tiled_prefetch_v.get_slice(thread_idx);
@@ -269,12 +265,6 @@ public:
     auto pKgK_1 = thr_prefetch_K.partition_S(gK_block);
     auto pVgV_1 = thr_prefetch_V.partition_S(gV_block);
 
-  /*   if(cute::thread(0)){
-      print(tiled_prefetch_v);
-      print("\t");
-      print(tiled_prefetch_k);
-      print("\n");
-    }  */  
     // The Key point is 1 is horisontal and zero is vertical
     // the iteration over K dimention of B matrix (head_size) should be :
     const auto iter_over_head_count =
@@ -309,62 +299,17 @@ public:
     Tensor prefetch_iter_v = append_pvc_tensor<1>(prefetch_iter_2d_v, nblock_limit,
                                                   (get<0>(PrefetchVThrShape{}) * get<0>(PrefetchVTileSize{})));
 
-
-                                                  
-    /*if(cute::thread(16)){
-      print("prefetch_iter_q "); print(prefetch_iter_q); print("\n");
-      print("pQgQ "); print(pQgQ); print("\n");
-      print("prefetch_iter_k "); print(prefetch_iter_k); print("\n");
-      print("pKgK "); print(pKgK); print("\n");
-      print("prefetch_iter_v "); print(prefetch_iter_v); print("\n");
-      print("pVgV "); print(pVgV); print("\n");
-    }*/
-
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < k_tile_count; i++) {
-     // prefetch(tiled_prefetch_q, prefetch_iter_q(_, _, _, i));
       prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
-     /*  if(cute::thread(64, 0)) {
-        print(pQgQ(_, _, _ , i));
-        print ("\t");
-        print(pQgQ_1(_,_,_,i));
-        print("\t");
-        print(prefetch_iter_q(_, _, _, i));
-        print("\n");
-      } */
-
     }
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++) {
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < iter_over_head_count; j++) {
         prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
-        /*  if(cute::thread(64,0)) {
-          print(pKgK(_, _, _ , i, j));
-          print ("\t");
-          print(pKgK_1(_, _, _ , i, j));
-          print("\t");
-          print(prefetch_iter_k(_, _, _ , i, j));
-          print("\n");
-        }  */
-        //prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, i, j));
       }
     }
-    
-
-   // CUTLASS_PRAGMA_UNROLL
-   // for (int i = 0; i < DispatchPolicy::Stages; i++) {
-      //prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, i));
-      /*  if(cute::thread(64, 0)) {
-        print(pVgV(_, _, _ , i));
-        print ("\t");
-        print(pVgV_1(_,_,_,i));
-        print("\t");
-        print(prefetch_iter_v(_, _, _, i));
-        print("\n");
-      }  */
-    //  prefetch(tiled_prefetch_v, pVgV(_, _, _ , i));
-   // }
 
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
     TiledMma tiled_mma;
@@ -379,7 +324,7 @@ public:
     clear(out_reg);
     // Perform the collective scoped MMA
     CollectiveMainloop collective_mma;
-    // when causal mask is true.It is not possible to set the scope
+    // when causal mask is true. It is not possible to set the scope
     // of the barrier to workgroup level as the number n block is
     // different for each subgroup due to triangular nature of causal based operation
     static constexpr int barrier_scope = CausalMask ? 3 : 2;
@@ -390,8 +335,6 @@ public:
       barrier_arrive(barrier_scope);
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
-     /*  auto gK_1 = local_tile(mK_nk, subgroup_shape, make_coord(_, nblock, _), Step<X, _1, _1>{});*/
-      //auto pKgK = thr_prefetch_K.partition_S(gK_1);
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
 
@@ -403,14 +346,9 @@ public:
 
       collective_mma.mmaPV(out_reg, tSr, gV(_, _ , nblock), out_reg, params.mainloop);
       if (nblock + DispatchPolicy::Stages < nblock_limit) {
-        //  CUTLASS_PRAGMA_UNROLL
-      //  auto pVgV = thr_prefetch_V.partition_S(gV(_, nblock + DispatchPolicy::Stages));
         for (int j = 0; j < iter_over_head_count; j++) {
-        //prefetch(tiled_prefetch_k, prefetch_iter_k(_, _, _, nblock + DispatchPolicy::Stages, j));
-        prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
+          prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
         }
-        //prefetch(tiled_prefetch_v, prefetch_iter_v(_, _, _, nblock + DispatchPolicy::Stages));
-      //  prefetch(tiled_prefetch_v, pVgV(_, _, _, nblock + DispatchPolicy::Stages));
       }
       barrier_wait(barrier_scope);
     }
@@ -418,7 +356,6 @@ public:
       // BAND Matrix
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
-     // auto gK = local_tile(mK_nk, subgroup_shape, make_coord(0, nblock_limit - 1, _), Step<X, _1, _1>{});
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
       // 3) Perform GEMM S = Q*K
@@ -443,7 +380,6 @@ public:
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
-      //auto gV = local_tile(mV_nk, subgroup_shape, make_coord(0, blk_n_coord * ATOM_N, nblock_limit - 1), Step<X, _1, _1>{});
       collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_limit - 1), out_reg, params.mainloop);
     }
 
