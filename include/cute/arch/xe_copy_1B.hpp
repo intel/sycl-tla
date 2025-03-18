@@ -427,7 +427,7 @@ struct XE_2D_U4x16x64_LD_N {
         __builtin_IB_subgroup_block_read_flat_u8_m16k32v1(
             (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 
-   // ================= shuffule begin =================
+   // ================= shuffle begin =================
 
     static constexpr auto subgroup_size = 16;
     static constexpr auto copy_W = decltype(size<1>(BlockShape{}))::value / subgroup_size;
