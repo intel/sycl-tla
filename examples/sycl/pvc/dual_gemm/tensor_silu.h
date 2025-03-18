@@ -137,12 +137,3 @@ void TensorSiLu(
 } // namespace device
 } // namespace reference
 } // namespace cutlass
-
-#if (CUTLASS_ENABLE_SYCL)
-namespace sycl {
-  template <>
-  struct is_device_copyable <
-  cutlass::reference::device::detail::TensorSiLuFunc<float,
-                                                      cutlass::layout::RowMajor>::Params> : std::true_type {};
-}
-#endif
