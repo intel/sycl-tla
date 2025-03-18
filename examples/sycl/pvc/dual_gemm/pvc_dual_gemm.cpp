@@ -45,6 +45,7 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
+#include "cutlass/util/reference/device/tensor_epilogue.h"
 #include "../common.hpp"
 #include "helper.h"
 #include "tensor_silu.h"
@@ -115,6 +116,7 @@ using LayoutA = cutlass::layout::RowMajor;
 using LayoutB = cutlass::layout::RowMajor;
 using LayoutC = cutlass::layout::RowMajor;
 using LayoutD = cutlass::layout::RowMajor;
+using LayoutBias = cutlass::layout::ColumnMajor;
 
 template <
   class GemmKernel
@@ -154,6 +156,8 @@ struct ExampleRunner {
   cutlass::DeviceAllocation<ElementB> block_B1;
   cutlass::DeviceAllocation<ElementC> block_C0;
   cutlass::DeviceAllocation<ElementC> block_C1;
+  cutlass::DeviceAllocation<ElementOutput> block_bias0;
+  cutlass::DeviceAllocation<ElementOutput> block_bias1;
   cutlass::DeviceAllocation<ElementOutput> block_D0;
   cutlass::DeviceAllocation<ElementOutput> block_D1;
   cutlass::DeviceAllocation<ElementOutput> block_D2;
@@ -165,7 +169,7 @@ struct ExampleRunner {
   // Methods
   //
 
-  template <bool WriteEpilogueOutput0, bool WriteEpilogueOutput1>
+  template <bool WriteEpilogueOutput0, bool WriteEpilogueOutput1, bool UseBias0, bool UseBias1>
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha0, ElementCompute alpha1, ElementCompute beta0, ElementCompute beta1) {
     auto [M, N, K, L] = problem_size;
 
@@ -215,10 +219,19 @@ struct ExampleRunner {
 
     syclcompat::wait();
 
-    using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
-    cutlass::reference::device::TensorSiLu(TensorView(block_ref_D2.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
-                                          TensorView(block_ref_D0.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
-                                          TensorView(block_ref_D1.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)));
+    if constexpr (UseBias0) {
+      cutlass::reference::device::TensorPerRowBias(cutlass::TensorView(block_ref_D0.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)), 
+                                                   cutlass::TensorView(block_bias0.get(), LayoutBias::packed({0, N}), cutlass::make_Coord(M, N)));
+    }
+
+    if constexpr (UseBias1) {
+      cutlass::reference::device::TensorPerRowBias(cutlass::TensorView(block_ref_D1.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)), 
+                                                   cutlass::TensorView(block_bias1.get(), LayoutBias::packed({0, N}), cutlass::make_Coord(M, N)));
+    }
+
+    cutlass::reference::device::TensorSiLu(cutlass::TensorView(block_ref_D2.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
+                                           cutlass::TensorView(block_ref_D0.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
+                                           cutlass::TensorView(block_ref_D1.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)));
 
     syclcompat::wait();
 
@@ -236,6 +249,7 @@ struct ExampleRunner {
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
+  template <bool UseBias0, bool UseBias1>
   void initialize(const ProblemShapeType& problem_size) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
@@ -262,6 +276,16 @@ struct ExampleRunner {
     initialize_block(block_B1, seed + 2021);
     initialize_block(block_C0, seed + 2020);
     initialize_block(block_C1, seed + 2019);
+
+    if constexpr (UseBias0) {
+      block_bias0.reset(M * L);
+      initialize_block(block_bias0, seed + 2018);
+    }
+
+    if constexpr (UseBias1) {
+      block_bias1.reset(M * L);
+      initialize_block(block_bias1, seed + 2017);
+    }
   }
 
   static cutlass::Status run(typename GemmKernel::Params params) {
@@ -284,21 +308,50 @@ struct ExampleRunner {
     return cutlass::Status::kSuccess;
   }
 
-  template <bool WriteEpilogueOutput0, bool WriteEpilogueOutput1>
-  cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
+  template <bool UseBias0, bool UseBias1>
+  typename GemmKernel::Arguments get_arguments(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
-    initialize(problem_size);
+    using EpilogueArguments0 = typename GemmKernel::EpilogueArguments0;
+    using EpilogueArguments1 = typename GemmKernel::EpilogueArguments1;
+
+    EpilogueArguments0 epilogue_arguments0{{options.alpha0, options.beta0}, block_C0.get(), stride_C, block_D0.get(), stride_D};
+    EpilogueArguments1 epilogue_arguments1{{options.alpha1, options.beta1}, block_C1.get(), stride_C, block_D1.get(), stride_D};
+
+    if constexpr (UseBias0) {
+      using StrideBias = Stride<_1, _0, int64_t>;
+      StrideBias dBias = {};
+      epilogue_arguments0.thread.bias_ptr = block_bias0.get();
+      epilogue_arguments0.thread.dBias = dBias; 
+    }
+
+    if constexpr (UseBias1) {
+      using StrideBias = Stride<_1, _0, int64_t>;
+      StrideBias dBias = {};
+      epilogue_arguments1.thread.bias_ptr = block_bias1.get();
+      epilogue_arguments1.thread.dBias = dBias; 
+    }
 
     typename GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
       {block_A.get(), stride_A, block_B0.get(), stride_B, block_B1.get(), stride_B},
-      {{options.alpha0, options.beta0}, block_C0.get(), stride_C, block_D0.get(), stride_D},
-      {{options.alpha1, options.beta1}, block_C1.get(), stride_C, block_D1.get(), stride_D},
+      epilogue_arguments0,
+      epilogue_arguments1,
       {nullptr, stride_C, block_D2.get(), stride_D},
       hw_info
     };
+
+    return arguments;
+  }
+
+  template <bool WriteEpilogueOutput0, bool WriteEpilogueOutput1, bool UseBias0, bool UseBias1>
+  cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
+    ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
+
+    initialize<UseBias0, UseBias1>(problem_size);
+
+    auto arguments = get_arguments<UseBias0, UseBias1>(options, hw_info);
 
     size_t workspace_size = GemmKernel::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
@@ -318,7 +371,7 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify<WriteEpilogueOutput0, WriteEpilogueOutput1>(problem_size, options.alpha0, options.alpha1, options.beta0, options.beta1);
+    bool passed = verify<WriteEpilogueOutput0, WriteEpilogueOutput1, UseBias0, UseBias1>(problem_size, options.alpha0, options.alpha1, options.beta0, options.beta1);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if(!passed) return cutlass::Status::kErrorInternal;
@@ -342,7 +395,26 @@ struct ExampleRunner {
 
 };
 
-int main(int argc, const char** argv)
+template <class ElementOutput, class ElementBias, class ElementCompute, class ElementAccumulator, bool UseBias>
+struct EpilogueOp;
+
+template <class ElementOutput, class ElementBias, class ElementCompute, class ElementAccumulator>
+struct EpilogueOp <ElementOutput, ElementBias, ElementCompute, ElementAccumulator, true> {
+  using type = cutlass::epilogue::fusion::LinCombPerRowBias<
+      ElementOutput, ElementCompute, ElementBias, ElementAccumulator,
+      ElementAccumulator, 128 / sizeof_bits_v<ElementBias>,
+      cutlass::FloatRoundStyle::round_to_nearest>;
+};
+
+template <class ElementOutput, class ElementBias, class ElementCompute, class ElementAccumulator>
+struct EpilogueOp <ElementOutput, ElementBias, ElementCompute, ElementAccumulator, false> {
+  using type = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementCompute,
+          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+};
+
+
+template <bool UseBias0, bool UseBias1>
+int run_dual_gemm(int argc, const char** argv)
 {
   //
   // Parse options
@@ -374,12 +446,11 @@ int main(int argc, const char** argv)
   // to use a GPU other than that with device ID 0.
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
-  bool passed;
-
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;               // <- data type of epilogue operations
+  using ElementBias = float;                          // <- data type of bias
   using ElementInputA = bfloat16_t;                   // <- data type of elements in input matrix A
   using ElementInputB = bfloat16_t;                   // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
@@ -404,10 +475,13 @@ int main(int argc, const char** argv)
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
-  using LinearEpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
-          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+  using EpilogueOp0 = typename EpilogueOp<ElementOutput, ElementBias, ElementComputeEpilogue, ElementAccumulator, UseBias0>::type;
+  using EpilogueOp1 = typename EpilogueOp<ElementOutput, ElementBias, ElementComputeEpilogue, ElementAccumulator, UseBias1>::type;
 
-  using LinearFusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, LinearEpilogueOp, TileShape,
+  using FusionCallBacks0 = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp0, TileShape,
+          decltype(tile_shape(TiledMma()))>;
+
+  using FusionCallBacks1 = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp1, TileShape,
           decltype(tile_shape(TiledMma()))>;
 
   constexpr bool WriteEpilogueOutput0 = true;
@@ -419,7 +493,7 @@ int main(int argc, const char** argv)
           cutlass::gemm::TagToStrideC_t<LayoutC>,
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
-          LinearFusionCallBacks,
+          FusionCallBacks0,
           XE_2D_U32x8x16_LD_N,
           XE_2D_U32x8x16_ST_N,
           WriteEpilogueOutput0>;
@@ -430,7 +504,7 @@ int main(int argc, const char** argv)
           cutlass::gemm::TagToStrideC_t<LayoutC>,
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
-          LinearFusionCallBacks,
+          FusionCallBacks1,
           XE_2D_U32x8x16_LD_N,
           XE_2D_U32x8x16_ST_N,
           WriteEpilogueOutput1>;
@@ -468,8 +542,18 @@ int main(int argc, const char** argv)
 
   ExampleRunner<GemmKernel> runner;
 
-  auto status = runner.run<WriteEpilogueOutput0, WriteEpilogueOutput1>(options, hw_info);
+  auto status = runner.template run<WriteEpilogueOutput0, WriteEpilogueOutput1, UseBias0, UseBias1>(options, hw_info);
   CUTLASS_CHECK(status);
 
+  return 0;
+}
+
+int main(int argc, const char** argv)
+{
+  std::cout << "Running Dual Gemm with Linear Combination Epilogue (D = alpha * A * B + beta * C)\n";
+  run_dual_gemm<false, false>(argc, argv);
+  std::cout << "\nRunning Dual Gemm with Linear Combination + Row Bias Epilogue (D = alpha * A * B + beta * C + per-row bias)\n";
+  run_dual_gemm<true, true>(argc, argv);
+  std::cout << "\n\n";
   return 0;
 }
