@@ -214,9 +214,11 @@ struct CollectiveMma<
     if constexpr (std::is_same_v<SrcType, DstType>) {
       return in;
     } else if constexpr (sizeof_bits_v<SrcType> < 8) {
+      // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
+      // hardcode here for functionality test, will remove this branch in the future.
+
       auto out = make_fragment_like<DstType>(in);
 
-      // TODO: hard code for test
       #pragma unroll
       for (int i = 0; i < decltype(size(out))::value; i++) {
         out[i] = static_cast<DstType>(in[i].get());
