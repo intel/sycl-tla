@@ -210,13 +210,13 @@ public:
     Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(seq_len, head_size, batch * num_heads));   //(m,k,l)
     Tensor mK_nkl = cute::get_pvc_tensor(make_shape(seq_len, head_size, batch * num_heads));   //(m,k,l)
     Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size, seq_len, batch * num_heads));   //(n,k,l)
-    Tensor mQ_mk = mQ_mkl(_,_,blk_l_coord);                                                      // (m,k)
-    Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                      // (n,k)
-    Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                      // (n,k)
+    Tensor mQ_mk = mQ_mkl(_,_,blk_l_coord);                                                    // (m,k)
+    Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                    // (n,k)
+    Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                    // (n,k)
     
-    auto gQ = local_tile(mQ_mk, subgroup_shape, make_coord(blk_m_coord * ATOM_M, _, _), Step<_1,  X, _1>{}); // subgroup_shape<16, 64, 64> //Atom_M ->8   // 16x64
-    auto gK = local_tile(mK_nk, subgroup_shape, make_coord(_, _ , _), Step<X, _1, _1>{});                 // subgroup_shape<16, 64, 64>                       // 64x64
-    auto gV = local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, _), Step<X, _1, _1>{});     // subgroup_shape<16, 64, 64>  // Atom_N -> 2  // 64x64
+    auto gQ = local_tile(mQ_mk, subgroup_shape, make_coord(blk_m_coord * ATOM_M, _, _), Step<_1,  X, _1>{}); // subgroup_shape<16, 64, 64> // Atom_M ->8   // 16x64
+    auto gK = local_tile(mK_nk, subgroup_shape, make_coord(_, _ , _), Step<X, _1, _1>{});                    // subgroup_shape<16, 64, 64>                 // 64x64
+    auto gV = local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, _), Step<X, _1, _1>{});  // subgroup_shape<16, 64, 64> // Atom_N -> 2  // 64x64
 
     const int seq_coord = blk_m_coord * BLK_M + (sub_group_id / ATOM_N) * SG_M;
     const int l_coord = blk_l_coord;
@@ -227,9 +227,9 @@ public:
     const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, SG_N)
                                         : cute::ceil_div(non_causal_seq_len, SG_N);
 
-    auto tiled_prefetch_q =  params.mainloop.gmem_tiled_copy_q.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_N>>, Num_SGs>(params.mainloop.mQ);   // <M=128(BLK_M), K=128(BLK_N)> // is_reverse_needed=0
-    auto tiled_prefetch_k =  params.mainloop.gmem_tiled_copy_k.template prefetch_selector<Shape<Int<BLK_K>,Int<BLK_N>>, Num_SGs>(params.mainloop.mK); // <N=64(BLK_K), K=128(BLK_N)> // is_revese_needed=0
-    auto tiled_prefetch_v =  params.mainloop.gmem_tiled_copy_v.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mV);  // <N=128(BLK_N), K=64(BLK_K)> // is_reverse_needed=1 
+    auto tiled_prefetch_q =  params.mainloop.gmem_tiled_copy_q.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_N>>, Num_SGs>(params.mainloop.mQ);   // <M=128 (BLK_M), K=128 (BLK_N)>  // is_reverse_needed=0
+    auto tiled_prefetch_k =  params.mainloop.gmem_tiled_copy_k.template prefetch_selector<Shape<Int<BLK_K>,Int<BLK_N>>, Num_SGs>(params.mainloop.mK);   // <N=64  (BLK_K), K=128 (BLK_N)>  // is_revese_needed=0
+    auto tiled_prefetch_v =  params.mainloop.gmem_tiled_copy_v.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(params.mainloop.mV);   // <N=128 (BLK_N), K=64  (BLK_K)>  // is_reverse_needed=1 
     auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
     auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
     auto thr_prefetch_V = tiled_prefetch_v.get_slice(thread_idx);
@@ -266,10 +266,6 @@ public:
     // of the barrier to workgroup level as the number n block is
     // different for each subgroup due to triangular nature of causal based operation
     static constexpr int barrier_scope = CausalMask ? 3 : 2;
-    // FIX ME(Codeplay): The ceil_div perfrom //(head_size + SG_N-1)  / SG_N) so in both cases 
-    // the performance must be intact having different results seems to be a problem in the code gen
-    // Temporarily working around the issue by disabling the ceil_div when head_dim == BLK_N
-    const int tile_qk_count = (CausalMask && head_size % SG_N == 0  ) ? (head_size / SG_N) : cute::ceil_div(head_size, SG_N); 
     // MAIN LOOP: loop over K and V, perform fused attention + online softmax
     for (int nblock = 0, load_idx = 0; nblock < nblock_limit - static_cast<int>(CausalMask); nblock++, 
          load_idx += SG_N) {
@@ -280,17 +276,23 @@ public:
       clear(tSr);
 
       // 3) Perform GEMM S = Q*K
-      collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size , get<1>(subgroup_shape)), params.mainloop);
+      collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size , SG_N), params.mainloop);
+      
+      // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
+      // prefetching it the same way as cutlass K matrix does not make sense
       prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock));
+
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
       collective_mma.mmaPV(out_reg, tSr, gV(_, _ , nblock), out_reg, params.mainloop);
-      if (nblock + DispatchPolicy::Stages < nblock_limit) {
+      
+      // Prefetch the next K tile
+     // there is no need to gaurd it with if statememt as prefetch will ignore out of bound reading
+        CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < size<4>(pKgK); j++) {
           prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
         }
-      }
       barrier_wait(barrier_scope);
     }
     if constexpr (CausalMask) {
@@ -300,7 +302,9 @@ public:
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
       // 3) Perform GEMM S = Q*K
-      collective_mma.mmaQK(tSr, gQ,  gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size , get<1>(subgroup_shape)), params.mainloop);
+      collective_mma.mmaQK(tSr, gQ,  gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size , SG_N), params.mainloop);
+      // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
+      // prefetching it the same way as cutlass K matrix does not make sense
       prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock_limit - 1));
       // mask the elements of each tile where j > i
       const int item_id = thread_idx % SubgroupSize;
