@@ -216,7 +216,6 @@ public:
     auto gQ = local_tile(mQ_mk, subgroup_shape, make_coord(blk_m_coord * ATOM_M, _, _), Step<_1,  X, _1>{});
 
     const int seq_coord = blk_m_coord * BLK_M + (sub_group_id / ATOM_N) * SG_M;
-    const int head_size_coord = blk_n_coord * BLK_N + (sub_group_id % ATOM_N) * SG_N;
     const int l_coord = blk_l_coord;
     using PrefetchQThrShape = typename CollectiveMainloop::PrefetchQThrShape; // shape<4,2> // (4,4)
     using PrefetchKThrShape = typename CollectiveMainloop::PrefetchKThrShape; // shape<4,2> // (4,4)
@@ -268,14 +267,15 @@ public:
     // vertical. The prefetch only move along the sequence length. Here we call sequence length K since it get consumed
     // and head size N since it stay subgroup arranged 4x2 to load (64x64) in one load(each 64x32)
     Tensor prefetch_iter_2d_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
-        make_coord((sub_group_id / get<1>(PrefetchVThrShape{})) *
-                       get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
+        make_coord(
                    BlockIdxX() * BLK_N + ((sub_group_id % get<1>(PrefetchVThrShape{})) *
                                           get<1>(PrefetchVTileSize{})), //  iteration 1/N/W/Horisontal / Head size
+                   (sub_group_id / get<1>(PrefetchVThrShape{})) *
+                       get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
                    blk_l_coord),
         // We loop over the consuming dimension which is the iteration 0(N) here
         make_shape(_1{}, _1{}, _1{}));
-    Tensor prefetch_iter_v = append_pvc_tensor<0>(prefetch_iter_2d_v, nblock_limit,
+    Tensor prefetch_iter_v = append_pvc_tensor<1>(prefetch_iter_2d_v, nblock_limit,
                                                   (get<0>(PrefetchVThrShape{}) * get<0>(PrefetchVTileSize{})));
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < k_tile_count; i++) {
@@ -326,15 +326,13 @@ public:
       clear(tSr);
 
       // 3) Perform GEMM S = Q*K
-      auto tile_coord_QK = make_coord(seq_coord, load_idx, _, blk_l_coord);
-      collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, tile_qk_count, params.mainloop);
+      collective_mma.mmaQK(tSr, gQ, gK, tSr, tile_qk_count, params.mainloop);
 
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
       auto gV = local_tile(mV_nk, subgroup_shape, make_coord(_, blk_n_coord * ATOM_N, nblock), Step<X, _1, _1>{}); 
-      auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
-      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, params.mainloop);
+      collective_mma.mmaPV(out_reg, tSr, gV, out_reg, params.mainloop);
       if (nblock + DispatchPolicy::Stages < nblock_limit) {
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < iter_over_head_count; j++) {
@@ -352,8 +350,7 @@ public:
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
       // 3) Perform GEMM S = Q*K
-      auto tile_coord_QK = make_coord(seq_coord, (nblock_limit - 1) * SG_N, _, blk_l_coord);
-      collective_mma.mmaQK(tile_coord_QK, tSr, gQ, gK, tSr, tile_qk_count, params.mainloop);
+      collective_mma.mmaQK(tSr, gQ, gK, tSr, tile_qk_count, params.mainloop);
       // mask the elements of each tile where j > i
       const int item_id = thread_idx % SubgroupSize;
       int col_idx = item_id + (nblock_limit - 1) * SG_N;
@@ -374,8 +371,7 @@ public:
       softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
       auto gV = local_tile(mV_nk, subgroup_shape, make_coord(0, blk_n_coord * ATOM_N, nblock_limit - 1), Step<X, _1, _1>{});
-      auto tile_coord_PV = make_coord(0, head_size_coord, _, blk_l_coord);
-      collective_mma.mmaPV(tile_coord_PV, out_reg, tSr, gV, out_reg, params.mainloop);
+      collective_mma.mmaPV(out_reg, tSr, gV, out_reg, params.mainloop);
     }
 
     CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
