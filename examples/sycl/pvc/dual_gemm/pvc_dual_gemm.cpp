@@ -219,19 +219,22 @@ struct ExampleRunner {
 
     syclcompat::wait();
 
-    if constexpr (UseBias0) {
-      cutlass::reference::device::TensorPerRowBias(cutlass::TensorView(block_ref_D0.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)), 
-                                                   cutlass::TensorView(block_bias0.get(), LayoutBias::packed({0, N}), cutlass::make_Coord(M, N)));
-    }
+    for(int batch = 0, offset = 0; batch < L; batch++, offset += M * N) {
+      if constexpr (UseBias0) {
+        cutlass::reference::device::TensorPerRowBias(cutlass::TensorView(block_ref_D0.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)), 
+                                                    cutlass::TensorView(block_bias0.get(), LayoutBias::packed({0, N}), cutlass::make_Coord(M, N)));
+      }
 
-    if constexpr (UseBias1) {
-      cutlass::reference::device::TensorPerRowBias(cutlass::TensorView(block_ref_D1.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)), 
-                                                   cutlass::TensorView(block_bias1.get(), LayoutBias::packed({0, N}), cutlass::make_Coord(M, N)));
-    }
+      if constexpr (UseBias1) {
+        cutlass::reference::device::TensorPerRowBias(cutlass::TensorView(block_ref_D1.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)), 
+                                                    cutlass::TensorView(block_bias1.get(), LayoutBias::packed({0, N}), cutlass::make_Coord(M, N)));
+      }
 
-    cutlass::reference::device::TensorSiLu(cutlass::TensorView(block_ref_D2.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
-                                           cutlass::TensorView(block_ref_D0.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
-                                           cutlass::TensorView(block_ref_D1.get(), LayoutD::packed({M, N}), cutlass::make_Coord(M, N)));
+      cutlass::reference::device::TensorSiLu(cutlass::TensorView(block_ref_D2.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
+                                            cutlass::TensorView(block_ref_D0.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
+                                            cutlass::TensorView(block_ref_D1.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)));
+
+    }
 
     syclcompat::wait();
 
