@@ -224,9 +224,7 @@ public:
     auto gV_block = local_tile(mV_nk, TileShape{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});  //TileShape <128, 128, 64>   // 128x64
 
     const int seq_coord = blk_m_coord * BLK_M + (sub_group_id / ATOM_N) * SG_M;
-    const int head_size_coord = blk_n_coord * BLK_N + (sub_group_id % ATOM_N) * SG_N;
     const int l_coord = blk_l_coord;
-
     using PrefetchQThrShape = typename CollectiveMainloop::PrefetchQThrShape; // shape<4,2> // (4,4)
     using PrefetchKThrShape = typename CollectiveMainloop::PrefetchKThrShape; // shape<4,2> // (4,4)
     using PrefetchVThrShape = typename CollectiveMainloop::PrefetchVThrShape; // shape<4,2> // (4,4)
@@ -237,8 +235,8 @@ public:
     const int causal_seq_len = seq_coord + get<0>(subgroup_shape);
     const int non_causal_seq_len = seq_len;
 
-    const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, get<1>(subgroup_shape))
-                                        : cute::ceil_div(non_causal_seq_len, get<1>(subgroup_shape));
+    const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, SG_N)
+                                        : cute::ceil_div(non_causal_seq_len, SG_N);
 
     const int k_tile_count =  cutlass::nearest_up_pow2(head_size)  / (get<1>(PrefetchQThrShape{}) * get<1>(PrefetchQTileSize{}));
     // m, k
@@ -289,10 +287,11 @@ public:
     // vertical. The prefetch only move along the sequence length. Here we call sequence length K since it get consumed
     // and head size N since it stay subgroup arranged 4x2 to load (64x64) in one load(each 64x32)
     Tensor prefetch_iter_2d_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
-        make_coord((sub_group_id / get<1>(PrefetchVThrShape{})) *
-                       get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
+        make_coord(
                    BlockIdxX() * BLK_N + ((sub_group_id % get<1>(PrefetchVThrShape{})) *
                                           get<1>(PrefetchVTileSize{})), //  iteration 1/N/W/Horisontal / Head size
+                   (sub_group_id / get<1>(PrefetchVThrShape{})) *
+                       get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
                    blk_l_coord),
         // We loop over the consuming dimension which is the iteration 0(N) here
         make_shape(_1{}, _1{}, _1{}));
@@ -328,10 +327,13 @@ public:
     // of the barrier to workgroup level as the number n block is
     // different for each subgroup due to triangular nature of causal based operation
     static constexpr int barrier_scope = CausalMask ? 3 : 2;
-
+    // FIX ME(Codeplay): The ceil_div perfrom //(head_size + SG_N-1)  / SG_N) so in both cases 
+    // the performance must be intact having different results seems to be a problem in the code gen
+    // Temporarily working around the issue by disabling the ceil_div when head_dim == BLK_N
+    const int tile_qk_count = (CausalMask && head_size % SG_N == 0  ) ? (head_size / SG_N) : cute::ceil_div(head_size, SG_N); 
     // MAIN LOOP: loop over K and V, perform fused attention + online softmax
-    for (int nblock = 0, load_idx = 0; nblock < nblock_limit - static_cast<int>(CausalMask);
-         nblock++, load_idx += get<1>(subgroup_shape)) {
+    for (int nblock = 0, load_idx = 0; nblock < nblock_limit - static_cast<int>(CausalMask); nblock++, 
+         load_idx += SG_N) {
       barrier_arrive(barrier_scope);
       // 1) Load K (performed inside mmaQK)
       // 2) Create Tensor S
@@ -363,7 +365,7 @@ public:
       prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock_limit - 1));
       // mask the elements of each tile where j > i
       const int item_id = thread_idx % SubgroupSize;
-      int col_idx = item_id + (nblock_limit - 1) * get<1>(subgroup_shape);
+      int col_idx = item_id + (nblock_limit - 1) * SG_N;
       CUTLASS_PRAGMA_UNROLL
       for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
         CUTLASS_PRAGMA_UNROLL
