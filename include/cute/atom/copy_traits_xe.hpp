@@ -409,22 +409,38 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
 };
 
 template <class TiledCopy, class TLShape>
-CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy, TLShape &&fragment_top_level_shape) {
-  auto [mma_atom_size, total_mma_atom_iters_MN, total_mma_atom_iters_K] = fragment_top_level_shape;
-  auto copy_size_MN =
-      size<0>(typename TiledCopy::BlockShape{}); // TODO(Codeplay): We could use ValLayoutDst once it is consistent
-  auto copy_size_K = size<1>(typename TiledCopy::BlockShape{}) / size(typename TiledCopy::ThrID{});
-  // assert(copy_size_MN >= mma_atom_size); <= only the right check for A, I think
-  auto mma_atom_iters_in_copy_MN = copy_size_MN / mma_atom_size;
-  auto mma_atom_iters_in_copy_K = copy_size_K;
-  auto copy_iters_MN = total_mma_atom_iters_MN / mma_atom_iters_in_copy_MN;
-  auto copy_iters_K = total_mma_atom_iters_K / mma_atom_iters_in_copy_K;
-  auto order = std::conditional_t<TiledCopy::is_convention_MN, 
-                                  Step<_0, Step<_1, _3>, Step<_2, _4>>,
-                                  Step<_0, Step<_2, _3>, Step<_1, _4>>>{};
-  return make_ordered_layout(make_shape(mma_atom_size,
-                                        make_shape(mma_atom_iters_in_copy_MN, copy_iters_MN),
-                                        make_shape(mma_atom_iters_in_copy_K, copy_iters_K)),
+CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
+                                                     TLShape &&fragment_top_level_shape) {
+  auto [mma_atom_shape, total_mma_atom_iters_M, total_mma_atom_iters_N] = fragment_top_level_shape;
+  auto mma_atom_shape_2d = prepend<2>(mma_atom_shape, _1{});
+
+  Int mma_atom_size_M =
+      Int<!TiledCopy::is_convention_MN ? size<0>(mma_atom_shape_2d) : size<1>(mma_atom_shape_2d)>{};
+  Int mma_atom_size_N =
+      Int<!TiledCopy::is_convention_MN ? size<1>(mma_atom_shape_2d) : size<0>(mma_atom_shape_2d)>{};
+  Int copy_size_M =
+      Int<!TiledCopy::is_convention_MN
+              ? size<1>(typename TiledCopy::BlockShape{}) /
+                    size(typename TiledCopy::Traits_LD_t::ThrID{})
+              : size<0>(typename TiledCopy::BlockShape{})>{}; // TODO(Codeplay): We could use
+                                                              // ValLayoutDst once it is consistent
+  Int copy_size_N =
+      Int<!TiledCopy::is_convention_MN ? size<0>(typename TiledCopy::BlockShape{})
+                                       : size<1>(typename TiledCopy::BlockShape{}) /
+                                             size(typename TiledCopy::Traits_LD_t::ThrID{})>{};
+  static_assert(copy_size_M >= mma_atom_size_M);
+  static_assert(copy_size_N >= mma_atom_size_N);
+  Int mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size_M;
+  Int mma_atom_iters_in_copy_N = copy_size_N / mma_atom_size_N;
+  Int copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
+  Int copy_iters_N = total_mma_atom_iters_N / mma_atom_iters_in_copy_N;
+  auto order = std::conditional_t<TiledCopy::is_convention_MN,
+                                  Step<Step<_0, _1>, Step<_2, _4>, Step<_3, _5>>,
+                                  Step<Step<_0, _1>, Step<_3, _5>, Step<_2, _4>>>{};
+
+  return make_ordered_layout(make_shape(mma_atom_shape_2d,
+                                        make_shape(mma_atom_iters_in_copy_M, copy_iters_M),
+                                        make_shape(mma_atom_iters_in_copy_N, copy_iters_N)),
                              order);
 };
 
@@ -616,9 +632,9 @@ template <class... args_t>
 struct Copy_Traits_<XE_2D_U8x4x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x4x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
-  // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_8>,
-                           Stride< _0,_1>>;
+  // Map from (dst-thr,dst-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2,  _4>>,
+                           Stride<_0,Stride< _1,_256,_512>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16,Shape <_16,  _2,  _4>>,
                            Stride<_16,Stride< _1,_256,_512>>>;
