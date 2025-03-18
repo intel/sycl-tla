@@ -165,6 +165,7 @@ struct ExampleRunner {
   // Methods
   //
 
+  template <bool WriteEpilogueOutput0, bool WriteEpilogueOutput1>
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha0, ElementCompute alpha1, ElementCompute beta0, ElementCompute beta1) {
     auto [M, N, K, L] = problem_size;
 
@@ -222,11 +223,11 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
-    bool passed_D0 = cutlass::reference::device::BlockCompareEqual(
-      block_ref_D0.get(), block_D0.get(), block_D0.size());
+    bool passed_D0 = WriteEpilogueOutput0 ? cutlass::reference::device::BlockCompareEqual(
+      block_ref_D0.get(), block_D0.get(), block_D0.size()) : true;
 
-    bool passed_D1 = cutlass::reference::device::BlockCompareEqual(
-      block_ref_D1.get(), block_D1.get(), block_D1.size());
+    bool passed_D1 = WriteEpilogueOutput1 ? cutlass::reference::device::BlockCompareEqual(
+      block_ref_D1.get(), block_D1.get(), block_D1.size()) : true;
 
     bool passed_D2 = cutlass::reference::device::BlockCompareRelativelyEqual(
       block_ref_D2.get(), block_D2.get(), block_D2.size(), 0.5f, 0.5f);
@@ -283,6 +284,7 @@ struct ExampleRunner {
     return cutlass::Status::kSuccess;
   }
 
+  template <bool WriteEpilogueOutput0, bool WriteEpilogueOutput1>
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
@@ -316,7 +318,7 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha0, options.alpha1, options.beta0, options.beta1);
+    bool passed = verify<WriteEpilogueOutput0, WriteEpilogueOutput1>(problem_size, options.alpha0, options.alpha1, options.beta0, options.beta1);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if(!passed) return cutlass::Status::kErrorInternal;
@@ -377,9 +379,9 @@ int main(int argc, const char** argv)
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
-  using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
+  using ElementComputeEpilogue = float;               // <- data type of epilogue operations
+  using ElementInputA = bfloat16_t;                   // <- data type of elements in input matrix A
+  using ElementInputB = bfloat16_t;                   // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
   using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
@@ -408,7 +410,9 @@ int main(int argc, const char** argv)
   using LinearFusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, LinearEpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
 
-  using CollectiveEpilogue = cutlass::epilogue::collective::DualGemmEpilogue<
+  constexpr bool WriteEpilogueOutput0 = true;
+  constexpr bool WriteEpilogueOutput1 = true;
+  using CollectiveEpilogue0 = cutlass::epilogue::collective::DualGemmEpilogue<
           EpilogueDispatchPolicy,
           TileShape,
           ElementAccumulator,
@@ -417,7 +421,19 @@ int main(int argc, const char** argv)
           cutlass::gemm::TagToStrideC_t<LayoutD>,
           LinearFusionCallBacks,
           XE_2D_U32x8x16_LD_N,
-          XE_2D_U32x8x16_ST_N>;
+          XE_2D_U32x8x16_ST_N,
+          WriteEpilogueOutput0>;
+  using CollectiveEpilogue1 = cutlass::epilogue::collective::DualGemmEpilogue<
+          EpilogueDispatchPolicy,
+          TileShape,
+          ElementAccumulator,
+          cutlass::gemm::TagToStrideC_t<LayoutC>,
+          ElementOutput,
+          cutlass::gemm::TagToStrideC_t<LayoutD>,
+          LinearFusionCallBacks,
+          XE_2D_U32x8x16_LD_N,
+          XE_2D_U32x8x16_ST_N,
+          WriteEpilogueOutput1>;
 
   using CollectiveEpilogueActivation = cutlass::epilogue::collective::DualGemmElemActEpilogue<
           EpilogueDispatchPolicy,
@@ -445,14 +461,15 @@ int main(int argc, const char** argv)
   using GemmKernel = cutlass::gemm::kernel::DualGemm<
   Shape<int, int, int, int>,
   CollectiveMainloop,
-  CollectiveEpilogue,
-  CollectiveEpilogue,
+  CollectiveEpilogue0,
+  CollectiveEpilogue1,
   CollectiveEpilogueActivation
   >;
 
   ExampleRunner<GemmKernel> runner;
 
-  CUTLASS_CHECK(runner.run(options, hw_info));
+  auto status = runner.run<WriteEpilogueOutput0, WriteEpilogueOutput1>(options, hw_info);
+  CUTLASS_CHECK(status);
 
   return 0;
 }

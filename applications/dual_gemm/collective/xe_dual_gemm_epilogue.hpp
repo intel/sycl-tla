@@ -60,7 +60,8 @@ template <
   class StrideD_,
   class FusionCallbacks_,
   class CopyOpG2R_,
-  class CopyOpR2G_
+  class CopyOpR2G_,
+  bool WriteOutput_
 >
 class DualGemmEpilogue;
 
@@ -74,7 +75,8 @@ template <
   class StrideD_,
   class FusionCallbacks_,
   class CopyOpG2R_,
-  class CopyOpR2G_
+  class CopyOpR2G_,
+  bool WriteOutput_
 >
 class DualGemmEpilogue<
     IntelPVCEpilogue,
@@ -85,7 +87,8 @@ class DualGemmEpilogue<
     StrideD_,
     FusionCallbacks_,
     CopyOpG2R_,
-    CopyOpR2G_
+    CopyOpR2G_,
+    WriteOutput_
 > {
 public:
   //
@@ -101,6 +104,8 @@ public:
   using StrideD = StrideD_;
   using CopyOpG2R = CopyOpG2R_;
   using CopyOpR2G = CopyOpR2G_;
+
+  static constexpr bool WriteOutput = WriteOutput_;
 
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
   using GmemTiledCopyC = CopyOpG2R;
@@ -126,7 +131,7 @@ public:
                                              make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{}))));
 private:
   constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
-  constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
+  constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G> && WriteOutput;
 
   constexpr static bool is_m_major_C = detail::is_m_major<StrideC>();
   constexpr static bool is_m_major_D = detail::is_m_major<StrideD>();
