@@ -286,8 +286,8 @@ struct CollectiveMma<
     Tensor tCgB = thr_mma.partition_B(gB);
 
     // Create fragments
-    Tensor tCrA = make_tensor<ElementB>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<ElementB>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
+    Tensor tCrA = make_tensor<ElementB>(make_fragment_layout(mainloop.copy_A, tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementB>(make_fragment_layout(mainloop.copy_B, tCgB(_,_,_,0).shape()));
 
     // narrow input fragment
     Tensor tCrA_input = make_tensor<ElementA>(tCrA.shape());
@@ -346,11 +346,12 @@ struct CollectiveMma<
     auto prefetch_iter_a = append_pvc_tensor<1>(block2d_prefetch_iter_a, k_tile_count, BLK_K);
 
     Tensor block2d_prefetch_iter_b = XE_Prefetch_B{}.get_pvc_tensor(
-                               make_coord((get_sub_group_id() / ATOM_N / get<1>(PrefetchBThrShape{}) + k_start_idx) * get<0>(PrefetchBTileSize{}),
+                               make_coord(
                                            n_coord + (get_sub_group_id() / ATOM_N) % get<1>(PrefetchBThrShape{}) * get<1>(PrefetchBTileSize{}),
+                                          (get_sub_group_id() / ATOM_N / get<1>(PrefetchBThrShape{}) + k_start_idx) * get<0>(PrefetchBTileSize{}),
                                            l_coord),
                                make_shape(_1{}, _1{}, _1{}));
-    auto prefetch_iter_b = append_pvc_tensor<0>(block2d_prefetch_iter_b, k_tile_count, BLK_K);
+    auto prefetch_iter_b = append_pvc_tensor<1>(block2d_prefetch_iter_b, k_tile_count, BLK_K);
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
