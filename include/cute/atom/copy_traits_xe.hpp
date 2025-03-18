@@ -91,11 +91,11 @@ auto get_logical_layout(LayoutIn &&, BlockShape &&) {
   } else {
     // (16, (32, 2))
     //        ^-- the size of an element in bits
-    // TODO(codeplay): this may not be a safe assumption but SPIR-V builtins are coming.
-    using ElemBitSize = decltype(cute::get<1, 0>(LayoutIn{}.shape()));
+    static_assert(size(LayoutIn{}) % size(BlockShape{}) == 0);
+    constexpr int ElemBitSize = size(LayoutIn{}) / size(BlockShape{});
     // Construct a generic row-major layout of the relevant size
     using RowMajorLayout =
-        decltype(make_ordered_layout(Shape<ElemBitSize, BlockShape>{}, Step<_0, Step<_2, _1>>{}));
+        decltype(make_ordered_layout(Shape<Int<ElemBitSize>, BlockShape>{}, Step<_0, Step<_2, _1>>{}));
     // Compose with LayoutIn to produce the transposed Copy_Traits layout
     return right_inverse(RowMajorLayout{}).compose(LayoutIn{});
   }
