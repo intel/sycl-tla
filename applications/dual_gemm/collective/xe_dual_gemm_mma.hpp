@@ -178,16 +178,16 @@ struct DualGemmMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, St
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
-    Tensor tCrA = make_tensor<ElementA>(tiled_copy_a.make_fragment_layout(tCgA(_,_,_,0).shape()));
-    Tensor tCrB0 = make_tensor<ElementB>(tiled_copy_b.make_fragment_layout(tCgB(_,_,_,0).shape()));
-    Tensor tCrB1 = make_tensor<ElementB>(tiled_copy_b.make_fragment_layout(tCgB(_,_,_,0).shape()));
+    Tensor tCrA = make_tensor<ElementA> (make_fragment_layout(tiled_copy_a, tCgA(_,_,_,0).shape()));
+    Tensor tCrB0 = make_tensor<ElementB>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
+    Tensor tCrB1 = make_tensor<ElementB>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
   
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
     Tensor tBrB0 = thr_copy_B.retile_D(tCrB0);
     Tensor tBrB1 = thr_copy_B.retile_D(tCrB1);
     
-    // Retile global tile for copies
+    // Retile global counting tensors for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
