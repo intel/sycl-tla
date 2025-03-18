@@ -258,8 +258,8 @@ public:
       auto K = get<2>(problem_shape_MNKL);
       auto L = get<3>(problem_shape_MNKL);
 
-      Tensor mA_mkl = params.mainloop.copy_A.get_pvc_tensor(make_shape(M,K,L));   //(m,k,l)
-      Tensor mB_nkl = params.mainloop.copy_B.get_pvc_tensor(make_shape(N,K,L));   //(n,k,l)
+      Tensor mA_mkl = cute::get_pvc_tensor(make_shape(M,K,L));   //(m,k,l)
+      Tensor mB_nkl = cute::get_pvc_tensor(make_shape(N,K,L));   //(n,k,l)
 
       auto m_coord = work_tile_info.M_idx;
       auto n_coord = work_tile_info.N_idx;
