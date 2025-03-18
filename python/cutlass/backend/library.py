@@ -1,6 +1,6 @@
 #################################################################################################
 #
-# Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -471,6 +471,9 @@ def api_version(arch, opclass, dtype):
     :return: API version to be used in code emission
     :rtype: ApiVersion
     """
+    if opclass == OpcodeClass.TensorOp and arch == 11:
+        return ApiVersion.v3x
+
     if (arch >= 90 and
         opclass == OpcodeClass.TensorOp and
         (dtype != DataType.f64)):

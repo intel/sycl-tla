@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,11 +41,24 @@
 #include "cutlass/gemm/collective/sm90_mma_multistage_gmma_rs_warpspecialized.hpp"
 #include "cutlass/gemm/collective/sm90_mma_tma_gmma_ss.hpp"
 #include "cutlass/gemm/collective/sm90_mma_tma_gmma_rs_warpspecialized.hpp"
-#include "cutlass/gemm/collective/sm90_mma_tma_gmma_rs_warpspecialized_mixed_input.hpp"
+#include "cutlass/gemm/collective/sm90_mma_tma_gmma_rs_warpspecialized_mixed_input.hpp" 
 #include "cutlass/gemm/collective/sm90_mma_tma_gmma_ss_warpspecialized.hpp"
 #include "cutlass/gemm/collective/sm90_sparse_mma_tma_gmma_ss_warpspecialized.hpp"
+#include "cutlass/gemm/collective/sm90_sparse_mma_tma_gmma_ss_warpspecialized_fp8.hpp"
 #include "cutlass/gemm/collective/sm90_mma_array_tma_gmma_ss_warpspecialized.hpp"
+#include "cutlass/gemm/collective/sm90_mma_array_tma_gmma_rs_warpspecialized_mixed_input.hpp"
 #include "cutlass/gemm/collective/sm90_mma_tma_gmma_ss_warpspecialized_fp8.hpp"
+#include "cutlass/gemm/collective/sm90_mma_tma_gmma_ss_warpspecialized_fp8_blockwise_scaling.hpp"
+
+#if !defined(__CUDACC_RTC__)
+#include "cutlass/gemm/collective/sm100_mma_warpspecialized.hpp"
+#include "cutlass/gemm/collective/sm100_mma_array_warpspecialized.hpp"
+#include "cutlass/gemm/collective/sm100_mma_warpspecialized_emulated.hpp"
+#include "cutlass/gemm/collective/sm100_mma_array_warpspecialized_emulated.hpp"
+
+#include "cutlass/gemm/collective/sm100_blockscaled_mma_warpspecialized.hpp" 
+#include "cutlass/gemm/collective/sm100_blockscaled_mma_array_warpspecialized.hpp" 
+#endif // !defined(__CUDACC_RTC__)
 
 #if defined(SYCL_INTEL_TARGET)
 #include "cutlass/gemm/collective/xe_mma.hpp"

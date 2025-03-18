@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,9 +56,7 @@ template <typename T>
 T* allocate(size_t count = 1) {
 
   T* ptr = 0;
-  size_t bytes = 0;
-
-  bytes = count * sizeof(T);
+  size_t bytes = count * sizeof_bits<T>::value / 8;
 
 #if defined(CUTLASS_ENABLE_SYCL)
   if (count > 0) {

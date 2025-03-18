@@ -206,6 +206,21 @@ public:
   using  TensorScale = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementScale const*>(nullptr)), make_shape(0,0,0), StrideScale{}));   //(m OR n, k)
   using  TensorZero = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const*>(nullptr)), make_shape(0,0,0), StrideScale{}));   //(m OR n, k)
  
+  
+  using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
+  using Copy_A = decltype(make_tiled_copy(atom_load_A{},
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{}))));
+  
+  using Copy_B = decltype(make_tiled_copy(atom_load_B{},
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{}))));
+
+  using Copy_Scale = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShape>{},
+                                     make_layout(shape_div(typename traits_load_scale::BlockShape{},
+                                                           CopyThreadShape{}))));
+  using Copy_Zero = Copy_Scale; // Same layout
+
   // Host side kernel arguments
   struct Arguments {
     ElementA const* ptr_A;
@@ -221,10 +236,10 @@ public:
   // TODO(joe): Can/should I specialize the Params struct based on `ConversionMode`?
   // Could this save passing some args & registers etc?
   struct Params {
-    TensorMKL mA;
-    TensorNKL mB;
-    TensorScale mScale;
-    TensorZero mZero;
+    Copy_A copy_A;
+    Copy_B copy_B;
+    Copy_Scale copy_scale;
+    Copy_Zero copy_zero;
     int64_t scale_k;
     int group_size;
   };
@@ -261,7 +276,20 @@ public:
         make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
                     make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
 
-    return Params{mA_mkl, mB_nkl, mScale, mZero, scale_k, args.group_size};
+    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(mA_mkl),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
+    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(mB_nkl),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
+    auto tiled_copy_scale = make_tiled_copy(atom_load_scale{}.with(mScale),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShape{})));
+    auto tiled_copy_zero = make_tiled_copy(atom_load_scale{}.with(mZero),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShape{})));
+
+    return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, tiled_copy_zero, scale_k, args.group_size};
   }
 
   // Helper functions to select packing for conversion
@@ -361,10 +389,7 @@ public:
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
-  template <
-    int PrefetchStrideA,
-    int PrefetchStrideB,
-    class FrgTensorD,
+  template <class FrgTensorD,
     class TensorA,
     class TensorB,
     class FrgTensorC,
@@ -393,38 +418,25 @@ public:
     (void)thread_idx;
     (void)smem_buf;
 
-    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
-  #ifdef CUTLASS_SYCL_SWITCH_WG
-    const int m_coord = n_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
-    const int n_coord = m_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
-  #else
-    const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
-    const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
-  #endif
-    const int l_coord = l_idx;
-
-    auto tiled_copy_a = make_xe_2d_copy(atom_load_A{}.with(mainloop.mA),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
-    auto tiled_copy_b = make_xe_2d_copy(atom_load_B{}.with(mainloop.mB),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
-    auto tiled_copy_scale = make_xe_2d_copy(atom_load_scale{}.with(mainloop.mScale),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
-    auto tiled_copy_zero = make_xe_2d_copy(atom_load_scale{}.with(mainloop.mZero),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
-
     // Partition the copying of A and B tiles across the threads
-    auto thr_copy_A = tiled_copy_a.get_slice(thread_idx);
-    auto thr_copy_B = tiled_copy_b.get_slice(thread_idx);
-    auto thr_copy_scale = tiled_copy_scale.get_slice(thread_idx);
-    auto thr_copy_zero = tiled_copy_zero.get_slice(thread_idx);
+    auto thr_copy_A = mainloop.copy_A.get_slice(thread_idx);
+    auto thr_copy_B = mainloop.copy_B.get_slice(thread_idx);
+    auto thr_copy_scale = mainloop.copy_scale.get_slice(thread_idx);
+    auto thr_copy_zero = mainloop.copy_zero.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
-    auto thr_mma = tiled_mma.get_slice(thread_idx);
+    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto first_thread_in_sg_idx = sg.get_group_linear_id() * DispatchPolicy::SubgroupSize;
+    auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
 
-    // Partition fragment
-    Tensor fragment_A = thr_mma.partition_fragment_A(gA(_, _, 0)); // (M_atom, M_iter, K_iter)
-    Tensor fragment_B = thr_mma.partition_fragment_B(gB(_, _, 0)); // (K_atom, N_iter, K_iter)
+    // Partition
+    Tensor tCgA = thr_mma.partition_A(gA);
+    Tensor tCgB = thr_mma.partition_B(gB);
+
+    // Create fragments
+    Tensor tCrA = make_tensor<ElementMMA>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementMMA>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
 
     // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
     // layout else we need mode N_iter from fragment_B layout.
@@ -436,40 +448,40 @@ public:
 
     // narrow input fragment
     Tensor tCrAB_input = make_tensor<ElementQuant>(
-        std::conditional_t<IsATransformed, decltype(fragment_A.layout()),
-                           decltype(fragment_B.layout())>{});
+        std::conditional_t<IsATransformed, decltype(tCrA.layout()),
+                           decltype(tCrB.layout())>{});
 
     static_assert(std::is_same_v<typename decltype(tCrAB_input)::value_type, ElementQuant>);
-    static_assert(std::is_same_v<typename decltype(fragment_A)::value_type, ElementMMA>);
-    static_assert(std::is_same_v<typename decltype(fragment_B)::value_type, ElementMMA>);
+    static_assert(std::is_same_v<typename decltype(tCrA)::value_type, ElementMMA>);
+    static_assert(std::is_same_v<typename decltype(tCrB)::value_type, ElementMMA>);
 
     // Retile for copy
-    auto [copy_tCrA, copy_tCrB] = [&](){
+    auto [tArA, tBrB] = [&](){
       if constexpr (IsATransformed) {
-        return std::make_pair(thr_copy_A.retile_D(tCrAB_input), thr_copy_A.retile_D(fragment_B));
+        return std::make_pair(thr_copy_A.retile_D(tCrAB_input), thr_copy_A.retile_D(tCrB));
       } else {
-        return std::make_pair(thr_copy_A.retile_D(fragment_A), thr_copy_A.retile_D(tCrAB_input));
+        return std::make_pair(thr_copy_A.retile_D(tCrA), thr_copy_A.retile_D(tCrAB_input));
       }
     }();
 
     Tensor copy_tCrS = thr_copy_scale.retile_D(fragment_scale_input);
     Tensor copy_tCrZ = thr_copy_zero.retile_D(fragment_zero_input);
 
-    // Retile for cute::gemm
-    Tensor mma_tCrA = thr_copy_A.retile_MMA(thr_mma, fragment_A);
-    Tensor mma_tCrB = thr_copy_B.retile_MMA(thr_mma, fragment_B);
+    // Retile global tile for copies
+    Tensor tAgA = thr_copy_A.retile_S(tCgA);
+    Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
   #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
         print("======================= A: \n");
         print("  gA : "); print(gA); print("\n");
-        print("copy_tCrA : "); print(copy_tCrA); print("\n");
-        print("  mma_tCrA : "); print(mma_tCrA); print("\n");
+        print("tCgA : "); print(tCgA); print("\n");
+        print("tAgA : "); print(tAgA); print("\n");
 
         print("=====================  B :\n");
         print("  gB : "); print(gB); print("\n");
-        print("copy_tCrB : "); print(copy_tCrB); print("\n");
-        print("  mma_tCrB : "); print(mma_tCrB); print("\n");
+        print("tCgB : "); print(tCgB); print("\n");
+        print("tBgB : "); print(tBgB); print("\n");
 
         print("=====================  Config: \n");
         print("  threads per workgroup : "); print(MaxThreadsPerBlock); print("\n");
@@ -485,11 +497,11 @@ public:
     //
     // Mainloop
     //
-    Tensor block2d_copy_iter_a = tiled_copy_a.get_pvc_tensor(make_coord(m_coord, 0, l_coord), copy_tCrA.shape());
-    auto copy_iter_a = append_pvc_tensor<1>(block2d_copy_iter_a, k_tile_count, BLK_K);
+    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
 
-    Tensor block2d_copy_iter_b = tiled_copy_b.get_pvc_tensor(make_coord(n_coord, 0, l_coord), copy_tCrB.shape());
-    auto copy_iter_b = append_pvc_tensor<1>(block2d_copy_iter_b, k_tile_count, BLK_K);
+    const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
+    const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
+    const int l_coord = l_idx;
 
     Tensor copy_iter_s = [&](){
       if constexpr(IsATransformed){
@@ -508,25 +520,26 @@ public:
 
     Tensor block2d_prefetch_iter_a = XE_Prefetch_A{}.get_pvc_tensor(
                                make_coord(m_coord + (get_sub_group_id() % ATOM_N) / get<1>(PrefetchAThrShape{}) * get<0>(PrefetchATileSize{}),
-                                          (k_start_idx + (get_sub_group_id() % ATOM_N) % get<1>(PrefetchAThrShape{})) * PrefetchStrideA,
+                                          (k_start_idx + (get_sub_group_id() % ATOM_N) % get<1>(PrefetchAThrShape{})) * get<1>(PrefetchATileSize{}),
                                           l_coord),
                                make_shape(_1{}, _1{}, _1{}));
     auto prefetch_iter_a = append_pvc_tensor<1>(block2d_prefetch_iter_a, k_tile_count, BLK_K);
 
     Tensor block2d_prefetch_iter_b = XE_Prefetch_B{}.get_pvc_tensor(
-                               make_coord((get_sub_group_id() / ATOM_N / get<1>(PrefetchBThrShape{}) + k_start_idx) * PrefetchStrideB,
+                               make_coord(
                                            n_coord + (get_sub_group_id() / ATOM_N) % get<1>(PrefetchBThrShape{}) * get<1>(PrefetchBTileSize{}),
+                                          (get_sub_group_id() / ATOM_N / get<1>(PrefetchBThrShape{}) + k_start_idx) * get<0>(PrefetchBTileSize{}),
                                            l_coord),
                                make_shape(_1{}, _1{}, _1{}));
-    auto prefetch_iter_b = append_pvc_tensor<0>(block2d_prefetch_iter_b, k_tile_count, BLK_K);
+    auto prefetch_iter_b = append_pvc_tensor<1>(block2d_prefetch_iter_b, k_tile_count, BLK_K);
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
       if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
-        prefetch(tiled_copy_a, prefetch_iter_a(_,_,_,prefetch_k));
+        prefetch(mainloop.copy_A, prefetch_iter_a(_,_,_,prefetch_k));
       }
       if constexpr(cute::detail::has_prefetch<GmemTiledCopyB>) {
-        prefetch(tiled_copy_b, prefetch_iter_b(_,_,_,prefetch_k));
+        prefetch(mainloop.copy_B, prefetch_iter_b(_,_,_,prefetch_k));
       }
     }
 
@@ -535,33 +548,34 @@ public:
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
       // Copy gmem to rmem for the first k_tile
-      copy(tiled_copy_a, copy_iter_a(_,_,_,k), copy_tCrA);
-      copy(tiled_copy_b, copy_iter_b(_,_,_,k), copy_tCrB);
+      copy(mainloop.copy_A, tAgA(_,_,_,k), tArA);
+      copy(mainloop.copy_B, tBgB(_,_,_,k), tBrB);
 
+      // TODO(joe): likely an issue here - what do these go to?
       if constexpr(ModeHasScales){
-        copy(tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
+        copy(mainloop.copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
       }
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-        copy(tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
+        copy(mainloop.copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
       }
       if constexpr (IsATransformed) {
-        transform_quant(tCrAB_input, mma_tCrA, fragment_scale_input,
+        transform_quant(tCrAB_input, tCrA, fragment_scale_input,
                         fragment_zero_input);
       } else {
-        transform_quant(tCrAB_input, mma_tCrB, fragment_scale_input,
+        transform_quant(tCrAB_input, tCrB, fragment_scale_input,
                         fragment_zero_input);
       }
 
       if(prefetch_k < k_tile_count) {
         if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
-          prefetch(tiled_copy_a, prefetch_iter_a(_,_,_,prefetch_k));
+          prefetch(mainloop.copy_A, prefetch_iter_a(_,_,_,prefetch_k));
         }
         if constexpr(cute::detail::has_prefetch<GmemTiledCopyB>) {
-          prefetch(tiled_copy_b, prefetch_iter_b(_,_,_,prefetch_k));
+          prefetch(mainloop.copy_B, prefetch_iter_b(_,_,_,prefetch_k));
         } 
       }
 
-      cute::gemm(tiled_mma, mma_tCrA, mma_tCrB, accum);
+      cute::gemm(tiled_mma, tCrA, tCrB, accum);
     }
   }
 };

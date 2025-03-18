@@ -358,8 +358,8 @@ int main(int argc, const char** argv)
                Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
                     Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
 
-  constexpr int PipelineStages = 3;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
+  constexpr int PipelineStages = 2;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages, cutlass::gemm::KernelPVCCooperative>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,

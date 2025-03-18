@@ -1,6 +1,6 @@
 #################################################################################################
 #
-# Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -198,6 +198,17 @@ def is_torch_tensor(inp) -> bool:
     if is_torch_available():
         import torch
         return isinstance(inp, torch.Tensor)
+    return False
+
+def is_xpu_available():
+    if is_torch_available():
+        import torch
+        return torch.xpu.is_available()
+    return False
+
+def is_xpu_tensor(inp) -> bool:
+    if is_torch_tensor(inp):
+        return inp.device.type == "xpu"
     return False
 
 

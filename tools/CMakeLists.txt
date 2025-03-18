@@ -1,4 +1,4 @@
-# Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -29,6 +29,10 @@
 cmake_policy(SET CMP0112 NEW)
 
 add_subdirectory(util)
+
+if (CUTLASS_ENABLE_SYCL)
+  add_subdirectory(copy_debug)
+endif()
 
 if (CUTLASS_ENABLE_LIBRARY)
   add_subdirectory(library)

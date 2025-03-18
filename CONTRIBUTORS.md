@@ -1,94 +1,73 @@
 ![ALT](./media/images/gemm-hierarchy-with-epilogue-no-labels.png "CUTLASS")
 
-[README](./README.md#documentation) > **Contributors**
+[README](./README.md#documentation) > **Active Developers**
 
-# CUTLASS Developers and Contributors
+# CUTLASS Developers **
 
-This is the official list of CUTLASS developers and contributors.
-
-## DEVELOPERS
-Vijay Thakkar<br />
-Pradeep Ramani<br />
-Cris Cecka<br />
-Aniket Shivam<br />
-Jack Kosaian<br />
-Mark Hoemmen<br />
-Richard Cai<br />
-Honghao Lu<br />
-Ethan Yan<br />
-Haicheng Wu<br />
-Andrew Kerr<br />
+Andrew Kerr (CUTLASS founding member)<br />
 Dustyn Blasig<br />
-Fengqi Qiao<br />
-Duane Merrill<br />
-Yujia Zhai<br />
-Rawn Henry<br />
-Sergey Klevtsov<br />
-Shang Zhang<br />
-Piotr Majcher<br />
-Paul Springer<br />
-Markus Hohnerbach<br />
-Jin Wang<br />
-Aditya Atluri<br />
-
-## CuTe
-Cris Cecka<br />
-Vijay Thakkar<br />
-
-## CUTLASS Product Manager
-Matthew Nicely<br />
-
-## Former CUTLASS Developers
-Manish Gupta<br />
-Naila Farooqui<br />
-David Tanner<br />
-Manikandan Ananth<br />
-Zhaodong Chen<br />
-Chinmay Talegaonkar<br />
-
-## CONTRIBUTORS
-Timothy Costa<br />
-Julien Demouth<br />
-Brian Fahs<br />
-Michael Garland<br />
-Michael Goldfarb<br />
-Mostafa Hagog<br />
-Fei Hu<br />
-Alan Kaatz<br />
-Tina Li<br />
-Timmy Liu<br />
-Wei Liu<br />
-Tim Martin<br />
-Duane Merrill<br />
-Kevin Siu<br />
-Markus Tavenrath<br />
-John Tran<br />
-Vicki Wang<br />
-Junkai Wu<br />
-Fung Xie<br />
 Albert Xu<br />
-Yang Xu<br />
-Jack Yang<br />
-Scott Yokim<br />
+Junkai Wu<br />
 Xiuxia Zhang<br />
+Haicheng Wu (CUTLASS founding member)<br />
+Jack Yang<br />
+Pradeep Ramani (CUTLASS 3.x founding member)<br />
+Aditya Atluri<br />
+Han Li<br />
 Nick Zhao<br />
+Ivan Yin<br />
+Yu-Jung Chen<br />
+Markus Hoehnerbach<br />
+Honghao Lu<br />
+Mihir Awatramani<br />
+Hao  Sheng<br />
+Zekun Fan<br />
+Aniket	Shivam<br />
+Siyu Liu<br />
+Richard Cai<br />
+Vikas Gupta<br />
+Ethan Yan<br />
+Vijay Thakkar (CUTLASS 3.x and CuTe founding member)<br />
+Cris Cecka (CuTe and CUTLASS 3.x founding member)<br />
+Lawrence Ryan<br />
+Qun Song<br />
+Daniel Ricketts<br />
+dePaul Miller<br />
+Yuhan Li<br />
+Saman Ashkiani<br />
+Jack Chen<br />
+Shang Zhang<br />
+Petrick Liu<br />
+Questa Wang<br />
+Pramod Shenoy<br />
+Jack Kosaian<br />
+Yujia Zhai<br />
+Zhaodong Chen<br />
+Manas Sahni<br />
+Shunfan Shao<br />
+Fengqi Qiao<br />
+Serif Yesil<br />
+Aragorn Guan<br />
+Heidi He<br />
+Xiao Song<br />
+Sergey Klevtsov<br />
+Jiang Shao<br />
+Ruqing Xu<br />
+Mengyu Guo<br />
+Tao Xie<br />
+Linfeng Zheng<br />
+Harrison Barclay<br />
+Wenfei Tang<br />
+Diksha Gohlyan<br />
+Alexander Zhurkevich<br />
+Siyuan Fu<br />
+Hua Huang<br />
+Xiufan Liang<br />
+Ian Tramble<br />
+Ali Hassani<br />
+Shreya Gaur<br />
 
-## SYCL CONTRIBUTORS
-Alejandro Acosta<br />
-Atharva Dubey<br />
-Mehdi Goli<br />
-Ruyman Reyes<br />
-Muhammad Tanvir<br />
+** _The list is sorted in order of the author's first contribution to the CUTLASS project._
 
-## ACKNOWLEDGEMENTS
-
-Girish Bharambe<br />
-Luke Durant<br />
-Carter Edwards<br />
-Olivier Giroux<br />
-Stephen Jones<br />
-Rishkul Kulkarni<br />
-Bryce Lelbach<br />
-Joel McCormack<br />
-Kyrylo Perelygin<br />
-Sean Treichler<br />
+# CUTLASS Product Manager
+Matthew Nicely<br />

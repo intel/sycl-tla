@@ -1,4 +1,4 @@
-# Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -71,7 +71,7 @@ set(CUTLASS_TEST_UNIT_RESULTS_CACHE_DIR ${CMAKE_CURRENT_LIST_DIR}/data/hashes)
 
 function(cutlass_test_unit_add_executable NAME)
 
-  set(options WITHOUT_CUDA)
+  set(options WITHOUT_CUDA DO_NOT_LOWERCASE_TEST_NAME)
   set(oneValueArgs)
   set(multiValueArgs TEST_SETS_SUPPORTED EXTRA_INCLUDE_DIRS)
   cmake_parse_arguments(_ "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -121,14 +121,66 @@ function(cutlass_test_unit_add_executable NAME)
 
   set(CUTLASS_TEST_UNIT_TEST_COMMAND_OPTIONS --gtest_output=xml:${NAME_STEM}.gtest.xml)
 
+  if (__DO_NOT_LOWERCASE_TEST_NAME)
+    set(DO_NOT_LOWERCASE_TEST_NAME DO_NOT_LOWERCASE_TEST_NAME)
+  else()
+    set(DO_NOT_LOWERCASE_TEST_NAME)
+  endif()
+  
   cutlass_add_executable_tests(
     ${NAME_STEM} ${NAME}
     TEST_SETS_SUPPORTED ${__TEST_SETS_SUPPORTED}
     TEST_COMMAND_OPTIONS CUTLASS_TEST_UNIT_TEST_COMMAND_OPTIONS
     ${RESULT_CACHE_FILE_ARGS}
+    ${DO_NOT_LOWERCASE_TEST_NAME}
     )
 
 endfunction()
+  
+
+function(cutlass_test_unit_add_executable_split_file NAME)
+  # Given the input arguments to cutlass_test_unit_add_executable, creates
+  # a new set of arguments in which each file has at most one TEST definition,
+  # and calls cutlass_test_unit_add_executable with the newly-formed arguments.
+  # The goal of this is to reduce the memory consumed while building CUTLASS
+  # tests with a high degree of parallelism while not requiring developers
+  # to split unit tests across multiple files artificially.
+
+  # Get all arguments other than the NAME of the target
+  list(SUBLIST ARGV 1 ${ARGC} SUBARGV)
+
+  if (CUTLASS_UNIT_TEST_SPLIT_FILES)
+    execute_process(
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+      COMMAND ${Python3_EXECUTABLE} ${CUTLASS_SOURCE_DIR}/tools/scripts/split_test_cmake.py
+        ${NAME}
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        --src_files ${SUBARGV}
+        --dst_dir ${CMAKE_CURRENT_BINARY_DIR}
+      RESULT_VARIABLE cutlass_test_SPLIT_RESULT
+      OUTPUT_VARIABLE cutlass_test_SPLIT_OUTPUT
+      OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/test_split_files.txt
+      ERROR_FILE ${CMAKE_CURRENT_BINARY_DIR}/test_split_error.log
+    )
+
+    if(NOT cutlass_test_SPLIT_RESULT EQUAL 0)
+      message(FATAL_ERROR "Error splitting unit test. See ${CMAKE_CURRENT_BINARY_DIR}/test_split_error.log")
+    endif()
+
+    # Forward the values printed by split_test_cmake.py as arguments to cutlass_test_unit_add_executable.
+    # We additionally specify to add -I${CMAKE_CURRENT_SOURCE_DIR} to the target. This is necessary because
+    # the splitting process writes new files to ${CMAKE_CURRENT_BINARY_DIR}, but many CUTLASS unit tests
+    # use relative imports for including testbeds (e.g., '#include "../testbed.hpp"'). These headers are
+    # not written to ${CMAKE_CURRENT_BINARY_DIR} during the splitting process, so we must indicate that
+    # headers can also be searched for from ${CMAKE_CURRENT_SOURCE_DIR}.
+    file(STRINGS ${CMAKE_CURRENT_BINARY_DIR}/test_split_files.txt NEW_OPTIONS)
+    cutlass_test_unit_add_executable(${NAME} ${NEW_OPTIONS} EXTRA_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR})
+  else()
+    # Simply pass arguments through
+    cutlass_test_unit_add_executable(${ARGV})
+  endif()
+endfunction() 
+
 add_custom_target(cutlass_test_unit)
 add_custom_target(test_unit)
 

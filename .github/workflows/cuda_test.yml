@@ -5,6 +5,8 @@ on:
     branches: [ "sycl-develop" ]
   pull_request:
     branches: [ "sycl-develop" ]
+  merge_group:
+    branches: [ "sycl-develop" ]
   workflow_dispatch:
 
 permissions: {}
@@ -29,9 +31,8 @@ jobs:
           nvidia-smi
           export CUDACXX=/usr/local/cuda/bin/nvcc
           cmake -G Ninja -DCUTLASS_NVCC_ARCHS="90a"
-          cmake --build .
 
       - name: Unit test
         shell: bash
         run: |
-          cmake --build . --target test_unit -j
+          cmake --build . --target test_unit -j 48

@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,10 +38,14 @@
 #include "cutlass/cutlass.h"
 
 #ifndef CUDA_CTA_RECONFIG_ACTIVATED
-  #if (__CUDACC_VER_MAJOR__ >= 12 && \
-    defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900 && defined(__CUDA_ARCH_FEAT_SM90_ALL))
+  #if defined(__CUDA_ARCH__) && __CUDACC_VER_MAJOR__ >= 12 && (             \
+         (__CUDA_ARCH__ ==  900 && defined(__CUDA_ARCH_FEAT_SM90_ALL))      \
+      || (__CUDA_ARCH__ == 1000 && defined(__CUDA_ARCH_FEAT_SM100_ALL))     \
+    )
     #define CUDA_CTA_RECONFIG_ACTIVATED 1
   #endif
+
+
 #endif
 
 namespace cutlass {

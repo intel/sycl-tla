@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -142,7 +142,6 @@ class MmaVoltaTensorOpMultiplicandTileIterator<
         "Shape of warp-level Mma must be divisible by operator shape.");
 
     // Shape of one individual LDS.128
-    // TODO: 32 and 4 are hardcoded, 32-by-4 is logical shape
     using LdsShape = layout::PitchLinearShape<
       32,
       4
@@ -458,7 +457,6 @@ class MmaVoltaTensorOpMultiplicandTileIterator<
         "Shape of warp-level Mma must be divisible by operator shape.");
 
     // Shape of one individual LDS
-    // TODO: remove hardcoded 32 and 4
     using LdsShape = layout::PitchLinearShape<
       32,
       4

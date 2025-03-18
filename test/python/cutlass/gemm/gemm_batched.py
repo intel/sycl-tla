@@ -1,6 +1,6 @@
 #################################################################################################
 #
-# Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -88,6 +88,7 @@ def initialize(rows, cols, batch):
         return tensor.reshape(rows, cols)
 
 
+@unittest.skipIf(device_cc() == 11, "Batched GEMM test not supported on PVC")
 class GemmF16Batched(unittest.TestCase):
     def run_batched(self, batch_count: tuple, batch_A: bool, batch_B: bool, batch_C: bool):
         M = 512

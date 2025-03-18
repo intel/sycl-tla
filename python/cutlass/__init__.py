@@ -1,6 +1,6 @@
 #################################################################################################
 #
-# Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -57,6 +57,19 @@ CUTLASS_PATH = os.getenv("CUTLASS_PATH", cutlass_library.source_path)
 # Alias CUTLASS_PATH as source_path
 source_path = CUTLASS_PATH
 
+_NVCC_VERSION = None
+def nvcc_version():
+    global _NVCC_VERSION
+    if _NVCC_VERSION is None:
+        import subprocess
+
+        # Attempt to get NVCC version
+        result = subprocess.run(['nvcc', '--version'], capture_output=True)
+        if result.returncode != 0:
+            raise Exception('Unable to run `nvcc --version')
+        _NVCC_VERSION = str(result.stdout).split(" release ")[-1].split(",")[0]
+    return _NVCC_VERSION
+
 _CUDA_INSTALL_PATH = None
 def cuda_install_path():
     """
@@ -95,6 +108,8 @@ if (sys.version_info.major == 3 and sys.version_info.major > 8) or sys.version_i
 else:
     this.use_rmm = False
 
+this._use_sycl = False
+
 
 def set_log_level(level: int):
     """
@@ -121,7 +136,7 @@ def get_option_registry():
         this._option_registry = OptionRegistry(device_cc())
     return this._option_registry
 
-this.__version__ = '3.6.0'
+this.__version__ = '3.8.0'
 
 from cutlass.backend import create_memory_pool
 from cutlass.emit.pytorch import pytorch
@@ -172,6 +187,35 @@ def initialize_cuda_context():
     this._device_id = int(device_id)
 
 
+import dpctl
+
+this._sycl_device: dpctl.SyclDevice = None
+
+def initialize_sycl_context():
+    if this._device_id is not None and this._sycl_device is not None:
+        return
+
+    device_id = int(os.getenv("CUTLASS_SYCL_DEVICE_ID", default=0))
+    sycl_gpus = dpctl.get_devices(
+        dpctl.backend_type.level_zero, dpctl.device_type.gpu)
+
+    if len(sycl_gpus) <= device_id:
+        raise Exception("No LevelZero device found")
+
+    this._device_id = device_id
+    this._sycl_device = sycl_gpus[device_id]
+
+
 def device_id() -> int:
-    initialize_cuda_context()
+    if os.getenv("CUTLASS_USE_SYCL"):
+        initialize_sycl_context()
+        this._use_sycl = True
+    else:
+        this._use_sycl = False
+        initialize_cuda_context()
     return this._device_id
+
+
+def sycl_device() -> dpctl.SyclDevice:
+    initialize_sycl_context()
+    return this._sycl_device

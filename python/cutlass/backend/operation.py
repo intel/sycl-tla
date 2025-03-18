@@ -1,6 +1,6 @@
 #################################################################################################
 #
-# Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -33,6 +33,8 @@
 import ctypes
 
 from cuda import __version__, cuda
+
+import dpctl
 
 from cutlass.backend.utils.device import device_cc
 
@@ -122,10 +124,22 @@ class ExecutableOperation:
 
         return err
 
+    def run_with_sycl(self, launch_config, kernel_params, param_size, stream):
+        local_mem = dpctl.experimental.WorkGroupMemory(launch_config.shared_memory_capacity)
+        raw_arg = dpctl.experimental.RawKernelArg(param_size, kernel_params)
+        globalSize = [g * l for g, l in zip(launch_config.grid, launch_config.block)]
+        globalSize.reverse()
+        localSize = launch_config.block
+        localSize.reverse()
+        stream.submit(self.kernel, [raw_arg, local_mem], globalSize, localSize) 
+
     def run(self, host_workspace, device_workspace, launch_config, stream=cuda.CUstream(0)):
         cArg = (ctypes.c_char * len(host_workspace)).from_buffer(host_workspace)
         packed = (ctypes.c_void_p * 1)()
         packed[0] = ctypes.addressof(cArg)
+        if isinstance(stream, dpctl.SyclQueue):
+           self.run_with_sycl(launch_config, packed[0], len(host_workspace), stream)
+           return cuda.CUresult.CUDA_SUCCESS
 
         if supports_cluster_launch():
             return self.run_with_clusters(launch_config, packed, stream)

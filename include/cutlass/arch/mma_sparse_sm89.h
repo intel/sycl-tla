@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2024 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,10 +35,8 @@
 
 #pragma once
 
-#if defined(__CUDACC_RTC__)
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include <cuda/std/cassert>
-#else
-#include <assert.h>
 #endif
 
 #include "mma.h"
@@ -48,12 +46,13 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if (__CUDACC_VER_MAJOR__ > 12) || (__CUDACC_VER_MAJOR__ == 12 && __CUDACC_VER_MINOR__ >= 4)
-
-#  define CUTLASS_ARCH_SPARSE_MMA_SM89_SUPPORTED 1
+#  define CUTLASS_ARCH_SPARSE_MMA_F32_SM89_SUPPORTED
 #endif
 
-#if defined(CUTLASS_ARCH_SPARSE_MMA_SM89_SUPPORTED) && defined(__CUDA_ARCH__) && (__CUDA_ARCH__ == 890)
-#  define CUTLASS_ARCH_SPARSE_MMA_SM89_ENABLED
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 890)
+#  if defined(CUTLASS_ARCH_SPARSE_MMA_F32_SM89_SUPPORTED)
+#    define CUTLASS_ARCH_SPARSE_MMA_F32_SM89_ENABLED
+#  endif
 #endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,7 +116,7 @@ struct SparseMma<
     int const id2
   ) const {
 
-#if defined(CUTLASS_ARCH_SPARSE_MMA_SM89_ENABLED)
+#if defined(CUTLASS_ARCH_SPARSE_MMA_F32_SM89_ENABLED)
 
     uint32_t const *A = reinterpret_cast<uint32_t const *>(&a);
     uint32_t const *B = reinterpret_cast<uint32_t const *>(&b);
@@ -202,7 +201,7 @@ struct SparseMma<
     int const id2
   ) const {
 
-#if defined(CUTLASS_ARCH_SPARSE_MMA_SM89_ENABLED)
+#if defined(CUTLASS_ARCH_SPARSE_MMA_F32_SM89_ENABLED)
 
     uint32_t const *A = reinterpret_cast<uint32_t const *>(&a);
     uint32_t const *B = reinterpret_cast<uint32_t const *>(&b);
@@ -287,7 +286,7 @@ struct SparseMma<
     int const id2
   ) const {
 
-#if defined(CUTLASS_ARCH_SPARSE_MMA_SM89_ENABLED)
+#if defined(CUTLASS_ARCH_SPARSE_MMA_F32_SM89_ENABLED)
 
     uint32_t const *A = reinterpret_cast<uint32_t const *>(&a);
     uint32_t const *B = reinterpret_cast<uint32_t const *>(&b);
@@ -372,7 +371,7 @@ struct SparseMma<
     int const id2
   ) const {
 
-#if defined(CUTLASS_ARCH_SPARSE_MMA_SM89_ENABLED)
+#if defined(CUTLASS_ARCH_SPARSE_MMA_F32_SM89_ENABLED)
 
     uint32_t const *A = reinterpret_cast<uint32_t const *>(&a);
     uint32_t const *B = reinterpret_cast<uint32_t const *>(&b);

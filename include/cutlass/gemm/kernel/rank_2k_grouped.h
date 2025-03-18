@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -397,8 +397,6 @@ public:
       // An example of an unneeded threadblock is one that is assigned to compute in the upper
       // portion of a Rank2K kernel filled with mode kLower.
       //
-      // TODO: Consider pushing these checks into ProblemVisitor to avoid spuriously
-      // returning from `next_tile()`.
       //
 
       // Early exit if threadblock is out of range
@@ -479,14 +477,14 @@ public:
 
       // Construct iterators to A and B operands for Mma1
       typename Mma1::IteratorA iterator_A(
-        Mma1::IteratorA::Params(ldm_A),
+        typename Mma1::IteratorA::Params(ldm_A),
         ptr_A,
         {problem_size.m(), problem_size_k},
         thread_idx,
         tb_offset_MxK);
 
       typename Mma1::IteratorB iterator_BT(
-        Mma1::IteratorB::Params(ldm_B),
+        typename Mma1::IteratorB::Params(ldm_B),
         ptr_B,
         {problem_size_k, problem_size.n()},
         thread_idx,
@@ -494,14 +492,14 @@ public:
 
       // Construct iterators to A and B operands for Mma2
       typename Mma2::IteratorA iterator_B(
-        Mma2::IteratorA::Params(ldm_B),
+        typename Mma2::IteratorA::Params(ldm_B),
         ptr_B,
         {problem_size.m(), problem_size_k},
         thread_idx,
         tb_offset_MxK);
 
       typename Mma2::IteratorB iterator_AT(
-        Mma2::IteratorB::Params(ldm_A),
+        typename Mma2::IteratorB::Params(ldm_A),
         ptr_A,
         {problem_size_k, problem_size.n()},
         thread_idx,
@@ -560,7 +558,7 @@ public:
 
         // Tile iterator loading from source tensor.
         typename Epilogue::OutputTileIterator iterator_C(
-          Epilogue::OutputTileIterator::Params(params.ldc[problem_idx]),
+          typename Epilogue::OutputTileIterator::Params(params.ldc[problem_idx]),
           ptr_C,
           problem_size.mn(),
           thread_idx,
@@ -570,7 +568,7 @@ public:
 
         // Tile iterator writing to destination tensor.
         typename Epilogue::OutputTileIterator iterator_D(
-          Epilogue::OutputTileIterator::Params(params.ldd[problem_idx]),
+          typename Epilogue::OutputTileIterator::Params(params.ldd[problem_idx]),
           ptr_D,
           problem_size.mn(),
           thread_idx,
@@ -634,7 +632,7 @@ public:
 
       // Tile iterator loading from source tensor.
       typename Epilogue::OutputTileIterator iterator_C(
-        Epilogue::OutputTileIterator::Params(params.ldc[problem_idx]),
+        typename Epilogue::OutputTileIterator::Params(params.ldc[problem_idx]),
         ptr_C,
         problem_size.mn(),
         thread_idx,
@@ -644,7 +642,7 @@ public:
 
       // Tile iterator writing to destination tensor.
       typename Epilogue::OutputTileIterator iterator_D(
-        Epilogue::OutputTileIterator::Params(params.ldd[problem_idx]),
+        typename Epilogue::OutputTileIterator::Params(params.ldd[problem_idx]),
         ptr_D,
         problem_size.mn(),
         thread_idx,

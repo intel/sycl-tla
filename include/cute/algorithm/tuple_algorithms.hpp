@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -173,7 +173,13 @@ void
 for_each(T&& t, F&& f)
 {
   if constexpr (is_tuple<remove_cvref_t<T>>::value) {
-    return detail::apply(t, [&](auto&&... a) { (f(static_cast<decltype(a)&&>(a)), ...); }, tuple_seq<T>{});
+    return detail::apply(t,
+      [&](auto &&...a) {
+        if constexpr (sizeof...(a) > 0) { // Avoid spurious warnings about ignored inline attr on empty callsite
+          CUTE_INLINE_CALL(f(static_cast<decltype(a) &&>(a)), ...);
+        }
+      },
+      tuple_seq<T>{});
   } else {
     return f(static_cast<T&&>(t));
   }

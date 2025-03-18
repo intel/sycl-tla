@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -112,6 +112,33 @@ public:
     status = UnderlyingKernel::Mma::IteratorB::can_implement(args.problem_size);
     if (Status::kSuccess != status) {
       return status;
+    }
+
+    // Check that tensor sizes don't exceed maximum supported size
+    if (kConvolutionalOperator == conv::Operator::kFprop) {
+      if (args.problem_size.activation_size() * sizeof(ElementA) >=
+              (1ull << 31) ||
+          args.problem_size.filter_size() * sizeof(ElementB) >= (1ull << 31) ||
+          args.problem_size.output_size() * sizeof(ElementC) >= (1ull << 31)) {
+        return Status::kErrorInvalidProblem;
+      }
+    }
+    else if (kConvolutionalOperator == conv::Operator::kDgrad ||
+               kConvolutionalOperator == conv::Operator::kDeconv) {
+      if (args.problem_size.activation_size() * sizeof(ElementC) >=
+              (1ull << 31) ||
+          args.problem_size.filter_size() * sizeof(ElementB) >= (1ull << 31) ||
+          args.problem_size.output_size() * sizeof(ElementA) >= (1ull << 31)) {
+        return Status::kErrorInvalidProblem;
+      }
+    }
+    else if (kConvolutionalOperator == conv::Operator::kWgrad) {
+      if (args.problem_size.activation_size() * sizeof(ElementB) >=
+              (1ull << 31) ||
+          args.problem_size.filter_size() * sizeof(ElementC) >= (1ull << 31) ||
+          args.problem_size.output_size() * sizeof(ElementA) >= (1ull << 31)) {
+        return Status::kErrorInvalidProblem;
+      }
     }
 
     // check group conv constraint

@@ -1,6 +1,6 @@
 #################################################################################################
 #
-# Copyright (c) 2017 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -121,7 +121,7 @@ def get_name(
     return SubstituteTemplate(
         name_format,
         {
-            "arch": str(arch),
+            "arch": "PVC" if arch == 11 else f"SM{str(arch)}",
             "eA": DataTypeNames[element_a],
             "eB": DataTypeNames[element_b],
             "eC": DataTypeNames[element_c],

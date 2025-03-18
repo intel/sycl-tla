@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,14 +34,17 @@
 #  define CUTE_HOST_DEVICE __forceinline__ __host__ __device__
 #  define CUTE_DEVICE      __forceinline__          __device__
 #  define CUTE_HOST        __forceinline__ __host__
+#  define CUTE_INLINE_CALL
 #elif defined(__SYCL_DEVICE_ONLY__)
 #  define CUTE_HOST_DEVICE __attribute__((always_inline)) inline
 #  define CUTE_DEVICE      __attribute__((always_inline)) inline
 #  define CUTE_HOST        inline
+#  define CUTE_INLINE_CALL [[clang::always_inline]]
 #else
 #  define CUTE_HOST_DEVICE inline
 #  define CUTE_DEVICE      inline
 #  define CUTE_HOST        inline
+#  define CUTE_INLINE_CALL
 #endif // CUTE_HOST_DEVICE, CUTE_DEVICE
 
 #if defined(__CUDACC_RTC__)
@@ -104,7 +107,7 @@
 
 #if defined(_MSC_VER)
 // Provides support for alternative operators 'and', 'or', and 'not'
-#  include <iso646.h>
+#  include <ciso646>
 #endif // _MSC_VER
 
 #if defined(__CUDACC_RTC__)
