@@ -167,7 +167,7 @@ struct ExampleRunner {
     using TileShape = Shape<_256, _256, _32>;
 
     using TiledMma =
-      TiledMMA<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
+      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
                Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
                     Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
@@ -348,8 +348,8 @@ int main(int argc, const char** argv)
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;               // <- data type of epilogue operations
-  using ElementInputA = half_t;                       // <- data type of elements in input matrix A
-  using ElementInputB = int4_t;                       // <- data type of elements in input matrix B
+  using ElementInputA = cutlass::int8_t;              // <- data type of elements in input matrix A
+  using ElementInputB = bfloat16_t;                   // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::RowMajor;
@@ -357,15 +357,16 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  // Note: XE_2D_U4x32x64_LD_N is incompatible with our bf16 MMA atoms
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U4x32x64_LD_N;
+  // Note: XE_2D_U8x32x32_LD_V is incompatible with our bf16 MMA atoms
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
   using TiledMma =
-    TiledMMA<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
+    TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
                   Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
