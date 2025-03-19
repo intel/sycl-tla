@@ -125,7 +125,6 @@ class TensorView : public TensorRef<Element_, Layout_> {
   CUTLASS_HOST_DEVICE
   TensorView() { }
 
-
   /// Constructs a TensorView object
   CUTLASS_HOST_DEVICE
   TensorView(
@@ -134,7 +133,7 @@ class TensorView : public TensorRef<Element_, Layout_> {
     TensorCoord const &extent             ///< size of the view in logical coordinates
   ):
     Base(ptr, layout), extent_(extent) {
-  
+
   }
 
   /// Constructs a TensorView object
@@ -144,7 +143,7 @@ class TensorView : public TensorRef<Element_, Layout_> {
     TensorCoord const &extent             ///< logical size of tensor
   ):
     Base(ref), extent_(extent) {
-  
+
   }
 #if defined(CUTLASS_ENABLE_SYCL)
   CUTLASS_HOST_DEVICE
@@ -158,8 +157,8 @@ class TensorView : public TensorRef<Element_, Layout_> {
   /// Converting constructor from TensorRef to non-constant data.
   CUTLASS_HOST_DEVICE
   TensorView(
-    NonConstTensorView const &view)        ///< TensorView to non-const data
-  :
+    NonConstTensorView const &view        ///< TensorView to non-const data
+  ):
     Base(view), extent_(view.extent_) { }
 #endif
 

@@ -129,7 +129,6 @@ struct RandomUniformFunc {
     oneapi::mkl::rng::device::philox4x32x10<> generator(params.seed,
       ThreadIdxX() + BlockIdxX() * BlockDimX());
     FloatType rnd = oneapi::mkl::rng::device::generate(distribution, generator);
-
     // Random values are cast to integer after scaling by a power of two to facilitate error
     // testing
     Element result;

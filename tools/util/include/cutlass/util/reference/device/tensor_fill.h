@@ -43,7 +43,6 @@
 
 #if !defined(__CUDACC_RTC__)
 
-
 // Standard Library includes
 #include <utility>
 #include <cstdlib>
