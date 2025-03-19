@@ -37,7 +37,7 @@ namespace example
 
 // Naive grid-stride loop implementation of gather
 template<typename Element, typename Func>
-__global__ void
+CUTLASS_GLOBAL void
 gather_kernel(Element const * __restrict__ input,
               Element       * __restrict__ output,
               Func func,
@@ -97,7 +97,7 @@ gather(Element const * input,
 
 // Naive grid-stride loop implementation of scatter
 template<typename Element, typename Func>
-__global__ void
+CUTLASS_GLOBAL void
 scatter_kernel(Element const * __restrict__ input,
                Element       * __restrict__ output,
                Func func,

@@ -44,7 +44,7 @@ template <
   class DTensor,
   class ElementAccumulator,
   class ElementEpilogue>
-__global__ static
+CUTLASS_GLOBAL
 void
 gett_kernel(
   DTensor       D,

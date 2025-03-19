@@ -47,7 +47,7 @@ namespace example
  * For row major, the inputs must be switched accordingly.
 */
 template<bool Batched, typename Element, typename Permute>
-__global__ void
+CUTLASS_GLOBAL void
 permute_kernel(Element const* __restrict__ input,
                Element* __restrict__ output,
                Permute permute,
