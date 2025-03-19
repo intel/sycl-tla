@@ -353,13 +353,16 @@ public:
     CUTLASS_TRACE_HOST("GemmUniversal::run()");
     dim3 const block = GemmKernel::get_block_shape();
     dim3 const grid = get_grid_shape(params);
-    dim3 const block_finalize = syclcompat::dim3(NumThreadsPerWarp, 
-                                                 std::min(MaxNumThreadsPerBlock / NumThreadsPerWarp, 
-                                                          params.softmax_params.args.M), 
-                                                 1);
-    dim3 const grid_finalize = syclcompat::dim3(cute::ceil_div(params.softmax_params.args.M, block_finalize.x), 
-                                                params.softmax_params.args.batch_count, 
-                                                1);
+    dim3 const block_finalize(
+      NumThreadsPerWarp,
+      std::min(MaxNumThreadsPerBlock / NumThreadsPerWarp, params.softmax_params.args.M),
+      1
+    );
+    dim3 const grid_finalize(
+      cute::ceil_div(params.softmax_params.args.M, block_finalize.x),
+      params.softmax_params.args.batch_count,
+      1
+    );
 
     // configure smem size and carveout
     int smem_size = GemmKernel::SharedStorageSize;
@@ -451,30 +454,37 @@ public:
       else {
         CUTLASS_ASSERT(cuda_adapter == nullptr);
 #if defined(CUTLASS_ENABLE_SYCL)
-        const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
-        const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
-
         using namespace syclcompat::experimental;
-#if defined (SYCL_INTEL_TARGET)
+        sycl::ext::oneapi::experimental::properties smem_prop{
+          sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size)
+        };
+        launch_properties launch_props{smem_prop};
+        const syclcompat::dim3 sycl_grid(grid.x, grid.y, grid.z);
+        const syclcompat::dim3 sycl_block(block.x, block.y, block.z);
         auto event = launch<device_kernel<GemmKernel>>(launch_policy{
-          sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}, 
-          kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
+          sycl_grid,
+          sycl_block,
+          launch_props
+#if defined(SYCL_INTEL_TARGET)
+          , kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
+#endif // defined(SYCL_INTEL_TARGET)
         }, params.gemm_params);
-#else
-        auto event = launch<device_kernel<GemmKernel>>(launch_policy{
-          sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}},
-          params.gemm_params);
-#endif
-        const auto sycl_block_finalize = syclcompat::dim3(block_finalize.x, block_finalize.y, block_finalize.z);
-        const auto sycl_grid_finalize = syclcompat::dim3(grid_finalize.x, grid_finalize.y, grid_finalize.z);
-        auto event2 = launch<device_kernel<SoftmaxFinalizeKernel>>(launch_policy{
-          sycl_grid_finalize, sycl_block_finalize, local_mem_size{static_cast<std::size_t>(smem_size_finalize)}},
-          params.softmax_params);
-        EventManager::getInstance().addEvent(event2);
+
+        syclcompat::experimental::launch_properties kernel_launch_props_finalize{
+          sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size_finalize)
+        };
+        const syclcompat::dim3 sycl_grid_finalize(grid_finalize.x, grid_finalize.y, grid_finalize.z);
+        const syclcompat::dim3 sycl_block_finalize(block_finalize.x, block_finalize.y, block_finalize.z);
+        auto event_finalize = launch<device_kernel<SoftmaxFinalizeKernel>>(launch_policy{
+            sycl_grid_finalize,
+            sycl_block_finalize,
+            kernel_launch_props_finalize,
+          }, params.softmax_params);
+        EventManager::getInstance().addEvent(event_finalize);
 #else
         device_kernel<GemmKernel><<<grid, block, smem_size, stream>>>(params.gemm_params);
         device_kernel<SoftmaxFinalizeKernel><<<grid_finalize, block_finalize, smem_size_finalize, stream>>>(params.softmax_params);
-#endif
+#endif // defined(CUTLASS_ENABLE_SYCL)
       }
     }
 

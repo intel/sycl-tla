@@ -38,13 +38,17 @@
 #include <cutlass/platform/platform.h> // uint64_t
 
 // __grid_constant__ was introduced in CUDA 11.7.
-#if ((__CUDACC_VER_MAJOR__ >= 12) || ((__CUDACC_VER_MAJOR__ == 11) && (__CUDACC_VER_MINOR__ >= 7))) && !CUTLASS_CLANG_CUDA
+#if ((__CUDACC_VER_MAJOR__ >= 12) || ((__CUDACC_VER_MAJOR__ == 11) && (__CUDACC_VER_MINOR__ >= 7)))
 #  define CUTLASS_GRID_CONSTANT_SUPPORTED
 #endif
 
 // __grid_constant__ can be enabled only on SM70+
 #if defined(CUTLASS_GRID_CONSTANT_SUPPORTED) && defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 700)
 #  define CUTLASS_GRID_CONSTANT_ENABLED
+#endif
+
+#if defined(CUTLASS_ENABLE_SYCL)
+#  define CUTLASS_GRID_CONSTANT
 #endif
 
 #if ! defined(CUTLASS_GRID_CONSTANT)
@@ -70,13 +74,12 @@ template <typename  T>                                                          
 
 /// Generic CUTLASS kernel template.
 template <typename Operator>
-#if defined(CUTLASS_ENABLE_SYCL)
-void Kernel(typename Operator::Params params, char* smem) {
-  // Dynamic shared memory base pointer
-  int* SharedStorageBase = reinterpret_cast<int*>(smem);
-#else
 CUTLASS_GLOBAL
 void Kernel(typename Operator::Params params) {
+#if defined(CUTLASS_ENABLE_SYCL)
+  int* SharedStorageBase = static_cast<int*>(
+      sycl::ext::oneapi::experimental::get_work_group_scratch_memory());
+#else
   // Dynamic shared memory base pointer
   extern __shared__ int SharedStorageBase[];
 #endif
@@ -93,13 +96,12 @@ void Kernel(typename Operator::Params params) {
 
 /// Generic CUTLASS kernel template.
 template <typename Operator>
-#if defined(CUTLASS_ENABLE_SYCL)
-void Kernel2(typename Operator::Params params, char* smem) {
-  // Dynamic shared memory base pointer
-  int* SharedStorageBase = reinterpret_cast<int*>(smem);
-#else
 CUTLASS_GLOBAL
-void Kernel2(typename Operator::Params params) {
+void Kernel2(typename Operator::Params const& params) {
+#if defined(CUTLASS_ENABLE_SYCL)
+  int* SharedStorageBase = static_cast<int*>(
+      sycl::ext::oneapi::experimental::get_work_group_scratch_memory());
+#else
   // Dynamic shared memory base pointer
   extern __shared__ int SharedStorageBase[];
 #endif
@@ -122,7 +124,8 @@ void Kernel2(typename Operator::Params params) {
 /// Generic CUTLASS kernel template.
 template <typename Operator>
 #if defined(CUTLASS_ENABLE_SYCL)
-void device_kernel(typename Operator::Params const params, sycl::local_ptr<char> smem) {
+void device_kernel(typename Operator::Params const& params) {
+  char* smem = static_cast<char*>(sycl::ext::oneapi::experimental::get_work_group_scratch_memory());
 #else
 CUTLASS_GLOBAL
 #ifdef __CUDACC__
@@ -137,7 +140,6 @@ void device_kernel(CUTLASS_GRID_CONSTANT typename Operator::Params const params)
   Operator op;
   op(params, smem);
   cutlass::arch::synclog_print();
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////
