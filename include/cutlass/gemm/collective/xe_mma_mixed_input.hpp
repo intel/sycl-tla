@@ -351,7 +351,7 @@ public:
       *pDstArr = Converter::convert(*pSrcArr);
     }
 
-    if (ModeHasScales) {
+    if constexpr (ModeHasScales) {
       if constexpr(IsATransformed){
         // The current scale load atom (1x32) gives 2 scale values to
         // each thread. All threads need access to all other threads
@@ -363,7 +363,7 @@ public:
             auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
             tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
             tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
-            if (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
+            if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
               auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
               tCrA_mma(_, _, 0)[j * 16 + i] += zero;
               tCrA_mma(_, _, 1)[j * 16 + i] += zero;
@@ -379,7 +379,7 @@ public:
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < 32; ++j) {
             tCrA_mma(_, i, _)[j] *= tCrS_input(i);
-            if (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
+            if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
               tCrA_mma(_, i, _)[j] += tCrZ_input(i);
             }
           }
