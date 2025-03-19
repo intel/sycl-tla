@@ -338,6 +338,8 @@ public:
     auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
     constexpr int num_elements = decltype(size(src))::value;
 
+    // TODO(joe): consider replacing `pack` with `num_elements` here
+    // See xe_flash_attn_mma.hpp
     constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
     using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
     using SrcArray = cutlass::Array<SrcType, pack>;
