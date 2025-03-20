@@ -179,8 +179,10 @@ struct DualGemmMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, St
     Tensor tCgB = thr_mma.partition_B(gB);
 
     Tensor tCrA = make_tensor<ElementA> (make_fragment_layout(tiled_copy_a, tCgA(_,_,_,0).shape()));
-    Tensor tCrB0 = make_tensor<ElementB>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
-    Tensor tCrB1 = make_tensor<ElementB>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
+
+    Layout tCrBLayout = make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape());
+    Tensor tCrB0 = make_tensor<ElementB>(tCrBLayout);
+    Tensor tCrB1 = make_tensor<ElementB>(tCrBLayout);
   
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
