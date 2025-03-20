@@ -426,8 +426,8 @@ public:
     Tensor tCgB = thr_mma.partition_B(gB);
 
     // Create fragments
-    Tensor tCrA = make_tensor<ElementMMA>(make_fragment_layout(tiled_copy_a, tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<ElementMMA>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
+    Tensor mma_A = make_tensor<ElementMMA>(make_fragment_layout(tiled_copy_a, tCgA(_,_,_,0).shape()));
+    Tensor mma_B = make_tensor<ElementMMA>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
 
     // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
     // layout else we need mode N_iter from fragment_B layout.
@@ -438,20 +438,20 @@ public:
     Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragScaleLayout{});
 
     // narrow input fragment
-    Tensor tCrAB_input = make_tensor<ElementQuant>(
-        std::conditional_t<IsATransformed, decltype(tCrA.layout()),
-                           decltype(tCrB.layout())>{});
+    Tensor quant_frag = make_tensor<ElementQuant>(
+        std::conditional_t<IsATransformed, decltype(mma_A.layout()),
+                           decltype(mma_B.layout())>{});
 
-    static_assert(std::is_same_v<typename decltype(tCrAB_input)::value_type, ElementQuant>);
-    static_assert(std::is_same_v<typename decltype(tCrA)::value_type, ElementMMA>);
-    static_assert(std::is_same_v<typename decltype(tCrB)::value_type, ElementMMA>);
+    static_assert(std::is_same_v<typename decltype(quant_frag)::value_type, ElementQuant>);
+    static_assert(std::is_same_v<typename decltype(mma_A)::value_type, ElementMMA>);
+    static_assert(std::is_same_v<typename decltype(mma_B)::value_type, ElementMMA>);
 
     // Retile for copy
-    auto [tArA, tBrB] = [&](){
+    auto [frag_copy_A, frag_copy_B] = [&](){
       if constexpr (IsATransformed) {
-        return std::make_pair(thr_copy_A.retile_D(tCrAB_input), thr_copy_B.retile_D(tCrB));
+        return std::make_pair(thr_copy_A.retile_D(quant_frag), thr_copy_B.retile_D(mma_B));
       } else {
-        // return std::make_pair(thr_copy_A.retile_D(tCrA), thr_copy_B.retile_D(tCrAB_input));
+        return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(quant_frag));
         return std::make_pair(thr_copy_A.retile_D(tCrA), thr_copy_B.retile_D(make_tensor(tCrAB_input.data(), select<0, 2, 1>(tCrAB_input.layout()))));
       }
     }();
@@ -503,15 +503,15 @@ public:
         print("  gA   : "); print(gA);   print("\n");
         print("  tCgA : "); print(tCgA); print("\n");
         print("  tAgA : "); print(tAgA); print("\n");
-        print("  tCrA : "); print(tCrA); print("\n");
-        print("  tArA : "); print(tArA); print("\n");
+        print("  mma_A : "); print(mma_A); print("\n");
+        print("  frag_copy_A : "); print(frag_copy_A); print("\n");
 
         print("=====================  B :\n");
         print("  gB : ");   print(gB);   print("\n");
         print("  tCgB : "); print(tCgB); print("\n");
         print("  tBgB : "); print(tBgB); print("\n");
-        print("  tCrB : "); print(tCrB); print("\n");
-        print("  tBrB : "); print(tBrB); print("\n");
+        print("  mma_B : "); print(mma_B); print("\n");
+        print("  frag_copy_B : "); print(frag_copy_B); print("\n");
 
         print("=====================  Config: \n");
         print("  threads per workgroup : "); print(MaxThreadsPerBlock);  print("\n");
@@ -542,8 +542,8 @@ public:
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
       // Copy gmem to rmem for the first k_tile
-      copy(tiled_copy_a, tAgA(_,_,_,k), tArA);
-      copy(tiled_copy_b, tBgB(_,_,_,k), tBrB);
+      copy(tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
+      copy(tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
 
       // TODO(joe): likely an issue here - what do these go to?
       if constexpr(ModeHasScales){
@@ -553,10 +553,10 @@ public:
         copy(tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
       }
       if constexpr (IsATransformed) {
-        transform_quant(tCrAB_input, tCrA, fragment_scale_input,
+        transform_quant(quant_frag, mma_A, fragment_scale_input,
                         fragment_zero_input);
       } else {
-        transform_quant(tCrAB_input, tCrB, fragment_scale_input,
+        transform_quant(quant_frag, mma_B, fragment_scale_input,
                         fragment_zero_input);
       }
 
@@ -570,7 +570,7 @@ public:
       }
 
       // TODO(joe): rename these to mma_A/mma_B as per Tao's changes
-      cute::gemm(tiled_mma, tCrA, tCrB, accum);
+      cute::gemm(tiled_mma, mma_A, mma_B, accum);
     }
   }
 };
