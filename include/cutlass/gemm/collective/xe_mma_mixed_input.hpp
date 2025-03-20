@@ -135,11 +135,15 @@ public:
   using TransformA = TransformA_;
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
+  using MmaType = typename TiledMma::ValTypeA; // ValTypeA and ValTypeB are always same and reflects MMA type on intel Xe
+  using LargerElementType = std::conditional_t<(cute::sizeof_bits_v<ElementA> > cute::sizeof_bits_v<ElementB>),
+                                               ElementA,
+                                               ElementB>;
 
-  static_assert(cute::sizeof_bits_v<ElementA> >= 8 &&
-                    cute::sizeof_bits_v<ElementB> >= 8,
-                "Subbyte types not supported.");
   static_assert(!cute::is_same_v<ElementA, ElementB>, "Mixed precision GEMM requires different types for A and B!");
+  static_assert(std::is_same_v<LargerElementType, MmaType>,
+               "MainloopIntelPVCMixedPrecision has the restriction that mixed dtype always converts the "
+               "narrower input type to the larger one and performs GEMM using the DPAS for the larger input type.");
 
 private:
    
@@ -204,8 +208,8 @@ public:
     ElementB const* ptr_B;
     StrideB dB;
     ElementScale const* ptr_S = nullptr;
-    StrideScale dS;
-    int group_size;
+    StrideScale dS{};
+    int group_size = 1;
     ElementZero const* ptr_Z = nullptr;
   };
 
@@ -252,6 +256,7 @@ public:
         make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
                     make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
 
+    // TODO(joe): handle ConvertOnly mode etc here
     return Params{mA_mkl, mB_nkl, mScale, mZero, scale_k, args.group_size};
   }
 
@@ -284,8 +289,6 @@ public:
   ) {
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
-    static_assert(is_rmem<EngineOut>::value, "Output tensor for A conversion must come from registers");
-    static_assert(cosize_v<LayoutIn> == cosize_v<LayoutOut>);
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
     static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineScales::value_type>);
@@ -295,25 +298,34 @@ public:
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
-    auto const& src = tCrA_load(_, _, _);
-    auto const& dst = tCrA_mma(_, _, _);
-    auto pSrc = raw_pointer_cast(src.data());
-    auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
-    constexpr int num_elements = decltype(size(src))::value;
+    if constexpr (sizeof_bits_v<SrcType> < 8) {
+      // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
+      // hardcode here for functionality test, will remove this branch in the future.
+      #pragma unroll
+      for (int i = 0; i < decltype(size(tCrA_mma))::value; i++) {
+        tCrA_mma[i] = static_cast<DstType>(tCrA_load[i].get());
+      }
+    } else {
+      auto const& src = tCrA_load(_, _, _);
+      auto const& dst = tCrA_mma(_, _, _);
+      auto pSrc = const_cast<SrcType*>(raw_pointer_cast(src.data()));
+      auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
+      constexpr int num_elements = decltype(size(src))::value;
 
     // TODO(joe): consider replacing `pack` with `num_elements` here
     // See xe_flash_attn_mma.hpp
-    constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
-    using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
-    using SrcArray = cutlass::Array<SrcType, pack>;
-    using DstArray = cutlass::Array<DstType, pack>;
-    constexpr int iters = num_elements / pack;
+      constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
+      using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
+      using SrcArray = cutlass::Array<SrcType, pack>;
+      using DstArray = cutlass::Array<DstType, pack>;
+      constexpr int iters = num_elements / pack;
 
-    CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < iters; ++i) {
-      SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
-      DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
-      *pDstArr = Converter::convert(*pSrcArr);
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < iters; ++i) {
+        SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
+        DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
+        *pDstArr = Converter::convert(*pSrcArr);
+      }
     }
 
     if constexpr (ModeHasScales) {
@@ -439,12 +451,17 @@ public:
       if constexpr (IsATransformed) {
         return std::make_pair(thr_copy_A.retile_D(tCrAB_input), thr_copy_B.retile_D(tCrB));
       } else {
-        return std::make_pair(thr_copy_A.retile_D(tCrA), thr_copy_B.retile_D(tCrAB_input));
+        // return std::make_pair(thr_copy_A.retile_D(tCrA), thr_copy_B.retile_D(tCrAB_input));
+        return std::make_pair(thr_copy_A.retile_D(tCrA), thr_copy_B.retile_D(make_tensor(tCrAB_input.data(), select<0, 2, 1>(tCrAB_input.layout()))));
       }
     }();
 
     Tensor copy_tCrS = thr_copy_scale.retile_D(fragment_scale_input);
     Tensor copy_tCrZ = thr_copy_zero.retile_D(fragment_zero_input);
+
+    // TODO(joe): is this needed?:
+    // TODO(codeplay): to fixed the hardcode here
+    // Tensor tBrB = thr_copy_B.retile_D(make_tensor(tCrB.data(), select<0, 2, 1>(tCrB.layout())));
 
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
@@ -483,23 +500,27 @@ public:
   #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
         print("======================= A: \n");
-        print("  gA : "); print(gA); print("\n");
-        print("tCgA : "); print(tCgA); print("\n");
-        print("tAgA : "); print(tAgA); print("\n");
+        print("  gA   : "); print(gA);   print("\n");
+        print("  tCgA : "); print(tCgA); print("\n");
+        print("  tAgA : "); print(tAgA); print("\n");
+        print("  tCrA : "); print(tCrA); print("\n");
+        print("  tArA : "); print(tArA); print("\n");
 
         print("=====================  B :\n");
-        print("  gB : "); print(gB); print("\n");
-        print("tCgB : "); print(tCgB); print("\n");
-        print("tBgB : "); print(tBgB); print("\n");
+        print("  gB : ");   print(gB);   print("\n");
+        print("  tCgB : "); print(tCgB); print("\n");
+        print("  tBgB : "); print(tBgB); print("\n");
+        print("  tCrB : "); print(tCrB); print("\n");
+        print("  tBrB : "); print(tBrB); print("\n");
 
         print("=====================  Config: \n");
-        print("  threads per workgroup : "); print(MaxThreadsPerBlock); print("\n");
-        print("  SubgroupTileShape : "); print(SubgroupTileShape{}); print("\n");
+        print("  threads per workgroup : "); print(MaxThreadsPerBlock);  print("\n");
+        print("  SubgroupTileShape     : "); print(SubgroupTileShape{}); print("\n");
 
-        print(" tiled_prefetch_a :    ");print(tiled_prefetch_a);print("\n");
-        print(" tiled_prefetch_b :    ");print(tiled_prefetch_b);print("\n");
-        print(" pAgA :    ");print(pAgA);print("\n");
-        print(" pBgB :    ");print(pBgB);print("\n");
+        print("  tiled_prefetch_a :    "); print(tiled_prefetch_a); print("\n");
+        print("  tiled_prefetch_b :    "); print(tiled_prefetch_b); print("\n");
+        print("  pAgA :    "); print(pAgA); print("\n");
+        print("  pBgB :    "); print(pBgB); print("\n");
       }
   #endif
 
@@ -548,6 +569,7 @@ public:
         } 
       }
 
+      // TODO(joe): rename these to mma_A/mma_B as per Tao's changes
       cute::gemm(tiled_mma, tCrA, tCrB, accum);
     }
   }

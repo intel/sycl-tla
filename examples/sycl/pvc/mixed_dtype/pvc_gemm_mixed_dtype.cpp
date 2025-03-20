@@ -290,26 +290,12 @@ struct ExampleRunner {
 
     using GemmRef = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelRef>;
 
-    typename GemmRef::Arguments arguments;
-    if constexpr (AIsNarrower) {
-      arguments = {cutlass::gemm::GemmUniversalMode::kGemm,
-                   {options.m, options.n, options.k, options.l},
-                   {block_A_dq.get(), stride_A, block_B.get(), stride_B},
-                   {{options.alpha, options.beta},
-                    block_C.get(),
-                    stride_C,
-                    block_ref_D.get(),
-                    stride_D}};
-    } else {
-      arguments = {cutlass::gemm::GemmUniversalMode::kGemm,
-                   {options.m, options.n, options.k, options.l},
-                   {block_A.get(), stride_A, block_B_dq.get(), stride_B},
-                   {{options.alpha, options.beta},
-                    block_C.get(),
-                    stride_C,
-                    block_ref_D.get(),
-                    stride_D}};
-    }
+    typename GemmRef::Arguments arguments{
+      cutlass::gemm::GemmUniversalMode::kGemm,
+      {options.m, options.n, options.k, options.l},
+      {block_A_dq.get(), stride_A, block_B_dq.get(), stride_B},
+      {{options.alpha, options.beta}, block_C.get(), stride_C, block_ref_D.get(), stride_D}
+    };
 
     // Run the gemm where the scaling is performed outside of the kernel.
     GemmRef gemm_ref;
@@ -397,27 +383,17 @@ struct ExampleRunner {
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, cute::make_shape(dq_mn_size, scale_k, L));
 
     block_A.reset(M * K * L);
+    block_A_dq.reset(M * K * L);
     block_B.reset(K * N * L);
+    block_B_dq.reset(K * N * L);
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
-
-    if constexpr(AIsNarrower){
-      block_A_dq.reset(M * K * L);
-    }else{
-      block_B_dq.reset(N * K * L);
-    }
-
     block_scale.reset(scale_k * options.l * dq_mn_size);
     block_zero.reset(scale_k * options.l * dq_mn_size);
 
-    if constexpr (AIsNarrower) {
-      initialize_quant_tensor(block_A, seed + 2023);
-      initialize_block(block_B, seed + 2022);
-    } else {
-      initialize_block(block_A, seed + 2023);
-      initialize_quant_tensor(block_B, seed + 2022);
-    }
+    initialize_mixed_dtype_block(block_A, block_A_dq, seed + 2023);
+    initialize_mixed_dtype_block(block_B, block_B_dq, seed + 2022);
     initialize_block(block_C, seed + 2021);
 
     initialize_scale(block_scale, options);
@@ -459,7 +435,11 @@ struct ExampleRunner {
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    CUTLASS_CHECK(gemm_op.can_implement(arguments));
+    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
+      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      std::exit(1);
+    }
+
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 
     // Run the GEMM
@@ -476,7 +456,7 @@ struct ExampleRunner {
       GPU_Clock timer;
       timer.start();
       for (int i = 0; i < options.iterations; ++i) {
-        CUTLASS_CHECK(gemm_op.run());
+        gemm_op.run();
       }
       syclcompat::wait();
 
