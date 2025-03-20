@@ -451,9 +451,7 @@ public:
       if constexpr (IsATransformed) {
         return std::make_pair(thr_copy_A.retile_D(quant_frag), thr_copy_B.retile_D(mma_B));
       } else {
-        // return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(quant_frag));
-        // TODO(joe): understand why this swap is needed
-        return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(make_tensor(quant_frag.data(), select<0, 2, 1>(quant_frag.layout()))));
+        return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(quant_frag));
       }
     }();
 
@@ -462,8 +460,7 @@ public:
 
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
-    // Tensor tBgB = thr_copy_B.retile_S(tCgB);
-    Tensor tBgB = thr_copy_B.retile_S(make_tensor(tCgB.data(), select<0, 2, 1, 3>(tCgB.layout())));
+    Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
     auto tiled_prefetch_a = tiled_copy_a.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.mA);
     auto tiled_prefetch_b = tiled_copy_b.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(mainloop.mB);
