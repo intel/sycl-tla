@@ -97,7 +97,7 @@ void Kernel(typename Operator::Params params) {
 /// Generic CUTLASS kernel template.
 template <typename Operator>
 CUTLASS_GLOBAL
-void Kernel2(typename Operator::Params const& params) {
+void Kernel2(typename Operator::Params params) {
 #if defined(CUTLASS_ENABLE_SYCL)
   int* SharedStorageBase = static_cast<int*>(
       sycl::ext::oneapi::experimental::get_work_group_scratch_memory());
