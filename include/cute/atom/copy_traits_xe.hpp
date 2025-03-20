@@ -505,12 +505,12 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
       Int<!TiledCopy::is_convention_MN ? size<1>(mma_atom_shape_2d) : size<0>(mma_atom_shape_2d)>{};
   Int copy_size_M =
       Int<!TiledCopy::is_convention_MN
-              ? size<1>(typename TiledCopy::BlockShape{}) /
+              ? size<0>(typename TiledCopy::BlockShape{}) /
                     size(typename TiledCopy::Traits_LD_t::ThrID{})
               : size<0>(typename TiledCopy::BlockShape{})>{}; // TODO(Codeplay): We could use
                                                               // ValLayoutDst once it is consistent
   Int copy_size_N =
-      Int<!TiledCopy::is_convention_MN ? size<0>(typename TiledCopy::BlockShape{})
+      Int<!TiledCopy::is_convention_MN ? size<1>(typename TiledCopy::BlockShape{})
                                        : size<1>(typename TiledCopy::BlockShape{}) /
                                              size(typename TiledCopy::Traits_LD_t::ThrID{})>{};
   static_assert(copy_size_M >= mma_atom_size_M);
@@ -645,7 +645,7 @@ struct Copy_Traits_<XE_2D_U8x32x32_LD_N, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U4x32x64_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U4x32x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U4x32x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -658,7 +658,7 @@ struct Copy_Traits<XE_2D_U4x32x64_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U4x32x64_LD_N, args_t...>(args...) {}
 };
 
@@ -2331,6 +2331,8 @@ COPY_TRAIT_LD_DEF(XE_2D_U16x16x32_LD_V)
 COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_T)
 COPY_TRAIT_LD_DEF(XE_2D_TF32x16x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_TF32x32x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U4x32x64_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U4x16x64_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x1x64_LD_N::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U8x2x64_LD_N::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U8x4x64_LD_N::PREFETCH)
