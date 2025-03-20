@@ -60,8 +60,8 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
                                           Layout<Shape<_1, _16>>{},
                                           make_layout(shape_div(typename traits_store::BlockShape{}, Shape<_1, _16>{})));
 
-  auto S_coord = tiled_copy_load.get_pvc_tensor(append(S.shape(),_1{}))(_,_,0);
-  auto D_coord = tiled_copy_store.get_pvc_tensor(append(D.shape(),_1{}))(_,_,0);
+  auto S_coord = cute::get_pvc_tensor(append(S.shape(),_1{}))(_,_,0);
+  auto D_coord = cute::get_pvc_tensor(append(D.shape(),_1{}))(_,_,0);
 
   Tensor tiled_tensor_S = tiled_divide(
     S_coord, Shape<Int<wg_tile_m>, Int<wg_tile_n>>{}); // ((M, N), m', n')
@@ -125,7 +125,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
   const int l_coord = BlockIdxZ();
 
   // Copy from GMEM to RMEM and from RMEM to GMEM
-  auto blk_load_S = tiled_copy_load.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
+  auto blk_load_S = cute::get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
                                                    fragment.shape());
 
   copy(tiled_copy_load, thr_tile_load_S, fragment);
@@ -147,7 +147,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
   }
 #endif
 
-  auto blk_store_D = tiled_copy_store.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
+  auto blk_store_D = cute::get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
                                                      fragment.shape());
 
   // onlt run first subgroup
