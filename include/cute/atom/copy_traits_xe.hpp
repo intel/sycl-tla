@@ -134,17 +134,22 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
     Layout<Shape<Int<sgs_non_contig>, Shape<Int<SubgroupSize >, Int<sgs_contig>>>,
            Stride<Int<SubgroupSize >,  Stride<_1, Int<SubgroupSize  * sgs_non_contig>>>>
   >;
-  
+
   #define RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, CONTIG) \
     using PrefetchTraits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##NON_CONTIG##x##CONTIG##_LD_N, decltype(tensor.stride())>; \
     using PrefetchAtom = Copy_Atom<PrefetchTraits, dtype>; \
-    using PrefetchValLayout = decltype(make_layout(shape_div(typename PrefetchTraits::BlockShape{}, CopyThreadShape{}))); \
+    constexpr auto scalar = cute::max(1, DTYPE_SIZE / dtype_size_bits); \
+    using ScalarPrefetchShape = Shape<Int<size<0>(typename PrefetchTraits::BlockShape{})>, \
+                                      Int<size<1>(typename PrefetchTraits::BlockShape{}) * scalar>>; \
+    using PrefetchValLayout = decltype(make_layout(shape_div(ScalarPrefetchShape{}, CopyThreadShape{}))); \
     return make_tiled_copy(PrefetchAtom{}.with(tensor), \
                            PrefetchTilingLayout{}, \
                            PrefetchValLayout{});
 
   #define CHOOSE_PREFETCH_FOR_TYPE(NON_CONTIG) \
-    if constexpr (dtype_size_bits == 8){ \
+    if constexpr (dtype_size_bits == 4){ \
+      RETURN_STATEMENT(NON_CONTIG, 8, 32); \
+    } else if constexpr (dtype_size_bits == 8){ \
       RETURN_STATEMENT(NON_CONTIG, 8, 64); \
     } else if constexpr (dtype_size_bits == 16){ \
       RETURN_STATEMENT(NON_CONTIG, 16, 32); \
