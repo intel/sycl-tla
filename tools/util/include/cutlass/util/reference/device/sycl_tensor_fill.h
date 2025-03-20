@@ -170,7 +170,7 @@ void BlockFillRandomUniform(
 
 namespace detail {
 
-/// Computes a random Gaussian distribution
+/// Compute the linear offset into the tensor-view with a scale and offset
 template <
   typename Element,               ///< Element type
   typename Layout>                ///< Layout function
@@ -185,26 +185,13 @@ struct TensorFillLinearFunc {
   /// Coordinate in tensor's index space
   typedef typename TensorView::TensorCoord TensorCoord;
 
-  /// Parameters structure
   struct Params {
-
-    //
-    // Data members
-    //
-
     TensorView view;
     Array<Element, Layout::kRank> v;
     Element s;
 
-    /// Default ctor
-    CUTLASS_HOST_DEVICE
     Params() { }
 
-    //
-    // Methods
-    //
-
-    /// Construction of Gaussian RNG functor.
     Params(
       TensorView view_,      ///< destination tensor
       Array<Element, Layout::kRank> const & v_,
@@ -213,26 +200,11 @@ struct TensorFillLinearFunc {
       view(view_), v(v_), s(s_) { }
   };
 
-  //
-  // Data members
-  //
-
-  /// Parameters object
   Params params;
 
-  //
-  // Methods
-  //
-
-  /// Device-side initialization of RNG
-  CUTLASS_DEVICE
-  TensorFillLinearFunc(Params const &params): params(params) {
-
-  }
+  TensorFillLinearFunc(Params const &params): params(params) {}
   TensorFillLinearFunc(TensorFillLinearFunc const &) = default;
 
-  /// Compute random value and update RNG state
-  CUTLASS_DEVICE
   void operator()(TensorCoord const &coord) {
 
     Element sum = params.s;
