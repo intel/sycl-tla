@@ -148,8 +148,8 @@ struct ExampleRunner {
 
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
-  cutlass::DeviceAllocation<typename TiledMma::MMA_Type> block_A_dq; // Dequantized copy of A for validation
-  cutlass::DeviceAllocation<typename TiledMma::MMA_Type> block_B_dq; // Dequantized copy of B for validation
+  cutlass::DeviceAllocation<typename TiledMma::ValTypeA> block_A_dq; // Dequantized copy of A for validation
+  cutlass::DeviceAllocation<typename TiledMma::ValTypeB> block_B_dq; // Dequantized copy of B for validation
   cutlass::DeviceAllocation<ElementC> block_C;
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
@@ -199,9 +199,9 @@ struct ExampleRunner {
     using CollectiveMainloopRef = cutlass::gemm::collective::CollectiveMma<
             GEMMDispatchPolicy,
             TileShape,
-            typename TiledMma::MMA_Type,
+            typename TiledMma::ValTypeA,
             cutlass::gemm::TagToStrideA_t<LayoutA>,
-            typename TiledMma::MMA_Type,
+            typename TiledMma::ValTypeB,
             cutlass::gemm::TagToStrideB_t<LayoutB>,
             TiledMma,
             GmemTiledCopyA, void, void, cute::identity,  // A

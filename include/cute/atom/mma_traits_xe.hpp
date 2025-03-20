@@ -45,8 +45,6 @@ struct MMA_Traits<XE_8x16x16_F32BF16BF16F32_TT>
   using ValTypeB = bfloat16_t;
   using ValTypeC = float;
 
-  using MMA_Type = bfloat16_t;
-
   using Shape_MNK = Shape<_8,_16,_16>;
   using ThrID   = Layout<_16>;
 
@@ -111,8 +109,6 @@ struct MMA_Traits<XE_8x16x16_F32F16F16F32_TT>
   using ValTypeA = half_t;
   using ValTypeB = half_t;
   using ValTypeC = float;
-
-  using MMA_Type = half_t;
 
   using Shape_MNK = Shape<_8,_16,_16>;
   using ThrID   = Layout<_16>;
