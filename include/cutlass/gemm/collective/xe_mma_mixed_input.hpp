@@ -189,28 +189,13 @@ public:
   using traits_load_scale = Copy_Traits<GmemTiledCopyScale, StrideScale>;
   using atom_load_scale = Copy_Atom<traits_load_scale, NonVoidElementScale>;
 
-  using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize, ElementA>());
-  using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize, ElementB>());
-
   using  TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), StrideA{}));   //(m, k)
   using  TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), StrideB{}));   //(n, k)
   using  TensorScale = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementScale const*>(nullptr)), make_shape(0,0,0), StrideScale{}));   //(m OR n, k)
   using  TensorZero = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const*>(nullptr)), make_shape(0,0,0), StrideScale{}));   //(m OR n, k)
- 
   
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
-  using Copy_A = decltype(make_tiled_copy(atom_load_A{},
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{}))));
-  
-  using Copy_B = decltype(make_tiled_copy(atom_load_B{},
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{}))));
-
-  using Copy_Scale = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShape>{},
-                                     make_layout(shape_div(typename traits_load_scale::BlockShape{},
-                                                           CopyThreadShape{}))));
-  using Copy_Zero = Copy_Scale; // Same layout
+  using CopyThreadShapeRev = decltype(cute::reverse(CopyThreadShape{}));
 
   // Host side kernel arguments
   struct Arguments {
@@ -405,12 +390,13 @@ public:
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
 
+    // TODO(joe): Deal with these in a manner that doesn't require `CopyThreadShapeRev`
     auto tiled_copy_scale = make_tiled_copy(atom_load_scale{}.with(mainloop.mScale),
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShape{})));
+                                   Layout<CopyThreadShapeRev>{},
+                                   make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{})));
     auto tiled_copy_zero = make_tiled_copy(atom_load_scale{}.with(mainloop.mZero),
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShape{})));
+                                   Layout<CopyThreadShapeRev>{},
+                                   make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{})));
     // Partition the copying of A and B tiles across the threads
     auto thr_copy_A = tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = tiled_copy_b.get_slice(thread_idx);
@@ -464,9 +450,6 @@ public:
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
-    static_assert(std::is_same_v<typename decltype(tCrA_input)::value_type, ElementA>);
-    static_assert(std::is_same_v<typename decltype(tCrA)::value_type, ElementB>);
-    
     auto tiled_prefetch_a = tiled_copy_a.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.mA);
     auto tiled_prefetch_b = tiled_copy_b.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(mainloop.mB);
     auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
@@ -476,6 +459,27 @@ public:
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);
 
+    //
+    // Mainloop
+    //
+    // TODO(joe): unhardcode these
+    auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
+    const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
+    const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
+    const int l_coord = l_idx;
+
+    // TODO(joe): I need to work out the 'correct' way to grab these, or else re-introduce the `m_coord` etc for now...
+    Tensor copy_iter_s = [&](){
+      if constexpr(IsATransformed){
+        return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
+                           make_layout(make_shape(_1{}, _1{}, _1{}, k_tile_count), 
+                                       make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+      }else{
+        return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
+                           make_layout(make_shape(_1{}, _2{}, _1{}, k_tile_count), 
+                                       make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+      }
+    }();
   #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
         print("======================= A: \n");
@@ -498,22 +502,6 @@ public:
         print(" pBgB :    ");print(pBgB);print("\n");
       }
   #endif
-
-    //
-    // Mainloop
-    //
-
-    Tensor copy_iter_s = [&](){
-      if constexpr(IsATransformed){
-        return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
-                           make_layout(make_shape(_1{}, _1{}, _1{}, k_tile_count), 
-                                       make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
-      }else{
-        return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
-                           make_layout(make_shape(_1{}, _2{}, _1{}, k_tile_count), 
-                                       make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
-      }
-    }();
 
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
     int prefetch_k = 0;
