@@ -543,16 +543,16 @@ public:
 #if defined(CUTLASS_ENABLE_SYCL)
 
 #if defined (SYCL_INTEL_TARGET)
-#define ALLOW_SUBGROUP_SIZE_PROP 1
+      constexpr bool allow_subgroup_size_prop = true;
 #else
-#define ALLOW_SUBGROUP_SIZE_PROP 0
+      constexpr bool allow_subgroup_size_prop = false;
 #endif
 
         CUTLASS_ASSERT(cuda_adapter == nullptr);
         auto kernel_props = [] () {
           constexpr bool is_device_agnostic =
             cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>;
-          if constexpr (!ALLOW_SUBGROUP_SIZE_PROP or is_device_agnostic) {
+          if constexpr (!allow_subgroup_size_prop or is_device_agnostic) {
             using EmptyProperties = decltype(sycl::ext::oneapi::experimental::properties());
             return syclcompat::experimental::kernel_properties<EmptyProperties>{};
           } else {
