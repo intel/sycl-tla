@@ -451,21 +451,19 @@ public:
       if constexpr (IsATransformed) {
         return std::make_pair(thr_copy_A.retile_D(quant_frag), thr_copy_B.retile_D(mma_B));
       } else {
-        return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(quant_frag));
-        return std::make_pair(thr_copy_A.retile_D(tCrA), thr_copy_B.retile_D(make_tensor(tCrAB_input.data(), select<0, 2, 1>(tCrAB_input.layout()))));
+        // return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(quant_frag));
+        // TODO(joe): understand why this swap is needed
+        return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(make_tensor(quant_frag.data(), select<0, 2, 1>(quant_frag.layout()))));
       }
     }();
 
     Tensor copy_tCrS = thr_copy_scale.retile_D(fragment_scale_input);
     Tensor copy_tCrZ = thr_copy_zero.retile_D(fragment_zero_input);
 
-    // TODO(joe): is this needed?:
-    // TODO(codeplay): to fixed the hardcode here
-    // Tensor tBrB = thr_copy_B.retile_D(make_tensor(tCrB.data(), select<0, 2, 1>(tCrB.layout())));
-
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
-    Tensor tBgB = thr_copy_B.retile_S(tCgB);
+    // Tensor tBgB = thr_copy_B.retile_S(tCgB);
+    Tensor tBgB = thr_copy_B.retile_S(make_tensor(tCgB.data(), select<0, 2, 1, 3>(tCgB.layout())));
 
     auto tiled_prefetch_a = tiled_copy_a.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.mA);
     auto tiled_prefetch_b = tiled_copy_b.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(mainloop.mB);
