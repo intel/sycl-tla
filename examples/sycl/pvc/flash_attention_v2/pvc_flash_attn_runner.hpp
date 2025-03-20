@@ -303,15 +303,14 @@ template <class GemmKernel> struct ExampleRunner {
     const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
     const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
 
-    using namespace ;
     syclcompat::experimental::launch_properties launch_props {
       sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
     };
     syclcompat::experimental::kernel_properties kernel_props{
-      sycl_exp::sub_group_size<GemmKernel::DispatchPolicy::SubgroupSize>
+      syclcompat::experimental::sycl_exp::sub_group_size<GemmKernel::DispatchPolicy::SubgroupSize>
     };
-    auto event = syclcompat::experimental::launch<cutlass::device_kernel<GemmKernel>>(
-      launch_policy{sycl_grid, sycl_block, launch_props, kernel_props}, params);
+    syclcompat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
+    auto event = syclcompat::experimental::launch<cutlass::device_kernel<GemmKernel>>(policy, params);
 
     EventManager::getInstance().addEvent(event);
   }
