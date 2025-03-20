@@ -495,7 +495,12 @@ public:
                                        make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }
     }();
+
+  #define LOG_GROUP 0
+  #define LOG_THREAD 0
+  #define CUTLASS_ENABLE_DEBUG_PRINTS 0
   #if CUTLASS_ENABLE_DEBUG_PRINTS
+  #define PRINT(x) print(#x ": "); print(x); print("\n");
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
         print("======================= A: \n");
         print("  gA   : "); print(gA);   print("\n");
@@ -520,6 +525,7 @@ public:
         print("  pAgA :    "); print(pAgA); print("\n");
         print("  pBgB :    "); print(pBgB); print("\n");
       }
+  #undef PRINT
   #endif
 
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
