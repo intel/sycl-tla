@@ -378,6 +378,8 @@ struct XE_2D_U4x32x64_LD_N {
             (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 
    // ================= shuffle begin =================
+   // FIXME: the performance of shuffle algorithm here is too bad, we are working with
+   // compiler/IGC team to optimize it.
 
     static constexpr auto subgroup_size = 16;
     static constexpr auto copy_W = decltype(size<1>(BlockShape{}))::value / subgroup_size;
@@ -428,6 +430,8 @@ struct XE_2D_U4x16x64_LD_N {
             (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 
    // ================= shuffle begin =================
+   // FIXME: the performance of shuffle algorithm here is too bad, we are working with
+   // compiler/IGC team to optimize it.
 
     static constexpr auto subgroup_size = 16;
     static constexpr auto copy_W = decltype(size<1>(BlockShape{}))::value / subgroup_size;

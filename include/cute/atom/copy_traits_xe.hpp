@@ -658,7 +658,7 @@ struct Copy_Traits<XE_2D_U4x32x64_LD_N, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U4x16x64_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U4x16x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U4x16x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -671,12 +671,12 @@ struct Copy_Traits<XE_2D_U4x16x64_LD_N, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U4x16x64_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x1x64_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U8x1x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x1x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit

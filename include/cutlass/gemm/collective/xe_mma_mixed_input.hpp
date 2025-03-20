@@ -98,6 +98,15 @@ struct CollectiveMma<
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
   using MmaType = typename TiledMma::MMA_Type;
+  using LargerElementType = std::conditional_t<(cute::sizeof_bits_v<ElementA> > cute::sizeof_bits_v<ElementB>),
+                                               ElementA,
+                                               ElementB>;
+
+  static_assert(!std::is_same_v<ElementA, ElementB>, "MainloopIntelPVCMixedPrecision requires that "
+                                                     "data type of A and B are different.");
+  static_assert(std::is_same_v<LargerElementType, MmaType>,
+               "MainloopIntelPVCMixedPrecision has the restriction that mixed dtype always converts the "
+               "narrower input type to the larger one and performs GEMM using the DPAS for the larger input type.");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -294,9 +303,6 @@ struct CollectiveMma<
 
     // TODO: codeplay to fixed the hardcode here
     Tensor tBgB = thr_copy_B.retile_S(make_tensor(tCgB.data(), select<0, 2, 1, 3>(tCgB.layout())));
-
-    static_assert(std::is_same_v<typename decltype(tCrA_input)::value_type, ElementA>);
-    static_assert(std::is_same_v<typename decltype(tCrA)::value_type, ElementB>);
     
     auto tiled_prefetch_a = tiled_copy_a.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.mA);
     auto tiled_prefetch_b = tiled_copy_b.template prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(mainloop.mB);
@@ -354,8 +360,8 @@ struct CollectiveMma<
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.copy_A, tAgA(_,_,_,k), tArA);
-      copy(mainloop.copy_B, tBgB(_,_,_,k), tBrB);
+      copy(tiled_copy_a, tAgA(_,_,_,k), tArA);
+      copy(tiled_copy_b, tBgB(_,_,_,k), tBrB);
 
       auto mma_A = transform_if_needed<MmaType>(tCrA);
       auto mma_B = transform_if_needed<MmaType>(tCrB);
