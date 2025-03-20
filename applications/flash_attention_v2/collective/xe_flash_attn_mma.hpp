@@ -255,19 +255,6 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
       print("  SubgroupTileShape : ");
       print(SubgroupTileShape{});
       print("\n");
-
-      print(" PrefetchQThrShape :    ");
-      print(PrefetchQThrShape{});
-      print("\n");
-      print(" PrefetchKThrShape :    ");
-      print(PrefetchKThrShape{});
-      print("\n");
-      print(" PrefetchQTileSize :    ");
-      print(PrefetchQTileSize{});
-      print("\n");
-      print(" PrefetchKTileSize :    ");
-      print(PrefetchKTileSize{});
-      print("\n");
     }
 #endif
 
@@ -319,13 +306,6 @@ struct CollectiveMmaAttention<MainloopIntelPVC<Stages>, TileShape_, ElementQ_, S
       print("\n");
       print("  SubgroupTileShape : ");
       print(SubgroupTileShape{});
-      print("\n");
-
-      print(" PrefetchVThrShape :    ");
-      print(PrefetchVThrShape{});
-      print("\n");
-      print(" PrefetchVTileSize :    ");
-      print(PrefetchVTileSize{});
       print("\n");
     }
 #endif
