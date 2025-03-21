@@ -227,11 +227,6 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages, Schedule>, TileShape_, Elemen
         print("=====================  Config: \n");
         print("  threads per workgroup : "); print(MaxThreadsPerBlock); print("\n");
         print("  SubgroupTileShape : "); print(SubgroupTileShape{}); print("\n");
-
-        print(" PrefetchAThrShape :    ");print(PrefetchAThrShape{});print("\n");
-        print(" PrefetchBThrShape :    ");print(PrefetchBThrShape{});print("\n");
-        print(" PrefetchATileSize :    ");print(PrefetchATileSize{});print("\n");
-        print(" PrefetchBTileSize :    ");print(PrefetchBTileSize{});print("\n");
       }
 #endif
 
