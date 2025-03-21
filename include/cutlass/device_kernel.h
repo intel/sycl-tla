@@ -47,10 +47,6 @@
 #  define CUTLASS_GRID_CONSTANT_ENABLED
 #endif
 
-#if defined(CUTLASS_ENABLE_SYCL)
-#  define CUTLASS_GRID_CONSTANT
-#endif
-
 #if ! defined(CUTLASS_GRID_CONSTANT)
 #  if defined(CUTLASS_GRID_CONSTANT_ENABLED)
 #    define CUTLASS_GRID_CONSTANT __grid_constant__
@@ -168,7 +164,11 @@ CUTLASS_GLOBAL
 // Enclosing this in __CUDACC__ suppresses MSVC warnings.
 __launch_bounds__(Operator::MaxThreadsPerBlock, Operator::MinBlocksPerMultiprocessor)
 #endif // __CUDACC__
-void device_kernel(CUTLASS_GRID_CONSTANT typename Operator::Params const& params)
+##if defined(CUTLASS_ENABLE_SYCL)
+void device_kernel(typename Operator::Params const& params)
+#else
+void device_kernel(CUTLASS_GRID_CONSTANT typename Operator::Params const params)
+#endif
 {
   // Dynamic shared memory base pointer
 #if defined(CUTLASS_ENABLE_SYCL)
