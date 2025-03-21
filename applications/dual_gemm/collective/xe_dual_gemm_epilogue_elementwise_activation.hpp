@@ -257,7 +257,7 @@ public:
     auto n_sg = get_sub_group_id() % ATOM_N;
     
     // Represent the full output tensor
-    Tensor mD_mnl = params.xe_store_d.get_pvc_tensor(make_shape(M,N,L));
+    Tensor mD_mnl = cute::get_pvc_tensor(make_shape(M,N,L));
 
     // Tile the output tensor per WG and select the tile for current WG
     Tensor g_wg_D = local_tile(mD_mnl, take<0,2>(CtaTileMNK{}), make_coord(m_coord,n_coord,l_coord));  // (BLK_M,BLK_N)
