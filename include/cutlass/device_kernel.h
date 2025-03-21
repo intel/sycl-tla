@@ -164,7 +164,7 @@ CUTLASS_GLOBAL
 // Enclosing this in __CUDACC__ suppresses MSVC warnings.
 __launch_bounds__(Operator::MaxThreadsPerBlock, Operator::MinBlocksPerMultiprocessor)
 #endif // __CUDACC__
-##if defined(CUTLASS_ENABLE_SYCL)
+#if defined(CUTLASS_ENABLE_SYCL)
 void device_kernel(typename Operator::Params const& params)
 #else
 void device_kernel(CUTLASS_GRID_CONSTANT typename Operator::Params const params)
