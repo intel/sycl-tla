@@ -295,13 +295,11 @@ struct CollectiveMma<
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
 
-    // TODO(codeplay): to fixed the hardcode here
     Tensor tBrB = thr_copy_B.retile_D(tCrB);
 
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
 
-    // TODO: codeplay to fixed the hardcode here
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
     
     auto tiled_prefetch_a = tiled_copy_a.template prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.mA);
