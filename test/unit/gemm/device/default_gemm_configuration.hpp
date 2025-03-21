@@ -1439,7 +1439,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
 
   using DispatchPolicy = MainloopIntelPVC<3>;
   using TiledMma =
-      TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
                Layout<TileShape>,
                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
@@ -1545,7 +1545,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
 
   using DispatchPolicy = MainloopIntelPVC<3>;
   using TiledMma =
-      TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                Layout<TileShape>,
                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
@@ -1653,7 +1653,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
 
   using DispatchPolicy = MainloopIntelPVC<3>;
   using TiledMma =
-      TiledMMAHelper<MMA_Atom<XE_8x16x32_S32S8S8S32_TT>,
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x32_S32S8S8S32_TT>,
                Layout<TileShape>,
                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
@@ -1760,7 +1760,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
 
   using DispatchPolicy = MainloopIntelPVC<3>;
   using TiledMma =
-      TiledMMAHelper<MMA_Atom<XE_8x16x8_F32TF32TF32F32_TT>,
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x8_F32TF32TF32F32_TT>,
                Layout<TileShape>,
                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 

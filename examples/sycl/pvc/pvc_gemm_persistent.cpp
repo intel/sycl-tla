@@ -322,7 +322,7 @@ int run(int argc, const char** argv) {
   using TileShape = Shape<_256, _256, _32>;
 
   using TiledMma =
-      TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
                      Layout<TileShape>,
                      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 

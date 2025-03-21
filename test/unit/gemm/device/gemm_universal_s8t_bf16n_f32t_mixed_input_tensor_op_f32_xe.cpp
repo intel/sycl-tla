@@ -84,7 +84,7 @@ TEST(XE_Device_GemmUniversal_s8t_bf16n_f32t_mixed_input_tensor_op_f32, 128x128x6
   using TileShape = Shape<_256, _256, _32>;
 
   using TiledMma =
-      TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
                Layout<TileShape>,
                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
