@@ -560,7 +560,9 @@ public:
         }
 #else
         syclcompat::experimental::kernel_properties kernel_props{
+#if defined(SYCL_INTEL_TARGET)
               syclcompat::experimental::sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>
+#endif
         };
         syclcompat::experimental::launch_properties launch_props {
           sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
