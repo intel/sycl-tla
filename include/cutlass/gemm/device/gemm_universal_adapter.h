@@ -542,7 +542,7 @@ public:
       else {
         CUTLASS_ASSERT(cuda_adapter == nullptr);
 #if defined(CUTLASS_ENABLE_SYCL)
-#if defined(SYCL_INTEL_TARGET)
+#if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
         using namespace syclcompat::experimental;
         if constexpr (cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>) {
           auto event = launch<device_kernel<GemmKernel>>(launch_policy{
@@ -551,8 +551,10 @@ public:
           EventManager::getInstance().addEvent(event);
         } else {
           auto event = launch<device_kernel<GemmKernel>>(launch_policy{
-            sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
-            kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
+            sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
+#if defined(SYCL_INTEL_TARGET)
+            , kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
+#endif
           }, params);
           EventManager::getInstance().addEvent(event);
         }
@@ -568,7 +570,7 @@ public:
         };
         auto event = syclcompat::experimental::launch<device_kernel<GemmKernel>>(policy, params);
         EventManager::getInstance().addEvent(event);
-#endif // defined(SYCL_INTEL_TARGET)
+#endif // !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 #else
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
         CUTLASS_TRACE_HOST("GemmUniversal::run: Launching kernel with cutlass::kernel_launch");
