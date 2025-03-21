@@ -324,7 +324,7 @@ int main(int argc, const char** argv)
   // See 0t_mma_atom.md#TiledMMAs for more info.
   // Sub-groups are arranged row-major (stride 4,1,0) for performance reasons.
   using TiledMma =
-      typename ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;

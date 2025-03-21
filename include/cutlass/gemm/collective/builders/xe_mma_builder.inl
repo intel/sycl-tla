@@ -85,7 +85,7 @@ struct CollectiveBuilder<
 
       //Prepare Template arguments required of CollectiveMainLoop
       using TiledMma =
-          typename ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+          typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
                                         Layout<TileShape_MNK>,
                                         Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 

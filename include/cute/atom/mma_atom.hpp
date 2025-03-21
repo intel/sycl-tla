@@ -653,7 +653,7 @@ make_tiled_mma(MMA_Op       const&,
 // In this manner, the tiling has been permuted so that the values handled by each thread are
 // closer together.
 template <typename MMA_Atom, typename CTALayout, typename WarpLayout>
-struct ContigBlockMMAHelper{
+struct TiledMMAHelper{
 private:
   using AtomShape = typename MMA_Atom::Shape_MNK;
 

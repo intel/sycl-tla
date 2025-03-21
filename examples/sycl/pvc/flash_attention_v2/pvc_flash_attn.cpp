@@ -53,7 +53,7 @@ int main(int argc, const char **argv) {
   if (options.head_size == 64 || options.head_size == 96) {
 
     using TiledMma =
-        typename ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
                                       Layout<Shape<_128, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
@@ -72,7 +72,7 @@ int main(int argc, const char **argv) {
                              : FMHAConfig<false, Shape<_256, _64, _64>, TiledMma>::run(options);
   } else if (options.head_size == 128) {
     using TiledMma =
-        typename ContigBlockMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
                                       Layout<Shape<_128, _128, _64>>,
                                       Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>>::TiledMMA;
 
