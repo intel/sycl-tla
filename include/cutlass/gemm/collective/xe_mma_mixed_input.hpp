@@ -546,7 +546,6 @@ public:
       copy(tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
       copy(tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
 
-      // TODO(joe): likely an issue here - what do these go to?
       if constexpr(ModeHasScales){
         copy(tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
       }
@@ -570,7 +569,6 @@ public:
         } 
       }
 
-      // TODO(joe): rename these to mma_A/mma_B as per Tao's changes
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
     }
   }
