@@ -74,14 +74,21 @@ template <typename  T>                                                          
 
 /// Generic CUTLASS kernel template.
 template <typename Operator>
+#if defined(SYCL_INTEL_TARGET)
+void Kernel(typename Operator::Params params, char* smem) {
+  // Dynamic shared memory base pointer
+  int* SharedStorageBase = reinterpret_cast<int*>(smem);
+#else
 CUTLASS_GLOBAL
 void Kernel(typename Operator::Params params) {
+  // Dynamic shared memory base pointer
+  extern __shared__ int SharedStorageBase[];
 #if defined(CUTLASS_ENABLE_SYCL)
   int* SharedStorageBase = static_cast<int*>(
       sycl::ext::oneapi::experimental::get_work_group_scratch_memory());
 #else
-  // Dynamic shared memory base pointer
   extern __shared__ int SharedStorageBase[];
+#endif
 #endif
   // Declare pointer to dynamic shared memory.
   typename Operator::SharedStorage *shared_storage =
@@ -93,17 +100,23 @@ void Kernel(typename Operator::Params params) {
   cutlass::arch::synclog_print();
 }
 
-
 /// Generic CUTLASS kernel template.
 template <typename Operator>
+#if defined(SYCL_INTEL_TARGET)
+void Kernel2(typename Operator::Params params, char* smem) {
+  // Dynamic shared memory base pointer
+  int* SharedStorageBase = reinterpret_cast<int*>(smem);
+#else
 CUTLASS_GLOBAL
 void Kernel2(typename Operator::Params params) {
+  // Dynamic shared memory base pointer
 #if defined(CUTLASS_ENABLE_SYCL)
   int* SharedStorageBase = static_cast<int*>(
-      sycl::ext::oneapi::experimental::get_work_group_scratch_memory());
+      sycl::ext::oneapi::experimental::get_work_group_scratch_me mory());
+
 #else
-  // Dynamic shared memory base pointer
   extern __shared__ int SharedStorageBase[];
+#endif
 #endif
   // Declare pointer to dynamic shared memory.
   typename Operator::SharedStorage *shared_storage =
@@ -122,25 +135,34 @@ void Kernel2(typename Operator::Params params) {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Generic CUTLASS kernel template.
+#if defined(SYCL_INTEL_TARGET)
 template <typename Operator>
-#if defined(CUTLASS_ENABLE_SYCL)
-void device_kernel(typename Operator::Params const& params) {
-  char* smem = static_cast<char*>(sycl::ext::oneapi::experimental::get_work_group_scratch_memory());
+void device_kernel(typename Operator::Params const& params, sycl::local_ptr<char> smem)
+{
+  Operator op;
+  op(params, smem);
+  cutlass::arch::synclog_print();
+}
 #else
+template <typename Operator>
 CUTLASS_GLOBAL
 #ifdef __CUDACC__
 // Enclosing this in __CUDACC__ suppresses MSVC warnings.
 __launch_bounds__(Operator::MaxThreadsPerBlock, Operator::MinBlocksPerMultiprocessor)
 #endif // __CUDACC__
-void device_kernel(CUTLASS_GRID_CONSTANT typename Operator::Params const params)
+void device_kernel(CUTLASS_GRID_CONSTANT typename Operator::Params const& params)
 {
   // Dynamic shared memory base pointer
+#if defined(CUTLASS_ENABLE_SYCL)
+  char* smem = static_cast<char*>(sycl::ext::oneapi::experimental::get_work_group_scratch_memory());
+#else
   extern __shared__ char smem[];
 #endif
   Operator op;
   op(params, smem);
   cutlass::arch::synclog_print();
 }
+#endif // defined(SYCL_INTEL_TARGET)
 
 ////////////////////////////////////////////////////////////////////////////////
 } /// namespace cutlass

@@ -540,27 +540,26 @@ public:
         }
       }
       else {
-#if defined(CUTLASS_ENABLE_SYCL)
-
-#if defined (SYCL_INTEL_TARGET)
-      constexpr bool allow_subgroup_size_prop = true;
-#else
-      constexpr bool allow_subgroup_size_prop = false;
-#endif
-
         CUTLASS_ASSERT(cuda_adapter == nullptr);
-        auto kernel_props = [] () {
-          constexpr bool is_device_agnostic =
-            cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>;
-          if constexpr (!allow_subgroup_size_prop or is_device_agnostic) {
-            using EmptyProperties = decltype(sycl::ext::oneapi::experimental::properties());
-            return syclcompat::experimental::kernel_properties<EmptyProperties>{};
-          } else {
-            return syclcompat::experimental::kernel_properties{
+#if defined(CUTLASS_ENABLE_SYCL)
+#if defined(SYCL_INTEL_TARGET)
+        using namespace syclcompat::experimental;
+        if constexpr (cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>) {
+          auto event = launch<device_kernel<GemmKernel>>(launch_policy{
+            sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
+          }, params);
+          EventManager::getInstance().addEvent(event);
+        } else {
+          auto event = launch<device_kernel<GemmKernel>>(launch_policy{
+            sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
+            kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
+          }, params);
+          EventManager::getInstance().addEvent(event);
+        }
+#else
+        syclcompat::experimental::kernel_properties kernel_props{
               syclcompat::experimental::sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>
-            };
-          }
-        }();
+        };
         syclcompat::experimental::launch_properties launch_props {
           sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
         };
@@ -569,6 +568,7 @@ public:
         };
         auto event = syclcompat::experimental::launch<device_kernel<GemmKernel>>(policy, params);
         EventManager::getInstance().addEvent(event);
+#endif // defined(SYCL_INTEL_TARGET)
 #else
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
         CUTLASS_TRACE_HOST("GemmUniversal::run: Launching kernel with cutlass::kernel_launch");
