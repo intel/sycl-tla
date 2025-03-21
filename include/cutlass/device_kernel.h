@@ -73,8 +73,8 @@ template <typename  T>                                                          
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Generic CUTLASS kernel template.
+#if defined(CUTLASS_ENABLE_SYCL) && !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 template <typename Operator>
-#if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 void Kernel(typename Operator::Params params, char* smem) {
   // Dynamic shared memory base pointer
   int* SharedStorageBase = reinterpret_cast<int*>(smem);
@@ -88,6 +88,7 @@ void Kernel(typename Operator::Params params, char* smem) {
   cutlass::arch::synclog_print();
 }
 #else
+template <typename Operator>
 CUTLASS_GLOBAL
 void Kernel(typename Operator::Params params) {
   // Dynamic shared memory base pointer
@@ -109,8 +110,8 @@ void Kernel(typename Operator::Params params) {
 #endif
 
 /// Generic CUTLASS kernel template.
+#if defined(CUTLASS_ENABLE_SYCL) && !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 template <typename Operator>
-#if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 void Kernel2(typename Operator::Params params, char* smem) {
   // Dynamic shared memory base pointer
   int* SharedStorageBase = reinterpret_cast<int*>(smem);
@@ -123,6 +124,7 @@ void Kernel2(typename Operator::Params params, char* smem) {
 
 }
 #else
+template <typename Operator>
 CUTLASS_GLOBAL
 void Kernel2(typename Operator::Params params) {
   // Dynamic shared memory base pointer
@@ -151,7 +153,7 @@ void Kernel2(typename Operator::Params params) {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Generic CUTLASS kernel template.
-#if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
+#if defined(CUTLASS_ENABLE_SYCL) && !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 template <typename Operator>
 void device_kernel(typename Operator::Params const& params, sycl::local_ptr<char> smem)
 {
@@ -178,7 +180,7 @@ void device_kernel(CUTLASS_GRID_CONSTANT typename Operator::Params const& params
   op(params, smem);
   cutlass::arch::synclog_print();
 }
-#endif // !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
+#endif // defined(CUTLASS_ENABLE_SYCL) && !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 
 ////////////////////////////////////////////////////////////////////////////////
 } /// namespace cutlass
