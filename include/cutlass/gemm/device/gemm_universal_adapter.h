@@ -559,11 +559,23 @@ public:
           EventManager::getInstance().addEvent(event);
         }
 #else
-        syclcompat::experimental::kernel_properties kernel_props{
-#if defined(SYCL_INTEL_TARGET)
-              syclcompat::experimental::sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>
+#if defined (SYCL_INTEL_TARGET)
+        constexpr bool allow_subgroup_size_prop = true;
+#else
+        constexpr bool allow_subgroup_size_prop = false;
 #endif
-        };
+        auto kernel_props = [] () {
+          constexpr bool is_device_agnostic =
+            cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>;
+          if constexpr (!allow_subgroup_size_prop or is_device_agnostic) {
+            using EmptyProperties = decltype(sycl::ext::oneapi::experimental::properties());
+            return syclcompat::experimental::kernel_properties<EmptyProperties>{};
+          } else {
+            return syclcompat::experimental::kernel_properties{
+              syclcompat::experimental::sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>
+            };
+          }
+        }();
         syclcompat::experimental::launch_properties launch_props {
           sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
         };
