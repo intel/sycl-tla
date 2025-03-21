@@ -56,10 +56,8 @@ void copy_kernel_vectorized(TensorS S, TensorD D, TiledLoad load,
   auto coord_tensor_load = cute::get_pvc_tensor(append(S.shape(),_1{}));
   auto thr_tile_load_coord = thr_copy_load.partition_S(coord_tensor_load)(_,_,_,0);
   auto fragment = make_tensor<typename TensorS::value_type>(thr_tile_load_coord.shape());
-  auto ld_tensor =
-  cute::get_pvc_tensor(make_coord(m_coord, n_coord, l_coord), fragment.shape());
   if constexpr (cute::detail::has_prefetch<CopyOp>)
-    prefetch(load, ld_tensor);
+    prefetch(load, thr_tile_load_coord);
   copy(load, thr_tile_load_coord, fragment);
 
   // ==========  store   ==========

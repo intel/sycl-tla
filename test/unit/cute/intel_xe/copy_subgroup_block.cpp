@@ -124,10 +124,6 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
                       (cutlass::get_sub_group_id() % sg_per_wg_x) * sg_tile_n;
   const int l_coord = BlockIdxZ();
 
-  // Copy from GMEM to RMEM and from RMEM to GMEM
-  auto blk_load_S = cute::get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
-                                                   fragment.shape());
-
   copy(tiled_copy_load, thr_tile_load_S, fragment);
 
   auto thr_copy_store = tiled_copy_store.get_thread_slice(ThreadIdxX());
@@ -146,9 +142,6 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
     print("\n");
   }
 #endif
-
-  auto blk_store_D = cute::get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
-                                                     fragment.shape());
 
   // onlt run first subgroup
   if (syclcompat::global_id::x() < 16 && !syclcompat::global_id::y() &&
