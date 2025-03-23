@@ -324,10 +324,10 @@ template <class FMHAConfiguration> struct BenchmarkRunnerFMHA {
         params);
 #else
     syclcompat::experimental::launch_properties launch_props{
-          sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size)
+      sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size)
     };
     syclcompat::experimental::kernel_properties kernel_props{
-      syclcompat::experimental::sub_group_size<GemmKernel::DispatchPolicy::SubgroupSize>
+      sycl::ext::oneapi::experimental::sub_group_size<GemmKernel::DispatchPolicy::SubgroupSize>
     };
     syclcompat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
     auto event = syclcompat::experimental::launch<cutlass::device_kernel<GemmKernel>>(policy, params);
