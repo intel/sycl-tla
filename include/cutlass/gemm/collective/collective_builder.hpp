@@ -39,12 +39,18 @@
 #include "cutlass/gemm/collective/collective_builder_decl.hpp"
 #include "cutlass/gemm/collective/builders/sm90_gmma_builder.inl"
 #include "cutlass/gemm/collective/builders/sm90_sparse_gmma_builder.inl"
-#if !defined(__CUDACC_RTC__)
-#include "cutlass/gemm/collective/builders/sm100_umma_builder.inl"
-#include "cutlass/gemm/collective/builders/sm100_9xBF16_umma_builder.inl"
+#if !defined(__CUDACC_RTC__) 
+#include "cutlass/gemm/collective/builders/sm100_umma_builder.inl"              
+#include "cutlass/gemm/collective/builders/sm100_9xBF16_umma_builder.inl"       
+#include "cutlass/gemm/collective/builders/sm100_sparse_umma_builder.inl"
 #include "cutlass/gemm/collective/builders/sm100_blockscaled_umma_builder.inl"
+#include "cutlass/gemm/collective/builders/sm100_blockwise_umma_builder.inl"
+#include "cutlass/gemm/collective/builders/sm100_blockscaled_sparse_umma_builder.inl"
+#include "cutlass/gemm/collective/builders/sm120_mma_builder.inl"
+#include "cutlass/gemm/collective/builders/sm120_blockscaled_mma_builder.inl"
+#include "cutlass/gemm/collective/builders/sm120_sparse_mma_builder.inl"
+#include "cutlass/gemm/collective/builders/sm120_blockscaled_sparse_mma_builder.inl"
 #endif
-
 
 #if defined(SYCL_INTEL_TARGET)
 #include "cutlass/gemm/collective/builders/xe_mma_builder.inl"
