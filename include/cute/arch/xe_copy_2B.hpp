@@ -63,6 +63,21 @@ SYCL_DEVICE_BUILTIN(cute::intel::int8 intel_subgroup_block_read_transform_u16_k1
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord));
 
+// U8 prefetch
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m1k32v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m2k32v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m4k32v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m8k32v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+
+// U16 prefetch
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
