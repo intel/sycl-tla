@@ -483,16 +483,12 @@ public:
         EventManager::getInstance().addEvent(event_finalize);
 #else
         using namespace syclcompat::experimental;
+        auto event = launch<device_kernel<GemmKernel>>(launch_policy{
+          sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
 #if defined (SYCL_INTEL_TARGET)
-        auto event = launch<device_kernel<GemmKernel>>(launch_policy{
-          sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
-          kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
-        }, params.gemm_params);
-#else
-        auto event = launch<device_kernel<GemmKernel>>(launch_policy{
-          sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}},
-          params.gemm_params);
+          , kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
 #endif
+        }, params.gemm_params);
         const auto sycl_block_finalize = syclcompat::dim3(block_finalize.x, block_finalize.y, block_finalize.z);
         const auto sycl_grid_finalize = syclcompat::dim3(grid_finalize.x, grid_finalize.y, grid_finalize.z);
         auto event2 = launch<device_kernel<SoftmaxFinalizeKernel>>(launch_policy{

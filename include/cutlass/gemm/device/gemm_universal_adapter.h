@@ -564,7 +564,7 @@ public:
 #else
         constexpr bool allow_subgroup_size_prop = false;
 #endif
-        auto kernel_props = [] () {
+        auto kernel_props = [] {
           constexpr bool is_device_agnostic =
             cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>;
           if constexpr (!allow_subgroup_size_prop or is_device_agnostic) {
@@ -572,7 +572,7 @@ public:
             return syclcompat::experimental::kernel_properties<EmptyProperties>{};
           } else {
             return syclcompat::experimental::kernel_properties{
-              syclcompat::experimental::sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>
+              sycl::ext::oneapi::experimental::sub_group_size<DispatchPolicy::SubgroupSize>
             };
           }
         }();
