@@ -36,6 +36,8 @@
 #include <cute/algorithm/prefetch.hpp>
 #include <cute/arch/copy_xe.hpp>
 
+#include <cutlass/util/packed_stride.hpp>
+
 namespace cute {
 
 namespace detail {
@@ -233,9 +235,24 @@ struct XE_2D_LD_Unpack {
 
   XE_2D_LD_Unpack() {}
 
-  template<class TileShape, int Num_SGs, class Tensor>
-  CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) const {
-    constexpr int subgroup_size  = size(typename Traits_LD_t::ThrID{});
+  template<class TileShape, int Num_SGs, class dtype>
+  CUTE_HOST_DEVICE auto prefetch_selector() const {
+    constexpr int subgroup_size = size(typename Traits_LD_t::ThrID{});
+    int M, N;
+    if constexpr (is_need_reversed) {
+      M = width;
+      N = height;
+    } else{
+      M = height;
+      N = width;
+    }
+    // L is not used in prefetch_selector and we do not have the correct value here.
+    // Just set it to some arbitrary value >1. `make_cute_packed_stride` would not set stride correctly for 1
+    int L = 2;
+    auto data = make_gmem_ptr(static_cast<const dtype*>(base_ptr));
+    auto shape = make_shape(M,N,L);
+    auto stride = cutlass::make_cute_packed_stride(StrideIndicator{}, shape);
+    auto tensor = make_tensor(data, shape, stride);
     return cute::prefetch_selector<TileShape, Num_SGs, subgroup_size>(tensor);
   }
 
