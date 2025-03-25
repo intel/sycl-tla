@@ -219,6 +219,20 @@ SYCL_DEVICE_OCL(void intel_sub_group_2d_block_prefetch_8b_8r32x2c(
 SYCL_DEVICE_OCL(void intel_sub_group_2d_block_prefetch_8b_32r16x1c(
     __global void* base_address, int width, int height, int pitch,
     cute::intel::coord_t coord));
+
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m1k32v1(
+  long baseoffset, int width_minus_one, int height_minus_one,
+  int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m2k32v1(
+  long baseoffset, int width_minus_one, int height_minus_one,
+  int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m4k32v1(
+  long baseoffset, int width_minus_one, int height_minus_one,
+  int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m8k32v1(
+  long baseoffset, int width_minus_one, int height_minus_one,
+  int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+
 #undef SYCL_DEVICE_OCL
 
 namespace cute
@@ -264,7 +278,7 @@ struct XE_2D_U8x1x32_LD_N {
                                       int height, int pitch,
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
-__builtin_IB_subgroup_block_read_prefetch_u8_m1k32v1(
+      __builtin_IB_subgroup_block_read_prefetch_u8_m1k32v1(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord, CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
@@ -297,7 +311,7 @@ struct XE_2D_U8x2x32_LD_N {
                                       int height, int pitch,
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
-__builtin_IB_subgroup_block_read_prefetch_u8_m2k32v1(
+      __builtin_IB_subgroup_block_read_prefetch_u8_m2k32v1(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord, CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
