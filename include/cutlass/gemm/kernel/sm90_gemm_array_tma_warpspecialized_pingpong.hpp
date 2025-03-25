@@ -115,6 +115,7 @@ public:
     "Ptr-Array Pingpong and Grouped Gemm Pingpong kernel only supports the default scheduler.");
 
   static constexpr bool IsGroupedGemmKernel = !cute::is_same_v<InternalStrideA, StrideA>;
+  static constexpr uint32_t MinTensorMapWorkspaceAlignment = 64;
 
   using TileScheduler = cute::conditional_t<IsGroupedGemmKernel,
     typename detail::TileSchedulerSelector<
@@ -131,6 +132,7 @@ public:
   static constexpr uint32_t NumMmaWarpGroups = 2;
   static constexpr uint32_t MaxThreadsPerBlock = CUTE_STATIC_V(size(TiledMma{})) + (NumMmaWarpGroups * NumThreadsPerWarpGroup);
   static constexpr uint32_t MinBlocksPerMultiprocessor = 1;
+  static constexpr uint32_t NumProducerThreads = CollectiveMainloop::NumProducerThreadEvents;
 
   /// Register requirement for Load and Math WGs
   static constexpr uint32_t LoadRegisterRequirement = 40;
@@ -239,16 +241,16 @@ public:
 
     void* epilogue_workspace = workspace_ptr + workspace_offset;
     workspace_offset += CollectiveEpilogue::get_workspace_size(problem_shapes, args.epilogue, sm_count);
-    workspace_offset = round_nearest(workspace_offset,  MinWorkspaceAlignment);
+    workspace_offset = round_nearest(workspace_offset, MinTensorMapWorkspaceAlignment);
 
     void* mainloop_workspace = workspace_ptr + workspace_offset;
     workspace_offset += CollectiveMainloop::get_workspace_size(problem_shapes, args.mainloop, sm_count);
-    workspace_offset = round_nearest(workspace_offset,  MinWorkspaceAlignment);
+    workspace_offset = round_nearest(workspace_offset, MinTensorMapWorkspaceAlignment);
 
     void* scheduler_workspace = workspace_ptr + workspace_offset;
     workspace_offset += TileScheduler::template get_workspace_size<typename ProblemShape::UnderlyingProblemShape, ElementAccumulator>(
       args.scheduler, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info, NumMmaWarpGroups);
-    workspace_offset = round_nearest(workspace_offset,  MinWorkspaceAlignment);
+    workspace_offset = round_nearest(workspace_offset, MinTensorMapWorkspaceAlignment);
 
     // Precompute the sub tiles numbers in epilogue, pass into tile scheduler.  Therefore it will be used
     // in separate reduction scheme for streamk case, NumEpilogueSubTiles default value is 1, which means
@@ -308,14 +310,14 @@ public:
     }
 
     workspace_size += CollectiveEpilogue::get_workspace_size(args.problem_shape, args.epilogue, sm_count);
-    workspace_size = round_nearest(workspace_size,  MinWorkspaceAlignment);
+    workspace_size = round_nearest(workspace_size, MinTensorMapWorkspaceAlignment);
 
     workspace_size += CollectiveMainloop::get_workspace_size(args.problem_shape, args.mainloop, sm_count);
-    workspace_size = round_nearest(workspace_size,  MinWorkspaceAlignment);
+    workspace_size = round_nearest(workspace_size, MinTensorMapWorkspaceAlignment);
 
     workspace_size += TileScheduler::template get_workspace_size<typename ProblemShape::UnderlyingProblemShape, ElementAccumulator>(
       args.scheduler, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info, NumMmaWarpGroups, NumEpilogueSubTiles);
-    workspace_size = round_nearest(workspace_size,  MinWorkspaceAlignment);
+    workspace_size = round_nearest(workspace_size, MinTensorMapWorkspaceAlignment);
 
     return workspace_size;
   }
@@ -331,14 +333,14 @@ public:
 
     status = CollectiveEpilogue::initialize_workspace(args.problem_shape, args.epilogue, workspace_ptr + workspace_offset, stream, cuda_adapter);
     workspace_offset += CollectiveEpilogue::get_workspace_size(args.problem_shape, args.epilogue, args.hw_info.sm_count);
-    workspace_offset = round_nearest(workspace_offset,  MinWorkspaceAlignment);
+    workspace_offset = round_nearest(workspace_offset, MinTensorMapWorkspaceAlignment);
     if (status != Status::kSuccess) {
       return status;
     }
 
     status = CollectiveMainloop::initialize_workspace(args.problem_shape, args.mainloop, workspace_ptr + workspace_offset, stream, cuda_adapter);
     workspace_offset += CollectiveMainloop::get_workspace_size(args.problem_shape, args.mainloop, args.hw_info.sm_count);
-    workspace_offset = round_nearest(workspace_offset,  MinWorkspaceAlignment);
+    workspace_offset = round_nearest(workspace_offset, MinTensorMapWorkspaceAlignment);
     if (status != Status::kSuccess) {
       return status;
     }
@@ -347,7 +349,7 @@ public:
       args.scheduler, workspace_ptr + workspace_offset, stream, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info, NumMmaWarpGroups, NumEpilogueSubTiles, NumAccumulatorMtxs, cuda_adapter);
     workspace_offset += TileScheduler::template get_workspace_size<typename ProblemShape::UnderlyingProblemShape, ElementAccumulator>(
       args.scheduler, typename ProblemShape::UnderlyingProblemShape{}, args.hw_info, NumMmaWarpGroups, NumEpilogueSubTiles);
-    workspace_offset = round_nearest(workspace_offset,  MinWorkspaceAlignment);
+    workspace_offset = round_nearest(workspace_offset, MinTensorMapWorkspaceAlignment);
     if (status != Status::kSuccess) {
       return status;
     }
@@ -443,6 +445,7 @@ public:
     }
     mainloop_pipeline_params.is_leader = warp_group_thread_idx == 0;
     mainloop_pipeline_params.num_consumers = NumThreadsPerWarpGroup;
+    mainloop_pipeline_params.num_producers = NumProducerThreads;
     mainloop_pipeline_params.transaction_bytes = params.mainloop.tma_transaction_bytes;
     MainloopPipeline mainloop_pipeline(shared_storage.pipelines.mainloop, mainloop_pipeline_params, ClusterShape{});
 
@@ -607,6 +610,7 @@ public:
           auto k_tile_iter = cute::make_coord_iterator(idx2crd(work_k_tile_start, shape<3>(gA_mkl)), shape<3>(gA_mkl));
 
           if (did_batch_change) {
+            load_inputs = collective_mainloop.tensors_perform_update(load_inputs, params.mainloop, problem_shape_MNKL, curr_batch);
             collective_mainloop.tensormaps_fence_acquire(input_tensormaps);
           }
 
@@ -690,9 +694,9 @@ public:
           // Converge before issuing tensormap fence release since fence is aligned
           __syncwarp();
           collective_epilogue.template tensormaps_cp_fence_release<IsEpiLoad>(shared_storage.tensormaps.epilogue, epi_load_tensormap, 0);
-        }
 
-        load_order_barrier.wait();
+          load_order_barrier.wait();
+        }
 
         while (work_tile_info.is_valid()) {
           int32_t curr_batch = work_tile_info.L_idx;
