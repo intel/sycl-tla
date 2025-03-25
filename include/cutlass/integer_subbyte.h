@@ -74,13 +74,19 @@ struct integer_subbyte {
   template<class T,
     class Enable = cutlass::platform::enable_if_t<cutlass::platform::is_convertible_v<T, int>>
   >
+#if !defined(CUTLASS_EXTRA_WARNINGS)
   [[deprecated("Implicit conversion is deprecated; please use explicit construction instead")]]
+#endif
   CUTLASS_HOST_DEVICE
   integer_subbyte(T value)
       : integer_subbyte(static_cast<xint_t>(value)) {}
 
   CUTLASS_HOST_DEVICE
   integer_subbyte(float value)
+      : integer_subbyte(static_cast<xint_t>(value)) {}
+
+  CUTLASS_HOST_DEVICE
+  integer_subbyte(double value)
       : integer_subbyte(static_cast<xint_t>(value)) {}
 
   // CUTLASS code commonly converts both signed and unsigned integers
