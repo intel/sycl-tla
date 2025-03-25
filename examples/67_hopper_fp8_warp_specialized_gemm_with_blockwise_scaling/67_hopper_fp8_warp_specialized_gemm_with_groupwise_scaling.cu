@@ -100,7 +100,7 @@ using         LayoutB     = cutlass::layout::ColumnMajor;                   // L
 constexpr int AlignmentB  = 128 / cutlass::sizeof_bits<ElementB>::value;    // Memory access granularity/alignment of B matrix in units of elements (up to 16 bytes)
 
 // C matrix configuration
-using         ElementC    = cutlass::float_e4m3_t;                          // Element type for C and D matrix operands
+using         ElementC    = float;                          // Element type for C and D matrix operands
 using         LayoutC     = cutlass::layout::ColumnMajor;                   // Layout type for C and D matrix operands
 constexpr int AlignmentC  = 128 / cutlass::sizeof_bits<ElementC>::value;    // Memory access granularity/alignment of C matrix in units of elements (up to 16 bytes)
 
@@ -303,108 +303,109 @@ struct Result
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Helper to initialize a block of device data
-  template <typename Element, typename Layout>
-  bool initialize_tensor(
-    cutlass::TensorView<Element, Layout> view,
-    cutlass::Distribution::Kind dist_kind,
-    uint64_t seed) {
+template <typename Element, typename Layout>
+bool initialize_tensor(
+  cutlass::TensorView<Element, Layout> view,
+  cutlass::Distribution::Kind dist_kind,
+  uint64_t seed) {
 
-    if (dist_kind == cutlass::Distribution::Uniform) {
+  if (dist_kind == cutlass::Distribution::Uniform) {
 
-      double scope_max, scope_min;
-      int bits_input = cutlass::sizeof_bits<Element>::value;
-      int bits_output = cutlass::sizeof_bits<Element>::value;
+    double scope_max, scope_min;
+    int bits_input = cutlass::sizeof_bits<Element>::value;
+    int bits_output = cutlass::sizeof_bits<Element>::value;
 
-      if (bits_input == 1) {
-        scope_max = 2;
-        scope_min = 0;
-      } else if (bits_input <= 8) {
-        scope_max = 2;
-        scope_min = -2;
-      } else if (bits_output == 16) {
-        scope_max = 5;
-        scope_min = -5;
-      } else {
-        scope_max = 8;
-        scope_min = -8;
-      }
-
-      cutlass::reference::host::TensorFillRandomUniform(
-        view, seed, scope_max, scope_min, 0);
-    }
-    else if (dist_kind == cutlass::Distribution::AllZeros) {
-      cutlass::reference::host::TensorFill(view);
-    }
-    else if (dist_kind == cutlass::Distribution::Identity) {
-
-      cutlass::reference::host::TensorFillIdentity(view);
-    }
-    else if (dist_kind == cutlass::Distribution::Gaussian) {
-
-      cutlass::reference::host::TensorFillRandomGaussian(view, seed, 0, 0.5);
-    }
-    else if (dist_kind == cutlass::Distribution::Sequential) {
-      cutlass::reference::host::BlockFillSequential(view.data(), view.capacity());
-    }
-    else {
-      throw std::runtime_error("Not implementated.");
+    if (bits_input == 1) {
+      scope_max = 2;
+      scope_min = 0;
+    } else if (bits_input <= 8) {
+      scope_max = 2;
+      scope_min = -2;
+    } else if (bits_output == 16) {
+      scope_max = 5;
+      scope_min = -5;
+    } else {
+      scope_max = 8;
+      scope_min = -8;
     }
 
-    return true;
+    cutlass::reference::host::TensorFillRandomUniform(
+      view, seed, scope_max, scope_min, bits_input);
   }
+  else if (dist_kind == cutlass::Distribution::AllZeros) {
+    cutlass::reference::host::TensorFill(view);
+  }
+  else if (dist_kind == cutlass::Distribution::Identity) {
+
+    cutlass::reference::host::TensorFillIdentity(view);
+  }
+  else if (dist_kind == cutlass::Distribution::Gaussian) {
+
+    cutlass::reference::host::TensorFillRandomGaussian(view, seed, 0, 0.5);
+  }
+  else if (dist_kind == cutlass::Distribution::Sequential) {
+    cutlass::reference::host::BlockFillSequential(view.data(), view.capacity());
+  }
+  else {
+    throw std::runtime_error("Not implementated.");
+  }
+
+  return true;
+}
 
 /// Helper to initialize a block of device data (scale_tensors)
-  template <typename Element, typename Layout>
-  bool initialize_scale_tensor(
-    cutlass::TensorView<Element, Layout> view,
-    cutlass::Distribution::Kind dist_kind,
-    uint64_t seed) {
+template <typename Element, typename Layout>
+bool initialize_scale_tensor(
+  cutlass::TensorView<Element, Layout> view,
+  cutlass::Distribution::Kind dist_kind,
+  uint64_t seed) {
 
-    if (dist_kind == cutlass::Distribution::Uniform) {
+  if (dist_kind == cutlass::Distribution::Uniform) {
 
-      double scope_max, scope_min;
+    double scope_max, scope_min;
 
-      scope_min = -1;
-      scope_max = 1;
+    scope_min = -1;
+    scope_max = 1;
 
-      cutlass::reference::host::TensorFillRandomUniform(
-        view, seed, scope_max, scope_min, 0);
-    }
-    else if (dist_kind == cutlass::Distribution::AllZeros) {
-      cutlass::reference::host::TensorFill(view);
-    }
-    else if (dist_kind == cutlass::Distribution::Identity) {
-
-      cutlass::reference::host::TensorFillIdentity(view);
-    }
-    else if (dist_kind == cutlass::Distribution::Gaussian) {
-
-      cutlass::reference::host::TensorFillRandomGaussian(view, seed, 0, 0.5);
-    }
-    else if (dist_kind == cutlass::Distribution::Sequential) {
-      cutlass::reference::host::BlockFillSequential(view.data(), view.capacity());
-    }
-    else {
-      throw std::runtime_error("Not implementated.");
-    }
-
-    return true;
+    cutlass::reference::host::TensorFillRandomUniform(
+      view, seed, scope_max, scope_min);
   }
+  else if (dist_kind == cutlass::Distribution::AllZeros) {
+    cutlass::reference::host::TensorFill(view);
+  }
+  else if (dist_kind == cutlass::Distribution::Identity) {
+
+    cutlass::reference::host::TensorFillIdentity(view);
+  }
+  else if (dist_kind == cutlass::Distribution::Gaussian) {
+
+    cutlass::reference::host::TensorFillRandomGaussian(view, seed, 0, 0.5);
+  }
+  else if (dist_kind == cutlass::Distribution::Sequential) {
+    cutlass::reference::host::BlockFillSequential(view.data(), view.capacity());
+  }
+  else {
+    throw std::runtime_error("Not implementated.");
+  }
+
+  return true;
+}
 
 /// Initialize operands to be used in the GEMM and reference GEMM
 template <typename GroupScaleConfig>
 void initialize(const Options<RasterOrderOptions> &options) {
 
   using TileShape = typename GroupScaleConfig::TileShape;
-  const int ScaleMsPerTile = GroupScaleConfig::ScaleMsPerTile;
-  const int ScaleNsPerTile = GroupScaleConfig::ScaleNsPerTile;
+  const int ScaleGranularityM = GroupScaleConfig::ScaleGranularityM;
+  const int ScaleGranularityN = GroupScaleConfig::ScaleGranularityN;
+
+  assert(options.m % ScaleGranularityM == 0);
+  assert(options.n % ScaleGranularityN == 0);
 
   // Find Group Scaling tensor shapes based on `ScaleGranularityM`, problem shape, and TileShape
-  auto gemm_problem_shape = cute::make_shape(options.m, options.n, options.k);
-  auto blockscale_shape = shape(get<1>(cute::zipped_divide(cute::make_layout(gemm_problem_shape), TileShape{})));
-  auto groupscale_m = cute::get<0>(blockscale_shape) * ScaleMsPerTile; // We need to pad along M in scale tensor of A to prevent illegal memory access.
-  auto groupscale_n = cute::get<1>(blockscale_shape) * ScaleNsPerTile; // We need to pad along N in scale tensor of A to prevent illegal memory access.
-  auto blockscale_k = cute::get<2>(blockscale_shape);
+  auto groupscale_m = ceil_div(options.m, ScaleGranularityM);
+  auto groupscale_n = ceil_div(options.n, ScaleGranularityN);
+  auto blockscale_k = ceil_div(options.k, cute::get<2>(TileShape{}));
 
   stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(options.m, options.k, options.l));
   stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(options.n, options.k, options.l));
@@ -453,6 +454,10 @@ void initialize(const Options<RasterOrderOptions> &options) {
   blockscale_tensor_A.sync_device();
   blockscale_tensor_B.sync_device();
 
+  // Note : This value has to match the KernelSchedule::ScalePromotionInterval
+  // Else kernel will fail can_implement() check
+  // Deprecation Notice : We plan to remove this params member in an upcoming release
+  // Users can safely delete this line from their code, since the default is already 4
   mma_promotion_interval = 4;
 
   if (options.save_aux) {
@@ -571,13 +576,15 @@ bool verify(const Options<RasterOrderOptions> &options, const int ScaleMsPerTile
   //
   // Compute reference output
   //
+  const int ScaleGranularityM = get<0>(TileShape_{}) / ScaleMsPerTile;
+  const int ScaleGranularityN = get<1>(TileShape_{}) / ScaleNsPerTile;
 
   // Group scaling tensors shapes based `ScaleGranularityM`, CTA Block (TileShape) and GEMM Problem shape
-  auto gemm_problem_shape = cute::make_shape(options.m, options.n, options.k);
-  auto blockscale_shape = shape(get<1>(cute::zipped_divide(cute::make_layout(gemm_problem_shape), TileShape_{})));
-  auto blockscale_m = cute::get<0>(blockscale_shape);
-  auto blockscale_n = cute::get<1>(blockscale_shape);
-  auto blockscale_k = cute::get<2>(blockscale_shape);
+  auto blockscale_m = ceil_div(options.m, get<0>(TileShape_{}));
+  auto blockscale_n = ceil_div(options.n, get<1>(TileShape_{}));
+  auto blockscale_k = ceil_div(options.k, get<2>(TileShape_{}));
+  auto groupscale_m = ceil_div(options.m, ScaleGranularityM);
+  auto groupscale_n = ceil_div(options.n, ScaleGranularityN);
 
   // Create instantiation for device reference gemm kernel
   auto A = cute::make_tensor(tensor_A.host_data(),
@@ -613,14 +620,14 @@ bool verify(const Options<RasterOrderOptions> &options, const int ScaleMsPerTile
 
   auto blockscale_A = cute::make_tensor(blockscale_tensor_A.host_data(),
                                         cute::make_layout(
-                                          cute::make_shape(blockscale_m, ScaleMsPerTile, blockscale_k, options.l),
-                                          cute::make_stride(blockscale_k * ScaleMsPerTile, 1, ScaleMsPerTile, blockscale_m * blockscale_k * ScaleMsPerTile)
+                                          cute::make_shape(groupscale_m, blockscale_k, options.l),
+                                          cute::make_stride(1, groupscale_m, groupscale_m * blockscale_k)
                                         )
                                       );
   auto blockscale_B = cute::make_tensor(blockscale_tensor_B.host_data(),
                                         cute::make_layout(
-                                          cute::make_shape(blockscale_n, ScaleNsPerTile, blockscale_k, options.l),
-                                          cute::make_stride(blockscale_k * ScaleNsPerTile, 1, ScaleNsPerTile, blockscale_n * blockscale_k * ScaleNsPerTile)
+                                          cute::make_shape(groupscale_n, blockscale_k, options.l),
+                                          cute::make_stride(1, groupscale_n, groupscale_n * blockscale_k)
                                         )
                                       );
 
@@ -665,29 +672,40 @@ bool verify(const Options<RasterOrderOptions> &options, const int ScaleMsPerTile
   cutlass::reference::host::Gemm3x(mainloop_params, epilogue_params);
 
   // compare_reference
+  bool passed = true;
   tensor_D.sync_host();
-  bool passed = cutlass::reference::host::TensorEquals(tensor_ref_D.host_view(), tensor_D.host_view());
+  passed &= cutlass::reference::host::TensorRelativelyEquals(tensor_D.host_view(), tensor_ref_D.host_view(), ElementAux(options.epsilon), ElementAux(options.non_zero_floor));
+  double mse = cutlass::reference::host::TensorMSE(tensor_D.host_view(), tensor_ref_D.host_view());
+  double mre = cutlass::reference::host::TensorMRE(tensor_D.host_view(), tensor_ref_D.host_view());
+  double max_error = cutlass::reference::host::TensorGreatestError(tensor_D.host_view(), tensor_ref_D.host_view());
+  std::cout << "  Result MSE: " << mse << ", MRE: " << mre << ", greatest error: " << max_error << std::endl;
 
-  if (false) {
-    std::cout << "tensor_ref_D.host_view() {" << std::endl
-              << tensor_ref_D.host_view() << std::endl
-              << "}"  << std::endl;
-    std::cout << "tensor_D.host_view() {" << std::endl
-              << tensor_D.host_view() << std::endl
-              << "}"  << std::endl;
-  }
+#if 0
+  std::cout << "tensor_ref_D.host_view() {" << std::endl
+            << tensor_ref_D.host_view() << std::endl
+            << "}"  << std::endl;
+  std::cout << "tensor_D.host_view() {" << std::endl
+            << tensor_D.host_view() << std::endl
+            << "}"  << std::endl;
+#endif
 
   if (IsDFp8 && options.save_amax) {
     abs_max_D.sync_host();
-    passed &= abs_max_D.at(cutlass::make_Coord(0)) == reference_abs_max_D.at(cutlass::make_Coord(0));
+    std::cout << "  Abs max D: " << abs_max_D.at(cutlass::make_Coord(0)) << ", reference: " << reference_abs_max_D.at(cutlass::make_Coord(0)) << std::endl;
+    passed &= cutlass::relatively_equal(abs_max_D.at(cutlass::make_Coord(0)), reference_abs_max_D.at(cutlass::make_Coord(0)), ElementScalar(options.epsilon), ElementScalar(options.non_zero_floor));
   }
 
   if (options.save_aux) {
     tensor_aux.sync_host();
-    passed &= cutlass::reference::host::TensorEquals(tensor_ref_aux.host_view(), tensor_aux.host_view());
+    passed &= cutlass::reference::host::TensorRelativelyEquals(tensor_aux.host_view(), tensor_ref_aux.host_view(), ElementAux(options.epsilon), ElementAux(options.non_zero_floor));
+    mse = cutlass::reference::host::TensorMSE(tensor_aux.host_view(), tensor_ref_aux.host_view());
+    mre = cutlass::reference::host::TensorMRE(tensor_aux.host_view(), tensor_ref_aux.host_view());
+    max_error = cutlass::reference::host::TensorGreatestError(tensor_aux.host_view(), tensor_ref_aux.host_view());
+    std::cout << "  Aux MSE: " << mse << ", MRE: " << mre << ", greatest error: " << max_error << std::endl;
     if (IsAuxFp8 && options.save_amax) {
       abs_max_aux.sync_host();
-      passed &= abs_max_aux.at(cutlass::make_Coord(0)) == reference_abs_max_aux.at(cutlass::make_Coord(0));
+      std::cout << "  Abs max aux: " << abs_max_aux.at(cutlass::make_Coord(0)) << ", reference: " << reference_abs_max_aux.at(cutlass::make_Coord(0)) << std::endl;
+      passed &= cutlass::relatively_equal(abs_max_aux.at(cutlass::make_Coord(0)), reference_abs_max_aux.at(cutlass::make_Coord(0)), ElementScalar(options.epsilon), ElementScalar(options.non_zero_floor));
     }
   }
 
@@ -703,6 +721,31 @@ int run(Options<RasterOrderOptions> &options)
   const int ScaleGranularityN = GroupScaleConfig::ScaleGranularityN;
   const int ScaleMsPerTile    = GroupScaleConfig::ScaleMsPerTile;
   const int ScaleNsPerTile    = GroupScaleConfig::ScaleNsPerTile;
+
+  bool skip = false;
+  std::cout << "  Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+  std::cout << "  Tile shape (M, N, K): " << size<0>(TileShape{}) << ", " << size<1>(TileShape{}) << ", " << size<2>(TileShape{}) << std::endl;
+  std::cout << "  ScaleGranularityM: " << ScaleGranularityM << " (ScaleMsPerTile: " << ScaleMsPerTile << ")" << std::endl;
+  std::cout << "  ScaleGranularityN: " << ScaleGranularityN << " (ScaleNsPerTile: " << ScaleNsPerTile << ")" << std::endl;
+
+
+  if (options.m < ScaleGranularityM) {
+    std::cout << "  Skippig (m size: " << options.m << " less than ScaleGranularityM: " << ScaleGranularityM << "):" << std::endl;
+    skip = true;
+  }
+
+  if (options.n < ScaleGranularityN) {
+    std::cout << "  Skippig (n size: " << options.n << " less than ScaleGranularityN: " << ScaleGranularityN << "):" << std::endl;
+    skip = true;
+  }
+
+  if (options.k < size<2>(TileShape{})) {
+    std::cout << "  Skippig (k size: " << options.k << " less than TileShape[2]: " << size<2>(TileShape{}) << "):" << std::endl;
+    skip = true;
+  }
+
+  if (!skip) std::cout << "  Running... " << std::endl;
+  else return -1;
 
   initialize<GroupScaleConfig>(options);
 
@@ -729,20 +772,22 @@ int run(Options<RasterOrderOptions> &options)
 
   // Check if output from CUTLASS kernel and reference kernel are equal or not
   Result result;
-  result.passed = verify(options, ScaleMsPerTile, ScaleNsPerTile);
+  if (options.verify) {
+    result.passed = verify(options, ScaleMsPerTile, ScaleNsPerTile);
 
-  std::cout << "  Disposition: " << (result.passed ? "Passed" : "Failed") << std::endl;
-
-  // if (!result.passed) {
-  //  exit(-1);
-  // }
+    std::cout << "  Disposition: " << (result.passed ? "Passed" : "Failed") << std::endl;
+  }
+  else {
+    result.passed = true;
+  }
 
   // Run profiling loop
   if (options.iterations > 0)
   {
     GpuTimer timer;
-    timer.start();
-    for (int iter = 0; iter < options.iterations; ++iter) {
+    for (int iter = 0; iter < options.warmup + options.iterations; ++iter) {
+      if (iter == options.warmup)
+        timer.start();
       CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
       CUTLASS_CHECK(gemm.run());
     }
@@ -762,17 +807,13 @@ int run(Options<RasterOrderOptions> &options)
       raster = "Along M";
     }
 
-    std::cout << "  Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-    std::cout << "  Tile shape (M, N, K): " << size<0>(TileShape{}) << ", " << size<1>(TileShape{}) << ", " << size<2>(TileShape{}) << std::endl;
-    std::cout << "  ScaleGranularityM: " << ScaleGranularityM << " (ScaleMsPerTile: " << ScaleMsPerTile << ")" << std::endl;
-    std::cout << "  ScaleGranularityN: " << ScaleGranularityN << " (ScaleNsPerTile: " << ScaleNsPerTile << ")" << std::endl;
     std::cout << "  Rasterization: " << raster << " with a maximum CTA swizzle of " << options.swizzle << std::endl;
     std::cout << "  Avg runtime: " << result.avg_runtime_ms << " ms" << std::endl;
     std::cout << "  GFLOPS: " << result.gflops << std::endl;
     fflush(stdout);
   }
 
-  return 0;
+  return result.passed;
 }
 
 #endif // defined(CUTLASS_ARCH_MMA_SM90_SUPPORTED)
@@ -818,27 +859,31 @@ int main(int argc, char const **args) {
   //
 
 #if defined(CUTLASS_ARCH_MMA_SM90_SUPPORTED)
+  bool passed = true;
   std::cout << "Basic split-K GEMM kernel" << std::endl;
-  run<GroupScale1D1DConfig, GroupScale1D1DGemm::GemmDefault>(options);
+  passed &= run<GroupScale1D1DConfig, GroupScale1D1DGemm::GemmDefault>(options);
   std::cout << std::endl;
-  run<GroupScale1D2DConfig, GroupScale1D2DGemm::GemmDefault>(options);
+  passed &= run<GroupScale1D2DConfig, GroupScale1D2DGemm::GemmDefault>(options);
   std::cout << std::endl;
-  run<GroupScale2D1DConfig, GroupScale2D1DGemm::GemmDefault>(options);
+  passed &= run<GroupScale2D1DConfig, GroupScale2D1DGemm::GemmDefault>(options);
   std::cout << std::endl;
-  run<GroupScale2D2DConfig, GroupScale2D2DGemm::GemmDefault>(options);
+  passed &= run<GroupScale2D2DConfig, GroupScale2D2DGemm::GemmDefault>(options);
   std::cout << std::endl;
 
   std::cout << std::endl;
 
   std::cout << "StreamK GEMM kernel" << std::endl;
-  run<GroupScale1D1DConfig, GroupScale1D1DGemm::GemmStreamK>(options);
+  passed &= run<GroupScale1D1DConfig, GroupScale1D1DGemm::GemmStreamK>(options);
   std::cout << std::endl;
-  run<GroupScale1D2DConfig, GroupScale1D2DGemm::GemmStreamK>(options);
+  passed &= run<GroupScale1D2DConfig, GroupScale1D2DGemm::GemmStreamK>(options);
   std::cout << std::endl;
-  run<GroupScale2D1DConfig, GroupScale2D1DGemm::GemmStreamK>(options);
+  passed &= run<GroupScale2D1DConfig, GroupScale2D1DGemm::GemmStreamK>(options);
   std::cout << std::endl;
-  run<GroupScale2D2DConfig, GroupScale2D2DGemm::GemmStreamK>(options);
+  passed &= run<GroupScale2D2DConfig, GroupScale2D2DGemm::GemmStreamK>(options);
   std::cout << std::endl;
+
+  if (!passed)
+    return -1;
 #endif
 
   return 0;

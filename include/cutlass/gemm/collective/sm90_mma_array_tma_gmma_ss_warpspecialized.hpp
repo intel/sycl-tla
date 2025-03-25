@@ -116,6 +116,9 @@ struct CollectiveMma<
 
   using PipelineParams = typename MainloopPipeline::Params;
   using CtaShape_MNK = decltype(shape_div(TileShape{}, ClusterShape{}));
+
+  static constexpr int NumProducerThreadEvents = 1;
+
   static_assert(rank(SmemLayoutAtomA{}) == 2, "SmemLayoutAtom must be rank 2 (M/N, K)");
   static_assert((size<0>(TileShape{}) % size<0>(SmemLayoutAtomA{})) == 0, "SmemLayoutAtom must evenly divide tile shape.");
   static_assert((size<2>(TileShape{}) % size<1>(SmemLayoutAtomA{})) == 0, "SmemLayoutAtom must evenly divide tile shape.");
@@ -222,9 +225,10 @@ struct CollectiveMma<
     auto init_N = get<1>(init_shape);
     auto init_K = get<2>(init_shape);
     // Batches/Groups are managed by using appropriate pointers to input matrices
-    const uint32_t mock_L = 1;
-    InternalElementA const* ptr_A_first_batch = reinterpret_cast<InternalElementA const*>(args.ptr_A);
-    InternalElementB const* ptr_B_first_batch = reinterpret_cast<InternalElementB const*>(args.ptr_B);
+    const uint32_t init_L = 1;
+    // NOTE: Since TMA desc creation with nullptr not possible until 12.6, we use an initial address even when tensor addresses are on device. This address is never used.
+    InternalElementA const* ptr_A_first_batch = reinterpret_cast<InternalElementA const*>(reinterpret_cast<uint64_t>(args.ptr_A) & 0xFFFFFFFFFFFFFFF0);  // Address must be 16B-aligned
+    InternalElementB const* ptr_B_first_batch = reinterpret_cast<InternalElementB const*>(reinterpret_cast<uint64_t>(args.ptr_B) & 0xFFFFFFFFFFFFFFF0);  // Address must be 16B-aligned
 
     InternalStrideA stride_a;
     InternalStrideB stride_b;
@@ -243,8 +247,8 @@ struct CollectiveMma<
       stride_a = args.dA;
       stride_b = args.dB;
     }
-    Tensor tensor_a = make_tensor(ptr_A_first_batch, make_layout(make_shape(init_M,init_K,mock_L), stride_a));
-    Tensor tensor_b = make_tensor(ptr_B_first_batch, make_layout(make_shape(init_N,init_K,mock_L), stride_b));
+    Tensor tensor_a = make_tensor(ptr_A_first_batch, make_layout(make_shape(init_M,init_K,init_L), stride_a));
+    Tensor tensor_b = make_tensor(ptr_B_first_batch, make_layout(make_shape(init_N,init_K,init_L), stride_b));
     TMA_A tma_load_a = make_tma_copy(
         GmemTiledCopyA{},
         tensor_a,
@@ -331,12 +335,12 @@ struct CollectiveMma<
     using X = Underscore;
     // Separate out problem shape for convenience
     auto [M,N,K,L] = problem_shape_MNKL;
-    const int32_t mock_L = 1;
+    const int32_t init_L = 1;
 
     // TMA requires special handling of strides to deal with coord codomain mapping
     // Represent the full tensors -- get these from TMA
-    Tensor mA_mkl = mainloop_params.tma_load_a.get_tma_tensor(make_shape(M,K,mock_L));                            // (m,k,l)
-    Tensor mB_nkl = mainloop_params.tma_load_b.get_tma_tensor(make_shape(N,K,mock_L));                            // (n,k,l)
+    Tensor mA_mkl = mainloop_params.tma_load_a.get_tma_tensor(make_shape(M,K,init_L));                            // (m,k,l)
+    Tensor mB_nkl = mainloop_params.tma_load_b.get_tma_tensor(make_shape(N,K,init_L));                            // (n,k,l)
 
     // Make tiled views, defer the slice
     Tensor gA_mkl = local_tile(mA_mkl, TileShape{}, make_coord(_,_,_), Step<_1, X,_1>{});  // (BLK_M,BLK_K,m,k,l)
@@ -749,6 +753,16 @@ struct CollectiveMma<
     cute::tma_descriptor_fence_acquire(get<1>(input_tensormaps));
   }
 
+  template <class InputTensors, class ProblemShape_MNKL>
+  CUTLASS_DEVICE
+  InputTensors
+  tensors_perform_update(
+      InputTensors const& input_tensors,
+      [[maybe_unused]] Params const& mainloop_params,
+      [[maybe_unused]] ProblemShape_MNKL problem_shape_mnkl,
+      [[maybe_unused]] int32_t next_batch) {
+    return input_tensors;
+  }
 
 };
 
