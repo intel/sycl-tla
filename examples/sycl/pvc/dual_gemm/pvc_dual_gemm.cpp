@@ -464,15 +464,9 @@ int run_dual_gemm(int argc, const char** argv)
   // Workgroup-level tile
   using TileShape = Shape<_256, _128, _32>;
 
-  // The Tile of this layout describes how 8x4x1 sub-groups tile the TileShape of <256, 128, 32>. 
-  // This permutation (which can be thought of as a scatter operation on the default tiling) 
-  // ensures that each sub-group operates on a contiguous 32x32x32 chunk (4x2x2 iterations)
-  // See 0t_mma_atom.md#TiledMMAs for more info.
-  using TiledMma =
-      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
-               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                    Layout<Shape<_16, _4, _2>, Stride<_1, _32, _16>>, _32>>;
+  using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+                                          Layout<TileShape>,
+                                          Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
