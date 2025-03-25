@@ -19,6 +19,7 @@ runs:
       if: inputs.DPCPP_RELEASE == 'NIGHTLY'
       shell: bash
       run: |
+        sudo apt install -y libhwloc15
         export DPCPP_PATH=${{ inputs.DPCPP_PATH }}
         mkdir -p $DPCPP_PATH
         pushd $DPCPP_PATH
@@ -30,7 +31,6 @@ runs:
           latest=$(curl -sS https://api.github.com/repos/intel/llvm/releases | jq -r '[.[].tag_name|select(match("nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}"))][0]')
           URL=https://github.com/intel/llvm/releases/download/${latest}/sycl_linux.tar.gz;
         fi
-        sudo apt install -y libhwloc15
         echo "Downloading DPCPP from ${URL}"
         sudo wget -q $URL
         sudo tar -xf sycl_linux.tar.gz
