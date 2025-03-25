@@ -186,6 +186,7 @@ struct ExampleRunner {
   using ElementB = typename Gemm::ElementB;
   using ElementAcc = typename Gemm::ElementAccumulator;
   using ElementMMA = std::conditional_t<AIsNarrower, ElementB, ElementA>;
+  using ElementQuant = std::conditional_t<AIsNarrower, ElementA, ElementB>;
 
   using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
   using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
@@ -321,7 +322,7 @@ struct ExampleRunner {
       block.copy_from_host(stage.data());
     } 
     else {
-      float elt_max_f = float(cutlass::platform::numeric_limits<QuantType>::max());
+      float elt_max_f = float(cutlass::platform::numeric_limits<ElementQuant>::max());
       const float max_dequant_val = 4.f;
       const float min_dequant_val = 0.5f;
 
