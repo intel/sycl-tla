@@ -36,6 +36,7 @@
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/collective/collective_mma.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
+#include "cutlass/fp8_to_fp16.h"
 
 #include <cute/tensor.hpp>
 #include <random>
@@ -162,7 +163,6 @@ struct ExampleRunner {
       DstT* h_dst = new DstT[size];
       for (size_t i = 0; i < size; ++i) {
           h_dst[i] = static_cast<DstT>(h_src[i]);
-          //print("h_dst: "); print(static_cast<float>(h_dst[i])); print("\n");
       }
 
       syclcompat::memcpy(d_dst, h_dst, size * sizeof(DstT));
@@ -237,6 +237,18 @@ struct ExampleRunner {
       bool passed = cutlass::reference::device::BlockCompareEqual(
           block_ref_D.get(), block_D.get(), block_D.size());
 
+      // DEBUG
+      /*
+      float* dD = block_D.get();
+      float* hD = new float[block_A.size()];
+      syclcompat::memcpy(hD, dD, block_D.size() * sizeof(float));
+      for (int i = 0; i < M; ++i) {
+          for (int j = 0; j < K; ++j) {
+              print(hD[i * K + j]); print(" ");
+          }
+          std::cout << std::endl;
+      }
+      */
       return passed;
   }
 
@@ -259,8 +271,40 @@ struct ExampleRunner {
     initialize_block(block_A, seed + 2023); // fp8
     initialize_block(block_B, seed + 2022); // fp8
     initialize_block(block_C, seed + 2021); // fp32
+    
+    // DEBUG
+    /*
+    cutlass::float_e4m3_t fp8_one(static_cast<float>(0.0f));
+    cute::intel::uchar16 input_vec;
+    for (size_t i = 0; i < 16; ++i) {
+        uint8_t int8_bits = reinterpret_cast<uint8_t&>(fp8_one);
+        input_vec[i] = int8_bits;
+    }
+    cute::intel::ushort16 output_vec = E4M3_to_FP16_vec16(input_vec);
+    for (int i = 0; i < 16; ++i) {
+        uint16_t vector_bits = output_vec[i];
+        half_t vector_result = reinterpret_cast<half_t&>(vector_bits);
+        print("fp16_val: "); print(static_cast<float>(vector_result)); print("\n");
+    }
+    */
 
-    // debug purpose
+    /*
+    cutlass::float_e4m3_t fp8_val(static_cast<float>(1.0f));
+    print("fp8_val: "); print(static_cast<float>(fp8_val)); print("\n");
+    uint8_t int8_bits = reinterpret_cast<uint8_t&>(fp8_val);
+    half_t fp16_val = E4M3_to_FP16(int8_bits);
+    print("fp16_val: "); print(static_cast<float>(fp16_val)); print("\n");
+    */
+
+    /*
+    cutlass::float_e4m3_t fp8_val(static_cast<float>(1.0f));
+    print("fp8_val: "); print(static_cast<float>(fp8_val)); print("\n");
+    uint8_t int8_bits = reinterpret_cast<uint8_t&>(fp8_val);
+    unsigned short fp16_bits = E4M3_to_FP16(int8_bits);
+    half_t fp16_val = reinterpret_cast<half_t&>(fp16_bits);
+    print("fp16_val: "); print(static_cast<float>(fp16_val)); print("\n");
+    */
+
     /*
     ElementA* dA = block_A.get();
     ElementA* hA = new ElementA[block_A.size()];
@@ -268,7 +312,7 @@ struct ExampleRunner {
     /*
     // debug purpose: initialize with all 1's
     for (size_t i = 0; i < block_A.size(); ++i) {
-        cutlass::float_e4m3_t fp8_val(static_cast<float>(1.0f));
+        cutlass::float_e4m3_t fp8_val(static_cast<float>(0.31251534));
         cutlass::ReferenceFactory<ElementA>::get(hA, i) = fp8_val;
     }
     */
@@ -286,13 +330,16 @@ struct ExampleRunner {
     syclcompat::memcpy(dA, hA, block_A.size() * sizeof(ElementA));
     */
     /*
+    syclcompat::memcpy(hA, dA, block_A.size() * sizeof(ElementA));
+    */
+    /*
     ElementB* dB = block_B.get();
     ElementB* hB = new ElementB[block_B.size()];
     */
     /*
     // debug purpose: initialize with all 1's
     for (size_t i = 0; i < block_A.size(); ++i) {
-        cutlass::float_e4m3_t fp8_val(static_cast<float>(1.0f));
+        cutlass::float_e4m3_t fp8_val(static_cast<float>(0.31251534));
         cutlass::ReferenceFactory<ElementB>::get(hB, i) = fp8_val;
     }
     */
@@ -300,11 +347,15 @@ struct ExampleRunner {
     syclcompat::memcpy(dB, hB, block_B.size() * sizeof(ElementB));
     */
     /*
+    syclcompat::memcpy(hB, dB, block_B.size() * sizeof(ElementA));
+    */
+    /*
     for (int i = 0; i < block_A.size(); ++i) {
         cutlass::half hA_fp16 = hA[i];
         print("hA: "); print(static_cast<float>(hA_fp16)); print("\n");
     }
     */
+    
     /*
     for (int i = 0; i < M; ++i) {
         for (int j = 0; j < K; ++j) {
@@ -313,8 +364,15 @@ struct ExampleRunner {
         }
         std::cout << std::endl;
     }
+    print("---------------------------------------------"); print("\n");
+    for (int j = 0; j < N; ++j) {
+        for (int i = 0; i < K; ++i) {
+            cutlass::half hB_fp16 = hB[i * N + j];
+            print(static_cast<float>(hB_fp16)); print(" ");
+        }
+        std::cout << std::endl;
+    }
     */
-
   }
   
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {

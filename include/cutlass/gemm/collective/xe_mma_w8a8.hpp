@@ -32,6 +32,7 @@
 
 #include "cutlass/cutlass.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
+#include "cutlass/fp8_to_fp16.h"
 
 #include "cute/algorithm/functional.hpp"
 #include "cute/atom/mma_atom.hpp"
@@ -173,7 +174,7 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       class LayoutOut,
       class... Ts>
   CUTLASS_DEVICE
-      void transform_A(
+      void convert_E4M3_to_FP16(
           Tensor<EngineIn, LayoutIn> const& tCrA_load,
           Tensor<EngineOut, LayoutOut>& tCrA_mma) {
 
@@ -183,29 +184,33 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
       static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
       
-      using SrcType = cutlass::float_e4m3_t;
+      using SrcType = typename EngineIn::value_type;
       using DstType = typename EngineOut::value_type;
+
+      static_assert(std::is_same_v<SrcType, uint8_t>, "Expected fp8 (E4M3) input as uint8_t");
+      static_assert(std::is_same_v<DstType, half_t>, "Expected fp16 output as half_t");
 
       auto const& src = tCrA_load(_, _, _);
       auto const& dst = tCrA_mma(_, _, _);
-      
-      auto pSrc = raw_pointer_cast(src.data());
-      auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
-      
+
+      SrcType const* pSrc = src.data();
+      DstType* pDst = dst.data();
+
       constexpr int num_elements = decltype(size(src))::value;
-      constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
-      constexpr int iters = num_elements / pack;
-
-      using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
-      using SrcArray = cutlass::Array<SrcType, pack>;
-      using DstArray = cutlass::Array<DstType, pack>;
-
-      auto* pSrcArr = reinterpret_cast<const SrcArray*>(raw_pointer_cast(tCrA_load.data()));
-      auto* pDstArr = reinterpret_cast<DstArray*>(raw_pointer_cast(tCrA_mma.data()));
+      constexpr int vec_size = 16;
+      static_assert(num_elements % vec_size == 0, "Number of elements must be divisible by vector size (16)");
 
       CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < iters; ++i) {
-            pDstArr[i] = Converter::convert(pSrcArr[i]);
+        for (int i = 0; i < num_elements / vec_size; ++i) {
+            cute::intel::uchar16 src_vec;
+            for (int j = 0; j < vec_size; ++j) {
+                src_vec[j] = pSrc[i * vec_size + j];
+            }
+            cute::intel::ushort16 dst_vec = E4M3_to_FP16_vec16(src_vec);
+            for (int j = 0; j < vec_size; ++j) {
+                reinterpret_cast<uint16_t*>(pDst)[i * vec_size + j] = dst_vec[j];
+
+            }
         }
   }
   
@@ -273,8 +278,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       
       // convert fp8 to fp16
       // TODO: register pressure
-      transform_A(tCrA, tCrA_fp16); // fp8 (stored as fake uint8) -> fp16
-      transform_A(tCrB, tCrB_fp16); // fp8 (stored as fake uint8) -> fp16
+      convert_E4M3_to_FP16(tCrA, tCrA_fp16); // fp8 (stored as fake uint8) -> fp16
+      convert_E4M3_to_FP16(tCrB, tCrB_fp16); // fp8 (stored as fake uint8) -> fp16
 
       // compute using fp16
       cute::gemm(tiled_mma, tCrA_fp16, tCrB_fp16, accum);
