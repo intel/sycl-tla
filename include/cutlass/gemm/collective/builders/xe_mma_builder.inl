@@ -41,7 +41,6 @@ namespace cutlass::gemm::collective {
   // Intel PVC 3 stage pipeline, using prefetch
   // Also the auto builder
 
-// TODO(joe): Decide if we want to support mixed precision dispatch here (also update example/test if so)
 template <
   class ElementA,
   class GmemLayoutATag,
