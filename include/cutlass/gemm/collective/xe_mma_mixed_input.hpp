@@ -213,14 +213,11 @@ public:
     ElementZero const* ptr_Z = nullptr;
   };
 
-  // TODO(joe): Can/should I specialize the Params struct based on `ConversionMode`?
-  // Could this save passing some args & registers etc?
   struct Params {
     TensorMKL mA;
     TensorNKL mB;
     TensorScale mScale;
     TensorZero mZero;
-    int64_t scale_k;
     int group_size;
   };
 
