@@ -194,7 +194,7 @@ struct ExampleRunner {
 
       auto bias_view =
           cutlass::TensorView(
-          block_bias.get() + batch * L, LayoutBias::packed({M, 1}), cutlass::make_Coord(M, 1));
+          block_bias.get() + batch * M, LayoutBias::packed({M, 1}), cutlass::make_Coord(M, 1));
 
       cutlass::reference::device::TensorPerRowBias(D_view, bias_view);
     }
