@@ -126,7 +126,7 @@ public:
 
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
-  using GmemTiledCopyScale = XE_2D_U16x1x32_LD_N;  // TODO(joe): generalize
+  using GmemTiledCopyScale = XE_2D_U16x1x32_LD_N;  // TODO(Codeplay): generalize
 
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;
@@ -163,6 +163,8 @@ private:
   static constexpr ConversionMode KernelConversionMode = get_conversion_mode();
   static constexpr bool ModeHasScales = KernelConversionMode == ConversionMode::ConvertAndScale ||
                                         KernelConversionMode == ConversionMode::ConvertAndScaleWithZero;
+
+  static_assert(!(sizeof_bits_v<ElementQuant> < 8 && ModeHasScales), "Dequantization with sub-byte quant type not yet supported in Xe mixed precision Gemm");
 
 public:
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
@@ -314,8 +316,7 @@ public:
       auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
       constexpr int num_elements = decltype(size(src))::value;
 
-    // TODO(joe): consider replacing `pack` with `num_elements` here
-    // See xe_flash_attn_mma.hpp
+    // TODO(Codeplay): (perf) consider replacing `pack` with `num_elements` here - See xe_flash_attn_mma.hpp
       constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
       using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
       using SrcArray = cutlass::Array<SrcType, pack>;
@@ -397,14 +398,13 @@ public:
     (void)thread_idx;
     (void)smem_buf;
 
+    // TODO(Codeplay): Fix use of make_tiled_copy here & avoid use of CopyThreadShape/CopyThreadShapeRev 
     auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(mainloop.mA),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
     auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(mainloop.mB),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
-
-    // TODO(joe): Deal with these in a manner that doesn't require `CopyThreadShapeRev`
     auto tiled_copy_scale = make_tiled_copy(atom_load_scale{}.with(mainloop.mScale),
                                    Layout<CopyThreadShapeRev>{},
                                    make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{})));
@@ -476,13 +476,12 @@ public:
     //
     // Mainloop
     //
-    // TODO(joe): unhardcode these
+    // TODO(Codeplay): Define these coord tensors using proper cute logic 
     auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
     const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
     const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
     const int l_coord = l_idx;
 
-    // TODO(joe): I need to work out the 'correct' way to grab these, or else re-introduce the `m_coord` etc for now...
     Tensor copy_iter_s = [&](){
       if constexpr(IsATransformed){
         return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
