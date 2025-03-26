@@ -194,7 +194,7 @@ struct ExampleRunner {
 
       auto bias_view =
           cutlass::TensorView(
-          block_bias.get(), LayoutBias::packed({0, N}), {M, N});
+          block_bias.get() + batch * L, LayoutBias::packed({M, 1}), cutlass::make_Coord(M, 1));
 
       cutlass::reference::device::TensorPerRowBias(D_view, bias_view);
     }
@@ -238,6 +238,12 @@ struct ExampleRunner {
 
     using StrideBias = Stride<_1, _0, int64_t>;
     StrideBias dBias = {};
+
+    if(options.l > 1) {
+      cute::get<2>(dBias) = static_cast<int64_t>(options.m);
+    } else {
+      cute::get<2>(dBias) = static_cast<int64_t>(0);
+    }
 
     using EpilogueArguments = typename Gemm::GemmKernel::EpilogueArguments;
     EpilogueArguments epilogue_arguments{
