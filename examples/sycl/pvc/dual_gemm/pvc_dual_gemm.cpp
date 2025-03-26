@@ -220,20 +220,24 @@ struct ExampleRunner {
     syclcompat::wait();
 
     for(int batch = 0, offset = 0; batch < L; batch++, offset += M * N) {
+      auto D0_view = cutlass::TensorView(block_ref_D0.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N));
       if constexpr (UseBias0) {
-        cutlass::reference::device::TensorPerRowBias(cutlass::TensorView(block_ref_D0.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)), 
-                                                    cutlass::TensorView(block_bias0.get(), LayoutBias::packed({0, N}), cutlass::make_Coord(M, N)));
+        auto bias0_view = cutlass::TensorView(block_bias0.get() + batch * M, LayoutBias::packed({M, 1}), cutlass::make_Coord(M, 1));
+        cutlass::reference::device::TensorPerRowBias(D0_view, bias0_view);
       }
 
+      syclcompat::wait();
+
+      auto D1_view = cutlass::TensorView(block_ref_D1.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N));
       if constexpr (UseBias1) {
-        cutlass::reference::device::TensorPerRowBias(cutlass::TensorView(block_ref_D1.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)), 
-                                                    cutlass::TensorView(block_bias1.get(), LayoutBias::packed({0, N}), cutlass::make_Coord(M, N)));
+        auto bias1_view = cutlass::TensorView(block_bias1.get() + batch * M, LayoutBias::packed({M, 1}), cutlass::make_Coord(M, 1));
+        cutlass::reference::device::TensorPerRowBias(D1_view, bias1_view);
       }
 
-      cutlass::reference::device::TensorSiLu(cutlass::TensorView(block_ref_D2.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
-                                            cutlass::TensorView(block_ref_D0.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)),
-                                            cutlass::TensorView(block_ref_D1.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)));
+      syclcompat::wait();
 
+      auto D2_view = cutlass::TensorView(block_ref_D2.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N));
+      cutlass::reference::device::TensorSiLu(D2_view, D0_view, D1_view);
     }
 
     syclcompat::wait();
@@ -323,16 +327,28 @@ struct ExampleRunner {
 
     if constexpr (UseBias0) {
       using StrideBias = Stride<_1, _0, int64_t>;
-      StrideBias dBias = {};
+      StrideBias dBias0 = {};
+      if(options.l > 1) {
+        cute::get<2>(dBias0) = static_cast<int64_t>(options.m);
+      } else {
+        cute::get<2>(dBias0) = static_cast<int64_t>(0);
+      }
+
       epilogue_arguments0.thread.bias_ptr = block_bias0.get();
-      epilogue_arguments0.thread.dBias = dBias; 
+      epilogue_arguments0.thread.dBias = dBias0;
     }
 
     if constexpr (UseBias1) {
       using StrideBias = Stride<_1, _0, int64_t>;
-      StrideBias dBias = {};
+      StrideBias dBias1 = {};
+      if(options.l > 1) {
+        cute::get<2>(dBias1) = static_cast<int64_t>(options.m);
+      } else {
+        cute::get<2>(dBias1) = static_cast<int64_t>(0);
+      }
+
       epilogue_arguments1.thread.bias_ptr = block_bias1.get();
-      epilogue_arguments1.thread.dBias = dBias; 
+      epilogue_arguments1.thread.dBias = dBias1;
     }
 
     typename GemmKernel::Arguments arguments{
