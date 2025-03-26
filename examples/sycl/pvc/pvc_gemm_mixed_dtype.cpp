@@ -351,20 +351,6 @@ struct ExampleRunner {
     return true;
   }
 
-  template <typename Element>
-  bool initialize_quant_tensor(
-    cutlass::DeviceAllocation<Element>& block,
-    uint64_t seed=2023) {
-
-    float scope_min = float(cutlass::platform::numeric_limits<Element>::lowest());
-    float scope_max = float(cutlass::platform::numeric_limits<Element>::max());
-
-    cutlass::reference::device::BlockFillRandomUniform(
-      block.get(), block.size(), seed, Element(scope_max), Element(scope_min));
-
-    return true;
-  }
-
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(Options const& options) {
     auto [M, N, K, L] = ProblemShapeType{options.m, options.n, options.k, options.l};
