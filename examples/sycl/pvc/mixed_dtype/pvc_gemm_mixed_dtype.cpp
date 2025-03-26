@@ -60,7 +60,7 @@
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "../common.hpp"
 #include "helper.h"
-#include "unfused_weight_dequantize.hpp"
+#include "cutlass/util/mixed_dtype_utils.hpp"
 
 using namespace cute;
 
@@ -402,11 +402,11 @@ struct ExampleRunner {
     auto layout_B = make_layout(shape_b, stride_B);
     auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
     if constexpr (AIsNarrower) {
-      dequantize_weight(block_A_dq.get(), block_A.get(), layout_A,
+      dequantize(block_A_dq.get(), block_A.get(), layout_A,
                         block_scale.get(), block_zero.get(), layout_scale_zero,
                         options.g);
     } else {
-      dequantize_weight(block_B_dq.get(), block_B.get(), layout_B,
+      dequantize(block_B_dq.get(), block_B.get(), layout_B,
                         block_scale.get(), block_zero.get(), layout_scale_zero,
                         options.g);
     }
