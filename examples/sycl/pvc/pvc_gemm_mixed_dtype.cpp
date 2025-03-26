@@ -369,17 +369,18 @@ struct ExampleRunner {
   void initialize(Options const& options) {
     auto [M, N, K, L] = ProblemShapeType{options.m, options.n, options.k, options.l};
 
-    int const scale_k = cute::ceil_div(options.k, options.g);
+    const int scale_k = cute::ceil_div(options.k, options.g);
     const int dq_mn_size = AIsNarrower ? options.m : options.n;
-    auto shape_a = cute::make_shape(options.m, options.k, options.l);
-    auto shape_b = cute::make_shape(options.n, options.k, options.l);
-    auto shape_scale_zero = cute::make_shape(dq_mn_size, scale_k, options.l);
+    auto shape_A = cute::make_shape(M, K, L);
+    auto shape_B = cute::make_shape(N, K, L);
+    auto shape_CD = cute::make_shape(M, N, L);
+    auto shape_scale_zero = cute::make_shape(dq_mn_size, scale_k, L);
 
-    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
-    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
-    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
-    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
-    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, cute::make_shape(dq_mn_size, scale_k, L));
+    stride_A = cutlass::make_cute_packed_stride(StrideA{}, shape_A);
+    stride_B = cutlass::make_cute_packed_stride(StrideB{}, shape_B);
+    stride_C = cutlass::make_cute_packed_stride(StrideC{}, shape_CD);
+    stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
+    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
 
     block_A.reset(M * K * L);
     block_A_dq.reset(M * K * L);
@@ -388,8 +389,8 @@ struct ExampleRunner {
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
-    block_scale.reset(scale_k * options.l * dq_mn_size);
-    block_zero.reset(scale_k * options.l * dq_mn_size);
+    block_scale.reset(scale_k * L * dq_mn_size);
+    block_zero.reset(scale_k * L * dq_mn_size);
 
     initialize_mixed_dtype_block(block_A, block_A_dq, seed + 2023);
     initialize_mixed_dtype_block(block_B, block_B_dq, seed + 2022);
@@ -398,8 +399,8 @@ struct ExampleRunner {
     initialize_scale(block_scale, options);
     initialize_zero(block_zero, options);
 
-    auto layout_A = make_layout(shape_a, stride_A);
-    auto layout_B = make_layout(shape_b, stride_B);
+    auto layout_A = make_layout(shape_A, stride_A);
+    auto layout_B = make_layout(shape_B, stride_B);
     auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
     if constexpr (AIsNarrower) {
       dequantize(block_A_dq.get(), block_A.get(), layout_A,
@@ -449,6 +450,7 @@ struct ExampleRunner {
     // Verify that the result is correct
     bool passed = verify(options);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+
     if(!passed) return cutlass::Status::kErrorInternal;
 
     if (options.iterations > 0) {
