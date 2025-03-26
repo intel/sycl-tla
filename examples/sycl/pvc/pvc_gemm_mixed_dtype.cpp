@@ -402,6 +402,9 @@ struct ExampleRunner {
     auto layout_A = make_layout(shape_A, stride_A);
     auto layout_B = make_layout(shape_B, stride_B);
     auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
+
+    // Note that we are overwriting the relevant `block_X_dq` here, both were
+    // filled by initialize_mixed_dtype_block above
     if constexpr (AIsNarrower) {
       dequantize(block_A_dq.get(), block_A.get(), layout_A,
                         block_scale.get(), block_zero.get(), layout_scale_zero,
