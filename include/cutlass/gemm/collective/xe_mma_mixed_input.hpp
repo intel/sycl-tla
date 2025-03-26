@@ -246,18 +246,23 @@ public:
         make_tensor(make_gmem_ptr(static_cast<ElementB const *>(args.ptr_B)),
                     make_layout(make_shape(N, K, L), args.dB));
 
-    // These are unused in ConversionMode::DirectConvert
+    if constexpr(KernelConversionMode == ConversionMode::DirectConvert){
+      return Params{mA_mkl, mB_nkl, {}, {}, 0};
+    }
+
     auto scale_k = cute::ceil_div(K, args.group_size);
     auto mScale = make_tensor(
         make_gmem_ptr(static_cast<NonVoidElementScale const *>(args.ptr_S)),
         make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
 
+    if constexpr(KernelConversionMode == ConversionMode::ConvertAndScale){
+      return Params{mA_mkl, mB_nkl, mScale, {}, args.group_size};
+    }
     auto mZero =
         make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
                     make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
 
-    // TODO(joe): handle ConvertOnly mode etc here
-    return Params{mA_mkl, mB_nkl, mScale, mZero, scale_k, args.group_size};
+    return Params{mA_mkl, mB_nkl, mScale, mZero, args.group_size};
   }
 
   // Helper functions to select packing for conversion
