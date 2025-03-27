@@ -47,9 +47,6 @@ jobs:
           which $CXX
           $CXX --version
           sycl-ls
-          ocloc query OCL_DRIVER_VERSION
-          ocloc query IGC_REVISION
-          ocloc query NEO_REVISION
       - name: Build
         shell: bash
         run: |
