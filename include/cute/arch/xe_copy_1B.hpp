@@ -443,6 +443,44 @@ struct XE_2D_U8x32x32_LD_N {
   }
 };
 
+struct XE_2D_U4x16x16_LD_T {
+  using BlockShape = Shape<_16, _16>;
+  using inst_dtype = uint32_t;
+  static constexpr bool is_transpose = true;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(SYCL_INTEL_TARGET)
+    *reinterpret_cast<intel::uint2 *>(dst) =
+        __builtin_IB_subgroup_block_read_flat_transpose_u32_k2(
+            (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+#endif
+  }
+};
+
+struct XE_2D_U4x32x16_LD_T {
+  using BlockShape = Shape<_32, _16>;
+  using inst_dtype = uint32_t;
+  static constexpr bool is_transpose = true;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(SYCL_INTEL_TARGET)
+    *reinterpret_cast<intel::uint4 *>(dst) =
+        __builtin_IB_subgroup_block_read_flat_transpose_u32_k4(
+            (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+#endif
+  }
+};
+
 struct XE_2D_U4x32x64_LD_N {
   using BlockShape = Shape<_32, _64>;
   using inst_dtype = int8_t;
