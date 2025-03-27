@@ -162,6 +162,27 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
   #undef RETURN_STATEMENT
 }
 
+template<class TileShape, int Num_SGs, class... TiledCopyArgs>
+CUTE_HOST_DEVICE auto prefetch_selector(TiledCopy<TiledCopyArgs...> const& tiled_copy) {
+  using Tiled_Copy = TiledCopy<TiledCopyArgs...>;
+  constexpr int subgroup_size = size(typename Tiled_Copy::Traits_LD_t::ThrID{});
+  int M, N;
+  if constexpr (Tiled_Copy::is_need_reversed) {
+    M = tiled_copy.width;
+    N = tiled_copy.height;
+  } else{
+    M = tiled_copy.height;
+    N = tiled_copy.width;
+  }
+  // L is not used in prefetch_selector and we do not have the correct value here. Just set it to some arbitrary value.
+  int L = 1;
+  auto data = make_gmem_ptr(static_cast<const typename Tiled_Copy::ValType*>(tiled_copy.base_ptr));
+  auto shape = make_shape(M, N, L);
+  auto order = std::conditional_t<Tiled_Copy::is_need_reversed, Step<_0, _1, _2>, Step<_1, _0, _2>>{};
+  auto tensor = make_tensor(data, make_ordered_layout(shape, order));
+  return cute::prefetch_selector<TileShape, Num_SGs, subgroup_size>(tensor);
+}
+
 
 template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<1>, int64_t>>
 struct XE_2D_LD_Unpack {
@@ -232,29 +253,6 @@ struct XE_2D_LD_Unpack {
                   stride_l(traits.stride_l) {}
 
   XE_2D_LD_Unpack() {}
-
-  template<class TileShape, int Num_SGs, class dtype>
-  CUTE_HOST_DEVICE auto prefetch_selector() const {
-    constexpr int subgroup_size = size(typename Traits_LD_t::ThrID{});
-    int M, N;
-    if constexpr (is_need_reversed) {
-      M = width;
-      N = height;
-    } else{
-      M = height;
-      N = width;
-    }
-    // L is not used in prefetch_selector and we do not have the correct value here.
-    // Just set it to some arbitrary value >1. `make_cute_packed_stride` would not set stride correctly for 1
-    int L = 2;
-    auto data = make_gmem_ptr(static_cast<const dtype*>(base_ptr));
-    auto shape = make_shape(M,N,L);
-    //auto stride = cutlass::make_cute_packed_stride(StrideIndicator{}, shape);
-    auto order = std::conditional_t<is_need_reversed, Step<_0, _1, _2>, Step<_1, _0, _2>>{};
-    auto layout = make_ordered_layout(shape, order);
-    auto tensor = make_tensor(data, layout);
-    return cute::prefetch_selector<TileShape, Num_SGs, subgroup_size>(tensor);
-  }
 
   template <class TS, class SLayout, class TD, class DLayout>
   CUTE_HOST_DEVICE friend constexpr void
