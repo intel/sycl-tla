@@ -19,6 +19,7 @@ runs:
       if: inputs.DPCPP_RELEASE == 'NIGHTLY'
       shell: bash
       run: |
+        apt update && apt upgrade -y
         dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         export DPCPP_PATH=${{ inputs.DPCPP_PATH }}
         mkdir -p $DPCPP_PATH
@@ -52,7 +53,7 @@ runs:
         sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
-        sudo apt update
+        sudo apt update && apt upgrade -y
         sudo apt install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
@@ -63,4 +64,10 @@ runs:
         export CPLUS_INCLUDE_PATH=$CMPLR_ROOT/include:$CPLUS_INCLUDE_PATH
         export LD_LIBRARY_PATH=$CMPLR_ROOT/lib:$LD_LIBRARY_PATH
         EOF
-
+    - name: DPCPP Debug Info
+      shell: bash
+      run: |
+        sycl-ls
+        ocloc query OCL_DRIVER_VERSION
+        ocloc query IGC_REVISION
+        ocloc query NEO_REVISION
