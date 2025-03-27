@@ -474,11 +474,11 @@ int run_dual_gemm(int argc, const char** argv)
   using ElementInputB = bfloat16_t;                   // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  using GmemTiledCopyA = XE_2D_U16x16x32_LD_N;
   using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
 
   // Workgroup-level tile
-  using TileShape = Shape<_256, _128, _32>;
+  using TileShape = Shape<_128, _128, _64>;
 
   using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
                                           Layout<TileShape>,
