@@ -36,8 +36,6 @@
 #include <cute/algorithm/prefetch.hpp>
 #include <cute/arch/copy_xe.hpp>
 
-#include <cutlass/util/packed_stride.hpp>
-
 namespace cute {
 
 namespace detail {
@@ -251,8 +249,10 @@ struct XE_2D_LD_Unpack {
     int L = 2;
     auto data = make_gmem_ptr(static_cast<const dtype*>(base_ptr));
     auto shape = make_shape(M,N,L);
-    auto stride = cutlass::make_cute_packed_stride(StrideIndicator{}, shape);
-    auto tensor = make_tensor(data, shape, stride);
+    //auto stride = cutlass::make_cute_packed_stride(StrideIndicator{}, shape);
+    auto order = std::conditional_t<is_need_reversed, Step<_0, _1, _2>, Step<_1, _0, _2>>{};
+    auto layout = make_ordered_layout(shape, order);
+    auto tensor = make_tensor(data, layout);
     return cute::prefetch_selector<TileShape, Num_SGs, subgroup_size>(tensor);
   }
 

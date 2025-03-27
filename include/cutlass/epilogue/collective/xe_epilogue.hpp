@@ -187,13 +187,13 @@ public:
     XE_Copy_C xe_load_c = {};
     if constexpr (is_source_supported) {
       auto mC = make_tensor(make_gmem_ptr(args.ptr_C), make_layout(make_shape(M, N, L), args.dC));
-      xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(mC), Layout<CopyThreadShape>{}, val_layout_load_C{});
+      xe_load_c = {xe_load_c.with(mC)};
     }
 
     XE_Copy_D xe_store_d = {};
     if constexpr (is_destination_supported) {
       auto mD = make_tensor(make_gmem_ptr(args.ptr_D), make_layout(make_shape(M, N, L), args.dD));
-      xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(mD), Layout<CopyThreadShape>{}, val_layout_store_D{});
+      xe_store_d = {xe_store_d.with(mD)};
     }
 
     return {
