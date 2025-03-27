@@ -64,10 +64,3 @@ runs:
         export CPLUS_INCLUDE_PATH=$CMPLR_ROOT/include:$CPLUS_INCLUDE_PATH
         export LD_LIBRARY_PATH=$CMPLR_ROOT/lib:$LD_LIBRARY_PATH
         EOF
-    - name: DPCPP Debug Info
-      shell: bash
-      run: |
-        sycl-ls
-        ocloc query OCL_DRIVER_VERSION
-        ocloc query IGC_REVISION
-        ocloc query NEO_REVISION

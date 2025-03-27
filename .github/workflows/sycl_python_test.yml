@@ -50,6 +50,10 @@ jobs:
           . setvars.sh
           # Persist environment variables to following steps
           env >> $GITHUB_ENV
+          sycl-ls
+          ocloc query OCL_DRIVER_VERSION
+          ocloc query IGC_REVISION
+          ocloc query NEO_REVISION
 
       - name: Install DPCTL
         id: install_dpctl
