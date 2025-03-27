@@ -33,7 +33,6 @@ jobs:
         shell: bash
         run: |
           nvidia-smi
-          sudo apt install -y libhwloc15
           mkdir ~/dpcpp
           pushd ~/dpcpp
           echo "Will use DPCPP ${{ inputs.DPCPP_VERSION }}."
