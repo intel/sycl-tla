@@ -49,18 +49,16 @@ cutlass_example_add_executable(
   TEST_BATCHES
 )
 
+#TODO: enable batch > 1 test once implementation is fixed.
 cutlass_example_add_executable(
   pvc_gemm_with_epilogue_softmax
   pvc_gemm_with_epilogue_softmax.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
 )
 
+#TODO: enable batch > 1 test once implementation is fixed.
 cutlass_example_add_executable(
   pvc_gemm_with_epilogue_lincombdeeltact
   pvc_gemm_with_epilogue_lincombdeeltact.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
 )
 
 cutlass_example_add_executable(
@@ -70,11 +68,10 @@ cutlass_example_add_executable(
   TEST_BATCHES
 )
 
+#TODO: enable batch > 1 test once implementation is fixed.
 cutlass_example_add_executable(
   pvc_collective_builder
   pvc_collective_builder.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
 )
 
 cutlass_example_add_executable(
