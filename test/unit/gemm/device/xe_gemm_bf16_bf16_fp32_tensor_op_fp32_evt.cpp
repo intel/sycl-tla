@@ -45,31 +45,54 @@
 
 #include "gemm_testbed_3x.hpp"
 
+namespace {
+using namespace cute;
+using LayoutA = cutlass::layout::RowMajor;
+using LayoutB = cutlass::layout::RowMajor;
+using LayoutC = cutlass::layout::RowMajor;
+using LayoutD = cutlass::layout::RowMajor;
+using EpilogueSchedule = cutlass::epilogue::collective::EpilogueScheduleAuto;
+using ElementAccumulator = float;
+using ElementComputeEpilogue = float;
+using ElementInputA = bfloat16_t;
+using ElementInputB = bfloat16_t;
+using ElementOutput = float;
+using TileShape_MNK = Shape<_256, _256, _32>;
+using ClusterShape_MNK = Shape<_1, _1, _1>;
+
+constexpr static int AlignmentA = sizeof(ElementInputA);
+constexpr static int AlignmentB = sizeof(ElementInputB);
+constexpr static int AlignmentC = sizeof(ElementAccumulator);
+constexpr static int AlignmentD = sizeof(ElementOutput);
+
+using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    ElementInputA, LayoutA, AlignmentA,
+    ElementInputB, LayoutB, AlignmentB,
+    ElementAccumulator,
+    TileShape_MNK, ClusterShape_MNK,
+    cutlass::gemm::collective::StageCountAuto,
+    cutlass::gemm::collective::KernelScheduleAuto
+  >::CollectiveOp;
+
+template <typename CollectiveEpilogue>
+struct XE_Device_Gemm_bf16_bf16_f32_tensor_op_gmma_f32_epilogue{
+
+
+  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<
+    cutlass::gemm::kernel::GemmUniversal<
+      Shape<int, int, int, int>,
+      CollectiveMainloop,
+      CollectiveEpilogue
+    >>;
+};
+}
+
 // D = activation(alpha * acc + beta * C)
 TEST(XE_Device_Gemm_bf16t_bf16t_f32t_tensor_op_gmma_f32_epilogue, 256x256x32_LinCombEltAct) {
-  using namespace cute;
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-  using LayoutC = cutlass::layout::RowMajor;
-  using LayoutD = cutlass::layout::RowMajor;
 
-  using TileShape_MNK = Shape<_256, _256, _32>;
-  using ClusterShape_MNK = Shape<_1, _1, _1>;
-
-  using EpilogueSchedule = cutlass::epilogue::collective::EpilogueScheduleAuto;
-  using ElementAccumulator = float;
-  using ElementComputeEpilogue = float;
-  using ElementInputA = bfloat16_t;
-  using ElementInputB = bfloat16_t;
-  using ElementOutput = float;
-
-  constexpr int AlignmentA = sizeof(ElementInputA);
-  constexpr int AlignmentB = sizeof(ElementInputB);
-  constexpr int AlignmentC = sizeof(ElementAccumulator);
-  constexpr int AlignmentD = sizeof(ElementOutput);
-
-  using FusionCallbacks = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, 
-          ElementOutput, ElementComputeEpilogue, ElementAccumulator, 
+  using FusionCallbacks = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu,
+          ElementOutput, ElementComputeEpilogue, ElementAccumulator,
           ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
@@ -83,49 +106,14 @@ TEST(XE_Device_Gemm_bf16t_bf16t_f32t_tensor_op_gmma_f32_epilogue, 256x256x32_Lin
       FusionCallbacks
     >::CollectiveOp;
 
-  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
-      ElementInputA, LayoutA, AlignmentA,
-      ElementInputB, LayoutB, AlignmentB,
-      ElementAccumulator,
-      TileShape_MNK, ClusterShape_MNK,
-      cutlass::gemm::collective::StageCountAuto,
-      cutlass::gemm::collective::KernelScheduleAuto
-    >::CollectiveOp;
-
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int, int, int, int>,
-      CollectiveMainloop,
-      CollectiveEpilogue
-  >;
-
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+  using Gemm = XE_Device_Gemm_bf16_bf16_f32_tensor_op_gmma_f32_epilogue<CollectiveEpilogue>::Gemm;
 
   bool passed = test::gemm::device::TestXe<Gemm, cutlass::epilogue::thread::ReLu>(1.0, 1.0);
   EXPECT_TRUE(passed);
 }
 
 TEST(Xe_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue_drelu, 256x256x32) {
-  using namespace cute;
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-  using LayoutC = cutlass::layout::RowMajor;
-  using LayoutD = cutlass::layout::RowMajor;
   using LayoutAux = cutlass::layout::RowMajor;
-
-  using TileShape_MNK = Shape<_256, _256, _32>;
-  using ClusterShape_MNK = Shape<_1,_1,_1>;
-  using EpilogueSchedule = cutlass::epilogue::collective::EpilogueScheduleAuto;
-  using ElementAccumulator = float;
-  using ElementComputeEpilogue = float;
-  using ElementInputA = bfloat16_t;
-  using ElementInputB = bfloat16_t;
-  using ElementOutput = float;
-
-  constexpr int AlignmentA = sizeof(ElementInputA);
-  constexpr int AlignmentB = sizeof(ElementInputB);
-  constexpr int AlignmentC = sizeof(ElementAccumulator);
-  constexpr int AlignmentD = sizeof(ElementOutput);
 
   using FusionCallbacks = cutlass::epilogue::fusion::LinCombDeEltAct<
     LayoutC,
@@ -144,23 +132,7 @@ TEST(Xe_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue_drelu, 256x256x32) {
       FusionCallbacks
     >::CollectiveOp;
 
-  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
-      ElementInputA, LayoutA, AlignmentA,
-      ElementInputB, LayoutB, AlignmentB,
-      ElementAccumulator,
-      TileShape_MNK, ClusterShape_MNK,
-      cutlass::gemm::collective::StageCountAuto,
-      cutlass::gemm::collective::KernelScheduleAuto
-    >::CollectiveOp;
-
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int,int,int,int>,
-      CollectiveMainloop,
-      CollectiveEpilogue
-  >;
-
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+  using Gemm = XE_Device_Gemm_bf16_bf16_f32_tensor_op_gmma_f32_epilogue<CollectiveEpilogue>::Gemm;
 
   // TODO(Codeplay): fix batch
   bool passed = test::gemm::device::TestXe<Gemm, cutlass::epilogue::thread::dReLU>(1.0, 1.0, false);
@@ -168,37 +140,7 @@ TEST(Xe_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue_drelu, 256x256x32) {
 }
 
 TEST(XE_Device_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue, 256x256x32_LinCombPerRowBias) {
-  using namespace cute;
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-  using LayoutC = cutlass::layout::RowMajor;
-  using LayoutD = cutlass::layout::RowMajor;
-
-  using TileShape_MNK = Shape<_256, _256, _32>;
-  using ClusterShape_MNK = Shape<_1, _1, _1>;
-
-  using EpilogueSchedule = cutlass::epilogue::collective::EpilogueScheduleAuto;
-  using ElementAccumulator = float;
-  using ElementComputeEpilogue = float;
   using ElementBias = float;
-  using ElementInputA = bfloat16_t;
-  using ElementInputB = bfloat16_t;
-  using ElementOutput = float;
-
-  constexpr int AlignmentA = sizeof(ElementInputA);
-  constexpr int AlignmentB = sizeof(ElementInputB);
-  constexpr int AlignmentC = sizeof(ElementAccumulator);
-  constexpr int AlignmentD = sizeof(ElementOutput);
-
-  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
-      ElementInputA, LayoutA, AlignmentA,
-      ElementInputB, LayoutB, AlignmentB,
-      ElementAccumulator,
-      TileShape_MNK, ClusterShape_MNK,
-      cutlass::gemm::collective::StageCountAuto,
-      cutlass::gemm::collective::KernelScheduleAuto
-    >::CollectiveOp;
 
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
   using EpilogueOp = cutlass::epilogue::fusion::LinCombPerRowBias<
@@ -222,13 +164,7 @@ TEST(XE_Device_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue, 256x256x32_LinC
           XE_2D_U32x8x16_ST_N,
           void, void>;
 
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int, int, int, int>,
-      CollectiveMainloop,
-      CollectiveEpilogue
-  >;
-
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+  using Gemm = XE_Device_Gemm_bf16_bf16_f32_tensor_op_gmma_f32_epilogue<CollectiveEpilogue>::Gemm;
 
   bool passed = test::gemm::device::TestXe<Gemm>(1.0, 0.0);
   EXPECT_TRUE(passed);

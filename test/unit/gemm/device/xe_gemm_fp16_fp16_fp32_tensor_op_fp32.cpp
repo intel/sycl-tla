@@ -42,75 +42,44 @@
 
 #include "gemm_testbed_3x.hpp"
 
-
-TEST(XE_Device_Gemm_fp16t_fp16t_f32t_tensor_op_f32, 256x256x32) {
+namespace {
+template <typename LayoutA, typename LayoutB>
+struct XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32 {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
-    cute::half_t, cutlass::layout::RowMajor,
-    cute::half_t, cutlass::layout::RowMajor,
+    cute::half_t, LayoutA,
+    cute::half_t, LayoutA,
     float, cutlass::layout::RowMajor,
     float>;
 
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      cute::Shape<int,int,int,int>,
-      Config::CollectiveMainloop,
-      Config::CollectiveEpilogue
-  >;
+  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<cutlass::gemm::kernel::GemmUniversal<
+    cute::Shape<int,int,int,int>,
+    typename Config::CollectiveMainloop,
+    typename Config::CollectiveEpilogue>>;
+};
+}
 
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+
+TEST(XE_Device_Gemm_fp16t_fp16t_f32t_tensor_op_f32, 256x256x32) {
+  using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32<
+    cutlass::layout::RowMajor, cutlass::layout::RowMajor>::Gemm;
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
 TEST(XE_Device_Gemm_fp16n_fp16t_f32t_tensor_op_f32, 256x256x32) {
-  using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
-    cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
-    cute::half_t, cutlass::layout::ColumnMajor,
-    cute::half_t, cutlass::layout::RowMajor,
-    float, cutlass::layout::RowMajor,
-    float>;
-
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      cute::Shape<int,int,int,int>,
-      Config::CollectiveMainloop,
-      Config::CollectiveEpilogue
-  >;
-
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+  using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32<
+    cutlass::layout::ColumnMajor, cutlass::layout::RowMajor>::Gemm;
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
 TEST(XE_Device_Gemm_fp16t_fp16n_f32t_tensor_op_f32, 256x256x32) {
-  using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
-    cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
-    cute::half_t, cutlass::layout::RowMajor,
-    cute::half_t, cutlass::layout::ColumnMajor,
-    float, cutlass::layout::RowMajor,
-    float>;
-
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      cute::Shape<int,int,int,int>,
-      Config::CollectiveMainloop,
-      Config::CollectiveEpilogue
-  >;
-
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+  using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32<
+    cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>::Gemm;
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
 TEST(XE_Device_Gemm_fp16n_fp16n_f32t_tensor_op_f32, 256x256x32) {
-  using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
-    cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
-    cute::half_t, cutlass::layout::ColumnMajor,
-    cute::half_t, cutlass::layout::ColumnMajor,
-    float, cutlass::layout::RowMajor,
-    float>;
-
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      cute::Shape<int,int,int,int>,
-      Config::CollectiveMainloop,
-      Config::CollectiveEpilogue
-  >;
-
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+  using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32<
+    cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>::Gemm;
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
