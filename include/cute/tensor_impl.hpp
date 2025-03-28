@@ -235,7 +235,7 @@ struct Tensor
   decltype(auto)
   operator()(Coord const& coord) {
     if constexpr (has_underscore<Coord>::value) {
-      auto const& [sliced_layout,offset] = slice_and_offset(coord, layout());
+      auto [sliced_layout,offset] = slice_and_offset(coord, layout());
       return make_tensor(data() + offset, sliced_layout);
     } else {
       return data()[layout()(coord)];
@@ -249,7 +249,7 @@ struct Tensor
   decltype(auto)
   operator()(Coord const& coord) const {
     if constexpr (has_underscore<Coord>::value) {
-      auto const& [sliced_layout,offset] = slice_and_offset(coord, layout());
+      auto [sliced_layout,offset] = slice_and_offset(coord, layout());
       return make_tensor(data() + offset, sliced_layout);
     } else {
       return data()[layout()(coord)];
@@ -481,7 +481,7 @@ CUTE_HOST_DEVICE constexpr
 auto
 make_counting_tensor(Layout const& layout)
 {
-  return make_tensor(make_inttuple_iter(repeat_like(coshape(layout), Int<0>{})), layout);
+  return make_tensor(make_inttuple_iter(coprofile(layout)), layout);
 }
 
 //
@@ -788,7 +788,7 @@ recast(Tensor&& tensor)
  * vectorization should be attempted.
  *
  * Note that the return value does NOT include alignment concerns such as the pointer value and
- * the divisbility of dynamic strides.
+ * the divisibility of dynamic strides.
  */
 template <class SrcEngine, class SrcLayout,
           class DstEngine, class DstLayout>
@@ -828,7 +828,7 @@ max_common_vector(Tensor<SrcEngine,SrcLayout> const& a,
  *          are both identity Layouts.
  *
  * Note that the returned layout does NOT include alignment concerns such as the pointer value and
- * the divisbility of dynamic strides.
+ * the divisibility of dynamic strides.
  */
 template <class SrcEngine, class SrcLayout,
           class DstEngine, class DstLayout>

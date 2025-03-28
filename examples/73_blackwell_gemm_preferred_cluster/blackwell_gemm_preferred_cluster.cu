@@ -129,27 +129,22 @@ using OperatorClass       = cutlass::arch::OpClassTensorOp;                 // O
 // MMA and Cluster Tile Shapes
 // Shape of the tile computed by tcgen05 MMA, could be across 2 SMs if Cluster Shape % 2 == 0 
 using MmaTileShape_MNK = Shape<_256,_128,_64>;                          
-// Shape of the threadblocks participating in a tcgen05 MMA. <1, 1, 1> for cta_group = 1, <2, 1, 1> for cta_group = 2
-using AtomThrShape_MNK = Shape<_2, _1, _1>;
-// Shape of the tile computed by each SM
-using PerSmTileShape_MNK = decltype(shape_div(MmaTileShape_MNK{}, AtomThrShape_MNK{}));
 // Shape of the cluster set to <int,int,_1> to indicate dynamic cluster shape
 using ClusterShape_MNK = Shape<int,int,_1>;
 // When dynamic cluster is used, KernelScheduleAuto always selects mainloop dispatch policy that 
 // lowers to tcgen05 MMA cta_group = 1 as we don't know if the dynamic cluster M dimension will be a multiple of 2
-// To use KernelScheduleAuto, users need to set AtomThrShape_MNK to Shape<1, 1, 1>
-using KernelSchedule = cute::conditional_t<cute::size(AtomThrShape_MNK{}) == 2, 
-  cutlass::gemm::KernelTmaWarpSpecialized2SmSm100, 
-  cutlass::gemm::collective::KernelScheduleAuto>;
+// To use tcgen05 MMA cta_group = 2, users must explicitly use 2sm builder schedules
+using KernelSchedule = cutlass::gemm::KernelTmaWarpSpecialized2SmSm100;
+using EpilogueSchedule = cutlass::epilogue::TmaWarpSpecialized2Sm;
 
 using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
     ArchTag, OperatorClass,
-    PerSmTileShape_MNK, ClusterShape_MNK,
+    MmaTileShape_MNK, ClusterShape_MNK,
     cutlass::epilogue::collective::EpilogueTileAuto,
     ElementAccumulator, ElementAccumulator,
     ElementC, LayoutC, AlignmentC,
     ElementC, LayoutC, AlignmentC,
-    cutlass::epilogue::collective::EpilogueScheduleAuto
+    EpilogueSchedule
   >::CollectiveOp;
 
 using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
@@ -219,7 +214,8 @@ struct Options {
   int iterations;
   int m, n, k;
   int preferred_cluster_m, preferred_cluster_n, fallback_cluster_m, fallback_cluster_n;
-  
+  int swizzle = 0;
+
   Options():
     help(false),
     m(4096), n(4096), k(4096),
@@ -228,7 +224,8 @@ struct Options {
     preferred_cluster_m(4),
     preferred_cluster_n(4),
     fallback_cluster_m(2),
-    fallback_cluster_n(1)
+    fallback_cluster_n(1),
+    swizzle(0)
   { }
 
   // Parses the command line
@@ -250,6 +247,7 @@ struct Options {
     cmd.get_cmd_line_argument("preferred_cluster_n", preferred_cluster_n, 4);
     cmd.get_cmd_line_argument("fallback_cluster_m", fallback_cluster_m, 2);
     cmd.get_cmd_line_argument("fallback_cluster_n", fallback_cluster_n, 1);
+    cmd.get_cmd_line_argument("swizzle", swizzle);
 
     if (!validate_cluster_shape()){
       std::cout << "--Invalid cluster shapes" << std::endl;
@@ -270,6 +268,7 @@ struct Options {
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
       << "  --alpha=<f32>               Epilogue scalar alpha\n"
       << "  --beta=<f32>                Epilogue scalar beta\n"
+      << "  --swizzle=<int>             Cluster rasterization swizzle\n"
       << "  --preferred_cluster_m=<str> Sets the M extent of preferred cluster shape\n"
       << "  --preferred_cluster_n=<str> Sets the N extent of preferred cluster shape\n"
       << "  --fallback_cluster_m=<str>  Sets the M extent of fallback cluster shape\n"
@@ -389,7 +388,8 @@ typename Gemm::Arguments args_from_options(const Options &options) {
 
   arguments.hw_info.cluster_shape = dim3(options.preferred_cluster_m, options.preferred_cluster_n,1);
   arguments.hw_info.cluster_shape_fallback = dim3(options.fallback_cluster_m, options.fallback_cluster_n,1);
-  
+
+  arguments.scheduler.max_swizzle_size = options.swizzle;
   return arguments;
 }
 

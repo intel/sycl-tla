@@ -62,6 +62,7 @@
 
 
 TEST(XE_Device_GemmUniversal_s8t_bf16n_f32t_mixed_input_tensor_op_f32, 128x128x64_64x64x64) {
+  using namespace cute;
 
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
@@ -83,10 +84,9 @@ TEST(XE_Device_GemmUniversal_s8t_bf16n_f32t_mixed_input_tensor_op_f32, 128x128x6
   using TileShape = Shape<_256, _256, _32>;
 
   using TiledMma =
-      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
-               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                    Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+               Layout<TileShape>,
+               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;
@@ -131,6 +131,7 @@ TEST(XE_Device_GemmUniversal_s8t_bf16n_f32t_mixed_input_tensor_op_f32, 128x128x6
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
+  // TODO(Codeplay): gemm batch doesn't work for mixed type
   bool passed = test::gemm::device::TestXe<Gemm>(1.0, 1.0);
   EXPECT_TRUE(passed);
 }

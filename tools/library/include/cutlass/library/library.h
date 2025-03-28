@@ -323,12 +323,11 @@ struct GemmUniversalArguments {
   int swizzle_size{1};
   int split_k_slices{1};
 
-  // For mixed input dtype kernels
-  bool is_mixed_dtype{false};
+  // For SM90 mixed input dtype kernels
+  bool is_sm90_mixed_dtype{false};
   Sm90MixedInputWiderOperand wider_operand{Sm90MixedInputWiderOperand::B};
   bool generate_scale_and_zero{false};
   bool generate_dequantized_AB{false};
-  bool *dequantized_AB_ready{nullptr};  // Carry the info back to gemm_operation_profiler.cu
   void *Scale{nullptr};                 // Scale tensor
   void *Zero{nullptr};                  // Zero tensor
   void *dequantized_AB{nullptr};        // Dequantized A or B tensor for verification
@@ -336,10 +335,9 @@ struct GemmUniversalArguments {
   void *packed_Scale{nullptr};          // Packed scale for int4 * fp8
 
   int device_index{0};
-  
+
   bool use_pdl{false};
 };
-
 
 /// Block Scaled GEMM
 //
@@ -495,29 +493,31 @@ struct GemmGroupedConfiguration {
   int64_t* lda;
   int64_t* ldb;
   int64_t* ldc;
+
+  cute::Shape<int, int, int>* problem_sizes_3x_host;
 };
 
 struct GemmGroupedArguments {
   int problem_count{};
   gemm::GemmCoord* problem_sizes{nullptr};
 
-  void * ptr_A{nullptr};
-  void * ptr_B{nullptr};
-  void * ptr_C{nullptr};
-  void * ptr_D{nullptr};
+  void* ptr_A{nullptr};
+  void* ptr_B{nullptr};
+  void* ptr_C{nullptr};
+  void* ptr_D{nullptr};
 
-  int64_t *lda{nullptr};
-  int64_t *ldb{nullptr};
-  int64_t *ldc{nullptr};
-  int64_t *ldd{nullptr};
+  int64_t* lda{nullptr};
+  int64_t* ldb{nullptr};
+  int64_t* ldc{nullptr};
+  int64_t* ldd{nullptr};
 
   void const *alpha{nullptr};
   void const *beta{nullptr};
   ScalarPointerMode pointer_mode{};
   bool use_pdl{false};
 
-  gemm::GemmCoord cluster_shape{};          
-  gemm::GemmCoord cluster_shape_fallback{}; 
+  gemm::GemmCoord cluster_shape{};
+  gemm::GemmCoord cluster_shape_fallback{};
 
   // these should really be in the configuration but staying consistent with GEMM
   int sm_count{0};
@@ -527,6 +527,13 @@ struct GemmGroupedArguments {
   // underlying operation uses the one it needs.
   cute::Shape<int, int, int>* problem_sizes_3x;
   cute::Shape<int, int, int>* problem_sizes_3x_host;
+};
+
+struct GroupedGemmBlockScaledArguments : GemmGroupedArguments {
+  void* SFA{nullptr};
+  void* SFB{nullptr};
+  void* SFD{nullptr};
+  void* norm_constant{nullptr};
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////

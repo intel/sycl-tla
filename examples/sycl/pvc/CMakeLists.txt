@@ -67,9 +67,18 @@ cutlass_example_add_executable(
   pvc_gemm_streamk.cpp
 )
 
+cutlass_example_add_executable(
+  pvc_gemm_persistent
+  pvc_gemm_persistent.cpp
+)
 add_subdirectory(flash_attention_v2)
 
 cutlass_example_add_executable(
   pvc_gemm_mixed_dtype
   pvc_gemm_mixed_dtype.cpp
+)
+
+cutlass_example_add_executable(
+  pvc_gemm_group
+  pvc_gemm_group.cpp
 )

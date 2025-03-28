@@ -166,6 +166,20 @@ struct IsDefaultEpilogue<cutlass::epilogue::collective::detail::Sm90TmaWarpSpeci
   static constexpr bool value = true;
 };
 
+template <typename Epilogue, typename = void>
+struct IsLegacyEpiloguePolicy {
+  static constexpr bool value = false;
+};
+
+template <typename Epilogue>
+struct IsLegacyEpiloguePolicy<Epilogue, cute::void_t<decltype(Epilogue::DispatchPolicy::FragmentSize)>> {
+  using EpiloguePolicy = typename Epilogue::DispatchPolicy;
+  static constexpr bool value = cute::is_same_v<
+                                      EpiloguePolicy,
+                                      cutlass::epilogue::Sm90TmaWarpSpecializedBiasElementwise<
+                                        EpiloguePolicy::StagesC, EpiloguePolicy::StagesD, EpiloguePolicy::FragmentSize>>;
+};
+
 // The number of splits to test.
 //
 // This class makes it harder to confuse the order of arguments
@@ -552,10 +566,10 @@ struct HostCollectiveMainloop<cutlass::gemm::KernelPtrArrayTmaWarpSpecializedBlo
   static constexpr int SFVecSize = Gemm::GemmKernel::CollectiveMainloop::SFVecSize;
 
   using ElementSF = typename Gemm::GemmKernel::ElementSF;
-  using Sm100BlkScaledConfig =  typename Gemm::GemmKernel::CollectiveMainloop::Sm100BlkScaledConfig;
-  using Blk_MN   = typename Sm100BlkScaledConfig::Blk_MN;
-  using Blk_SF   = typename Sm100BlkScaledConfig::Blk_SF;
-  using SfAtom   = typename Sm100BlkScaledConfig::SfAtom;
+  using Sm1xxBlkScaledConfig =  typename Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
+  using Blk_MN   = typename Sm1xxBlkScaledConfig::Blk_MN;
+  using Blk_SF   = typename Sm1xxBlkScaledConfig::Blk_SF;
+  using SfAtom   = typename Sm1xxBlkScaledConfig::SfAtom;
   using LayoutSFA = typename Gemm::GemmKernel::CollectiveMainloop::LayoutSFA;
   using InternalLayoutSFA = typename Gemm::GemmKernel::CollectiveMainloop::InternalLayoutSFA;
   using LayoutSFB = typename Gemm::GemmKernel::CollectiveMainloop::LayoutSFB;
@@ -662,8 +676,8 @@ struct HostCollectiveMainloop<cutlass::gemm::KernelPtrArrayTmaWarpSpecializedBlo
       auto k_blks = cutlass::ceil_div(K, size<1>(shape(SfAtom{})));
       auto m_blks = cutlass::ceil_div(M, Blk_MN{});
       auto n_blks = cutlass::ceil_div(N, Blk_MN{});
-      layout_sfa_host.push_back(Sm100BlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(M, N, K, 1)));
-      layout_sfb_host.push_back(Sm100BlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(M, N, K, 1)));
+      layout_sfa_host.push_back(Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(M, N, K, 1)));
+      layout_sfb_host.push_back(Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(M, N, K, 1)));
     
       // 2.x host tensor does not natively contain a batch stride or coord, so we spoof if by folding it into the outer mode
       auto sfa_coord   = cutlass::make_Coord(m_blks * Blk_MN{}, k_blks * Blk_SF{});
@@ -1092,13 +1106,7 @@ struct HostCollectiveEpilogue {
   //
   // FusionOperation derived types/queries
   //
-  using EpiloguePolicy = typename Epilogue::DispatchPolicy;
-  static constexpr bool IsLegacy =
-  cute::is_same_v<
-    EpiloguePolicy,
-    cutlass::epilogue::Sm90TmaWarpSpecializedBiasElementwise<
-      EpiloguePolicy::StagesC, EpiloguePolicy::StagesD, EpiloguePolicy::FragmentSize>
-  >;
+  static constexpr bool IsLegacy = detail::IsLegacyEpiloguePolicy<Epilogue>::value;
 
   using FusionOp = typename Gemm::EpilogueOutputOp;
   static_assert(cute::is_base_of_v<cutlass::epilogue::fusion::FusionOperation, FusionOp>);
@@ -1110,12 +1118,12 @@ struct HostCollectiveEpilogue {
   static constexpr SfStrategy SfGenStrategy              = (!IsBlockScaleSupported) ? SfStrategy::None : SfStrategy::SfDGen;
   static constexpr int32_t SFD_VectorSize = IsBlockScaleSupported ? FusionOp::SFVecSize : 1;
   using ElementSFD = non_void_t<cute::remove_pointer_t<typename FusionOp::ElementBlockScaleFactor>, ElementD>;
-  using Sm100BlockScaledOutputConfig = cutlass::detail::Sm100BlockScaledOutputConfig<
+  using Sm1xxBlockScaledOutputConfig= cutlass::detail::Sm1xxBlockScaledOutputConfig<
                                           SFD_VectorSize
                                         >;
-  using Blk_MN = typename Sm100BlockScaledOutputConfig::Blk_MN;
-  using Blk_SF = typename Sm100BlockScaledOutputConfig::Blk_SF; 
-  using OutputSFAtom = typename Sm100BlockScaledOutputConfig::SfAtom;
+  using Blk_MN = typename Sm1xxBlockScaledOutputConfig::Blk_MN;
+  using Blk_SF = typename Sm1xxBlockScaledOutputConfig::Blk_SF; 
+  using OutputSFAtom = typename Sm1xxBlockScaledOutputConfig::SfAtom;
   std::vector<cutlass::HostTensor<ElementSFD, LayoutTagD>> tensors_SFD;
   std::vector<cutlass::HostTensor<ElementSFD, LayoutTagD>> references_SFD;
   cutlass::DeviceAllocation<ElementSFD *> device_tensors_SFD;
@@ -1711,7 +1719,7 @@ struct HostCollectiveEpilogue {
     auto SfD = [&](){
       if constexpr (IsBlockScaleSupported) {
         auto tensor = make_tensor(detail::make_iterator(references_SFD[batch].host_data()),
-          Sm100BlockScaledOutputConfig::tile_atom_to_shape_SFD(problem_shape_MNKL));
+          Sm1xxBlockScaledOutputConfig::tile_atom_to_shape_SFD(problem_shape_MNKL));
         return tensor;
       }
       else {
@@ -1925,6 +1933,7 @@ struct TestbedImpl {
     return passed;
   }
 
+#ifndef SYCL_INTEL_TARGET
   /// Determine if the CUDA device is sufficient to run the kernel
   bool sufficient() {
     //
@@ -1956,6 +1965,7 @@ struct TestbedImpl {
 
     return true;
   }
+  #endif
 
   /// Executes one test
   bool run(
@@ -1966,11 +1976,14 @@ struct TestbedImpl {
     )
   {
 
+    using namespace cutlass;
+#ifndef SYCL_INTEL_TARGET
     // Fail test if insufficient CUDA device
     if (!sufficient()) {
       std::cout << "Test failed due to insufficient CUDA device." << std::endl;
       return false;
     }
+#endif
 
     if (!this->initialize(problem_shapes, alpha, beta)) {
       std::cerr << "Initialization failed \n";
@@ -2033,7 +2046,12 @@ struct TestbedImpl {
     cudaError_t result;
     status = gemm_op.initialize(arguments, workspace.get());
     status = gemm_op.run();
+#if defined SYCL_INTEL_TARGET
+    result = cudaSuccess;
+    syclcompat::wait();
+#else
     result = cudaDeviceSynchronize();
+#endif
     if (result != cudaSuccess) {
       EXPECT_EQ(result, cudaSuccess) << "Error at Kernel Sync.";
       return false;
@@ -2130,7 +2148,13 @@ bool TestAll(double alpha = 1.0, double beta = 0.0, CheckEquality check_relative
 
   Testbed3x<Gemm, ActivationFunctor> testbed(check_relative_equality, ScalarLoc::ON_DEVICE, VectorScale::DISABLED);
 
-  int max_alignment = std::max(Gemm::kAlignmentA, Gemm::kAlignmentB);
+  int max_alignment = 0;
+  // TODO(codeplay): unhardcode max_alignment
+#if defined SYCL_INTEL_TARGET
+  max_alignment = 32;
+#else
+  max_alignment = std::max(Gemm::kAlignmentA, Gemm::kAlignmentB);
+#endif
   std::vector<int> problem_size_m = {max_alignment, 512 - 3 * max_alignment};
   std::vector<int> problem_size_n = {max_alignment, 512 - 2 * max_alignment};
 
@@ -2204,7 +2228,7 @@ bool TestSmall(double alpha = 1.0, double beta = 1.0,
   
   static constexpr bool IsF8F6F4 = cutlass::gemm::collective::detail::is_sm100_mma_f8f6f4<TiledMma, ElementA, ElementB>();
   alignment_bits = cutlass::detail::get_input_alignment_bits<ElementA, IsF8F6F4>();
-  // For fp4 and fp6 QMMA kernels, the min alignment_input is 128 elements, so we don't need to add alignment_input in test problem sizes.
+  // For fp4 and fp6 kernels, the min alignment_input is 128 elements, so we don't need to add alignment_input in test problem sizes.
   int alignment_input = (alignment_bits / cute::sizeof_bits<ElementA>::value == 128) ? 0 : (alignment_bits / cute::sizeof_bits<ElementA>::value);
 
   

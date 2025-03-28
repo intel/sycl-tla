@@ -39,8 +39,6 @@
 #define SYCL_DEVICE_BUILTIN(x) inline x { assert(false); }
 #endif
 
-using namespace cute;
-
 // prefetch
 SYCL_DEVICE_BUILTIN(void __builtin_IB_lsc_prefetch_global_uchar(
     const __attribute__((opencl_global)) uint8_t *base, int immElemOff,
@@ -131,10 +129,13 @@ struct XE_1D_LDSM {
   copy(const S_ &src, D_ &dst) {
     #if defined(SYCL_INTEL_TARGET)
       CUTE_STATIC_ASSERT(sizeof(S_) == sizeof(S));
-      auto sg = sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_sub_group();
-      *(sycl::vec<S_, N>*)(&dst)
-        = sg.load<N>(sycl::address_space_cast<sycl::access::address_space::local_space,
-                  sycl::access::decorated::yes>(&*&src));
+      auto props = sycl::ext::oneapi::experimental::properties{
+          sycl::ext::oneapi::experimental::contiguous_memory,
+          sycl::ext::oneapi::experimental::alignment<sizeof(D)>};
+      auto sg =
+          sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_sub_group();
+      sycl::ext::oneapi::experimental::group_load(
+          sg, &src, *reinterpret_cast<sycl::vec<S_, N> *>(&dst), props);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif 
@@ -202,9 +203,11 @@ struct XE_1D_LOAD_GLOBAL {
       CUTE_STATIC_ASSERT(sizeof(S_) == sizeof(S));
       CUTE_STATIC_ASSERT(sizeof(D_) == sizeof(D));
       auto sg = sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_sub_group();
-      *(sycl::vec<S_, N>*)(&dst) 
-        = sg.load<N>(sycl::address_space_cast<sycl::access::address_space::global_space,
-                  sycl::access::decorated::yes>(&*&src));
+      auto props = sycl::ext::oneapi::experimental::properties{
+          sycl::ext::oneapi::experimental::contiguous_memory,
+          sycl::ext::oneapi::experimental::alignment<sizeof(D)>};
+      sycl::ext::oneapi::experimental::group_load(
+          sg, &src, *reinterpret_cast<sycl::vec<S_, N> *>(&dst), props);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif 
@@ -230,8 +233,11 @@ struct XE_1D_STSM {
   copy(S_ const& src, D_ & dst) {
     #if defined(SYCL_INTEL_TARGET)
       auto sg = sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_sub_group();
-      sg.store<N>(sycl::address_space_cast<sycl::access::address_space::local_space,
-            sycl::access::decorated::yes>(&*&dst), *(sycl::vec<D_, N>*)(&src));
+      auto props = sycl::ext::oneapi::experimental::properties{
+          sycl::ext::oneapi::experimental::contiguous_memory,
+          sycl::ext::oneapi::experimental::alignment<sizeof(S)>};
+      sycl::ext::oneapi::experimental::group_store(
+          sg, *reinterpret_cast<sycl::vec<D_, N> const *>(&src), &dst, props);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif
@@ -254,8 +260,11 @@ struct XE_1D_STORE_GLOBAL {
   copy(S_ const& src, D_ &dst) {
     #if defined(SYCL_INTEL_TARGET)
       auto sg = sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_sub_group();
-      sg.store<N>(sycl::address_space_cast<sycl::access::address_space::global_space,
-            sycl::access::decorated::yes>(&*&dst), *(sycl::vec<D_, N>*)(&src));
+      auto props = sycl::ext::oneapi::experimental::properties{
+          sycl::ext::oneapi::experimental::contiguous_memory,
+          sycl::ext::oneapi::experimental::alignment<sizeof(S)>};
+      sycl::ext::oneapi::experimental::group_store(
+          sg, *reinterpret_cast<sycl::vec<D_, N> const *>(&src), &dst, props);
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
     #endif

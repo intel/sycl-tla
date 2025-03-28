@@ -35,8 +35,7 @@
 
 #include "cute/layout.hpp"
 #include "cute/numeric/integral_constant.hpp" // cute::false_type
-#include "cute/arch/copy_sm100.hpp" 
-
+#include "cute/arch/copy_sm100.hpp"
 //////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::detail {
@@ -108,8 +107,10 @@ struct KernelCpAsyncWarpSpecializedCooperative { };
 struct KernelTma { };
 struct KernelTmaWarpSpecialized { };
 struct KernelTmaWarpSpecializedPingpong { 
+  static constexpr int SchedulerPipelineStageCount = 0;
 };
 struct KernelTmaWarpSpecializedCooperative { 
+  static constexpr int SchedulerPipelineStageCount = 0;
 };
 
 struct KernelPtrArrayTmaWarpSpecializedCooperative { };
@@ -117,9 +118,41 @@ struct KernelPtrArrayTmaWarpSpecializedPingpong { };
 
 // FP8 related policies (including Blocked Scaled Accumulation)
 template<
-  int ScaleGranularityM = 0 // `ScaleGranularityM` specifies scaling granularity along M, while zero-value `ScaleGranularityM` indicates that scaling granularity is `size<0>(TileShape_MNK{})` along M.
+  // `ScaleGranularityM`/`ScaleGranularityN` specifies scaling granularity along M/N, while zero-value
+  // `ScaleGranularityM`/`ScaleGranularityN` indicates that scaling granularity is
+  // `size<0>(TileShape_MNK{})`/`size<1>(TileShape_MNK{})` along M/N.
+  int ScaleGranularityM_ = 0,
+  int ScaleGranularityN_ = 0,
+  // `ScalePromotionInterval` specifies the interval to promote the accumulator for scaling
+  // It is required to be a multiple of 4 and specified in terms of number of MMA instructions
+  // in the reduction dimension. i.e for FP8 kernels, it is 
+  // ScalePromotionInterval * MMA_K = ScalePromotionInterval * 32 = 128 elements in K by default
+  int ScalePromotionInterval_ = 4
+
 >
-struct KernelTmaWarpSpecializedCooperativeFP8BlockScaledAccum: KernelTmaWarpSpecializedCooperative { };
+struct KernelTmaWarpSpecializedCooperativeFP8BlockScaledAccum: KernelTmaWarpSpecializedCooperative {
+  constexpr static int ScaleGranularityM = ScaleGranularityM_;
+  constexpr static int ScaleGranularityN = ScaleGranularityN_;
+  constexpr static int ScalePromotionInterval = ScalePromotionInterval_;
+};
+
+template<
+  // `ScaleGranularityM`/`ScaleGranularityN` specifies scaling granularity along M/N, while zero-value
+  // `ScaleGranularityM`/`ScaleGranularityN` indicates that scaling granularity is
+  // `size<0>(TileShape_MNK{})`/`size<1>(TileShape_MNK{})` along M/N.
+  int ScaleGranularityM_,
+  int ScaleGranularityN_,
+  // `ScalePromotionInterval` specifies the interval to promote the accumulator for scaling
+  // It is required to be a multiple of 4 and specified in terms of number of MMA instructions
+  // in the reduction dimension. i.e for FP8 kernels, it is 
+  // ScalePromotionInterval * MMA_K = ScalePromotionInterval * 32 = 128 elements in K by default
+  int ScalePromotionInterval_ = 4
+>
+struct KernelPtrArrayTmaWarpSpecializedCooperativeFP8BlockScaledAccum: KernelPtrArrayTmaWarpSpecializedCooperative {
+  constexpr static int ScaleGranularityM = ScaleGranularityM_;
+  constexpr static int ScaleGranularityN = ScaleGranularityN_;
+  constexpr static int ScalePromotionInterval = ScalePromotionInterval_;
+};
 
 // Policies to opt into mixed type GEMMs
 struct KernelTmaWarpSpecializedMixedInput : KernelTmaWarpSpecialized { };
@@ -127,7 +160,8 @@ struct KernelTmaWarpSpecializedPingpongMixedInput : KernelTmaWarpSpecializedPing
 struct KernelTmaWarpSpecializedCooperativeMixedInput: KernelTmaWarpSpecializedCooperative { };
 
 struct KernelPVC { };
-
+struct KernelPVCCooperative { };
+struct KernelPVCPtrArrayCooperative { };
 //////////////////////////////////////////////////////////////////////////////
 
 //
@@ -304,12 +338,21 @@ template<
   int Stages_,
   class ClusterShape_ = Shape<_1,_1,_1>,
   class KernelSchedule = KernelTmaWarpSpecialized,
-  int ScaleGranularityM = 0 // `ScaleGranularityM` specifies scaling granularity along M, while zero-value `ScaleGranularityM` indicates that scaling granularity is `size<0>(TileShape_MNK{})` along M.
+  // `ScaleGranularityM`/`ScaleGranularityN` specifies scaling granularity along M/N, while zero-value
+  // `ScaleGranularityM`/`ScaleGranularityN` indicates that scaling granularity is
+  // `size<0>(TileShape_MNK{})`/`size<1>(TileShape_MNK{})` along M/N.
+  int ScaleGranularityM = 0,
+  int ScaleGranularityN = 0,
+  // `ScalePromotionInterval` specifies the interval to promote the accumulator for scaling
+  // It is required to be a multiple of 4 and specified in terms of number of MMA instructions
+  // in the reduction dimension. i.e for FP8 kernels, it is 
+  // ScalePromotionInterval * MMA_K = ScalePromotionInterval * 32 = 128 elements in K by default
+  int ScalePromotionInterval = 4
 >
 struct MainloopSm90TmaGmmaWarpSpecializedBlockScalingFP8
   : MainloopSm90TmaGmmaWarpSpecialized<Stages_, ClusterShape_, KernelSchedule> {
   static_assert(
-    cute::is_same_v<KernelSchedule, KernelTmaWarpSpecializedCooperativeFP8BlockScaledAccum<ScaleGranularityM>>,
+    cute::is_same_v<KernelSchedule, KernelTmaWarpSpecializedCooperativeFP8BlockScaledAccum<ScaleGranularityM, ScaleGranularityN, ScalePromotionInterval>>,
     "KernelSchedule must be one of the warp specialized policies");
 };
 
@@ -321,9 +364,25 @@ template<
 >
 struct MainloopSm90ArrayTmaGmmaWarpSpecialized {
   constexpr static int Stages = Stages_;
+  constexpr static int PipelineAsyncMmaStages = 1;
   using ClusterShape = ClusterShape_;
   using ArchTag = arch::Sm90;
   using Schedule = KernelSchedule;
+  static_assert(
+    cute::is_base_of_v<KernelPtrArrayTmaWarpSpecializedCooperative, KernelSchedule> ||
+    cute::is_base_of_v<KernelPtrArrayTmaWarpSpecializedPingpong, KernelSchedule>,
+    "KernelSchedule must be one of the Ptr-Array or Grouped Gemm TMA Warp Specialized Cooperative or Pingpong policies");
+};
+
+// n-buffer in smem (Hopper TMA), pipelined with Hopper GMMA and TMA, Warp specialized dynamic schedule for Ptr-Array and Grouped Gemm
+// For FP8 kernels
+template<
+  int Stages_,
+  class ClusterShape_ = Shape<_1,_1,_1>,
+  class KernelSchedule = KernelPtrArrayTmaWarpSpecializedCooperative
+>
+struct MainloopSm90ArrayTmaGmmaWarpSpecializedFP8
+  : MainloopSm90ArrayTmaGmmaWarpSpecialized<Stages_, ClusterShape_, KernelSchedule> {
   static_assert(
     cute::is_base_of_v<KernelPtrArrayTmaWarpSpecializedCooperative, KernelSchedule> ||
     cute::is_base_of_v<KernelPtrArrayTmaWarpSpecializedPingpong, KernelSchedule>,
@@ -370,6 +429,26 @@ struct MainloopSm90ArrayTmaGmmaWarpSpecializedMixedInput {
     "KernelSchedule must be one of the Ptr-Array or Grouped Gemm TMA Warp Specialized Cooperative policies");
 };
 
+// n-buffer in smem (Hopper TMA), pipelined with Hopper GMMA and TMA, Warp specialized dynamic schedule
+// For FP8 kernels with Block Scaling
+template<
+  int Stages_,
+  class ClusterShape_ = Shape<_1,_1,_1>,
+  class KernelSchedule = KernelPtrArrayTmaWarpSpecializedCooperative,
+  // `ScaleGranularityM`/`ScaleGranularityN` specifies scaling granularity along M/N, while zero-value
+  // `ScaleGranularityM`/`ScaleGranularityN` indicates that scaling granularity is
+  // `size<0>(TileShape_MNK{})`/`size<1>(TileShape_MNK{})` along M/N.
+  int ScaleGranularityM = 0,
+  int ScaleGranularityN = 0,
+  int ScalePromotionInterval = 4
+>
+struct MainloopSm90ArrayTmaGmmaWarpSpecializedBlockScaling
+  : MainloopSm90ArrayTmaGmmaWarpSpecialized<Stages_, ClusterShape_, KernelSchedule> {
+  static_assert(
+    cute::is_same_v<KernelSchedule, KernelPtrArrayTmaWarpSpecializedCooperativeFP8BlockScaledAccum<ScaleGranularityM, ScaleGranularityN>>,
+    "KernelSchedule must be one of the warp specialized policies");
+};
+
 
 template<
   int SchedulerPipelineStageCount_,
@@ -390,7 +469,34 @@ struct KernelTmaWarpSpecializedBlockScaledSm100 final {
   static constexpr int AccumulatorPipelineStageCount = AccumulatorPipelineStageCount_;
 };
 
+template<
+  int SchedulerPipelineStageCount_,
+  int AccumulatorPipelineStageCount_
+>
+struct KernelTmaWarpSpecializedMmaTransformSm100 final {
+  static constexpr int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+  static constexpr int AccumulatorPipelineStageCount = AccumulatorPipelineStageCount_;
+};
 
+// Sparse Gemm
+template<
+  int SchedulerPipelineStageCount_,
+  int AccumulatorPipelineStageCount_
+>
+struct KernelSparseTmaWarpSpecializedSm100 final {
+  static constexpr int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+  static constexpr int AccumulatorPipelineStageCount = AccumulatorPipelineStageCount_;
+};
+
+// Sparse Gemm with block scaling factors
+template<
+  int SchedulerPipelineStageCount_,
+  int AccumulatorPipelineStageCount_
+>
+struct KernelSparseTmaWarpSpecializedBlockScaledSm100 final {
+  static constexpr int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+  static constexpr int AccumulatorPipelineStageCount = AccumulatorPipelineStageCount_;
+};
 
 // InputTransform GEMM
 template<
@@ -433,6 +539,39 @@ struct KernelPtrArrayTmaWarpSpecializedInputTransformSm100 final {
 };
 
 
+// SM120 kernel schedules
+template< int SchedulerPipelineStageCount_>
+struct KernelTmaWarpSpecializedCooperativeSm120 : KernelTmaWarpSpecializedCooperative {
+  static constexpr int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+};
+
+template< int SchedulerPipelineStageCount_>
+struct KernelTmaWarpSpecializedPingpongSm120 : KernelTmaWarpSpecializedPingpong {
+  static constexpr int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+};
+
+
+template< int SchedulerPipelineStageCount_>
+struct KernelTmaWarpSpecializedCooperativeBlockScaledSm120 : KernelTmaWarpSpecializedCooperative {
+  static constexpr int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+};
+
+template< int SchedulerPipelineStageCount_>
+struct KernelTmaWarpSpecializedPingpongBlockScaledSm120 : KernelTmaWarpSpecializedPingpong {
+  static constexpr int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+};
+
+template< int SchedulerPipelineStageCount_, bool isAsymmetric_>
+struct KernelTmaWarpSpecializedCooperativeSparseSm120 {
+  static constexpr int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+  static constexpr bool isAsymmetric = isAsymmetric_;
+};
+
+template< int SchedulerPipelineStageCount_, bool isAsymmetric_>
+struct KernelTmaWarpSpecializedCooperativeSparseBlockScaledSm120 {
+  static constexpr int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+  static constexpr bool isAsymmetric = isAsymmetric_;
+};
 //////////////////////////////////////////////////////////////////////////////
 
 //
@@ -445,7 +584,7 @@ struct KernelPtrArrayTmaWarpSpecializedInputTransformSm100 final {
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Base Dispatch Policies
+// Builder Tag Base Dispatch Policies
 struct KernelSchedule1Sm {};
 struct KernelSchedule2Sm {};
 struct KernelScheduleSm100 {};
@@ -457,11 +596,21 @@ struct KernelScheduleSm100DenseGemm : KernelScheduleSm100 {};   // Base policy
 // Dense GEMM: Specialize for 1SM vs 2SM
 struct KernelTmaWarpSpecialized1SmSm100 final : KernelSchedule1Sm, KernelScheduleSm100DenseGemm {};  // Use for 1SM Dense GEMM Kernels for Collective Mainloop Builder
 struct KernelTmaWarpSpecialized2SmSm100 final : KernelSchedule2Sm, KernelScheduleSm100DenseGemm {};  // Use for 2SM Dense GEMM Kernels for Collective Mainloop Builder
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM100 Ptr-Array Dense GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Dense GEMM + (Ptr Array or Group GEMM)
 struct KernelScheduleSm100PtrArrayDenseGemm : KernelScheduleSm100DenseGemm {};
 // Ptr-Array Dense GEMM: Specialize for 1SM vs 2SM
 struct KernelPtrArrayTmaWarpSpecialized1SmSm100 final : KernelSchedule1Sm, KernelScheduleSm100PtrArrayDenseGemm {};
 struct KernelPtrArrayTmaWarpSpecialized2SmSm100 final : KernelSchedule2Sm, KernelScheduleSm100PtrArrayDenseGemm {};
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM100 Blockwise GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+struct KernelScheduleSm100Blockwise  : KernelScheduleSm100 {};
+struct KernelTmaWarpSpecializedBlockwise1SmSm100 final : KernelSchedule1Sm, KernelScheduleSm100Blockwise {};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SM100 Planar Complex GEMM Dispatch Policies
@@ -470,15 +619,20 @@ struct KernelScheduleSm100PlanarComplexGemm : KernelScheduleSm100{};
 // Planar Complex GEMM: Specialize for 1SM vs 2SM
 struct KernelTmaWarpSpecialized1SmPlanarComplexSm100 final : KernelSchedule1Sm, KernelScheduleSm100PlanarComplexGemm { };
 struct KernelTmaWarpSpecialized2SmPlanarComplexSm100 final : KernelSchedule2Sm, KernelScheduleSm100PlanarComplexGemm { };
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM100 Ptr-Array Planar Complex GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Planar Complex GEMM + (Ptr Array or Group GEMM)
 struct KernelScheduleSm100PtrArrayPlanarComplexGemm : KernelScheduleSm100PlanarComplexGemm {};
+
 struct KernelPtrArrayTmaWarpSpecialized1SmPlanarComplexSm100 final : KernelSchedule1Sm, KernelScheduleSm100PtrArrayPlanarComplexGemm {};
 struct KernelPtrArrayTmaWarpSpecialized2SmPlanarComplexSm100 final : KernelSchedule2Sm, KernelScheduleSm100PtrArrayPlanarComplexGemm {};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SM100 FastF32 (9xBF16) GEMM Dispatch Policies
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-struct KernelScheduleSm100FastFP32Gemm : KernelScheduleSm100 {};
+struct KernelScheduleSm100FastFP32Gemm           : KernelScheduleSm100 {};
 struct KernelTmaWarpSpecializedFastFP32SmemSm100 : KernelScheduleSm100FastFP32Gemm { };
 // Dispatch policies without smem load the A operand from tmem
 struct KernelTmaWarpSpecialized1SmFastFP32Sm100 final : KernelSchedule1Sm, KernelScheduleSm100FastFP32Gemm { };
@@ -486,43 +640,123 @@ struct KernelTmaWarpSpecialized2SmFastFP32Sm100 final : KernelSchedule2Sm, Kerne
 // Dispatch policies with smem load the A operand from smem
 struct KernelTmaWarpSpecialized1SmFastFP32SmemSm100 final : KernelSchedule1Sm, KernelTmaWarpSpecializedFastFP32SmemSm100 { };
 struct KernelTmaWarpSpecialized2SmFastFP32SmemSm100 final : KernelSchedule2Sm, KernelTmaWarpSpecializedFastFP32SmemSm100 { };
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM100 Ptr-Array FastF32 (9xBF16) GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Ptr-Array Transform GEMM: Specialize for 1SM vs 2SM FastF32 GEMM
-struct KernelScheduleSm100PtrArrayFastFP32Gemm : KernelScheduleSm100FastFP32Gemm {};
+struct KernelScheduleSm100PtrArrayFastFP32Gemm           : KernelScheduleSm100FastFP32Gemm {};
 struct KernelTmaWarpSpecializedPtrArrayFastFP32SmemSm100 : KernelScheduleSm100PtrArrayFastFP32Gemm { };
-struct KernelPtrArrayTmaWarpSpecialized1SmFastFP32Sm100 final : KernelSchedule1Sm, KernelScheduleSm100PtrArrayFastFP32Gemm { };
-struct KernelPtrArrayTmaWarpSpecialized2SmFastFP32Sm100 final : KernelSchedule2Sm, KernelScheduleSm100PtrArrayFastFP32Gemm { };
+
+struct KernelPtrArrayTmaWarpSpecialized1SmFastFP32Sm100     final : KernelSchedule1Sm, KernelScheduleSm100PtrArrayFastFP32Gemm { };
+struct KernelPtrArrayTmaWarpSpecialized2SmFastFP32Sm100     final : KernelSchedule2Sm, KernelScheduleSm100PtrArrayFastFP32Gemm { };
 struct KernelPtrArrayTmaWarpSpecialized1SmFastFP32SmemSm100 final : KernelSchedule1Sm, KernelTmaWarpSpecializedPtrArrayFastFP32SmemSm100 { };
 struct KernelPtrArrayTmaWarpSpecialized2SmFastFP32SmemSm100 final : KernelSchedule2Sm, KernelTmaWarpSpecializedPtrArrayFastFP32SmemSm100 { };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM100 Sparse GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+struct KernelScheduleSparseGemmSm100 : KernelScheduleSm100 {};
+// Sparse GEMM: Specialize for 1SM vs 2SM
+struct KernelSparseTmaWarpSpecialized1SmSm100 final : KernelSchedule1Sm, KernelScheduleSparseGemmSm100 { };
+struct KernelSparseTmaWarpSpecialized2SmSm100 final : KernelSchedule2Sm, KernelScheduleSparseGemmSm100 { };
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SM100 BlockScaled Dense GEMM Dispatch Policies
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-struct KernelScheduleBlockScaledGemmSm100 : KernelScheduleSm100 {};
-struct KernelScheduleMxNvf4Sm100 : KernelScheduleBlockScaledGemmSm100 {};
-struct KernelScheduleMxf8f6f4Sm100 : KernelScheduleBlockScaledGemmSm100 {};
+struct KernelScheduleBlockScaledGemmSm100   : KernelScheduleSm100 {};
+struct KernelScheduleMxNvf4Sm100            : KernelScheduleBlockScaledGemmSm100 {};
+struct KernelScheduleMxf8f6f4Sm100          : KernelScheduleBlockScaledGemmSm100 {};
 // Block Scaled Dense GEMM: Specialize for instruction type, scale factor vector size, and 1SM vs. 2SM
-struct KernelTmaWarpSpecialized1SmBlockScaledSm100 final : KernelSchedule1Sm, KernelScheduleBlockScaledGemmSm100 { };
-struct KernelTmaWarpSpecialized2SmBlockScaledSm100 final : KernelSchedule2Sm, KernelScheduleBlockScaledGemmSm100 { };
-struct KernelTmaWarpSpecialized1SmNvf4Sm100 final : KernelSchedule1Sm, KernelScheduleMxNvf4Sm100 { };
-struct KernelTmaWarpSpecialized2SmNvf4Sm100 final : KernelSchedule2Sm, KernelScheduleMxNvf4Sm100 { };
-struct KernelTmaWarpSpecialized1SmMxf4Sm100 final : KernelSchedule1Sm, KernelScheduleMxNvf4Sm100 { };
-struct KernelTmaWarpSpecialized2SmMxf4Sm100 final : KernelSchedule2Sm, KernelScheduleMxNvf4Sm100 { };
-struct KernelTmaWarpSpecialized1SmMxf8f6f4Sm100 final : KernelSchedule1Sm, KernelScheduleMxf8f6f4Sm100 { };
-struct KernelTmaWarpSpecialized2SmMxf8f6f4Sm100 final : KernelSchedule2Sm, KernelScheduleMxf8f6f4Sm100 { };
+struct KernelTmaWarpSpecialized1SmBlockScaledSm100       final : KernelSchedule1Sm, KernelScheduleBlockScaledGemmSm100 { };
+struct KernelTmaWarpSpecialized2SmBlockScaledSm100       final : KernelSchedule2Sm, KernelScheduleBlockScaledGemmSm100 { };
+struct KernelTmaWarpSpecialized1SmNvf4Sm100              final : KernelSchedule1Sm, KernelScheduleMxNvf4Sm100 { };
+struct KernelTmaWarpSpecialized2SmNvf4Sm100              final : KernelSchedule2Sm, KernelScheduleMxNvf4Sm100 { };
+struct KernelTmaWarpSpecialized1SmMxf4Sm100              final : KernelSchedule1Sm, KernelScheduleMxNvf4Sm100 { };
+struct KernelTmaWarpSpecialized2SmMxf4Sm100              final : KernelSchedule2Sm, KernelScheduleMxNvf4Sm100 { };
+struct KernelTmaWarpSpecialized1SmMxf8f6f4Sm100          final : KernelSchedule1Sm, KernelScheduleMxf8f6f4Sm100 { };
+struct KernelTmaWarpSpecialized2SmMxf8f6f4Sm100          final : KernelSchedule2Sm, KernelScheduleMxf8f6f4Sm100 { };
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM100 BlockScaled Ptr Array Dense GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 // BlockScaled Dense GEMM + (Ptr Array or Group GEMM)
-struct KernelSchedulePtrArrayBlockScaledGemmSm100 : KernelScheduleBlockScaledGemmSm100 {};
-struct KernelSchedulePtrArrayMxNvf4Sm100 : KernelSchedulePtrArrayBlockScaledGemmSm100 {};
-struct KernelSchedulePtrArrayMxf8f6f4Sm100 : KernelSchedulePtrArrayBlockScaledGemmSm100 {};
+struct KernelSchedulePtrArrayBlockScaledGemmSm100   : KernelScheduleBlockScaledGemmSm100 {};
+struct KernelSchedulePtrArrayMxNvf4Sm100            : KernelSchedulePtrArrayBlockScaledGemmSm100 {};
+struct KernelSchedulePtrArrayMxf8f6f4Sm100          : KernelSchedulePtrArrayBlockScaledGemmSm100 {};
 // Ptr-Array Block Scaled Dense GEMM: Specialize for instruction type, scale factor vector size, and 1SM vs. 2SM
-struct KernelPtrArrayTmaWarpSpecialized1SmBlockScaledSm100 final : KernelSchedule1Sm, KernelSchedulePtrArrayBlockScaledGemmSm100 { };
-struct KernelPtrArrayTmaWarpSpecialized2SmBlockScaledSm100 final : KernelSchedule2Sm, KernelSchedulePtrArrayBlockScaledGemmSm100 { };
-struct KernelPtrArrayTmaWarpSpecialized1SmNvf4Sm100 final : KernelSchedule1Sm, KernelSchedulePtrArrayMxNvf4Sm100 { };
-struct KernelPtrArrayTmaWarpSpecialized2SmNvf4Sm100 final : KernelSchedule2Sm, KernelSchedulePtrArrayMxNvf4Sm100 { };
-struct KernelPtrArrayTmaWarpSpecialized1SmMxf4Sm100 final : KernelSchedule1Sm, KernelSchedulePtrArrayMxNvf4Sm100 { };
-struct KernelPtrArrayTmaWarpSpecialized2SmMxf4Sm100 final : KernelSchedule2Sm, KernelSchedulePtrArrayMxNvf4Sm100 { };
-struct KernelPtrArrayTmaWarpSpecialized1SmMxf8f6f4Sm100 final : KernelSchedule1Sm, KernelSchedulePtrArrayMxf8f6f4Sm100 { };
-struct KernelPtrArrayTmaWarpSpecialized2SmMxf8f6f4Sm100 final : KernelSchedule2Sm, KernelSchedulePtrArrayMxf8f6f4Sm100 { };
+struct KernelPtrArrayTmaWarpSpecialized1SmBlockScaledSm100       final : KernelSchedule1Sm, KernelSchedulePtrArrayBlockScaledGemmSm100 { };
+struct KernelPtrArrayTmaWarpSpecialized2SmBlockScaledSm100       final : KernelSchedule2Sm, KernelSchedulePtrArrayBlockScaledGemmSm100 { };
+struct KernelPtrArrayTmaWarpSpecialized1SmNvf4Sm100              final : KernelSchedule1Sm, KernelSchedulePtrArrayMxNvf4Sm100 { };
+struct KernelPtrArrayTmaWarpSpecialized2SmNvf4Sm100              final : KernelSchedule2Sm, KernelSchedulePtrArrayMxNvf4Sm100 { };
+struct KernelPtrArrayTmaWarpSpecialized1SmMxf4Sm100              final : KernelSchedule1Sm, KernelSchedulePtrArrayMxNvf4Sm100 { };
+struct KernelPtrArrayTmaWarpSpecialized2SmMxf4Sm100              final : KernelSchedule2Sm, KernelSchedulePtrArrayMxNvf4Sm100 { };
+struct KernelPtrArrayTmaWarpSpecialized1SmMxf8f6f4Sm100          final : KernelSchedule1Sm, KernelSchedulePtrArrayMxf8f6f4Sm100 { };
+struct KernelPtrArrayTmaWarpSpecialized2SmMxf8f6f4Sm100          final : KernelSchedule2Sm, KernelSchedulePtrArrayMxf8f6f4Sm100 { };
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM100 BlockScaled Sparse GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+struct KernelScheduleBlockScaledSparseGemmSm100 : KernelScheduleSm100 {};
+struct KernelScheduleSparseMxNvf4Sm100          : KernelScheduleBlockScaledSparseGemmSm100 {};
+struct KernelScheduleSparseMxf8f6f4Sm100        : KernelScheduleBlockScaledSparseGemmSm100 {};
+// Block Scaled Sparse GEMM: Specialize for instruction type, scale factor vector size, and 1SM vs. 2SM
+struct KernelSparseTmaWarpSpecialized1SmBlockScaledSm100 final : KernelSchedule1Sm, KernelScheduleBlockScaledSparseGemmSm100 {};
+struct KernelSparseTmaWarpSpecialized2SmBlockScaledSm100 final : KernelSchedule2Sm, KernelScheduleBlockScaledSparseGemmSm100 {};
+struct KernelSparseTmaWarpSpecialized1SmMxf8f6f4Sm100    final : KernelSchedule1Sm, KernelScheduleSparseMxf8f6f4Sm100 { };
+struct KernelSparseTmaWarpSpecialized2SmMxf8f6f4Sm100    final : KernelSchedule2Sm, KernelScheduleSparseMxf8f6f4Sm100 { };
+struct KernelSparseTmaWarpSpecialized1SmNvf4Sm100        final : KernelSchedule1Sm, KernelScheduleSparseMxNvf4Sm100 { };
+struct KernelSparseTmaWarpSpecialized2SmNvf4Sm100        final : KernelSchedule2Sm, KernelScheduleSparseMxNvf4Sm100 { };
+struct KernelSparseTmaWarpSpecialized1SmMxf4Sm100        final : KernelSchedule1Sm, KernelScheduleSparseMxNvf4Sm100 { };
+struct KernelSparseTmaWarpSpecialized2SmMxf4Sm100        final : KernelSchedule2Sm, KernelScheduleSparseMxNvf4Sm100 { };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//          SM120 Dispatch Policies
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Builder Tag Base Dispatch Policies
+struct KernelScheduleSm120 {};
+struct KernelScheduleAcc2x4Sm120 {};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM100 Dense GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+struct KernelScheduleSm120DenseGemm : KernelScheduleSm120 {};
+// Dense GEMM: Specialize for instruction type
+struct KernelScheduleF8f6f4Sm120 final : KernelScheduleSm120DenseGemm {};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM120 BlockScaled GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+struct KernelScheduleBlockScaledGemmSm120 : KernelScheduleSm120 {};
+struct KernelScheduleMxf8f6f4Sm120        : KernelScheduleBlockScaledGemmSm120 {};
+struct KernelScheduleMxNvf4Sm120          : KernelScheduleBlockScaledGemmSm120 {};
+// Block Scaled Sparse GEMM: Specialize for instruction type, scale factor vector size.
+struct KernelTmaWarpSpecializedNvf4Sm120             final : KernelScheduleMxNvf4Sm120, KernelTmaWarpSpecializedCooperative { };
+struct KernelTmaWarpSpecializedPingpongNvf4Sm120     final : KernelScheduleMxNvf4Sm120, KernelTmaWarpSpecializedPingpong { };
+struct KernelTmaWarpSpecializedMxf4Sm120             final : KernelScheduleMxNvf4Sm120, KernelTmaWarpSpecializedCooperative { };
+struct KernelTmaWarpSpecializedPingpongMxf4Sm120     final : KernelScheduleMxNvf4Sm120, KernelTmaWarpSpecializedPingpong { };
+struct KernelTmaWarpSpecializedMxf8f6f4Sm120         final : KernelScheduleMxf8f6f4Sm120, KernelTmaWarpSpecializedCooperative { };
+struct KernelTmaWarpSpecializedPingpongMxf8f6f4Sm120 final : KernelScheduleMxf8f6f4Sm120, KernelTmaWarpSpecializedPingpong { };
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM120 Sparse GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+struct KernelScheduleSparseGemmSm120 : KernelScheduleSm120 {};
+// Sparse GEMM: Specialize for instruction type
+struct KernelScheduleSparseF8f6f4Sm120 final : KernelScheduleSparseGemmSm120 {};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// SM120 BlockScaled Sparse GEMM Dispatch Policies
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+struct KernelScheduleBlockScaledSparseGemmSm120 : KernelScheduleSm120 {};
+struct KernelScheduleSparseMxNvf4Sm120          : KernelScheduleBlockScaledSparseGemmSm120 {};
+struct KernelScheduleSparseMxf8f6f4Sm120        : KernelScheduleBlockScaledSparseGemmSm120 {};
+// Block Scaled Sparse GEMM: Specialize for instruction type, scale factor vector size, Acc2x4
+struct KernelSparseTmaWarpSpecializedNvf4Sm120           final : KernelScheduleSparseMxNvf4Sm120 { };
+struct KernelSparseTmaWarpSpecializedMxf4Sm120           final : KernelScheduleSparseMxNvf4Sm120 { };
+struct KernelSparseTmaWarpSpecializedMxf8f6f4Sm120       final : KernelScheduleSparseMxf8f6f4Sm120 { };
+struct KernelSparseTmaWarpSpecializedMxf8f6f4Acc2x4Sm120 final : KernelScheduleSparseMxf8f6f4Sm120, KernelScheduleAcc2x4Sm120 { };
 
 
 // n-buffer in smem, pipelined with Blackwell UMMA and TMA, Warp specialized dynamic schedule
@@ -540,7 +774,20 @@ struct MainloopSm100TmaUmmaWarpSpecialized {
   constexpr static bool IsOverlappingAccum = false;
 };
 
-
+// n-buffer in smem, pipelined with Blackwell UMMA and TMA, Warp specialized dynamic schedule
+template<
+  int Stages_,
+  int SchedulerPipelineStageCount_,
+  int AccumulatorPipelineStageCount_,
+  class ClusterShape_ = Shape<_1,_1,_1>
+>
+struct MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling {
+  constexpr static int Stages = Stages_;
+  using ClusterShape = ClusterShape_;
+  using ArchTag = arch::Sm100;
+  using Schedule = KernelTmaWarpSpecializedMmaTransformSm100<SchedulerPipelineStageCount_, AccumulatorPipelineStageCount_>;
+  constexpr static bool IsOverlappingAccum = false;
+};
 
 // n-buffer in smem, pipelined with Blackwell UMMA and TMA, Warp specialized dynamic schedule
 template<
@@ -557,7 +804,35 @@ struct MainloopSm100TmaUmmaWarpSpecializedBlockScaled {
   using Schedule = KernelTmaWarpSpecializedBlockScaledSm100<SchedulerPipelineStageCount_, AccumulatorPipelineStageCount_>;
 };
 
+template<
+  int Stages_,
+  int SchedulerPipelineStageCount_,
+  int AccumulatorPipelineStageCount_,
+  class ClusterShape_ = Shape<_1,_1,_1>
+>
+struct MainloopSm100TmaUmmaWarpSpecializedSparse {
+  constexpr static int Stages = Stages_;
+  constexpr static int MetadataS2TStages = 4;
+  using ClusterShape = ClusterShape_;
+  using ArchTag = arch::Sm100;
+  constexpr static bool IsOverlappingAccum = AccumulatorPipelineStageCount_ == 1;
+  using Schedule = KernelSparseTmaWarpSpecializedSm100<SchedulerPipelineStageCount_, AccumulatorPipelineStageCount_>;
+};
 
+template<
+  int Stages_,
+  int SchedulerPipelineStageCount_,
+  int AccumulatorPipelineStageCount_,
+  class ClusterShape_ = Shape<_1,_1,_1>
+>
+struct MainloopSm100TmaUmmaWarpSpecializedBlockScaledSparse {
+  constexpr static int Stages = Stages_;
+  constexpr static int MetadataS2TStages = 4;
+  using ClusterShape = ClusterShape_;
+  using ArchTag = arch::Sm100;
+  constexpr static bool IsOverlappingAccum = AccumulatorPipelineStageCount_ == 1;
+  using Schedule = KernelSparseTmaWarpSpecializedBlockScaledSm100<SchedulerPipelineStageCount_, AccumulatorPipelineStageCount_>;
+};
 
 // n-buffer in smem, pipelined with Blackwell Fast FP32 kernel with UMMA (HwScaled) and TMA,
 // Warp specialized dynamic schedule
@@ -689,12 +964,21 @@ struct MainloopSm100ArrayTmaUmmaWarpSpecializedFastF32 {
 
 
 #if defined(SYCL_INTEL_TARGET)
-template<int Stages_>
+template<int Stages_, class KernelSchedule = KernelPVC>
 struct MainloopIntelPVC {
   constexpr static int Stages = Stages_;
   constexpr static int SubgroupSize = 16;
   using ArchTag = arch::IntelPVC;
-  using Schedule = KernelPVC;
+  using Schedule = KernelSchedule;
+  using ClusterShape = Shape<_1,_1,_1>;
+};
+
+template<int Stages_, class KernelScheduler = KernelPVCPtrArrayCooperative>
+struct MainloopIntelPVCGroup {
+  constexpr static int Stages = Stages_;
+  constexpr static int SubgroupSize = 16;
+  using ArchTag = arch::IntelPVC;
+  using Schedule = KernelScheduler;
   using ClusterShape = Shape<_1,_1,_1>;
 };
 
@@ -715,6 +999,81 @@ struct MainloopDeviceAgnostic {
   using Schedule = KernelMultistage;
 };
 #endif
+
+template<
+  int Stages_,
+  int SchedulerPipelineStageCount_,
+  class ClusterShape_,
+  class KernelSchedule_
+>
+struct MainloopSm120TmaWarpSpecialized {
+  constexpr static int Stages = Stages_;
+  using ClusterShape = ClusterShape_;
+  using KernelSchedule = KernelSchedule_;
+
+  constexpr static int PipelineAsyncMmaStages = 0;
+  using ArchTag = arch::Sm120;
+
+  using Schedule = cute::conditional_t<cute::is_base_of_v<KernelTmaWarpSpecializedPingpong, KernelSchedule>,
+                                       KernelTmaWarpSpecializedPingpongSm120<SchedulerPipelineStageCount_>,
+                                       KernelTmaWarpSpecializedCooperativeSm120<SchedulerPipelineStageCount_>>;
+};
+
+template<
+  int Stages_,
+  int SchedulerPipelineStageCount_,
+  class ClusterShape_,
+  class KernelSchedule_
+>
+struct MainloopSm120TmaWarpSpecializedBlockScaled {
+  constexpr static int Stages = Stages_;
+  constexpr static int SchedulerPipelineStageCount = SchedulerPipelineStageCount_;
+  using ClusterShape = ClusterShape_;
+  using KernelSchedule = KernelSchedule_;
+
+  constexpr static int PipelineAsyncMmaStages = 0;
+  using ArchTag = arch::Sm120;
+
+  using Schedule = cute::conditional_t<cute::is_base_of_v<KernelTmaWarpSpecializedPingpong, KernelSchedule>,
+                                       KernelTmaWarpSpecializedPingpongBlockScaledSm120<SchedulerPipelineStageCount_>,
+                                       KernelTmaWarpSpecializedCooperativeBlockScaledSm120<SchedulerPipelineStageCount_>>;
+
+};
+
+template<
+  int StagesA_,
+  int StagesB_,
+  int StagesE_,
+  int SchedulerPipelineStageCount_,
+  class ClusterShape_ = Shape<_1,_1,_1>
+>
+struct MainloopSm120TmaWarpSpecializedSparse {
+  constexpr static int StagesA = StagesA_;
+  constexpr static int StagesB = StagesB_;
+  constexpr static int StagesE = StagesE_;
+  constexpr static bool isAsymmetric = (StagesA != StagesB);
+  using ClusterShape = ClusterShape_;
+  using ArchTag = arch::Sm120;
+  using Schedule = KernelTmaWarpSpecializedCooperativeSparseSm120<SchedulerPipelineStageCount_, isAsymmetric>;
+};
+
+template<
+  int StagesA_,
+  int StagesB_,
+  int StagesE_,
+  int SchedulerPipelineStageCount_,
+  class ClusterShape_ = Shape<_1,_1,_1>
+>
+struct MainloopSm120TmaWarpSpecializedSparseBlockScaled {
+  constexpr static int StagesA = StagesA_;
+  constexpr static int StagesB = StagesB_;
+  constexpr static int StagesE = StagesE_;
+  constexpr static bool isAsymmetric = (StagesA != StagesB);
+  using ClusterShape = ClusterShape_;
+  using ArchTag = arch::Sm120;
+  using Schedule = KernelTmaWarpSpecializedCooperativeSparseBlockScaledSm120<SchedulerPipelineStageCount_, isAsymmetric>;
+};
+
 
 //////////////////////////////////////////////////////////////////////////////
 

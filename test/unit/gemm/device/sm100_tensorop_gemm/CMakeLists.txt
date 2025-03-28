@@ -26,10 +26,8 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#
 
-#
-
+if (CUTLASS_NVCC_ARCHS MATCHES 100a)
 add_custom_target(
   cutlass_test_unit_gemm_device_sm100_tensorop
   DEPENDS
@@ -38,7 +36,7 @@ add_custom_target(
   cutlass_test_unit_gemm_device_tensorop_sm100_s8xs8
 )
 
-cutlass_test_unit_gemm_device_add_executable_split_file(
+cutlass_test_unit_gemm_device_add_executable(
   cutlass_test_unit_gemm_device_tensorop_sm100_f16xf16
 
   BATCH_SOURCES ON
@@ -48,7 +46,7 @@ cutlass_test_unit_gemm_device_add_executable_split_file(
   f16_f16_f16_f16_fusion.cu
 )
 
-cutlass_test_unit_gemm_device_add_executable_split_file(
+cutlass_test_unit_gemm_device_add_executable(
   cutlass_test_unit_gemm_device_tensorop_sm100_f8xf8
 
   BATCH_SOURCES ON
@@ -58,7 +56,7 @@ cutlass_test_unit_gemm_device_add_executable_split_file(
   f8_f8_f16_f8_fusion.cu
 )
 
-cutlass_test_unit_gemm_device_add_executable_split_file(
+cutlass_test_unit_gemm_device_add_executable(
   cutlass_test_unit_gemm_device_tensorop_sm100_s8xs8
 
   BATCH_SOURCES ON
@@ -67,5 +65,6 @@ cutlass_test_unit_gemm_device_add_executable_split_file(
   s8_s8_void_s32.cu
   s8_s8_s32_s32_fusion.cu
 )
+endif()
 
 add_subdirectory(narrow_precision) 
