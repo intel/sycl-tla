@@ -28,7 +28,7 @@ runs:
           URL=https://github.com/intel/llvm/releases/download/${{ inputs.DPCPP_VERSION }}/sycl_linux.tar.gz;
         else
           echo "Will use latest DPCPP version"
-          latest=$(curl -sS https://api.github.com/repos/intel/llvm/releases | jq -r '[.[].tag_name|select(match("nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}"))][0]')
+          latest=$(curl -sS https://api.github.com/repos/intel/llvm/releases | jq -r '.[] | select(.tag_name | test("nightly-[0-9]{4}-[0-9]{2}-[0-9]{2}")) | .tag_name' | head -n 1)
           URL=https://github.com/intel/llvm/releases/download/${latest}/sycl_linux.tar.gz;
         fi
         echo "Downloading DPCPP from ${URL}"
