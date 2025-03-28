@@ -21,6 +21,7 @@ static inline ushort16 E4M3_to_FP16_vec16(uchar16 xin) {
     uchar16 sgn_x = xin ^ xa;
 
     uchar16 zero_mask;
+    #pragma unroll
     for (int i = 0; i < 16; ++i) {
         zero_mask[i] = (xa[i] == 0) ? 1 : 0;
     }

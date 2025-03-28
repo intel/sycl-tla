@@ -151,7 +151,7 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       class LayoutOut,
       class... Ts>
   CUTLASS_DEVICE
-      void convert_E4M3_to_FP16(
+  void convert_E4M3_to_FP16(
           Tensor<EngineIn, LayoutIn> const& tCrA_load,
           Tensor<EngineOut, LayoutOut>& tCrA_mma) {
 
@@ -175,7 +175,6 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
 
       constexpr int num_elements = decltype(size(src))::value;
       constexpr int vec_size = 16;
-      static_assert(num_elements % vec_size == 0, "Number of elements must be divisible by vector size (16)");
 
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < num_elements / vec_size; ++i) {

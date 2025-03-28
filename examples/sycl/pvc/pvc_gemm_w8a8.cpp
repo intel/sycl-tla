@@ -28,7 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-
+/*
+* This implements W8A8 GEMM (FP8 weights and activations) using FP16 compute as a workaround,
+* since current Intel GPUs (e.g., PVC, BMG) lack native FP8 support.
+* The kernel converts FP8 inputs to FP16 on-the-fly and performs GEMM using FP16 MMA.
+*/
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
@@ -36,7 +40,6 @@
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/collective/collective_mma.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
-#include "cutlass/fp8_to_fp16.h"
 
 #include <cute/tensor.hpp>
 #include <random>
@@ -155,7 +158,7 @@ struct ExampleRunner {
   // Methods
   //
   template <typename SrcT, typename DstT>
-  void convert_fp(const SrcT* d_src, DstT* d_dst, size_t size) {
+  void convert_e4m3_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
       SrcT* h_src = new SrcT[size];
       syclcompat::memcpy(h_src, d_src, size * sizeof(SrcT));
       syclcompat::wait();
@@ -176,12 +179,12 @@ struct ExampleRunner {
       cutlass::DeviceAllocation<half_t> block_B_fp16(block_B.size());
 
       // fp8 -> fp16
-      convert_fp<float_e4m3_t, half_t>(
+      convert_e4m3_to_fp16<float_e4m3_t, half_t>(
           block_A.get(),
           block_A_fp16.get(),
           block_A.size()
       );
-      convert_fp<float_e4m3_t, half_t>(
+      convert_e4m3_to_fp16<float_e4m3_t, half_t>(
           block_B.get(),
           block_B_fp16.get(),
           block_B.size()
@@ -345,6 +348,7 @@ int main(int argc, const char** argv)
 
   using TileShape = Shape<_256, _256, _32>;
 
+  // TODO: Consider smaller tile size to reduce register pressure
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
