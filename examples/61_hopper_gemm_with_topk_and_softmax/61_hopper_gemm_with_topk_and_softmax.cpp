@@ -50,6 +50,24 @@
     in most efficient reduction kernels, because floating point addition is not necessarily
     associative.
 */
+#include "cutlass/epilogue/collective/default_epilogue.hpp"
+#include "cutlass/epilogue/collective/xe_epilogue.hpp"
+#include "cutlass/epilogue/fusion/xe_callbacks.hpp"
+#include "cutlass/gemm/device/gemm_universal.h"
+#include "cutlass/gemm/device/gemm_universal_adapter.h"
+#include "cutlass/gemm/collective/collective_mma.hpp"
+#include "cutlass/util/GPU_Clock.hpp"
+
+#include <cute/tensor.hpp>
+#include <random>
+
+#include "cutlass/util/command_line.h"
+#include "cutlass/util/device_memory.h"
+#include "cutlass/util/packed_stride.hpp"
+#include "cutlass/util/reference/device/gemm_complex.h"
+#include "cutlass/util/reference/device/tensor_compare.h"
+//#include "common.hpp"
+#include "helper.h"
 
 #include <iostream>
 
