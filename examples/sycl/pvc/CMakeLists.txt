@@ -79,6 +79,11 @@ cutlass_example_add_executable(
 )
 
 cutlass_example_add_executable(
+  pvc_gemm_group
+  pvc_gemm_group.cpp
+)
+
+cutlass_example_add_executable(
   pvc_gemm_w8a8
   pvc_gemm_w8a8.cpp
 )
