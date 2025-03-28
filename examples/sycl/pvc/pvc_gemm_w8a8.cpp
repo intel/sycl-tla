@@ -28,11 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-/*
-* This implements W8A8 GEMM (FP8 weights and activations) using FP16 compute as a workaround,
-* since current Intel GPUs (e.g., PVC, BMG) lack native FP8 support.
-* The kernel converts FP8 inputs to FP16 on-the-fly and performs GEMM using FP16 MMA.
-*/
+
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
