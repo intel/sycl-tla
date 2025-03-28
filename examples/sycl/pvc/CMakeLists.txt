@@ -78,3 +78,8 @@ cutlass_example_add_executable(
   pvc_gemm_mixed_dtype
   pvc_gemm_mixed_dtype.cpp
 )
+
+cutlass_example_add_executable(
+  pvc_gemm_group
+  pvc_gemm_group.cpp
+)
