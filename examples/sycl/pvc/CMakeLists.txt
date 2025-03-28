@@ -95,3 +95,8 @@ cutlass_example_add_executable(
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
 )
+
+cutlass_example_add_executable(
+  pvc_gemm_group
+  pvc_gemm_group.cpp
+)
