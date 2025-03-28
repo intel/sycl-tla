@@ -145,11 +145,11 @@ struct ExampleRunner {
   StrideD stride_D;
   uint64_t seed = 0;
 
-  cutlass::DeviceAllocation<ElementA> block_A; // fp8
-  cutlass::DeviceAllocation<ElementB> block_B; // fp8
-  cutlass::DeviceAllocation<ElementC> block_C; // fp32
-  cutlass::DeviceAllocation<ElementOutput> block_D; // fp32
-  cutlass::DeviceAllocation<ElementOutput> block_ref_D; // fp32
+  cutlass::DeviceAllocation<ElementA> block_A;
+  cutlass::DeviceAllocation<ElementB> block_B;
+  cutlass::DeviceAllocation<ElementC> block_C;
+  cutlass::DeviceAllocation<ElementOutput> block_D;
+  cutlass::DeviceAllocation<ElementOutput> block_ref_D;
 
   //
   // Methods
@@ -175,40 +175,17 @@ struct ExampleRunner {
       cutlass::DeviceAllocation<half_t> block_A_fp16(block_A.size());
       cutlass::DeviceAllocation<half_t> block_B_fp16(block_B.size());
 
-      cutlass::DeviceAllocation<cutlass::float_e4m3_t> block_A_fp8(block_A.size());
-      cutlass::DeviceAllocation<cutlass::float_e4m3_t> block_B_fp8(block_A.size());
-
       // fp8 -> fp16
-      convert_fp<cutlass::float_e4m3_t, half_t>(
+      convert_fp<float_e4m3_t, half_t>(
           block_A.get(),
           block_A_fp16.get(),
           block_A.size()
       );
-      convert_fp<cutlass::float_e4m3_t, half_t>(
+      convert_fp<float_e4m3_t, half_t>(
           block_B.get(),
           block_B_fp16.get(),
           block_B.size()
       );
-      /*
-      // verify dtype conversion with roundtrip: fp8 -> fp16 -> fp8
-      // fp16 -> fp8
-      convert_fp<half_t, cutlass::float_e4m3_t>(
-          block_A_fp16.get(),
-          block_A_fp8.get(),
-          block_A.size()
-      );
-      convert_fp<half_t, cutlass::float_e4m3_t>(
-          block_B_fp16.get(),
-          block_B_fp8.get(),
-          block_B.size()
-      );
-      bool passed_A = cutlass::reference::device::BlockCompareEqual(
-          block_A.get(), block_A_fp8.get(), block_A.size());
-      bool passed_B = cutlass::reference::device::BlockCompareEqual(
-          block_B.get(), block_B_fp8.get(), block_B.size());
-      print("passed_A: "); print(passed_A); print("\n");
-      print("passed_B: "); print(passed_B); print("\n");
-      */
 
       cutlass::TensorRef ref_A(block_A_fp16.get(), LayoutA::packed({M, K}));
       cutlass::TensorRef ref_B(block_B_fp16.get(), LayoutB::packed({K, N}));
@@ -237,18 +214,6 @@ struct ExampleRunner {
       bool passed = cutlass::reference::device::BlockCompareEqual(
           block_ref_D.get(), block_D.get(), block_D.size());
 
-      // DEBUG
-      /*
-      float* dD = block_D.get();
-      float* hD = new float[block_A.size()];
-      syclcompat::memcpy(hD, dD, block_D.size() * sizeof(float));
-      for (int i = 0; i < M; ++i) {
-          for (int j = 0; j < K; ++j) {
-              print(hD[i * K + j]); print(" ");
-          }
-          std::cout << std::endl;
-      }
-      */
       return passed;
   }
 
@@ -268,111 +233,9 @@ struct ExampleRunner {
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
-    initialize_block(block_A, seed + 2023); // fp8
-    initialize_block(block_B, seed + 2022); // fp8
-    initialize_block(block_C, seed + 2021); // fp32
-    
-    // DEBUG
-    /*
-    cutlass::float_e4m3_t fp8_one(static_cast<float>(0.0f));
-    cute::intel::uchar16 input_vec;
-    for (size_t i = 0; i < 16; ++i) {
-        uint8_t int8_bits = reinterpret_cast<uint8_t&>(fp8_one);
-        input_vec[i] = int8_bits;
-    }
-    cute::intel::ushort16 output_vec = E4M3_to_FP16_vec16(input_vec);
-    for (int i = 0; i < 16; ++i) {
-        uint16_t vector_bits = output_vec[i];
-        half_t vector_result = reinterpret_cast<half_t&>(vector_bits);
-        print("fp16_val: "); print(static_cast<float>(vector_result)); print("\n");
-    }
-    */
-
-    /*
-    cutlass::float_e4m3_t fp8_val(static_cast<float>(1.0f));
-    print("fp8_val: "); print(static_cast<float>(fp8_val)); print("\n");
-    uint8_t int8_bits = reinterpret_cast<uint8_t&>(fp8_val);
-    half_t fp16_val = E4M3_to_FP16(int8_bits);
-    print("fp16_val: "); print(static_cast<float>(fp16_val)); print("\n");
-    */
-
-    /*
-    cutlass::float_e4m3_t fp8_val(static_cast<float>(1.0f));
-    print("fp8_val: "); print(static_cast<float>(fp8_val)); print("\n");
-    uint8_t int8_bits = reinterpret_cast<uint8_t&>(fp8_val);
-    unsigned short fp16_bits = E4M3_to_FP16(int8_bits);
-    half_t fp16_val = reinterpret_cast<half_t&>(fp16_bits);
-    print("fp16_val: "); print(static_cast<float>(fp16_val)); print("\n");
-    */
-
-    /*
-    ElementA* dA = block_A.get();
-    ElementA* hA = new ElementA[block_A.size()];
-    */
-    /*
-    // debug purpose: initialize with all 1's
-    for (size_t i = 0; i < block_A.size(); ++i) {
-        cutlass::float_e4m3_t fp8_val(static_cast<float>(0.31251534));
-        cutlass::ReferenceFactory<ElementA>::get(hA, i) = fp8_val;
-    }
-    */
-    /*
-    // debug purpose: initialize with 1,2,3,4 repeated
-    for (int i = 0; i < M; ++i) {
-        for (int j = 0; j < K; ++j) {
-            int idx = i * K + j;
-            cutlass::float_e4m3_t fp8_val(static_cast<float>((j%4)+1));
-            cutlass::ReferenceFactory<ElementA>::get(hA, idx) = fp8_val;
-        }
-    }
-    */
-    /*
-    syclcompat::memcpy(dA, hA, block_A.size() * sizeof(ElementA));
-    */
-    /*
-    syclcompat::memcpy(hA, dA, block_A.size() * sizeof(ElementA));
-    */
-    /*
-    ElementB* dB = block_B.get();
-    ElementB* hB = new ElementB[block_B.size()];
-    */
-    /*
-    // debug purpose: initialize with all 1's
-    for (size_t i = 0; i < block_A.size(); ++i) {
-        cutlass::float_e4m3_t fp8_val(static_cast<float>(0.31251534));
-        cutlass::ReferenceFactory<ElementB>::get(hB, i) = fp8_val;
-    }
-    */
-    /*
-    syclcompat::memcpy(dB, hB, block_B.size() * sizeof(ElementB));
-    */
-    /*
-    syclcompat::memcpy(hB, dB, block_B.size() * sizeof(ElementA));
-    */
-    /*
-    for (int i = 0; i < block_A.size(); ++i) {
-        cutlass::half hA_fp16 = hA[i];
-        print("hA: "); print(static_cast<float>(hA_fp16)); print("\n");
-    }
-    */
-    
-    /*
-    for (int i = 0; i < M; ++i) {
-        for (int j = 0; j < K; ++j) {
-            cutlass::half hA_fp16 = hA[i * K + j];
-            print(static_cast<float>(hA_fp16)); print(" ");
-        }
-        std::cout << std::endl;
-    }
-    print("---------------------------------------------"); print("\n");
-    for (int j = 0; j < N; ++j) {
-        for (int i = 0; i < K; ++i) {
-            cutlass::half hB_fp16 = hB[i * N + j];
-            print(static_cast<float>(hB_fp16)); print(" ");
-        }
-        std::cout << std::endl;
-    }
-    */
+    initialize_block(block_A, seed + 2023);
+    initialize_block(block_B, seed + 2022);
+    initialize_block(block_C, seed + 2021);
   }
   
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -392,6 +255,11 @@ struct ExampleRunner {
 
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
+
+    if (options.n < 16) {
+        std::cout << "Invalid Problem Size: N must be >= 16 for FP8 input with F16 MMA (XE_8x16x16_F32F16F16F32_TT). Got N=" << options.n << std::endl;
+        std::exit(1);
+    }
 
     if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
       std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
@@ -462,9 +330,9 @@ int main(int argc, const char** argv)
 
   using ElementAccumulator = float;
   using ElementComputeEpilogue = float; 
-  // TODO: Generalize fp8 format (e4m3, e5m2)
-  using ElementInputA = cutlass::float_e4m3_t; // fp8 
-  using ElementInputB = cutlass::float_e4m3_t; // fp8 
+  // TODO: support E5M2
+  using ElementInputA = cutlass::float_e4m3_t; 
+  using ElementInputB = cutlass::float_e4m3_t; 
   using ElementOutput = float;
 
   using LayoutA = cutlass::layout::RowMajor;
@@ -472,18 +340,14 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V; // copy fp8 using fake int8
-  using GmemTiledCopyB = XE_2D_U8x32x32_LD_V; // copy fp8 using fake int8
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 
   using TileShape = Shape<_256, _256, _32>;
 
-  // compute using fp16 (fp8 converted to fp16)
-  // TODO: register spill
   using TiledMma =
-      TiledMMA<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
-               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
-               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                    Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
+      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;

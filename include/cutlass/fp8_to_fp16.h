@@ -1,22 +1,14 @@
 #pragma once
 
-#include <stdint.h>
-#include <cstdint>
 #include <cutlass/half.h> 
 #include <cute/util/sycl_vec.hpp>
 
 using half_t = cutlass::half_t;
-using uchar4 = cute::intel::uchar4;
-using ushort4 = cute::intel::ushort4;
+using uchar16 = cute::intel::uchar16;
+using ushort16 = cute::intel::ushort16;
 
-
-union FP16Union {
-    uint16_t i;
-    half_t f;
-};
-
-static inline cute::intel::ushort16 convert_ushort16(cute::intel::uchar16 x) {
-    cute::intel::ushort16 result;
+static inline ushort16 convert_ushort16(uchar16 x) {
+    ushort16 result;
     #pragma unroll
     for (int i = 0; i < 16; ++i) {
         result[i] = static_cast<uint16_t>(x[i]);
@@ -24,9 +16,7 @@ static inline cute::intel::ushort16 convert_ushort16(cute::intel::uchar16 x) {
     return result;
 }
 
-static inline cute::intel::ushort16 E4M3_to_FP16_vec16(cute::intel::uchar16 xin) {
-    using namespace cute::intel;
-
+static inline ushort16 E4M3_to_FP16_vec16(uchar16 xin) {
     uchar16 xa = xin & 0x7F;
     uchar16 sgn_x = xin ^ xa;
 
@@ -54,50 +44,42 @@ static inline cute::intel::ushort16 E4M3_to_FP16_vec16(cute::intel::uchar16 xin)
     return result;
 }
 
-static inline half_t E4M3_to_FP16(uint8_t xin) {
-    uint8_t xa = xin & 0x7F;
-    uint8_t sgn_x = xin ^ xa;
+static inline unsigned short E4M3_to_FP16(unsigned char xin) {
+    unsigned char xa, sgn_x, nan_mask, den_mask;
 
-    uint8_t nan_mask = (0x7E - xa) & 0x80;
-    uint8_t den_mask = (((int8_t)(xa - 8)) >> 7);
+    union {
+        signed short i;
+        _Float16 f;
+    } x16, den_corr;
 
+    xa = xin & 0x7f;
+    sgn_x = xin ^ xa;
+
+    // mask for NaN input
+    nan_mask = (0x7e - xa) & 0x80;
+    // mask for denormal / zero input
+    den_mask = (((signed char)(xa - 8)) >> 7);
+
+    // apply Nan correction
     xa += (nan_mask >> 1);
+    // first denormal correction
     xa |= (den_mask & 8);
     den_mask &= 0x48;
+    // exponent bias correction
     xa += 0x40;
 
-    FP16Union x16, den_corr;
-    x16.i = xa << 7;
-    den_corr.i = den_mask << 7;
+    // zero-extend to 16 bits
+    x16.i = xa;
+    den_corr.i = den_mask;
+    // FP16 format
+    x16.i <<= 7;
+    den_corr.i <<= 7;
 
+    // apply correction for denormals/zero
     x16.f -= den_corr.f;
 
-    x16.i ^= ((uint16_t)sgn_x << 8);
+    // finally, apply the sign
+    x16.i ^= (((signed short)sgn_x) << 8);
 
-    return x16.f;
+    return (unsigned short)x16.i;
 }
-
-
-template <int N>
-struct E4M3_to_FP16_NumericArrayConverter {
-
-    using result_type = cutlass::Array<half_t, N>;
-    using source_type = cutlass::Array<uint8_t, N>;
-
-    CUTLASS_HOST_DEVICE
-    static result_type convert(source_type const& s) {
-        result_type result;
-
-        CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < N; ++i) {
-            result[i] = E4M3_to_FP16(s[i]);
-        }
-
-        return result;
-    }
-
-    CUTLASS_HOST_DEVICE
-    result_type operator()(source_type const& s) const {
-    return convert(s);
-    }
-};
