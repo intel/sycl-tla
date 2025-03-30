@@ -157,8 +157,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       class... Ts>
   CUTLASS_DEVICE
   void convert_E4M3_to_FP16(
-          Tensor<EngineIn, LayoutIn> const& tCrA_load,
-          Tensor<EngineOut, LayoutOut>& tCrA_mma) {
+          Tensor<EngineIn, LayoutIn> const& in,
+          Tensor<EngineOut, LayoutOut>& out) {
 
       static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
       static_assert(is_rmem<EngineOut>::value, "Output tensor for A conversion must come from registers");
@@ -172,8 +172,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       static_assert(std::is_same_v<SrcType, uint8_t>, "Expected fp8 (E4M3) input as uint8_t");
       static_assert(std::is_same_v<DstType, half_t>, "Expected fp16 output as half_t");
 
-      auto const& src = tCrA_load(_, _, _);
-      auto const& dst = tCrA_mma(_, _, _);
+      auto const& src = in(_, _, _);
+      auto const& dst = out(_, _, _);
 
       SrcType const* pSrc = src.data();
       DstType* pDst = dst.data();
@@ -183,15 +183,15 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
 
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < num_elements / vec_size; ++i) {
-          // load
+          // vectorized load
           cute::intel::uchar16 src_vec;
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < vec_size; ++j) {
               src_vec[j] = pSrc[i * vec_size + j];
           }
-          // convert fp8 -> fp16
+          // vectorized convert fp8 -> fp16
           cute::intel::ushort16 dst_vec = E4M3_to_FP16_vec16(src_vec);
-          // store
+          // vectorized store
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < vec_size; ++j) {
               reinterpret_cast<uint16_t*>(pDst)[i * vec_size + j] = dst_vec[j];
