@@ -180,7 +180,7 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
 
       constexpr int num_elements = decltype(size(src))::value;
       constexpr int vec_size = 16;
-
+TODO(Codeplay): Move conversion to NumericArrayConverter 
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < num_elements / vec_size; ++i) {
           // vectorized load
