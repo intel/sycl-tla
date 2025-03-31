@@ -77,8 +77,6 @@ using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder
 
 template <typename CollectiveEpilogue>
 struct XE_Device_Gemm_bf16_bf16_f32_tensor_op_gmma_f32_epilogue{
-
-
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<
     cutlass::gemm::kernel::GemmUniversal<
       Shape<int, int, int, int>,

@@ -48,7 +48,7 @@ struct XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32 {
   using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
     cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
     cute::half_t, LayoutA,
-    cute::half_t, LayoutA,
+    cute::half_t, LayoutB,
     float, cutlass::layout::RowMajor,
     float>;
 
