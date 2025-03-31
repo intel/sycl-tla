@@ -133,7 +133,7 @@ class TensorView : public TensorRef<Element_, Layout_> {
     TensorCoord const &extent             ///< size of the view in logical coordinates
   ):
     Base(ptr, layout), extent_(extent) {
-
+  
   }
 
   /// Constructs a TensorView object
@@ -143,8 +143,9 @@ class TensorView : public TensorRef<Element_, Layout_> {
     TensorCoord const &extent             ///< logical size of tensor
   ):
     Base(ref), extent_(extent) {
-
+  
   }
+
 #if defined(CUTLASS_ENABLE_SYCL)
   CUTLASS_HOST_DEVICE
   TensorView(TensorView<Element_, Layout_> const&) = default;
