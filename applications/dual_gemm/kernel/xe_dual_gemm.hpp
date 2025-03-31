@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,22 +37,31 @@
 
 #include "cute/tensor.hpp"
 
+#include "dual_gemm/collective/xe_dual_gemm_mma.hpp"
+
 namespace cutlass::gemm::kernel {
+
+template <
+  class ProblemShape_,
+  class DualGemmMainloop_,
+  class CollectiveEpilogue0_,
+  class CollectiveEpilogue1_,
+  class DualGemmElemActEpilogue_,
+  class TileScheduler_ = void
+>
+class DualGemm;
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <
   class ProblemShape_,
-  class CollectiveMainloop_,
-  class CollectiveEpilogue_,
+  class DualGemmMainloop_,
+  class CollectiveEpilogue0_,
+  class CollectiveEpilogue1_,
+  class DualGemmElemActEpilogue_,
   class TileScheduler_
 >
-class GemmUniversal<
-  ProblemShape_,
-  CollectiveMainloop_,
-  CollectiveEpilogue_,
-  TileScheduler_,
-  cute::enable_if_t<cute::is_base_of_v<KernelPVC, typename CollectiveMainloop_::DispatchPolicy::Schedule>>>
+class DualGemm
 {
 public:
   //
@@ -64,20 +73,20 @@ public:
     "ProblemShape{} should be <M,N,K> or <M,N,K,L>");
 
   // Mainloop derived types
-  using CollectiveMainloop = CollectiveMainloop_;
-  using TileShape = typename CollectiveMainloop::WorkgroupTileShape;
+  using DualGemmMainloop = DualGemmMainloop_;
+  using TileShape = typename DualGemmMainloop::WorkgroupTileShape;
   using WorkgroupTileShape = TileShape;
-  using TiledMma  = typename CollectiveMainloop::TiledMma;
-  using ArchTag   = typename CollectiveMainloop::ArchTag;
-  using ElementA  = typename CollectiveMainloop::ElementA;
-  using StrideA   = typename CollectiveMainloop::StrideA;
-  using ElementB  = typename CollectiveMainloop::ElementB;
-  using StrideB   = typename CollectiveMainloop::StrideB;
-  using DispatchPolicy = typename CollectiveMainloop::DispatchPolicy;
-  using ElementAccumulator = typename CollectiveMainloop::ElementAccumulator;
-  using MainloopArguments = typename CollectiveMainloop::Arguments;
+  using TiledMma  = typename DualGemmMainloop::TiledMma;
+  using ArchTag   = typename DualGemmMainloop::ArchTag;
+  using ElementA  = typename DualGemmMainloop::ElementA;
+  using StrideA   = typename DualGemmMainloop::StrideA;
+  using ElementB  = typename DualGemmMainloop::ElementB;
+  using StrideB   = typename DualGemmMainloop::StrideB;
+  using DispatchPolicy = typename DualGemmMainloop::DispatchPolicy;
+  using ElementAccumulator = typename DualGemmMainloop::ElementAccumulator;
+  using MainloopArguments = typename DualGemmMainloop::Arguments;
   using ClusterShape = typename DispatchPolicy::ClusterShape;
-  using MainloopParams = typename CollectiveMainloop::Params;
+  using MainloopParams = typename DualGemmMainloop::Params;
 
   static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler>,
     "Intel PVC does not support specializing the tile scheduler.");
@@ -89,28 +98,43 @@ public:
   using TileSchedulerParams = typename TileScheduler::Params;
 
   // Epilogue derived types
-  using CollectiveEpilogue = CollectiveEpilogue_;
-  using ElementC = typename CollectiveEpilogue::ElementC;
-  using StrideC  = typename CollectiveEpilogue::StrideC;
-  using ElementD = typename CollectiveEpilogue::ElementD;
-  using StrideD  = typename CollectiveEpilogue::StrideD;
-  using EpilogueArguments = typename CollectiveEpilogue::Arguments;
-  using EpilogueParams = typename CollectiveEpilogue::Params;
-  static_assert(cute::is_same_v<ElementAccumulator, typename CollectiveEpilogue::ElementAccumulator>,
+  using CollectiveEpilogue0 = CollectiveEpilogue0_;
+  using CollectiveEpilogue1 = CollectiveEpilogue1_;
+  using ElementC = typename CollectiveEpilogue0::ElementC;
+  using StrideC  = typename CollectiveEpilogue0::StrideC;
+  using ElementD = typename CollectiveEpilogue0::ElementD;
+  using StrideD  = typename CollectiveEpilogue0::StrideD;
+  using EpilogueArguments0 = typename CollectiveEpilogue0::Arguments;
+  using EpilogueArguments1 = typename CollectiveEpilogue1::Arguments;
+  using EpilogueParams0 = typename CollectiveEpilogue0::Params;
+  using EpilogueParams1 = typename CollectiveEpilogue1::Params;
+
+  using DualGemmElemActEpilogue = DualGemmElemActEpilogue_;
+  using DualGemmElemActEpilogueArguments = typename DualGemmElemActEpilogue::Arguments;
+  using DualGemmElemActEpilogueParams = typename DualGemmElemActEpilogue::Params;
+  static_assert(cute::is_same_v<ElementAccumulator, typename CollectiveEpilogue0::ElementAccumulator>,
     "Mainloop and epilogue do not agree on accumulator value type.");
 
   // MSVC requires the cast to fix a warning-as-error.
   static constexpr int SharedStorageSize = 0;
 
-  static constexpr int SubgroupSize = CollectiveMainloop::SubgroupSize; // sub_group size
-  static constexpr uint32_t MaxThreadsPerBlock = CollectiveMainloop::MaxThreadsPerBlock;
-  using MmaAtomShape = typename CollectiveMainloop::MmaAtomShape;
-  using SubgroupTileShape = typename CollectiveMainloop::SubgroupTileShape;
+  static constexpr int SubgroupSize = DualGemmMainloop::SubgroupSize; // sub_group size
+  static constexpr uint32_t MaxThreadsPerBlock = DualGemmMainloop::MaxThreadsPerBlock;
+  using MmaAtomShape = typename DualGemmMainloop::MmaAtomShape;
+  using SubgroupTileShape = typename DualGemmMainloop::SubgroupTileShape;
+ 
+  using TensorMKL = typename DualGemmMainloop::TensorMKL;
+  using TensorNKL = typename DualGemmMainloop::TensorNKL;
+
+  using TensorMK = decltype(TensorMKL{}(_, _, 0));
+  using TensorNK = decltype(TensorNKL{}(_, _, 0));
 
   // Kernel level shared memory storage
   struct SharedStorage {
-    using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;
-    EpilogueTensorStorage epilogue;
+    using EpilogueTensorStorage0 = typename CollectiveEpilogue0::TensorStorage;
+    using EpilogueTensorStorage1 = typename CollectiveEpilogue1::TensorStorage;
+    EpilogueTensorStorage0 epilogue0;
+    EpilogueTensorStorage1 epilogue1;
   };
 
   // Device side arguments
@@ -118,7 +142,9 @@ public:
     GemmUniversalMode mode{};
     ProblemShape problem_shape{};
     MainloopArguments mainloop{};
-    EpilogueArguments epilogue{};
+    EpilogueArguments0 epilogue0{};
+    EpilogueArguments1 epilogue1{};
+    DualGemmElemActEpilogueArguments elem_act_epilogue{};
     KernelHardwareInfo hw_info{};
     TileSchedulerArguments scheduler{};
   };
@@ -128,7 +154,9 @@ public:
     GemmUniversalMode mode{};
     ProblemShape problem_shape{};
     MainloopParams mainloop{};
-    EpilogueParams epilogue{};
+    EpilogueParams0 epilogue0{};
+    EpilogueParams1 epilogue1{};
+    DualGemmElemActEpilogueParams elem_act_epilogue{};
     KernelHardwareInfo hw_info{};
     TileSchedulerParams scheduler{};
   };
@@ -144,14 +172,16 @@ public:
     (void) workspace;
     auto problem_shape_MNKL = append<4>(args.problem_shape, 1);
 
-    auto mainloop_args = CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace);
+    auto mainloop_args = DualGemmMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace);
     TileSchedulerParams scheduler = TileScheduler::to_underlying_arguments(
       problem_shape_MNKL, TileShape{}, ClusterShape{}, args.hw_info, args.scheduler, &workspace);
     return {
       args.mode,
       args.problem_shape,
       mainloop_args,
-      CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace),
+      CollectiveEpilogue0::to_underlying_arguments(args.problem_shape, args.epilogue0, workspace),
+      CollectiveEpilogue1::to_underlying_arguments(args.problem_shape, args.epilogue1, workspace),
+      DualGemmElemActEpilogue::to_underlying_arguments(args.problem_shape, args.elem_act_epilogue, workspace),
       args.hw_info,
       scheduler
     };
@@ -254,19 +284,21 @@ public:
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
     TiledMma tiled_mma;
 
-    Tensor accumulators = partition_fragment_C(tiled_mma, take<0,2>(blk_shape)); 
-    clear(accumulators);
+    Tensor accumulators0 = partition_fragment_C(tiled_mma, take<0,2>(blk_shape));
+    Tensor accumulators1 = partition_fragment_C(tiled_mma, take<0,2>(blk_shape));
+    clear(accumulators0);
+    clear(accumulators1);
 
     auto k_tile_iter  = cute::make_coord_iterator(idx2crd(0, make_shape(K)), make_shape(K));
     int  k_tile_count = K / get<2>(workgroup_shape);
 
     // Perform the collective scoped MMA
-    CollectiveMainloop collective_mma;
+    DualGemmMainloop collective_mma;
     collective_mma(
-      accumulators,
+      accumulators0,
+      accumulators1,
       gA,
       gB,
-      accumulators,
       k_tile_iter, k_tile_count,
       residue_mnk,
       blk_coord_mnkl,
@@ -276,12 +308,37 @@ public:
       params.mainloop
     );
 
-    CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
-    epilogue(
+    CollectiveEpilogue0 epilogue0{params.epilogue0, shared_storage.epilogue0};
+    epilogue0(
       problem_shape_MNKL,
-      subgroup_shape, // TODO(codeplay): Inconsistency here w/ blk_coord_mnkl
+      subgroup_shape,
       blk_coord_mnkl,
-      accumulators,
+      accumulators0,
+      tiled_mma,
+      residue_mnk,
+      thread_idx,
+      smem_buf
+    );
+
+    CollectiveEpilogue1 epilogue1{params.epilogue1, shared_storage.epilogue1};
+    epilogue1(
+      problem_shape_MNKL,
+      subgroup_shape,
+      blk_coord_mnkl,
+      accumulators1,
+      tiled_mma,
+      residue_mnk,
+      thread_idx,
+      smem_buf
+    );
+
+    DualGemmElemActEpilogue elem_act_epilogue{params.elem_act_epilogue};
+    elem_act_epilogue(
+      problem_shape_MNKL,
+      subgroup_shape,
+      blk_coord_mnkl,
+      accumulators0,
+      accumulators1,
       tiled_mma,
       residue_mnk,
       thread_idx,

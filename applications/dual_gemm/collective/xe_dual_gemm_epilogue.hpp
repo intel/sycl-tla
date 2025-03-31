@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,20 @@ namespace cutlass {
 namespace epilogue {
 namespace collective {
 
+template <
+  class DispatchPolicy,
+  class CtaTileMNK_,
+  class ElementC_,
+  class StrideC_,
+  class ElementD_,
+  class StrideD_,
+  class FusionCallbacks_,
+  class CopyOpG2R_,
+  class CopyOpR2G_,
+  bool WriteOutput_
+>
+class DualGemmEpilogue;
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <
@@ -61,13 +75,10 @@ template <
   class StrideD_,
   class FusionCallbacks_,
   class CopyOpG2R_,
-  class SmemLayoutAtomC_,
-  class CopyOpS2R_,
   class CopyOpR2G_,
-  class SmemLayoutAtomD_,
-  class CopyOpR2S_
+  bool WriteOutput_
 >
-class CollectiveEpilogue<
+class DualGemmEpilogue<
     IntelPVCEpilogue,
     CtaTileMNK_,
     ElementC_,
@@ -76,11 +87,8 @@ class CollectiveEpilogue<
     StrideD_,
     FusionCallbacks_,
     CopyOpG2R_,
-    SmemLayoutAtomC_,
-    CopyOpS2R_,
     CopyOpR2G_,
-    SmemLayoutAtomD_,
-    CopyOpR2S_
+    WriteOutput_
 > {
 public:
   //
@@ -95,11 +103,9 @@ public:
   using ElementD = ElementD_;
   using StrideD = StrideD_;
   using CopyOpG2R = CopyOpG2R_;
-  using SmemLayoutAtomC = SmemLayoutAtomC_;
-  using CopyOpS2R = CopyOpS2R_;
   using CopyOpR2G = CopyOpR2G_;
-  using SmemLayoutAtomD = SmemLayoutAtomD_;
-  using CopyOpR2S = CopyOpR2S_;
+
+  static constexpr bool WriteOutput = WriteOutput_;
 
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
   using GmemTiledCopyC = CopyOpG2R;
@@ -114,24 +120,18 @@ public:
   static_assert(cute::rank(StrideC{}) == 3, "StrideC must be rank-3: [M, N, L]");
   static_assert(cute::rank(StrideD{}) == 3, "StrideD must be rank-3: [M, N, L]");
 
-  static_assert(std::is_same_v<CopyOpS2R, void>, "Copy operation to shared memory is not supported");
-  static_assert(std::is_same_v<CopyOpR2S, void>, "Copy operation to shared memory is not supported");
-  static_assert(std::is_same_v<SmemLayoutAtomC, void>, "Copy operation to shared memory is not supported");
-  static_assert(std::is_same_v<SmemLayoutAtomD, void>, "Copy operation to shared memory is not supported");
-
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
-  
   using Trait_C = Copy_Traits<GmemTiledCopyC, StrideC>;
-  using val_layout_load_C = decltype(make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
-  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}, Layout<CopyThreadShape>{}, val_layout_load_C{}));
-
+  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{},
+                                             Layout<CopyThreadShape>{},
+                                             make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{}))));
   using Trait_D = Copy_Traits<GmemTiledCopyD, StrideD>;
-  using val_layout_store_D = decltype(make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
-  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}, Layout<CopyThreadShape>{}, val_layout_store_D{}));
-
+  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{},
+                                             Layout<CopyThreadShape>{},
+                                             make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{}))));
 private:
   constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
-  constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
+  constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G> && WriteOutput;
 
   constexpr static bool is_m_major_C = detail::is_m_major<StrideC>();
   constexpr static bool is_m_major_D = detail::is_m_major<StrideD>();
@@ -168,6 +168,10 @@ public:
     typename FusionCallbacks::Params thread{};
     XE_Copy_C xe_load_c;
     XE_Copy_D xe_store_d;
+    ElementC const* ptr_C = nullptr;
+    StrideC dC{};
+    ElementD* ptr_D = nullptr;
+    StrideD dD{};
   };
 
   //
@@ -186,20 +190,30 @@ public:
 
     XE_Copy_C xe_load_c = {};
     if constexpr (is_source_supported) {
-      auto mC = make_tensor(make_gmem_ptr(args.ptr_C), make_layout(make_shape(M, N, L), args.dC));
-      xe_load_c = {xe_load_c.with(mC)};
+      auto mC = make_tensor(make_gmem_ptr(static_cast<ElementC const*>(args.ptr_C)),
+                            make_layout(make_shape(M, N, L), args.dC));
+      xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(mC),
+                                  Layout<CopyThreadShape>{},
+                                  make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
     }
 
     XE_Copy_D xe_store_d = {};
     if constexpr (is_destination_supported) {
-      auto mD = make_tensor(make_gmem_ptr(args.ptr_D), make_layout(make_shape(M, N, L), args.dD));
-      xe_store_d = {xe_store_d.with(mD)};
+      auto mD = make_tensor(make_gmem_ptr(static_cast<ElementD const*>(args.ptr_D)),
+                            make_layout(make_shape(M, N, L), args.dD));
+      xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(mD),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
     }
 
     return {
       FusionCallbacks::to_underlying_arguments(problem_shape, args.thread, workspace),
       xe_load_c,
       xe_store_d,
+      args.ptr_C,
+      args.dC,
+      args.ptr_D,
+      args.dD
     };
   }
 
@@ -225,7 +239,7 @@ public:
   }
 
   CUTLASS_HOST_DEVICE
-  CollectiveEpilogue(Params const& params_, TensorStorage const& shared_storage_)
+  DualGemmEpilogue(Params const& params_, TensorStorage const& shared_storage_)
       : params(params_), fusion_callbacks(params_.thread, shared_storage_.thread) {}
 
   CUTLASS_DEVICE
@@ -247,7 +261,7 @@ public:
       ProblemShapeMNKL problem_shape_mnkl,
       TileShapeMNK tile_shape_MNK,
       TileCoordMNKL tile_coord_mnkl,
-      Accumulator accumulators, 
+      Accumulator& accumulators, 
       TiledMma tiled_mma,
       ResidueMNK residue_mnk,
       int thread_idx,
@@ -316,7 +330,6 @@ public:
     Tensor tCgD = thread_xe_store_d.partition_D(gD);
 
     Tensor trC = make_tensor<typename TiledMma::ValTypeC>(Shape<Int<FragmentSize>>{});
-    Tensor trD = make_tensor<typename TiledMma::ValTypeD>(Shape<Int<FragmentSize>>{});
 
     // Because Sm90 uses shared memory, they are not tied to using the same accumulator values
     // for MMA and Epilogue. But because we are operating directly in the accumulators, we need to be
@@ -355,7 +368,6 @@ public:
     cst_callbacks.begin();
 
     auto acc_frag = recast<Array<ElementOutput, FragmentSize>>(accumulators);
-    auto trD_frag = recast<Array<ElementOutput, FragmentSize>>(trD);
 
     constexpr int ValuesLoaded =
       FragsM * FragsN * FragmentSize * SubgroupSize * ATOM_M * ATOM_N * ATOM_K;
@@ -378,13 +390,12 @@ public:
         auto acc_frag_mn = acc_frag(_, epi_m, epi_n);
 
         CUTLASS_PRAGMA_UNROLL
-        for (int epi_v = 0; epi_v < size<0>(trD_frag); ++epi_v) {
-          trD_frag(epi_v) = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
+        for (int epi_v = 0; epi_v < size<0>(acc_frag); ++epi_v) {
+          acc_frag_mn(epi_v) = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
         }
-        cst_callbacks.reduce(nullptr, synchronize, epi_m, epi_n, (epi_m == FragsM - 1 && epi_n == FragsN - 1), trD);
-        
+
         if constexpr (is_destination_supported) {
-          copy(params.xe_store_d, trD, tCgD(_, epi_m, epi_n));
+          copy(params.xe_store_d, accumulators(_, epi_m, epi_n), tCgD(_, epi_m, epi_n));
         }
       }
     }

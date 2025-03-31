@@ -42,38 +42,33 @@
 
 namespace cutlass::gemm::collective {
 using namespace cute;
+
+template <class DispatchPolicy, class TileShape_, class ElementA_, class StrideA_, class ElementB_, class StrideB_,
+          class TiledMma_, class GmemTiledCopyA_, class GmemTiledCopyB_>
+struct DualGemmMma;
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <int Stages, class Schedule, class TileShape_, class ElementA_, class StrideA_, class ElementB_, class StrideB_,
-          class TiledMma_, class GmemTiledCopyA_, class SmemLayoutAtomA_, class SmemCopyAtomA_, class TransformA_,
-          class GmemTiledCopyB_, class SmemLayoutAtomB_, class SmemCopyAtomB_, class TransformB_>
-struct CollectiveMma<MainloopIntelPVCGroup<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
-                     GmemTiledCopyA_, SmemLayoutAtomA_, SmemCopyAtomA_, TransformA_, GmemTiledCopyB_, SmemLayoutAtomB_,
-                     SmemCopyAtomB_, TransformB_> {
+          class TiledMma_, class GmemTiledCopyA_, class GmemTiledCopyB_>
+struct DualGemmMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
+                     GmemTiledCopyA_, GmemTiledCopyB_> {
   //
   // Type Aliases
   //
-  using DispatchPolicy = MainloopIntelPVCGroup<Stages, Schedule>;
+  using DispatchPolicy = MainloopIntelPVC<Stages, Schedule>;
   using WorkgroupTileShape = TileShape_;
   using ElementA = ElementA_;
   using StrideA = StrideA_;
-  using InternalStrideA = cute::remove_pointer_t<StrideA>;
   using ElementB = ElementB_;
   using StrideB = StrideB_;
-  using InternalStrideB = cute::remove_pointer_t<StrideB>;
   using TiledMma = TiledMma_;
   using ElementAccumulator = typename TiledMma::ValTypeC;
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
-  using SmemLayoutAtomA = SmemLayoutAtomA_;
-  using SmemLayoutAtomB = SmemLayoutAtomB_;
-  using SmemCopyAtomA = SmemCopyAtomA_;
-  using SmemCopyAtomB = SmemCopyAtomB_;
-  using TransformA = TransformA_;
-  using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
 
-  static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopIntelPVCArray requires that A and B have same type.");
+  static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopIntelPVC requires that A and B have same type.");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -95,88 +90,79 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages, Schedule>, TileShape_, Elemen
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
-  using traits_load_A = Copy_Traits<GmemTiledCopyA, InternalStrideA>;
+  using traits_load_A = Copy_Traits<GmemTiledCopyA, StrideA>;
   using atom_load_A = Copy_Atom<traits_load_A, ElementA>;
 
-  using traits_load_B = Copy_Traits<GmemTiledCopyB, InternalStrideB>;
+  using traits_load_B = Copy_Traits<GmemTiledCopyB, StrideB>;
   using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
 
-  using TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), InternalStrideA{}));   //(m, k)
-  using TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), InternalStrideB{}));   //(n, k)
+  using TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), StrideA{}));   //(m, k)
+  using TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), StrideB{}));   //(n, k)
 
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
 
   // Host side kernel arguments
   struct Arguments {
-    ElementA const** ptr_A;
+    ElementA const* ptr_A;
     StrideA dA;
-    ElementB const** ptr_B;
-    StrideB dB;
+    ElementB const* ptr_B0;
+    StrideB dB0;
+    ElementB const* ptr_B1;
+    StrideB dB1;
   };
 
   struct Params {
     TensorMKL mA;
-    TensorNKL mB;
-    ElementA const** ptr_A;
-    StrideA dA;
-    ElementB const** ptr_B;
-    StrideB dB;
+    TensorNKL mB0;
+    TensorNKL mB1;
   };
 
   //
   // Methods
   //
 
-  CollectiveMma() = default;
+  DualGemmMma() = default;
 
   template <class ProblemShape>
   static constexpr Params
   to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
     (void) workspace;
 
-    // Batches/Groups are managed by using appropriate pointers to input matrices
-    const int32_t mock_L = 1;
-    ElementA const* ptr_A_first_batch = reinterpret_cast<ElementA const*>(args.ptr_A);
-    ElementB const* ptr_B_first_batch = reinterpret_cast<ElementB const*>(args.ptr_B);
+    auto [M,N,K,L] = problem_shape;
 
-    auto problem_shape_MNK = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, int32_t(1));;
-    auto init_M = get<0>(problem_shape_MNK);
-    auto init_N = get<1>(problem_shape_MNK);
-    auto init_K = get<2>(problem_shape_MNK);
+    auto mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.ptr_A)),
+                              make_layout(make_shape(M, K, L), args.dA));
 
-    TensorMKL mA_mkl = make_tensor(make_gmem_ptr(ptr_A_first_batch), make_layout(make_shape(init_M,init_K,mock_L), InternalStrideA{}/*args.dA*/));
-    TensorNKL mB_nkl = make_tensor(make_gmem_ptr(ptr_B_first_batch), make_layout(make_shape(init_N,init_K,mock_L), InternalStrideB{}/*args.dB*/));
+    auto mB0_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.ptr_B0)),
+                              make_layout(make_shape(N, K, L), args.dB0));
 
-    return Params{
-      mA_mkl,
-      mB_nkl,
-      args.ptr_A,
-      args.dA,
-      args.ptr_B,
-      args.dB
-    };
+    auto mB1_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.ptr_B1)),
+                              make_layout(make_shape(N, K, L), args.dB1));
+
+    return Params{mA_mkl, mB0_nkl, mB1_nkl};
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
-  template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator,
-            class BlkCoord, class LoadTensors>
-  CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,
-                                 KTileIterator k_tile_iter, int const& k_tile_count,
-                                 BlkCoord const &blk_coord, int const &K_start, int const& thread_idx, char *smem_buf,
-                                 Params const &mainloop, LoadTensors const& load_tensors) {
-    static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
-    static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
+  template <class FrgTensorD0, class FrgTensorD1, class TensorA, class TensorB, class KTileIterator, class ResidueMNK,
+            class BlkCoord>
+  CUTLASS_DEVICE void operator()(FrgTensorD0 &accum0, FrgTensorD1 &accum1, TensorA gA, TensorB gB,
+                                 KTileIterator k_tile_iter, int k_tile_count, ResidueMNK residue_mnk,
+                                 BlkCoord const &blk_coord, int const &K_start, int thread_idx, char *smem_buf,
+                                 Params const &mainloop) {
+    static_assert(is_rmem<FrgTensorD0>::value, "D0 tensor must be rmem resident.");
+    static_assert(is_rmem<FrgTensorD1>::value, "D1 tensor must be rmem resident.");
 
+    (void)residue_mnk;
     (void)thread_idx;
     (void)smem_buf;
 
-    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(get<0>(load_tensors)),
+    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(mainloop.mA),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
-    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(get<1>(load_tensors)),
+    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(mainloop.mB0),
                                    Layout<CopyThreadShape>{},
                                    make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
-
+    
     auto thr_copy_A = tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = tiled_copy_b.get_slice(thread_idx);
 
@@ -188,26 +174,30 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages, Schedule>, TileShape_, Elemen
     auto first_thread_in_sg_idx = sg.get_group_linear_id() * DispatchPolicy::SubgroupSize;
     auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
 
-    // Partition global counting tensors for MMA
+    // Partition
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
-    Tensor tCrA = make_tensor<ElementA>(make_fragment_layout(tiled_copy_a, tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<ElementB>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
+    Tensor tCrA = make_tensor<ElementA> (make_fragment_layout(tiled_copy_a, tCgA(_,_,_,0).shape()));
+
+    Layout tCrBLayout = make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape());
+    Tensor tCrB0 = make_tensor<ElementB>(tCrBLayout);
+    Tensor tCrB1 = make_tensor<ElementB>(tCrBLayout);
   
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
-    Tensor tBrB = thr_copy_B.retile_D(tCrB);
+    Tensor tBrB0 = thr_copy_B.retile_D(tCrB0);
+    Tensor tBrB1 = thr_copy_B.retile_D(tCrB1);
     
     // Retile global counting tensors for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
-    auto tiled_prefetch_a = cute::prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(tiled_copy_a);
-    auto tiled_prefetch_b = cute::prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(tiled_copy_b);
+    auto tiled_prefetch_a = cute::prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.mA);//256x32
+    auto tiled_prefetch_b = cute::prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(mainloop.mB0);//32x128
     auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
     auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);
-
+    
     // Partition global tile for prefetch
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);
@@ -227,6 +217,11 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages, Schedule>, TileShape_, Elemen
         print("=====================  Config: \n");
         print("  threads per workgroup : "); print(MaxThreadsPerBlock); print("\n");
         print("  SubgroupTileShape : "); print(SubgroupTileShape{}); print("\n");
+
+        print(" PrefetchAThrShape :    ");print(PrefetchAThrShape{});print("\n");
+        print(" PrefetchBThrShape :    ");print(PrefetchBThrShape{});print("\n");
+        print(" PrefetchATileSize :    ");print(PrefetchATileSize{});print("\n");
+        print(" PrefetchBTileSize :    ");print(PrefetchBTileSize{});print("\n");
       }
 #endif
 
@@ -241,6 +236,7 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages, Schedule>, TileShape_, Elemen
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
       prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
       prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+      prefetch(tiled_prefetch_b.with(mainloop.mB1), pBgB(_, _, _, prefetch_k));
     }
 
     CUTLASS_PRAGMA_UNROLL
@@ -248,35 +244,20 @@ struct CollectiveMma<MainloopIntelPVCGroup<Stages, Schedule>, TileShape_, Elemen
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
       copy(tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
-      copy(tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
+      copy(tiled_copy_b, tBgB(_,_,_,k_tile), tBrB0);
+      copy(tiled_copy_b.with(mainloop.mB1), tBgB(_,_,_,k_tile), tBrB1);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+        prefetch(tiled_prefetch_b.with(mainloop.mB1), pBgB(_, _, _, prefetch_k));
       }
 
-      cute::gemm(tiled_mma, tCrA, tCrB, accum);
+      cute::gemm(tiled_mma, tCrA, tCrB0, accum0);
+      cute::gemm(tiled_mma, tCrA, tCrB1, accum1);
       barrier_wait(barrier_scope);
     }
   }
-
-  template <typename ProblemShape_MNKL>
-  CUTLASS_DEVICE auto update_tensor_shape_stride(
-    Params const& mainloop_params,
-    int32_t const& next_group,
-    ProblemShape_MNKL const& problem_shape_mnkl) {
-      const int32_t M = get<0>(problem_shape_mnkl);
-      const int32_t N = get<1>(problem_shape_mnkl);
-      const int32_t K = get<2>(problem_shape_mnkl);
-
-      ElementA const* ptr_A_curr_batch = reinterpret_cast<ElementA const*>(mainloop_params.ptr_A[next_group]);
-      ElementB const* ptr_B_curr_batch = reinterpret_cast<ElementB const*>(mainloop_params.ptr_B[next_group]);
-
-      Tensor mA = make_tensor(make_gmem_ptr(ptr_A_curr_batch), make_shape(M, K,(int32_t)1), mainloop_params.dA[next_group]);
-      Tensor mB = make_tensor(make_gmem_ptr(ptr_B_curr_batch), make_shape(N, K,(int32_t)1), mainloop_params.dB[next_group]);
-
-      return cute::make_tuple(mA, mB);
-    }
 };
 
 } // namespace cutlass::gemm::collective
