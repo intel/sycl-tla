@@ -41,6 +41,7 @@
 #include "default_gemm_group_configuration.hpp"
 #include "gemm_testbed_3x_ptr_array.hpp"
 
+namespace cutlass {
 namespace {
 template <typename LayoutA, typename LayoutB>
 struct XE_Device_Gemm_bf16_bf16_f32_tensor_op_f32_group_gemm {
@@ -63,7 +64,6 @@ struct XE_Device_Gemm_bf16_bf16_f32_tensor_op_f32_group_gemm {
       cutlass::gemm::GroupScheduler
     >>;
 };
-}
 
 TEST(XE_Device_Gemm_bf16t_bf16t_f32t_tensor_op_f32_group_gemm, 256x256x32) {
   using Gemm = XE_Device_Gemm_bf16_bf16_f32_tensor_op_f32_group_gemm<
@@ -96,3 +96,5 @@ TEST(XE_Device_Gemm_bf16n_bf16n_f32t_tensor_op_f32_group_gemm, 256x256x32) {
   EXPECT_TRUE(test::gemm::device::TestAll<Gemm>(1.0, 1.0));
   EXPECT_TRUE(test::gemm::device::TestAll<Gemm>(1.0, 0.0));
 }
+}
+} // namespace cutlass

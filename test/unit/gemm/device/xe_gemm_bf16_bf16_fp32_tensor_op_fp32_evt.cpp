@@ -45,6 +45,7 @@
 
 #include "gemm_testbed_3x.hpp"
 
+namespace cutlass {
 namespace {
 using namespace cute;
 using LayoutA = cutlass::layout::RowMajor;
@@ -84,7 +85,6 @@ struct XE_Device_Gemm_bf16_bf16_f32_tensor_op_gmma_f32_epilogue{
       CollectiveEpilogue
     >>;
 };
-}
 
 // D = activation(alpha * acc + beta * C)
 TEST(XE_Device_Gemm_bf16t_bf16t_f32t_tensor_op_gmma_f32_epilogue, 256x256x32_LinCombEltAct) {
@@ -167,3 +167,5 @@ TEST(XE_Device_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue, 256x256x32_LinC
   bool passed = test::gemm::device::TestXe<Gemm>(1.0, 0.0);
   EXPECT_TRUE(passed);
 }
+}
+} // namespace cutlass

@@ -42,6 +42,7 @@
 
 #include "gemm_testbed_3x.hpp"
 
+namespace cutlass {
 namespace {
 template <typename LayoutA, typename LayoutB>
 struct XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32 {
@@ -57,7 +58,6 @@ struct XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32 {
     typename Config::CollectiveMainloop,
     typename Config::CollectiveEpilogue>>;
 };
-}
 
 
 TEST(XE_Device_Gemm_fp16t_fp16t_f32t_tensor_op_f32, 256x256x32) {
@@ -83,3 +83,5 @@ TEST(XE_Device_Gemm_fp16n_fp16n_f32t_tensor_op_f32, 256x256x32) {
     cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>::Gemm;
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
+}
+} // namespace cutlass

@@ -43,6 +43,7 @@
 #include "gemm_testbed_3x.hpp"
 
 /* TODO(Codeplay): TF32 copy builtins don't work well with GEMM. Needs more investigation
+namespace cutlass {
 namespace {
 template <typename LayoutA, typename LayoutB>
 struct XE_Device_Gemm_tf32_tf32_f32_tensor_op_f32 {
@@ -60,7 +61,6 @@ struct XE_Device_Gemm_tf32_tf32_f32_tensor_op_f32 {
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 };
-}
 
 TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 256x256x32) {
   using LayoutA = RowMajor;
@@ -90,4 +90,6 @@ TEST(XE_Device_Gemm_tf32n_tf32n_f32t_tensor_op_f32, 256x256x32) {
   using Gemm = XE_Device_Gemm_tf32_tf32_f32_tensor_op_f32<LayoutA, LayoutB>::Gemm;
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
+}
+} // namespace cutlass
 */
