@@ -478,12 +478,12 @@ public:
     Tensor copy_iter_s = [&](){
       if constexpr(IsATransformed){
         return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
-                           make_layout(make_shape(_1{}, _1{}, _1{}, k_tile_count), 
-                                       make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+                           make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count), 
+                                       make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }else{
         return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
-                           make_layout(make_shape(_1{}, _2{}, _1{}, k_tile_count), 
-                                       make_stride(_0{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+                           make_layout(make_shape(_2{}, _2{}, _1{}, k_tile_count), 
+                                       make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }
     }();
 
