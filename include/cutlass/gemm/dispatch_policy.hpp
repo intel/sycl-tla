@@ -161,6 +161,7 @@ struct KernelTmaWarpSpecializedCooperativeMixedInput: KernelTmaWarpSpecializedCo
 
 struct KernelPVC { };
 struct KernelPVCCooperative { };
+struct KernelPVCPtrArrayCooperative { };
 //////////////////////////////////////////////////////////////////////////////
 
 //
@@ -972,6 +973,15 @@ struct MainloopIntelPVC {
   using ClusterShape = Shape<_1,_1,_1>;
 };
 
+template<int Stages_, class KernelScheduler = KernelPVCPtrArrayCooperative>
+struct MainloopIntelPVCGroup {
+  constexpr static int Stages = Stages_;
+  constexpr static int SubgroupSize = 16;
+  using ArchTag = arch::IntelPVC;
+  using Schedule = KernelScheduler;
+  using ClusterShape = Shape<_1,_1,_1>;
+};
+
 template<int Stages_>
 struct MainloopIntelPVCMixedPrecision {
   constexpr static int Stages = Stages_;
@@ -979,6 +989,15 @@ struct MainloopIntelPVCMixedPrecision {
   using ArchTag = arch::IntelPVC;
   using Schedule = KernelPVC;
   using ClusterShape = Shape<_1,_1,_1>;
+};
+
+template<int Stages_, class KernelSchedule = KernelPVC>
+struct MainloopIntelW8A8 {
+    constexpr static int Stages = Stages_;
+    constexpr static int SubgroupSize = 16;
+    using ArchTag = arch::IntelPVC;
+    using Schedule = KernelPVC;
+    using ClusterShape = Shape<_1, _1, _1>;
 };
 #endif
 
