@@ -545,7 +545,7 @@ int main(int argc, const char** argv)
           XE_2D_U32x8x16_ST_N,
           void, void>;
 
-  // Define 3 helpers to avoid template arg repetition
+  // Use the helpers to avoid template arg repetition
   using GemmAdapterBuilder = helpers::MixedGemmUniversalAdapterBuilder<Shape<int, int, int, int>, CollectiveEpilogue>;
 
   using MixedBuilderQuantA =
