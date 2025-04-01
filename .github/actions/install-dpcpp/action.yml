@@ -19,7 +19,7 @@ runs:
       if: inputs.DPCPP_RELEASE == 'NIGHTLY'
       shell: bash
       run: |
-        sudo apt update && sudo apt install -y intel-opencl-icd
+        sudo apt update && sudo apt install -y intel-opencl-icd intel-ocloc libigc2 libze-intel-gpu1 libze-intel-gpu-dev
         dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         export DPCPP_PATH=${{ inputs.DPCPP_PATH }}
         mkdir -p $DPCPP_PATH
@@ -54,7 +54,7 @@ runs:
         rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo apt update
-        sudo apt install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp intel-opencl-icd
+        sudo apt install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp intel-opencl-icd intel-ocloc libigc2 libze-intel-gpu1 libze-intel-gpu-dev
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh
