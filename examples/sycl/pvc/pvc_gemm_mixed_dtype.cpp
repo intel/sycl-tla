@@ -81,7 +81,7 @@ struct Options {
   bool help;
   bool error;
 
-  int a_narrower;
+  bool a_narrower;
   int mode;
   int m, n, k, l, iterations;
   int g;
@@ -91,7 +91,7 @@ struct Options {
     help(false),
     error(false),
     m(5120), n(4096), k(4096), l(1), iterations(20),
-    g(128), mode(2), a_narrower(0),
+    g(128), mode(2), a_narrower(false),
     alpha(1.f), beta(0.f)
   { }
 
@@ -110,10 +110,12 @@ struct Options {
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("g", g, 128);
     cmd.get_cmd_line_argument("mode", mode, 2);
-    cmd.get_cmd_line_argument("a_narrower", a_narrower, 0);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    if (cmd.check_cmd_line_flag("a_narrower")) {
+      a_narrower = true;
+    }
   }
 
   /// Prints the usage statement.
@@ -128,7 +130,7 @@ struct Options {
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
       << "  --g=<int>                   The size of each group for the scales and zeros. To broadcast a vector of scales or zeros, set the group size to K.\n"
       << "  --mode=<int>                The mode to run the gemm. 0 is Convert Only, 1 is Convert and Scale, 2 is Convert and Scale with Zero Point\n"
-      << "  --a_narrower=<0/1>          Whether A is the narrower type.\n"
+      << "  --a_narrower                If specified, make A the narrower type (B is narrower by default).\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
       << "  --iterations=<int>          Iterations\n\n";
