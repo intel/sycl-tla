@@ -47,19 +47,19 @@ namespace cutlass {
 namespace {
 template <typename LayoutA, typename LayoutB>
 struct XE_Device_Gemm_tf32_tf32_f32_tensor_op_f32 {
-  using Config = cutlass::gemm::device::DefaultGemmConfigurationToCutlass3Types<
-    cutlass::arch::OpClassTensorOp, cutlass::arch::IntelPVC,
+  using Config = gemm::device::DefaultGemmConfigurationToCutlass3Types<
+    arch::OpClassTensorOp, arch::IntelPVC,
     tfloat32_t, LayoutA,
     tfloat32_t, LayoutB,
-    float, cutlass::layout::RowMajor,
+    float, layout::RowMajor,
     float>;
 
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
+  using GemmKernel = gemm::kernel::GemmUniversal<
       cute::Shape<int,int,int,int>,
       Config::CollectiveMainloop,
       Config::CollectiveEpilogue>;
 
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+  using Gemm = gemm::device::GemmUniversalAdapter<GemmKernel>;
 };
 
 TEST(XE_Device_Gemm_tf32t_tf32t_f32t_tensor_op_f32, 256x256x32) {
