@@ -335,7 +335,7 @@ template <class GemmKernel> struct ExampleRunner {
     if (!GemmKernel::can_implement(arguments)) {
       std::cout << "Invalid Problem Size: " << options.batch << 'x' << options.num_heads << 'x' <<
         options.seq_len << 'x' << options.head_size << (options.is_causal ? "xCausal" : "xNonCausal") << std::endl;
-      std::exit(1);
+      return Status::kErrorInvalidProblem;
     }
 
     // Initialize the workspace
