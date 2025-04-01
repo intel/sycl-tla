@@ -427,7 +427,7 @@ struct FusionCallbacks<
   EpilogueTile
 > : Sm90LinCombTopKSoftmaxCol<TopK, 8 /*FragmentSize*/, CtaTileShapeMNK, EpilogueTile, ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle> {
 
-  constexpr int FragmentSize = 8;
+  static constexpr int FragmentSize = 8;
   using ElementOutput = ElementOutput_;
   using ElementCompute = ElementCompute_;
   using ElementSource = ElementSource_;
