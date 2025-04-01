@@ -425,13 +425,14 @@ struct FusionCallbacks<
   fusion::LinCombTopKSoftmaxCol<TopK, ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle>,
   CtaTileShapeMNK,
   EpilogueTile
-> : Sm90LinCombTopKSoftmaxCol<TopK, epilogue::IntelPVCEpilogue::FragmentSize, CtaTileShapeMNK, EpilogueTile, ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle> {
+> : Sm90LinCombTopKSoftmaxCol<TopK, 8 /*FragmentSize*/, CtaTileShapeMNK, EpilogueTile, ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle> {
 
+  constexpr int FragmentSize = 8;
   using ElementOutput = ElementOutput_;
   using ElementCompute = ElementCompute_;
   using ElementSource = ElementSource_;
   using ElementScalar = ElementScalar_;
-  using Impl = Sm90LinCombTopKSoftmaxCol<TopK, epilogue::IntelPVCEpilogue::FragmentSize, CtaTileShapeMNK, EpilogueTile, 
+  using Impl = Sm90LinCombTopKSoftmaxCol<TopK, FragmentSize, CtaTileShapeMNK, EpilogueTile, 
                                         typename cutlass::detail::get_unpacked_element_type<ElementOutput>::type, 
                                         ElementCompute, ElementSource, ElementScalar, RoundStyle>;
   using Operation = fusion::LinCombTopKSoftmaxCol<TopK, ElementOutput, ElementCompute, ElementSource, ElementScalar, RoundStyle>;

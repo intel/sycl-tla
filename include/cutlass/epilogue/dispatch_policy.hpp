@@ -258,7 +258,6 @@ struct Sm120TmaWarpSpecialized {
 #if defined (SYCL_INTEL_TARGET)
 struct IntelPVCEpilogue {
   static constexpr int SubgroupSize = 16;
-  static constexpr int FragmentSize = 8;
 };
 
 struct IntelPVCGroupEpilogue {
