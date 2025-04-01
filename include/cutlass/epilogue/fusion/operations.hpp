@@ -371,6 +371,7 @@ struct ScaledLinCombPerColBiasEltAct
   static constexpr bool IsScaleFactorSupported = true;
 };
 
+
 // Z = scale_a * scale_b * alpha * acc + scale_c * beta * C + per-row bias
 // if D is fp8 
 //   amax_d = max(abs(elements in activation(Z)))
