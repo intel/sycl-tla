@@ -352,7 +352,7 @@ template <class GemmKernel> struct ExampleRunner {
     bool passed = verify(problem_size, options.is_causal);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) {
+    if (!passed) {
       return cutlass::Status::kErrorInternal;
     }
 
