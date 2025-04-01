@@ -391,7 +391,7 @@ template <typename T = void>
 CUTLASS_HOST_DEVICE
 cudaError_t cudaMemsetAsync(void *devPtr, unsigned int value, size_t count, cudaStream_t stream = nullptr) {
   static_assert(std::is_same_v<T, void>, "cudaMemsetAsync takes a dummy template parameter, T = "
-                                         "void, to delay SYCL kernel instantiation");
+                                         "void, to instantiate copy kernel only if it is used.");
   syclcompat::fill_async(devPtr, value, count);
   return cudaSuccess;
 }
@@ -404,7 +404,7 @@ template <typename T = void>
 CUTLASS_HOST_DEVICE
 CUresult cuMemsetD32Async(CUdeviceptr devPtr, uint32_t value, size_t count, cudaStream_t stream = nullptr) {
   static_assert(std::is_same_v<T, void>, "cuMemsetD32Async takes a dummy template parameter, T = "
-                                         "void, to delay SYCL kernel instantiation");
+                                         "void, to instantiate copy kernel only if it is used.");
   void *ptr = reinterpret_cast<void *>(devPtr);
   syclcompat::fill_async(ptr, value, count);
   return cudaSuccess;
@@ -414,7 +414,7 @@ template <typename T = void>
 CUTLASS_HOST_DEVICE
 CUresult cuMemsetD16Async(CUdeviceptr devPtr, uint16_t value, size_t count, cudaStream_t stream = nullptr) {
   static_assert(std::is_same_v<T, void>, "cuMemsetD16Async takes a dummy template parameter, T = "
-                                         "void, to delay SYCL kernel instantiation");
+                                         "void, to instantiate copy kernel only if it is used.");
   void *ptr = reinterpret_cast<void *>(devPtr);
   syclcompat::fill_async(ptr, value, count);
   return cudaSuccess;
@@ -424,7 +424,7 @@ template <typename T = void>
 CUTLASS_HOST_DEVICE
 CUresult cuMemsetD8Async(CUdeviceptr devPtr, uint8_t value, size_t count, cudaStream_t stream = nullptr) {
   static_assert(std::is_same_v<T, void>, "cuMemsetD8Async takes a dummy template parameter, T = "
-                                         "void, to delay SYCL kernel instantiation");
+                                         "void, to instantiate copy kernel only if it is used.");
   void *ptr = reinterpret_cast<void *>(devPtr);
   syclcompat::fill_async(ptr, value, count);
   return cudaSuccess;
