@@ -131,17 +131,13 @@ using ElementAmax        = float;
 using MmaTileShape_MNK = Shape<_256,_128,_64>;                          
 // Shape of the threadblocks in a cluster
 using ClusterShape_MNK = Shape<_2,_2,_1>;
-// Shape of the threadblocks participating in a tcgen05 MMA. <1, 1, 1> for cta_group = 1, <2, 1, 1> for cta_group = 2
-using AtomThrShape_MNK = Shape<_2, _1, _1>;
-// Shape of the tile computed by each SM
-using PerSmTileShape_MNK = decltype(shape_div(MmaTileShape_MNK{}, AtomThrShape_MNK{}));
 
 using FusionOp = cutlass::epilogue::fusion::ScaledLinCombPerRowBiasEltActAmaxAux<
   LayoutC, cutlass::epilogue::thread::ReLU, ElementD, ElementCompute, ElementAux, ElementAmax, ElementBias>;
   
 using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
     cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp,
-    PerSmTileShape_MNK, ClusterShape_MNK,
+    MmaTileShape_MNK, ClusterShape_MNK,
     cutlass::epilogue::collective::EpilogueTileAuto,
     ElementAccumulator, ElementCompute,
     ElementC, LayoutC, AlignmentC,
@@ -235,6 +231,7 @@ struct Options {
   bool save_amax = true;
   int iterations = 1000;
   int m = 1024, n = 512, k = 1024, l = 1;
+  int swizzle = 0;
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -260,6 +257,7 @@ struct Options {
     cmd.get_cmd_line_argument("save_aux", save_aux, true);
     cmd.get_cmd_line_argument("save_amax", save_amax, true);
     cmd.get_cmd_line_argument("iterations", iterations);
+    cmd.get_cmd_line_argument("swizzle", swizzle);
   }
 
   /// Prints the usage statement.
@@ -275,6 +273,7 @@ struct Options {
       << "  --l=<int>                   Sets the l extent (batch) of the GEMM\n"
       << "  --alpha=<f32>               Epilogue scalar alpha\n"
       << "  --beta=<f32>                Epilogue scalar beta\n"
+      << "  --swizzle=<int>             Cluster rasterization swizzle\n"
       << "  --scale_a=<f32>             Scaling factor for A\n"
       << "  --scale_b=<f32>             Scaling factor for B\n"
       << "  --scale_c=<f32>             Scaling factor for C\n"
@@ -479,6 +478,8 @@ typename Gemm::Arguments args_from_options(const Options &options)
   if (options.save_amax) {
     fusion_args.amax_D_ptr = abs_max_D.device_data();
   }
+
+  arguments.scheduler.max_swizzle_size = options.swizzle;
 
   return arguments;
 }

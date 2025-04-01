@@ -1,0 +1,27 @@
+name: install-dpctl
+description: Clone and build DPCTL
+inputs:
+  DPCTL_URL:
+    description: URL of the DPCTL repository to use.
+  DPCTL_BRANCH:
+    description: Name of the DPCTL branch to use.
+  DPCTL_PATH:
+    description: Path where to put DPCTL
+  VENV_PATH:
+    description: Path to virtualenv
+
+runs:
+  using: "composite"
+  steps:
+    - name: Clone and install DPCTL
+      shell: bash
+      run: |
+        export DPCTL_PATH=${{ inputs.DPCTL_PATH }}
+        git clone --depth=1 --branch ${{ inputs.DPCTL_BRANCH }} ${{ inputs.DPCTL_URL }} $DPCTL_PATH
+        pushd $DPCTL_PATH
+        source ${{ inputs.VENV_PATH }}/bin/activate
+        pip install --no-cache-dir numpy cython scikit-build cmake ninja pytest versioneer
+        python scripts/build_locally.py --c-compiler=$(which $CC) \
+          --cxx-compiler=$(which $CXX) \
+          --compiler-root=$(dirname `which $CXX`) \
+          --cmake-opts="-DCMAKE_INCLUDE_PATH=/lib/x86_64-linux-gnu -DLIBZE_LOADER_FILENAME=libze_loader.so.1"

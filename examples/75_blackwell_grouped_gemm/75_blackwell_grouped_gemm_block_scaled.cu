@@ -143,31 +143,23 @@ using StageCountType = cutlass::gemm::collective::StageCountAuto;           // S
 
 // Runtime Cluster Shape
 using ClusterShape = Shape<int32_t,int32_t,_1>;
-/* // For Static Cluster Shape: 
-use ClusterShape = Shape<_2,_1,_1> for example
-using AtomThrShape   = decltype(shape_div(ClusterShape{}, Shape<_2,_1,_1>{}));    // for 2SM config
-using OutputTileShape = decltype(shape_div(ClusterTileShape{}, ClusterShape{}));  // for epilogue builder
-using MmaTileShape   = decltype(shape_div(ClusterTileShape{}, AtomThrShape{}));   // for mainloop builder
-*/
 
 // Different configs for 1SM and 2SM MMA kernel
 struct MMA1SMConfig {
   using MmaTileShape     = Shape<_128,_256,_256>;
   using KernelSchedule   = cutlass::gemm::KernelPtrArrayTmaWarpSpecialized1SmNvf4Sm100;   // Kernel to launch
   using EpilogueSchedule = cutlass::epilogue::PtrArrayTmaWarpSpecialized1Sm;              // Epilogue to launch
-  using OutputTileShape  = decltype(shape_div(MmaTileShape{}, Shape<_1,_1,_1>{}));
 };
 
 struct MMA2SMConfig {
   using MmaTileShape     = Shape<_256,_256,_256>;
   using KernelSchedule   = cutlass::gemm::KernelPtrArrayTmaWarpSpecialized2SmNvf4Sm100;   // Kernel to launch
   using EpilogueSchedule = cutlass::epilogue::PtrArrayTmaWarpSpecialized2Sm;              // Epilogue to launch
-  using OutputTileShape  = decltype(shape_div(MmaTileShape{}, Shape<_2,_1,_1>{}));
 };
 
 using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
     ArchTag, EpilogueOperatorClass,
-    typename MMA1SMConfig::OutputTileShape, ClusterShape,
+    typename MMA1SMConfig::MmaTileShape, ClusterShape,
     Shape<_128,_64>,
     ElementAccumulator, ElementAccumulator,
     ElementC, LayoutC *, AlignmentC,
@@ -195,7 +187,7 @@ using Gemm = Gemm1SM;
 
 using CollectiveEpilogue2SM = typename cutlass::epilogue::collective::CollectiveBuilder<
     ArchTag, EpilogueOperatorClass,
-    typename MMA2SMConfig::OutputTileShape, ClusterShape,
+    typename MMA2SMConfig::MmaTileShape, ClusterShape,
     Shape<_128,_64>,
     ElementAccumulator, ElementAccumulator,
     ElementC, LayoutC *, AlignmentC,
@@ -227,14 +219,14 @@ using StrideD = typename Gemm::GemmKernel::InternalStrideD;
 
 using LayoutSFA = typename Gemm::GemmKernel::CollectiveMainloop::InternalLayoutSFA;
 using LayoutSFB = typename Gemm::GemmKernel::CollectiveMainloop::InternalLayoutSFB;
-using Sm100BlkScaledConfig =  typename Gemm::GemmKernel::CollectiveMainloop::Sm100BlkScaledConfig;
-using Sm100BlockScaledOutputConfig = cutlass::detail::Sm100BlockScaledOutputConfig<
+using Sm1xxBlkScaledConfig =  typename Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
+using Sm1xxBlockScaledOutputConfig= cutlass::detail::Sm1xxBlockScaledOutputConfig<
                                         OutputSFVectorSize, 
                                         cute::is_same_v<typename FusionOperation::GmemLayoutTagScalefactor,
                                             cutlass::layout::RowMajor> ? cute::UMMA::Major::K : cute::UMMA::Major::MN
                                      >;
-using OutputSFAtom = typename Sm100BlockScaledOutputConfig::SfAtom;
-using LayoutSFD = typename Sm100BlockScaledOutputConfig::LayoutSF;
+using OutputSFAtom = typename Sm1xxBlockScaledOutputConfig::SfAtom;
+using LayoutSFD = typename Sm1xxBlockScaledOutputConfig::LayoutSF;
 
 // Host-side allocations
 std::vector<StrideA> stride_A_host;
@@ -313,6 +305,7 @@ struct Options {
 
   bool help = false;
   bool verification = true;
+  bool use_pdl = false;
 
   float alpha = FLT_MAX;
   float beta  = FLT_MAX;
@@ -336,8 +329,11 @@ struct Options {
       help = true;
       return;
     }
-    if (cmd.check_cmd_line_flag("no-verif")) {
+    if (cmd.check_cmd_line_flag("no_verif")) {
       verification = false;
+    }
+    if (cmd.check_cmd_line_flag("use_pdl")) {
+      use_pdl = true;
     }
 
     cmd.get_cmd_line_argument("m", m);
@@ -465,7 +461,8 @@ struct Options {
       << "  --iterations=<int>                                           Number of profiling iterations to perform\n\n"
       << "  --benchmark=<str>                                            Executes a benchmark problem size\n"
       << "  --max_sm_count=<int>                                         Run kernels using only these number of SMs\n"
-      << "  --no-verif                                                   Do not run (host-side) verification kernels\n";
+      << "  --no_verif                                                   Do not run (host-side) verification kernels\n"
+      << "  --use_pdl                                                    Launch kernel with PDL (Programmatic Dependent Launch) enabled\n";
 
     out
       << "\n\nExamples:\n\n"
@@ -562,9 +559,9 @@ void allocate(const Options &options) {
     auto layout_B = make_layout(make_shape(N, K, 1), stride_B);
     auto layout_C = make_layout(make_shape(M, N, 1), stride_C);
     auto layout_D = make_layout(make_shape(M, N, 1), stride_D);
-    auto layout_SFA = Sm100BlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(M, N, K, 1));
-    auto layout_SFB = Sm100BlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(M, N, K, 1));
-    auto layout_SFD = Sm100BlockScaledOutputConfig::tile_atom_to_shape_SFD(cute::make_shape(M, N, K, 1));
+    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(M, N, K, 1));
+    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(M, N, K, 1));
+    auto layout_SFD = Sm1xxBlockScaledOutputConfig::tile_atom_to_shape_SFD(cute::make_shape(M, N, K, 1));
 
     stride_A_host.push_back(stride_A);
     stride_B_host.push_back(stride_B);
@@ -783,9 +780,9 @@ bool verify(const Options &options) {
     auto layout_B = make_layout(make_shape(N, K, 1), stride_B);
     auto layout_C = make_layout(make_shape(M, N, 1), stride_C);
     auto layout_D = make_layout(make_shape(M, N, 1), stride_D);
-    auto layout_SFA = Sm100BlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(M, N, K, 1));
-    auto layout_SFB = Sm100BlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(M, N, K, 1));
-    auto layout_SFD = Sm100BlockScaledOutputConfig::tile_atom_to_shape_SFD(cute::make_shape(M, N, K, 1));
+    auto layout_SFA = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(cute::make_shape(M, N, K, 1));
+    auto layout_SFB = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(cute::make_shape(M, N, K, 1));
+    auto layout_SFD = Sm1xxBlockScaledOutputConfig::tile_atom_to_shape_SFD(cute::make_shape(M, N, K, 1));
 
     // Create the arguments for host reference implementation
     Tensor tensor_A = make_tensor(make_iterator(block_A.at(i).host_data()), layout_A);
@@ -853,7 +850,7 @@ int run(Options &options, bool host_problem_shapes_available = true)
   CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
 
   // Correctness / Warmup iteration
-  CUTLASS_CHECK(gemm.run());
+  CUTLASS_CHECK(gemm.run(/* stream = */ nullptr, /* cuda_adapter = */ nullptr, /* launch_with_pdl = */ options.use_pdl));
 
   cudaDeviceSynchronize();
 
@@ -878,7 +875,7 @@ int run(Options &options, bool host_problem_shapes_available = true)
     timer.start();
     for (int iter = 0; iter < options.iterations; ++iter) {
       CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
-      CUTLASS_CHECK(gemm.run());
+      CUTLASS_CHECK(gemm.run(/* stream = */ nullptr, /* cuda_adapter = */ nullptr, /* launch_with_pdl = */ options.use_pdl));
     }
     timer.stop();
 

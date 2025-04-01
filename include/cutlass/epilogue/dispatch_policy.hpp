@@ -44,34 +44,38 @@ namespace cutlass::epilogue {
 // Builder Epilogue Schedules
 //
 //////////////////////////////////////////////////////////////////////////////
-
+// Pre-Hopper schedules
 struct PtrArrayDefault {};
 struct EpilogueSimtVectorized {};
 struct EpiloguePtrArraySimtVectorized {};
+// Hopper direct store schedules
 struct NoSmemWarpSpecialized {};
 struct PtrArrayNoSmemWarpSpecialized {};
 struct PtrArrayNoSmemWarpSpecializedTransposed {};
+// Hopper TMA schedules
 struct TmaWarpSpecialized {};
 struct TmaWarpSpecializedCooperative {};
-
+struct PtrArrayTmaWarpSpecialized { static constexpr int NumEpilogueWarpGroups = 1; };
+struct PtrArrayTmaWarpSpecializedPingpong { static constexpr int NumEpilogueWarpGroups = 2; };
+struct PtrArrayTmaWarpSpecializedCooperative { static constexpr int NumEpilogueWarpGroups = 2; };
+// Blackwell direct store schedules
+struct NoSmemWarpSpecialized1Sm {};
+struct NoSmemWarpSpecialized2Sm {};
+struct PtrArrayNoSmemWarpSpecialized1Sm : NoSmemWarpSpecialized1Sm {};
+struct PtrArrayNoSmemWarpSpecialized2Sm : NoSmemWarpSpecialized2Sm {};
+// Blackwell TMA schedules 
 struct TmaWarpSpecialized1Sm {};
 struct TmaWarpSpecialized2Sm {};
-struct PtrArrayTmaWarpSpecialized1Sm {};
-struct PtrArrayTmaWarpSpecialized2Sm {};
-
-struct PtrArrayTmaWarpSpecializedCooperative {
-  static constexpr int NumEpilogueWarpGroups = 2;
-};
-
-// Standard warp specialized epilogue
-struct PtrArrayTmaWarpSpecialized {
-  static constexpr int NumEpilogueWarpGroups = 1;
-};
-
-// Pingpong kernel epilogue
-struct PtrArrayTmaWarpSpecializedPingpong {
-  static constexpr int NumEpilogueWarpGroups = 2;
-};
+struct PtrArrayTmaWarpSpecialized1Sm : TmaWarpSpecialized1Sm {};
+struct PtrArrayTmaWarpSpecialized2Sm : TmaWarpSpecialized2Sm {};
+struct TmaWarpSpecialized1SmNvf4     final : TmaWarpSpecialized1Sm {};
+struct TmaWarpSpecialized2SmNvf4     final : TmaWarpSpecialized2Sm {};
+struct TmaWarpSpecialized1SmMxf4     final : TmaWarpSpecialized1Sm {};
+struct TmaWarpSpecialized2SmMxf4     final : TmaWarpSpecialized2Sm {};
+struct TmaWarpSpecialized1SmMxf8f6f4 final : TmaWarpSpecialized1Sm {};
+struct TmaWarpSpecialized2SmMxf8f6f4 final : TmaWarpSpecialized2Sm {};
+// Cooperative epilogue schedule for sm120 sparse kernels
+struct SparseTmaWarpSpecializedCooperativeSm120 : public TmaWarpSpecializedCooperative {};
 
 // DEPRECATED schedules, will be removed in next release
 struct TmaWarpSpecializedElementwiseBase : public TmaWarpSpecialized {};
@@ -236,8 +240,27 @@ struct Sm100NoSmemWarpSpecialized {};
 struct Sm100PtrArrayNoSmem {};
 struct Sm100PtrArrayNoSmemWarpSpecialized {};
 
+template<
+  int StagesC_,
+  int StagesD_,
+  int FragmentSize_,
+  bool ReuseSmemC_,
+  bool DelayTmaStore_
+>
+struct Sm120TmaWarpSpecialized {
+  constexpr static int StagesC = StagesC_;
+  constexpr static int StagesD = StagesD_;
+  constexpr static int FragmentSize = FragmentSize_;
+  constexpr static bool ReuseSmemC = ReuseSmemC_;
+  constexpr static bool DelayTmaStore = DelayTmaStore_;
+};
+
 #if defined (SYCL_INTEL_TARGET)
 struct IntelPVCEpilogue {
+  static constexpr int SubgroupSize = 16;
+};
+
+struct IntelPVCGroupEpilogue {
   static constexpr int SubgroupSize = 16;
 };
 #endif

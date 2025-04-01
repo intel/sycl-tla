@@ -304,11 +304,22 @@ template <class GemmKernel> struct ExampleRunner {
     const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
     const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
 
+#if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
     using namespace syclcompat::experimental;
     auto event = launch<cutlass::device_kernel<GemmKernel>>(
         launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
                       kernel_properties{sycl_exp::sub_group_size<GemmKernel::DispatchPolicy::SubgroupSize>}},
         params);
+#else
+    syclcompat::experimental::launch_properties launch_props {
+      sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
+    };
+    syclcompat::experimental::kernel_properties kernel_props{
+      sycl::ext::oneapi::experimental::sub_group_size<GemmKernel::DispatchPolicy::SubgroupSize>
+    };
+    syclcompat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
+    auto event = syclcompat::experimental::launch<cutlass::device_kernel<GemmKernel>>(policy, params);
+#endif
 
     EventManager::getInstance().addEvent(event);
   }
@@ -364,13 +375,13 @@ template <class GemmKernel> struct ExampleRunner {
       }
       syclcompat::wait();
 
-      float cute_time = timer.seconds() / options.iterations;
+      double cute_time = timer.seconds() / options.iterations;
       double flops_qk = 2.0 * options.batch * options.num_heads * options.seq_len * options.seq_len * options.head_size;
       double flops_pv = 2.0 * options.batch * options.num_heads * options.seq_len * options.head_size * options.seq_len;
       double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
-      double gbps = options.batch * options.num_heads *
-                    (options.seq_len * options.head_size + options.seq_len * options.head_size) * 2 * 2 * (1e-9) /
-                    (cute_time);
+      double gbps_qk = 2.0 * options.batch * options.num_heads * (options.seq_len * options.head_size + options.seq_len * options.head_size);
+      double gbps_pv = 2.0 * options.batch * options.num_heads * (options.seq_len * options.head_size + options.seq_len * options.head_size);
+      double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
       std::cout << "Problem Size: " << options.batch << 'x' << options.num_heads << 'x' << options.seq_len << 'x'
                 << options.head_size << (options.is_causal ? "xCausal" : "xNonCausal");
       printf(":   %4.3f  GB/s   ,    %4.3f  TFlop/s   ,   %6.4f  ms\n", gbps, tflops, cute_time * 1000);

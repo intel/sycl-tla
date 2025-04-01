@@ -84,18 +84,16 @@ struct CollectiveBuilder<
       static_assert(cute::is_same_v<ElementAccumulator, float>, "Intel multi-stage pipeline requires ElementC to be of type float");
 
       //Prepare Template arguments required of CollectiveMainLoop
-
       using TiledMma =
-          TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                   Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
-                   Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                        Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
-      
+          typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+                                        Layout<TileShape_MNK>,
+                                        Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+
       static constexpr int PipelineStages = 3;
       using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
 
-      using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-      using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+      using GmemTiledCopyA = XE_2D_U16x16x16_LD_N;
+      using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
 
       //PVC pipeline does not use shared memory
       using SmemLayoutAtomA = void; 

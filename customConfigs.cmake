@@ -47,7 +47,7 @@ function(cutlass_generate_kernel_filter_and_testlists_files)
     COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${CUTLASS_LIBRARY_PACKAGE_DIR}
       ${Python3_EXECUTABLE} ${CUTLASS_SOURCE_DIR}/python/cutlass_library/generator.py 
       --generator-target=${__TEST_SET_NAME} 
-      --cuda-version=${CUTLASS_GENERATOR_CUDA_COMPILER_VERSION}
+      --cuda-version=${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR}
       --architectures=${CUTLASS_NVCC_ARCHS}
       --kernels=\*
       --disable-cutlass-package-imports
@@ -65,10 +65,10 @@ endfunction()
 
 if(CUTLASS_BUILD_FOR_PROFILER_REGRESSIONS)
 
-    set(PROFILER_ARCH_LIST 100a)
+    set(PROFILER_ARCH_LIST 100a 101a 120a)
     foreach(ARCH IN LISTS CUTLASS_NVCC_ARCHS)
       if(NOT (ARCH IN_LIST PROFILER_ARCH_LIST))
-        message(FATAL_ERROR "Only SM100a compute capability is supported with profiler-based unit tests")
+        message(FATAL_ERROR "Only SM100a/101a/120a compute capability is supported with profiler-based unit tests")
       endif()
     endforeach()
 

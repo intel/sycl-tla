@@ -308,6 +308,9 @@ GEMM
   [int]       --cluster_m,--cluster-shape::m                    Cluster shape in the M dimension
   [int]       --cluster_n,--cluster-shape::n                    Cluster shape in the N dimension
   [int]       --cluster_k,--cluster-shape::k                    Cluster shape in the K dimension
+  [int]       --cluster_m_fallback,--cluster-shape-fallback::m  Fallback cluster shape in the M dimension
+  [int]       --cluster_n_fallback,--cluster-shape-fallback::n  Fallback cluster shape in the N dimension
+  [int]       --cluster_k_fallback,--cluster-shape-fallback::k  Fallback cluster shape in the K dimension
   [int]       --stages,--threadblock-stages                     Number of stages of threadblock-scoped matrix multiply
   [int]       --warps_m,--warp-count::m                         Number of warps within threadblock along the M dimension
   [int]       --warps_n,--warp-count::n                         Number of warps within threadblock along the N dimension
@@ -320,6 +323,7 @@ GEMM
   [enum]      --raster_order={heuristic|H|along_m|M|along_n|N}  If supported by kernel, sets the tile raster direction
   [int]       --swizzle_size={1,2,4,8}                          If supported by kernel, sets the 2D tile swizzle extent (In Hopper, other values will be rounded down to the nearest supported value)
   [int]       --use_pdl,--use-pdl                               Use PDL (true, false)
+  [int]       --enable_sm90_mixed_dtype_shuffle_test            If true, the profiler will test SM90 mixed input kernels that can use shuffled input layouts for better performance
   [enum]      --runtime_input_datatype_a                        Runtime data type for A matrix, narrow-precision only (e4m3, e5m2, e3m2, e2m3, e2m1)
   [enum]      --runtime_input_datatype_b                        Runtime data type for B matrix, narrow-precision only (e4m3, e5m2, e3m2, e2m3, e2m1)
 
@@ -360,13 +364,55 @@ Profile when execution is performed on device 0 and the C tensor is located on a
   $ cutlass_profiler --device=0 --allocations=C:1,D:2 --operation=Gemm --m=1024 --n=1024 --k=128
 ```
 
-The format of tensor argument is followed by `<type>:<layout>`. The type could be `f32` as 32-bit floating point, `s8` as 8-bit signed integer, etc. The available types can be referred to the `NumericTypeID_enumerants` in [util.cu](tools/library/src/util.cu). The layout could be `row` or `column`.
+The format of tensor argument is followed by `<type>:<layout>`. The type could be `f32` as 32-bit floating point, `s8` as 8-bit signed integer, etc. The available types can be referred to the `NumericTypeID_enumerants` in [util.cu](tools/library/src/util.cu). The layout could be `row` or `column`. If `--enable_sm90_mixed_dtype_shuffle_test=true` is used, the actual layout of the narrow data type matrix is a shuffled layout, neither `row` nor `column`.
 
 In addition to encoded data types, CUTLASS profiler allows non-encoded generic data types, namely `f8`, `f6`, and `f4`, with corresponding encoding specified through GEMM input argument: `--runtime_input_datatype_a` and `--runtime_input_datatype_b`. Currently, six encoding schemes are supported: `e4m3`, `e5m2`, `e3m2`, `e2m3`, and `e2m1`.
 
-Cluster shapes can be statically set to `Shape<int,int,_1>;` and specified via runtime arguments: `cluster_m`, `cluster_n` and `cluster_k` in CUTLASS profiler. One may refer to our CUTLASS Example [73_blackwell_gemm_flexible_cluster](../../examples/73_blackwell_gemm_preferred_cluster/blackwell_gemm_preferred_cluster.cu) for more details of the this feature.
+Cluster shapes can be statically set to `Shape<int,int,_1>;` and specified via runtime arguments: `cluster_m`, `cluster_n` and `cluster_k` in CUTLASS profiler.  In addition to preferred cluster shapes, a user can also specify fallback cluster shapes via runtime arguments: `cluster_m_fallback`, `cluster_n_fallback` and `cluster_k_fallback` in CUTLASS profiler. Those fallback cluster shapes are smaller shapes than the preferred ones for the hardware to assign when there is no chance to issue a larger preferred CGA cluster to the GPU. There are several rules for using a flexible CGA: 1) Preferred CGA size should be divisible by fallback CGA size. 2) Grid dim should be divisible by preferred CGA size. 3) Preferred CGA and fallback CGA must have the same depth (cluster_dim.z must be equal). One may refer to our CUTLASS Example [73_blackwell_gemm_flexible_cluster](../../examples/73_blackwell_gemm_preferred_cluster/blackwell_gemm_preferred_cluster.cu) for more details of the this feature. 
+Please be noted that this feature (flexible cluster shapes within a single grid) is only applicable to `sm100a` kernels. The hardware will rasterize into a single cluster shape for those kernels that do not support this feature even with preferred or fallback cluster shapes assigned.
 
 CUTLASS 3.x kernels for Hopper and Blackwell also support a new feature called programatic dependent launch (PDL). This can be enabled with `--use-pdl`, and can overlap the epilogue of the prior kernel with the prologue of the next kernel. This can effectively hide kernel prologues. Using PDL can improve performance for back to back GEMMs. See [dependent kernel launch](dependent_kernel_launch.md) for more information. CUDA graphs can also be used (`--use-cuda-graphs`) with PDL to ensure that smaller kernels are enqueued back-to-back on a stream.
+
+## Exhaustive search mode and top-k output ranking according to performance in GFLOPS/s
+
+CUTLASS also allows a few options to enable searching best performing kernel in a broader parameter space.
+
+1. **Sorting Performance Results by GFLOPs/second**  
+   A new option enables users to sort the final performance report based on GFLOPs/second, making it easier to identify the most efficient kernels.
+
+2. **Exhaustive Search for Best Kernel Performance in GFLOPs/second**  
+   This feature allows the profiler to search for the best-performing kernel across a range of problem sizes, swizzle sizes, rasterization orders, and dynamic cluster configurations. It ensures that all viable configurations are considered to maximize performance.
+
+3. **Performance Search Under a Fixed GEMM Shape**  
+   This option enables exhaustive performance tuning for a specific problem size. Unlike the previous feature, this restricts the search to a fixed GEMM shape while still exploring various kernel parameters to find the best configuration.
+
+### Usage Examples
+
+#### 1. Finding the Best Performing Kernel
+
+Use the following command to conduct an exhaustive search and sort results by GFLOPs/second:
+
+```bash
+cutlass_profiler --kernels=*gemm* --enable-kernel-performance-search --sort-results-flops-per-sec
+```
+
+#### 2. Performance Optimization for a Fixed GEMM Shape
+
+To optimize kernel performance for a specific GEMM problem size:
+
+```bash
+cutlass_profiler --kernels=*gemm* --enable-best-kernel-for-fixed-shape --m=6144 --n=6144 --k=6144 --sort-results-flops-per-sec
+```
+
+To search optimized kernel performance for a series of GEMM shapes (m, n, k = 1024, 2048):
+
+```bash
+cutlass_profiler --kernels=*gemm* --enable-best-kernel-for-fixed-shape --m=1024,2048 --n=1024,2048 --k=1024,2048 --sort-results-flops-per-sec
+```
+
+It is worth noting that by enabling exhaustive performance search via `--enable-kernel-performance-search`, a user is still able and responsible to decide parameters like data distribution in argument list, for which a user can choose `--dist=uniform,min:-1,max:1,scale:-1` to initialize a tensor with floating point numbers in uniform distribution. Otherwise, those parameters will be initialized to their default values.
+
+For examples above, one can change the kernel filtering regex according to their own use cases.
 
 ## Example CUDA Core GEMM Operation
 
@@ -585,6 +631,9 @@ Conv2d
   [int]       --cluster_m,--cluster-shape::m                    Cluster shape in the M dimension
   [int]       --cluster_n,--cluster-shape::n                    Cluster shape in the N dimension
   [int]       --cluster_k,--cluster-shape::k                    Cluster shape in the K dimension
+  [int]       --cluster_m_fallback,--cluster-shape-fallback::m  Fallback cluster shape in the M dimension
+  [int]       --cluster_n_fallback,--cluster-shape-fallback::n  Fallback cluster shape in the N dimension
+  [int]       --cluster_k_fallback,--cluster-shape-fallback::k  Fallback cluster shape in the K dimension
   [int]       --stages,--threadblock-stages                     Number of stages of threadblock-scoped matrix multiply
   [int]       --warps_m,--warp-count::m                         Number of warps within threadblock along the M dimension
   [int]       --warps_n,--warp-count::n                         Number of warps within threadblock along the N dimension

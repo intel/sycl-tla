@@ -121,32 +121,25 @@ using StageCountType = cutlass::gemm::collective::StageCountAuto;           // S
 
 // Runtime Cluster Shape
 using ClusterShape = Shape<int32_t,int32_t,_1>;
-// For Static Cluster Shape: 
-// using ClusterShape    = Shape<_2,_1,_1>; // for example
-// using AtomThrShape    = decltype(shape_div(ClusterShape{}, Shape<_2,_1,_1>{}));    // for 2SM config
-// using OutputTileShape = decltype(shape_div(ClusterTileShape{}, ClusterShape{}));   // for epilogue builder
-// using MmaTileShape    = decltype(shape_div(ClusterTileShape{}, AtomThrShape{}));   // for mainloop builder
 
 // Different configs for 1SM and 2SM MMA kernel
 struct MMA1SMConfig {
   using MmaTileShape     = Shape<_128,_256,Int<128 / sizeof(ElementA)>>;
   using KernelSchedule   = cutlass::gemm::KernelPtrArrayTmaWarpSpecialized1SmSm100;   // Kernel to launch
   using EpilogueSchedule = cutlass::epilogue::PtrArrayTmaWarpSpecialized1Sm;          // Epilogue to launch
-  using OutputTileShape  = decltype(shape_div(MmaTileShape{}, Shape<_1,_1,_1>{}));
 };
 
 struct MMA2SMConfig {
   using MmaTileShape     = Shape<_256,_256,Int<128 / sizeof(ElementA)>>;
   using KernelSchedule   = cutlass::gemm::KernelPtrArrayTmaWarpSpecialized2SmSm100;   // Kernel to launch
   using EpilogueSchedule = cutlass::epilogue::PtrArrayTmaWarpSpecialized2Sm;          // Epilogue to launch
-  using OutputTileShape  = decltype(shape_div(MmaTileShape{}, Shape<_2,_1,_1>{}));
 };
 
 template <typename ScheduleConfig>
 struct GivenGemmSchedule {
   using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
     ArchTag, OperatorClass,
-    typename ScheduleConfig::OutputTileShape, ClusterShape,
+    typename ScheduleConfig::MmaTileShape, ClusterShape,
     cutlass::epilogue::collective::EpilogueTileAuto,
     ElementAccumulator, ElementAccumulator,
     ElementC, LayoutC *, AlignmentC,
@@ -249,6 +242,7 @@ using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTil
 struct Options {
 
   bool help = false;
+  bool use_pdl = false;
 
   float alpha = FLT_MAX;
   float beta  = FLT_MAX;
@@ -270,6 +264,9 @@ struct Options {
     if (cmd.check_cmd_line_flag("help")) {
       help = true;
       return;
+    }
+    if (cmd.check_cmd_line_flag("use_pdl")) {
+      use_pdl = true;
     }
 
     cmd.get_cmd_line_argument("m", m);
@@ -394,7 +391,8 @@ struct Options {
       << "  --raster=<char>                                              CTA Rasterization direction (N for along N, M for along M)\n\n"
       << "  --iterations=<int>                                           Number of profiling iterations to perform\n\n"
       << "  --benchmark=<str>                                            Executes a benchmark problem size\n"
-      << "  --max_sm_count=<int>                                         Run kernels using only these number of SMs\n";
+      << "  --max_sm_count=<int>                                         Run kernels using only these number of SMs\n"
+      << "  --use_pdl                                                    Launch kernel with PDL (Programmatic Dependent Launch) enabled\n";
                                                                                              
     out
       << "\n\nExamples:\n\n"
@@ -718,7 +716,7 @@ int run(Options &options, bool host_problem_shapes_available = true)
   CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
 
   // Correctness / Warmup iteration
-  CUTLASS_CHECK(gemm.run());
+  CUTLASS_CHECK(gemm.run(/* stream = */ nullptr, /* cuda_adapter = */ nullptr, /* launch_with_pdl = */ options.use_pdl));
 
   // Check if output from CUTLASS kernel and reference kernel are equal or not
   Result result;
@@ -737,7 +735,7 @@ int run(Options &options, bool host_problem_shapes_available = true)
     timer.start();
     for (int iter = 0; iter < options.iterations; ++iter) {
       CUTLASS_CHECK(gemm.initialize(arguments, workspace.get()));
-      CUTLASS_CHECK(gemm.run());
+      CUTLASS_CHECK(gemm.run(/* stream = */ nullptr, /* cuda_adapter = */ nullptr, /* launch_with_pdl = */ options.use_pdl));
     }
     timer.stop();
 

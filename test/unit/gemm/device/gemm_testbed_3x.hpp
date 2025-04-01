@@ -92,9 +92,9 @@ enum class CheckEquality {
 
 namespace detail {
 
-inline constexpr auto decomp_mode_to_string =
-  [] (cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90StreamKParams::DecompositionMode mode) -> std::string {
-    using Mode = cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90StreamKParams::DecompositionMode;
+template <typename Mode>
+constexpr auto
+decomp_mode_to_string(Mode mode) {
     if (mode == Mode::Heuristic) {
       return "Heuristic";
     }
@@ -904,6 +904,83 @@ struct HostCollectiveMainloop<ScheduleType_, Gemm, ElementA_, ElementB_,
   using HostCollectiveMainloopSparse<Gemm, ElementA_, ElementB_>::HostCollectiveMainloopSparse;
 };
 
+//
+// Sparse MMA input Operands : A_compressed, B, metadata
+//
+// Structured Sparse Gemm Input Operands
+
+template<
+  class Gemm,
+  int SchedulerPipelineStageCount_,
+  int AccumulatorPipelineStageCount_,
+  typename ElementA_,
+  typename ElementB_
+>
+struct HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedSm100<SchedulerPipelineStageCount_,
+                                                                                 AccumulatorPipelineStageCount_>,
+                              Gemm, ElementA_, ElementB_>
+  : HostCollectiveMainloopSparse<Gemm, ElementA_, ElementB_>
+{
+  using HostCollectiveMainloopSparse<Gemm, ElementA_, ElementB_>::HostCollectiveMainloopSparse;
+};
+
+//
+// Sparse Gemm Input Operands : A , B, E
+//
+template<
+  class Gemm,
+  int SchedulerPipelineStageCount_,
+  class ElementA_,
+  class ElementB_
+>
+struct HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedCooperativeSparseSm120<SchedulerPipelineStageCount_, false /*isAsymmetric*/>,
+                              Gemm, ElementA_, ElementB_> : public
+       HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedSm100<0/*SchedulerPipelineStageCount_*/,
+                                                                                 0/*AccumulatorPipelineStageCount_*/>,
+                              Gemm, ElementA_, ElementB_> {
+  using Base = HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedSm100<0,0>,
+                                      Gemm, ElementA_, ElementB_ >;
+  HostCollectiveMainloop(
+    CheckEquality check_relative_equality_ = CheckEquality::EXACT,
+    cutlass::Distribution::Kind init_A_ = cutlass::Distribution::Uniform,
+    cutlass::Distribution::Kind init_B_ = cutlass::Distribution::Uniform,
+    uint64_t seed_ = Base::kDefaultSeed,
+    typename Base::LayoutTagA::Stride stride_factor_A_ = typename Base::LayoutTagA::Stride(),
+    typename Base::LayoutTagB::Stride stride_factor_B_ = typename Base::LayoutTagB::Stride(),
+    typename Base::LayoutTagE::Stride stride_factor_E_ = typename Base::LayoutTagE::Stride()
+  ) : Base::HostCollectiveMainloop(check_relative_equality_, init_A_, init_B_, seed_, stride_factor_A_,
+                                                                                      stride_factor_B_,
+                                                                                      stride_factor_E_) {}
+};
+
+//
+// Sparse Gemm Input Operands : A , B, E
+//
+template<
+  class Gemm,
+  int SchedulerPipelineStageCount_,
+  class ElementA_,
+  class ElementB_
+>
+struct HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedCooperativeSparseSm120<SchedulerPipelineStageCount_, true /*isAsymmetric*/>,
+                              Gemm, ElementA_, ElementB_> : public
+       HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedSm100<0/*SchedulerPipelineStageCount_*/,
+                                                                                 0/*AccumulatorPipelineStageCount_*/>,
+                              Gemm, ElementA_, ElementB_> {
+  using Base = HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedSm100<0,0>,
+                                      Gemm, ElementA_, ElementB_ >;
+  HostCollectiveMainloop(
+    CheckEquality check_relative_equality_ = CheckEquality::EXACT,
+    cutlass::Distribution::Kind init_A_ = cutlass::Distribution::Uniform,
+    cutlass::Distribution::Kind init_B_ = cutlass::Distribution::Uniform,
+    uint64_t seed_ = Base::kDefaultSeed,
+    typename Base::LayoutTagA::Stride stride_factor_A_ = typename Base::LayoutTagA::Stride(),
+    typename Base::LayoutTagB::Stride stride_factor_B_ = typename Base::LayoutTagB::Stride(),
+    typename Base::LayoutTagE::Stride stride_factor_E_ = typename Base::LayoutTagE::Stride()
+  ) : Base::HostCollectiveMainloop(check_relative_equality_, init_A_, init_B_, seed_, stride_factor_A_,
+                                                                                      stride_factor_B_,
+                                                                                      stride_factor_E_) {}
+};
 
 //
 // Block Scaled Gemm Input Operands : A , B, scalefactorA, scalefactorB
@@ -935,10 +1012,10 @@ struct HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedBlockScaled
   static constexpr int SFVecSize = Gemm::GemmKernel::CollectiveMainloop::SFVecSize;
 
   using ElementSF = typename Gemm::GemmKernel::CollectiveMainloop::ElementSF;
-  using Sm100BlkScaledConfig =  typename Gemm::GemmKernel::CollectiveMainloop::Sm100BlkScaledConfig;
-  using Blk_MN   = typename Sm100BlkScaledConfig::Blk_MN;
-  using Blk_SF   = typename Sm100BlkScaledConfig::Blk_SF;
-  using SfAtom   = typename Sm100BlkScaledConfig::SfAtom;
+  using Sm1xxBlkScaledConfig =  typename Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
+  using Blk_MN   = typename Sm1xxBlkScaledConfig::Blk_MN;
+  using Blk_SF   = typename Sm1xxBlkScaledConfig::Blk_SF;
+  using SfAtom   = typename Sm1xxBlkScaledConfig::SfAtom;
   using LayoutSFA = typename Gemm::GemmKernel::CollectiveMainloop::LayoutSFA;
   using LayoutSFB = typename Gemm::GemmKernel::CollectiveMainloop::LayoutSFB;
 
@@ -1027,8 +1104,8 @@ struct HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedBlockScaled
     auto k_blks = cutlass::ceil_div(K, size<1>(shape(SfAtom{})));
     auto m_blks = cutlass::ceil_div(M, Blk_MN{});
     auto n_blks = cutlass::ceil_div(N, Blk_MN{});
-    layout_sfa = Sm100BlkScaledConfig::tile_atom_to_shape_SFA(problem_shape_MNKL);
-    layout_sfb = Sm100BlkScaledConfig::tile_atom_to_shape_SFB(problem_shape_MNKL);
+    layout_sfa = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(problem_shape_MNKL);
+    layout_sfb = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(problem_shape_MNKL);
 
     // 2.x host tensor does not natively contain a batch stride or coord, so we spoof if by folding it into the outer mode
     auto sfa_coord   = cutlass::make_Coord(m_blks * Blk_MN{} * L, k_blks * Blk_SF{});
@@ -1109,6 +1186,422 @@ struct HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedBlockScaled
   }
 };
 
+
+//
+// Block Scaled Gemm Input Operands : A , B, scalefactorA, scalefactorB
+//
+template<
+  class Gemm,
+  int SchedulerPipelineStageCount_,
+  class ElementA_,
+  class ElementB_
+>
+struct HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedPingpongBlockScaledSm120<SchedulerPipelineStageCount_>, 
+                              Gemm, ElementA_, ElementB_> : public
+       HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedBlockScaledSm100<0,0>,
+                              Gemm, ElementA_, ElementB_> {
+  using Base = HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedBlockScaledSm100<0,0>,
+                                      Gemm, ElementA_, ElementB_>;
+  HostCollectiveMainloop(
+    CheckEquality check_relative_equality_ = CheckEquality::EXACT,
+    cutlass::Distribution::Kind init_A_ = cutlass::Distribution::Uniform,
+    cutlass::Distribution::Kind init_B_ = cutlass::Distribution::Uniform,
+    uint64_t seed_ = Base::kDefaultSeed,
+    typename Base::LayoutTagA::Stride stride_factor_A_ = typename Base::LayoutTagA::Stride(),
+    typename Base::LayoutTagB::Stride stride_factor_B_ = typename Base::LayoutTagB::Stride()
+  ) : Base::HostCollectiveMainloop(check_relative_equality_, init_A_, init_B_, seed_, stride_factor_A_, stride_factor_B_) {}
+};
+
+//
+// Block Scaled Gemm Input Operands : A , B, scalefactorA, scalefactorB
+//
+template<
+  class Gemm,
+  int SchedulerPipelineStageCount_,
+  class ElementA_,
+  class ElementB_
+>
+struct HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedCooperativeBlockScaledSm120<SchedulerPipelineStageCount_>,
+                              Gemm, ElementA_, ElementB_> : public
+       HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedBlockScaledSm100<0,0>,
+                              Gemm, ElementA_, ElementB_> {
+  using Base = HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedBlockScaledSm100<0,0>,
+                                      Gemm, ElementA_, ElementB_>;
+  HostCollectiveMainloop(
+    CheckEquality check_relative_equality_ = CheckEquality::EXACT,
+    cutlass::Distribution::Kind init_A_ = cutlass::Distribution::Uniform,
+    cutlass::Distribution::Kind init_B_ = cutlass::Distribution::Uniform,
+    uint64_t seed_ = Base::kDefaultSeed,
+    typename Base::LayoutTagA::Stride stride_factor_A_ = typename Base::LayoutTagA::Stride(),
+    typename Base::LayoutTagB::Stride stride_factor_B_ = typename Base::LayoutTagB::Stride()
+  ) : Base::HostCollectiveMainloop(check_relative_equality_, init_A_, init_B_, seed_, stride_factor_A_, stride_factor_B_) {}
+};
+
+//
+// Block Scaled Structured Sparse Gemm Input Operands : A_compressed, B, metadata, scalefactorA, scalefactorB
+//
+template<
+  class Gemm,
+  int SchedulerPipelineStageCount_,
+  int AccumulatorPipelineStageCount_,
+  typename ElementA_,
+  typename ElementB_
+>
+struct HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedBlockScaledSm100<SchedulerPipelineStageCount_,
+                                                                                            AccumulatorPipelineStageCount_>,
+                              Gemm, ElementA_, ElementB_> {
+  // Kernel data types
+  using ElementA = ElementA_;
+  // CuTe layout A for the kernel's sparse tensorA.
+  using LayoutA  = typename Gemm::GemmKernel::CollectiveMainloop::LayoutA;
+  using ElementB = ElementB_;
+  using StrideB  = typename Gemm::GemmKernel::StrideB;
+  using ScheduleType = typename Gemm::GemmKernel::CollectiveMainloop::DispatchPolicy::Schedule;
+
+  using ElementE = typename Gemm::GemmKernel::CollectiveMainloop::ElementE;
+  // CuTe layout E for the kernel's metadata tensor.
+  using LayoutE  = typename Gemm::GemmKernel::CollectiveMainloop::LayoutE;
+  using ElementAccumulator = typename Gemm::GemmKernel::ElementAccumulator;
+  using ElementScalingFactor = ElementAccumulator;
+  using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
+  using EpilogueOutputOp = typename Gemm::EpilogueOutputOp;
+  using SparseConfig = typename Gemm::GemmKernel::CollectiveMainloop::SparseConfig;
+
+  // The following typenames are for the reference host tensors. They are non-sparse tensors.
+  using LayoutTagA = decltype(SparseConfig::deduce_layoutA_tag(LayoutA{}));
+  using StrideA = cutlass::gemm::TagToStrideA_t<LayoutTagA>;
+  // We don't care about the actual strideE for the host tensor, but just need one to allocate memory.
+  using StrideE = StrideA;
+
+  static constexpr int SFVecSize = Gemm::GemmKernel::CollectiveMainloop::SFVecSize;
+  // Deduce Cutlass Layouts (RowMajor & ColumnMajor)
+  using LayoutTagB = cutlass::detail::StrideToLayoutTagB_t<StrideB>;
+
+  using LayoutTagE = cutlass::detail::StrideToLayoutTagA_t<StrideE>;
+
+  using ElementSF = typename Gemm::GemmKernel::CollectiveMainloop::ElementSF;
+  using Sm1xxBlkScaledConfig =  typename Gemm::GemmKernel::CollectiveMainloop::Sm1xxBlkScaledConfig;
+  using Blk_MN   = typename Sm1xxBlkScaledConfig::Blk_MN;
+  using Blk_SF   = typename Sm1xxBlkScaledConfig::Blk_SF;
+  using SfAtom   = typename Sm1xxBlkScaledConfig::SfAtom;
+  using LayoutSFA = typename Gemm::GemmKernel::CollectiveMainloop::LayoutSFA;
+  using LayoutSFB = typename Gemm::GemmKernel::CollectiveMainloop::LayoutSFB;
+
+  using CompressorUtility = cutlass::transform::kernel::StructuredSparseCompressorUtility<
+                              cute::Shape<int, int, int, int>,
+                              ElementA,
+                              LayoutTagA,
+                              SparseConfig>;
+  using CompressorKernel = cutlass::transform::kernel::StructuredSparseCompressor<
+                        cute::Shape<int, int, int, int>,
+                        ElementA,
+                        LayoutTagA,
+                        SparseConfig,
+                        cutlass::arch::Sm100>;
+
+  using Compressor = cutlass::transform::device::TransformUniversalAdapter<CompressorKernel>;
+
+  using Arguments = typename Gemm::GemmKernel::MainloopArguments;
+  // Whether to use relative equality checks
+  CheckEquality check_relative_equality = CheckEquality::EXACT;
+
+  StrideA stride_a;
+  StrideA stride_a_compressed;
+  StrideB stride_b;
+  StrideE stride_e;
+
+  LayoutA layout_a;
+  LayoutE layout_e;
+  LayoutSFA layout_sfa;
+  LayoutSFB layout_sfb;
+
+  typename LayoutTagA::Stride stride_factor_A;
+  typename LayoutTagB::Stride stride_factor_B;
+  typename LayoutTagE::Stride stride_factor_E;
+
+  cutlass::Distribution::Kind init_A;
+  cutlass::Distribution::Kind init_B;
+
+  cutlass::HostTensor<ElementA, LayoutTagA> tensor_A;
+  cutlass::HostTensor<ElementA, LayoutTagA> tensor_A_Comp;
+  cutlass::HostTensor<ElementB, LayoutTagB> tensor_B;
+  cutlass::HostTensor<ElementE, LayoutTagE> tensor_E;
+  cutlass::HostTensor<ElementSF, LayoutTagA> tensor_SFA;
+  cutlass::HostTensor<ElementSF, LayoutTagB> tensor_SFB;
+
+  uint64_t seed;
+  static constexpr uint64_t kDefaultSeed = 4096;
+
+  // Note: this limitation comes from testbed / not the library
+  static_assert(is_row_or_col_major<StrideA>(),
+    "ERROR : A Layout is neither Row / Column Major)");
+  static_assert(is_row_or_col_major<StrideB>(),
+    "ERROR : B Layout is neither Row / Column Major)");
+
+  HostCollectiveMainloop(
+    CheckEquality check_relative_equality_ = CheckEquality::EXACT,
+    cutlass::Distribution::Kind init_A_ = cutlass::Distribution::Uniform,
+    cutlass::Distribution::Kind init_B_ = cutlass::Distribution::Uniform,
+    uint64_t seed_ = kDefaultSeed,
+    typename LayoutTagA::Stride stride_factor_A_ = typename LayoutTagA::Stride(),
+    typename LayoutTagB::Stride stride_factor_B_ = typename LayoutTagB::Stride(),
+    typename LayoutTagE::Stride stride_factor_E_ = typename LayoutTagE::Stride()
+  ):
+    check_relative_equality(check_relative_equality_),
+    stride_factor_A(stride_factor_A_),
+    stride_factor_B(stride_factor_B_),
+    stride_factor_E(stride_factor_E_),
+    init_A(init_A_), init_B(init_B_), seed(seed_) { }
+
+  template<class ProblemShapeType>
+  bool initialize(ProblemShapeType problem_size) {
+#if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
+    CUTLASS_TRACE_HOST("HostCollectiveMainloop (KernelSparseTmaWarpSpecializedBlockScaledSm100)::initialize");
+#endif
+    //
+    // Allocate the GEMM workspace
+    //
+    auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
+    auto M = cute::size<0>(problem_shape_MNKL);
+    auto N = cute::size<1>(problem_shape_MNKL);
+    auto K = cute::size<2>(problem_shape_MNKL);
+    auto L = cute::size<3>(problem_shape_MNKL);
+
+    stride_a = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
+    stride_b = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
+
+    CompressorUtility compressor_utility(problem_shape_MNKL, stride_a);
+
+    // TensorE
+    // In unit of ElementE (uint8_t), after alignment requirement
+    // M-dim: TensorEAtom_M alignment
+    // K-dim: TensorEAtom_K alignment
+    int KAlignedE = compressor_utility.get_metadata_k_physical();
+    int MAlignedE = compressor_utility.get_metadata_m_physical();
+
+    // TensorA Compressed
+    // In unit of ElementARaw, after alignment requirement
+    // M-dim: TMA alignment
+    // K-dim: TMA alignment
+    int KAlignedAC = compressor_utility.get_tensorA_k_physical();
+    int MAlignedAC = compressor_utility.get_tensorA_m_physical();
+
+    stride_a_compressed = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, KAlignedAC, L));
+    stride_e = cutlass::make_cute_packed_stride(StrideE{}, cute::make_shape(MAlignedE, KAlignedE, L));
+
+    auto a_coord = cutlass::make_Coord(M * L, K);
+    auto b_coord = cutlass::make_Coord(K, N * L);
+    auto e_coord = cutlass::make_Coord(MAlignedE * L, KAlignedE);
+    auto a_comp_coord = cutlass::make_Coord(MAlignedAC * L, KAlignedAC);
+
+    tensor_A.resize(a_coord, cutlass::layout::Affine2Layout_Factory<LayoutTagA>::layout_factory(a_coord, stride_factor_A));
+    tensor_A_Comp.resize(a_comp_coord, cutlass::layout::Affine2Layout_Factory<LayoutTagA>::layout_factory(a_comp_coord, stride_factor_A));
+    tensor_B.resize(b_coord, cutlass::layout::Affine2Layout_Factory<LayoutTagB>::layout_factory(b_coord, stride_factor_B));
+    tensor_E.resize(e_coord, cutlass::layout::Affine2Layout_Factory<LayoutTagE>::layout_factory(e_coord, stride_factor_E));
+
+    EXPECT_TRUE(initialize_tensor(tensor_A.host_view(), init_A, seed + 2022));
+    EXPECT_TRUE(initialize_tensor(tensor_B.host_view(), init_B, seed + 2021));
+
+    // It is possible to randomly initialize to all zeros, so override this with non-zeros
+    // in the upper left corner of each operand.
+    tensor_A.host_view().at({0, 0}) = ElementA(1);
+    tensor_B.host_view().at({0, 0}) = ElementB(1);
+
+    compressor_utility.structure_sparse_zero_mask_fill(tensor_A.host_data(), static_cast<int>(seed + 2023));
+
+    tensor_A.sync_device();
+    tensor_B.sync_device();
+    tensor_E.sync_device();
+    tensor_A_Comp.sync_device();
+
+    cutlass::Status status {cutlass::Status::kSuccess };
+
+    cutlass::KernelHardwareInfo hw_info;
+    hw_info.device_id = 0;
+    hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
+    typename Compressor::Arguments arguments{
+      {M, N, K, L},
+      {tensor_A.device_data(),
+       stride_a,
+       tensor_A_Comp.device_data(),
+       tensor_E.device_data()},
+      {hw_info}
+    };
+
+    Compressor compressor_op;
+    size_t workspace_size = Compressor::get_workspace_size(arguments);
+    cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
+
+    status = compressor_op.can_implement(arguments);
+    if (status != cutlass::Status::kSuccess) {
+      return false;
+    }
+
+    status = compressor_op.initialize(arguments, workspace.get());
+    if (status != cutlass::Status::kSuccess) {
+      return false;
+    }
+
+    status = compressor_op.run();
+
+#if (CUTLASS_ENABLE_SYCL)
+    try {
+      syclcompat::wait_and_throw();
+    } catch (std::exception const &e) {
+      ADD_FAILURE() << "Error at Kernel Sync.";
+      return false;
+    }
+#else
+    auto result = cudaDeviceSynchronize();
+    if (result != cudaSuccess) {
+      EXPECT_EQ(result, cudaSuccess) << "Error at Kernel Sync.";
+      return false;
+    }
+#endif
+
+    layout_a = SparseConfig::fill_layoutA(problem_shape_MNKL);
+    layout_e = SparseConfig::fill_layoutE(problem_shape_MNKL);
+
+    tensor_E.sync_host();
+    tensor_A_Comp.sync_host();
+
+    using namespace cute;
+    auto k_blks = cutlass::ceil_div(K, size<1>(shape(SfAtom{})));
+    auto m_blks = cutlass::ceil_div(M, Blk_MN{});
+    auto n_blks = cutlass::ceil_div(N, Blk_MN{});
+    layout_sfa = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFA(problem_shape_MNKL);
+    layout_sfb = Sm1xxBlkScaledConfig::tile_atom_to_shape_SFB(problem_shape_MNKL);
+
+    // 2.x host tensor does not natively contain a batch stride or coord, so we spoof if by folding it into the outer mode
+    auto sfa_coord   = cutlass::make_Coord(m_blks * Blk_MN{} * L, k_blks * Blk_SF{});
+    auto sfb_coord   = cutlass::make_Coord(n_blks * Blk_MN{} * L, k_blks * Blk_SF{});
+ 
+    tensor_SFA.resize(sfa_coord, cutlass::layout::Affine2Layout_Factory<LayoutTagA>::layout_factory(sfa_coord, stride_factor_A));
+    tensor_SFB.resize(sfb_coord, cutlass::layout::Affine2Layout_Factory<LayoutTagB>::layout_factory(sfb_coord, stride_factor_B));
+
+    EXPECT_TRUE(initialize_tensor(tensor_SFA.host_view(), init_A, seed + 2024));
+    EXPECT_TRUE(initialize_tensor(tensor_SFB.host_view(), init_B, seed + 2025));
+
+    // It is possible to randomly initialize to all zeros, so override this with non-zeros
+    // in the upper left corner of each operand.
+    tensor_SFA.host_view().at({0, 0}) = ElementSF(1);
+    tensor_SFB.host_view().at({0, 0}) = ElementSF(1);
+
+    tensor_SFA.sync_device();
+    tensor_SFB.sync_device();
+
+    return true;
+  }
+
+  Arguments to_args() {
+    using ArrayElementA = typename Gemm::GemmKernel::CollectiveMainloop::ArrayElementA;
+    using ArrayElementB = typename Gemm::GemmKernel::CollectiveMainloop::ArrayElementB;
+    return {
+      reinterpret_cast<ArrayElementA *>(tensor_A_Comp.device_data()), layout_a,
+      reinterpret_cast<ArrayElementB *>(tensor_B.device_data()), stride_b,
+      tensor_E.device_data(), layout_e,
+      tensor_SFA.device_data(), layout_sfa,
+      tensor_SFB.device_data(), layout_sfb
+    };
+  }
+
+  auto to_host_args(ProblemShapeType problem_size) {
+    using namespace cute;
+    //
+    // Allocate the GEMM workspace
+    //
+    auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
+    auto M = cute::size<0>(problem_shape_MNKL);
+    auto N = cute::size<1>(problem_shape_MNKL);
+    auto K = cute::size<2>(problem_shape_MNKL);
+    auto L = cute::size<3>(problem_shape_MNKL);
+    auto A = make_tensor(make_iterator(tensor_A.host_data()),
+          make_layout(make_shape(M, K, L), stride_a));
+    auto SfA = make_tensor(tensor_SFA.host_data(), layout_sfa);
+
+    auto B = make_tensor(make_iterator(tensor_B.host_data()),
+        make_layout(make_shape(N, K, L), stride_b));
+    auto SfB = make_tensor(tensor_SFB.host_data(), layout_sfb);
+
+    // return {A, SfA, B, SfB};
+    cutlass::reference::host::GettMainloopParams<ElementAccumulator, 
+        decltype(A),  
+        decltype(B), 
+        decltype(SfA), 
+        decltype(SfB)
+      > 
+          mainloop_params{A, SfA, B, SfB};
+    return mainloop_params;
+  }
+
+  void print_tensors(std::ofstream& file) {
+    file << "A =\n" << tensor_A.host_view()
+         << "\nB =\n" << tensor_B.host_view()
+         << "\nSFA =\n" << tensor_SFA.host_view()
+         << "\nSFB =\n" << tensor_SFB.host_view();
+  }
+
+  bool compare_reference(
+      cute::Shape<int,int,int,int> problem_shape_MNKL) {
+    auto [M, N, K, L] = problem_shape_MNKL;
+
+    EXPECT_GT(cutlass::reference::host::TensorNorm(tensor_A.host_view()), 0);
+    EXPECT_GT(cutlass::reference::host::TensorNorm(tensor_B.host_view()), 0);
+    EXPECT_GT(cutlass::reference::host::TensorNorm(tensor_SFA.host_view()), 0);
+    EXPECT_GT(cutlass::reference::host::TensorNorm(tensor_SFB.host_view()), 0);
+    return true;
+  }
+};
+
+template<
+  class Gemm,
+  int SchedulerPipelineStageCount_,
+  class ElementA_,
+  class ElementB_
+>
+struct HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedCooperativeSparseBlockScaledSm120<SchedulerPipelineStageCount_, true>,
+                              Gemm, ElementA_, ElementB_> : public
+       HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedBlockScaledSm100<0,0>,
+                              Gemm, ElementA_, ElementB_> {
+  using Base = HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedBlockScaledSm100<0,0>,
+                                      Gemm, ElementA_, ElementB_>;
+  HostCollectiveMainloop(
+    CheckEquality check_relative_equality_ = CheckEquality::EXACT,
+    cutlass::Distribution::Kind init_A_ = cutlass::Distribution::Uniform,
+    cutlass::Distribution::Kind init_B_ = cutlass::Distribution::Uniform,
+    uint64_t seed_ = Base::kDefaultSeed,
+    typename Base::LayoutTagA::Stride stride_factor_A_ = typename Base::LayoutTagA::Stride(),
+    typename Base::LayoutTagB::Stride stride_factor_B_ = typename Base::LayoutTagB::Stride(),
+    typename Base::LayoutTagE::Stride stride_factor_E_ = typename Base::LayoutTagE::Stride()
+  ) : Base::HostCollectiveMainloop(check_relative_equality_, init_A_, init_B_, seed_, stride_factor_A_,
+                                                                                      stride_factor_B_,
+                                                                                      stride_factor_E_) {}
+};
+
+template<
+  class Gemm,
+  int SchedulerPipelineStageCount_,
+  class ElementA_,
+  class ElementB_
+>
+struct HostCollectiveMainloop<cutlass::gemm::KernelTmaWarpSpecializedCooperativeSparseBlockScaledSm120<SchedulerPipelineStageCount_, false>,
+                              Gemm, ElementA_, ElementB_> : public
+       HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedBlockScaledSm100<0,0>,
+                              Gemm, ElementA_, ElementB_> {
+  using Base = HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedBlockScaledSm100<0,0>,
+                                      Gemm, ElementA_, ElementB_>;
+  HostCollectiveMainloop(
+    CheckEquality check_relative_equality_ = CheckEquality::EXACT,
+    cutlass::Distribution::Kind init_A_ = cutlass::Distribution::Uniform,
+    cutlass::Distribution::Kind init_B_ = cutlass::Distribution::Uniform,
+    uint64_t seed_ = Base::kDefaultSeed,
+    typename Base::LayoutTagA::Stride stride_factor_A_ = typename Base::LayoutTagA::Stride(),
+    typename Base::LayoutTagB::Stride stride_factor_B_ = typename Base::LayoutTagB::Stride(),
+    typename Base::LayoutTagE::Stride stride_factor_E_ = typename Base::LayoutTagE::Stride()
+  ) : Base::HostCollectiveMainloop(check_relative_equality_, init_A_, init_B_, seed_, stride_factor_A_, 
+                                                                                      stride_factor_B_,
+                                                                                      stride_factor_E_) {}
+};
 
 template<class Gemm>
 struct HostCollectiveDefaultEpilogue {
@@ -1403,13 +1896,13 @@ struct HostCollectiveEpilogue {
   static constexpr bool IsBlockScaleSupported            = FusionOp::IsBlockScaleSupported;
   static constexpr SfStrategy SfGenStrategy              = (!IsBlockScaleSupported) ? SfStrategy::None : SfStrategy::SfDGen;
   static constexpr int32_t SFD_VectorSize = IsBlockScaleSupported ? FusionOp::SFVecSize : 1;
+  static constexpr bool IsKMajorSFD = cute::is_same_v<typename FusionOp::GmemLayoutTagScalefactor, cutlass::layout::RowMajor>;
   using ElementSFD = non_void_t<typename FusionOp::ElementBlockScaleFactor, ElementD>;
-  using Sm100BlockScaledOutputConfig = cutlass::detail::Sm100BlockScaledOutputConfig<
-                                          SFD_VectorSize
-                                        >;
-  using Blk_MN = typename Sm100BlockScaledOutputConfig::Blk_MN;
-  using Blk_SF = typename Sm100BlockScaledOutputConfig::Blk_SF; 
-  using OutputSFAtom = typename Sm100BlockScaledOutputConfig::SfAtom;
+  using Sm1xxBlockScaledOutputConfig= cutlass::detail::Sm1xxBlockScaledOutputConfig<SFD_VectorSize,
+                                        IsKMajorSFD ? cute::UMMA::Major::K : cute::UMMA::Major::MN>;
+  using Blk_MN = typename Sm1xxBlockScaledOutputConfig::Blk_MN;
+  using Blk_SF = typename Sm1xxBlockScaledOutputConfig::Blk_SF; 
+  using OutputSFAtom = typename Sm1xxBlockScaledOutputConfig::SfAtom;
   cutlass::HostTensor<ElementSFD, LayoutTagD> tensor_SFD;
   cutlass::HostTensor<ElementSFD, LayoutTagD> reference_SFD;
   
@@ -1705,7 +2198,12 @@ struct HostCollectiveEpilogue {
       auto m_blks = cutlass::ceil_div(M, cute::size<0>(cute::shape(OutputSFAtom{})));
       auto n_blks = cutlass::ceil_div(N, cute::size<1>(cute::shape(OutputSFAtom{})));
       auto sfd_coord = [&] () {
+        if constexpr (IsKMajorSFD) {
           return cutlass::make_Coord(m_blks * Blk_MN{} * L, n_blks * Blk_SF{});
+        }
+        else {
+          return cutlass::make_Coord(m_blks * Blk_SF{} * L, n_blks * Blk_MN{});
+        }
       }();
       tensor_SFD.resize(sfd_coord, cutlass::layout::Affine2Layout_Factory<LayoutTagD>::layout_factory(sfd_coord, stride_factor_D));
       reference_SFD.resize(sfd_coord, cutlass::layout::Affine2Layout_Factory<LayoutTagD>::layout_factory(sfd_coord, stride_factor_D), false);
@@ -2074,7 +2572,7 @@ struct HostCollectiveEpilogue {
     auto SfD = [&](){
       if constexpr (IsBlockScaleSupported) {
         auto tensor = make_tensor(detail::make_iterator(reference_SFD.host_data()),
-          Sm100BlockScaledOutputConfig::tile_atom_to_shape_SFD(problem_shape_MNKL));
+          Sm1xxBlockScaledOutputConfig::tile_atom_to_shape_SFD(problem_shape_MNKL));
         return tensor;
       }
       else {
@@ -2164,7 +2662,8 @@ template <
   typename ElementA = typename Gemm::GemmKernel::ElementA,
   typename ElementB = typename Gemm::GemmKernel::ElementB
   , typename RuntimeDatatypeA = void* 
-  , typename RuntimeDatatypeB = void* 
+  , typename RuntimeDatatypeB = void*,
+  typename DecompositionMode = cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90StreamKParams::DecompositionMode
 >
 struct TestbedImpl {
   // Kernel data types
@@ -2206,7 +2705,6 @@ struct TestbedImpl {
   static constexpr uint64_t kDefaultSeed = 4096;
   static constexpr uint32_t mma_promotion_interval = 4;
   using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90::RasterOrderOptions;
-  using DecompositionMode = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90StreamKParams::DecompositionMode;
 
   HostCollectiveMainloopType collective_mma_inputs;
   CollectiveEpilogue collective_epilogue;
@@ -2362,8 +2860,6 @@ struct TestbedImpl {
     //
     // Run the GEMM
     //
-    cudaError_t result;
-
     for (int iter = 0; iter < iterations; ++iter) {
       status = gemm_op(arguments, workspace.get());
       if (status != cutlass::Status::kSuccess) {
@@ -2380,7 +2876,7 @@ struct TestbedImpl {
       return false;
     }
 #else
-    result = cudaDeviceSynchronize();
+    auto result = cudaDeviceSynchronize();
     if (result != cudaSuccess) {
       EXPECT_EQ(result, cudaSuccess) << "Error at Kernel Sync.";
       return false;
@@ -2459,7 +2955,11 @@ struct TestbedImpl {
 
     typename Gemm::GemmKernel::TileScheduler::Arguments scheduler_args;
     if constexpr (cute::is_same_v<typename Gemm::GemmKernel::TileSchedulerTag, cutlass::gemm::StreamKScheduler>) {
+#if defined(SYCL_INTEL_TARGET)
+      scheduler_args = { static_cast<int>(splits), decomposition_mode };
+#else
       scheduler_args = { static_cast<int>(splits), static_cast<int>(max_swizzle), raster_order, decomposition_mode };
+#endif
     }
     else {
       scheduler_args = { static_cast<int>(max_swizzle), raster_order };
@@ -2527,7 +3027,6 @@ struct TestbedImpl {
       return profile(problem_size, static_cast<int>(iterations), gemm_op, arguments, workspace);
     }
     else {
-      cudaError_t result;
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
       CUTLASS_TRACE_HOST("TestbedImpl::run: Calling gemm_op.initialize");
 #endif
@@ -2561,7 +3060,7 @@ struct TestbedImpl {
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
       CUTLASS_TRACE_HOST("TestbedImpl::run: Calling cudaDeviceSynchronize");
 #endif
-      result = cudaDeviceSynchronize();
+      auto result = cudaDeviceSynchronize();
       if (result != cudaSuccess) {
         CUTLASS_TRACE_HOST("TestbedImpl::run: cudaDeviceSynchronize reports non-success");
         EXPECT_EQ(result, cudaSuccess) << "Error at Kernel Sync.";
@@ -2616,7 +3115,8 @@ template <
   typename ElementA = typename Gemm::GemmKernel::ElementA,
   typename ElementB = typename Gemm::GemmKernel::ElementB
   , typename RuntimeDatatypeA = void* 
-  , typename RuntimeDatatypeB = void* 
+  , typename RuntimeDatatypeB = void*,
+  typename DecompositionMode = cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90StreamKParams::DecompositionMode
 >
 struct Testbed3x {
 
@@ -2627,7 +3127,8 @@ struct Testbed3x {
                         ElementA, 
                         ElementB
                         , RuntimeDatatypeA 
-                        , RuntimeDatatypeB 
+                        , RuntimeDatatypeB,
+                        DecompositionMode
                         >;
   using Kernel      = typename Gemm::GemmKernel;
   using Epilogue    = typename Gemm::GemmKernel::CollectiveEpilogue;
@@ -2637,8 +3138,6 @@ struct Testbed3x {
   using ElementScalar        = typename TestBedImpl::ElementScalar;
 
   using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90::RasterOrderOptions;
-  using DecompositionMode = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90StreamKParams::DecompositionMode;
-
   // Detail Implementation
   TestBedImpl impl_;
 
@@ -3199,6 +3698,18 @@ bool TestSmall(double alpha = 1.0, double beta = cute::is_same_v<typename Gemm::
     max_alignment_n = std::max(Gemm::kAlignmentA, Gemm::kAlignmentB);
     max_alignment_m = std::max(Gemm::kAlignmentA, Gemm::kAlignmentB);
   }
+  // Alignment for SFD
+  if constexpr (detail::IsSfdEpi<typename Gemm::GemmKernel::CollectiveEpilogue>::value) {
+    using GmemLayoutTagScalefactor = typename Gemm::GemmKernel::CollectiveEpilogue::FusionCallbacks::Operation::GmemLayoutTagScalefactor;
+    constexpr int SFDVecSize = Gemm::GemmKernel::CollectiveEpilogue::FusionCallbacks::Operation::SFVecSize;
+    if constexpr (cute::is_same_v<GmemLayoutTagScalefactor, cutlass::layout::RowMajor>) {
+      max_alignment_n = std::lcm(max_alignment_n, SFDVecSize);
+    }
+    else {
+      max_alignment_m = std::lcm(max_alignment_m, SFDVecSize);
+    }
+  }
+
   float waves[] = {0.5, 1.25, 2.5};
   int cluster_m = 1;
   int cluster_n = 1;
@@ -3501,47 +4012,137 @@ bool TestAll(double alpha = 1.0, double beta = cute::is_same_v<typename Gemm::Ge
   return passed;
 }
 
+#if defined(SYCL_INTEL_TARGET)
 template <typename Gemm, template <class T> class ActivationFunctor =
                              cutlass::epilogue::thread::Identity>
+// TODO(Codeplay): remove the test_batch option once batching is enabled for all tests
 bool TestXe(
     double alpha = 1.0, double beta = 0.0,
+    bool test_batch = true, int max_alignment = 4,
     CheckEquality check_relative_equality = CheckEquality::RELATIVE) {
   using ElementScalar = typename Gemm::EpilogueOutputOp::ElementScalar;
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
-  Testbed3x<Gemm, ActivationFunctor> testbed(
-    check_relative_equality, ScalarLoc::ON_HOST, VectorScale::DISABLED);
+  using DecompositionMode = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode;
+
+  Testbed3x<Gemm, ActivationFunctor, false,
+    typename Gemm::GemmKernel::ElementA,
+    typename Gemm::GemmKernel::ElementB,
+    void*, void*, DecompositionMode> testbed(
+      check_relative_equality, ScalarLoc::ON_HOST, VectorScale::DISABLED);
 
   // For M & N we test a small and a big size
   // For K, we currently only support K = TileShapeK
-  // We set L = 1 throughout
   // TODO(codeplay): unhardcode max_alignment
-  int max_alignment = 4;
+
   std::vector<int> problem_size_m{max_alignment, 512 - 3 * max_alignment};
   std::vector<int> problem_size_n{max_alignment, 512 - 2 * max_alignment};
+  std::vector<int> problem_size_l = test_batch ? std::vector{1, 3, 4} : std::vector{1};
 
   constexpr int TileShapeK = cute::size<2>(typename Gemm::GemmKernel::TileShape{});
   std::vector<int> problem_size_k{TileShapeK};
+
+  using DecompositionMode = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode;
+  std::vector decomposition_modes = {DecompositionMode::Heuristic};
+  std::vector problem_splits = {detail::Splits{1}};
+  static constexpr bool UsesStreamKScheduler = cute::is_same_v<typename Gemm::GemmKernel::TileSchedulerTag, cutlass::gemm::StreamKScheduler>;
+  if constexpr (UsesStreamKScheduler) {
+    problem_splits.push_back(detail::Splits{2});
+    problem_splits.push_back(detail::Splits{3});
+
+    decomposition_modes.push_back(DecompositionMode::DataParallel);
+    decomposition_modes.push_back(DecompositionMode::SplitK);
+    decomposition_modes.push_back(DecompositionMode::StreamK);
+
+    // Use larger K sizes for stream-K tests
+    static constexpr int min_tiles_per_sk_unit = cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::min_iters_per_sk_unit_;
+    problem_size_k = {TileShapeK * min_tiles_per_sk_unit, TileShapeK * 3 * min_tiles_per_sk_unit - max_alignment};
+  }
+
+  using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90::RasterOrderOptions;
+  std::vector<RasterOrderOptions> raster_orders = {RasterOrderOptions::AlongM};
+  std::vector max_swizzle_sizes{detail::MaxSwizzleSize{1}};
 
   bool passed = true;
 
   for (int m : problem_size_m) {
     for (int n : problem_size_n) {
       for (int k : problem_size_k) {
-        ProblemShapeType problem_size{m, n, k, 1};
-        passed =
-            testbed.run(problem_size, cutlass::from_real<ElementScalar>(alpha),
-                        cutlass::from_real<ElementScalar>(beta));
-        if (!passed) {
-          std::cout << __FILE__ << ':' << __LINE__ << " : GEMM MNK " << m << " "
-                    << n << " " << k << " FAILED.\n";
-          return false;
-        }
-      }
-    }
-  }
+        for (int l : problem_size_l) {
+          for (auto raster_order : raster_orders) {
+            for (auto max_swizzle_size : max_swizzle_sizes) {
+              for (DecompositionMode decomp_mode : decomposition_modes) {
+                            std::vector problem_splits = {detail::Splits{1}};
+                if (decomp_mode == DecompositionMode::Heuristic || decomp_mode == DecompositionMode::SplitK) {
+                  auto max_splits = (k + TileShapeK - 1) / TileShapeK;
+                  if (max_splits > 2) {
+                    problem_splits.push_back(detail::Splits{2});
+                  }
+                  if (max_splits > 3) {
+                    problem_splits.push_back(detail::Splits{3});
+                  }
+
+                  problem_splits.push_back(detail::Splits{max_splits});
+
+                  // Test the case in which we ask for more splits than there are K tiles in the GEMM. In this
+                  // case, split-K will fall back to a splitting factor of `max_splits`.
+                  problem_splits.push_back(detail::Splits{max_splits + 1});
+                }
+
+                for (auto splits : problem_splits) {
+                  ProblemShapeType problem_size{m, n, k, l};
+                  try {
+                    passed = testbed.run(problem_size,
+                                         cutlass::from_real<ElementScalar>(alpha),
+                                         cutlass::from_real<ElementScalar>(beta),
+                                         raster_order,
+                                         max_swizzle_size,
+                                         splits,
+                                         decomp_mode
+                                         );
+                  }
+                  catch (std::exception const& e) {
+                    EXPECT_TRUE(false) << "TestAll: testbed.run {"
+                      << "m: " << m << ", n: " << n << ", k: " << k << ", l: " << l
+                      << ", alpha: " << alpha << ", beta: " << beta
+                      << ", splits: " << static_cast<int>(splits)
+                      << ", decomp_mode: " << detail::decomp_mode_to_string(decomp_mode)
+                      << "} threw an exception: " << e.what();
+                    throw;
+                  }
+                  catch (...) {
+                    EXPECT_TRUE(false) << "TestAll: testbed.run {"
+                      << "m: " << m << ", n: " << n << ", k: " << k << ", l: " << l
+                      << ", alpha: " << alpha << ", beta: " << beta
+                      << ", splits: " << static_cast<int>(splits)
+                      << ", decomp_mode: " << detail::decomp_mode_to_string(decomp_mode)
+                      << "} threw an exception (unknown)";
+                    throw;
+                  }
+
+                  EXPECT_TRUE(passed) << "TestAll: testbed.run {"
+                      << "m: " << m << ", n: " << n << ", k: " << k << ", l: " << l
+                    << ", alpha: " << alpha << ", beta: " << beta
+                    << ", splits: " << static_cast<int>(splits)
+                    << ", decomp_mode: " << detail::decomp_mode_to_string(decomp_mode)
+                    << "} failed";
+
+                  if (!passed) {
+                    std::cout << __FILE__ << ':' << __LINE__ << " : GEMM MNKL " << m
+                              << " " << n << " " << k << " " << l << " FAILED.\n";
+                    return false;
+                  }
+                } // splits
+              } // decomp_mode
+            } // max_swizzle_size
+          } // raster_order
+        } // l
+      }  // k
+    }  // n
+  }  // m
   return passed;
 }
+#endif
 
 template <typename Gemm>
 bool TestAllBiasElementwise(double alpha = 1.0, double beta = cute::is_same_v<typename Gemm::GemmKernel::ElementC, void> ? 0.0 : 1.0, CheckEquality check_relative_equality = CheckEquality::EXACT) {

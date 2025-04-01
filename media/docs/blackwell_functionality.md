@@ -285,7 +285,9 @@ Layout, and Dispatch Policy combinations for each row of [Table 1](#legacy_gemm_
 | 1/2 SM | Epilogue Dispatch Policy                 |
 |--------|------------------------------------------|
 | 1SM    | cutlass::epilogue::TmaWarpSpecialized1Sm |
+| 1SM    | cutlass::epilogue::NoSmemWarpSpecialized1Sm |
 | 2SM    | cutlass::epilogue::TmaWarpSpecialized2Sm |
+| 2SM    | cutlass::epilogue::NoSmemWarpSpecialized2Sm |
 
 **Table 15: Epilogue PerSmTileShape_MNK** <a id="epi_persmtileshape" name="epi_persmtileshape"></a> 
 | 1/2 SM | MMA tile Shape           | PerSmTileShape_MNK      |
@@ -442,7 +444,7 @@ PerSmTileShape_MNK should be deduced from the mainloop setup. For example, in ab
 It means each CTA is doing (256 / 2sm) x 256 x 128 output, so the PerSmTileShape_MNK is 128x256x128. The possible PerSmTileShape_MNK
 is listed in [Table 15](#epi_persmtileshape)
 
-The epilogue scheduling policy is configurable, and it is common to set `cutlass::epilogue::TmaWarpSpecialized2Sm`
+The epilogue scheduling policy is configurable, and it is common to set `cutlass::epilogue::collective::EpilogueScheduleAuto`
 to allow the epilogue builder to automatically select the appropriate policy. However, it can also be explicitly defined to
 use other policies based on the 1sm or 2sm MMA instruction. The available policies are listed in [Table 14](#epi_dispatch).
 
@@ -458,10 +460,6 @@ use other policies based on the 1sm or 2sm MMA instruction. The available polici
   using ElementAccumulator = float;
   // Epilogue computation's precision type
   using ElementCompute = float;
-  // Cluster size for multicast
-  using ClusterShape_MNK = Shape<_4,_4,_1>;
-  // Collective Epilogue takes the output tile shape for 1 CTA
-  using PerSmTileShape_MNK = Shape<_128,_256,_128>;
   
   //
   // Construct CollectiveEpilogue
@@ -469,7 +467,7 @@ use other policies based on the 1sm or 2sm MMA instruction. The available polici
 
   using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
       cutlass::arch::Sm100, cutlass::arch::OpClassBlockScaledTensorOp,      // Arch and Tensorop spec
-      PerSmTileShape_MNK, ClusterShape_MNK,                                 // Epilogue tile shape, and cluster shape
+      MmaTileShape_MNK, ClusterShape_MNK,                                   // MMA tile shape, and cluster shape
       cutlass::epilogue::collective::EpilogueTileAuto,                      // Epilogue subtile shape. Auto will find a suitable tile shape
       ElementAccumulator, ElementCompute,                                   // Mma instr's accumulator type and compute precision for epilogue
       ElementC, GmemLayoutC, AlignC,                                        // C tensor description
@@ -499,12 +497,12 @@ Typically, GmemLayoutSFD would be same as the GmemLayoutD.
 
   using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
       cutlass::arch::Sm100, cutlass::arch::OpClassBlockScaledTensorOp,      // Arch and Tensorop spec
-      PerSmTileShape_MNK, ClusterShape_MNK,                                 // Epilogue tile shape, and cluster shape
+      MmaTileShape_MNK, ClusterShape_MNK,                                   // MMA tile shape, and cluster shape
       cutlass::epilogue::collective::EpilogueTileAuto,                      // Epilogue subtile shape. Auto will find a suitable tile shape
       ElementAccumulator, ElementCompute,                                   // Mma instr's accumulator type and compute precision for epilogue
       ElementC, GmemLayoutC, AlignC,                                        // C tensor description
       ElementD, GmemLayoutD, AlignD,                                        // D tensor description
-      cutlass::epilogue::collective::EpilogueScheduleAuto                   // Epilogue schedule policy
+      cutlass::epilogue::TmaWarpSpecialized2Sm                              // Epilogue schedule policy
       FusionOperation                                                       // <================================== Pass the fusion config into epilogue builder.
     >::CollectiveOp;
 ```
@@ -532,13 +530,13 @@ If the scale factor tensor exceeds M128xSF4, it indicates that there are multipl
   <img src="../images/narrow_precison_multiple_block_sf_layout.png" alt="/narrow_precison_multiple_block_sf_layout.png"/>
 </p>
 
-The creation of scale factor tensors' layouts are tedious. CUTLASS provides `Sm100BlockScaledConfig` to create these layouts easily
+The creation of scale factor tensors' layouts are tedious. CUTLASS provides `Sm1xxBlockScaledConfig` to create these layouts easily
 (See [sm100_blockscaled_layout.hpp](cutlass/include/cutlass/detail/sm100_blockscaled_layout.hpp)).
 The interface to create SFA and SFB tensor layouts is as follows:
 
 ```cpp
 auto problem_shape = make_shape(M, N, K, L);
-using SfConfig = Sm100BlockScaledConfig<SFVecSize>;
+using SfConfig = Sm1xxBlockScaledConfig<SFVecSize>;
 
 // SFA shape: ((32,4), ceil(M/128)), ((SFVecSize,4), ceil(K/4), L)
 auto layout_sfa = SfConfig::tile_atom_to_shape_SFA(problem_shape);
