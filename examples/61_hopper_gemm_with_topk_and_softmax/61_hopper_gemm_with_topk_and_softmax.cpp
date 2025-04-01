@@ -61,42 +61,24 @@
 #include <cute/tensor.hpp>
 #include <random>
 
+#include "cutlass/util/host_tensor.h"
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/packed_stride.hpp"
+#include "cutlass/util/tensor_view_io.h"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-//#include "common.hpp"
-#include "helper.h"
-
-#include <iostream>
-
-#include "cutlass/cutlass.h"
-#include "cutlass/numeric_types.h"
-
-#include "cute/tensor.hpp"
-#include "cutlass/tensor_ref.h"
-#include "cutlass/gemm/dispatch_policy.hpp"
-#include "cutlass/gemm/collective/collective_builder.hpp"
-#include "cutlass/gemm/device/gemm_universal_adapter.h"
-#include "cutlass/gemm/kernel/gemm_universal.hpp"
-#include "cutlass/epilogue/dispatch_policy.hpp"
-#include "cutlass/epilogue/collective/collective_builder.hpp"
-
-#include "cutlass/util/command_line.h"
-#include "cutlass/util/distribution.h"
-#include "cutlass/util/host_tensor.h"
-#include "cutlass/util/packed_stride.hpp"
-#include "cutlass/util/tensor_view_io.h"
 #include "cutlass/util/reference/host/error_metrics.h"
 #include "cutlass/util/reference/host/tensor_fill.h"
 #include "cutlass/util/reference/host/tensor_copy.h"
 #include "cutlass/util/reference/host/tensor_compare.h"
 #include "cutlass/util/reference/host/tensor_norm.h"
 #include "cutlass/util/reference/host/gett.hpp"
-
-
+//#include "common.hpp"
 #include "helper.h"
+
+
+
 
 using namespace cute;
 
@@ -134,8 +116,6 @@ using ArchTag             = cutlass::arch::IntelPVC;                            
 using OperatorClass       = cutlass::arch::OpClassTensorOp;                 // Operator class tag
 using TileShape           = Shape<_256, _256, _32>;                            // Threadblock-level tile size
 using ClusterShape        = Shape<_1,_1,_1>;                                // Shape of the threadblocks in a cluster
-using KernelSchedule      = cutlass::gemm::collective::KernelScheduleAuto;
-using EpilogueSchedule    = cutlass::epilogue::collective::EpilogueScheduleAuto;
 
 using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
 using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
@@ -170,15 +150,17 @@ using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
       XE_2D_U32x8x16_ST_N,
       void, void>;
 
-using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-    ArchTag, OperatorClass,
-    ElementA, LayoutA, AlignmentA,
-    ElementB, LayoutB, AlignmentB,
-    ElementAccumulator,
-    TileShape, ClusterShape,
-    cutlass::gemm::collective::StageCountAutoCarveout<0>,
-    KernelSchedule
-  >::CollectiveOp;
+using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
+  GEMMDispatchPolicy,
+  TileShape,
+  ElementA,
+  cutlass::gemm::TagToStrideA_t<LayoutA>,
+  ElementB,
+  cutlass::gemm::TagToStrideB_t<LayoutB>,
+  TiledMma,
+  GmemTiledCopyA, void, void, cute::identity,  // A
+  GmemTiledCopyB, void, void, cute::identity   // B
+>;
 
 using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
     Shape<int,int,int,int>, // Indicates ProblemShape
