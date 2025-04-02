@@ -44,7 +44,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass {
-namespace epilogue {
+namespace flash_attention {
 namespace collective {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -54,12 +54,12 @@ template <class DispatchPolicy, class... Args> class CollectiveEpilogueAttention
 };
 
 template <class CtaTileMNK_, class ElementO_, class StrideO_, class ElementLSE_, class CopyOpO_>
-class CollectiveEpilogueAttention<IntelPVCEpilogue, CtaTileMNK_, ElementO_, StrideO_, ElementLSE_, CopyOpO_> {
+class CollectiveEpilogueAttention<epilogue::IntelPVCEpilogue, CtaTileMNK_, ElementO_, StrideO_, ElementLSE_, CopyOpO_> {
 public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = IntelPVCEpilogue;
+  using DispatchPolicy = epilogue::IntelPVCEpilogue;
   using CtaTileMNK = CtaTileMNK_;
   using ElementO = ElementO_;
   using ElementAccumulator = ElementO_;
@@ -159,6 +159,7 @@ public:
     using MmaAtomShape = typename TiledMma::AtomShape_MNK;
     using SubgroupTileShape = decltype(cute::shape_div(take<0, 3>(CtaTileMNK{}), take<1, 4>(typename TiledMma::ThrLayoutVMNK{}.shape())));
     using FragsShape = decltype(cute::shape_div(take<0, 2>(SubgroupTileShape{}), take<0, 2>(MmaAtomShape())));
+    static constexpr bool is_var_len = cutlass::fmha::collective::is_variable_length_v<tuple_element_t<2, ProblemShape>>;
   
     static constexpr int FragsM = get<0>(FragsShape{}); // A frags per sub_group
     static constexpr int FragsN = get<1>(FragsShape{}); // B frags per sub_group
@@ -183,7 +184,7 @@ public:
     // Indexing variables
     auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
     // Represent the full output tensor
-    Tensor mO_mnl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_vo, batch * num_heads));
+    Tensor mO_mnl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_vo, (is_var_len ? batch : 1) * num_heads));
     
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord;
     // Tile the output tensor per WG
@@ -201,6 +202,29 @@ public:
     copy(params.xe_store_o, out, tOgO);
   }
 
+  template <bool VarLen, class ProblemShapeType>
+  CUTLASS_DEVICE static constexpr Params get_updated_copies(Params const& params, ProblemShapeType const& problem_shape, int const& l_coord) {
+    if constexpr (!VarLen) {
+      return params;
+    } else {
+      auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
+
+      auto qo_cumulative_length = get<2>(problem_shape).cumulative_length;
+      int offset_o = l_coord == 0 ? 0 : num_heads * head_size_vo * qo_cumulative_length[l_coord];
+      XE_Copy_O xe_store_o = {};
+      auto store_traits = static_cast<Trait_O const&>(params.xe_store_o);
+      ElementO* base_ptr = (ElementO*)store_traits.base_ptr;
+      xe_store_o = make_tiled_copy(Copy_Atom<Trait_O, ElementO>{}.with(
+                                        make_tensor(make_gmem_ptr(base_ptr + offset_o),
+                                                    make_layout(make_shape(seq_len_qo, head_size_vo, num_heads),
+                                                                make_stride(static_cast<int64_t>(head_size_vo), cute::C<1>{}, static_cast<int64_t>(seq_len_qo * head_size_vo))))),
+                                  Layout<Shape<_1, Int<SubgroupSize>>>{},
+                                  make_layout(make_shape(get<0>(typename Trait_O::BlockShape{}),
+                                                          get<1>(typename Trait_O::BlockShape{}) / Int<SubgroupSize>{})));
+      return Params{xe_store_o};
+    }
+  }
+
 private:
   Params const &params;
 };
@@ -208,7 +232,7 @@ private:
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace collective
-} // namespace epilogue
+} // namespace flash_attention
 } // namespace cutlass
 
 /////////////////////////////////////////////////////////////////////////////////////////////////

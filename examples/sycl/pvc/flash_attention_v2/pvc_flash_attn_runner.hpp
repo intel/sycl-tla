@@ -32,6 +32,8 @@
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
+#include "77_blackwell_fmha/collective/fmha_fusion.hpp"
+#include "flash_attention_v2/kernel/tile_scheduler.hpp"
 #include "flash_attention_v2/kernel/xe_flash_attn_gemm.hpp"
 #include "flash_attention_v2/collective/xe_flash_attn_epilogue.hpp"
 #include "flash_attention_v2/collective/xe_flash_attn_softmax_epilogue.hpp"
@@ -56,12 +58,13 @@ struct Options {
   bool help;
   bool error;
   bool is_causal;
+  bool varlen = false;
 
   int batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo, iterations;
   float softmax_scale;
 
   Options()
-      : help(false), error(false), is_causal(false), batch(32), num_heads(16), seq_len_qo(512), head_size_qk(128),
+      : help(false), error(false), is_causal(false), varlen(false), batch(32), num_heads(16), seq_len_qo(512), head_size_qk(128),
         seq_len_kv(512), head_size_vo(128), iterations(100), softmax_scale(1.f) {}
 
   // Parses the command line
@@ -75,6 +78,10 @@ struct Options {
 
     if (cmd.check_cmd_line_flag("is_causal")) {
       is_causal = true;
+    }
+
+    if (cmd.check_cmd_line_flag("varlen")) {
+      varlen = true;
     }
 
     cmd.get_cmd_line_argument("batch", batch, 32);
@@ -95,6 +102,7 @@ struct Options {
         << "Options:\n\n"
         << "  --help                      If specified, displays this usage statement\n\n"
         << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
+        << "  --varlen                    Enable variable sequence length\n"
         << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
         << "  --num_heads=<int>           Sets the Number of Attention Heads of the Multi-Head Self Attention module\n"
         << "  --seq_len_qo=<int>          Sets the Sequence length of the Query input in Multi-Head Self Attention module\n"
@@ -114,7 +122,7 @@ using LayoutK = cutlass::layout::ColumnMajor;
 using LayoutV = cutlass::layout::RowMajor;
 using LayoutO = cutlass::layout::RowMajor;
 
-template <class GemmKernel> struct ExampleRunner {
+template <class GemmKernel, bool isVarLen> struct ExampleRunner {
 
   using StrideQ = typename GemmKernel::StrideQ;
   using StrideK = typename GemmKernel::StrideK;
@@ -149,6 +157,11 @@ template <class GemmKernel> struct ExampleRunner {
   cutlass::DeviceAllocation<ElementV> block_V;
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
+
+  std::vector<int> cumulative_seqlen_q;
+  std::vector<int> cumulative_seqlen_kv;
+  cutlass::DeviceAllocation<int> device_cumulative_seqlen_q;
+  cutlass::DeviceAllocation<int> device_cumulative_seqlen_kv;
 
   //
   // Methods
@@ -279,9 +292,219 @@ template <class GemmKernel> struct ExampleRunner {
     return passed;
   }
 
+  bool verify_varlen(ProblemShapeType problem_size, bool is_causal) {
+    int max_seq_len_q = static_cast<int>(get<2>(problem_size));
+    int max_seq_len_kv = static_cast<int>(get<3>(problem_size));
+    get<2>(problem_size) = cutlass::fmha::collective::VariableLength{max_seq_len_q, cumulative_seqlen_q.data()};
+    get<3>(problem_size) = cutlass::fmha::collective::VariableLength{max_seq_len_kv, cumulative_seqlen_kv.data()};
+
+    auto [batch, num_heads, head_size_qk, head_size_vo] = cute::select<0,1,4,5>(problem_size);
+
+    int offset_q = 0;
+    int offset_k = 0;
+    int offset_v = 0;
+    int offset_o = 0;
+    // loop over the batch dimension to compute the output
+    // to avoid the risk of running out of device memory
+    for (int b = 0; b < batch; b++) {
+      auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(problem_size, b);
+      auto [seq_len_qo, seq_len_kv] = cute::select<2,3>(logical_problem_shape);
+
+      for (int h = 0; h < num_heads; h++) {
+        cutlass::DeviceAllocation<ElementOutput> block_S;
+        block_S.reset(seq_len_qo * seq_len_kv);
+
+        cutlass::TensorRef ref_Q(block_Q.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
+        cutlass::TensorRef ref_K(block_K.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
+        cutlass::TensorRef ref_V(block_V.get() + offset_v, LayoutV::packed({seq_len_kv, head_size_vo}));
+        cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
+        cutlass::TensorRef ref_O(block_ref_O.get() + offset_o, LayoutO::packed({seq_len_qo, head_size_vo}));
+
+        cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv, head_size_qk}, 1.f, ref_Q,
+                                                cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
+                                                0.f, ref_S, ref_S, ElementAccumulator(0),
+                                                1,                   // batch_count
+                                                seq_len_qo * head_size_qk, // batch_stride_Q
+                                                seq_len_kv * head_size_qk, // batch_stride_K
+                                                seq_len_qo * seq_len_kv,   // batch_stride_S
+                                                seq_len_qo * seq_len_kv    // batch_stride_S
+        );
+
+        syclcompat::wait();
+
+        std::vector<ElementOutput> host_S(block_S.size());
+        syclcompat::memcpy<ElementOutput>(host_S.data(), block_S.get(), host_S.size());
+        syclcompat::wait();
+
+        // delete this memory as it is no longer needed
+        block_S.reset();
+
+        if (is_causal) {
+          // apply mask to S
+          for (int row = 0; row < seq_len_qo; row++) {
+            for (int col = 0; col < seq_len_kv; col++) {
+              if (col > row)
+                host_S[col + row * seq_len_kv] = -INFINITY;
+            }
+          }
+        }
+
+        // compute max element per row of S
+        std::vector<ElementOutput> max_vec(seq_len_qo, -INFINITY);
+        for (int row = 0; row < seq_len_qo; row++) {
+          int idx = row * seq_len_kv;
+          int max_idx = row;
+          max_vec[max_idx] = host_S[idx++];
+          for (int col = 1; col < seq_len_kv; col++, idx++) {
+            if (max_vec[max_idx] < host_S[idx])
+              max_vec[max_idx] = host_S[idx];
+          }
+        }
+
+        // compute exp of S
+        for (int row = 0; row < seq_len_qo; row++) {
+          int idx = row * seq_len_kv;
+          int max_idx = row;
+          for (int col = 0; col < seq_len_kv; col++, idx++) {
+            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) / sqrt(static_cast<ElementOutput>((head_size_qk))));
+          }
+        }
+
+        // compute sum per row of S
+        std::vector<ElementOutput> sum_vec(seq_len_qo, ElementOutput{0});
+        for (int row = 0; row < seq_len_qo; row++) {
+          int idx = row * seq_len_kv;
+          int sum_idx = row;
+          for (int col = 0; col < seq_len_kv; col++, idx++) {
+            sum_vec[sum_idx] += host_S[idx];
+          }
+
+          // scale each row with the sum to compute softmax
+          idx = row * seq_len_kv;
+          sum_idx = row;
+          for (int col = 0; col < seq_len_kv; col++, idx++) {
+            host_S[idx] /= sum_vec[sum_idx];
+          }
+        }
+
+        std::vector<ElementV> host_P(host_S.size());
+        for (int p = 0; p < host_P.size(); p++)
+          host_P[p] = static_cast<ElementV>(host_S[p]);
+
+        cutlass::DeviceAllocation<ElementV> block_P;
+        block_P.reset(host_P.size());
+
+        syclcompat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
+        syclcompat::wait();
+
+        cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
+
+        cutlass::reference::device::GemmComplex({seq_len_qo, head_size_vo, seq_len_kv}, 1.f, ref_P,
+                                                cutlass::ComplexTransform::kNone, ref_V, cutlass::ComplexTransform::kNone,
+                                                0.f, ref_O, ref_O, ElementAccumulator(0),
+                                                1,                   // batch_count
+                                                seq_len_qo * seq_len_kv,   // batch_stride_P
+                                                seq_len_kv * head_size_vo, // batch_stride_V
+                                                seq_len_qo * head_size_vo, // batch_stride_O
+                                                seq_len_qo * head_size_vo  // batch_stride_O
+        );
+
+        syclcompat::wait();
+        // delete this memory as it is no longer needed
+        block_P.reset();
+
+        offset_q += seq_len_qo * head_size_qk;
+        offset_k += seq_len_kv * head_size_qk;
+        offset_v += seq_len_kv * head_size_vo;
+        offset_o += seq_len_qo * head_size_vo;
+      }
+    }
+
+    syclcompat::wait();
+
+    // Check if output from CUTLASS kernel and reference kernel are equal or not
+    bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
+                                                                          block_O.size(), 0.5f, 0.5f);
+
+    return passed;
+  }
+
+  template<class ProblemShape>
+  auto initialize_varlen(const ProblemShape& problem_size, const bool VarlenSame = true) {
+    int num_batches = get<0>(problem_size);
+
+    // generate Q as --b times
+    //    gaussian (--Q, --Q / 2) sampled positive
+    //    track cumulative 
+    std::mt19937 rng(0x202305151552ull);
+    std::normal_distribution<double> dist_q(get<2>(problem_size), get<2>(problem_size) / 2);
+    std::normal_distribution<double> dist_kv(get<3>(problem_size), get<3>(problem_size) / 2);
+
+    auto generate_positive_int = [](auto& dist, auto& gen) {
+      int result = 0;
+      do {
+        result = static_cast<int>(dist(gen));
+      } while (result <= 0);
+      return result;
+    };
+
+    cumulative_seqlen_q = {0};
+    cumulative_seqlen_kv = {0};
+
+    int total_seqlen_q = 0;
+    int total_seqlen_kv = 0;
+    int max_seqlen_q = 0;
+    int max_seqlen_kv = 0;
+
+    for (int i = 0; i < num_batches; i++) {
+      int seqlen_q = VarlenSame ? get<2>(problem_size) : generate_positive_int(dist_q, rng);
+      int seqlen_kv = VarlenSame ? get<3>(problem_size) : generate_positive_int(dist_kv, rng);
+
+      total_seqlen_q += seqlen_q;
+      total_seqlen_kv += seqlen_kv;
+
+      max_seqlen_q = std::max(max_seqlen_q, seqlen_q);
+      max_seqlen_kv = std::max(max_seqlen_kv, seqlen_kv);
+
+      cumulative_seqlen_q.push_back(cumulative_seqlen_q.back() + seqlen_q);
+      cumulative_seqlen_kv.push_back(cumulative_seqlen_kv.back() + seqlen_kv);
+    }
+
+    ProblemShape problem_size_for_init = problem_size;
+    get<0>(problem_size_for_init) = 1;
+    get<2>(problem_size_for_init) = total_seqlen_q;
+    get<3>(problem_size_for_init) = total_seqlen_kv;
+
+    ProblemShapeType problem_size_for_launch;
+
+    get<2>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_q};
+    get<3>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv};
+    get<4>(problem_size_for_launch) = get<4>(problem_size);
+    get<5>(problem_size_for_launch) = get<5>(problem_size);
+    get<0>(problem_size_for_launch) = get<0>(problem_size);
+    get<1>(problem_size_for_launch) = get<1>(problem_size);
+
+    return cute::make_tuple(problem_size_for_init, problem_size_for_launch);
+  }
+
   /// Initialize operands to be used in the GEMM and reference GEMM
-  void initialize(const ProblemShapeType &problem_size) {
-    // auto problem_shape = cute::append<4>(problem_size, 1);
+  ProblemShapeType initialize(const Options &options) {
+    auto problem_shape_in =
+        cute::make_tuple(options.batch, options.num_heads, options.seq_len_qo, options.seq_len_kv, options.head_size_qk, options.head_size_vo);
+
+    ProblemShapeType problem_shape;
+    decltype(problem_shape_in) problem_size;
+
+    if constexpr (isVarLen) {
+      auto [problem_shape_init, problem_shape_launch] = initialize_varlen(problem_shape_in);
+      problem_shape = problem_shape_launch;
+      problem_size = problem_shape_init;
+    }
+    else {
+      problem_size = problem_shape_in;
+      problem_shape = problem_shape_in;
+    }
+
     auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_size;
 
     stride_Q = cutlass::make_cute_packed_stride(StrideQ{}, cute::make_shape(seq_len_qo, head_size_qk, batch * num_heads));
@@ -296,8 +519,26 @@ template <class GemmKernel> struct ExampleRunner {
     block_ref_O.reset(batch * num_heads * seq_len_qo * head_size_vo);
 
     initialize_block(block_Q, seed + 2023);
-    initialize_block(block_K, seed + 2022); // assume K is already transposed
+    initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
+
+    if (!cumulative_seqlen_q.empty()) {
+      device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
+      device_cumulative_seqlen_q.copy_from_host(
+        cumulative_seqlen_q.data(), cumulative_seqlen_q.size());
+    }
+    if (!cumulative_seqlen_kv.empty()) {
+      device_cumulative_seqlen_kv.reset(cumulative_seqlen_kv.size());
+      device_cumulative_seqlen_kv.copy_from_host(
+        cumulative_seqlen_kv.data(), cumulative_seqlen_kv.size());
+    }
+
+    if constexpr (isVarLen) {
+      get<2>(problem_shape).cumulative_length = device_cumulative_seqlen_q.get();
+      get<3>(problem_shape).cumulative_length = device_cumulative_seqlen_kv.get();
+    }
+
+    return problem_shape;
   }
 
   static void run(typename GemmKernel::Params params) {
@@ -331,10 +572,8 @@ template <class GemmKernel> struct ExampleRunner {
   }
 
   void run(const Options &options, const cutlass::KernelHardwareInfo &hw_info) {
-    ProblemShapeType problem_size =
-        ProblemShapeType{options.batch, options.num_heads, options.seq_len_qo, options.seq_len_kv, options.head_size_qk, options.head_size_vo};
 
-    initialize(problem_size);
+    ProblemShapeType problem_size = initialize(options);
 
     typename GemmKernel::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
@@ -365,7 +604,7 @@ template <class GemmKernel> struct ExampleRunner {
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.is_causal);
+    bool passed = isVarLen ? verify_varlen(problem_size, options.is_causal) : verify(problem_size, options.is_causal);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if (passed && options.iterations > 0) {
@@ -394,8 +633,9 @@ template <class GemmKernel> struct ExampleRunner {
 };
 
 template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig {
-  static int run(const Options &options) {
 
+  template <bool isVarLen>
+  static int run(const Options &options) {
     //
     // Run examples
     //
@@ -420,26 +660,39 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
     using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
     using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
     using GmemTiledCopyStore = XE_2D_U32x8x16_ST_N;
-    using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogueAttention<
+    using CollectiveEpilogue = cutlass::flash_attention::collective::CollectiveEpilogueAttention<
         EpilogueDispatchPolicy, TileShape, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
-    using CollectiveSoftmaxEpilogue = cutlass::epilogue::collective::CollectiveSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
+    using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::CollectiveSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
+
+    using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int>;
+    using namespace cutlass::fmha::collective;
+    using ProblemShapeVarlen = cute::tuple<int, int, VariableLength, VariableLength, int, int>;
+    using ProblemShapeType = std::conditional_t<isVarLen, ProblemShapeVarlen, ProblemShapeRegular>;
 
     // Mainloop
-    using CollectiveMainloop = cutlass::gemm::collective::CollectiveMmaAttention<
-        GEMMDispatchPolicy, TileShape, ElementInputQ, cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
+    using CollectiveMainloop = cutlass::flash_attention::collective::CollectiveMmaAttention<
+        GEMMDispatchPolicy, ProblemShapeType, TileShape, ElementInputQ, cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
         cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV, cutlass::gemm::TagToStrideB_t<LayoutV>, TiledMma,
         GmemTiledCopyQ, // Q
         GmemTiledCopyK, // K
         GmemTiledCopyV, // V,
         Causal>;
 
-    using GemmKernel = cutlass::gemm::kernel::GemmUniversalAttention<Shape<int, int, int, int, int, int>, CollectiveMainloop,
+    using GemmKernel = cutlass::flash_attention::kernel::GemmUniversalAttention<ProblemShapeType, CollectiveMainloop,
                                                                      CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
 
-    ExampleRunner<GemmKernel> runner;
+    ExampleRunner<GemmKernel, isVarLen> runner;
 
     runner.run(options, hw_info);
-    return 0;
+    return 0;    
+  }
+
+  static int run(const Options &options) {
+    if(options.varlen) {
+      return run<true>(options);
+    } else {
+      return run<false>(options);
+    }
   }
 };

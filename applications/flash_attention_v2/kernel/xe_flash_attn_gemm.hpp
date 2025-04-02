@@ -37,7 +37,7 @@
 
 #include "flash_attention_v2/collective/xe_flash_attn_mma.hpp"
 
-namespace cutlass::gemm::kernel {
+namespace cutlass::flash_attention::kernel {
 
 template <class ProblemShape, class CollectiveMainloop, class CollectiveSoftmaxEpilogue_, class CollectiveEpilogue, class TileScheduler_ = void>
 class GemmUniversalAttention;
@@ -77,13 +77,12 @@ public:
   using SoftmaxArguments = typename CollectiveSoftmaxEpilogue::Arguments;
   using SoftmaxParams = typename CollectiveSoftmaxEpilogue::Params;
 
-  static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler>,
+  static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler> or cute::is_same_v<TileScheduler_, IndividualScheduler>,
                 "Intel PVC does not support specializing the tile scheduler.");
   using TileSchedulerTag = TileScheduler_;
   using TileScheduler =
-      typename detail::TileSchedulerSelector<TileScheduler_, ArchTag, TileShapePV,
-                                             cute::Shape<cute::Int<1>, cute::Int<1>, cute::Int<1>>>::Scheduler;
-  using TileSchedulerArguments = typename TileScheduler::Arguments;
+      typename detail::TileSchedulerSelector<TileScheduler_, ArchTag>::Scheduler;
+  using TileSchedulerParams = typename TileScheduler::Params;
 
   // Epilogue derived types
   using CollectiveEpilogue = CollectiveEpilogue_;
@@ -128,6 +127,8 @@ public:
   static constexpr int FragsM = get<0>(FragsShape{});                                          // 2
   static constexpr int FragsN = get<1>(FragsShape{});                                          // 4
 
+  static constexpr bool is_var_len = CollectiveMainloop::is_var_len;
+
   // Kernel level shared memory storage
   struct SharedStorage {
     using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;
@@ -136,22 +137,22 @@ public:
 
   // Device side arguments
   struct Arguments {
-    GemmUniversalMode mode{};
+    gemm::GemmUniversalMode mode{};
     ProblemShape problem_shape{};
     MainloopArguments mainloop{};
     SoftmaxArguments softmax{};
     EpilogueArguments epilogue{};
     KernelHardwareInfo hw_info{};
-    TileSchedulerArguments scheduler{};
   };
 
   // Kernel entry point API
   struct Params {
-    GemmUniversalMode mode;
+    gemm::GemmUniversalMode mode;
     ProblemShape problem_shape;
     MainloopParams mainloop;
     SoftmaxParams softmax;
     EpilogueParams epilogue;
+    TileSchedulerParams scheduler;
   };
 
   //
@@ -164,13 +165,14 @@ public:
     return {args.mode, args.problem_shape,
             CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
             CollectiveSoftmaxEpilogue::to_underlying_arguments(args.softmax),
-            CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace)};
+            CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace),
+            TileScheduler::to_underlying_arguments(args.problem_shape, args.hw_info, WorkgroupTileShape{})};
   }
 
   static bool can_implement(Arguments const &args) {
-    bool mode_implementable = args.mode == GemmUniversalMode::kGemm or
-                              (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
-    return mode_implementable && TileScheduler::can_implement(args.scheduler);
+    bool mode_implementable = args.mode == gemm::GemmUniversalMode::kGemm or
+                              (args.mode == gemm::GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
+    return mode_implementable;
   }
 
   static int get_workspace_size(Arguments const &args) { return 0; }
@@ -181,9 +183,7 @@ public:
   }
 
   static dim3 get_grid_shape(Params const &params) {
-    return dim3(cute::size(cute::ceil_div(cute::shape<5>(params.problem_shape), cute::shape<1>(WorkgroupTileShape{}))),
-                cute::size(cute::ceil_div(cute::shape<2>(params.problem_shape), cute::shape<0>(WorkgroupTileShape{}))),
-                cute::size(cute::shape<0>(params.problem_shape) * cute::shape<1>(params.problem_shape)));
+    return TileScheduler::get_grid_shape(params.scheduler);
   }
 
   static dim3 get_block_shape() { return dim3(MaxThreadsPerBlock, 1, 1); }
@@ -209,34 +209,48 @@ public:
     int thread_idx = int(ThreadIdxX());
     int sub_group_id = thread_idx / SubgroupSize;
 
-    auto blk_m_coord = BlockIdxY();
-    auto blk_n_coord = BlockIdxX();
-    auto blk_l_coord = BlockIdxZ();
+    TileScheduler tile_scheduler{params.scheduler};
 
-    Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_qk, batch * num_heads));   //(m,k,l)
-    Tensor mK_nkl = cute::get_pvc_tensor(make_shape(seq_len_kv, head_size_qk, batch * num_heads));   //(m,k,l)
-    Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, seq_len_kv, batch * num_heads));   //(n,k,l)
-    Tensor mQ_mk = mQ_mkl(_,_,blk_l_coord);                                                    // (m,k)
-    Tensor mK_nk = mK_nkl(_,_,blk_l_coord);                                                    // (n,k)
-    Tensor mV_nk = mV_nkl(_,_,blk_l_coord);                                                    // (n,k)
+    CUTLASS_PRAGMA_NO_UNROLL
+    for (; tile_scheduler.is_valid(); ++tile_scheduler) {
+    auto blk_coord = tile_scheduler.get_block_coord();
+
+    auto blk_m_coord = get<1>(blk_coord);
+    auto blk_n_coord = get<0>(blk_coord);
+    auto blk_l_coord = is_var_len ? get<3>(blk_coord) : get<2>(blk_coord) * num_heads + get<3>(blk_coord);
+
+    auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(params.problem_shape, get<2>(blk_coord));
+
+    if (blk_m_coord * get<0>(WorkgroupTileShape{}) >= get<2>(logical_problem_shape)) {
+      continue;
+    }
+
+    Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(get<2>(logical_problem_shape), head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(m,k,l)
+    Tensor mK_nkl = cute::get_pvc_tensor(make_shape(get<3>(logical_problem_shape), head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(m,k,l)
+    Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, get<3>(logical_problem_shape), (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
+    Tensor mQ_mk = mQ_mkl(_, _, blk_l_coord);                                                    // (m,k)
+    Tensor mK_nk = mK_nkl(_, _, blk_l_coord);                                                    // (n,k)
+    Tensor mV_nk = mV_nkl(_, _, blk_l_coord);                                                    // (n,k)
 
     auto gQ = local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
     auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
     auto gV = local_tile(mV_nk, TileShapePV{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
 
-    const int seq_coord = cute::min(seq_len_kv, blk_m_coord * QK_BLK_M + (sub_group_id / PV_ATOM_N) * QK_SG_M);
+    const int min_causal_seq_len = cute::min(get<2>(logical_problem_shape), get<3>(logical_problem_shape));
+    const int seq_coord = cute::min(min_causal_seq_len, blk_m_coord * QK_BLK_M + (sub_group_id / PV_ATOM_N) * QK_SG_M);
     const int l_coord = blk_l_coord;
 
     const int causal_seq_len = seq_coord + QK_SG_M;
-    const int non_causal_seq_len = seq_len_kv;
+    const int non_causal_seq_len = get<3>(logical_problem_shape);
 
     const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, QK_BLK_N)
                                         : cute::ceil_div(non_causal_seq_len, QK_BLK_N);
+    
+    auto mainloop_params = CollectiveMainloop::template get_updated_copies<is_var_len>(params.mainloop, params.problem_shape, get<2>(blk_coord));
 
     auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M>, Int<QK_BLK_K>>, Num_SGs>(params.mainloop.gmem_tiled_copy_q);
     auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_N>, Int<QK_BLK_K>>, Num_SGs>(params.mainloop.gmem_tiled_copy_k);
     auto tiled_prefetch_v = cute::prefetch_selector<Shape<Int<PV_BLK_N>, Int<PV_BLK_K>>, Num_SGs>(params.mainloop.gmem_tiled_copy_v);
-
     auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
     auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
     auto thr_prefetch_V = tiled_prefetch_v.get_slice(thread_idx);
@@ -282,8 +296,8 @@ public:
       clear(tSr);
 
       // 3) Perform GEMM S = Q*K
-      collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size_qk, QK_BLK_K), params.mainloop);
-      
+      collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
+
       // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
       // prefetching it the same way as cutlass K matrix does not make sense
       prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock));
@@ -291,7 +305,7 @@ public:
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
-      collective_mma.mmaPV(out_reg, tSr, gV(_, _ , nblock), out_reg, params.mainloop);
+      collective_mma.mmaPV(out_reg, tSr, gV(_, _ , nblock), out_reg, mainloop_params);
       
       // Prefetch the next K tile
      // there is no need to gaurd it with if statememt as prefetch will ignore out of bound reading
@@ -309,7 +323,7 @@ public:
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
       // 3) Perform GEMM S = Q*K
-      collective_mma.mmaQK(tSr, gQ,  gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), params.mainloop);
+      collective_mma.mmaQK(tSr, gQ,  gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
       // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
       // prefetching it the same way as cutlass K matrix does not make sense
       prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock_limit - 1));
@@ -332,15 +346,17 @@ public:
       CollectiveSoftmaxEpilogue softmax(params.softmax);
       softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
-      collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_limit - 1), out_reg, params.mainloop);
+      collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_limit - 1), out_reg, mainloop_params);
     }
 
-    CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
+    auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, get<2>(blk_coord));
+    CollectiveEpilogue epilogue{epilogue_params, shared_storage.epilogue};
     auto blk_coord_mnkl = make_coord(blk_m_coord, blk_n_coord, _, blk_l_coord);
-    epilogue(params.problem_shape, blk_coord_mnkl, out_reg, max_reg, sum_reg, tiled_mma, params.softmax.scale);
+    epilogue(logical_problem_shape, blk_coord_mnkl, out_reg, max_reg, sum_reg, tiled_mma, params.softmax.scale);
+    }
   }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-} // namespace cutlass::gemm::kernel
+} // namespace cutlass::flash_attention::kernel

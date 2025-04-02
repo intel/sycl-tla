@@ -28,6 +28,7 @@
 
 
 set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
+set(CUTLASS_EXAMPLES_DIR ${CMAKE_SOURCE_DIR}/examples)
 
 cutlass_example_add_executable(
   pvc_flash_attention
