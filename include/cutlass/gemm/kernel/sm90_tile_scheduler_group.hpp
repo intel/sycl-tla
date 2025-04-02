@@ -98,6 +98,19 @@ public:
   using RasterOrderOptions = typename Params::RasterOrderOptions;
   static constexpr bool IsDynamicPersistent = false;
 
+  using Pipeline = PipelineEmpty;
+  using PipelineStorage = typename Pipeline::SharedStorage;
+  using ThrottlePipeline = PipelineEmpty;
+  using ThrottlePipelineStorage = typename ThrottlePipeline::SharedStorage;
+  struct CLCResponse {};
+
+  class SharedStorage {
+  public:
+    CUTLASS_DEVICE PipelineStorage pipeline() { return PipelineStorage{}; }
+    CUTLASS_DEVICE ThrottlePipelineStorage throttle_pipeline() { return ThrottlePipelineStorage{}; }
+    CUTLASS_DEVICE CLCResponse* data() { return nullptr; }
+  };
+  
   struct Arguments {
     int max_swizzle_size = 1;
     // Not applying Heuristics for Grouped problems, since largest dimension can change per group
@@ -219,15 +232,15 @@ public:
   CUTLASS_DEVICE explicit PersistentTileSchedulerSm90Group(Params const& params_) : scheduler_params(params_) {
     // MSVC requires protecting use of CUDA-specific nonstandard syntax,
     // like blockIdx and gridDim, with __CUDA_ARCH__.
-#if defined(__CUDA_ARCH__)
+#if defined(__CUDA_ARCH__) || defined __SYCL_DEVICE_ONLY__
     if (scheduler_params.raster_order_ == RasterOrder::AlongN) {
-      current_work_linear_idx_ = uint64_t(blockIdx.x) + uint64_t(blockIdx.y) * uint64_t(gridDim.x);
+      current_work_linear_idx_ = uint64_t(BlockIdxX()) + uint64_t(BlockIdxY()) * uint64_t(GridDimX());
     }
     else {
-      current_work_linear_idx_ = uint64_t(blockIdx.x) * uint64_t(gridDim.y) + uint64_t(blockIdx.y);
+      current_work_linear_idx_ = uint64_t(BlockIdxX()) * uint64_t(GridDimY()) + uint64_t(BlockIdxY());
     }
 
-    total_grid_size_ = uint64_t(gridDim.x) * uint64_t(gridDim.y) * uint64_t(gridDim.z);
+    total_grid_size_ = uint64_t(GridDimX()) * uint64_t(GridDimY()) * uint64_t(GridDimZ());
 
     uint64_t ctas_along_m, ctas_along_n;
     if (is_tuple<decltype(cute::shape<0>(params_.problem_shapes_[0]))>::value ||

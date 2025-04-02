@@ -53,18 +53,21 @@ void copy_kernel_vectorized(TensorS S, TensorD D, TiledLoad load,
 
   // ==========  load   ==========
   auto thr_copy_load = load.get_thread_slice(ThreadIdxX());
-  auto coord_tensor_load = load.get_pvc_tensor(append(S.shape(),_1{}));
+  auto coord_tensor_load = cute::get_pvc_tensor(append(S.shape(),_1{}));
   auto thr_tile_load_coord = thr_copy_load.partition_S(coord_tensor_load)(_,_,_,0);
   auto fragment = make_tensor<typename TensorS::value_type>(thr_tile_load_coord.shape());
-  auto ld_tensor =
-      load.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord), fragment.shape());
-  if constexpr (cute::detail::has_prefetch<CopyOp>)
-    prefetch(load, ld_tensor);
+  if constexpr (cute::detail::has_prefetch<CopyOp>){
+    for(int i=0;i<size<1>(thr_tile_load_coord);i++){
+      for(int j=0;j<size<2>(thr_tile_load_coord);j++){
+        prefetch(load, thr_tile_load_coord(_,i,j));
+      }
+    }
+  }
   copy(load, thr_tile_load_coord, fragment);
 
   // ==========  store   ==========
   auto thr_copy_store = store.get_thread_slice(ThreadIdxX());
-  auto coord_tensor_store = load.get_pvc_tensor(append(D.shape(),_1{}));
+  auto coord_tensor_store = cute::get_pvc_tensor(append(D.shape(),_1{}));
   auto thr_tile_store_coord = thr_copy_store.partition_D(coord_tensor_store)(_,_,_,0);
   Tensor frag_view =
       make_tensor(static_cast<decltype(fragment) &&>(fragment).data(),
@@ -282,7 +285,7 @@ struct copy_op<uint32_t, load, store, M, N, true> {
     auto tiled_load = make_tiled_copy(
         Copy_Atom<Copy_Traits<load, decltype(S)>, dtype>{}.with(device_src.data(), M, N),
         Layout<Shape<Int<SUBGROUP_SIZE>, _1>>{},
-        make_layout(shape_div(typename Copy_Traits<load, decltype(S)>::BlockShape{}, Shape<_1, _16>{})));
+        make_layout(shape_div(typename Copy_Traits<load, decltype(S)>::BlockShape{}, Shape<_16, _1>{})));
     auto tiled_store = make_tiled_copy(
         Copy_Atom<Copy_Traits<store, decltype(D)>, dtype>{}.with(device_output.data(), N, M),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},

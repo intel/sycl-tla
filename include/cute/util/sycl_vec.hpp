@@ -51,6 +51,7 @@ using uchar = unsigned char;
 using uchar2 = vector_t<uchar, 2>;
 using uchar4 = vector_t<uchar, 4>;
 using uchar8 = vector_t<uchar, 8>;
+using uchar16 = vector_t<uchar, 16>;
 
 using float2 = vector_t<float, 2>;
 using float4 = vector_t<float, 4>;

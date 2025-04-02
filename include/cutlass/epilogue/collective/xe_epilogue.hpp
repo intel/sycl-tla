@@ -120,14 +120,15 @@ public:
   static_assert(std::is_same_v<SmemLayoutAtomD, void>, "Copy operation to shared memory is not supported");
 
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
+  
   using Trait_C = Copy_Traits<GmemTiledCopyC, StrideC>;
-  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{},
-                                             Layout<CopyThreadShape>{},
-                                             make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{}))));
+  using val_layout_load_C = decltype(make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
+  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}, Layout<CopyThreadShape>{}, val_layout_load_C{}));
+
   using Trait_D = Copy_Traits<GmemTiledCopyD, StrideD>;
-  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{},
-                                             Layout<CopyThreadShape>{},
-                                             make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{}))));
+  using val_layout_store_D = decltype(make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
+  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}, Layout<CopyThreadShape>{}, val_layout_store_D{}));
+
 private:
   constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
@@ -167,10 +168,6 @@ public:
     typename FusionCallbacks::Params thread{};
     XE_Copy_C xe_load_c;
     XE_Copy_D xe_store_d;
-    ElementC const* ptr_C = nullptr;
-    StrideC dC{};
-    ElementD* ptr_D = nullptr;
-    StrideD dD{};
   };
 
   //
@@ -189,30 +186,20 @@ public:
 
     XE_Copy_C xe_load_c = {};
     if constexpr (is_source_supported) {
-      auto mC = make_tensor(make_gmem_ptr(static_cast<ElementC const*>(args.ptr_C)),
-                            make_layout(make_shape(M, N, L), args.dC));
-      xe_load_c = make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}.with(mC),
-                                  Layout<CopyThreadShape>{},
-                                  make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
+      auto mC = make_tensor(make_gmem_ptr(args.ptr_C), make_layout(make_shape(M, N, L), args.dC));
+      xe_load_c = {xe_load_c.with(mC)};
     }
 
     XE_Copy_D xe_store_d = {};
     if constexpr (is_destination_supported) {
-      auto mD = make_tensor(make_gmem_ptr(static_cast<ElementD const*>(args.ptr_D)),
-                            make_layout(make_shape(M, N, L), args.dD));
-      xe_store_d = make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}.with(mD),
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
+      auto mD = make_tensor(make_gmem_ptr(args.ptr_D), make_layout(make_shape(M, N, L), args.dD));
+      xe_store_d = {xe_store_d.with(mD)};
     }
 
     return {
       FusionCallbacks::to_underlying_arguments(problem_shape, args.thread, workspace),
       xe_load_c,
       xe_store_d,
-      args.ptr_C,
-      args.dC,
-      args.ptr_D,
-      args.dD
     };
   }
 
@@ -317,7 +304,7 @@ public:
     bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
     
     // Represent the full output tensor
-    Tensor mD_mnl = params.xe_store_d.get_pvc_tensor(make_shape(M,N,L));
+    Tensor mD_mnl = cute::get_pvc_tensor(make_shape(M,N,L));
 
     // Tile the output tensor per WG and select the tile for current WG
     Tensor g_wg_D = local_tile(mD_mnl, take<0,2>(CtaTileMNK{}), make_coord(m_coord,n_coord,l_coord));  // (BLK_M,BLK_N)

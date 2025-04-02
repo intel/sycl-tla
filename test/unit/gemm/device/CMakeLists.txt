@@ -34,6 +34,7 @@ if(CUTLASS_ENABLE_SYCL)
       xe_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp
       xe_gemm_s8_s8_s32_tensor_op_s32.cpp
       xe_gemm_tf32_tf32_fp32_tensor_op_fp32.cpp
+      gemm_universal_bf16n_bf16t_f32n_tensor_op_f32_xe.cpp
     )
 
     cutlass_test_unit_add_executable(
@@ -49,6 +50,15 @@ if(CUTLASS_ENABLE_SYCL)
     cutlass_test_unit_add_executable(
       cutlass_test_unit_gemm_device_mixed_input_tensorop_xe
       gemm_universal_s8t_bf16n_f32t_mixed_input_tensor_op_f32_xe.cpp
+      gemm_universal_f16t_s4t_f32t_mixed_input_tensor_op_f32_xe.cpp
+      gemm_universal_f16t_s4n_f32t_mixed_input_tensor_op_f32_xe.cpp
+    )
+
+    # Group Gemm test
+    cutlass_test_unit_add_executable(
+      cutlass_test_unit_gemm_device_tensorop_xe_group_gemm
+      xe_gemm_bf16_bf16_fp32_tensor_op_fp32_group_gemm.cpp
+      xe_gemm_fp16_fp16_fp32_tensor_op_fp32_group_gemm.cpp
     )
 
     add_custom_target(
@@ -58,6 +68,8 @@ if(CUTLASS_ENABLE_SYCL)
       cutlass_test_unit_gemm_device_tensorop_cooperative_xe
       cutlass_test_unit_gemm_device_tensorop_epilogue_fusion_xe
       cutlass_test_unit_gemm_device_mixed_input_tensorop_xe
+      cutlass_test_unit_gemm_device_tensorop_xe_group_gemm
+      cutlass_test_unit_gemm_device_tensorop_xe
     )
 
     add_custom_target(
@@ -67,6 +79,8 @@ if(CUTLASS_ENABLE_SYCL)
       test_unit_gemm_device_tensorop_cooperative_xe
       test_unit_gemm_device_tensorop_epilogue_fusion_xe
       test_unit_gemm_device_mixed_input_tensorop_xe
+      test_unit_gemm_device_tensorop_xe_group_gemm
+      test_unit_gemm_device_tensorop_xe
     )
   else()
     # Dummy targets if not building for Intel
@@ -102,6 +116,13 @@ endfunction()
 
 add_subdirectory(sm100_blockscaled_tensorop_gemm)
 add_subdirectory(sm100_tensorop_gemm)
+add_subdirectory(sm100_blockscaled_sparse_tensorop_gemm)
+add_subdirectory(sm100_sparse_tensorop_gemm)
+add_subdirectory(sm120_blockscaled_sparse_tensorop_gemm)
+add_subdirectory(sm120_sparse_tensorop_gemm)
+add_subdirectory(sm120_tensorop_gemm)
+add_subdirectory(sm120_blockscaled_tensorop_gemm)
+
 cutlass_test_unit_gemm_device_add_executable(
   cutlass_test_unit_gemm_device_simt
 
@@ -379,6 +400,11 @@ cutlass_test_unit_gemm_device_add_executable(
 cutlass_test_unit_gemm_device_add_executable(
   cutlass_test_unit_gemm_device_tensorop_sm90_group_gemm
   sm90_gemm_f16_f16_f16_tensor_op_f32_group_gemm.cu
+)
+
+# Group Gemm pingpong test
+cutlass_test_unit_gemm_device_add_executable(
+  cutlass_test_unit_gemm_device_tensorop_sm90_group_gemm_pingpong
   sm90_gemm_f16_f16_f16_tensor_op_f32_group_gemm_pingpong.cu
 )
 
