@@ -56,84 +56,84 @@
 
 // 8bits No transform No transpose
 SYCL_DEVICE_BUILTIN(cute::intel::ushort __builtin_IB_subgroup_block_read_flat_u8_m1k32v1(
-    long baseoffset, int width_minus_one, int height_minus_one,
+    intptr_t baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort2 __builtin_IB_subgroup_block_read_flat_u8_m2k32v1(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort4 __builtin_IB_subgroup_block_read_flat_u8_m4k32v1(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort8 __builtin_IB_subgroup_block_read_flat_u8_m8k32v1(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort16 __builtin_IB_subgroup_block_read_flat_u8_m16k32v1(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort32 __builtin_IB_subgroup_block_read_flat_u8_m32k32v1(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort2 __builtin_IB_subgroup_block_read_flat_u8_m1k32v2(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort4 __builtin_IB_subgroup_block_read_flat_u8_m2k32v2(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort8 __builtin_IB_subgroup_block_read_flat_u8_m4k32v2(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort16 __builtin_IB_subgroup_block_read_flat_u8_m8k32v2(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort32 __builtin_IB_subgroup_block_read_flat_u8_m16k32v2(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort64 __builtin_IB_subgroup_block_read_flat_u8_m32k32v2(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 
 
 // 8bits VNNI transform No transpose
 SYCL_DEVICE_BUILTIN(
     cute::intel::uint8 __builtin_IB_subgroup_block_read_flat_transform_u8_k32(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::uint16 __builtin_IB_subgroup_block_read_flat_transform_u8_k32v2(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::uint32 __builtin_IB_subgroup_block_read_flat_transform_u8_k32v4(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 
 // 8bits No transform No transpose
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u8_m1k16v1(
-    long baseoffset, int width_minus_one, int height_minus_one,
+    intptr_t baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, cute::intel::uchar data));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u8_m2k16v1(
-    long baseoffset, int width_minus_one, int height_minus_one,
+    intptr_t baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, cute::intel::uchar2 data));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u8_m4k16v1(
-    long baseoffset, int width_minus_one, int height_minus_one,
+    intptr_t baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, cute::intel::uchar4));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u8_m8k16v1(
-    long baseoffset, int width_minus_one, int height_minus_one,
+    intptr_t baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, cute::intel::uchar8));
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u8_m8k16v2(
-    long baseoffset, int width_minus_one, int height_minus_one,
+    intptr_t baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, cute::intel::uchar8));
 #undef SYCL_DEVICE_BUILTIN
 

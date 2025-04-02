@@ -57,15 +57,15 @@
 // 64bits No transform Transpose
 SYCL_DEVICE_BUILTIN(
     cute::intel::ulong __builtin_IB_subgroup_block_read_flat_transpose_u64_k1(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ulong2 __builtin_IB_subgroup_block_read_flat_transpose_u64_k2(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ulong4 __builtin_IB_subgroup_block_read_flat_transpose_u64_k4(
-        long baseoffset, int width_minus_one, int height_minus_one,
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 #undef SYCL_DEVICE_BUILTIN
 
