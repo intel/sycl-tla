@@ -376,6 +376,18 @@ public:
     static_assert(ValuesLoaded == MN, "the total elements loaded by all threads should be the same as MxN" );
     
     auto synchronize = [&] () {};
+    
+// 32 x 64 
+if constexpr(!is_same_v<CopyOpR2G_, XE_2D_U32x8x16_ST_N>) {
+auto D = make_tensor(make_gmem_ptr(params.ptr_D), make_layout(make_shape(4096, 4096), make_stride(4096, 1)));
+for(int i = 0; i < size<1>(accumulators); i++) {
+  for(int j = 0; j < size<2>(accumulators); j++) {
+    for(int v = 0; v < size<0>(accumulators); v++) {
+      D(v + i * 8 + m_sg * 32 + BlockIdxY() * 256 ,  BlockIdxX() * 256 + n_sg * 64 + (thread_idx % 16) * 2 + (j % 2) + (j / 2) * 32) = accumulators(v, i, j);
+    }
+  }
+}
+} else{
     CUTLASS_PRAGMA_UNROLL
     for (int epi_n = 0; epi_n < FragsN; epi_n++) {
       CUTLASS_PRAGMA_UNROLL
@@ -402,7 +414,7 @@ public:
       }
     }
 
-    cst_callbacks.end();
+    cst_callbacks.end();}
   }
 
 private:

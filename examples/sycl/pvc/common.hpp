@@ -61,6 +61,27 @@ bool initialize_block(
   return true;
 }
 
+template<class LowElement, class HiElement>
+void intialize_block(cutlass::DeviceAllocation<LowElement>& block_device, cutlass::DeviceAllocation<HiElement>& block_device_ref,
+                     uint64_t seed, int M, int N) {
+  static_assert(cute::sizeof_bits_v<HiElement> > 8);
+  std::ranlux24_base rng(std::random_device{}());
+  rng.seed(seed);
+
+  using Limits = cutlass::platform::numeric_limits<LowElement>;
+  std::uniform_int_distribution<> dist(Limits::lowest(), Limits::max());
+
+  auto block_host = std::vector<LowElement>(block_device.size());
+  auto block_host_ref = std::vector<HiElement>(block_device_ref.size());
+  for (int i = 0; i < block_host.size(); i++) {
+    block_host[i] = static_cast<LowElement>(dist(rng));
+    block_host_ref[i]= static_cast<HiElement>(block_host[i]);
+  }
+
+  block_device.copy_from_host(block_host.data());
+  block_device_ref.copy_from_host(block_host_ref.data());
+}
+
 template <typename T1, typename T2>
 void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
                            cutlass::DeviceAllocation<T2>& block_device_dq,

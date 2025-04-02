@@ -47,13 +47,13 @@ using namespace cute;
 template <int Stages, class Schedule, class TileShape_, class ElementA_, class StrideA_, class ElementB_, class StrideB_,
           class TiledMma_, class GmemTiledCopyA_, class SmemLayoutAtomA_, class SmemCopyAtomA_, class TransformA_,
           class GmemTiledCopyB_, class SmemLayoutAtomB_, class SmemCopyAtomB_, class TransformB_>
-struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
+struct CollectiveMma<MainloopIntelPVCLowPrecision<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
                      GmemTiledCopyA_, SmemLayoutAtomA_, SmemCopyAtomA_, TransformA_, GmemTiledCopyB_, SmemLayoutAtomB_,
                      SmemCopyAtomB_, TransformB_> {
   //
   // Type Aliases
   //
-  using DispatchPolicy = MainloopIntelPVC<Stages, Schedule>;
+  using DispatchPolicy = MainloopIntelPVCLowPrecision<Stages, Schedule>;
   using WorkgroupTileShape = TileShape_;
   using ElementA = ElementA_;
   using StrideA = StrideA_;
@@ -179,6 +179,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
     Tensor tCrA = make_tensor<ElementA>(make_fragment_layout(tiled_copy_a, tCgA(_,_,_,0).shape()));
     Tensor tCrB = make_tensor<ElementB>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
+    auto mma_A = make_fragment_like<typename TiledMma::ValTypeA>(tCrA);
+    auto mma_B = make_fragment_like<typename TiledMma::ValTypeB>(tCrB);
 
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
@@ -242,12 +244,14 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
       copy(tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
       copy(tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
 
+      transformA(tCrA, GmemTiledCopyA{}, mma_A);
+      transformB(tCrB, GmemTiledCopyB{}, mma_B);
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
       }
 
-      cute::gemm(tiled_mma, tCrA, tCrB, accum);
+      cute::gemm(tiled_mma, mma_A, mma_B, accum);
       barrier_wait(barrier_scope);
     }
   }
