@@ -335,16 +335,10 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
       auto tensorV = make_tensor(make_gmem_ptr(v_ptr + offset_v),
                                 make_layout(make_shape(head_size_vo, seq_len_kv, num_heads),
                                             make_stride(cute::C<1>{}, static_cast<int64_t>(head_size_vo), static_cast<int64_t>(seq_len_kv * head_size_vo))));
-      XE_Copy_Q copyQ = make_tiled_copy(atom_load_Q{}.with(tensorQ),
-                                        Layout<CopyThreadShape>{},
-                                        make_layout(shape_div(typename traits_load_Q::BlockShape{}, CopyThreadShape{})));
-      XE_Copy_K copyK = make_tiled_copy(atom_load_K{}.with(tensorK),
-                                        Layout<CopyThreadShape>{},
-                                        make_layout(shape_div(typename traits_load_K::BlockShape{}, CopyThreadShape{})));
-      XE_Copy_V copyV = make_tiled_copy(atom_load_V{}.with(tensorV),
-                                        Layout<CopyThreadShape>{},
-                                        make_layout(shape_div(typename traits_load_V::BlockShape{}, CopyThreadShape{})));
-      
+      XE_Copy_Q copyQ{XE_Copy_Q{}.with(tensorQ)};
+      XE_Copy_K copyK{XE_Copy_K{}.with(tensorK)};
+      XE_Copy_V copyV{XE_Copy_V{}.with(tensorV)};
+
       return Params{copyQ, copyK, copyV};
     }
   }

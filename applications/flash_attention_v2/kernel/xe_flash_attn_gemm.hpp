@@ -248,9 +248,9 @@ public:
     
     auto mainloop_params = CollectiveMainloop::template get_updated_copies<is_var_len>(params.mainloop, params.problem_shape, get<2>(blk_coord));
 
-    auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M>, Int<QK_BLK_K>>, Num_SGs>(params.mainloop.gmem_tiled_copy_q);
-    auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_N>, Int<QK_BLK_K>>, Num_SGs>(params.mainloop.gmem_tiled_copy_k);
-    auto tiled_prefetch_v = cute::prefetch_selector<Shape<Int<PV_BLK_N>, Int<PV_BLK_K>>, Num_SGs>(params.mainloop.gmem_tiled_copy_v);
+    auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_q);
+    auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_N>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k);
+    auto tiled_prefetch_v = cute::prefetch_selector<Shape<Int<PV_BLK_N>, Int<PV_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_v);
     auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
     auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
     auto thr_prefetch_V = tiled_prefetch_v.get_slice(thread_idx);

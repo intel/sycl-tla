@@ -624,7 +624,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
       double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
       std::cout << "Batch: " << options.batch << "\tNumHeads: " << options.num_heads << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
-                << "\tCausal Mask: " << (options.is_causal ? "true" : "false");
+                << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false");
       printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
     }
 
