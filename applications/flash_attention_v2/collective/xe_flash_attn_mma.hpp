@@ -313,9 +313,9 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
       auto qo_cumulative_length = get<2>(problem_shape).cumulative_length;
       auto kv_cumulative_length = get<3>(problem_shape).cumulative_length;
 
-      int offset_q = l_coord == 0 ? 0 : num_heads * head_size_qk * qo_cumulative_length[l_coord];
-      int offset_k = l_coord == 0 ? 0 : num_heads * head_size_qk * kv_cumulative_length[l_coord];
-      int offset_v = l_coord == 0 ? 0 : num_heads * head_size_vo * kv_cumulative_length[l_coord];
+      int offset_q = num_heads * head_size_qk * qo_cumulative_length[l_coord];
+      int offset_k = num_heads * head_size_qk * kv_cumulative_length[l_coord];
+      int offset_v = num_heads * head_size_vo * kv_cumulative_length[l_coord];
 
       auto q_traits = static_cast<traits_load_Q const&>(params.gmem_tiled_copy_q);
       ElementQ* q_ptr = (ElementQ*)q_traits.base_ptr;

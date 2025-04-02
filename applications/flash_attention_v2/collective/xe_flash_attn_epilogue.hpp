@@ -210,7 +210,7 @@ public:
       auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
 
       auto qo_cumulative_length = get<2>(problem_shape).cumulative_length;
-      int offset_o = l_coord == 0 ? 0 : num_heads * head_size_vo * qo_cumulative_length[l_coord];
+      int offset_o = num_heads * head_size_vo * qo_cumulative_length[l_coord];
       XE_Copy_O xe_store_o = {};
       auto store_traits = static_cast<Trait_O const&>(params.xe_store_o);
       ElementO* base_ptr = (ElementO*)store_traits.base_ptr;
