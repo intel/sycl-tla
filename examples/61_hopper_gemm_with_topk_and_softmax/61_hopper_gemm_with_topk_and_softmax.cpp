@@ -184,11 +184,6 @@ StrideB stride_B;
 StrideD stride_D;
 uint64_t seed;
 
-cutlass::HostTensor<ElementA  , LayoutA  > tensor_A;
-cutlass::HostTensor<ElementB  , LayoutB  > tensor_B;
-cutlass::HostTensor<ElementD  , LayoutD  > tensor_D;
-cutlass::HostTensor<ElementD  , LayoutD  > tensor_ref_D;
-
 using LayoutScalar = cutlass::layout::PackedVectorLayout;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -263,6 +258,12 @@ struct Result {
   cutlass::Status status;
   cutlass::cudaError_t error;
   bool passed;
+  
+
+  cutlass::HostTensor<ElementA  , LayoutA  > tensor_A;
+  cutlass::HostTensor<ElementB  , LayoutB  > tensor_B;
+  cutlass::HostTensor<ElementD  , LayoutD  > tensor_D;
+  cutlass::HostTensor<ElementD  , LayoutD  > tensor_ref_D;
 
   Result(
     double avg_runtime_ms = 0,
@@ -273,174 +274,175 @@ struct Result {
     avg_runtime_ms(avg_runtime_ms), gflops(gflops), status(status), error(error), passed(false)
   {}
 
-};
+  /////////////////////////////////////////////////////////////////////////////////////////////////
+  /// GEMM setup and evaluation
+  /////////////////////////////////////////////////////////////////////////////////////////////////
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
-/// GEMM setup and evaluation
-/////////////////////////////////////////////////////////////////////////////////////////////////
+  /// Helper to initialize a block of device data
+  template <typename Element, typename Layout>
+  bool initialize_tensor(
+      cutlass::TensorView<Element, Layout> view,
+      uint64_t seed) {
+    cutlass::reference::host::TensorFillRandomUniform(
+      view, seed, /* max = */ 1, /* min = */ -1, /* bits = */ 2);
+    return true;
+  }
 
-/// Helper to initialize a block of device data
-template <typename Element, typename Layout>
-bool initialize_tensor(
-    cutlass::TensorView<Element, Layout> view,
-    uint64_t seed) {
-  cutlass::reference::host::TensorFillRandomUniform(
-    view, seed, /* max = */ 1, /* min = */ -1, /* bits = */ 2);
-  return true;
-}
+  /// Initialize operands to be used in the GEMM and reference GEMM
+  void initialize(const Options &options) {
 
-/// Initialize operands to be used in the GEMM and reference GEMM
-void initialize(const Options &options) {
+    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(options.m, options.k, options.l));
+    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(options.n, options.k, options.l));
+    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
 
-  stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(options.m, options.k, options.l));
-  stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(options.n, options.k, options.l));
-  stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
+    auto a_coord = cutlass::make_Coord(options.m * options.l, options.k);
+    auto c_coord = cutlass::make_Coord(options.m * options.l, options.n);
+    auto b_coord = cutlass::make_Coord(options.k, options.n * options.l);
 
-  auto a_coord = cutlass::make_Coord(options.m * options.l, options.k);
-  auto c_coord = cutlass::make_Coord(options.m * options.l, options.n);
-  auto b_coord = cutlass::make_Coord(options.k, options.n * options.l);
+    tensor_A.resize(a_coord);
+    tensor_B.resize(b_coord);
+    tensor_D.resize(c_coord);
+    tensor_ref_D.resize(c_coord);
 
-  tensor_A.resize(a_coord);
-  tensor_B.resize(b_coord);
-  tensor_D.resize(c_coord);
-  tensor_ref_D.resize(c_coord);
+    initialize_tensor(tensor_A.host_view(), seed + 2022);
+    initialize_tensor(tensor_B.host_view(), seed + 2023);
 
-  initialize_tensor(tensor_A.host_view(), seed + 2022);
-  initialize_tensor(tensor_B.host_view(), seed + 2023);
+    tensor_A.sync_device();
+    tensor_B.sync_device();
+    tensor_D.sync_device();
+  }
 
-  tensor_A.sync_device();
-  tensor_B.sync_device();
-  tensor_D.sync_device();
-}
+  /// Populates a Gemm::Arguments structure from the given commandline options
+  typename Gemm::Arguments args_from_options(const Options &options) {
+    typename Gemm::Arguments arguments{
+      cutlass::gemm::GemmUniversalMode::kGemm,
+      {options.m, options.n, options.k, options.l},
+      {tensor_A.device_data(), stride_A, tensor_B.device_data(), stride_B},
+      {
+        {options.alpha(), 0.f}, // alpha, beta
+        nullptr, stride_D,
+        tensor_D.device_data(), stride_D
+      }
+    };
 
-/// Populates a Gemm::Arguments structure from the given commandline options
-typename Gemm::Arguments args_from_options(const Options &options) {
-  typename Gemm::Arguments arguments{
-    cutlass::gemm::GemmUniversalMode::kGemm,
-    {options.m, options.n, options.k, options.l},
-    {tensor_A.device_data(), stride_A, tensor_B.device_data(), stride_B},
-    {
-      {options.alpha(), 0.f}, // alpha, beta
-      nullptr, stride_D,
-      tensor_D.device_data(), stride_D
-    }
-  };
+    return arguments;
+  }
 
-  return arguments;
-}
+  bool verify(const Options &options) {
+    //
+    // Compute reference output
+    //
 
-bool verify(const Options &options) {
-  //
-  // Compute reference output
-  //
+    // Create instantiation for device reference gemm kernel
+    auto A = cute::make_tensor(tensor_A.host_data(),
+        cute::make_layout(cute::make_shape(options.m, options.k, options.l), stride_A));
+    auto B = cute::make_tensor(tensor_B.host_data(),
+        cute::make_layout(cute::make_shape(options.n, options.k, options.l), stride_B));
+    auto D = cute::make_tensor(tensor_ref_D.host_data(),
+        cute::make_layout(cute::make_shape(options.m, options.n, options.l), stride_D));
+    using unused_t = decltype(D);
 
-  // Create instantiation for device reference gemm kernel
-  auto A = cute::make_tensor(tensor_A.host_data(),
-      cute::make_layout(cute::make_shape(options.m, options.k, options.l), stride_A));
-  auto B = cute::make_tensor(tensor_B.host_data(),
-      cute::make_layout(cute::make_shape(options.n, options.k, options.l), stride_B));
-  auto D = cute::make_tensor(tensor_ref_D.host_data(),
-      cute::make_layout(cute::make_shape(options.m, options.n, options.l), stride_D));
-  using unused_t = decltype(D);
+    cutlass::reference::host::GettMainloopParams<ElementAccumulator, decltype(A), decltype(B)> mainloop_params{A, B};
 
-  cutlass::reference::host::GettMainloopParams<ElementAccumulator, decltype(A), decltype(B)> mainloop_params{A, B};
+    cutlass::reference::host::GettEpilogueParams<
+        ElementScalar,
+        ElementScalar,
+        ElementAccumulator,
+        ElementCompute,
+        unused_t,
+        decltype(D),
+        unused_t, // bias
+        unused_t, // aux
+        unused_t, // valpha
+        unused_t  // vbeta
+    > epilogue_params;
 
-  cutlass::reference::host::GettEpilogueParams<
-      ElementScalar,
-      ElementScalar,
-      ElementAccumulator,
-      ElementCompute,
-      unused_t,
-      decltype(D),
-      unused_t, // bias
-      unused_t, // aux
-      unused_t, // valpha
-      unused_t  // vbeta
-  > epilogue_params;
+    epilogue_params.D = D;
+    epilogue_params.alpha = options.alpha();
+    epilogue_params.beta = 0.f;
 
-  epilogue_params.D = D;
-  epilogue_params.alpha = options.alpha();
-  epilogue_params.beta = 0.f;
+    // get reference result
+    cutlass::reference::host::Gemm3x(mainloop_params, epilogue_params);
 
-  // get reference result
-  cutlass::reference::host::Gemm3x(mainloop_params, epilogue_params);
+    if constexpr (EnableTopKSoftmax) {
+      // top-K + softmax
+      for (int i = 0; i < options.m; ++i) {
 
-  if constexpr (EnableTopKSoftmax) {
-    // top-K + softmax
-    for (int i = 0; i < options.m; ++i) {
-
-      // Find Top-K
-      cutlass::Array<ElementAccumulator, TopK> top_k;
-      top_k.fill(-cutlass::platform::numeric_limits<ElementCompute>::infinity());
-      for (int j = 0; j < options.n; ++j) {
-        auto val = static_cast<ElementAccumulator>(tensor_ref_D.host_view().ref().at({i, j}));
-        for (int top_k_idx = 0; top_k_idx < TopK; ++top_k_idx) {
-          if (val > top_k[top_k_idx]) {
-            // Shift down
-            for (int l = TopK - 1; l > top_k_idx; --l) {
-              top_k[l] = top_k[l - 1];
+        // Find Top-K
+        cutlass::Array<ElementAccumulator, TopK> top_k;
+        top_k.fill(-cutlass::platform::numeric_limits<ElementCompute>::infinity());
+        for (int j = 0; j < options.n; ++j) {
+          auto val = static_cast<ElementAccumulator>(tensor_ref_D.host_view().ref().at({i, j}));
+          for (int top_k_idx = 0; top_k_idx < TopK; ++top_k_idx) {
+            if (val > top_k[top_k_idx]) {
+              // Shift down
+              for (int l = TopK - 1; l > top_k_idx; --l) {
+                top_k[l] = top_k[l - 1];
+              }
+              top_k[top_k_idx] = val;
+              break;
             }
-            top_k[top_k_idx] = val;
-            break;
+          }
+        }
+
+        // This formulation of top-K + softmax only works when it is
+        // guaranteed that none of the top-K elements are repeated!
+        // If this is the case, the device kernel can also make mistakes, because
+        //   A. Once the top-K values are reduced, and the operation is being applied,
+        //      there is no way to tell repeated elements apart, so none are masked.
+        //   B. The softmax sum of exps will be incorrect (because the repeated elements
+        //      are not repeated in it.)
+
+        ElementAccumulator max = top_k[0];
+        ElementAccumulator sum = ElementAccumulator(0.f);
+        for (int top_k_idx = 0; top_k_idx < TopK; ++top_k_idx) {
+          sum = sum + cutlass::fast_exp(top_k[top_k_idx] - max);
+        }
+
+        for (int j=0; j < options.n; ++j) {
+          auto val = tensor_ref_D.host_view().ref().at({i, j});
+          if (val < top_k[TopK - 1]) {
+            tensor_ref_D.host_view().ref().at({i, j}) = static_cast<ElementD>(0.f);
+          } else {
+            // Softmax
+            auto softmax_val = cutlass::fast_exp(val - max) / sum;
+            tensor_ref_D.host_view().ref().at({i, j}) = static_cast<ElementD>(softmax_val);
           }
         }
       }
-
-      // This formulation of top-K + softmax only works when it is
-      // guaranteed that none of the top-K elements are repeated!
-      // If this is the case, the device kernel can also make mistakes, because
-      //   A. Once the top-K values are reduced, and the operation is being applied,
-      //      there is no way to tell repeated elements apart, so none are masked.
-      //   B. The softmax sum of exps will be incorrect (because the repeated elements
-      //      are not repeated in it.)
-
-      ElementAccumulator max = top_k[0];
-      ElementAccumulator sum = ElementAccumulator(0.f);
-      for (int top_k_idx = 0; top_k_idx < TopK; ++top_k_idx) {
-        sum = sum + cutlass::fast_exp(top_k[top_k_idx] - max);
-      }
-
-      for (int j=0; j < options.n; ++j) {
-        auto val = tensor_ref_D.host_view().ref().at({i, j});
-        if (val < top_k[TopK - 1]) {
-          tensor_ref_D.host_view().ref().at({i, j}) = static_cast<ElementD>(0.f);
-        } else {
-          // Softmax
-          auto softmax_val = cutlass::fast_exp(val - max) / sum;
-          tensor_ref_D.host_view().ref().at({i, j}) = static_cast<ElementD>(softmax_val);
-        }
-      }
     }
+
+    // compare_reference
+    tensor_D.sync_host();
+
+    double err = cutlass::reference::host::TensorRelativeErrorMetric(
+      tensor_D.host_view(),
+      tensor_ref_D.host_view());
+    bool passed = err < options.eps;
+
+    if (options.m <= 32 && options.n <= 32) {
+      std::cout << "GEMM output:\n" << tensor_D.host_view() << "\n\n";
+      std::cout << "Reference output:\n" << tensor_ref_D.host_view() << "\n\n";
+    }
+
+    std::cout << "  Disposition: " << (passed ? "Passed" : "Failed") << " \t Relative error: " << err << std::endl;
+
+    return passed;
   }
 
-  // compare_reference
-  tensor_D.sync_host();
-
-  double err = cutlass::reference::host::TensorRelativeErrorMetric(
-    tensor_D.host_view(),
-    tensor_ref_D.host_view());
-  bool passed = err < options.eps;
-
-  if (options.m <= 32 && options.n <= 32) {
-    std::cout << "GEMM output:\n" << tensor_D.host_view() << "\n\n";
-    std::cout << "Reference output:\n" << tensor_ref_D.host_view() << "\n\n";
-  }
-
-  std::cout << "  Disposition: " << (passed ? "Passed" : "Failed") << " \t Relative error: " << err << std::endl;
-
-  return passed;
-}
+};
 
 /// Execute a given example GEMM computation
 template <typename Gemm>
 int run(Options &options) {
-  initialize(options);
-
   // Instantiate CUTLASS kernel depending on templates
   Gemm gemm;
 
+  Result result;
+  result.initialize(options);
+
   // Create a structure of gemm kernel arguments suitable for invoking an instance of Gemm
-  auto arguments = args_from_options(options);
+  auto arguments = result.args_from_options(options);
 
   // Using the arguments, query for extra workspace required for matrix multiplication computation
   size_t workspace_size = Gemm::get_workspace_size(arguments);
@@ -458,8 +460,7 @@ int run(Options &options) {
   CUTLASS_CHECK(gemm.run());
 
   // Check if output from CUTLASS kernel and reference kernel are equal or not
-  Result result;
-  result.passed = verify(options);
+  result.passed = result.verify(options);
 
   if (!result.passed) {
     exit(-1);
