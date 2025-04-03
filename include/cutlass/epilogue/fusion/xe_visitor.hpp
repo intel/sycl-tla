@@ -228,9 +228,7 @@ struct XeRowBroadcast {
   static_assert(is_static_v<decltype(take<0,2>(StrideMNL{}))> || IsDynamicBroadcast); // batch stride can be dynamic or static
   static_assert(take<0,2>(StrideMNL{}) == Stride<_0,_1>{} || IsDynamicBroadcast);
 
-  struct SharedStorage { 
-    array_aligned<ElementInput, size<1>(CtaTileShapeMNK{})> smem;
-  };
+  struct SharedStorage { };
 
   struct Arguments {
     PtrRowType ptr_row = nullptr;
@@ -238,6 +236,7 @@ struct XeRowBroadcast {
     StrideMNL dRow = {};
   };
 
+  // TODO(joe): ElementInput vs ElementCompute here - see Sm90ColBroacast...
   using Params = Arguments;
 
   template <class ProblemShape>
@@ -270,8 +269,7 @@ struct XeRowBroadcast {
 
   CUTLASS_HOST_DEVICE
   XeRowBroadcast(Params const& params, SharedStorage const& shared_storage)
-      : params(params), is_zero_(false),
-        smem(const_cast<ElementInput*>(shared_storage.smem.data())) {
+      : params(params), is_zero_(false) {
     auto const& [stride_M, stride_N, stride_L] = params.dRow;
     // Nullptr default
     if (EnableNullptr && params.ptr_row == nullptr) {
@@ -310,89 +308,76 @@ struct XeRowBroadcast {
     return EmptyProducerLoadCallbacks{};
   }
 
-  template <class GS_GTensor, class GS_STensor, class GS_CTensor, class Tiled_G2S, class SR_STensor, class SR_RTensor, class Residue>
+  template<class GTensor, class RTensor, class CTensor, class ThrResidue>
   struct ConsumerStoreCallbacks : EmptyConsumerStoreCallbacks {
     CUTLASS_DEVICE
-    ConsumerStoreCallbacks(
-        GS_GTensor tGS_gRow_, GS_STensor tGS_sRow_, 
-        GS_CTensor tGS_cRow_, Tiled_G2S tiled_g2s_, 
-        SR_STensor tSR_sRow_, SR_RTensor tSR_rRow_,
-        Residue residue_cRow_, Params const& params_)
-      : tGS_gRow(tGS_gRow_)
-      , tGS_sRow(tGS_sRow_)
-      , tGS_cRow(tGS_cRow_)
-      , tiled_G2S(tiled_g2s_)
-      , tSR_sRow(tSR_sRow_)
-      , tSR_rRow(tSR_rRow_)
-      , residue_cRow(residue_cRow_)
-      , params(params_) {
+    ConsumerStoreCallbacks(GTensor tCgRow_, RTensor tCrRow_, CTensor tCcRow_, ThrResidue residue_tCcRow_, Params const& params_)
+      : tCgRow(tCgRow_),
+        tCrRow(tCrRow_),
+        tCcRow(tCcRow_),
+        residue_tCcRow(residue_tCcRow_),
+        params(params_) {
+      if (EnableNullptr && params.ptr_row == nullptr) {
+        fill(tCrRow, params.null_default);
+      }
     }
 
-    GS_GTensor tGS_gRow;                                                         // (CPY,CPY_M,CPY_N)
-    GS_STensor tGS_sRow;                                                         // (CPY,CPY_M,CPY_N)
-    GS_CTensor tGS_cRow;                                                         // (CPY,CPY_M,CPY_N)
-    Tiled_G2S tiled_G2S;
-
-    SR_STensor tSR_sRow;                                                         // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
-    SR_RTensor tSR_rRow;                                                         // (CPY,CPY_M,CPY_N,EPI_M,EPI_N) 
-  
-    Residue residue_cRow;                                                        // (m, n)
+    GTensor tCgRow;                                                                    // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
+    RTensor tCrRow;                                                                    // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
+    CTensor tCcRow;                                                                    // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
+    ThrResidue residue_tCcRow;
     Params const& params;
 
     CUTLASS_DEVICE void
     begin() {
-      bool is_nullptr = EnableNullptr && params.ptr_row == nullptr;
-
-      Tensor tGS_gRow_flt = filter_zeros(tGS_gRow);
-      Tensor tGS_sRow_flt = filter_zeros(tGS_sRow);
-      Tensor tGS_cRow_flt = filter_zeros(tGS_cRow, tGS_gRow.stride());
-
-      for (int i = 0; i < size(tGS_gRow_flt); ++i) {
-        if (get<1>(tGS_cRow_flt(i)) >= size<1>(CtaTileShapeMNK{})) {
-          continue; // OOB of SMEM, 
-        }
-        if (not is_nullptr && elem_less(tGS_cRow_flt(i), residue_cRow)) {
-          tGS_sRow_flt(i) = tGS_gRow_flt(i); // issue async gmem to smem load
-        }
-        else {
-          tGS_sRow_flt(i) = params.null_default; // fill OOB values so smem to RF load can issue without predication
-        }
+      if (EnableNullptr && params.ptr_row == nullptr) {
+        return;
       }
-    }
 
-    CUTLASS_DEVICE bool
-    begin_sync_needed() const {
-      return true; // Ensure visibility of async gmem to smem loads
-    }
+      // Filter so we don't issue redundant copies over stride-0 modes
+      // (only works if 0-strides are in same location, which is by construction)
+      Tensor tCgRow_flt = filter_zeros(tCgRow);
+      Tensor tCrRow_flt = make_tensor_like<ElementInput>(filter_zeros(tCrRow));
+      Tensor tCcRow_flt = filter_zeros(tCcRow, tCgRow.stride());
 
-    CUTLASS_DEVICE void
-    begin_loop(int epi_m, int epi_n) {
-      if (epi_m == 0) { // Assumes M-major subtile loop
-        Tensor tSR_sRow_flt = filter_zeros(tSR_sRow(_,_,_,epi_m,epi_n));
-        Tensor tSR_rRow_flt = make_tensor_like<ElementInput>(tSR_sRow_flt);
-        copy_aligned(tSR_sRow_flt, tSR_rRow_flt);
-
-        constexpr int FrgSize = size(tSR_rRow_flt);
-        using FrgInput = Array<ElementInput, FrgSize>;
-        using FrgCompute = Array<ElementCompute, FrgSize>;
-        using ConvertInput = NumericArrayConverter<ElementCompute, ElementInput, FrgSize>;
-
-        Tensor tSR_rRow_input_frg = recast<FrgInput>(coalesce(tSR_rRow_flt));
-        Tensor tSR_rRow_compute_frg = recast<FrgCompute>(filter(tSR_rRow));
-        ConvertInput convert_input{};
-
-        tSR_rRow_compute_frg(_0{}) = convert_input(tSR_rRow_input_frg(_0{}));
+      constexpr auto MCL = decltype(max_common_layout(tCgRow_flt, tCrRow_flt)){};
+      constexpr int V = cute::min(Alignment, size(MCL));
+      if constexpr (V > 1) {
+        using VecType = uint_bit_t<V * sizeof_bits_v<ElementInput>>;
+        Tensor tCgRow_vec = recast<VecType>(coalesce(tCgRow_flt));
+        Tensor tCrRow_vec = recast<VecType>(coalesce(tCrRow_flt));
+        Tensor tCcRow_vec = tensor<1>(zipped_divide(tCcRow_flt, MCL.compose(Int<V>{})));
+        auto pred_fn = [&](auto const &...coords) CUTLASS_LAMBDA_FUNC_INLINE {
+          return elem_less(tCcRow_vec(coords...), residue_tCcRow);
+        };
+        copy_if(pred_fn, tCgRow_vec, tCrRow_vec);
+      } else {
+        auto pred_fn = [&](auto const &...coords) CUTLASS_LAMBDA_FUNC_INLINE {
+          return elem_less(tCcRow_flt(coords...), residue_tCcRow);
+        };
+        copy_if(pred_fn, tCgRow_flt, tCrRow_flt);
       }
+
+      constexpr int FrgSize = size(tCrRow_flt);
+      using FrgInput = Array<ElementInput, FrgSize>;
+      using FrgCompute = Array<ElementCompute, FrgSize>;
+      using ConvertInput = NumericArrayConverter<ElementCompute, ElementInput, FrgSize>;
+
+      Tensor tCrRow_input_frg = recast<FrgInput>(coalesce(tCrRow_flt));
+      Tensor tCrRow_compute_frg = recast<FrgCompute>(filter(tCrRow));
+      ConvertInput convert_input{};
+      tCrRow_compute_frg(_0{}) = convert_input(tCrRow_input_frg(_0{}));
     }
 
     template <typename ElementAccumulator, int FragmentSize>
     CUTLASS_DEVICE Array<ElementCompute, FragmentSize>
     visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, int epi_n) {
       Array<ElementCompute, FragmentSize> frg_row;
+      Tensor tCrRow_mn = tCrRow(_,_,_,epi_m,epi_n);
 
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < FragmentSize; ++i) {
-        frg_row[i] = tSR_rRow(epi_v * FragmentSize + i);
+        frg_row[i] = tCrRow_mn(epi_v * FragmentSize + i);
       }
 
       return frg_row;
@@ -407,7 +392,6 @@ struct XeRowBroadcast {
   get_consumer_store_callbacks(ConsumerStoreArgs<Args...> const& args) {
     auto [M, N, K, L] = args.problem_shape_mnkl;
     auto [m, n, k, l] = args.tile_coord_mnkl;
-    using ThreadCount = decltype(size(args.tiled_copy));
 
     auto layout_N = [&] () CUTLASS_LAMBDA_FUNC_INLINE {
       auto shape_N = get<1>(args.problem_shape_mnkl);
@@ -434,33 +418,15 @@ struct XeRowBroadcast {
       ptr_row = params.ptr_row;
     }
     Tensor mRow = make_tensor(make_gmem_ptr(ptr_row), make_layout(layout_M,layout_N,layout_L));
-    Tensor gRow = local_tile(mRow(_,_,l), take<0,2>(args.tile_shape_mnk), make_coord(m, n));          // (CTA_M, CTA_N)
-    Tensor sRow = make_tensor(make_smem_ptr(smem), 
-        make_shape(size<0>(CtaTileShapeMNK{}), size<1>(CtaTileShapeMNK{})), make_shape(_0{}, _1{}));  // (CTA_M, CTA_N)
-    //// G2S: Gmem to Smem
-    auto tiled_g2s = make_tiled_copy(Copy_Atom<DefaultCopy, ElementInput>{},
-                                     Layout< Shape<_1, ThreadCount>, 
-                                            Stride<_0,          _1>>{}, 
-                                     Layout<_1>{});   
-    auto thr_g2s = tiled_g2s.get_slice(args.thread_idx);
-    Tensor tGS_gRow = thr_g2s.partition_S(gRow);
-    Tensor tGS_sRow = thr_g2s.partition_D(sRow);
+    Tensor tCgRow = sm90_partition_for_epilogue<ReferenceSrc>(                         // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
+      mRow, args.tile_shape_mnk, args.tile_coord_mnkl, args.epi_tile, args.tiled_copy, args.thread_idx);
 
-    //// G2S: Coord 
-    Tensor tGS_cRow = thr_g2s.partition_S(args.cD);
-
-    //// S2R: Smem to Reg
-    Tensor tSR_sRow = sm90_partition_for_epilogue<ReferenceSrc>(sRow, args.epi_tile, args.tiled_copy, args.thread_idx);
-    Tensor tSR_rRow = make_tensor_like<ElementCompute>(take<0,3>(tSR_sRow));                        // (CPY,CPY_M,CPY_N)
-
-    return ConsumerStoreCallbacks(
-      tGS_gRow, 
-      tGS_sRow, 
-      tGS_cRow, tiled_g2s, 
-      tSR_sRow, 
-      tSR_rRow, 
-      args.residue_cD,
-      params);
+    Tensor mRow_static = make_tensor(make_gmem_ptr(ptr_row), make_layout(make_layout(M),layout_N,layout_L));
+    Tensor tCgRow_static = sm90_partition_for_epilogue<ReferenceSrc>(                  // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
+      mRow_static, args.tile_shape_mnk, args.tile_coord_mnkl, args.epi_tile, args.tiled_copy, args.thread_idx);
+    Tensor tCrRow = make_tensor_like<ElementCompute>(tCgRow_static);                   // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
+    
+    return ConsumerStoreCallbacks(tCgRow, tCrRow, args.tCcD, args.residue_tCcD, params);
   }
 };
 } // namespace cutlass::epilogue::fusion
