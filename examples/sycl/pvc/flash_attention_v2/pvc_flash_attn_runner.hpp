@@ -354,7 +354,7 @@ template <class GemmKernel> struct ExampleRunner {
       std::cout << "Invalid Problem Size: " << options.batch << 'x' << options.num_heads << 'x' <<
         options.seq_len_qo << 'x' << options.seq_len_kv << 'x' << options.head_size_qk << 'x'  << options.head_size_vo 
         << (options.is_causal ? "xCausal" : "xNonCausal") << std::endl;
-      return Status::kErrorInvalidProblem;
+      return cutlass::Status::kErrorInvalidProblem;
     }
 
     // Initialize the workspace
