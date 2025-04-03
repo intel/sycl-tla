@@ -144,10 +144,10 @@ gett(
   const syclcompat::dim3 sycl_grid(dimGrid.x, dimGrid.y, dimGrid.z);
   const syclcompat::dim3 sycl_block(dimBlock.x, dimBlock.y, dimBlock.z);
   syclcompat::launch<gett_kernel<
-    decltype(D),
     decltype(A),
     decltype(B),
     decltype(C),
+    decltype(D),
     ElementAccumulator,
     ElementEpilogue>>(sycl_grid, sycl_block, D, A, B, C, alpha, beta, ElementAccumulator(0));
 #else
