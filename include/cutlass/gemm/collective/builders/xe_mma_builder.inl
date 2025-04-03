@@ -80,8 +80,6 @@ struct CollectiveBuilder<
           "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
-      static_assert(cute::is_any_of_v<ElementA, bfloat16_t, half_t>, "Intel multi-stage pipeline requires ElementA to be of type bfloat16_t or half_t");
-      static_assert(cute::is_any_of_v<ElementB, bfloat16_t, half_t>, "Intel multi-stage pipeline requires ElementB to be of type bfloat16_t or half_t");
       static_assert(cute::is_same_v<ElementAccumulator, float>, "Intel multi-stage pipeline requires ElementC to be of type float");
 
       using MMAAtom = MMA_Atom<std::conditional_t<cute::is_same_v<ElementA, bfloat16_t>,

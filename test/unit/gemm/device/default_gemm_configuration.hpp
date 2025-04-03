@@ -1438,7 +1438,6 @@ struct DefaultGemmConfigurationToCutlass3Types<
 {
   using TileShape = Shape<_256, _256, _32>;
 
-  using DispatchPolicy = MainloopIntelPVC<3>;
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
                Layout<TileShape>,
@@ -1546,7 +1545,6 @@ struct DefaultGemmConfigurationToCutlass3Types<
 {
   using TileShape = Shape<_256, _256, _32>;
 
-  using DispatchPolicy = MainloopIntelPVC<3>;
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                Layout<TileShape>,
