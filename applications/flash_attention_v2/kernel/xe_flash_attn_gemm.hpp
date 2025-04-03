@@ -218,19 +218,21 @@ public:
 
       auto blk_m_coord = get<1>(blk_coord); // seq_len_blk_idx
       auto blk_n_coord = get<0>(blk_coord); // head_size_blk_idx
+      auto batch_coord = get<2>(blk_coord); // batch_blk_idx
+      auto num_heads_coord = get<3>(blk_coord); // num_heads_blk_idx
 
       // For variable sequence length case, batch is considered to be 1 (same as group gemm).
-      // For fixed sequence length case, the l_coord is the sum of both batch_coord and num_heads_coord.
+      // For fixed sequence length case, the l_coord is the weighted sum of both batch_coord and num_heads_coord.
       // Flash Attention implementation combines batch and num_heads to calculate the total batch_size.
-      // iff is_var_len: batch_size = num_heads (as each batch would have it's seq_len_qo and seq_len_kv)
+      // iff is_var_len: batch_size = num_heads (as each batch would have it's own seq_len_qo and seq_len_kv)
       // iff !is_var_len: batch_size = batch * num_heads
-      auto blk_l_coord = is_var_len ? get<3>(blk_coord) : get<2>(blk_coord) * num_heads + get<3>(blk_coord);
+      auto blk_l_coord = is_var_len ? num_heads_coord : batch_coord * num_heads + num_heads_coord;
 
       // Get problem shape for the current batch_blk_idx. For variable sequence length, it loads the sequence length
       // from Global memory for the given batch_blk_idx and returns the appropriate problem_shape. For fixed sequence
       // length, logical_problem_shape == params.problem_shape.
       // logical_problem_shape = [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo]
-      auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(params.problem_shape, get<2>(blk_coord));
+      auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(params.problem_shape, batch_coord);
 
       // Calculate the seq_len_idx (blk_m_coord * get<0>(WorkgroupTileShape{})) and check if it is still
       // within bounds of the actual seq_len_qo (get<2>(logical_problem_shape)).
@@ -259,7 +261,7 @@ public:
       const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, QK_BLK_N)
                                           : cute::ceil_div(non_causal_seq_len, QK_BLK_N);
       
-      auto mainloop_params = CollectiveMainloop::template get_updated_copies<is_var_len>(params.mainloop, params.problem_shape, get<2>(blk_coord));
+      auto mainloop_params = CollectiveMainloop::template get_updated_copies<is_var_len>(params.mainloop, params.problem_shape, batch_coord);
 
       auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_q);
       auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_N>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k);
@@ -362,7 +364,7 @@ public:
         collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_limit - 1), out_reg, mainloop_params);
       }
 
-      auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, get<2>(blk_coord));
+      auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, batch_coord);
       CollectiveEpilogue epilogue{epilogue_params, shared_storage.epilogue};
       auto blk_coord_mnkl = make_coord(blk_m_coord, blk_n_coord, _, blk_l_coord);
       epilogue(logical_problem_shape, blk_coord_mnkl, out_reg, max_reg, sum_reg, tiled_mma, params.softmax.scale);
