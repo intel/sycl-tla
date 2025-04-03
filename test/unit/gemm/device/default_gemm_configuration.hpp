@@ -39,6 +39,7 @@
 #include "cutlass/arch/mma.h"
 #include "cutlass/layout/layout.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
+#include "cutlass/gemm/collective/collective_builder.hpp"
 #include "cutlass/gemm/collective/collective_mma.hpp"
 #include "cutlass/epilogue/collective/collective_builder.hpp"
 
@@ -1455,15 +1456,15 @@ struct DefaultGemmConfigurationToCutlass3Types<
     bfloat16_t, LayoutB, kAlignmentB, 32>;
   using GmemTiledCopyB = typename DefaultOperandB::GmemTiledCopy;
 
-  // Mainloop
-  using CollectiveMainloop = collective::CollectiveMma<
-    DispatchPolicy, TileShape,
-    bfloat16_t, TagToStrideA_t<LayoutA>,
-    bfloat16_t, TagToStrideB_t<LayoutB>,
-    TiledMma,
-    GmemTiledCopyA, void, void, cute::identity,  // A
-    GmemTiledCopyB, void, void, cute::identity   // B
-  >;
+  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+      cute::bfloat16_t, LayoutA, 1,
+      cute::bfloat16_t, LayoutB, 1,
+      float,
+      TileShape, Shape<_1, _1, _1>,
+      cutlass::gemm::collective::StageCountAuto,
+      cutlass::gemm::collective::KernelScheduleAuto
+    >::CollectiveOp;
 
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
@@ -1474,14 +1475,16 @@ struct DefaultGemmConfigurationToCutlass3Types<
     decltype(tile_shape(TiledMma()))
   >;
 
-  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelPVCEpilogue,
-    TileShape,
-    float, TagToStrideC_t<LayoutC>,
-    float, TagToStrideC_t<LayoutC>,
-    FusionCallBacks,
-    XE_2D_U32x8x16_LD_N, void, void,
-    XE_2D_U32x8x16_ST_N, void, void>;
+  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+      TileShape, Shape<_1, _1, _1>,
+      cutlass::epilogue::collective::EpilogueTileAuto,
+      float, float,
+      float, LayoutC, 1,
+      float, LayoutC, 1,
+      cutlass::epilogue::collective::EpilogueScheduleAuto,
+      EpilogueOp
+    >::CollectiveOp;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1562,14 +1565,15 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using GmemTiledCopyB = typename DefaultOperandB::GmemTiledCopy;
 
   // Mainloop
-  using CollectiveMainloop = collective::CollectiveMma<
-    DispatchPolicy, TileShape,
-    half_t, TagToStrideA_t<LayoutA>,
-    half_t, TagToStrideB_t<LayoutB>,
-    TiledMma,
-    GmemTiledCopyA, void, void, cute::identity,  // A
-    GmemTiledCopyB, void, void, cute::identity   // B
-  >;
+  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    cute::bfloat16_t, LayoutA, 1,
+    cute::bfloat16_t, LayoutB, 1,
+    float,
+    TileShape, Shape<_1, _1, _1>,
+    cutlass::gemm::collective::StageCountAuto,
+    cutlass::gemm::collective::KernelScheduleAuto
+  >::CollectiveOp;
 
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
@@ -1580,14 +1584,16 @@ struct DefaultGemmConfigurationToCutlass3Types<
     decltype(tile_shape(TiledMma()))
   >;
 
-  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelPVCEpilogue,
-    TileShape,
-    float, TagToStrideC_t<LayoutC>,
-    float, TagToStrideC_t<LayoutC>,
-    FusionCallBacks,
-    XE_2D_U32x8x16_LD_N, void, void,
-    XE_2D_U32x8x16_ST_N, void, void>;
+  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+      cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+      TileShape, Shape<_1, _1, _1>,
+      cutlass::epilogue::collective::EpilogueTileAuto,
+      float, float,
+      float, LayoutC, 1,
+      float, LayoutC, 1,
+      cutlass::epilogue::collective::EpilogueScheduleAuto,
+      EpilogueOp
+    >::CollectiveOp;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

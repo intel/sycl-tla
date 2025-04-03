@@ -68,9 +68,10 @@ struct CollectiveBuilder<
   KernelScheduleType,
   cute::enable_if_t<
     (cute::is_same_v<KernelScheduleType, KernelPVC> ||
-     cute::is_same_v<KernelScheduleType, KernelScheduleAuto>) &&  
-    cute::is_same_v<GmemLayoutATag, cutlass::layout::RowMajor> && // Different struct specialization because this will change copy atoms
-    cute::is_same_v<GmemLayoutBTag, cutlass::layout::RowMajor>
+      cute::is_same_v<KernelScheduleType, KernelScheduleAuto>) &&
+    cute::is_same_v<ElementA, ElementB> &&
+    cute::is_any_of_v<ElementA, bfloat16_t, half_t> &&
+    cute::is_any_of_v<ElementB, bfloat16_t, half_t>
   >
     >{
 
@@ -79,23 +80,31 @@ struct CollectiveBuilder<
           "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
-      static_assert(cute::is_same_v<ElementA, bfloat16_t>, "Intel multi-stage pipeline requires ElementA to be of type bfloat16_t");
-      static_assert(cute::is_same_v<ElementB, bfloat16_t>, "Intel multi-stage pipeline requires ElementB to be of type bfloat16_t");
+      static_assert(cute::is_any_of_v<ElementA, bfloat16_t, half_t>, "Intel multi-stage pipeline requires ElementA to be of type bfloat16_t or half_t");
+      static_assert(cute::is_any_of_v<ElementB, bfloat16_t, half_t>, "Intel multi-stage pipeline requires ElementB to be of type bfloat16_t or half_t");
       static_assert(cute::is_same_v<ElementAccumulator, float>, "Intel multi-stage pipeline requires ElementC to be of type float");
 
-      //Prepare Template arguments required of CollectiveMainLoop
+      using MMAAtom = MMA_Atom<std::conditional_t<cute::is_same_v<ElementA, bfloat16_t>,
+                                                  XE_8x16x16_F32BF16BF16F32_TT,
+                                                  XE_8x16x16_F32F16F16F32_TT>>;
+      
+      // Prepare Template arguments required of CollectiveMainLoop
       using TiledMma =
-          typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                        Layout<TileShape_MNK>,
-                                        Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+          typename TiledMMAHelper<MMAAtom,
+                                  Layout<TileShape_MNK>,
+                                  Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
       static constexpr int PipelineStages = 3;
       using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
 
-      using GmemTiledCopyA = XE_2D_U16x16x16_LD_N;
-      using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
+      using GmemTiledCopyA = std::conditional_t<cute::is_same_v<GmemLayoutATag, cutlass::layout::RowMajor>,
+                                                XE_2D_U16x32x32_LD_N,
+                                                XE_2D_U16x16x16_LD_T>;
+      using GmemTiledCopyB = std::conditional_t<cute::is_same_v<GmemLayoutBTag, cutlass::layout::RowMajor>,
+                                                XE_2D_U16x32x32_LD_V,
+                                                XE_2D_U16x16x16_LD_T>;
 
-      //PVC pipeline does not use shared memory
+      // PVC pipeline does not use shared memory
       using SmemLayoutAtomA = void; 
       using SmemLayoutAtomB = void; 
       using SmemCopyAtomA = void;
