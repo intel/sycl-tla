@@ -176,7 +176,8 @@ struct XeFlashPersistentTileScheduler {
 
     template <
       class TileSchedulerTag,
-      class ArchTag
+      class ArchTag,
+      class Enable = void
     >
     struct TileSchedulerSelector {
       static_assert(cutlass::detail::dependent_false<ArchTag>,
@@ -187,7 +188,8 @@ struct XeFlashPersistentTileScheduler {
     template <class ArchTag>
     struct TileSchedulerSelector<
         void,
-        ArchTag>
+        ArchTag,
+        cute::enable_if_t<cute::is_same_v<ArchTag, cutlass::arch::IntelPVC>>>
     {
       using Scheduler = typename TileSchedulerSelector<
           IndividualScheduler,
@@ -197,7 +199,8 @@ struct XeFlashPersistentTileScheduler {
     template <class ArchTag>
     struct TileSchedulerSelector<
         IndividualScheduler,
-        ArchTag>
+        ArchTag,
+        cute::enable_if_t<cute::is_same_v<ArchTag, cutlass::arch::IntelPVC>>>
     {
       using Scheduler = kernel::XeFlashIndividualTileScheduler;
     };
@@ -205,7 +208,8 @@ struct XeFlashPersistentTileScheduler {
     template <class ArchTag>
     struct TileSchedulerSelector<
         PersistentScheduler,
-        ArchTag>
+        ArchTag,
+        cute::enable_if_t<cute::is_same_v<ArchTag, cutlass::arch::IntelPVC>>>
     {
       using Scheduler = kernel::XeFlashPersistentTileScheduler;
     };

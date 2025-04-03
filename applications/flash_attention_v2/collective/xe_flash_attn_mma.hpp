@@ -326,15 +326,19 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
       auto v_traits = static_cast<traits_load_V const&>(params.gmem_tiled_copy_v);
       ElementV* v_ptr = (ElementV*)v_traits.base_ptr;
 
-      auto tensorQ = make_tensor(make_gmem_ptr(q_ptr + offset_q),
-                                make_layout(make_shape(seq_len_qo, head_size_qk, num_heads),
-                                            make_stride(static_cast<int64_t>(head_size_qk), cute::C<1>{}, static_cast<int64_t>(seq_len_qo * head_size_qk))));
-      auto tensorK = make_tensor(make_gmem_ptr(k_ptr + offset_k),
-                                make_layout(make_shape(seq_len_kv, head_size_qk, num_heads),
-                                            make_stride(static_cast<int64_t>(head_size_qk), cute::C<1>{}, static_cast<int64_t>(seq_len_kv * head_size_qk))));
-      auto tensorV = make_tensor(make_gmem_ptr(v_ptr + offset_v),
-                                make_layout(make_shape(head_size_vo, seq_len_kv, num_heads),
-                                            make_stride(cute::C<1>{}, static_cast<int64_t>(head_size_vo), static_cast<int64_t>(seq_len_kv * head_size_vo))));
+      auto shape_q = make_shape(static_cast<int>(seq_len_qo), head_size_qk, num_heads);
+      StrideQ stride_q = cutlass::make_cute_packed_stride(StrideQ{}, shape_q);
+
+      auto shape_k = make_shape(static_cast<int>(seq_len_kv), head_size_qk, num_heads);
+      StrideK stride_k = cutlass::make_cute_packed_stride(StrideK{}, shape_k);
+
+      auto shape_v = make_shape(head_size_vo, static_cast<int>(seq_len_kv), num_heads);
+      StrideV stride_v = cutlass::make_cute_packed_stride(StrideV{}, shape_v);
+
+      auto tensorQ = make_tensor(make_gmem_ptr(q_ptr + offset_q), make_layout(shape_q, stride_q));
+      auto tensorK = make_tensor(make_gmem_ptr(k_ptr + offset_k), make_layout(shape_k, stride_k));
+      auto tensorV = make_tensor(make_gmem_ptr(v_ptr + offset_v), make_layout(shape_v, stride_v));
+
       XE_Copy_Q copyQ{XE_Copy_Q{}.with(tensorQ)};
       XE_Copy_K copyK{XE_Copy_K{}.with(tensorK)};
       XE_Copy_V copyV{XE_Copy_V{}.with(tensorV)};

@@ -76,12 +76,13 @@ public:
   static_assert(cute::rank(CtaTileMNK{}) == 4, "CtaTileMNK must be rank-3: [CTA_M_Q, CTA_N_V, CTA_N_QK, CTA_K_QK]");
   static_assert(cute::rank(StrideO{}) == 3, "StrideO must be rank-3: [seq_len_qo, head_size_vo, batch * num_heads]");
 
-  using Trait_O = Copy_Traits<GmemTiledCopyO, StrideO>;
-  using XE_Copy_O = decltype(make_tiled_copy(Copy_Atom<Trait_O, ElementO>{}
-                                             .with(static_cast<ElementO const*>(nullptr),int32_t(0), int32_t(0)),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                             make_layout(make_shape(get<0>(typename Trait_O::BlockShape{}),
-                                                                    get<1>(typename Trait_O::BlockShape{}) / Int<SubgroupSize>{}))));
+  using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
+  
+  using traits_store_O = Copy_Traits<GmemTiledCopyO, StrideO>;
+  using atom_load_O = Copy_Atom<traits_store_O, ElementO>;
+  using val_layout_load_O = decltype(make_layout(shape_div(typename traits_store_O::BlockShape{}, CopyThreadShape{})));
+  using XE_Copy_O = decltype(make_tiled_copy(atom_load_O{}, Layout<CopyThreadShape>{}, val_layout_load_O{}));
+
 private:
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementO>;
 
@@ -117,14 +118,10 @@ public:
                                                   [[maybe_unused]] void *workspace) {
     auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
 
-    XE_Copy_O xe_store_o = {};
-    xe_store_o = make_tiled_copy(Copy_Atom<Trait_O, ElementO>{}.with(
-                                      make_tensor(make_gmem_ptr(static_cast<ElementO const*>(args.ptr_O)), 
+    auto tensorO = make_tensor(make_gmem_ptr(static_cast<ElementO const*>(args.ptr_O)), 
                                                   make_layout(make_shape(seq_len_qo, head_size_vo, batch * num_heads), 
-                                                  args.dO))),
-                                 Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                 make_layout(make_shape(get<0>(typename Trait_O::BlockShape{}),
-                                                        get<1>(typename Trait_O::BlockShape{}) / Int<SubgroupSize>{})));
+                                                  args.dO));
+    XE_Copy_O xe_store_o{XE_Copy_O{}.with(tensorO)};
     return {
         xe_store_o,
     };
@@ -211,16 +208,15 @@ public:
 
       auto qo_cumulative_length = get<2>(problem_shape).cumulative_length;
       int offset_o = num_heads * head_size_vo * qo_cumulative_length[l_coord];
-      XE_Copy_O xe_store_o = {};
-      auto store_traits = static_cast<Trait_O const&>(params.xe_store_o);
+      auto store_traits = static_cast<traits_store_O const&>(params.xe_store_o);
+
       ElementO* base_ptr = (ElementO*)store_traits.base_ptr;
-      xe_store_o = make_tiled_copy(Copy_Atom<Trait_O, ElementO>{}.with(
-                                        make_tensor(make_gmem_ptr(base_ptr + offset_o),
-                                                    make_layout(make_shape(seq_len_qo, head_size_vo, num_heads),
-                                                                make_stride(static_cast<int64_t>(head_size_vo), cute::C<1>{}, static_cast<int64_t>(seq_len_qo * head_size_vo))))),
-                                  Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                  make_layout(make_shape(get<0>(typename Trait_O::BlockShape{}),
-                                                          get<1>(typename Trait_O::BlockShape{}) / Int<SubgroupSize>{})));
+      auto shape_o = make_shape(static_cast<int>(seq_len_qo), head_size_vo, num_heads);
+      StrideO stride_o = cutlass::make_cute_packed_stride(StrideO{}, shape_o);
+
+      auto tensorO = make_tensor(make_gmem_ptr(base_ptr + offset_o), make_layout(shape_o, stride_o));
+      XE_Copy_O xe_store_o{XE_Copy_O{}.with(tensorO)};
+
       return Params{xe_store_o};
     }
   }

@@ -34,6 +34,7 @@
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "77_blackwell_fmha/collective/fmha_fusion.hpp"
 #include "flash_attention_v2/kernel/tile_scheduler.hpp"
+#include "cutlass/util/packed_stride.hpp"
 #include "flash_attention_v2/kernel/xe_flash_attn_gemm.hpp"
 #include "flash_attention_v2/collective/xe_flash_attn_epilogue.hpp"
 #include "flash_attention_v2/collective/xe_flash_attn_softmax_epilogue.hpp"
@@ -45,7 +46,6 @@
 
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
-#include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "../common.hpp"
