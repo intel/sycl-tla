@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y ninja-build cmake cuda-toolkit
+          sudo apt install -y ninja-build cmake nvidia-cuda-toolkit
 
       - name: Build
         shell: bash
