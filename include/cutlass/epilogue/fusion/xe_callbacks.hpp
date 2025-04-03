@@ -410,6 +410,30 @@ struct FusionCallbacks<
   using Impl::Impl;
 };
 
+// D = alpha * acc + beta * C + per-column bias
+template<
+  int StagesC,
+  class CtaTileShapeMNK,
+  class EpilogueTile,
+  class ElementOutput,
+  class ElementCompute,
+  class ElementBias = ElementOutput,
+  class ElementSource = ElementOutput,
+  class ElementScalar = ElementCompute,
+  int AlignmentBias = 128 / sizeof_bits_v<ElementBias>,
+  FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest
+>
+using XeLinCombPerColBias =
+  Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementOutput, ElementCompute, RoundStyle>, // beta * C + (alpha * acc + bias)
+    Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>, // beta
+    Sm90SrcFetch<ElementSource>, // C
+    Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle>, // alpha * acc + bias
+      Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>, // alpha
+      Sm90AccFetch, // acc
+      XeRowBroadcast<0, CtaTileShapeMNK, ElementBias, ElementCompute, Stride<_0,_1,int64_t>, AlignmentBias> // bias
+    >
+  >;
+
 template <
   class ElementOutput_,
   class ElementCompute_,
@@ -426,9 +450,9 @@ struct FusionCallbacks<
     fusion::LinCombPerColBias<ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
-> : Sm90LinCombPerColBias<_1{}, CtaTileShapeMNK_, EpilogueTile_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> { // TODO(joe): document/handle dummy template args here
+> : XeLinCombPerColBias<_1{}, CtaTileShapeMNK_, EpilogueTile_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> { // TODO(joe): document/handle dummy template args here
 
-  using Impl = Sm90LinCombPerColBias<
+  using Impl = XeLinCombPerColBias<
       _1{},
       CtaTileShapeMNK_,
       EpilogueTile_, 
