@@ -198,8 +198,6 @@ public:
     // Separate out problem shape for convenience
     auto batch = get<0>(params.problem_shape);
     auto num_heads = get<1>(params.problem_shape);
-    auto seq_len_qo = get<2>(params.problem_shape);
-    auto seq_len_kv = get<3>(params.problem_shape);
     auto head_size_qk = get<4>(params.problem_shape);
     auto head_size_vo = get<5>(params.problem_shape);
     // Preconditions
@@ -234,15 +232,17 @@ public:
       // logical_problem_shape = [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo]
       auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(params.problem_shape, batch_coord);
 
+      auto [seq_len_qo, seq_len_kv] = select<2, 3>(logical_problem_shape);
+
       // Calculate the seq_len_idx (blk_m_coord * get<0>(WorkgroupTileShape{})) and check if it is still
       // within bounds of the actual seq_len_qo (get<2>(logical_problem_shape)).
-      if (blk_m_coord * get<0>(WorkgroupTileShape{}) >= get<2>(logical_problem_shape)) {
+      if (blk_m_coord * get<0>(WorkgroupTileShape{}) >= seq_len_qo) {
         continue;
       }
 
-      Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(get<2>(logical_problem_shape), head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(m,k,l)
-      Tensor mK_nkl = cute::get_pvc_tensor(make_shape(get<3>(logical_problem_shape), head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
-      Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, get<3>(logical_problem_shape), (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
+      Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(m,k,l)
+      Tensor mK_nkl = cute::get_pvc_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
+      Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, seq_len_kv, (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
       Tensor mQ_mk = mQ_mkl(_, _, blk_l_coord);                                                    // (m,k)
       Tensor mK_nk = mK_nkl(_, _, blk_l_coord);                                                    // (n,k)
       Tensor mV_nk = mV_nkl(_, _, blk_l_coord);                                                    // (n,k)
@@ -251,12 +251,11 @@ public:
       auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
       auto gV = local_tile(mV_nk, TileShapePV{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
 
-      const int min_causal_seq_len = cute::min(get<2>(logical_problem_shape), get<3>(logical_problem_shape));
-      const int seq_coord = cute::min(min_causal_seq_len, blk_m_coord * QK_BLK_M + (sub_group_id / PV_ATOM_N) * QK_SG_M);
+      const int seq_coord = cute::min(seq_len_qo, blk_m_coord * QK_BLK_M + (sub_group_id / PV_ATOM_N) * QK_SG_M);
       const int l_coord = blk_l_coord;
 
-      const int causal_seq_len = seq_coord + QK_SG_M;
-      const int non_causal_seq_len = get<3>(logical_problem_shape);
+      const int causal_seq_len = cute::min(seq_len_kv, seq_coord) + QK_SG_M;
+      const int non_causal_seq_len = seq_len_kv;
 
       const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, QK_BLK_N)
                                           : cute::ceil_div(non_causal_seq_len, QK_BLK_N);

@@ -73,7 +73,7 @@ public:
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
-  static_assert(cute::rank(CtaTileMNK{}) == 4, "CtaTileMNK must be rank-3: [CTA_M_Q, CTA_N_V, CTA_N_QK, CTA_K_QK]");
+  static_assert(cute::rank(CtaTileMNK{}) == 4, "CtaTileMNK must be rank-4: [CTA_M_Q, CTA_N_V, CTA_N_QK, CTA_K_QK]");
   static_assert(cute::rank(StrideO{}) == 3, "StrideO must be rank-3: [seq_len_qo, head_size_vo, batch * num_heads]");
 
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
