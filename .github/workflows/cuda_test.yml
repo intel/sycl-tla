@@ -16,8 +16,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build:
+    name: Build cuda tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y ninja-build cmake cuda-toolkit-11-2
+
+      - name: Build
+        shell: bash
+        run: |
+          cmake -G Ninja -DCUTLASS_NVCC_ARCHS="90a"
+          cmake --build . --target cutlass_unit_test -j $(nproc)
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuda-build
+          path: ./
+
   run-tests:
     name: Run cuda tests
+    needs: build
     runs-on: cp-nvidia-gpu
     timeout-minutes: 120
 
@@ -25,14 +52,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
-      - name: Build
-        shell: bash
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cuda-build
+          path: ./
+
+      - name: Check GPU availability
         run: |
           nvidia-smi
-          export CUDACXX=/usr/local/cuda/bin/nvcc
-          cmake -G Ninja -DCUTLASS_NVCC_ARCHS="90a"
 
-      - name: Unit test
+      - name: Run unit tests
         shell: bash
         run: |
           cmake --build . --target test_unit -j 48
