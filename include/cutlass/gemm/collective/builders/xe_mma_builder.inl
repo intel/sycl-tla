@@ -95,11 +95,18 @@ struct CollectiveBuilder<
       static constexpr int PipelineStages = 3;
       using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
 
+      static constexpr auto tile_M = get<0>(TileShape_MNK{});
+      static constexpr auto tile_N = get<1>(TileShape_MNK{});
+      static constexpr auto tile_K = get<2>(TileShape_MNK{});
       using GmemTiledCopyA = std::conditional_t<cute::is_same_v<GmemLayoutATag, cutlass::layout::RowMajor>,
-                                                XE_2D_U16x32x32_LD_N,
+                                                std::conditional_t< tile_M>=_32{} && tile_K>=_32{}, 
+                                                                    XE_2D_U16x32x32_LD_N, 
+                                                                    XE_2D_U16x16x16_LD_N>,
                                                 XE_2D_U16x16x16_LD_T>;
       using GmemTiledCopyB = std::conditional_t<cute::is_same_v<GmemLayoutBTag, cutlass::layout::RowMajor>,
-                                                XE_2D_U16x32x32_LD_V,
+                                                std::conditional_t< tile_N>=_32{} && tile_K>=_32{}, 
+                                                                    XE_2D_U16x32x32_LD_V, 
+                                                                    XE_2D_U16x16x16_LD_V>,
                                                 XE_2D_U16x16x16_LD_T>;
 
       // PVC pipeline does not use shared memory
