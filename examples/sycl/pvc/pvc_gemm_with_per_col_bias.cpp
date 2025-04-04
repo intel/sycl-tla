@@ -93,7 +93,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "PVC GEMM with Per Row Bias Example\n\n"
+    out << "PVC GEMM with Per Col Bias Example\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
@@ -194,9 +194,9 @@ struct ExampleRunner {
 
       auto bias_view =
           cutlass::TensorView(
-          block_bias.get() + batch * M, LayoutBias::packed({M, 1}), cutlass::make_Coord(M, 1));
+          block_bias.get() + batch * N, LayoutBias::packed({1, N}), cutlass::make_Coord(1, N));
 
-      cutlass::reference::device::TensorPerRowBias(D_view, bias_view);
+      cutlass::reference::device::TensorPerColBias(D_view, bias_view);
     }
 
     syclcompat::wait();
@@ -223,7 +223,7 @@ struct ExampleRunner {
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
-    block_bias.reset(M * L);
+    block_bias.reset(N * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
@@ -236,7 +236,7 @@ struct ExampleRunner {
 
     initialize(problem_size);
 
-    using StrideBias = Stride<_1, _0, int64_t>;
+    using StrideBias = Stride<_0, _1, int64_t>;
     StrideBias dBias = {};
 
     if(options.l > 1) {
@@ -358,7 +358,7 @@ int main(int argc, const char** argv)
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinCombPerRowBias<
+  using EpilogueOp = cutlass::epilogue::fusion::LinCombPerColBias<
       ElementOutput, ElementComputeEpilogue, ElementBias, ElementAccumulator,
       ElementAccumulator, 128 / sizeof_bits_v<ElementBias>,
       cutlass::FloatRoundStyle::round_to_nearest>;

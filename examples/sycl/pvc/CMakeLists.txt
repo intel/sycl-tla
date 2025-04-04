@@ -68,6 +68,13 @@ cutlass_example_add_executable(
   TEST_BATCHES
 )
 
+cutlass_example_add_executable(
+  pvc_gemm_with_per_col_bias
+  pvc_gemm_with_per_col_bias.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)
+
 #TODO: enable batch > 1 test once implementation is fixed.
 cutlass_example_add_executable(
   pvc_collective_builder
