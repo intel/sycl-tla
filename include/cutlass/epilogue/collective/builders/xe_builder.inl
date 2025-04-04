@@ -170,7 +170,8 @@ template <
       using EpilogueSchedule = std::conditional_t<cute::is_same_v<EpilogueScheduleType, EpilogueScheduleAuto>, 
                                                   IntelPVCEpilogue, 
                                                   EpilogueScheduleType>;
-      using DispatchPolicy = std::conditional_t<cute::is_same_v<EpilogueSchedule, IntelPVCGroupEpilogue>, 
+      static constexpr bool IsGroup = cute::is_same_v<EpilogueSchedule, IntelPVCGroupEpilogue>;
+      using DispatchPolicy = std::conditional_t<IsGroup, 
                                                 IntelPVCGroupEpilogue, 
                                                 IntelPVCEpilogue>;
       using CopyOpG2R = XE_2D_U32x8x16_LD_N;
@@ -182,16 +183,17 @@ template <
       using SmemLayoutAtomD_ = void;
       using CopyOpR2S_ = void;
 
+      //TODO(Codeplay): Should FusionCallbacks use DispatchPolicy IntelPVCGroupEpilogue for group gemm? That does not work.
       using FusionCallbacks = typename detail::FusionOpInfo<FusionOpOrCallbacks>::template FusionCallbacks<
-                                  DispatchPolicy,  TileShape_MNK, TileShape_MNK, CopyOpG2R>;
+                                  IntelPVCEpilogue, TileShape_MNK, TileShape_MNK, CopyOpG2R>;
 
       using CollectiveOp = cutlass::epilogue::collective::CollectiveEpilogue<
             DispatchPolicy,
             TileShape_MNK,
             ElementAccumulator,
-            cutlass::gemm::TagToStrideC_t<GmemLayoutTagC>,
+            cutlass::gemm::TagToStrideC_t<std::conditional_t<IsGroup, GmemLayoutTagC*, GmemLayoutTagC>>,
             ElementD,
-            cutlass::gemm::TagToStrideC_t<GmemLayoutTagD>,
+            cutlass::gemm::TagToStrideC_t<std::conditional_t<IsGroup, GmemLayoutTagD*, GmemLayoutTagD>>,
             FusionCallbacks,
             CopyOpG2R,
             SmemLayoutAtomC_,

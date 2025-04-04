@@ -91,9 +91,13 @@ struct CollectiveBuilder<
                                   Layout<TileShape_MNK>,
                                   Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
-      static constexpr int PipelineStages = 3;
+      static constexpr bool IsGroup = cute::is_same_v<KernelScheduleType, KernelPVCPtrArrayCooperative>;
+
       using KernelSchedule = std::conditional_t<cute::is_same_v<KernelScheduleType, KernelScheduleAuto>, KernelPVC, KernelScheduleType>;
-      using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelSchedule>;
+      static constexpr int PipelineStages = IsGroup ? 2 : 3;
+      using DispatchPolicy = std::conditional_t<IsGroup, 
+                                                cutlass::gemm::MainloopIntelPVCGroup<PipelineStages, KernelSchedule>,
+                                                cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelSchedule>>;
 
       static constexpr auto tile_M = get<0>(TileShape_MNK{});
       static constexpr auto tile_N = get<1>(TileShape_MNK{});
@@ -122,9 +126,9 @@ struct CollectiveBuilder<
               DispatchPolicy,
               TileShape_MNK,
               ElementA,
-              cutlass::gemm::TagToStrideA_t<GmemLayoutATag>,
+              cutlass::gemm::TagToStrideA_t<std::conditional_t<IsGroup, GmemLayoutATag*, GmemLayoutATag>>,
               ElementB,
-              cutlass::gemm::TagToStrideB_t<GmemLayoutBTag>,
+              cutlass::gemm::TagToStrideB_t<std::conditional_t<IsGroup, GmemLayoutBTag*, GmemLayoutBTag>>,
               TiledMma,
               GmemTiledCopyA,
               SmemLayoutAtomA,
