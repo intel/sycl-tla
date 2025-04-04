@@ -38,6 +38,7 @@
 
 namespace cutlass::gemm::collective {
 
+  // Intel PVC 3 stage pipeline, using prefetch
   // Also the auto builder
 
 template <
@@ -89,15 +90,10 @@ struct CollectiveBuilder<
           typename TiledMMAHelper<MMAAtom,
                                   Layout<TileShape_MNK>,
                                   Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
-      
+
+      static constexpr int PipelineStages = 3;
       using KernelSchedule = std::conditional_t<cute::is_same_v<KernelScheduleType, KernelScheduleAuto>, KernelPVC, KernelScheduleType>;
-      static constexpr int PipelineStages = cute::is_same_v<KernelScheduleType, KernelPVC> ? 3 : 2;
-      
-      static constexpr bool IsCooperative = cute::is_any_of_v<KernelSchedule, KernelPVCCooperative, KernelPVCPtrArrayCooperative>;
-      using DispatchPolicy = std::conditional_t<IsCooperative && false, 
-                                                cutlass::gemm::MainloopIntelPVCGroup<PipelineStages, KernelSchedule>,
-                                                cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelSchedule>
-                                                >;
+      using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelSchedule>;
 
       static constexpr auto tile_M = get<0>(TileShape_MNK{});
       static constexpr auto tile_N = get<1>(TileShape_MNK{});
@@ -126,9 +122,9 @@ struct CollectiveBuilder<
               DispatchPolicy,
               TileShape_MNK,
               ElementA,
-              cutlass::gemm::TagToStrideA_t<std::conditional_t<IsCooperative, GmemLayoutATag*, GmemLayoutATag>>,
+              cutlass::gemm::TagToStrideA_t<GmemLayoutATag>,
               ElementB,
-              cutlass::gemm::TagToStrideB_t<std::conditional_t<IsCooperative, GmemLayoutATag*, GmemLayoutBTag>>,
+              cutlass::gemm::TagToStrideB_t<GmemLayoutBTag>,
               TiledMma,
               GmemTiledCopyA,
               SmemLayoutAtomA,
