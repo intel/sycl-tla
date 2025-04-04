@@ -423,7 +423,7 @@ struct XeRowBroadcast {
     Tensor tCgRow = sm90_partition_for_epilogue<ReferenceSrc>(                         // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
       mRow, args.tile_shape_mnk, args.tile_coord_mnkl, args.epi_tile, args.tiled_copy, id_in_sg);
 
-    Tensor mRow_static = make_tensor(make_gmem_ptr(ptr_row), make_layout(make_layout(M),layout_N,layout_L));
+    Tensor mRow_static = make_tensor(make_gmem_ptr(ptr_row), make_layout(layout_M, make_layout(N),layout_L));
     Tensor tCgRow_static = sm90_partition_for_epilogue<ReferenceSrc>(                  // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
       mRow_static, args.tile_shape_mnk, args.tile_coord_mnkl, args.epi_tile, args.tiled_copy, id_in_sg);
     Tensor tCrRow = make_tensor_like<ElementCompute>(tCgRow_static);                   // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
