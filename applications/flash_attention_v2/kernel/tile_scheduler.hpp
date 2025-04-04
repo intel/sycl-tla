@@ -66,6 +66,7 @@ struct XeFlashIndividualTileScheduler {
     return Params{ grid, {shape<1>(problem_size)} };
   }
 
+  template <int Num_SGs>
   static dim3 get_grid_shape(Params const& params) {
     return params.grid;
   }
@@ -138,8 +139,15 @@ struct XeFlashPersistentTileScheduler {
     };
   }
 
+  template <int Num_SGs>
   static dim3 get_grid_shape(Params const& params) {
-    dim3 grid(std::min(params.num_blocks, params.hw_info.sm_count), 1, 1);
+    auto queue = syclcompat::get_default_queue();
+    auto dev = queue.get_device();
+    const size_t maxSubgroups =
+      dev.template get_info<sycl::info::device::max_num_sub_groups>();
+    // TODO (Codeplay): revert this back to std::min(params.num_blocks, params.hw_info.sm_count)
+    // once performance issue is fixed.
+    dim3 grid(std::min(params.num_blocks, ceil_div(params.hw_info.sm_count * maxSubgroups, Num_SGs)), 1, 1);
     return grid;
   }
 

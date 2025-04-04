@@ -303,9 +303,9 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     cute::gemm(tiled_mma, accum, tPr, tCrV, frag_src);
   }
 
-  template <bool VarLen, class ProblemShape>
+  template <class ProblemShape>
   CUTLASS_DEVICE static constexpr Params get_updated_copies(Params const& params, ProblemShape const& problem_shape, int const& l_coord) {
-    if constexpr (!VarLen) {
+    if constexpr (!is_var_len) {
       return params;
     } else {
       auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;

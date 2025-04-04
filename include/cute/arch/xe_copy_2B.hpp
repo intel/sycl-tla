@@ -592,8 +592,8 @@ struct XE_2D_U16x32x32_LD_N {
                                       int height, int pitch,
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
-      // __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
-      __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
+      __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
+    //   __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
           (long)baseoffset, width - 1, height - 1, pitch - 1, coord,
           CacheControl::kL1C_L3C);
 #else

@@ -184,10 +184,19 @@ public:
   }
 
   static dim3 get_grid_shape(Params const &params) {
-    return TileScheduler::get_grid_shape(params.scheduler);
+    return TileScheduler::template get_grid_shape<Num_SGs>(params.scheduler);
   }
 
   static dim3 get_block_shape() { return dim3(MaxThreadsPerBlock, 1, 1); }
+
+  CUTLASS_DEVICE
+  Shape<int, int, int, int, int, int> get_logical_problem_shape(ProblemShape const& problem_shape, int const& batch) {
+    if constexpr (is_var_len) {
+      return cutlass::fmha::collective::apply_variable_length(problem_shape, batch);
+    } else {
+      return problem_shape;
+    }
+  }
 
   CUTLASS_DEVICE
   void operator()(Params const &params, char *smem_buf) {
@@ -230,7 +239,7 @@ public:
       // from Global memory for the given batch_blk_idx and returns the appropriate problem_shape. For fixed sequence
       // length, logical_problem_shape == params.problem_shape.
       // logical_problem_shape = [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo]
-      auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(params.problem_shape, batch_coord);
+      auto logical_problem_shape = get_logical_problem_shape(params.problem_shape, batch_coord);
 
       auto [seq_len_qo, seq_len_kv] = select<2, 3>(logical_problem_shape);
 
@@ -259,8 +268,8 @@ public:
 
       const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, QK_BLK_N)
                                           : cute::ceil_div(non_causal_seq_len, QK_BLK_N);
-      
-      auto mainloop_params = CollectiveMainloop::template get_updated_copies<is_var_len>(params.mainloop, params.problem_shape, batch_coord);
+
+      auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, batch_coord);
 
       auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_q);
       auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_N>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k);
@@ -322,11 +331,11 @@ public:
         collective_mma.mmaPV(out_reg, tSr, gV(_, _ , nblock), out_reg, mainloop_params);
         
         // Prefetch the next K tile
-      // there is no need to gaurd it with if statememt as prefetch will ignore out of bound reading
-          CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < size<4>(pKgK); j++) {
-            prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
-          }
+        // there is no need to gaurd it with if statememt as prefetch will ignore out of bound reading
+        CUTLASS_PRAGMA_UNROLL
+        for (int j = 0; j < size<4>(pKgK); j++) {
+          prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
+        }
         barrier_wait(barrier_scope);
       }
 

@@ -59,13 +59,14 @@ struct Options {
   bool error;
   bool is_causal;
   bool varlen = false;
+  std::string scheduler;
 
   int batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo, iterations;
   float softmax_scale;
 
   Options()
       : help(false), error(false), is_causal(false), varlen(false), batch(32), num_heads(16), seq_len_qo(512), head_size_qk(128),
-        seq_len_kv(512), head_size_vo(128), iterations(100), softmax_scale(1.f) {}
+        seq_len_kv(512), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -83,6 +84,8 @@ struct Options {
     if (cmd.check_cmd_line_flag("varlen")) {
       varlen = true;
     }
+
+    cmd.get_cmd_line_argument("scheduler", scheduler, std::string("Individual"));
 
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads", num_heads, 16);
@@ -103,6 +106,7 @@ struct Options {
         << "  --help                      If specified, displays this usage statement\n\n"
         << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
         << "  --varlen                    Enable variable sequence length\n"
+        << "  --scheduler                 Choose between Individual or Persistent Scheduler\n"
         << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
         << "  --num_heads=<int>           Sets the Number of Attention Heads of the Multi-Head Self Attention module\n"
         << "  --seq_len_qo=<int>          Sets the Sequence length of the Query input in Multi-Head Self Attention module\n"
@@ -509,7 +513,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
       double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
       std::cout << "Batch: " << options.batch << "\tNumHeads: " << options.num_heads << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
-                << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false");
+                << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false")
+                << "\t Scheduler: " << options.scheduler;
       printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
     }
 
@@ -519,7 +524,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
 
 template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig {
 
-  template <bool isVarLen>
+  template <bool isVarLen, class Scheduler>
   static int run(const Options &options) {
     //
     // Run examples
@@ -565,7 +570,7 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
         Causal>;
 
     using GemmKernel = cutlass::flash_attention::kernel::GemmUniversalAttention<ProblemShapeType, CollectiveMainloop,
-                                                                     CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
+                                                                     CollectiveSoftmaxEpilogue, CollectiveEpilogue, Scheduler>;
 
     ExampleRunner<GemmKernel, isVarLen> runner;
 
@@ -575,9 +580,17 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
 
   static int run(const Options &options) {
     if(options.varlen) {
-      return run<true>(options);
+      if(options.scheduler.compare(std::string("Persistent")) == 0) {
+        return run<true, cutlass::flash_attention::PersistentScheduler>(options);
+      } else {
+        return run<true, cutlass::flash_attention::IndividualScheduler>(options);
+      }
     } else {
-      return run<false>(options);
+      if(options.scheduler.compare(std::string("Persistent")) == 0) {
+        return run<false, cutlass::flash_attention::PersistentScheduler>(options);
+      } else {
+        return run<false, cutlass::flash_attention::IndividualScheduler>(options);
+      }
     }
   }
 };
