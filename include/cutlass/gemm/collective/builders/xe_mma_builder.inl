@@ -67,8 +67,7 @@ struct CollectiveBuilder<
   cutlass::gemm::collective::StageCountAuto, 
   KernelScheduleType,
   cute::enable_if_t<
-    (cute::is_same_v<KernelScheduleType, KernelPVC> ||
-      cute::is_same_v<KernelScheduleType, KernelScheduleAuto>) &&
+    cute::is_any_of_v<KernelScheduleType, KernelScheduleAuto, KernelPVC, KernelPVCCooperative, KernelPVCPtrArrayCooperative> &&
     cute::is_same_v<ElementA, ElementB> &&
     cute::is_any_of_v<ElementA, bfloat16_t, half_t> &&
     cute::is_any_of_v<ElementB, bfloat16_t, half_t>
@@ -93,7 +92,7 @@ struct CollectiveBuilder<
                                   Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
       static constexpr int PipelineStages = 3;
-      using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
+      using DispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelScheduleType>;
 
       static constexpr auto tile_M = get<0>(TileShape_MNK{});
       static constexpr auto tile_N = get<1>(TileShape_MNK{});

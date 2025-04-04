@@ -93,6 +93,34 @@ namespace detail {
       >;
   };
 
+  /*template <
+  class ElementOutput,
+  class ElementCompute,
+  class ElementBias,
+  class ElementSource,
+  class ElementScalar,
+  int AlignmentBias,
+  FloatRoundStyle RoundStyle_
+  >
+  struct FusionOpInfo<cutlass::epilogue::fusion::LinCombPerRowBias<  
+    ElementOutput, ElementCompute, ElementBias, ElementSource, ElementScalar, AlignmentBias, RoundStyle_
+  >> {
+      constexpr static bool HasBuilder = true;
+
+      template <
+        class DispatchPolicy,
+        class TileShape_MNK,
+        class EpilogueTile,
+        class CopyOpG2R>
+      using FusionCallbacks = cutlass::epilogue::fusion::FusionCallbacks<
+        DispatchPolicy,
+        cutlass::epilogue::fusion::LinCombPerRowBias<ElementOutput, ElementCompute, ElementBias, ElementSource, ElementScalar, AlignmentBias, RoundStyle_>,
+        TileShape_MNK,
+        EpilogueTile,
+        CopyOpG2R
+      >;
+  };
+*/
   template <
     class GmemLayoutTagC,
     template <class> class ActivationFn,
