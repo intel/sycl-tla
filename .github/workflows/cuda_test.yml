@@ -33,6 +33,7 @@ jobs:
       - name: Build
         shell: bash
         run: |
+          export CUDACXX=/usr/local/cuda/bin/nvcc
           cmake -G Ninja -DCUTLASS_NVCC_ARCHS="90a"
           cmake --build . --target cutlass_test_unit -j 48
 
