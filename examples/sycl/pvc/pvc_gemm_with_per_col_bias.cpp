@@ -240,7 +240,7 @@ struct ExampleRunner {
     StrideBias dBias = {};
 
     if(options.l > 1) {
-      cute::get<2>(dBias) = static_cast<int64_t>(options.m);
+      cute::get<2>(dBias) = static_cast<int64_t>(options.n);
     } else {
       cute::get<2>(dBias) = static_cast<int64_t>(0);
     }
