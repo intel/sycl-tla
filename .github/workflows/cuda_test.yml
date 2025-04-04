@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           cmake -G Ninja -DCUTLASS_NVCC_ARCHS="90a"
-          cmake --build . --target cutlass_test_unit -j 6
+          cmake --build . --target cutlass_test_unit -j 2
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
