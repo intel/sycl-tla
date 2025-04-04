@@ -86,10 +86,12 @@ struct CollectiveBuilder<
                                                   XE_8x16x16_F32F16F16F32_TT>>;
       
       // Prepare Template arguments required of CollectiveMainLoop
+      using atoms_M = _8;
+      using atoms_N = _4;
       using TiledMma =
           typename TiledMMAHelper<MMAAtom,
                                   Layout<TileShape_MNK>,
-                                  Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+                                  Layout<Shape<atoms_M, atoms_N, _1>, Stride<atoms_N, _1, _0>>>::TiledMMA;
 
       static constexpr bool IsGroup = cute::is_same_v<KernelScheduleType, KernelPVCPtrArrayCooperative>;
 
@@ -103,12 +105,12 @@ struct CollectiveBuilder<
       static constexpr auto tile_N = get<1>(TileShape_MNK{});
       static constexpr auto tile_K = get<2>(TileShape_MNK{});
       using GmemTiledCopyA = std::conditional_t<cute::is_same_v<GmemLayoutATag, cutlass::layout::RowMajor>,
-                                                std::conditional_t< tile_M>=_32{} && tile_K>=_32{}, 
+                                                std::conditional_t< tile_M/atoms_M{}>=_32{} && tile_K>=_32{}, 
                                                                     XE_2D_U16x32x32_LD_N, 
                                                                     XE_2D_U16x16x16_LD_N>,
                                                 XE_2D_U16x16x16_LD_T>;
       using GmemTiledCopyB = std::conditional_t<cute::is_same_v<GmemLayoutBTag, cutlass::layout::RowMajor>,
-                                                std::conditional_t< tile_N>=_32{} && tile_K>=_32{}, 
+                                                std::conditional_t< tile_N/atoms_N{}>=_32{} && tile_K>=_32{}, 
                                                                     XE_2D_U16x32x32_LD_V, 
                                                                     XE_2D_U16x16x16_LD_V>,
                                                 XE_2D_U16x16x16_LD_T>;
