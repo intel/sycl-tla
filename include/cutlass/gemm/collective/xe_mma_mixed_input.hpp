@@ -378,9 +378,7 @@ public:
     class TensorA,
     class TensorB,
     class FrgTensorC,
-    class KTileIterator,
-    class ResidueMNK,
-    class BlkCoord
+    class KTileIterator
   >
   CUTLASS_DEVICE void
   operator() (
@@ -389,21 +387,13 @@ public:
       TensorB gB,
       FrgTensorC const &src_accum,
       KTileIterator k_tile_iter, int k_tile_count,
-      ResidueMNK residue_mnk,
-      BlkCoord const &blk_coord,
       int const &K_start,
       int thread_idx,
-      char *smem_buf,
       Params const& mainloop) 
   {
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
-    (void)residue_mnk;
-    (void)thread_idx;
-    (void)smem_buf;
-
-    // TODO(Codeplay): Fix use of make_tiled_copy here & avoid use of CopyThreadShape/CopyThreadShapeRev 
     // Partition the copying of A and B tiles across the threads
     auto thr_copy_A = mainloop.tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = mainloop.tiled_copy_b.get_slice(thread_idx);
