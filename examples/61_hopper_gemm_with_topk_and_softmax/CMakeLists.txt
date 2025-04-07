@@ -26,14 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-if (NOT CUTLASS_ENABLE_SYCL)
 cutlass_example_add_executable(
   61_hopper_gemm_with_topk_and_softmax
   61_hopper_gemm_with_topk_and_softmax.cu
   )
-elseif(SYCL_INTEL_TARGET)
-cutlass_example_add_executable(
-  61_hopper_gemm_with_topk_and_softmax
-  61_hopper_gemm_with_topk_and_softmax.cpp
-  )
-endif()

@@ -82,6 +82,13 @@ cutlass_example_add_executable(
 )
 
 cutlass_example_add_executable(
+  pvc_gemm_with_topk_and_softmax
+  pvc_gemm_with_topk_and_softmax.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)
+
+cutlass_example_add_executable(
   pvc_gemm_persistent
   pvc_gemm_persistent.cpp
   TEST_COMMAND_OPTIONS
