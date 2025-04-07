@@ -57,21 +57,41 @@
 
 
 #if defined(__SYCL_DEVICE_ONLY__) && defined(SYCL_INTEL_TARGET)
-#define CUTE_ARCH_COPY_XE_ENABLED
-#define CUTE_ARCH_MMA_XE_ENABLED
+#define CUTE_ARCH_XE_ENABLED
 #endif
  
-#if defined(CUTE_ARCH_COPY_XE_ENABLED) && defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER < 20250200)
-#define CUTE_ARCH_COPY_XE_BUILTIN_ENABLED
-#define CUTE_ARCH_MMA_XE_BUILTIN_ENABLED
-#elif defined(CUTE_ARCH_COPY_XE_ENABLED)
-#define CUTE_ARCH_COPY_XE_SPIRV_ENABLED
-#define CUTE_ARCH_MMA_XE_SPIRV_ENABLED
-// #define CUTE_ARCH_MMA_XE_BUILTIN_ENABLED
+#if defined(CUTE_ARCH_XE_ENABLED) && defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER < 20250200)
+#define CUTE_ARCH_XE_BUILTIN_ENABLED
+#elif defined(CUTE_ARCH_XE_ENABLED)
+#define CUTE_ARCH_XE_SPIRV_ENABLED
 #endif
 
+#if defined(CUTE_ARCH_XE_BUILTIN_ENABLED)
+namespace cute::detail
+{
+template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
+struct XeSubgroup2DBlockPrefetch {
+  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
+};
+template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
+struct XeSubgroup2DBlockLoad {
+  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
+};
+template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
+struct XeSubgroup2DBlockTransform {
+  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
+};
+template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
+struct XeSubgroup2DBlockTranspose {
+  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
+};
+template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
+struct XeSubgroup2DBlockStore {
+  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
+};
+}
+#endif
 // SPIRV copy definitions
-#if defined(CUTE_ARCH_COPY_XE_SPIRV_ENABLED)
 SYCL_EXTERNAL __attribute__((convergent)) void __spirv_Subgroup2DBlockLoadINTEL(
     int ElementSize, int BlockWidth, int BlockHeight, int BlockCount,
     const void* src_base_pointer, int memory_width, int memory_height,
@@ -92,7 +112,8 @@ SYCL_EXTERNAL __attribute__((convergent)) void __spirv_Subgroup2DBlockPrefetchIN
     int ElementSize, int BlockWidth, int BlockHeight, int BlockCount,
     const void* src_base_pointer, int memory_width, int memory_height,
     int memory_pitch,  cute::intel::coord_t coordinate);
-         
+
+#if defined(CUTE_ARCH_XE_SPIRV_ENABLED)
 namespace cute::detail {
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
 struct XeSubgroup2DBlockLoad {
@@ -136,18 +157,17 @@ struct XeSubgroup2DBlockTranspose {
   }
 };
 
-// template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-// struct XeSubgroup2DBlockPrefetch {
-//     CUTE_HOST_DEVICE
-//     void operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
-//             cute::intel::coord_t coordinate) {
-// #ifdef __SYCL_DEVICE_ONLY__
-//         __spirv_Subgroup2DBlockPrefetchINTEL(ElementSize, BlockWidth, BlockHeight, BlockCount,
-//             srcBasePointer, memoryWidth, memoryHeight, memoryPitch, coordinate);
-// #endif
-//     }
-// };
-
+template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
+struct XeSubgroup2DBlockPrefetch {
+    CUTE_HOST_DEVICE
+    void operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
+            cute::intel::coord_t coordinate) {
+#ifdef __SYCL_DEVICE_ONLY__
+        __spirv_Subgroup2DBlockPrefetchINTEL(ElementSize, BlockWidth, BlockHeight, BlockCount,
+            srcBasePointer, memoryWidth, memoryHeight, memoryPitch, coordinate);
+#endif
+    }
+};
 
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
 struct XeSubgroup2DBlockStore {
@@ -164,32 +184,6 @@ struct XeSubgroup2DBlockStore {
 } // namespace cute::detail end
 #endif
 
-namespace cute::detail
-{
-template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockPrefetch {
-  // static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
-};
-
-#if defined(CUTE_ARCH_COPY_XE_BUILTIN_ENABLED)
-template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockLoad {
-  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
-};
-template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockTransform {
-  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
-};
-template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockTranspose {
-  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
-};
-template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockStore {
-  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
-};
-#endif
-}
 enum class CacheControl {
   kDefault   = 0,
   kL1UC_L3UC = 1, // Override to L1 uncached and L3 uncached
@@ -201,7 +195,132 @@ enum class CacheControl {
   kL1IAR_L3C = 7, // Override to L1 invalidate-after-read, and L3 cached
 };
 
-#if defined(CUTE_ARCH_MMA_XE_SPIRV_ENABLED)
+namespace cute::detail{
+  template <class DElement, class AElement, class BElement, class CElement>
+  struct XeSubgroupMatrixMultiplyAccumulate {
+    static_assert(dependent_false<>, "Unsupported MMA Configuration.");
+  };
+} // namespace cute::detail end
+
+// mma_bf16
+SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::float8 acc));
+SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::float4 acc));
+SYCL_DEVICE_OCL(cute::intel::float2 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::float2 acc));
+SYCL_DEVICE_OCL(              float intel_sub_group_bf16_bf16_matrix_mad_k16(              short a, cute::intel::int8 b,               float acc));
+// mma_half
+SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::float8 acc));
+SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::float4 acc));
+SYCL_DEVICE_OCL(cute::intel::float2 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::float2 acc));
+SYCL_DEVICE_OCL(              float intel_sub_group_f16_f16_matrix_mad_k16(              short a, cute::intel::int8 b,               float acc));
+// mma_s8
+SYCL_DEVICE_OCL(cute::intel::int8 intel_sub_group_i8_i8_matrix_mad_k32(cute::intel::short8 a, cute::intel::int8 b, cute::intel::int8 acc));
+SYCL_DEVICE_OCL(cute::intel::int4 intel_sub_group_i8_i8_matrix_mad_k32(cute::intel::short4 a, cute::intel::int8 b, cute::intel::int4 acc));
+SYCL_DEVICE_OCL(cute::intel::int2 intel_sub_group_i8_i8_matrix_mad_k32(cute::intel::short2 a, cute::intel::int8 b, cute::intel::int2 acc));
+SYCL_DEVICE_OCL(              int intel_sub_group_i8_i8_matrix_mad_k32(              short a, cute::intel::int8 b,               int acc));
+// mma_u8
+SYCL_DEVICE_OCL(cute::intel::int8 intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort8 a, cute::intel::uint8 b, cute::intel::int8 acc));
+SYCL_DEVICE_OCL(cute::intel::int4 intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort4 a, cute::intel::uint8 b, cute::intel::int4 acc));
+SYCL_DEVICE_OCL(cute::intel::int2 intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort2 a, cute::intel::uint8 b, cute::intel::int2 acc));
+SYCL_DEVICE_OCL(              int intel_sub_group_u8_u8_matrix_mad_k32(              ushort a, cute::intel::uint8 b,               int acc));
+// mma_tf32
+SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_tf32_tf32_matrix_mad_k8(cute::intel::float4 a, cute::intel::float8 b, cute::intel::float8 acc));
+SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_tf32_tf32_matrix_mad_k8(cute::intel::float2 a, cute::intel::float8 b, cute::intel::float4 acc));
+SYCL_DEVICE_OCL(cute::intel::float2 intel_sub_group_tf32_tf32_matrix_mad_k8(              float a, cute::intel::float8 b, cute::intel::float2 acc));
+SYCL_DEVICE_OCL(              float intel_sub_group_tf32_tf32_matrix_mad_k8(              float a, cute::intel::float8 b,               float acc));
+// mma_bfloat16 with bfloat16 accumulator:
+SYCL_DEVICE_OCL(cute::intel::short8 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::short8 acc));
+SYCL_DEVICE_OCL(cute::intel::short4 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::short4 acc));
+SYCL_DEVICE_OCL(cute::intel::short2 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::short2 acc));
+SYCL_DEVICE_OCL(              short intel_sub_group_bf16_bf16_matrix_mad_k16(              short a, cute::intel::int8 b,               short acc));
+// mma_half with half accumulator:
+SYCL_DEVICE_OCL(cute::intel::half8 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::half8 acc));
+SYCL_DEVICE_OCL(cute::intel::half4 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::half4 acc));
+SYCL_DEVICE_OCL(cute::intel::half2 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::half2 acc));
+SYCL_DEVICE_OCL(        sycl::half intel_sub_group_f16_f16_matrix_mad_k16(              short a, cute::intel::int8 b,         sycl::half acc));
+
+#if defined(CUTE_ARCH_XE_BUILTIN_ENABLED)
+namespace cute::detail
+{
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
+#endif
+    }
+};
+  
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return intel_sub_group_f16_f16_matrix_mad_k16(a, b, c);
+#endif
+    }
+};
+
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<bfloat16_t, bfloat16_t, bfloat16_t, bfloat16_t> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
+#endif
+    }
+};
+  
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<half_t, half_t, half_t, half_t> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return intel_sub_group_f16_f16_matrix_mad_k16(a, b, c);
+#endif
+    }
+};
+  
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return intel_sub_group_i8_i8_matrix_mad_k32(a, b, c);
+#endif
+    }
+};
+  
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return intel_sub_group_u8_u8_matrix_mad_k32(a, b, c);
+#endif
+    }
+};
+  
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return intel_sub_group_tf32_tf32_matrix_mad_k8(a, b, c);
+#endif
+    }
+};
+} // namespace cute::detail end
+#endif
+
+
 // @brief spirv APIs for mma 
 // @param dims K 
 // @param ARegisters
@@ -229,6 +348,16 @@ SYCL_EXTERNAL cute::intel::float4 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(
 SYCL_EXTERNAL cute::intel::float2 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t,               float, cute::intel::float8, cute::intel::float2, int32_t);
 SYCL_EXTERNAL               float __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t,               float, cute::intel::float8,               float, int32_t);
 
+SYCL_EXTERNAL cute::intel::short8 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short8, cute::intel::int8, cute::intel::short8, int32_t);
+SYCL_EXTERNAL cute::intel::short4 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short4, cute::intel::int8, cute::intel::short4, int32_t);
+SYCL_EXTERNAL cute::intel::short2 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short2, cute::intel::int8, cute::intel::short2, int32_t);
+SYCL_EXTERNAL               short __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t,               short, cute::intel::int8,               short, int32_t);
+
+SYCL_EXTERNAL cute::intel::half8 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short8, cute::intel::int8, cute::intel::half8, int32_t);
+SYCL_EXTERNAL cute::intel::half4 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short4, cute::intel::int8, cute::intel::half4, int32_t);
+SYCL_EXTERNAL cute::intel::half2 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short2, cute::intel::int8, cute::intel::half2, int32_t);
+SYCL_EXTERNAL         sycl::half __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t,               short, cute::intel::int8,         sycl::half, int32_t);
+
 struct SPIRV_MMAOperands {
   static constexpr int SPIRV_MatrixASigned = 0x1;
   static constexpr int SPIRV_MatrixBSigned = 0x2;
@@ -238,14 +367,88 @@ struct SPIRV_MMAOperands {
   static constexpr int SPIRV_MatrixBFp16 = 0x800;
   static constexpr int SPIRV_MatrixABf16 = 0x1000;
   static constexpr int SPIRV_MatrixBBf16 = 0x2000;
+  static constexpr int SPIRV_MatrixCBf16 = 0xC;
   static constexpr int SPIRV_MatrixATf32 = 0x100;
   static constexpr int SPIRV_MatrixBTf32 = 0x200;
 };
+#if defined(CUTE_ARCH_XE_SPIRV_ENABLED)
+namespace cute::detail
+{
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(16, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixABf16 | SPIRV_MMAOperands::SPIRV_MatrixBBf16 );
 #endif
+    }
+};
 
-namespace cute::detail{
-  template <class DElement, class AElement, class BElement, class CElement>
-  struct XeSubgroupMatrixMultiplyAccumulate {
-    static_assert(dependent_false<>, "Unsupported MMA Configuration.");
-  };
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(16, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixAFp16 | SPIRV_MMAOperands::SPIRV_MatrixBFp16);
+#endif
+    }
+};
+
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<bfloat16_t, bfloat16_t, bfloat16_t, bfloat16_t> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(16, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixABf16 | SPIRV_MMAOperands::SPIRV_MatrixBBf16 |SPIRV_MMAOperands::SPIRV_MatrixCBf16);
+#endif
+    }
+};
+
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<half_t, half_t, half_t, half_t> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(16, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixAFp16 | SPIRV_MMAOperands::SPIRV_MatrixBFp16);
+#endif
+    }
+};
+
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(32, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixASigned | SPIRV_MMAOperands::SPIRV_MatrixBSigned | SPIRV_MMAOperands::SPIRV_MatrixAInt8 | SPIRV_MMAOperands::SPIRV_MatrixBInt8);
+#endif
+    }
+};
+
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(32, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixAInt8 | SPIRV_MMAOperands::SPIRV_MatrixBInt8);
+#endif
+    }
+};
+
+template<>
+struct XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float> {
+    template<typename ARegisters, typename BRegisters, typename CRegisters>
+    CUTE_HOST_DEVICE
+    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
+#ifdef __SYCL_DEVICE_ONLY__
+     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(8, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixATf32 | SPIRV_MMAOperands::SPIRV_MatrixBTf32);
+#endif
+    }
+};
 } // namespace cute::detail end
+#endif

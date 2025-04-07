@@ -34,152 +34,6 @@
 #include <cute/arch/mma.hpp>
 #include <cute/arch/xe_config.hpp>
 
-// mma_bf16
-SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::float8 acc));
-SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::float4 acc));
-SYCL_DEVICE_OCL(cute::intel::float2 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::float2 acc));
-SYCL_DEVICE_OCL(float  intel_sub_group_bf16_bf16_matrix_mad_k16(short a, cute::intel::int8 b, float acc));
-// mma_half
-SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::float8 acc));
-SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::float4 acc));
-SYCL_DEVICE_OCL(cute::intel::float2 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::float2 acc));
-SYCL_DEVICE_OCL(float  intel_sub_group_f16_f16_matrix_mad_k16(short a, cute::intel::int8 b, float acc));
-// mma_s8
-SYCL_DEVICE_OCL(cute::intel::int8 intel_sub_group_i8_i8_matrix_mad_k32(cute::intel::short8 a, cute::intel::int8 b, cute::intel::int8 acc));
-SYCL_DEVICE_OCL(cute::intel::int4 intel_sub_group_i8_i8_matrix_mad_k32(cute::intel::short4 a, cute::intel::int8 b, cute::intel::int4 acc));
-SYCL_DEVICE_OCL(cute::intel::int2 intel_sub_group_i8_i8_matrix_mad_k32(cute::intel::short2 a, cute::intel::int8 b, cute::intel::int2 acc));
-SYCL_DEVICE_OCL(int  intel_sub_group_i8_i8_matrix_mad_k32(short a, cute::intel::int8 b, int acc));
-// mma_u8
-SYCL_DEVICE_OCL(cute::intel::int8 intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort8 a, cute::intel::uint8 b, cute::intel::int8 acc));
-SYCL_DEVICE_OCL(cute::intel::int4 intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort4 a, cute::intel::uint8 b, cute::intel::int4 acc));
-SYCL_DEVICE_OCL(cute::intel::int2 intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort2 a, cute::intel::uint8 b, cute::intel::int2 acc));
-SYCL_DEVICE_OCL(int  intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort a, cute::intel::uint8 b, int acc));
-// mma_tf32
-SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_tf32_tf32_matrix_mad_k8(cute::intel::float4 a, cute::intel::float8 b, cute::intel::float8 acc));
-SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_tf32_tf32_matrix_mad_k8(cute::intel::float2 a, cute::intel::float8 b, cute::intel::float4 acc));
-SYCL_DEVICE_OCL(cute::intel::float2 intel_sub_group_tf32_tf32_matrix_mad_k8(float a, cute::intel::float8 b, cute::intel::float2 acc));
-SYCL_DEVICE_OCL(float  intel_sub_group_tf32_tf32_matrix_mad_k8(float a, cute::intel::float8 b, float acc));
-
-#if defined(CUTE_ARCH_MMA_XE_SPIRV_ENABLED)
-namespace cute::detail
-{
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(16, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixABf16 | SPIRV_MMAOperands::SPIRV_MatrixBBf16 );
-#endif
-    }
-};
-
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(16, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixAFp16 | SPIRV_MMAOperands::SPIRV_MatrixBFp16);
-#endif
-    }
-};
-
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(32, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixASigned | SPIRV_MMAOperands::SPIRV_MatrixBSigned | SPIRV_MMAOperands::SPIRV_MatrixAInt8 | SPIRV_MMAOperands::SPIRV_MatrixBInt8);
-#endif
-    }
-};
-
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(32, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixAInt8 | SPIRV_MMAOperands::SPIRV_MatrixBInt8);
-#endif
-    }
-};
-
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return __spirv_SubgroupMatrixMultiplyAccumulateINTEL(8, a, b, c, SPIRV_MMAOperands::SPIRV_MatrixATf32 | SPIRV_MMAOperands::SPIRV_MatrixBTf32);
-#endif
-    }
-};
-} // namespace cute::detail end
-#endif
-
-#if defined(CUTE_ARCH_MMA_XE_BUILTIN_ENABLED)
-namespace cute::detail
-{
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
-#endif
-    }
-};
-  
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return intel_sub_group_f16_f16_matrix_mad_k16(a, b, c);
-#endif
-    }
-};
-  
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return intel_sub_group_i8_i8_matrix_mad_k32(a, b, c);
-#endif
-    }
-};
-  
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return intel_sub_group_u8_u8_matrix_mad_k32(a, b, c);
-#endif
-    }
-};
-  
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-#ifdef __SYCL_DEVICE_ONLY__
-     return intel_sub_group_tf32_tf32_matrix_mad_k8(a, b, c);
-#endif
-    }
-};
-} // namespace cute::detail end
-#endif
-
 namespace cute {
 //MxNxK_D,A,B,C
 //# of vector component of a x subgroup-size x function name
@@ -198,7 +52,7 @@ struct XE_8x16x16_F32BF16BF16F32_TT
       intel::int8   const& b,
       intel::float8 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-PVC hardware");
@@ -218,7 +72,7 @@ struct XE_4x16x16_F32BF16BF16F32_TT
       intel::int8   const& b,
       intel::float4 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-PVC hardware");
@@ -238,7 +92,7 @@ struct XE_2x16x16_F32BF16BF16F32_TT
       intel::int8   const& b,
       intel::float2 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-PVC hardware");
@@ -259,7 +113,7 @@ struct XE_1x16x16_F32BF16BF16F32_TT
       intel::int8  const& b,
       float const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32BF16BF16F32_TT on non-PVC hardware");
@@ -267,7 +121,87 @@ struct XE_1x16x16_F32BF16BF16F32_TT
   }
 };
 
-//MxNxK_D,A,B,C
+struct XE_8x16x16_BF16BF16BF16BF16_TT
+{
+  using DRegisters = intel::short8[1];
+  using ARegisters = intel::short8[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = intel::short8[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(intel::short8      & d,
+      intel::short8 const& a,
+      intel::int8   const& b,
+      intel::short8 const& c)
+  {
+#if defined(CUTE_ARCH_XE_ENABLED)
+    d = detail::XeSubgroupMatrixMultiplyAccumulate<bfloat16_t, bfloat16_t, bfloat16_t, bfloat16_t>{}(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_BF16BF16BF16BF16_TT on non-PVC hardware");
+#endif
+  }
+};
+struct XE_4x16x16_BF16BF16BF16BF16_TT
+{
+  using DRegisters = intel::short4[1];
+  using ARegisters = intel::short4[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = intel::short4[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(intel::short4      & d,
+      intel::short4 const& a,
+      intel::int8   const& b,
+      intel::short4 const& c)
+  {
+#if defined(CUTE_ARCH_XE_ENABLED)
+    d = detail::XeSubgroupMatrixMultiplyAccumulate<bfloat16_t, bfloat16_t, bfloat16_t, bfloat16_t>{}(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x16_BF16BF16BF16BF16_TT on non-PVC hardware");
+#endif
+  }
+};
+struct XE_2x16x16_BF16BF16BF16BF16_TT
+{
+  using DRegisters = intel::short2[1];
+  using ARegisters = intel::short2[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = intel::short2[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(intel::short2      & d,
+      intel::short2 const& a,
+      intel::int8   const& b,
+      intel::short2 const& c)
+  {
+#if defined(CUTE_ARCH_XE_ENABLED)
+    d = detail::XeSubgroupMatrixMultiplyAccumulate<bfloat16_t, bfloat16_t, bfloat16_t, bfloat16_t>{}(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x16_BF16BF16BF16BF16_TT on non-PVC hardware");
+#endif
+  }
+};
+struct XE_1x16x16_BF16BF16BF16BF16_TT
+{
+  using DRegisters = short[1];
+  using ARegisters = short[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = short[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(short            & d,
+      short       const& a,
+      intel::int8 const& b,
+            short const& c)
+  {
+#if defined(CUTE_ARCH_XE_ENABLED)
+    d = detail::XeSubgroupMatrixMultiplyAccumulate<bfloat16_t, bfloat16_t, bfloat16_t, bfloat16_t>{}(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_BF16BF16BF16BF16_TT on non-PVC hardware");
+#endif
+  }
+};
+//MxNxK_A,B,C,D
 //# of vector component of a x subgroup-size x function name
 //float8 intel_sub_group_f16_f16_matrix_mad_k16(short8 a, int8 b, int8 acc);
 //TODO: Is A really not transposed? Maybe better a macro than separate define for 1,2,4,8
@@ -284,7 +218,7 @@ struct XE_8x16x16_F32F16F16F32_TT
       intel::int8   const& b,
       intel::float8 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32F16F16F32_TT on non-PVC hardware");
@@ -305,7 +239,7 @@ struct XE_4x16x16_F32F16F16F32_TT
       intel::int8   const& b,
       intel::float4 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x16_F32F16F16F32_TT on non-PVC hardware");
@@ -326,7 +260,7 @@ struct XE_2x16x16_F32F16F16F32_TT
       intel::int8   const& b,
       intel::float2 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
   d = detail::XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x16_F32F16F16F32_TT on non-PVC hardware");
@@ -347,7 +281,7 @@ struct XE_1x16x16_F32F16F16F32_TT
       intel::int8  const& b,
       float const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32F16F16F32_TT on non-PVC hardware");
@@ -355,6 +289,89 @@ struct XE_1x16x16_F32F16F16F32_TT
   }
 };
 
+struct XE_8x16x16_F16F16F16F16_TT
+{
+  using DRegisters = intel::half8[1];
+  using ARegisters = intel::short8[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = intel::half8[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(intel::half8      & d,
+      intel::short8 const& a,
+      intel::int8   const& b,
+      intel::half8 const& c)
+  {
+#if defined(CUTE_ARCH_XE_ENABLED)
+    d = detail::XeSubgroupMatrixMultiplyAccumulate<half_t, half_t, half_t, half_t>{}(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F16F16F16F16_TT on non-PVC hardware");
+#endif
+  }
+};
+
+struct XE_4x16x16_F16F16F16F16_TT
+{
+  using DRegisters = intel::half4[1];
+  using ARegisters = intel::short4[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = intel::half4[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(intel::half4      & d,
+      intel::short4 const& a,
+      intel::int8   const& b,
+      intel::half4 const& c)
+  {
+#if defined(CUTE_ARCH_XE_ENABLED)
+    d = detail::XeSubgroupMatrixMultiplyAccumulate<half_t, half_t, half_t, half_t>{}(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x16_F16F16F16F16_TT on non-PVC hardware");
+#endif
+  }
+};
+
+struct XE_2x16x16_F16F16F16F16_TT
+{
+  using DRegisters = sycl::half2[1];
+  using ARegisters = intel::short2[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = sycl::half2[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(sycl::half2      & d,
+      intel::short2 const& a,
+      intel::int8   const& b,
+      sycl::half2 const& c)
+  {
+#if defined(CUTE_ARCH_XE_ENABLED)
+  d = detail::XeSubgroupMatrixMultiplyAccumulate<half_t, half_t, half_t, half_t>{}(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x16_F16F16F16F16_TT on non-PVC hardware");
+#endif
+  }
+};
+
+struct XE_1x16x16_F16F16F16F16_TT
+{
+  using DRegisters = half_t[1];
+  using ARegisters = short[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = half_t[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(half_t      & d,
+      short const& a,
+      intel::int8  const& b,
+      half_t const& c)
+  {
+#if defined(CUTE_ARCH_XE_ENABLED)
+    d = detail::XeSubgroupMatrixMultiplyAccumulate<half_t, half_t, half_t, half_t>{}(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F16F16F16F16_TT on non-PVC hardware");
+#endif
+  }
+};
 //MxNxK_A,B,C,D
 //# of vector component of a x subgroup-size x function name
 //float8 intel_sub_group_i8_i8_matrix_mad_k16(short8 a, int8 b, float8 acc);
@@ -372,7 +389,7 @@ struct XE_8x16x32_S32S8S8S32_TT
       intel::int8   const& b,
       intel::int8 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32S8S8S32_TT on non-PVC hardware");
@@ -393,7 +410,7 @@ struct XE_4x16x32_S32S8S8S32_TT
       intel::int8   const& b,
       intel::int4 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32S8S8S32_TT on non-PVC hardware");
@@ -414,7 +431,7 @@ struct XE_2x16x32_S32S8S8S32_TT
       intel::int8   const& b,
       intel::int2 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32S8S8S32_TT on non-PVC hardware");
@@ -435,7 +452,7 @@ struct XE_1x16x32_S32S8S8S32_TT
       intel::int8  const& b,
       int const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32S8S8S32_TT on non-PVC hardware");
@@ -456,7 +473,7 @@ struct XE_8x16x32_S32U8U8S32_TT
       intel::uint8   const& b,
       intel::int8 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32U8U8S32_TT on non-PVC hardware");
@@ -477,7 +494,7 @@ struct XE_4x16x32_S32U8U8S32_TT
       intel::uint8   const& b,
       intel::int4 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32U8U8S32_TT on non-PVC hardware");
@@ -498,7 +515,7 @@ struct XE_2x16x32_S32U8U8S32_TT
       intel::uint8   const& b,
       intel::int2 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32U8U8S32_TT on non-PVC hardware");
@@ -519,7 +536,7 @@ struct XE_1x16x32_S32U8U8S32_TT
       intel::uint8  const& b,
       int const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32U8U8S32_TT on non-PVC hardware");
@@ -540,7 +557,7 @@ struct XE_8x16x8_F32TF32TF32F32_TT
       intel::float8   const& b,
       intel::float8 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x8_F32TF32TF32F32_TT on non-PVC hardware");
@@ -561,7 +578,7 @@ struct XE_4x16x8_F32TF32TF32F32_TT
       intel::float8   const& b,
       intel::float4 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x8_F32TF32TF32F32_TT on non-PVC hardware");
@@ -582,7 +599,7 @@ struct XE_2x16x8_F32TF32TF32F32_TT
       intel::float8   const& b,
       intel::float2 const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x8_F32TF32TF32F32_TT on non-PVC hardware");
@@ -603,7 +620,7 @@ struct XE_1x16x8_F32TF32TF32F32_TT
       intel::float8  const& b,
       float const& c)
   {
-#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float>{}(a, b, c);
 #else
     CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x8_F32TF32TF32F32_TT on non-PVC hardware");

@@ -49,7 +49,7 @@ SYCL_DEVICE_BUILTIN(
         int pitch_minus_one, cute::intel::coord_t coord));
 
 
-#if defined(CUTE_ARCH_COPY_XE_BUILTIN_ENABLED)
+#if defined(CUTE_ARCH_XE_BUILTIN_ENABLED)
 namespace cute::detail
 {
 template<>
@@ -95,7 +95,7 @@ struct XE_2D_U64x8x1_LD_T {
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
-#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     static_assert(sizeof(T) == 8, "Expected T to have size 8");
     detail::XeSubgroup2DBlockTranspose<8, 1, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
@@ -111,7 +111,7 @@ struct XE_2D_U64x8x2_LD_T {
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
-#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     static_assert(sizeof(T) == 8, "Expected T to have size 8");
     detail::XeSubgroup2DBlockTranspose<8, 2, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
@@ -127,7 +127,7 @@ struct XE_2D_U64x8x4_LD_T {
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
-#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+#if defined(CUTE_ARCH_XE_ENABLED)
     static_assert(sizeof(T) == 8, "Expected T to have size 8");
     detail::XeSubgroup2DBlockTranspose<8, 4, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
