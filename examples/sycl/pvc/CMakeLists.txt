@@ -29,13 +29,6 @@
 set(TEST_BATCHES --l=2)
 
 cutlass_example_add_executable(
-  pvc_gemm
-  pvc_gemm.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-)
-
-cutlass_example_add_executable(
   pvc_gemm_with_epilogue_relu
   pvc_gemm_with_epilogue_relu.cpp
   TEST_COMMAND_OPTIONS
