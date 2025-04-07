@@ -26,11 +26,11 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
+set(TEST_BATCHES --l=2)
 
 cutlass_example_add_executable(
-  07_pvc_dual_gemm
-  07_pvc_dual_gemm.cpp
+  03_pvc_gemm_streamk
+  03_pvc_gemm_streamk.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
 )
-
