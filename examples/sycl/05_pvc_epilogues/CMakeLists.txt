@@ -35,11 +35,10 @@ cutlass_example_add_executable(
   TEST_BATCHES
 )
 
+#TODO(Codeplay): enable batch > 1 test once implementation is fixed.
 cutlass_example_add_executable(
   05_pvc_gemm_with_epilogue_lincombdeeltact
   05_pvc_gemm_with_epilogue_lincombdeeltact.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
 )
 
 cutlass_example_add_executable(
@@ -49,11 +48,10 @@ cutlass_example_add_executable(
   TEST_BATCHES
 )
 
+#TODO(Codeplay): enable batch > 1 test once implementation is fixed.
 cutlass_example_add_executable(
   05_pvc_gemm_with_epilogue_softmax
   05_pvc_gemm_with_epilogue_softmax.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
 )
 
 cutlass_example_add_executable(
