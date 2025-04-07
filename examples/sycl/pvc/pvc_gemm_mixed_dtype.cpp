@@ -40,6 +40,10 @@
 * - Limitations:
 *    - group must be multiple of k-block size
 *    - scales & zeros must be MN-major
+*
+* Note: due to a bug in the IGC compiler, it's currently necessary to build this example with the following
+* environment variable set:
+*   export IGC_allowDecompose2DBlockFuncs=0
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
