@@ -41,16 +41,18 @@
 #include "cute/tensor.hpp"
 #include "sm90_visitor_tma_warpspecialized.hpp"
 
-#if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
-#define IS_NVIDIA_GPU 1
-#else
-#define IS_NVIDIA_GPU 0
-#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::epilogue::fusion {
 
+namespace {
+#if defined(__CUDA_ARCH__) || defined(__SYCL_CUDA_ARCH__)
+constexpr bool IS_NVIDIA_GPU = true;
+#else
+constexpr bool IS_NVIDIA_GPU = false;
+#endif
+}
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Top-K + Softmax reduction across columns

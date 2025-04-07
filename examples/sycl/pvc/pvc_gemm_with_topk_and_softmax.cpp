@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -119,9 +119,9 @@ using ClusterShape        = Shape<_1,_1,_1>;                                // S
 
 using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
 using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
-using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-        Layout<Shape<_8,_4,_1>>,
-        Tile<_64,_64,_32>>; // Subgroup level-tile
+using TiledMma =
+    typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+                                  Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 constexpr int PipelineStages = 3;
 using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
 using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
@@ -219,8 +219,8 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "61_hopper_gemm_with_topk_and_softmax\n\n"
-      << "  Hopper FP8 GEMM with Top-K and softmax fusion.\n\n"
+    out << "pvc_gemm_with_topk_and_softmax\n\n"
+      << "  PVC GEMM with Top-K and softmax fusion.\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
@@ -232,7 +232,7 @@ struct Options {
 
     out
       << "\n\nExamples:\n\n"
-      << "$ " << "61_hopper_gemm_with_topk_and_softmax" << " --m=16 --n=8 --k=1024 \n\n";
+      << "$ " << "pvc_gemm_with_topk_and_softmax" << " --m=16 --n=8 --k=1024 \n\n";
 
     return out;
   }
