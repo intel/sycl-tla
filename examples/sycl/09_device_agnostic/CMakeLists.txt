@@ -27,11 +27,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #cutlass_example_add_executable(
-#  device_agnostic_gemm
-#  device_agnostic_gemm.cpp
+#  09_device_agnostic_gemm
+#  09_device_agnostic_gemm.cpp
 #)
 #
 #cutlass_example_add_executable(
-#  device_agnostic_collective_builder
-#  device_agnostic_collective_builder.cpp
+#  09_device_agnostic_collective_builder
+#  09_device_agnostic_collective_builder.cpp
 #)
