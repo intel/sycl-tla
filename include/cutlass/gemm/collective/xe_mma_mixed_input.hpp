@@ -378,7 +378,8 @@ public:
     class TensorA,
     class TensorB,
     class FrgTensorC,
-    class KTileIterator
+    class KTileIterator,
+    class BlkCoord
   >
   CUTLASS_DEVICE void
   operator() (
@@ -387,6 +388,7 @@ public:
       TensorB gB,
       FrgTensorC const &src_accum,
       KTileIterator k_tile_iter, int k_tile_count,
+      BlkCoord const &blk_coord,
       int const &K_start,
       int thread_idx,
       Params const& mainloop) 
