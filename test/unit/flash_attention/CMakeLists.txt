@@ -26,6 +26,8 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+if(SYCL_INTEL_TARGET)
+
 set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
 
 cutlass_test_unit_add_executable(
@@ -45,3 +47,10 @@ add_custom_target(
   DEPENDS
   test_unit_flash_attention_xe
 )
+
+else()
+  # Dummy targets if not building for Intel
+  add_custom_target(cutlass_test_unit_flash_attention)
+  add_custom_target(test_unit_flash_attention)
+
+endif()
