@@ -42,6 +42,7 @@ jobs:
         shell: bash
         run: |
           . setvars.sh
+          export IGC_allowDecompose2DBlockFuncs=0 # TODO(codeplay): Remove this once IGC bug is fixed
           # Persist environment variables to following steps
           env >> $GITHUB_ENV
           which $CXX
