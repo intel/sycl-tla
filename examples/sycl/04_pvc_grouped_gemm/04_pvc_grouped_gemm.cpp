@@ -54,11 +54,11 @@
 using namespace cute;
 using ProblemShape = cutlass::gemm::GroupProblemShape<Shape<int,int,int>>; // <M,N,K> per group
 
-using ElementAccumulator = float;                   // <- data type of accumulator
-using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-using ElementA = bfloat16_t;                        // <- data type of elements in input matrix A
-using ElementB = bfloat16_t;                        // <- data type of elements in input matrix B
-using ElementOutput = float;                        // <- data type of elements in output matrix D
+using ElementAccumulator = float;     // <- data type of accumulator
+using ElementComputeEpilogue = float; // <- data type of epilogue operations
+using ElementA = bfloat16_t;          // <- data type of elements in input matrix A
+using ElementB = bfloat16_t;          // <- data type of elements in input matrix B
+using ElementOutput = float;          // <- data type of elements in output matrix D
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
