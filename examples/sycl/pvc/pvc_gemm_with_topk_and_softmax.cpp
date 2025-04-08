@@ -366,47 +366,49 @@ struct Result {
 
     if constexpr (EnableTopKSoftmax) {
       // top-K + softmax
-      for (int i = 0; i < options.m; ++i) {
+      for (int k = 0; k < options.l; ++k) {
+        for (int i = 0; i < options.m; ++i) {
 
-        // Find Top-K
-        cutlass::Array<ElementAccumulator, TopK> top_k;
-        top_k.fill(-cutlass::platform::numeric_limits<ElementCompute>::infinity());
-        for (int j = 0; j < options.n; ++j) {
-          auto val = static_cast<ElementAccumulator>(tensor_ref_D.host_view().ref().at({i, j}));
-          for (int top_k_idx = 0; top_k_idx < TopK; ++top_k_idx) {
-            if (val > top_k[top_k_idx]) {
-              // Shift down
-              for (int l = TopK - 1; l > top_k_idx; --l) {
-                top_k[l] = top_k[l - 1];
+          // Find Top-K
+          cutlass::Array<ElementAccumulator, TopK> top_k;
+          top_k.fill(-cutlass::platform::numeric_limits<ElementCompute>::infinity());
+          for (int j = 0; j < options.n; ++j) {
+            auto val = static_cast<ElementAccumulator>(tensor_ref_D.host_view().ref().at({i + k * options.m, j}));
+            for (int top_k_idx = 0; top_k_idx < TopK; ++top_k_idx) {
+              if (val > top_k[top_k_idx]) {
+                // Shift down
+                for (int l = TopK - 1; l > top_k_idx; --l) {
+                  top_k[l] = top_k[l - 1];
+                }
+                top_k[top_k_idx] = val;
+                break;
               }
-              top_k[top_k_idx] = val;
-              break;
             }
           }
-        }
 
-        // This formulation of top-K + softmax only works when it is
-        // guaranteed that none of the top-K elements are repeated!
-        // If this is the case, the device kernel can also make mistakes, because
-        //   A. Once the top-K values are reduced, and the operation is being applied,
-        //      there is no way to tell repeated elements apart, so none are masked.
-        //   B. The softmax sum of exps will be incorrect (because the repeated elements
-        //      are not repeated in it.)
+          // This formulation of top-K + softmax only works when it is
+          // guaranteed that none of the top-K elements are repeated!
+          // If this is the case, the device kernel can also make mistakes, because
+          //   A. Once the top-K values are reduced, and the operation is being applied,
+          //      there is no way to tell repeated elements apart, so none are masked.
+          //   B. The softmax sum of exps will be incorrect (because the repeated elements
+          //      are not repeated in it.)
 
-        ElementAccumulator max = top_k[0];
-        ElementAccumulator sum = ElementAccumulator(0.f);
-        for (int top_k_idx = 0; top_k_idx < TopK; ++top_k_idx) {
-          sum = sum + cutlass::fast_exp(top_k[top_k_idx] - max);
-        }
+          ElementAccumulator max = top_k[0];
+          ElementAccumulator sum = ElementAccumulator(0.f);
+          for (int top_k_idx = 0; top_k_idx < TopK; ++top_k_idx) {
+            sum = sum + cutlass::fast_exp(top_k[top_k_idx] - max);
+          }
 
-        for (int j=0; j < options.n; ++j) {
-          auto val = tensor_ref_D.host_view().ref().at({i, j});
-          if (val < top_k[TopK - 1]) {
-            tensor_ref_D.host_view().ref().at({i, j}) = static_cast<ElementD>(0.f);
-          } else {
-            // Softmax
-            auto softmax_val = cutlass::fast_exp(val - max) / sum;
-            tensor_ref_D.host_view().ref().at({i, j}) = static_cast<ElementD>(softmax_val);
+          for (int j=0; j < options.n; ++j) {
+            auto val = tensor_ref_D.host_view().ref().at({i + k * options.m, j});
+            if (val < top_k[TopK - 1]) {
+              tensor_ref_D.host_view().ref().at({i + k * options.m, j}) = static_cast<ElementD>(0.f);
+            } else {
+              // Softmax
+              auto softmax_val = cutlass::fast_exp(val - max) / sum;
+              tensor_ref_D.host_view().ref().at({i + k * options.m, j}) = static_cast<ElementD>(softmax_val);
+            }
           }
         }
       }
