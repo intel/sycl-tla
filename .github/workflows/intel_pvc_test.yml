@@ -46,6 +46,7 @@ jobs:
           env >> $GITHUB_ENV
           which $CXX
           $CXX --version
+          clinfo | grep "Device Name"
           sycl-ls
       - name: Build
         shell: bash
