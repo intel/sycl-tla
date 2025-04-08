@@ -59,7 +59,7 @@ SYCL_DEVICE_OCL(int  intel_sub_group_i8_i8_matrix_mad_k32(short a, cute::intel::
 SYCL_DEVICE_OCL(cute::intel::int8 intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort8 a, cute::intel::uint8 b, cute::intel::int8 acc));
 SYCL_DEVICE_OCL(cute::intel::int4 intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort4 a, cute::intel::uint8 b, cute::intel::int4 acc));
 SYCL_DEVICE_OCL(cute::intel::int2 intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort2 a, cute::intel::uint8 b, cute::intel::int2 acc));
-SYCL_DEVICE_OCL(int  intel_sub_group_u8_u8_matrix_mad_k32(ushort a, cute::intel::uint8 b, int acc));
+SYCL_DEVICE_OCL(int  intel_sub_group_u8_u8_matrix_mad_k32(cute::intel::ushort a, cute::intel::uint8 b, int acc));
 // mma_tf32
 SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_tf32_tf32_matrix_mad_k8(cute::intel::float4 a, cute::intel::float8 b, cute::intel::float8 acc));
 SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_tf32_tf32_matrix_mad_k8(cute::intel::float2 a, cute::intel::float8 b, cute::intel::float4 acc));
@@ -155,7 +155,7 @@ struct XE_1x16x16_F32BF16BF16F32_TT
   }
 };
 
-//MxNxK_A,B,C,D
+//MxNxK_D,A,B,C
 //# of vector component of a x subgroup-size x function name
 //float8 intel_sub_group_f16_f16_matrix_mad_k16(short8 a, int8 b, int8 acc);
 //TODO: Is A really not transposed? Maybe better a macro than separate define for 1,2,4,8
@@ -397,13 +397,13 @@ struct XE_2x16x32_S32U8U8S32_TT
 struct XE_1x16x32_S32U8U8S32_TT
 {
   using DRegisters = int[1];
-  using ARegisters = ushort[1];
+  using ARegisters = cute::intel::ushort[1];
   using BRegisters = intel::uint8[1];
   using CRegisters = int[1];
 
   CUTE_HOST_DEVICE static void
   fma(int      & d,
-      ushort const& a,
+      cute::intel::ushort const& a,
       intel::uint8  const& b,
       int const& c)
   {

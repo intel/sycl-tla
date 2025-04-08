@@ -106,7 +106,8 @@ struct TensorPerRowBiasFunc {
   CUTLASS_DEVICE
   void operator()(TensorCoord const &coord) {
     Element const & value = params.view.at(coord);
-    params.view.at(coord) = value + params.bias_view.at(coord);
+    TensorCoord bias_coord = cutlass::make_Coord(coord.row(), 0);
+    params.view.at(coord) = value + params.bias_view.at(bias_coord);
   }
 };
 

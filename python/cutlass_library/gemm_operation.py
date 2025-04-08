@@ -84,6 +84,7 @@ class GemmOperation:
     self.B = B
     self.C = C
     self.D = D
+    self.is_xe = self.arch == 11
 
     if is_block_scaled(gemm_kind):
       self.ScaleFactorA = ScaleFactorA
@@ -324,10 +325,20 @@ class GemmOperation:
           t = TileSchedulerSuffixes[self.tile_scheduler],
           k = self.kernel_schedule_name_3x(),
           e = self.epilogue_schedule_name_3x())
-    else:
+    elif not self.is_xe:
       threadblock = self.tile_description.procedural_name()
       return "cutlass{p}_{op}_{ex}_{tb}_{l}_align{a}".format(
           p = self.prefix,
+          op = opcode_class_name,
+          ex = self.extended_name(),
+          tb = threadblock,
+          l = self.layout_name(),
+          a = str(max(self.A.alignment, self.B.alignment)))
+    else:
+      threadblock = self.tile_description.procedural_name()
+      return "cutlass{p}_xe{ar}_{op}_{ex}_{tb}_{l}_align{a}".format(
+          p = self.prefix,
+          ar = self.arch,
           op = opcode_class_name,
           ex = self.extended_name(),
           tb = threadblock,
@@ -902,6 +913,8 @@ ${compile_guard_end}
       stage_count_string = f"cutlass::gemm::collective::StageCount<{str(operation.tile_description.stages)}>"
     elif opcode_class_main == OpcodeClass.SparseTensorOp and operation.arch == 100:
       stage_count_string = f"cutlass::gemm::collective::StageCountAutoCarveoutEpi<{str(operation.procedural_name())}_epilogue>"
+    elif operation.is_xe:
+      stage_count_string = "cutlass::gemm::collective::StageCountAuto"
     else:
       stage_count_string = f"cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(sizeof(typename {str(operation.procedural_name())}_epilogue::SharedStorage))>"
 
@@ -1059,6 +1072,10 @@ using {operation_name_str}_LayoutNarrowReordered = decltype(cute::tile_to_shape(
       'tile_scheduler': str(TileSchedulerTag[operation.tile_scheduler]),
       'mixed_dtype_prepare_code': mixed_dtype_prepare_code
     }
+
+    # Overriding values for Intel PVC
+    if operation.is_xe:  
+      values['arch'] = "cutlass::arch::IntelPVC"
 
     return SubstituteTemplate(self.gemm_template, values)
 

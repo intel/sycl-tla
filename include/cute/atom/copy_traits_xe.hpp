@@ -122,9 +122,10 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
   #define RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, CONTIG) \
     using PrefetchTraits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##NON_CONTIG##x##CONTIG##_LD_N, decltype(tensor.stride())>; \
     using PrefetchAtom = Copy_Atom<PrefetchTraits, dtype>; \
-    constexpr auto scalar = cute::max(1, DTYPE_SIZE / dtype_size_bits); \
-    using ScalarPrefetchShape = Shape<Int<size<0>(typename PrefetchTraits::BlockShape{})>, \
-                                      Int<size<1>(typename PrefetchTraits::BlockShape{}) * scalar>>; \
+    using Scalar = Int<cute::max(1, DTYPE_SIZE / dtype_size_bits)>; \
+    using ScalarLayout = std::conditional_t<is_need_reversed, Layout<Shape<Scalar, _1>>, Layout<Shape<_1, Scalar>>>; \
+    using ScalarPrefetchShape =  decltype(product_each(raked_product(ScalarLayout{}, \
+                                                        Layout<typename PrefetchTraits::BlockShape>{}).shape())); \
     using PrefetchValLayout = decltype(make_layout(shape_div(ScalarPrefetchShape{}, CopyThreadShape{}))); \
     return make_tiled_copy(PrefetchAtom{}.with(tensor), \
                            PrefetchTilingLayout{}, \
@@ -160,6 +161,27 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
   }
   #undef CHOOSE_PREFETCH_FOR_TYPE
   #undef RETURN_STATEMENT
+}
+
+template<class TileShape, int Num_SGs, class... TiledCopyArgs>
+CUTE_HOST_DEVICE auto prefetch_selector(TiledCopy<TiledCopyArgs...> const& tiled_copy) {
+  using Tiled_Copy = TiledCopy<TiledCopyArgs...>;
+  constexpr int subgroup_size = size(typename Tiled_Copy::Traits_LD_t::ThrID{});
+  int M, N;
+  if constexpr (Tiled_Copy::is_need_reversed) {
+    M = tiled_copy.width;
+    N = tiled_copy.height;
+  } else{
+    M = tiled_copy.height;
+    N = tiled_copy.width;
+  }
+  // L is not used in prefetch_selector and we do not have the correct value here. Just set it to some arbitrary value.
+  int L = 1;
+  auto data = make_gmem_ptr(static_cast<const typename Tiled_Copy::ValType*>(tiled_copy.base_ptr));
+  auto shape = make_shape(M, N, L);
+  auto order = std::conditional_t<Tiled_Copy::is_need_reversed, Step<_0, _1, _2>, Step<_1, _0, _2>>{};
+  auto tensor = make_tensor(data, make_ordered_layout(shape, order));
+  return cute::prefetch_selector<TileShape, Num_SGs, subgroup_size>(tensor);
 }
 
 
@@ -233,12 +255,6 @@ struct XE_2D_LD_Unpack {
 
   XE_2D_LD_Unpack() {}
 
-  template<class TileShape, int Num_SGs, class Tensor>
-  CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) const {
-    constexpr int subgroup_size  = size(typename Traits_LD_t::ThrID{});
-    return cute::prefetch_selector<TileShape, Num_SGs, subgroup_size>(tensor);
-  }
-
   template <class TS, class SLayout, class TD, class DLayout>
   CUTE_HOST_DEVICE friend constexpr void
   copy_unpack(Traits_LD_t const &traits, Tensor<TS, SLayout> const &src,
@@ -247,11 +263,10 @@ struct XE_2D_LD_Unpack {
     constexpr int dtype_bits = sizeof_bits_v<dtype>;
 
     static_assert(is_rmem<TD>::value);
-    // TODO(Codeplay): enable this check once the coordinate refactoring is complete
-    //static_assert(size(SLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::SrcLayout{}),
-      //            "Src tensor size does not match copy atom size");
-    // static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::DstLayout{}),
-    //               "Dst tensor size does not match copy atom size");
+    static_assert(size(SLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::SrcLayout{}),
+                  "Src tensor size does not match copy atom size.");
+    static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::DstLayout{}),
+                  "Dst tensor size does not match copy atom size.");
 
     dtype *base_addr = (dtype *)traits.base_ptr;
   
@@ -272,10 +287,11 @@ struct XE_2D_LD_Unpack {
   CUTE_HOST_DEVICE friend constexpr void
   prefetch(Copy_Atom<Traits_LD_t, CA_Args...> const &atom,
            Tensor<TS, SLayout> const &src) {
-    static_assert(detail::has_prefetch<CopyOp>);
-    //TODO(Codeplay) add asserts on size
-
     using dtype = typename Copy_Atom<Traits_LD_t, CA_Args...>::ValType;
+
+    static_assert(detail::has_prefetch<CopyOp>);
+    static_assert(size(SLayout{}) * sizeof_bits_v<dtype> == size<1>(typename Traits_LD_t::SrcLayout{}),
+                  "Src tensor size does not match copy atom for prefetch size");
 
     dtype *base_addr = (dtype *)atom.base_ptr;
 
@@ -284,10 +300,12 @@ struct XE_2D_LD_Unpack {
     int x = is_need_reversed ? m : n;
     int y = is_need_reversed ? n : m;
 
-    CopyOp::PREFETCH::copy((void *)(base_addr + l * atom.stride_l),
-                           atom.width * sizeof(dtype), atom.height,
-                           atom.pitch * sizeof(dtype),
-                           intel::coord_t{x, y});
+    constexpr auto inst_size_bits = detail::size_of_inst_bits<CopyOp, dtype>;
+
+    CopyOp::PREFETCH::copy(base_addr + l * atom.stride_l,
+                           (atom.width * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>, atom.height,
+                           (atom.pitch * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>,
+                           intel::coord_t{(int)(x * sizeof_bits_v<dtype> / inst_size_bits), y});
   }
 
   template <class... TensorArgs>
@@ -352,10 +370,9 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
 
     static_assert(is_rmem<TS>::value);
     static_assert(size(SLayout{}) * dtype_bits == size<1>(typename Traits_ST_t::SrcLayout{}),
-                  "Src tensor size does not match copy atom size");
-    // TODO(Codeplay): rnable this check once the coordinate refactoring is complete
-    //static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_ST_t::DstLayout{}),
-    //              "Dst tensor size does not match copy atom size");
+                  "Src tensor size does not match copy atom size.");
+    static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_ST_t::DstLayout{}),
+                  "Dst tensor size does not match copy atom size.");
 
     dtype *base_addr = (dtype *)traits.base_ptr;
     
@@ -398,8 +415,8 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
   Int copy_size_M = size<0>(thread_copy_shape);
   Int copy_size_N = size<1>(thread_copy_shape);
 
-  static_assert(copy_size_M >= mma_atom_size_M);
-  static_assert(copy_size_N >= mma_atom_size_N);
+  static_assert(copy_size_M >= mma_atom_size_M, "MMA atom larger than copy atom is not currently supported.");
+  static_assert(copy_size_N >= mma_atom_size_N, "MMA atom larger than copy atom is not currently supported.");
   Int mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size_M;
   Int mma_atom_iters_in_copy_N = copy_size_N / mma_atom_size_N;
   Int copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
@@ -566,6 +583,41 @@ struct Copy_Traits_<XE_2D_U4x16x64_LD_N, args_t...>
 };
 
 template <class... args_t>
+struct Copy_Traits_<XE_2D_U4x16x16_LD_T, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U4x16x16_LD_T, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_4, _16>>,
+                           Stride<_0,Stride< _1,_64>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16,Shape <_4, _16>>,
+                           Stride<_16,Stride< _1,_64>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgT>
+  Copy_Traits_(ArgT... args)
+      : XE_2D_LD_Unpack<XE_2D_U4x16x16_LD_T, args_t...>(args...) {}
+};
+template <class... args_t>
+struct Copy_Traits_<XE_2D_U4x32x16_LD_T, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U4x32x16_LD_T, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_4, _32>>,
+                          Stride<_0,Stride< _1,_64>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16,Shape <_4, _32>>,
+                           Stride<_16,Stride< _1,_64>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgT>
+  Copy_Traits_(ArgT... args)
+      : XE_2D_LD_Unpack<XE_2D_U4x32x16_LD_T, args_t...>(args...) {}
+};
+
+template <class... args_t>
 struct Copy_Traits_<XE_2D_U8x1x64_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x1x64_LD_N, args_t...> {
   using ThrID = Layout<_16>;
@@ -596,7 +648,7 @@ struct Copy_Traits_<XE_2D_U8x1x64_LD_N::PREFETCH, args_t...>
                            Stride<_16,Stride<_1,_8,_256>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
-  using CopyInternalType = ushort;
+  using CopyInternalType = cute::intel::ushort;
 };
 
 template <class... args_t>
@@ -631,7 +683,7 @@ struct Copy_Traits_<XE_2D_U8x2x64_LD_N::PREFETCH, args_t...>
                            Stride<_16,Stride<_1,_8,_256,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
-  using CopyInternalType = ushort;
+  using CopyInternalType = cute::intel::ushort;
 };
 
 template <class... args_t>
@@ -665,7 +717,7 @@ struct Copy_Traits_<XE_2D_U8x4x64_LD_N::PREFETCH, args_t...>
                            Stride<_16,Stride<_1,_8,_256,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
-  using CopyInternalType = ushort;
+  using CopyInternalType = cute::intel::ushort;
 };
 
 template <class... args_t>
@@ -699,7 +751,7 @@ struct Copy_Traits_<XE_2D_U8x8x64_LD_N::PREFETCH, args_t...>
                            Stride<_16,Stride<_1,_8,_256,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
-  using CopyInternalType = ushort;
+  using CopyInternalType = cute::intel::ushort;
 };
 
 
@@ -1050,7 +1102,7 @@ struct Copy_Traits_<XE_2D_U16x8x32_LD_N::PREFETCH, args_t...>
                            Stride<_32,Stride< _1,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
-  using CopyInternalType = ushort;
+  using CopyInternalType = cute::intel::ushort;
 };
 
 template <class... args_t>
@@ -1087,7 +1139,7 @@ struct Copy_Traits_<XE_2D_U16x16x32_LD_N::PREFETCH, args_t...>
                            Stride<_32,Stride< _1,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
-  using CopyInternalType = ushort;
+  using CopyInternalType = cute::intel::ushort;
 };
 
 template <class... args_t>
@@ -1121,7 +1173,7 @@ struct Copy_Traits_<XE_2D_U16x32x32_LD_N::PREFETCH, args_t...>
                            Stride<_32,Stride< _1,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
-  using CopyInternalType = ushort;
+  using CopyInternalType = cute::intel::ushort;
 };
 
 template <class... args_t>
@@ -2218,6 +2270,8 @@ COPY_TRAIT_LD_DEF(XE_2D_TF32x16x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_TF32x32x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U4x32x64_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U4x16x64_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U4x32x16_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U4x16x16_LD_T)
 COPY_TRAIT_LD_DEF(XE_2D_U8x1x64_LD_N::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U8x2x64_LD_N::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U8x4x64_LD_N::PREFETCH)

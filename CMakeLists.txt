@@ -103,13 +103,9 @@ endif()
 #
 ################################################################################
 
-set(CUTLASS_ENABLE_SYCL OFF CACHE BOOL "Enable SYCL")
-set(CUTLASS_SYCL_PROFILING_ENABLED OFF CACHE BOOL "Use SYCL events to calculate device execution time")
+option(CUTLASS_ENABLE_SYCL "Enable SYCL" OFF)
+option(CUTLASS_SYCL_PROFILING_ENABLED "Use SYCL events to calculate device execution time" OFF)
 
-set(CUTLASS_SYCL_SWITCH_WG OFF CACHE BOOL "Enable SWITCH WG and for GEMM on Intel PVC during benchmarking")
-if(CUTLASS_SYCL_SWITCH_WG)
-  add_compile_definitions(CUTLASS_SYCL_SWITCH_WG)
-endif()
 if (CUTLASS_ENABLE_SYCL)
   set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -278,6 +274,9 @@ set(CUTLASS_LIBRARY_DEBUG_POSTFIX ${CUTLASS_LIBRARY_DEBUG_POSTFIX_INIT} CACHE ST
 if(WIN32)
   # On Windows we link against the shared (DLL) runtime. Change gtest settings to match this.
   set(gtest_force_shared_crt ON CACHE BOOL "Use shared (DLL) run-time lib even when Google Test is built as static lib" FORCE)
+
+  # Disable CRT security warnings and don't include GDI headers (macro RELATIVE causes name collision)
+  add_definitions(-D_CRT_SECURE_NO_WARNINGS -DNOGDI)
 endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCUTLASS_VERSIONS_GENERATED")
@@ -806,7 +805,7 @@ if (DOXYGEN_FOUND)
     )
 endif()
 
-if(NOT WIN32 AND NOT CUTLASS_ENABLE_SYCL)
+if(NOT (WIN32 OR CUTLASS_ENABLE_SYCL OR CUTLASS_CLANG_DEVICE_COMPILE))
   # Add common library search paths so executables and libraries can load and run
   # without LD_LIBRARY_PATH being set.
   link_libraries(
