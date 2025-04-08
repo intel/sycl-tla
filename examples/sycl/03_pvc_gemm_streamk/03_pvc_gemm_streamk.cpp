@@ -28,6 +28,23 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief CUTLASS Intel PVC Gemm with Stream-K Scheduling
+
+    This example implements a Stream-K scheduled GEMM on Intel PVC hardware. Stream-K avoids tail
+    effects on performance where conventional tiling wouldn't evenly divide the work across hardware.
+    Whereas the conventional GEMM implementation requires that each work-group handle a 'whole' tile
+    (i.e. iterate across the entire range of K), Stream-K permits the scheduler to split tiles along
+    the K dimension between work-groups. This requires inter work-group communication to combine
+    partial tile results.
+
+    This example demonstrates 3 scheduling modes (DecompositionModes):
+    - DataParallel - conventional GEMM
+    - Split-K  - split the K dimension into fixed size chunks
+    - Stream-K - split each tile arbitrarily along K to balance workloads
+
+    Verification for this example is a conventional GEMM, since Split/Stream-K is a perf algorithm
+*/
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
@@ -242,7 +259,8 @@ struct ExampleRunner {
       {block_A.get(), stride_A, block_B.get(), stride_B},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
       hw_info,
-      {options.splits, 
+      {options.splits, // Setting splits > 1 will force SplitK decomposition
+      // Set the decomposition mode based on user provided options
       options.dp ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::DataParallel :
       options.splitk ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::SplitK :
                           cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::StreamK}
@@ -272,17 +290,6 @@ struct ExampleRunner {
       GPU_Clock timer;
       float elapsed_time_seconds = 0.f;
       for (int i = 0; i < options.iterations; ++i) {
-        typename Gemm::GemmKernel::Arguments arguments{
-          cutlass::gemm::GemmUniversalMode::kGemm,
-          problem_size,
-          {block_A.get(), stride_A, block_B.get(), stride_B},
-          {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
-          hw_info,
-          {options.splits, 
-          options.dp ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::DataParallel :
-          options.splitk ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::SplitK :
-                              cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::StreamK}
-        };
         gemm_op.initialize(arguments, workspace.get());
         timer.start();
         gemm_op.run();
