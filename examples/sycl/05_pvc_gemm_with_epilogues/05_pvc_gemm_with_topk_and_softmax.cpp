@@ -216,7 +216,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "pvc_gemm_with_topk_and_softmax\n\n"
+    out << "05_pvc_gemm_with_topk_and_softmax\n\n"
       << "  PVC GEMM with Top-K and softmax fusion.\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
@@ -229,7 +229,7 @@ struct Options {
 
     out
       << "\n\nExamples:\n\n"
-      << "$ " << "pvc_gemm_with_topk_and_softmax" << " --m=16 --n=8 --k=1024 \n\n";
+      << "$ " << "05_pvc_gemm_with_topk_and_softmax" << " --m=16 --n=8 --k=1024 \n\n";
 
     return out;
   }
