@@ -180,7 +180,6 @@ struct ExampleRunner {
           M * N  // batch_stride_D
         );
 
-
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareEqual(
       block_ref_D.get(), block_D.get(), block_D.size());
@@ -241,6 +240,7 @@ struct ExampleRunner {
     // Run the GEMM
     CUTLASS_CHECK(gemm_op.run(&q));
 
+    q.wait_and_throw();
 
     // Verify that the result is correct
     bool passed = verify(problem_size, options.alpha, options.beta);
@@ -254,6 +254,8 @@ struct ExampleRunner {
       for (int i = 0; i < options.iterations; ++i) {
         gemm_op.run(&q);
       }
+
+      q.wait_and_throw();
 
       float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
@@ -319,8 +321,8 @@ int main(int argc, const char** argv)
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
-  // The Tile of this layout describes how 8x4x1 sub-groups tile the TileShape of <256, 256, 32>. 
-  // This permutation (which can be thought of as a scatter operation on the default tiling) 
+  // The Tile of this layout describes how 8x4x1 sub-groups tile the TileShape of <256, 256, 32>.
+  // This permutation (which can be thought of as a scatter operation on the default tiling)
   // ensures that each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations)
   // See 0t_mma_atom.md#TiledMMAs for more info.
   // Sub-groups are arranged row-major (stride 4,1,0) for performance reasons.
