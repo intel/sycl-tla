@@ -28,7 +28,18 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief CUTLASS Intel PVC Gemm with ReLU epilogue using Collective Builder.
 
+    The Collective Builder classes provide a simplified interface for constructing a the mainloop
+    and epilogue for given data layouts & types, on certain hardware. Compared to `00_pvc_gemm`,
+    this example omits the MMA and copy operation definitions, as the CollectiveBuilder will select
+    these. Additionally, instead of specifying the DispatchPolicy, we provide only the arch
+    (cutlass::arch::IntelPVC).
+
+    This example also demonstrates the use of a ReLU activation epilogue, fusing the ReLU operation
+    with the GEMM in a single kernel.
+*/
 
 #include "cutlass/gemm/device/gemm_universal.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
@@ -331,11 +342,12 @@ int main(int argc, const char** argv)
     ElementInputA, LayoutA, AlignmentA,
     ElementInputB, LayoutB, AlignmentB,
     ElementAccumulator,
-    TileShape, Shape<_1, _1, _1>,
-    cutlass::gemm::collective::StageCountAuto,
-    cutlass::gemm::collective::KernelScheduleAuto
+    TileShape, Shape<_1, _1, _1>,                 // the ClusterShape is always <1,1,1> on IntelPVC
+    cutlass::gemm::collective::StageCountAuto,    // let the builder select the number of pipeline stages (i.e. prefetch iters)
+    cutlass::gemm::collective::KernelScheduleAuto // let the builder select the mainloop schedule
   >::CollectiveOp;
 
+  // Define a Linear Combination, Elementwise Activation (LinCombEltAct) epilogue with ReLU activation
   using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, 
           ElementOutput, ElementComputeEpilogue, ElementAccumulator, 
           ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
