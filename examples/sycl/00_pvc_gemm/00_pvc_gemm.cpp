@@ -369,13 +369,13 @@ int main(int argc, const char** argv)
           EpilogueDispatchPolicy,
           TileShape,
           ElementAccumulator,
-          cutlass::gemm::TagToStrideC_t<LayoutC>,
+          cutlass::gemm::TagToStrideC_t<LayoutC>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
           ElementOutput,
-          cutlass::gemm::TagToStrideC_t<LayoutD>,
+          cutlass::gemm::TagToStrideC_t<LayoutD>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
           FusionCallBacks,
-          XE_2D_U32x8x16_LD_N,
+          XE_2D_U32x8x16_LD_N, // The copy atom used to load matrix C
           void, void,
-          XE_2D_U32x8x16_ST_N,
+          XE_2D_U32x8x16_ST_N, // The copy atom used to store matrix D
           void, void>;
 
   // Mainloop
@@ -383,9 +383,9 @@ int main(int argc, const char** argv)
           GEMMDispatchPolicy,
           TileShape,
           ElementInputA,
-          cutlass::gemm::TagToStrideA_t<LayoutA>,
+          cutlass::gemm::TagToStrideA_t<LayoutA>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
           ElementInputB,
-          cutlass::gemm::TagToStrideB_t<LayoutB>,
+          cutlass::gemm::TagToStrideB_t<LayoutB>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
           TiledMma,
           GmemTiledCopyA, void, void, cute::identity,  // A
           GmemTiledCopyB, void, void, cute::identity   // B
