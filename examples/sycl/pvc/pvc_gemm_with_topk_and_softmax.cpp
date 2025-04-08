@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,10 +74,7 @@
 #include "cutlass/util/reference/host/tensor_compare.h"
 #include "cutlass/util/reference/host/tensor_norm.h"
 #include "cutlass/util/reference/host/gett.hpp"
-//#include "common.hpp"
 #include "helper.h"
-
-
 
 
 using namespace cute;
