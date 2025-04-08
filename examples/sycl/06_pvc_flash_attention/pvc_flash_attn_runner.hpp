@@ -49,7 +49,7 @@
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "../common.hpp"
+#include "sycl_common.hpp"
 
 using namespace cute;
 

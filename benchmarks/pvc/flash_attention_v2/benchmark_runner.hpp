@@ -49,7 +49,7 @@
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "../examples/sycl/pvc/common.hpp"
+#include "../examples/common/sycl_common.hpp"
 
 #include "../benchmarks/benchmark_runner.hpp"
 
