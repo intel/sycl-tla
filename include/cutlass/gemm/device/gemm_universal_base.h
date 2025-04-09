@@ -462,8 +462,7 @@ public:
       const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
       const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
 
-      sycl::queue q = stream ?
-        *reinterpret_cast<sycl::queue*>(stream) : syclcompat::get_default_queue();
+      sycl::queue q = stream ? *stream : syclcompat::get_default_queue();
       syclcompat::experimental::launch<Kernel2<GemmKernel>>(
         syclcompat::experimental::launch_policy{
           sycl_grid, sycl_block,

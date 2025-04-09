@@ -495,7 +495,7 @@ public:
     const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
     const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
 
-    auto q = stream ? *reinterpret_cast<sycl::queue*>(stream) : syclcompat::get_default_queue();
+    auto q = stream ? *stream : syclcompat::get_default_queue();
     syclcompat::experimental::launch<cutlass::Kernel<GemmKernel>>(
       syclcompat::experimental::launch_policy{
         sycl_grid, sycl_block,

@@ -545,8 +545,7 @@ public:
       else {
         CUTLASS_ASSERT(cuda_adapter == nullptr);
 #if defined(CUTLASS_ENABLE_SYCL)
-        sycl::queue q = stream ?
-          *reinterpret_cast<sycl::queue*>(stream) : syclcompat::get_default_queue();
+        sycl::queue q = stream ? *stream : syclcompat::get_default_queue();
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
         using namespace syclcompat::experimental;
         if constexpr (cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>) {
