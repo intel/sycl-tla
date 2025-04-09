@@ -216,6 +216,7 @@ struct ExampleRunner {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
+    // Complete the stride by combining static layout info (StrideA) with runtime size info (M,K,L)
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
