@@ -23,6 +23,12 @@ runs:
         echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | sudo tee /etc/apt/sources.list.d/intel-gpu-jammy.list
         sudo apt update && sudo apt install -y libze-intel-gpu1 libze1 intel-opencl-icd clinfo libze-dev intel-ocloc
         dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
+        
+        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.8.3/intel-igc-core-2_2.8.3+18762_amd64.deb
+        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.8.3/intel-igc-opencl-2_2.8.3+18762_amd64.deb
+        sudo dpkg -i --force-all intel-igc-core-2_2.8.3+18762_amd64.deb
+        sudo dpkg -i --force-all intel-igc-opencl-2_2.8.3+18762_amd64.deb
+
         export DPCPP_PATH=${{ inputs.DPCPP_PATH }}
         mkdir -p $DPCPP_PATH
         pushd $DPCPP_PATH
@@ -59,6 +65,12 @@ runs:
         echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo apt update
         sudo apt install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp libze-intel-gpu1 libze1 intel-opencl-icd clinfo libze-dev intel-ocloc
+
+        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.8.3/intel-igc-core-2_2.8.3+18762_amd64.deb
+        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.8.3/intel-igc-opencl-2_2.8.3+18762_amd64.deb
+        sudo dpkg -i --force-all intel-igc-core-2_2.8.3+18762_amd64.deb
+        sudo dpkg -i --force-all intel-igc-opencl-2_2.8.3+18762_amd64.deb
+        
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh
