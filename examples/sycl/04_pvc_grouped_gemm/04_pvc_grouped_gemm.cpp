@@ -28,7 +28,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief CUTLASS Intel PVC Group Gemm
 
+    This example demonstrates fusing mulitple GEMM operations into one kernel.
+
+    Verification for this example is a conventional GEMM kernel, executed once per group.
+*/
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_array_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
