@@ -41,8 +41,8 @@
 #include "cutlass/layout/layout.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
 #include "cutlass/gemm/collective/collective_mma.hpp"
+#include "cutlass/gemm/collective/collective_builder.hpp"
 #include "cutlass/epilogue/collective/collective_builder.hpp"
-
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/thread/linear_combination.h"
 
@@ -60,8 +60,7 @@ template<
   class ElementB, class LayoutB,
   class ElementC, class LayoutC,
   class ElementAccumulator,
-  class TileShape, class TiledMma,
-  class GmemTiledCopyA, class GmemTiledCopyB,
+  class TileShape,
   Scheduler TileScheduler>
 struct GemmConfiguration {
   static_assert(sizeof(ElementA) == 0, "No valid GemmConfiguration configuration exists.");
@@ -72,44 +71,44 @@ struct GemmConfiguration {
 // bfloat16
 
 template<typename LayoutA, typename LayoutB, typename LayoutC,
-  class TileShape, class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB, Scheduler TileScheduler>
+  class TileShape, Scheduler TileScheduler>
 struct GemmConfiguration<
       arch::IntelPVC,
       bfloat16_t, LayoutA,
       bfloat16_t, LayoutB,
       float, LayoutC,
-      float, TileShape, TiledMma,
-      GmemTiledCopyA, GmemTiledCopyB, TileScheduler> {
-  using DispatchPolicy = MainloopIntelPVC<3, std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>>;
+      float, TileShape,
+      TileScheduler> {
+  using KernelScheduleType =std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>;
 
+
+  static_assert(std::is_same_v<LayoutC, cutlass::layout::RowMajor>, "LayoutC unsupported in collective builder");
+  using LayoutD = LayoutC;
+  using ClusterShape = Shape<_1, _1, _1>;
   // Mainloop
-  using CollectiveMainloop = collective::CollectiveMma<
-    DispatchPolicy, TileShape,
-    bfloat16_t, TagToStrideA_t<LayoutA>,
-    bfloat16_t, TagToStrideB_t<LayoutB>,
-    TiledMma,
-    GmemTiledCopyA, void, void, identity, // A
-    GmemTiledCopyB, void, void, identity // B
-  >;
+  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    bfloat16_t, LayoutA, sizeof(bfloat16_t),
+    bfloat16_t, LayoutB, sizeof(bfloat16_t),
+    float,
+    TileShape, ClusterShape,
+    cutlass::gemm::collective::StageCountAuto,
+    KernelScheduleType
+  >::CollectiveOp;
 
   // Epilogue
-  using EpilogueDispatchPolicy = epilogue::IntelPVCEpilogue;
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float, float, float, FloatRoundStyle::round_to_nearest>;
-  using FusionCallBacks = epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
-          decltype(tile_shape(TiledMma()))>;
 
-  using CollectiveEpilogue = epilogue::collective::CollectiveEpilogue<
-        EpilogueDispatchPolicy,
-        TileShape,
-        float,
-        TagToStrideC_t<LayoutC>,
-        float,
-        TagToStrideC_t<LayoutC>,
-        FusionCallBacks,
-        XE_2D_U32x8x16_LD_N,
-        void, void,
-        XE_2D_U32x8x16_ST_N,
-        void, void>;
+  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    TileShape, ClusterShape,
+    cutlass::epilogue::collective::EpilogueTileAuto, float,
+    float,
+    float, LayoutC, sizeof(float),
+    float, LayoutD, sizeof(float),
+    cutlass::epilogue::collective::EpilogueScheduleAuto,
+    EpilogueOp
+  >::CollectiveOp;
 
   using GemmKernel = kernel::GemmUniversal<
     Shape<int, int, int, int>,

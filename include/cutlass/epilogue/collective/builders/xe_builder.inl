@@ -174,6 +174,7 @@ template <
       using DispatchPolicy = std::conditional_t<IsGroup, 
                                                 IntelPVCGroupEpilogue, 
                                                 IntelPVCEpilogue>;
+      // TODO update depending on same as mma builder
       using CopyOpG2R = XE_2D_U32x8x16_LD_N;
       using CopyOpR2G = XE_2D_U32x8x16_ST_N;
 

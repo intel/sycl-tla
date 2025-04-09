@@ -71,9 +71,7 @@ struct CollectiveBuilder<
     cute::is_same_v<ElementA, ElementB> &&
     cute::is_any_of_v<ElementA, bfloat16_t, half_t> &&
     cute::is_any_of_v<ElementB, bfloat16_t, half_t>
-  >
-    >{
-
+  >>{
       #ifdef SYCL_NVIDIA_TARGET
         static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
           "Trying to use Intel pipeline on Non Intel hardware");
@@ -86,7 +84,7 @@ struct CollectiveBuilder<
                                                   XE_8x16x16_F32F16F16F32_TT>>;
       
       // Prepare Template arguments required of CollectiveMainLoop
-      using atoms_M = _8;
+      using atoms_M = _8; // TODO(finlay): update depending on TileShape_MNK
       using atoms_N = _4;
       using TiledMma =
           typename TiledMMAHelper<MMAAtom,
@@ -104,6 +102,7 @@ struct CollectiveBuilder<
       static constexpr auto tile_M = get<0>(TileShape_MNK{});
       static constexpr auto tile_N = get<1>(TileShape_MNK{});
       static constexpr auto tile_K = get<2>(TileShape_MNK{});
+      // TODO update based on column or row major and TileShapeMNK
       using GmemTiledCopyA = std::conditional_t<cute::is_same_v<GmemLayoutATag, cutlass::layout::RowMajor>,
                                                 std::conditional_t< tile_M/atoms_M{}>=_32{} && tile_K>=_32{}, 
                                                                     XE_2D_U16x32x32_LD_N, 
