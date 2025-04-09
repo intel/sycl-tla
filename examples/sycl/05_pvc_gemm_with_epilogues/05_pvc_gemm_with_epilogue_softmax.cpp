@@ -28,6 +28,25 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief CUTLASS Intel PVC Gemm with row-wise softmax epilogue
+
+    This example constructs and executes a standard GEMM fused with a softmax epilogue.
+    Aside from the epilogue operation, it is identical to 00_pvc_gemm.
+
+    CUTLASS 3.x epilogues are implemented using the Epilogue Visitor Tree design pattern, and
+    typically combine 'Linear Combination' (i.e. `D = alpha * A*B + beta * C`) with an additional
+    epilogue operation.
+
+    In this case, a row-wise softmax is applied:
+
+    // D = softmax(alpha * (A*B) + beta * C)
+
+    To run this example:
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_epilogue_softmax --m=5120 --n=4096 --k=4096 --l=20
+
+    This will launch a batch of 20 gemms of size 5120x4096x4096.
+*/
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
@@ -395,6 +414,7 @@ int main(int argc, const char** argv)
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
+  // Linear Combination + Row-wise Softmax Epilogue
   using EpilogueOp = cutlass::epilogue::fusion::LinCombSoftmaxRow<ElementOutput,
           ElementComputeEpilogue, XE_2D_U32x8x16_ST_N, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 

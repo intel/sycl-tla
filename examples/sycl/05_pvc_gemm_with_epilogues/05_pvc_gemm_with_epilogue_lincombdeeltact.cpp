@@ -33,15 +33,15 @@
     \brief GEMM + Binary Activation Function using CUTLASS 3 APIs for Intel PVC architecture.
 
     This example demonstates an implementation of GEMM + element-wise binary activation function,
-    with an auxillary tensor. This examples makes use of PVCs subgroup cooperative 2d-block copy
+    with an auxiliary tensor. This examples makes use of PVCs subgroup cooperative 2d-block copy
     operations and DPAS instructions. All copy are using the cooperative 2d-block copy operations,
     so input sizes must be divisible by the global copy atom, CopyOpG2R.
 
     To run this example:
-      $ ./examples/sylc/pvc/pvc_gemm_with_epilogue_lincombdeeltact --m=5120 --n=4096 --k=4096 --l=20
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_epilogue_lincombdeeltact --m=5120 --n=4096 --k=4096 --l=20
 
-    This will launch a batch of 20 gemms of size 5120x4096x4096. The auxillary vector is created as
-    a 2-D tensor of size MxN. 1-D auxillary tensors are not yet supported. The input values are
+    This will launch a batch of 20 gemms of size 5120x4096x4096. The auxiliary vector is created as
+    a 2-D tensor of size MxN. 1-D auxiliary tensors are not yet supported. The input values are
     randomized and the results are verified against a reference implementation.
 */
 

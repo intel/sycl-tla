@@ -28,7 +28,27 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief CUTLASS Intel PVC Gemm with per-row-bias epilogue
 
+    This example constructs and executes a standard GEMM fused with a per-row-bias epilogue.
+    Aside from the epilogue operation, it is identical to 00_pvc_gemm.
+
+    CUTLASS 3.x epilogues are implemented using the Epilogue Visitor Tree design pattern, and
+    typically combine 'Linear Combination' (i.e. `D = alpha * A*B + beta * C`) with an additional
+    epilogue operation.
+
+    In this case, a row-wise bias value is added:
+
+    // D = alpha * (A*B) + beta * C + bias
+
+    This implies loading auxiliary data (containing the bias values) of shape M*L (each row shares a single bias value)
+
+    To run this example:
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_per_row_bias --m=5120 --n=4096 --k=4096 --l=20
+
+    This will launch a batch of 20 gemms of size 5120x4096x4096.
+*/
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
@@ -245,6 +265,8 @@ struct ExampleRunner {
       cute::get<2>(dBias) = static_cast<int64_t>(0);
     }
 
+    // The epilogue operation requires a pointer to the bias data and information about its layout
+    // in memory, in addition to the usual C and D matrix info
     using EpilogueArguments = typename Gemm::GemmKernel::EpilogueArguments;
     EpilogueArguments epilogue_arguments{
       {options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D};
@@ -358,6 +380,7 @@ int main(int argc, const char** argv)
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
+  // The Linear Combination + Per Row Bias epilogue operation
   using EpilogueOp = cutlass::epilogue::fusion::LinCombPerRowBias<
       ElementOutput, ElementComputeEpilogue, ElementBias, ElementAccumulator,
       ElementAccumulator, 128 / sizeof_bits_v<ElementBias>,
