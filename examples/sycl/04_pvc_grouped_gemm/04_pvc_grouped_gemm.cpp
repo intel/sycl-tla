@@ -33,7 +33,21 @@
 
     This example demonstrates fusing mulitple GEMM operations into one kernel.
 
-    Verification for this example is a conventional GEMM kernel, executed once per group.
+    Note that the scalar arguments to e.g. the standard 00_pvc_gemm example, have been
+    replaced with vector equivalents, as each individual GEMM has its own inputs and outputs, which
+    needn't be contiguous in memory. For example, where 00_pvc_gemm receives an `ElementA *`
+    defining Matrix A, grouped gemm receives a `ElementA **`, i.e. a pointer to pointers, each
+    pointing to a distinct Matrix A. Likewise, each individual GEMM operation may have its own alpha
+    and beta factors for linear combination. This example demonstrates two approaches: the user can
+    provide `options.alpha` and `options.beta`, in which case they will apply to all GEMMs;
+    otherwise, random values are generated per GEMM.
+
+    Group GEMM scheduling (cutlass::gemm::GroupScheduler) is more complex than standard GEMM,
+    because each GEMM may have a unique size, only known at runtime. Thus, the scheduler will
+    distribute an a priori unknown number of tiles to each work-group. See
+    include/cutlass/gemm/kernel/xe_gemm_array_cooperative.hpp for implementation.
+
+    Verification for this example is a conventional GEMM kernel, executed iteratively per group.
 */
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_array_epilogue.hpp"
@@ -195,6 +209,8 @@ struct ExampleRunner {
   // Device-side allocations
   cutlass::DeviceAllocation<typename ProblemShape::UnderlyingProblemShape> problem_sizes;
 
+  // This example defines all matrices in a single allocation (e.g. block_A), but this is not a
+  // requirement. Matrix base pointers are read from device allocation (e.g. ptr_A)
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
   cutlass::DeviceAllocation<ElementC> block_C;
@@ -226,6 +242,7 @@ struct ExampleRunner {
 
   bool verify(const Options &options) {
     bool passed = true;
+    // Verify against individual reference GEMMs
     for (int32_t i = 0; i < options.groups; ++i) {
       auto problem = options.problem_sizes_host.at(i);
       auto M = get<0>(problem);
@@ -275,6 +292,7 @@ void allocate(const Options &options) {
   int64_t total_elements_C = 0;
   int64_t total_elements_D = 0;
 
+  // Compute total allocation sizes across group
   for (int32_t i = 0; i < options.groups; ++i) {
 
     auto problem = options.problem_sizes_host.at(i);
@@ -282,6 +300,7 @@ void allocate(const Options &options) {
     auto N = get<1>(problem);
     auto K = get<2>(problem);
 
+    // Offset into block allocation of each matrix base pointer 
     offset_A.push_back(total_elements_A);
     offset_B.push_back(total_elements_B);
     offset_C.push_back(total_elements_C);
@@ -332,6 +351,7 @@ void initialize(const Options &options) {
   std::vector<ElementAccumulator *> ptr_alpha_host(options.groups);
   std::vector<ElementAccumulator *> ptr_beta_host(options.groups);
 
+  // Compute offsets, alpha & beta over group on host
   for (int32_t i = 0; i < options.groups; ++i) {
     ptr_A_host.at(i) = block_A.get() + offset_A.at(i);
     ptr_B_host.at(i) = block_B.get() + offset_B.at(i);
@@ -343,6 +363,7 @@ void initialize(const Options &options) {
     ptr_beta_host.at(i) = block_beta.get() + i;
   }
 
+  // Allocate device memory & copy from host
   ptr_A.reset(options.groups);
   ptr_A.copy_from_host(ptr_A_host.data());
 
@@ -538,6 +559,7 @@ int main(int argc, const char** argv)
                     Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
 
   constexpr int PipelineStages = 2;
+  // Dispatch to grouped gemm algorithm
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCGroup<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCGroupEpilogue;
 
