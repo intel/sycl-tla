@@ -61,7 +61,7 @@ CUTLASS_DEVICE auto convert_type(Tensor<Engine, Layout> const &tensor) {
 template <class DispatchPolicy, class ProblemShapeType_, class TileShape_, class ElementQ_, class StrideQ_, class ElementK_, class StrideK_,
           class ElementV_, class StrideV_, class TiledMma_, class GmemTiledCopyQ_, class GmemTiledCopyK_,
           class GmemTiledCopyV_, bool CausalMask_>
-struct CollectiveMmaAttention {
+struct FlashDecodeMma {
   static_assert(cutlass::detail::dependent_false<ElementQ_>, "Could not find a mainloop specialization.");
 };
 
@@ -70,14 +70,14 @@ struct CollectiveMmaAttention {
 template <int Stages, class ProblemShapeType_, class TileShape_, class ElementQ_, class StrideQ_, class ElementK_, class StrideK_,
           class ElementV_, class StrideV_, class TiledMma_, class GmemTiledCopyQ_, class GmemTiledCopyK_,
           class GmemTiledCopyV_, bool CausalMask_>
-struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileShape_, ElementQ_, StrideQ_, ElementK_, StrideK_, ElementV_,
+struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileShape_, ElementQ_, StrideQ_, ElementK_, StrideK_, ElementV_,
                               StrideV_, TiledMma_, GmemTiledCopyQ_, GmemTiledCopyK_, GmemTiledCopyV_, CausalMask_> {
   //
   // Type Aliases
   //
   using DispatchPolicy = gemm::MainloopIntelPVC<Stages>;
   using TileShape = TileShape_;
-  using WorkgroupTileShape = TileShape; // <BLK_M_Q, BLK_N_V, BLK_N_QK, BLK_K_QK>
+  using WorkgroupTileShape = TileShape; // <BLK_N_K, BLK_N_V, ?, BLK_K_QK>
   using ProblemShapeType = ProblemShapeType_;
   using ElementQ = ElementQ_;
   using StrideQ = StrideQ_;
@@ -98,8 +98,8 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
 
   using MmaAtomShape = typename TiledMma::AtomShape_MNK;
 
-  using TileShapeQK = decltype(select<0, 2, 3>(WorkgroupTileShape{})); // <BLK_M_Q, BLK_N_QK, BLK_K_QK>
-  using TileShapePV = decltype(select<0, 1, 2>(WorkgroupTileShape{})); // <BLK_M_PV, BLK_N_V, BLK_N_QK>
+  using TileShapeQK = decltype(Shape<_16, decltype(get<0>(WorkgroupTileShape{})), decltype(get<3>(WorkgroupTileShape{}))>{}); // <BLK_M_Q, BLK_N_QK, BLK_K_QK>
+  using TileShapePV = decltype(Shape<_16, decltype(get<1>(WorkgroupTileShape{})), decltype(get<0>(WorkgroupTileShape{}))>{}); // <BLK_M_PV, BLK_N_V, BLK_N_QK>
 
   static constexpr auto PV_BLK_N = get<1>(TileShapePV{});
   static constexpr auto PV_BLK_K = get<2>(TileShapePV{});
@@ -109,24 +109,25 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
   static constexpr auto PV_ATOM_K = get<3>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape());
 
   using SubgroupTileShapePV = decltype(cute::shape_div(TileShapePV{}, take<1, 4>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape())));
+  // using SubgroupTileShapePV = decltype(Shape<_16, _64, _128>{});
 
   static constexpr auto QK_BLK_M = get<0>(TileShapeQK{});
   static constexpr auto QK_BLK_N = get<1>(TileShapeQK{});
   static constexpr auto QK_BLK_K = get<2>(TileShapeQK{});
 
-  using K_Atom_Shape = decltype(Shape<Int<PV_ATOM_M>, _1, _1>{});
+  using Q_Atom_Shape = decltype(Shape<_1, Int<PV_ATOM_M>, _1>{});
 
-  // This TiledMma is only required to serve the specific tiling requirements for matrix K.
-  // This is due to the consumption of matrix K by all subgroups within a workgroup.
-  using TiledMmaK = typename TiledMMAHelper<typename TiledMmaQVO::Atom, 
+  // This TiledMma is only required to serve the specific tiling requirements for matrix Q.
+  // This is due to the consumption of matrix Q by all subgroups within a workgroup.
+  using TiledMmaQ = typename TiledMMAHelper<typename TiledMmaQVO::Atom, 
                                             Layout<TileShapeQK>,
-                                            Layout<K_Atom_Shape, Stride<_1, _1, _1>>>::TiledMMA;
+                                            Layout<Q_Atom_Shape, Stride<_1, _1, _1>>>::TiledMMA;
 
-  static constexpr auto QK_ATOM_M = get<1>(typename TiledMmaK::ThrLayoutVMNK{}.shape()); // 8
-  static constexpr auto QK_ATOM_N = get<2>(typename TiledMmaK::ThrLayoutVMNK{}.shape()); // 1
-  static constexpr auto QK_ATOM_K = get<3>(typename TiledMmaK::ThrLayoutVMNK{}.shape()); // 1
+  static constexpr auto QK_ATOM_M = get<1>(typename TiledMmaQ::ThrLayoutVMNK{}.shape()); // 1
+  static constexpr auto QK_ATOM_N = get<2>(typename TiledMmaQ::ThrLayoutVMNK{}.shape()); // 8
+  static constexpr auto QK_ATOM_K = get<3>(typename TiledMmaQ::ThrLayoutVMNK{}.shape()); // 1
 
-  using SubgroupTileShapeQK = decltype(cute::shape_div(TileShapeQK{}, take<1, 4>(typename TiledMmaK::ThrLayoutVMNK{}.shape())));
+  using SubgroupTileShapeQK = decltype(cute::shape_div(TileShapeQK{}, take<1, 4>(typename TiledMmaQ::ThrLayoutVMNK{}.shape())));
 
   static constexpr auto QK_SG_M = get<0>(SubgroupTileShapeQK{});
   static constexpr auto QK_SG_N = get<1>(SubgroupTileShapeQK{});
@@ -135,7 +136,9 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
   static constexpr bool is_var_len = cutlass::fmha::collective::is_variable_length_v<tuple_element_t<2, ProblemShapeType>>;
 
   using SubgroupTileShapeO = decltype(cute::shape_div(TileShapePV{}, take<1, 4>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape())));
-  using FragsShape = decltype(cute::shape_div(take<0, 2>(SubgroupTileShapeO{}), take<0, 2>(MmaAtomShape())));
+  // using FragsShape = decltype(cute::shape_div(take<0, 2>(SubgroupTileShapeO{}), take<0, 2>(MmaAtomShape())));
+  // using SubgroupTileShapeO = decltype(Shape<_16, _64, _128>{});
+  using FragsShape = decltype(Shape<_2, _1>{});
 
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMmaQVO{});
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
@@ -175,7 +178,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
   // Methods
   //
 
-  CollectiveMmaAttention() = default;
+  FlashDecodeMma() = default;
 
   static constexpr Params to_underlying_arguments(ProblemShapeType const &problem_shape, Arguments const &args,
                                                   void *workspace) {
@@ -201,13 +204,12 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     auto thr_copy_Q = params.gmem_tiled_copy_q.get_slice(thread_idx);
     auto thr_copy_K = params.gmem_tiled_copy_k.get_slice(thread_idx);
     // Instantiate the MMA object
-    TiledMmaK tiled_mma_k;
-    TiledMmaQVO tiled_mma_q;
+    TiledMmaQ tiled_mma;
     // To make all threads in a warp have the same global tensors pass in the index of thread 0 in each warp
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
     auto first_thread_in_sg_idx = sg.get_group_id()[0] * DispatchPolicy::SubgroupSize;
-    auto thread_mma_k = tiled_mma_k.get_slice(first_thread_in_sg_idx);
-    auto thread_mma_q = tiled_mma_q.get_slice(first_thread_in_sg_idx);
+    auto thread_mma_k = tiled_mma.get_slice(first_thread_in_sg_idx);
+    auto thread_mma_q = tiled_mma.get_slice(first_thread_in_sg_idx);
 
     // Partition
     Tensor tCgQ = thread_mma_q.partition_A(gQ);
@@ -246,6 +248,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     print("=====================  Config: \n");
     PRINT(MaxThreadsPerBlock);
     PRINT(SubgroupTileShapeQK{});
+    PRINT(accum);
   }
   #undef PRINT
 // #endif
@@ -254,10 +257,11 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     // Mainloop
     //
 
+    TiledMmaQVO tiled_mma2;
     for (int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
       copy(params.gmem_tiled_copy_q, tQgQ(_,_,_,k_tile), tQrQ);
       copy(params.gmem_tiled_copy_k, tKgK(_,_,_,k_tile), tKrK);
-      cute::gemm(tiled_mma_q, accum, tCrQ, tCrK, frag_src);
+      cute::gemm(tiled_mma2, accum, tCrQ, tCrK, frag_src);
     }
   }
 
@@ -292,6 +296,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     print("=====================  Config: \n");
     PRINT(MaxThreadsPerBlock);
     PRINT(SubgroupTileShapePV{});
+    PRINT(accum);
   }
   #undef PRINT
 // #endif
@@ -303,7 +308,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     // Mainloop
     //
     copy(params.gmem_tiled_copy_v, tVgV, tVrV);
-    cute::gemm(tiled_mma, accum, tPr, tCrV, frag_src);
+    // cute::gemm(tiled_mma, accum, tPr, tCrV, frag_src);
   }
 
   template <class ProblemShape>

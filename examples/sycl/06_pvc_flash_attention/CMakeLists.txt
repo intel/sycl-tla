@@ -34,3 +34,8 @@ cutlass_example_add_executable(
   06_pvc_prefill_attention
   06_pvc_prefill_attention.cpp
 )
+
+cutlass_example_add_executable(
+  06_pvc_decode_attention
+  06_pvc_decode_attention.cpp
+)
