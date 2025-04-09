@@ -186,12 +186,15 @@ struct ExampleRunner {
 
     syclcompat::wait();
 
-    ElementOutput *ptr =
-        (ElementOutput *)std::malloc(M * N * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr, block_ref_D.get(),
-                       M * N * L * sizeof(ElementOutput));
-    syclcompat::wait();
+    std::vector<ElementOutput> ptr(M*N*L);
+    std::vector<ElementOutput> ptr_refD(M*N*L);
 
+    syclcompat::memcpy(ptr.data(), block_ref_D.get(),
+                       M * N * L * sizeof(ElementOutput));
+    syclcompat::memcpy(ptr_refD.data(), block_D.get(),
+                       (size_t)M * N * L * sizeof(ElementOutput));
+
+    // Verify using a manual row-wise softmax on the host
     for (int l = 0; l < L; l++) {
       for (int i = 0; i < M; i++) {
 
@@ -212,16 +215,6 @@ struct ExampleRunner {
         }
       }
     }
-
-    syclcompat::memcpy(block_ref_D.get(), ptr,
-                       M * N * L * sizeof(ElementOutput));
-    syclcompat::wait();
-
-    ElementOutput *ptr_refD =
-        (ElementOutput *)std::malloc((size_t)M * N * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr_refD, block_D.get(),
-                       (size_t)M * N * L * sizeof(ElementOutput));
-    syclcompat::wait();
 
     uint32_t err_cnt = 0;
 
@@ -251,8 +244,6 @@ struct ExampleRunner {
       }
     }
 
-    std::free(ptr_refD);
-    std::free(ptr);
     std::cout << "err count: " << err_cnt
               << ", pass rate: " << 100 - (100 * err_cnt / (M * N * L)) << "%"
               << std::endl;
