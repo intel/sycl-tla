@@ -333,7 +333,7 @@ T shfl_xor_sync(
 namespace cutlass {
 
 // Stream
-using cudaStream_t = void *;
+using cudaStream_t = sycl::queue *;
 
 using dim3 = syclcompat::dim3;
 
