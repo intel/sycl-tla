@@ -31,7 +31,7 @@
 /*! \file
     \brief CUTLASS Intel PVC Group Gemm
 
-    This example demonstrates fusing mulitple GEMM operations into one kernel.
+    This example demonstrates fusing multiple GEMM operations into one kernel.
 
     Note that the scalar arguments to e.g. the standard 00_pvc_gemm example, have been
     replaced with vector equivalents, as each individual GEMM has its own inputs and outputs, which
@@ -46,6 +46,8 @@
     because each GEMM may have a unique size, only known at runtime. Thus, the scheduler will
     distribute an a priori unknown number of tiles to each work-group. See
     include/cutlass/gemm/kernel/xe_gemm_array_cooperative.hpp for implementation.
+
+    Note that for simplicity, this example sets every GEMM in the group to the same shape.
 
     Verification for this example is a conventional GEMM kernel, executed iteratively per group.
 */
@@ -357,14 +359,17 @@ void initialize(const Options &options) {
     ptr_B_host.at(i) = block_B.get() + offset_B.at(i);
     ptr_C_host.at(i) = block_C.get() + offset_C.at(i);
     ptr_D_host.at(i) = block_D.get() + offset_D.at(i);
+    // Fill host vector of alpha & beta with random values if using per-group values
     alpha_host.push_back((options.alpha == FLT_MAX) ? static_cast<ElementAccumulator>((rand() % 5) + 1) : options.alpha);
     beta_host.push_back((options.beta == FLT_MAX) ? static_cast<ElementAccumulator>(rand() % 5) : options.beta);
+    // Fill host ptr vectors with offset addresses into device alpha/beta blocks
     ptr_alpha_host.at(i) = block_alpha.get() + i;
     ptr_beta_host.at(i) = block_beta.get() + i;
   }
 
   // Allocate device memory & copy from host
   ptr_A.reset(options.groups);
+  // Per-group alpha and beta
   ptr_A.copy_from_host(ptr_A_host.data());
 
   ptr_B.reset(options.groups);
@@ -388,6 +393,7 @@ void initialize(const Options &options) {
   stride_D.reset(options.groups);
   stride_D.copy_from_host(stride_D_host.data());
 
+  // Per-group alpha and beta ptrs
   alpha_device.reset(options.groups);
   alpha_device.copy_from_host(ptr_alpha_host.data());
   beta_device.reset(options.groups);
@@ -396,6 +402,8 @@ void initialize(const Options &options) {
   initialize_block(block_A, seed + 2023);
   initialize_block(block_B, seed + 2022);
   initialize_block(block_C, seed + 2021);
+  // Per-group alpha and beta values - note these are not directly passed to kernel - the pointers
+  // (alpha_device/beta_device) are passed instead
   block_alpha.copy_from_host(alpha_host.data());
   block_beta.copy_from_host(beta_host.data());
 }
@@ -432,6 +440,7 @@ void initialize(const Options &options) {
     }
     using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90Group<ProblemShape>::RasterOrderOptions;
 
+    // Per-GEMM problem shape info may only exist on the device.
     if (host_problem_shapes_available) {
       arguments = typename Gemm::Arguments {
         cutlass::gemm::GemmUniversalMode::kGrouped,
