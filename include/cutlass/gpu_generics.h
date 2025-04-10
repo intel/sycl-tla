@@ -44,7 +44,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass {
-
 static const int NumThreadsPerWarp = 32;
 static const int NumThreadsPerWarpGroup = 128;
 static const int NumWarpsPerWarpGroup = NumThreadsPerWarpGroup / NumThreadsPerWarp;
@@ -265,7 +264,7 @@ T shfl_up_sync(
 #elif defined(__SYCL_DEVICE_ONLY__)
   return syclcompat::shift_sub_group_right(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
 #else
-  return 0;
+  return static_cast<T>(0);
 #endif
 }
 
@@ -281,7 +280,7 @@ T shfl_down_sync(
 #elif defined(__SYCL_DEVICE_ONLY__)
   return syclcompat::shift_sub_group_left(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
 #else
-  return 0;
+  return static_cast<T>(0);
 #endif
 }
 
@@ -299,7 +298,7 @@ T shfl_sync(
   unsigned int start_index = (g.get_local_linear_id() / width) * width;
   return sycl::select_from_group(g, var, start_index + delta % width);
 #else
-  return 0;
+  return static_cast<T>(0);
 #endif
 }
 
@@ -316,7 +315,7 @@ T shfl_xor_sync(
   auto g = syclcompat::get_nd_item<1>().get_sub_group();
   return syclcompat::permute_sub_group_by_xor(g, var, laneMask);
 #else
-  return 0;
+  return static_cast<T>(0);
 #endif
 }
 
@@ -344,7 +343,7 @@ CUTLASS_DEVICE T atomicAdd(T *address, T val) {
 #if defined(__SYCL_DEVICE_ONLY__)
   return syclcompat::atomic_fetch_add<sycl::access::address_space::global_space>(address, val);
 #endif
-  return 0;
+  return static_cast<T>(0);
 }
 
 CUTLASS_DEVICE int atomicCAS(int *address, int compare, int val) {
@@ -387,8 +386,11 @@ enum cudaMemcpyKind {
   cudaMemcpyDeviceToDevice = 3
 };
 
+template <typename T = void>
 CUTLASS_HOST_DEVICE
 cudaError_t cudaMemsetAsync(void *devPtr, unsigned int value, size_t count, cudaStream_t stream = nullptr) {
+  static_assert(std::is_same_v<T, void>, "cudaMemsetAsync takes a dummy template parameter, T = "
+                                         "void, to instantiate copy kernel only if it is used.");
   syclcompat::fill_async(devPtr, value, count);
   return cudaSuccess;
 }
@@ -397,22 +399,31 @@ using CUresult = unsigned int;
 using CUdeviceptr = unsigned int*;
 constexpr CUresult CUDA_SUCCESS = 0;
 
+template <typename T = void>
 CUTLASS_HOST_DEVICE
 CUresult cuMemsetD32Async(CUdeviceptr devPtr, uint32_t value, size_t count, cudaStream_t stream = nullptr) {
+  static_assert(std::is_same_v<T, void>, "cuMemsetD32Async takes a dummy template parameter, T = "
+                                         "void, to instantiate copy kernel only if it is used.");
   void *ptr = reinterpret_cast<void *>(devPtr);
   syclcompat::fill_async(ptr, value, count);
   return cudaSuccess;
 }
 
+template <typename T = void>
 CUTLASS_HOST_DEVICE
 CUresult cuMemsetD16Async(CUdeviceptr devPtr, uint16_t value, size_t count, cudaStream_t stream = nullptr) {
+  static_assert(std::is_same_v<T, void>, "cuMemsetD16Async takes a dummy template parameter, T = "
+                                         "void, to instantiate copy kernel only if it is used.");
   void *ptr = reinterpret_cast<void *>(devPtr);
   syclcompat::fill_async(ptr, value, count);
   return cudaSuccess;
 }
 
+template <typename T = void>
 CUTLASS_HOST_DEVICE
 CUresult cuMemsetD8Async(CUdeviceptr devPtr, uint8_t value, size_t count, cudaStream_t stream = nullptr) {
+  static_assert(std::is_same_v<T, void>, "cuMemsetD8Async takes a dummy template parameter, T = "
+                                         "void, to instantiate copy kernel only if it is used.");
   void *ptr = reinterpret_cast<void *>(devPtr);
   syclcompat::fill_async(ptr, value, count);
   return cudaSuccess;

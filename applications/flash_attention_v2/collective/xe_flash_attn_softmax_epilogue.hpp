@@ -44,7 +44,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass {
-namespace epilogue {
+namespace flash_attention {
 namespace collective {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -55,13 +55,13 @@ template <bool CausalMask_, class DispatchPolicy, class... Args> class Collectiv
 
 
 template <bool CausalMask_, class Element_>
-class CollectiveSoftmaxEpilogue<CausalMask_, IntelPVCEpilogue, Element_> {
+class CollectiveSoftmaxEpilogue<CausalMask_, epilogue::IntelPVCEpilogue, Element_> {
 public:
 
   //
   // Type Aliases
   //
-  using DispatchPolicy = IntelPVCEpilogue;
+  using DispatchPolicy = epilogue::IntelPVCEpilogue;
   using Element = Element_;
 
   static constexpr bool CausalMask = CausalMask_;
@@ -81,7 +81,8 @@ public:
   //
 
   static constexpr Params to_underlying_arguments(Arguments const &args) {
-    Element val = args.scale * static_cast<Element>(M_LOG2E);
+    constexpr double kLog2e = 1.4426950408889634074; // log_2(e) = M_LOG2E
+    Element val = args.scale * static_cast<Element>(kLog2e);
     return Params{val};
   }
 
@@ -175,7 +176,7 @@ public:
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace collective
-} // namespace epilogue
+} // namespace flash_attention
 } // namespace cutlass
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
