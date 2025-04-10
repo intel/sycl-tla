@@ -28,7 +28,29 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief CUTLASS Intel PVC Gemm with per-col-bias epilogue
 
+    This example constructs and executes a standard GEMM fused with a per-col-bias epilogue.
+    Aside from the epilogue operation, it is identical to 00_pvc_gemm.
+
+    CUTLASS 3.x epilogues are implemented using the Epilogue Visitor Tree design pattern, and
+    typically combine 'Linear Combination' (i.e. `D = alpha * A*B + beta * C`) with an additional
+    epilogue operation.
+
+    In this case, a col-wise bias value is added:
+
+    // D = alpha * (A*B) + beta * C + bias
+
+    This implies loading auxiliary data (containing the bias values) of shape M*L (each col shares a single bias value)
+
+    To build & run this example (from your build dir):
+
+      $ ninja 05_pvc_gemm_with_per_col_bias
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_per_col_bias
+
+    Call with `--help` for information about available options
+*/
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
