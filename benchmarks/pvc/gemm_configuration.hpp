@@ -43,6 +43,7 @@
 #include "cutlass/gemm/collective/collective_mma.hpp"
 #include "cutlass/gemm/collective/collective_builder.hpp"
 #include "cutlass/epilogue/collective/collective_builder.hpp"
+
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/thread/linear_combination.h"
 
@@ -82,7 +83,7 @@ struct GemmConfiguration<
   using KernelScheduleType =std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>;
 
 
-  static_assert(std::is_same_v<LayoutC, cutlass::layout::RowMajor>, "LayoutC unsupported in collective builder");
+  static_assert(std::is_same_v<LayoutC, cutlass::layout::RowMajor>, "Column Major LayoutC unsupported in collective builder");
   using LayoutD = LayoutC;
   using ClusterShape = Shape<_1, _1, _1>;
   // Mainloop

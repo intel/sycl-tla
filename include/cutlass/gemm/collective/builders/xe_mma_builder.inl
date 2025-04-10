@@ -82,10 +82,15 @@ struct CollectiveBuilder<
       using MMAAtom = MMA_Atom<std::conditional_t<cute::is_same_v<ElementA, bfloat16_t>,
                                                   XE_8x16x16_F32BF16BF16F32_TT,
                                                   XE_8x16x16_F32F16F16F32_TT>>;
-      
+
+
       // Prepare Template arguments required of CollectiveMainLoop
-      using atoms_M = _8; // TODO(finlay): update depending on TileShape_MNK
-      using atoms_N = _4;
+      static constexpr auto tile_M = get<0>(TileShape_MNK{});
+      static constexpr auto tile_N = get<1>(TileShape_MNK{});
+      static constexpr auto tile_K = get<2>(TileShape_MNK{});
+
+      using atoms_M = std::conditional_t<tile_M >= tile_N, _8, _4>;
+      using atoms_N = std::conditional_t<tile_M >= tile_N, _4, _8>;
       using TiledMma =
           typename TiledMMAHelper<MMAAtom,
                                   Layout<TileShape_MNK>,
@@ -99,10 +104,6 @@ struct CollectiveBuilder<
                                                 cutlass::gemm::MainloopIntelPVCGroup<PipelineStages, KernelSchedule>,
                                                 cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelSchedule>>;
 
-      static constexpr auto tile_M = get<0>(TileShape_MNK{});
-      static constexpr auto tile_N = get<1>(TileShape_MNK{});
-      static constexpr auto tile_K = get<2>(TileShape_MNK{});
-      // TODO update based on column or row major and TileShapeMNK
       using GmemTiledCopyA = std::conditional_t<cute::is_same_v<GmemLayoutATag, cutlass::layout::RowMajor>,
                                                 std::conditional_t< tile_M/atoms_M{}>=_32{} && tile_K>=_32{}, 
                                                                     XE_2D_U16x32x32_LD_N, 
