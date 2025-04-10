@@ -28,6 +28,18 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief CUTLASS Intel PVC Dual Gemm + Per Row Bias Epilogue
+
+    This example demonstrates combining 2 GEMM operations which share an A matrix into one kernel.
+    The two B matrices are assumed to have the same shape. Separate linear combination scales (alpha
+    & beta) are provided for each B matrix, as well as separate C and D matrices.
+
+    See 05_pvc_gemm_with_epilogues/05_pvc_gemm_with_per_row_bias for more info about per-row-bias
+    epilogue.
+
+    Verification for this example is two independent reference GEMM executions.
+*/
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
@@ -334,14 +346,16 @@ struct ExampleRunner {
     using EpilogueArguments0 = typename GemmKernel::EpilogueArguments0;
     using EpilogueArguments1 = typename GemmKernel::EpilogueArguments1;
 
+    // Separate epilogue args are passed for each B matrix
     EpilogueArguments0 epilogue_arguments0{{options.alpha0, options.beta0}, block_C0.get(), stride_C, block_D0.get(), stride_D};
     EpilogueArguments1 epilogue_arguments1{{options.alpha1, options.beta1}, block_C1.get(), stride_C, block_D1.get(), stride_D};
 
+    // per row bias is optional for each B matrix
     if constexpr (UseBias0) {
       using StrideBias = Stride<_1, _0, int64_t>;
       StrideBias dBias0 = {};
       if(options.l > 1) {
-        cute::get<2>(dBias0) = static_cast<int64_t>(options.m);
+        cute::get<2>(dBias0) = static_cast<int64_t>(options.m); // Stride between bias vectors in batch
       } else {
         cute::get<2>(dBias0) = static_cast<int64_t>(0);
       }

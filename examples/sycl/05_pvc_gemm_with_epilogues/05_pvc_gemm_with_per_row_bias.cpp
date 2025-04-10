@@ -260,7 +260,7 @@ struct ExampleRunner {
     StrideBias dBias = {};
 
     if(options.l > 1) {
-      cute::get<2>(dBias) = static_cast<int64_t>(options.m);
+      cute::get<2>(dBias) = static_cast<int64_t>(options.m); // Stride between bias vectors in batch
     } else {
       cute::get<2>(dBias) = static_cast<int64_t>(0);
     }
@@ -270,8 +270,8 @@ struct ExampleRunner {
     using EpilogueArguments = typename Gemm::GemmKernel::EpilogueArguments;
     EpilogueArguments epilogue_arguments{
       {options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D};
-    epilogue_arguments.thread.bias_ptr = block_bias.get();
-    epilogue_arguments.thread.dBias = dBias; 
+    epilogue_arguments.thread.bias_ptr = block_bias.get(); // per-row-bias data
+    epilogue_arguments.thread.dBias = dBias;               // and its stride
 
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
