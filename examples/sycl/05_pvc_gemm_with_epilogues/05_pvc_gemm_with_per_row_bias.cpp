@@ -44,10 +44,12 @@
 
     This implies loading auxiliary data (containing the bias values) of shape M*L (each row shares a single bias value)
 
-    To run this example:
-      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_per_row_bias --m=5120 --n=4096 --k=4096 --l=20
+    To build & run this example (from your build dir):
 
-    This will launch a batch of 20 gemms of size 5120x4096x4096.
+      $ ninja 05_pvc_gemm_with_per_row_bias
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_per_row_bias
+
+    Call with `--help` for information about available options
 */
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"

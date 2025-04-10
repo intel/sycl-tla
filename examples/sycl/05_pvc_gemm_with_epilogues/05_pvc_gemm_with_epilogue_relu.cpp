@@ -47,6 +47,13 @@
    --k=4096 --l=20
 
     This will launch a batch of 20 gemms of size 5120x4096x4096.
+
+    To build & run this example (from your build dir):
+
+      $ ninja 05_pvc_gemm_with_epilogue_relu
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_epilogue_relu
+
+    Call with `--help` for information about available options
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"

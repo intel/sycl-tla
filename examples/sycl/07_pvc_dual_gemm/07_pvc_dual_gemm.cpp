@@ -39,6 +39,13 @@
     epilogue.
 
     Verification for this example is two independent reference GEMM executions.
+
+    To build & run this example (from your build dir):
+
+      $ ninja 07_pvc_dual_gemm
+      $ ./examples/sycl/07_pvc_dual_gemm/07_pvc_dual_gemm
+
+    Call with `--help` for information about available options
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"

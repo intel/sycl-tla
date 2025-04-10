@@ -43,6 +43,13 @@
     This will launch a batch of 20 gemms of size 5120x4096x4096. The auxiliary vector is created as
     a 2-D tensor of size MxN. 1-D auxiliary tensors are not yet supported. The input values are
     randomized and the results are verified against a reference implementation.
+
+    To build & run this example (from your build dir):
+
+      $ ninja 05_pvc_gemm_with_epilogue_lincombdeeltact
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_epilogue_lincombdeeltact
+
+    Call with `--help` for information about available options
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"

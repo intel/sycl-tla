@@ -39,6 +39,13 @@
 
     This example also demonstrates the use of a ReLU activation epilogue, fusing the ReLU operation
     with the GEMM in a single kernel.
+
+    To build & run this example (from your build dir):
+
+      $ ninja 01_pvc_gemm_with_collective_builder
+      $ ./01_pvc_gemm_with_collective_builder
+
+    Call with `--help` for information about available options
 */
 
 #include "cutlass/gemm/device/gemm_universal.h"

@@ -52,6 +52,13 @@
   Note: due to a bug in the IGC compiler, it's currently necessary to build this example with the
   following environment variable set (CMake handles this):
       export IGC_allowDecompose2DBlockFuncs=0
+
+    To build & run this example (from your build dir):
+
+      $ ninja 02_pvc_gemm_mixed_dtype
+      $ ./examples/sycl/02_pvc_gemm_mixed_dtype/02_pvc_gemm_mixed_dtype
+
+    Call with `--help` for information about available options
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"

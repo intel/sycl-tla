@@ -50,6 +50,13 @@
     Note that for simplicity, this example sets every GEMM in the group to the same shape.
 
     Verification for this example is a conventional GEMM kernel, executed iteratively per group.
+
+    To build & run this example (from your build dir):
+
+      $ ninja 04_pvc_grouped_gemm
+      $ ./examples/sycl/04_pvc_grouped_gemm/04_pvc_grouped_gemm
+
+    Call with `--help` for information about available options
 */
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_array_epilogue.hpp"

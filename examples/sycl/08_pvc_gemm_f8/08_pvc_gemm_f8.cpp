@@ -38,6 +38,13 @@
     Aside from the input datatypes, this example is identical to 00_pvc_gemm.
 
     Verification for this example is a standard fp16 GEMM, with input data upcasted on the host.
+
+    To build & run this example (from your build dir):
+
+      $ ninja 08_pvc_gemm_f8
+      $ ./examples/sycl/08_pvc_gemm_f8/08_pvc_gemm_f8
+
+    Call with `--help` for information about available options
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"

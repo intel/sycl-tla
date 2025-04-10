@@ -42,6 +42,13 @@
         --seq_len_kv=512 --head_size_vo=128 --head_size_qk=128
 
     Causal masking of the first matrix multiplication is supported (`--is_causal`)
+
+    To build & run this example (from your build dir):
+
+      $ ninja 06_pvc_prefill_attention
+      $ ./examples/sycl/06_pvc_flash_attention/06_pvc_prefill_attention
+
+    Call with `--help` for information about available options
 */
 
 #include "pvc_flash_attn_runner.hpp"

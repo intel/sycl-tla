@@ -48,6 +48,13 @@
     Performance of GEMM on PVC is heavily dependent on prefetching the A and B matrices. That is,
     executing Intel specific prefetch instructions for future iterations to ensure that the required
     blocks of A and B are resident in cache before they are needed.
+
+    To build & run this example (from your build dir):
+
+      $ ninja 00_pvc_gemm
+      $ ./examples/sycl/00_pvc_gemm/00_pvc_gemm
+
+    Call with `--help` for information about available options
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"

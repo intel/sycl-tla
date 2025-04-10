@@ -44,6 +44,13 @@
     - Stream-K - split each tile arbitrarily along K to balance workloads
 
     Verification for this example is a conventional GEMM, since Split/Stream-K is a perf algorithm
+
+    To build & run this example (from your build dir):
+
+      $ ninja 03_pvc_gemm_streamk
+      $ ./examples/sycl/03_pvc_gemm_streamk/03_pvc_gemm_streamk
+
+    Call with `--help` for information about available options
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
