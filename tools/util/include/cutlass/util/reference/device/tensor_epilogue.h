@@ -215,17 +215,3 @@ void TensorPerColBias(
 } // namespace device
 } // namespace reference
 } // namespace cutlass
-
-#if (CUTLASS_ENABLE_SYCL)
-namespace sycl {
-  template <>
-  struct is_device_copyable<
-      cutlass::reference::device::detail::TensorPerRowBiasFunc<
-          float, cutlass::layout::RowMajor, float,
-          cutlass::layout::ColumnMajor>::Params> : std::true_type {};
-  template <>
-  struct is_device_copyable<
-      cutlass::reference::device::detail::TensorPerColBiasFunc<
-          float, cutlass::layout::RowMajor, float,
-          cutlass::layout::ColumnMajor>::Params> : std::true_type {};} // namespace sycl
-#endif
