@@ -433,6 +433,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
     return problem_shape;
   }
 
+  // Note that the GemmUniversalAdapter currently doesn't support flash attention, which is why this
+  // secondary `run` function is required to launch the kernel.
   static void run(typename GemmKernel::Params params) {
     dim3 const block = GemmKernel::get_block_shape();
     dim3 const grid = GemmKernel::get_grid_shape(params);

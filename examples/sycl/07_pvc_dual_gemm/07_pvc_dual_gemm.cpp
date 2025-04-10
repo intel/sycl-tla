@@ -308,6 +308,8 @@ struct ExampleRunner {
     }
   }
 
+  // Note that the GemmUniversalAdapter currently doesn't support dual gemm, which is why this
+  // secondary `run` function is required to launch the kernel.
   static cutlass::Status run(typename GemmKernel::Params params) {
     dim3 const block = GemmKernel::get_block_shape();
     dim3 const grid = GemmKernel::get_grid_shape(params);
