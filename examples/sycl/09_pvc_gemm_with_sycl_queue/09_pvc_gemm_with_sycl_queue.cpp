@@ -144,23 +144,49 @@ struct ExampleRunner {
   StrideD stride_D;
   uint64_t seed = 0;
 
-  cutlass::DeviceAllocation<ElementA> block_A;
-  cutlass::DeviceAllocation<ElementB> block_B;
-  cutlass::DeviceAllocation<ElementC> block_C;
-  cutlass::DeviceAllocation<ElementOutput> block_D;
-  cutlass::DeviceAllocation<ElementOutput> block_ref_D;
+  struct Memory {
+    ElementA* block_A;
+    ElementB* block_B;
+    ElementC* block_C;
+    ElementOutput* block_D;
+    ElementOutput* block_ref_D;
+    sycl::queue q;
+
+    Memory(sycl::queue q, ProblemShapeType problem_shape_MNKL) : q(q) {
+      auto [M, N, K, L] = problem_shape_MNKL;
+      block_A = sycl::malloc_device<ElementA>(M * K * L, q);
+      block_B = sycl::malloc_device<ElementB>(N * K * L, q);
+      block_C = sycl::malloc_device<ElementC>(M * N * L, q);
+      block_D = sycl::malloc_device<ElementOutput>(M * N * L, q);
+      block_ref_D = sycl::malloc_device<ElementOutput>(M * N * L, q);
+    }
+
+    ~Memory() {
+      sycl::free(block_A, q);
+      sycl::free(block_B, q);
+      sycl::free(block_C, q);
+      sycl::free(block_D, q);
+      sycl::free(block_ref_D, q);
+    }
+
+    // delete other constructors so avoiding leaks is easy
+    Memory(const Memory&) = delete;
+    Memory(Memory&&) noexcept = delete;
+    Memory& operator=(const Memory&) = delete;
+    Memory& operator=(Memory&&) noexcept = delete;
+  };
 
   //
   // Methods
   //
 
-  bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
+  bool verify(Memory& mem, const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
-    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+    cutlass::TensorRef ref_A(mem.block_A, LayoutA::packed({M, K}));
+    cutlass::TensorRef ref_B(mem.block_B, LayoutB::packed({K, N}));
+    cutlass::TensorRef ref_C(mem.block_C, LayoutC::packed({M, N}));
+    cutlass::TensorRef ref_D(mem.block_ref_D, LayoutD::packed({M, N}));
 
     cutlass::reference::device::GemmComplex(
           {M, N, K},
@@ -182,13 +208,13 @@ struct ExampleRunner {
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareEqual(
-      block_ref_D.get(), block_D.get(), block_D.size());
+      mem.block_ref_D, mem.block_D, M * N * L);
 
     return passed;
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
-  void initialize(const ProblemShapeType& problem_size) {
+  void initialize(const ProblemShapeType& problem_size, Memory& mem) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
@@ -197,29 +223,23 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
-
-    initialize_block(block_A, seed + 2023);
-    initialize_block(block_B, seed + 2022);
-    initialize_block(block_C, seed + 2021);
+    initialize_block(mem.block_A, M * K * L, seed + 2023);
+    initialize_block(mem.block_B, N * K * L, seed + 2022);
+    initialize_block(mem.block_C, M * N * L, seed + 2021);
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
-    initialize(problem_size);
-    // Must use default queue in this example due to the global DeviceAllocation instances
-    auto q = syclcompat::get_default_queue();
+    auto q = syclcompat::create_queue();
+    Memory mem(q, problem_size);
+    initialize(problem_size, mem);
 
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
+      {mem.block_A, stride_A, mem.block_B, stride_B},
+      {{options.alpha, options.beta}, mem.block_C, stride_C, mem.block_D, stride_D},
       hw_info
     };
 
@@ -243,7 +263,7 @@ struct ExampleRunner {
     q.wait_and_throw();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
+    bool passed = verify(mem, problem_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if(!passed) return cutlass::Status::kErrorInternal;
