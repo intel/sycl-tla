@@ -224,8 +224,8 @@ struct XeRowBroadcast {
   static_assert(Stages == 0, "Row broadcast doesn't support smem pipelining");
 
   static constexpr bool IsDynamicBroadcast = is_same_v<remove_cvref_t<decltype(get<1>(StrideMNL{}))>, bool>; // row vector or scalar broadcast
-  static_assert(is_static_v<decltype(take<0,2>(StrideMNL{}))> || IsDynamicBroadcast); // batch stride can be dynamic or static
-  static_assert(take<0,2>(StrideMNL{}) == Stride<_0,_1>{} || IsDynamicBroadcast);
+  static_assert(is_static_v<decltype(take<0,2>(StrideMNL{}))> || IsDynamicBroadcast, "XeRowBroadcast requires static MN stride for non-dynamic broadcast case."); // batch stride can be dynamic or static
+  static_assert(take<0,2>(StrideMNL{}) == Stride<_0,_1>{} || IsDynamicBroadcast, "XeRowBroadcast requires MN stride=(0,1) for non-dynamic broadcast case.");
 
   struct SharedStorage { };
 
@@ -235,13 +235,16 @@ struct XeRowBroadcast {
     StrideMNL dRow = {};
   };
 
-  // TODO(joe): ElementInput vs ElementCompute here - see Sm90ColBroacast...
-  using Params = Arguments;
+  struct Params {
+    PtrRowType ptr_row = nullptr;
+    ElementCompute null_default = ElementCompute(0);
+    StrideMNL dRow = {};
+  };
 
   template <class ProblemShape>
   static constexpr Params
   to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
-    return args;
+    return {args.ptr_row, ElementCompute(args.null_default), args.dRow};
   }
 
   template <class ProblemShape>
