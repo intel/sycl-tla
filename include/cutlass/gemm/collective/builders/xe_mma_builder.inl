@@ -83,7 +83,6 @@ struct CollectiveBuilder<
                                                   XE_8x16x16_F32BF16BF16F32_TT,
                                                   XE_8x16x16_F32F16F16F32_TT>>;
 
-
       // Prepare Template arguments required of CollectiveMainLoop
       static constexpr auto tile_M = get<0>(TileShape_MNK{});
       static constexpr auto tile_N = get<1>(TileShape_MNK{});
