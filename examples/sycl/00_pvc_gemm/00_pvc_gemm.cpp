@@ -36,6 +36,8 @@
     (cutlass::reference::device::GemmComplex). The example also provides a performance measurement
     for the GEMM in TFLOPS.
 
+    This example makes use of PVCs subgroup cooperative 2d-block copy operations and DPAS instructions.
+
     The shapes of the A and B matrix are defined at runtime by `options.m`, `.n` and `.k`, and the
     batch size is defined by `options.l`. The tile shape, which defines how much work is executed by
     a single work-group, is defined at compile time by:

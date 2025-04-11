@@ -42,12 +42,6 @@
 
     // D = ReLU(alpha * (A*B) + beta * C)
 
-    To run this example:
-      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_epilogue_relu --m=5120 --n=4096
-   --k=4096 --l=20
-
-    This will launch a batch of 20 gemms of size 5120x4096x4096.
-
     To build & run this example (from your build dir):
 
       $ ninja 05_pvc_gemm_with_epilogue_relu
