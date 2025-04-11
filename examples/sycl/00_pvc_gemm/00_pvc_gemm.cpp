@@ -34,9 +34,9 @@
     This example constructs and executes a simple CUTLASS GEMM kernel on Intel PVC hardware, and
     verifies its correctness with a reference implementation
     (cutlass::reference::device::GemmComplex). The example also provides a performance measurement
-    for the GEMM in Tflops per second.
+    for the GEMM in TFLOPS.
 
-    The shapes of the A and B matrix are defined at runtime by `options.m`, `.n` and `.k`., and the
+    The shapes of the A and B matrix are defined at runtime by `options.m`, `.n` and `.k`, and the
     batch size is defined by `options.l`. The tile shape, which defines how much work is executed by
     a single work-group, is defined at compile time by:
     ```
@@ -350,7 +350,7 @@ int main(int argc, const char** argv)
   using TileShape = Shape<_256, _256, _32>;
 
   // The TiledMMAHelper struct defines a specific TiledMMA for a given MMA atom
-  // (XE_8x16x16_F32BF16BF16F32_TT), TileShape (<256, 256, 32>) and sub-group layout (8x4x1 ). The
+  // (XE_8x16x16_F32BF16BF16F32_TT), TileShape (<256, 256, 32>) and sub-group layout (8x4x1). The
   // TiledMMA has the property that each sub-group operates on a single contiguous chunk of the
   // work-group TileShape. For this configuration, this implies that each sub-group operates on a
   // contiguous 32x64x32 chunk (4x4x2 iterations). See 0t_mma_atom.md#TiledMMAs for more info.
