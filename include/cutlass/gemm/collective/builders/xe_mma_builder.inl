@@ -38,8 +38,44 @@
 
 namespace cutlass::gemm::collective {
 
-  // Intel PVC 3 stage pipeline, using prefetch
-  // Also the auto builder
+namespace {
+template <typename LayoutA, class TileShape_MNK, int atoms_M>
+inline auto pick_load_atom_for_A() {
+  if constexpr (cute::is_same_v<LayoutA, cutlass::layout::RowMajor>) {
+    constexpr int tile_M = get<0>(TileShape_MNK{});
+    constexpr int tile_K = get<2>(TileShape_MNK{});
+    static_assert(tile_M % atoms_M == 0);
+    constexpr int atoms_in_M_dim = tile_M / atoms_M;
+    if constexpr (atoms_in_M_dim >= 32 && tile_K >= 32) {
+      return XE_2D_U16x32x32_LD_N{};
+    } else if constexpr (tile_K >= 32) {
+      return XE_2D_U16x8x32_LD_N{};
+    } else {
+      return XE_2D_U16x16x16_LD_N{};
+    }
+  } else {
+    return XE_2D_U16x16x16_LD_T{};
+  }
+}
+
+template <typename LayoutB, class TileShape_MNK, int atoms_N>
+inline auto pick_load_atom_for_B() {
+  if constexpr (cute::is_same_v<LayoutB, cutlass::layout::RowMajor>) {
+    constexpr int tile_N = get<1>(TileShape_MNK{});
+    constexpr int tile_K = get<2>(TileShape_MNK{});
+    if constexpr (tile_N / atoms_N >= 32 && tile_K >= 32) {
+      return XE_2D_U16x32x32_LD_V{};
+    } else {
+      return XE_2D_U16x16x16_LD_V{};
+    }
+  } else {
+    return XE_2D_U16x16x16_LD_T{};
+  }
+}
+} // namespace
+
+// Intel PVC 3 stage pipeline, using prefetch
+// Also the auto builder
 
 template <
   class ElementA,
@@ -83,13 +119,21 @@ struct CollectiveBuilder<
                                                   XE_8x16x16_F32BF16BF16F32_TT,
                                                   XE_8x16x16_F32F16F16F32_TT>>;
 
+      // We have too many subgroups, we can have at most 32, but only 8 are needed for 8x128 values (8x16 mma)
       // Prepare Template arguments required of CollectiveMainLoop
       static constexpr auto tile_M = get<0>(TileShape_MNK{});
       static constexpr auto tile_N = get<1>(TileShape_MNK{});
       static constexpr auto tile_K = get<2>(TileShape_MNK{});
 
-      using atoms_M = std::conditional_t<tile_M >= tile_N, _8, _4>;
-      using atoms_N = std::conditional_t<tile_M >= tile_N, _4, _8>;
+      // number of subgroups in a dim is at most (values in a dim)/(atom size in a dim)
+      using atom_mnk = typename MMAAtom::Shape_MNK;
+      using max_subgroups = decltype(take<0,2>(shape_div(TileShape_MNK{}, atom_mnk{}))); // M, N
+
+      // not necessary tall and skinny. Should really compute the smallest dim first and the distribute remaining subgroups.
+      // This is limiting the big dimension to 8.
+      static constexpr bool tall_and_skinny = tile_M >= tile_N;
+      using atoms_M = Int<std::min(decltype(get<0>(max_subgroups{}))::value, std::conditional_t<tall_and_skinny, _8, _4>::value)>; // too many subgroups in a dim
+      using atoms_N = Int<std::min(decltype(get<1>(max_subgroups{}))::value, std::conditional_t<tall_and_skinny, _4, _8>::value)>; // too many subgroups in a dim
       using TiledMma =
           typename TiledMMAHelper<MMAAtom,
                                   Layout<TileShape_MNK>,
@@ -103,16 +147,8 @@ struct CollectiveBuilder<
                                                 cutlass::gemm::MainloopIntelPVCGroup<PipelineStages, KernelSchedule>,
                                                 cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelSchedule>>;
 
-      using GmemTiledCopyA = std::conditional_t<cute::is_same_v<GmemLayoutATag, cutlass::layout::RowMajor>,
-                                                std::conditional_t< tile_M/atoms_M{}>=_32{} && tile_K>=_32{}, 
-                                                                    XE_2D_U16x32x32_LD_N, 
-                                                                    XE_2D_U16x16x16_LD_N>,
-                                                XE_2D_U16x16x16_LD_T>;
-      using GmemTiledCopyB = std::conditional_t<cute::is_same_v<GmemLayoutBTag, cutlass::layout::RowMajor>,
-                                                std::conditional_t< tile_N/atoms_N{}>=_32{} && tile_K>=_32{}, 
-                                                                    XE_2D_U16x32x32_LD_V, 
-                                                                    XE_2D_U16x16x16_LD_V>,
-                                                XE_2D_U16x16x16_LD_T>;
+      using GmemTiledCopyA = decltype(pick_load_atom_for_A<GmemLayoutATag, TileShape_MNK, atoms_M{}>());
+      using GmemTiledCopyB = decltype(pick_load_atom_for_B<GmemLayoutBTag, TileShape_MNK, atoms_N{}>());
 
       // PVC pipeline does not use shared memory
       using SmemLayoutAtomA = void; 
@@ -123,13 +159,17 @@ struct CollectiveBuilder<
       using TransformA = cute::identity;
       using TransformB = cute::identity;
 
+      using StrideA = cutlass::gemm::TagToStrideA_t<std::conditional_t<IsGroup, GmemLayoutATag*, GmemLayoutATag>>;
+      using StrideB = cutlass::gemm::TagToStrideB_t<std::conditional_t<IsGroup, GmemLayoutBTag*, GmemLayoutBTag>>;
+
+
       using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
               DispatchPolicy,
               TileShape_MNK,
               ElementA,
-              cutlass::gemm::TagToStrideA_t<std::conditional_t<IsGroup, GmemLayoutATag*, GmemLayoutATag>>,
+              StrideA,
               ElementB,
-              cutlass::gemm::TagToStrideB_t<std::conditional_t<IsGroup, GmemLayoutBTag*, GmemLayoutBTag>>,
+              StrideB,
               TiledMma,
               GmemTiledCopyA,
               SmemLayoutAtomA,
