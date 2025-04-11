@@ -62,7 +62,8 @@ template<
   class ElementAccumulator,
   class TileShape, class TiledMma,
   class GmemTiledCopyA, class GmemTiledCopyB,
-  Scheduler TileScheduler>
+  Scheduler TileScheduler,
+  class EpilogueOp = epilogue::fusion::LinearCombination<float, float, float, float, FloatRoundStyle::round_to_nearest>>
 struct GemmConfiguration {
   static_assert(sizeof(ElementA) == 0, "No valid GemmConfiguration configuration exists.");
 };
@@ -72,14 +73,14 @@ struct GemmConfiguration {
 // bfloat16
 
 template<typename LayoutA, typename LayoutB, typename LayoutC,
-  class TileShape, class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB, Scheduler TileScheduler>
+  class TileShape, class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB, Scheduler TileScheduler, class EpilogueOp>
 struct GemmConfiguration<
       arch::IntelPVC,
       bfloat16_t, LayoutA,
       bfloat16_t, LayoutB,
       float, LayoutC,
       float, TileShape, TiledMma,
-      GmemTiledCopyA, GmemTiledCopyB, TileScheduler> {
+      GmemTiledCopyA, GmemTiledCopyB, TileScheduler, EpilogueOp> {
   using DispatchPolicy = MainloopIntelPVC<3, std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>>;
 
   // Mainloop
@@ -94,7 +95,6 @@ struct GemmConfiguration<
 
   // Epilogue
   using EpilogueDispatchPolicy = epilogue::IntelPVCEpilogue;
-  using EpilogueOp = epilogue::fusion::LinearCombination<float, float, float, float, FloatRoundStyle::round_to_nearest>;
   using FusionCallBacks = epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
 
