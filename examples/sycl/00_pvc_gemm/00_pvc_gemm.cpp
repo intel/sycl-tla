@@ -351,17 +351,21 @@ int main(int argc, const char** argv)
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
+  // A TiledMMA struct defines a tiling of an MMA atom over M, N and K, combining both additional
+  // hardware (sub-groups for Intel PVC) and iterations by each sub-group.
+  //
   // The TiledMMAHelper struct defines a specific TiledMMA for a given MMA atom
   // (XE_8x16x16_F32BF16BF16F32_TT), TileShape (<256, 256, 32>) and sub-group layout (8x4x1). The
-  // TiledMMA constructed using TiledMMAHelper has the property that each sub-group operates on a single contiguous chunk of the
-  // work-group TileShape. For this configuration, this implies that each sub-group operates on a
-  // contiguous 32x64x32 chunk (4x4x2 iterations). See 0t_mma_atom.md#TiledMMAs for more info.
-  // Sub-groups are arranged row-major (stride 4,1,0) for performance reasons.
+  // TiledMMA constructed using TiledMMAHelper has the property that each sub-group operates on a
+  // single contiguous chunk of the work-group TileShape. For this configuration, this implies that
+  // each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations). See
+  // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 4,1,0) for
+  // performance reasons.
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
-  // For Intel PVC, PipelineStages defines how many iterations ahead to prefetch blocks from A and B.
+  // For Intel PVC, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
   constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
@@ -373,8 +377,12 @@ int main(int argc, const char** argv)
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
           ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
+  // FusionCallbacks ties the EpilogueOp to an implementation (based on the dispatch
+  // policy/architecture) and defines the epilogue arguments.
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
+  // GEMM Epilogue - loads & stores C/D matrices, performs epilogue operations & load/stores any
+  // auxiliary data required
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
           TileShape,
