@@ -29,7 +29,7 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief Flash Attention Prefill for Intel PVC
+    \brief Flash Attention V2 Prefill for Intel PVC
 
     This example constructs and executes a Flash Attention Prefill kernel on Intel PVC. The
     definition of the GEMM, options etc for this example are defined in the associated

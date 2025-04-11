@@ -31,10 +31,10 @@
 /*! \file
     \brief CUTLASS Intel PVC Gemm with ReLU epilogue using Collective Builder.
 
-    The Collective Builder classes provide a simplified interface for constructing a the mainloop
-    and epilogue for given data layouts & types, on certain hardware. Compared to `00_pvc_gemm`,
+    The Collective Builder classes provide a simplified interface for constructing the mainloop
+    and epilogue for given data layouts & types, on selected hardware. Compared to `00_pvc_gemm`,
     this example omits the MMA and copy operation definitions, as the CollectiveBuilder will select
-    these. Additionally, instead of specifying the DispatchPolicy, we provide only the arch
+    these. Additionally, instead of specifying the DispatchPolicy, we provide only the device architecture
     (cutlass::arch::IntelPVC).
 
     This example also demonstrates the use of a ReLU activation epilogue, fusing the ReLU operation

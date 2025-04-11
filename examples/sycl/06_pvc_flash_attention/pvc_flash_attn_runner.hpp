@@ -561,7 +561,7 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
     using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
     using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
-    using GmemTiledCopyK = XE_2D_U16x16x16_LD_T; // _T defines a transposed block load operation
+    using GmemTiledCopyK = XE_2D_U16x16x16_LD_T; // _T designates a transposed block load operation
     using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
     using GmemTiledCopyStore = XE_2D_U32x8x16_ST_N;
     using CollectiveEpilogue = cutlass::flash_attention::collective::CollectiveEpilogueAttention<

@@ -43,7 +43,7 @@
     - Split-K  - split the K dimension into fixed size chunks
     - Stream-K - split each tile arbitrarily along K to balance workloads
 
-    Verification for this example is a conventional GEMM, since Split/Stream-K is a perf algorithm
+    Verification for this example is a conventional GEMM, since Split/Stream-K is just a performance optimization of GEMM.
 
     To build & run this example (from your build dir):
 

@@ -353,7 +353,7 @@ int main(int argc, const char** argv)
 
   // The TiledMMAHelper struct defines a specific TiledMMA for a given MMA atom
   // (XE_8x16x16_F32BF16BF16F32_TT), TileShape (<256, 256, 32>) and sub-group layout (8x4x1). The
-  // TiledMMA has the property that each sub-group operates on a single contiguous chunk of the
+  // TiledMMA constructed using TiledMMAHelper has the property that each sub-group operates on a single contiguous chunk of the
   // work-group TileShape. For this configuration, this implies that each sub-group operates on a
   // contiguous 32x64x32 chunk (4x4x2 iterations). See 0t_mma_atom.md#TiledMMAs for more info.
   // Sub-groups are arranged row-major (stride 4,1,0) for performance reasons.
@@ -366,7 +366,7 @@ int main(int argc, const char** argv)
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
-  // This is the 'default' epilogue (Linear Combination) which performs everything in:
+  // This is the 'default' epilogue operation (Linear Combination) which performs everything in:
   // (D = alpha * (A*B) + beta * C)
   // aside from the (A*B), which is handled by the GEMM. See 05_pvc_gemm_with_epilogues for more
   // complex epilogue examples.
@@ -388,7 +388,7 @@ int main(int argc, const char** argv)
           XE_2D_U32x8x16_ST_N, // The copy atom used to store matrix D
           void, void>;
 
-  // Mainloop
+  // GEMM Mainloop - iteration over blocks in K dimension
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
