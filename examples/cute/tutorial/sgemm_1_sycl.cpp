@@ -42,7 +42,7 @@
 namespace syclcompat {
   template <class F, int Dim>
   sycl::event launch(const sycl::nd_range<Dim> &range, sycl::queue q, const F& f) {
-    return q.parallel_for(detail::transform_nd_range<Dim>(range),  [=](sycl::nd_item<3>) { f(); });
+    return q.parallel_for(detail::transform_nd_range<Dim>(range),  [=](sycl::nd_item<Dim>) { f(); });
   }
   template <class F, int Dim>
   sycl::event launch(const sycl::nd_range<Dim> &range, const F& f) {
