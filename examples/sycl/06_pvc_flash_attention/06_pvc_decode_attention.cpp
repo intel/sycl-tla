@@ -54,29 +54,29 @@ int main(int argc, const char **argv) {
 
     using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<Shape<_128, _64, _64>>,
+                                      Layout<Shape<_512, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
-    return options.is_causal ? FMHAConfig<true, Shape<_128, _64, _64, _64>, TiledMma>::run(options)
-                             : FMHAConfig<false, Shape<_128, _64, _64, _64>, TiledMma>::run(options);
-  } /*else if (options.head_size_vo == 192) {
+    return options.is_causal ? FMHAConfig<true, Shape<_512, _64, _64, _64>, TiledMma>::run(options)
+                             : FMHAConfig<false, Shape<_512, _64, _64, _64>, TiledMma>::run(options);
+  } else if (options.head_size_vo == 192) {
 
     using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<Shape<_256, _64, _64>>,
+                                      Layout<Shape<_1024, _64, _64>>,
                                       Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
-    return options.is_causal ? FMHAConfig<true, Shape<_256, _64, _64, _64>, TiledMma>::run(options)
-                             : FMHAConfig<false, Shape<_256, _64, _64, _64>, TiledMma>::run(options);
+    return options.is_causal ? FMHAConfig<true, Shape<_1024, _64, _64, _64>, TiledMma>::run(options)
+                             : FMHAConfig<false, Shape<_1024, _64, _64, _64>, TiledMma>::run(options);
   } else if (options.head_size_vo == 128) {
     using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<Shape<_128, _128, _64>>,
+                                      Layout<Shape<_512, _128, _64>>,
                                       Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>>::TiledMMA;
 
-    return options.is_causal ? FMHAConfig<true, Shape<_128, _128, _64, _64>, TiledMma>::run(options)
-                             : FMHAConfig<false, Shape<_128, _128, _64, _64>, TiledMma>::run(options);
-  } */else {
+    return options.is_causal ? FMHAConfig<true, Shape<_512, _128, _64, _64>, TiledMma>::run(options)
+                             : FMHAConfig<false, Shape<_512, _128, _64, _64>, TiledMma>::run(options);
+  } else {
     std::cerr << "Aborting execution." << std::endl;
     return -1;
   }

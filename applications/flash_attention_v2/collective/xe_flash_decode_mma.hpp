@@ -98,47 +98,47 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
 
   using MmaAtomShape = typename TiledMma::AtomShape_MNK;
 
-  using TileShapeQK = decltype(Shape<_16, decltype(get<0>(WorkgroupTileShape{})), decltype(get<3>(WorkgroupTileShape{}))>{}); // <BLK_M_Q, BLK_N_QK, BLK_K_QK>
-  using TileShapePV = decltype(Shape<_16, decltype(get<1>(WorkgroupTileShape{})), decltype(get<0>(WorkgroupTileShape{}))>{}); // <BLK_M_PV, BLK_N_V, BLK_N_QK>
-
-  static constexpr auto PV_BLK_N = get<1>(TileShapePV{});
-  static constexpr auto PV_BLK_K = get<2>(TileShapePV{});
-
   static constexpr auto PV_ATOM_M = get<1>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape());
   static constexpr auto PV_ATOM_N = get<2>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape());
   static constexpr auto PV_ATOM_K = get<3>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape());
 
-  using SubgroupTileShapePV = decltype(cute::shape_div(TileShapePV{}, take<1, 4>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape())));
-  // using SubgroupTileShapePV = decltype(Shape<_16, _64, _128>{});
+  using TileShapeQK = decltype(Shape<_16, decltype(get<0>(WorkgroupTileShape{})), decltype(get<3>(WorkgroupTileShape{}))>{}); // <BLK_M_Q, BLK_N_QK, BLK_K_QK>
 
   static constexpr auto QK_BLK_M = get<0>(TileShapeQK{});
   static constexpr auto QK_BLK_N = get<1>(TileShapeQK{});
   static constexpr auto QK_BLK_K = get<2>(TileShapeQK{});
 
   using Q_Atom_Shape = decltype(Shape<_1, Int<PV_ATOM_M>, _1>{});
+  using Q_Atom_Stride = decltype(Stride<_1, Int<PV_ATOM_N>, _1>{});
 
   // This TiledMma is only required to serve the specific tiling requirements for matrix Q.
   // This is due to the consumption of matrix Q by all subgroups within a workgroup.
   using TiledMmaQ = typename TiledMMAHelper<typename TiledMmaQVO::Atom, 
                                             Layout<TileShapeQK>,
-                                            Layout<Q_Atom_Shape, Stride<_1, _1, _1>>>::TiledMMA;
+                                            Layout<Q_Atom_Shape, Q_Atom_Stride>>::TiledMMA;
 
   static constexpr auto QK_ATOM_M = get<1>(typename TiledMmaQ::ThrLayoutVMNK{}.shape()); // 1
   static constexpr auto QK_ATOM_N = get<2>(typename TiledMmaQ::ThrLayoutVMNK{}.shape()); // 8
   static constexpr auto QK_ATOM_K = get<3>(typename TiledMmaQ::ThrLayoutVMNK{}.shape()); // 1
 
-  using SubgroupTileShapeQK = decltype(cute::shape_div(TileShapeQK{}, take<1, 4>(typename TiledMmaQ::ThrLayoutVMNK{}.shape())));
+  using TempShapeQK = decltype(cute::shape_div(take<1, 3>(TileShapeQK{}), take<2, 4>(typename TiledMmaQ::ThrLayoutVMNK{}.shape())));
+  using SubgroupTileShapeQK = decltype(make_shape(get<0>(TileShapeQK{}), get<0>(TempShapeQK{}), get<1>(TempShapeQK{})));
+  using FragsShapeQK = decltype(cute::shape_div(take<0, 2>(SubgroupTileShapeQK{}), take<0, 2>(typename TiledMmaQ::AtomShape_MNK())));
 
   static constexpr auto QK_SG_M = get<0>(SubgroupTileShapeQK{});
   static constexpr auto QK_SG_N = get<1>(SubgroupTileShapeQK{});
   static constexpr auto QK_SG_K = get<2>(SubgroupTileShapeQK{});
 
-  static constexpr bool is_var_len = cutlass::fmha::collective::is_variable_length_v<tuple_element_t<2, ProblemShapeType>>;
+  using TileShapePV = decltype(Shape<decltype(get<0>(TileShapeQK{})), decltype(get<1>(WorkgroupTileShape{})), decltype(QK_SG_N)>{}); // <BLK_M_PV, BLK_N_V, BLK_N_QK>
 
-  using SubgroupTileShapeO = decltype(cute::shape_div(TileShapePV{}, take<1, 4>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape())));
-  // using FragsShape = decltype(cute::shape_div(take<0, 2>(SubgroupTileShapeO{}), take<0, 2>(MmaAtomShape())));
-  // using SubgroupTileShapeO = decltype(Shape<_16, _64, _128>{});
-  using FragsShape = decltype(Shape<_2, _1>{});
+  static constexpr auto PV_BLK_N = get<1>(TileShapePV{});
+  static constexpr auto PV_BLK_K = get<2>(TileShapePV{});
+
+  using TempShapePV = decltype(cute::shape_div(take<1, 3>(TileShapePV{}), take<2, 4>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape())));
+  using SubgroupTileShapePV = decltype(make_shape(get<0>(TileShapePV{}), get<0>(TempShapePV{}), get<1>(TempShapePV{})));
+  using FragsShapePV = decltype(cute::shape_div(take<0, 2>(SubgroupTileShapePV{}), take<0, 2>(typename TiledMmaQVO::AtomShape_MNK())));
+
+  static constexpr bool is_var_len = cutlass::fmha::collective::is_variable_length_v<tuple_element_t<2, ProblemShapeType>>;
 
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMmaQVO{});
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
@@ -228,9 +228,9 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
     Tensor tQgQ = thr_copy_Q.retile_S(tCgQ);
     Tensor tKgK = thr_copy_K.retile_S(tCgK);
 
-// #if CUTLASS_ENABLE_DEBUG_PRINTS
+#if CUTLASS_ENABLE_DEBUG_PRINTS
 #define PRINT(x) print(#x ": "); print(x); print("\n");
-  if (cute::thread(0, 0)) {
+  if (cute::thread(LOG_THREAD, LOG_GROUP)) {
     print("======================= Q: \n");
     PRINT(gQ);
     PRINT(tCrQ);
@@ -251,7 +251,7 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
     PRINT(accum);
   }
   #undef PRINT
-// #endif
+#endif
 
     //
     // Mainloop
@@ -283,9 +283,9 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
     Tensor tVrV = gmem_thr_copy_V.retile_D(tCrV);
     Tensor tVgV = gmem_thr_copy_V.retile_S(tCgV);
 
-// #if CUTLASS_ENABLE_DEBUG_PRINTS
+#if CUTLASS_ENABLE_DEBUG_PRINTS
 #define PRINT(x) print(#x ": "); print(x); print("\n");
-  if (cute::thread(0, 0)) {
+  if (cute::thread(LOG_THREAD, LOG_GROUP)) {
     print("=====================  V :\n");
     PRINT(gV);
     PRINT(tCrV);
@@ -299,7 +299,7 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
     PRINT(accum);
   }
   #undef PRINT
-// #endif
+#endif
 
     // 7) Convert S to P (FP32 -> BF16)
     Tensor tPr = convert_type<typename TiledMmaQVO::ValTypeA>(tSr);
@@ -308,7 +308,7 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
     // Mainloop
     //
     copy(params.gmem_tiled_copy_v, tVgV, tVrV);
-    // cute::gemm(tiled_mma, accum, tPr, tCrV, frag_src);
+    cute::gemm(tiled_mma, accum, tPr, tCrV, frag_src);
   }
 
   template <class ProblemShape>

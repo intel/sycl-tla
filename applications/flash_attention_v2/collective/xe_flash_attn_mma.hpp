@@ -226,9 +226,9 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     Tensor tQgQ = thr_copy_Q.retile_S(tCgQ);
     Tensor tKgK = thr_copy_K.retile_S(tCgK);
 
-// #if CUTLASS_ENABLE_DEBUG_PRINTS
+#if CUTLASS_ENABLE_DEBUG_PRINTS
 #define PRINT(x) print(#x ": "); print(x); print("\n");
-  if (cute::thread(0, 0)) {
+  if (cute::thread(LOG_THREAD, LOG_GROUP)) {
     print("======================= Q: \n");
     PRINT(gQ);
     PRINT(tCrQ);
@@ -248,7 +248,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     PRINT(SubgroupTileShapeQK{});
   }
   #undef PRINT
-// #endif
+#endif
 
     //
     // Mainloop
@@ -279,9 +279,9 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     Tensor tVrV = gmem_thr_copy_V.retile_D(tCrV);
     Tensor tVgV = gmem_thr_copy_V.retile_S(tCgV);
 
-// #if CUTLASS_ENABLE_DEBUG_PRINTS
+#if CUTLASS_ENABLE_DEBUG_PRINTS
 #define PRINT(x) print(#x ": "); print(x); print("\n");
-  if (cute::thread(0, 0)) {
+  if (cute::thread(LOG_THREAD, LOG_GROUP)) {
     print("=====================  V :\n");
     PRINT(gV);
     PRINT(tCrV);
@@ -294,7 +294,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     PRINT(SubgroupTileShapePV{});
   }
   #undef PRINT
-// #endif
+#endif
 
     // 7) Convert S to P (FP32 -> BF16)
     Tensor tPr = convert_type<typename TiledMmaQVO::ValTypeA>(tSr);

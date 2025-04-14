@@ -586,10 +586,10 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
   }
 
   static int run(const Options &options) {
-    // if(options.varlen) {
-    //   return run<true, cutlass::flash_attention::IndividualScheduler>(options);
-    // } else {
+    if(options.varlen) {
+      return run<true, cutlass::flash_attention::FlashDecodeIndividualScheduler>(options);
+    } else {
       return run<false, cutlass::flash_attention::FlashDecodeIndividualScheduler>(options);
-    // }
+    }
   }
 };

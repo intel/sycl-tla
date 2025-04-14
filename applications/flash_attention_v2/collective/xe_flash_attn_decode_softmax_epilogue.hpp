@@ -104,88 +104,105 @@ public:
   CUTLASS_HOST_DEVICE
   FlashDecodeSoftmaxEpilogue(Params const &params_) : params(params_) {}
 
-  template <int Vec, int FragsM, int FragsN, class FragAcc, class STensorMax, class STensorSum>
-  CUTLASS_DEVICE void scale_exp_log2(FragAcc &frag_s, STensorMax const &stensor_max, STensorSum &stensor_sum) {
+  template <int Vec, int FragsM, int FragsN, class FragAcc, class FragMax, class FragSum>
+  CUTLASS_DEVICE void scale_exp_log2(FragAcc &frag_s, FragMax const &max, FragSum &sum) {
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
-    auto group = syclcompat::get_nd_item<1>().get_group();
-    int sg_local_id = sg.get_local_id()[0];
-
+    const auto max_scale = max * params.scale;
     CUTLASS_PRAGMA_UNROLL
     for (int indx = 0; indx < Vec * FragsM; indx++) {
-      const Element max_scale = stensor_max(indx) * params.scale;
-      Element sum_val = Element{0};
+      const auto max_scale_bcast = group_broadcast(sg, max_scale, indx);
       CUTLASS_PRAGMA_UNROLL
       for (int z = 0; z < FragsN; z++) {
         auto base_indx = indx + (z * Vec * FragsM);
-        Element eq = frag_s(base_indx) - max_scale;
+        Element eq = frag_s(base_indx) - max_scale_bcast;
         frag_s(base_indx) = sycl::native::exp2(eq);
-        sum_val += frag_s(base_indx);
+        sum(indx) += frag_s(base_indx);
       }
-      sum_val = reduce_over_group(sg, sum_val, sycl::plus<>());
-      if(sg_local_id == 0) {
-        stensor_sum(indx + sg.get_group_id()[0] * Vec * FragsM) = sum_val;
-      }
-    }
-
-    sycl::group_barrier(group);
-    int local_id = group.get_local_id()[0];
-    const int NumSG = sg.get_group_range()[0];
-
-    CUTLASS_PRAGMA_UNROLL
-    for(int id = (Vec * FragsM * NumSG) >> 1; id > Vec * FragsM; id >>= 1) {
-      if(local_id < id) {
-        auto left_val = stensor_sum(local_id);
-        auto right_val = stensor_sum(local_id + id);
-        stensor_sum(local_id) = left_val + right_val;
-      }
-      sycl::group_barrier(group);
     }
   }
 
-  template <int Vec, int FragsM, int FragsN, class FragSrc, class STensor>
-  CUTLASS_DEVICE void reduce_max(FragSrc &src, STensor &stensor_max) {
+  template <int Vec, int FragsM, int FragsN, class FragSrc, class STensorMax>
+  CUTLASS_DEVICE void reduce_max(FragSrc &src, STensorMax &stensor_max, Element& max_val) {
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
     auto group = syclcompat::get_nd_item<1>().get_group();
-    int sg_local_id = sg.get_local_id()[0];
+    const int sg_group_id = sg.get_group_id()[0];
+    const int sg_local_id = sg.get_local_id()[0];
 
     CUTLASS_PRAGMA_UNROLL
     for (int indx = 0; indx < Vec * FragsM; indx++) {
-      Element max_val = src(indx);
-      src(indx) *= params.scale;
+      auto curr_max = group_broadcast(sg, max_val, indx);
       CUTLASS_PRAGMA_UNROLL
-      for (int z = 1; z < FragsN; z++) {
+      for (int z = 0; z < FragsN; z++) {
         auto base_indx = indx + (z * Vec * FragsM);
-        max_val = sycl::max(max_val, src(base_indx));
+        curr_max = sycl::max(curr_max, src(base_indx));
         src(base_indx) *= params.scale;
       }
-      max_val = reduce_over_group(sg, max_val, sycl::maximum<>());
-      if (sg_local_id == 0) {
-        stensor_max(indx + sg.get_group_id()[0] * Vec * FragsM) = max_val;
+
+      curr_max = reduce_over_group(sg, curr_max, sycl::maximum<>());
+
+      if(sg_local_id == 0) {
+        stensor_max(indx + sg_group_id * Vec * FragsM) = curr_max;
       }
     }
+
     sycl::group_barrier(group);
-    int local_id = group.get_local_id()[0];
-    const int NumSG = sg.get_group_range()[0];
 
     CUTLASS_PRAGMA_UNROLL
-    for(int id = (Vec * FragsM * NumSG) >> 1; id > Vec * FragsM; id >>= 1) {
-      if(local_id < id) {
-        auto left_val = stensor_max(local_id);
-        auto right_val = stensor_max(local_id + id);
-        stensor_max(local_id) = sycl::max(left_val, right_val);
+    for (int indx = 0; indx < Vec * FragsM; indx++) {
+      Element curr_max = -INFINITY;
+      if(sg_local_id == indx) {
+        for (int i = 0; i < sg.get_group_range()[0]; i++) {
+          curr_max = sycl::max(curr_max, stensor_max(i * Vec * FragsM + sg_local_id));
+        }
+        max_val = curr_max;
       }
-      sycl::group_barrier(group);
     }
   }
 
-  template <class FragAcc, class STensorMax, class STensorSum>
-  CUTLASS_DEVICE void operator()(FragAcc &frag_s, STensorMax &stensor_max, STensorSum &stensor_sum) {
+  template <class FragAcc, class FragSum, class STensorMax, class FragOut>
+  CUTLASS_DEVICE void operator()(bool is_first, FragAcc &frag_s, Element& max_val, FragSum& sum, 
+                                  STensorMax& shmem_tensor_max, FragOut& out/*, int const& slm_out_rows*/) {
     using FragAccLayout = typename FragAcc::layout_type;
     constexpr int Vec = get<0>(FragAccLayout{}.shape());
     constexpr int FragsM = get<1>(FragAccLayout{}.shape());
     constexpr int FragsN = get<2>(FragAccLayout{}.shape());
-    reduce_max<Vec, FragsM, FragsN>(frag_s, stensor_max);
-    scale_exp_log2<Vec, FragsM, FragsN>(frag_s, stensor_max, stensor_sum);
+    Element max_prev = max_val;
+    static_assert(Vec * FragsM == 16, " the number of reg_max per workitem should be adopted accordingly.");
+
+    reduce_max<Vec, FragsM, FragsN>(frag_s, shmem_tensor_max, max_val);
+
+    if (!is_first) {
+      auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+      const int sg_group_id = sg.get_group_id()[0];
+      const int sg_local_id = sg.get_local_id()[0];
+      const int sg_size = sg.get_local_range()[0];
+
+      Element max_scale{max_val * params.scale};
+      Element exp_scale{sycl::native::exp2(max_prev * params.scale - max_scale)};
+      // const int out_curr_idx = sg_local_id + sg_group_id * slm_out_rows * sg_size;
+      CUTLASS_PRAGMA_UNROLL
+      for (int indx = 0; indx < Vec * FragsM; indx++) {
+        auto max_scale_bcast = group_broadcast(sg, max_scale, indx);
+        auto exp_scale_bcast = group_broadcast(sg, exp_scale, indx);
+        sum(indx) *= exp_scale_bcast;
+        CUTLASS_PRAGMA_UNROLL
+        for (int z = 0; z < FragsN; z++) {
+          auto base_indx = indx + (z * Vec * FragsM);
+          out(base_indx) *= exp_scale_bcast;
+          // const int slm_curr_idx = out_curr_idx + base_indx * sg_size;
+
+          // auto out_val_curr = shmem_tensor_out_curr(slm_curr_idx);
+          // auto out_prev_val = shmem_tensor_out_prev(slm_curr_idx);
+          // printf("Softmax -> ThreadIdx: %lu | base_idx: %d | out_val_curr: %f | out_val_prev: %f\n", ThreadIdxX(), base_indx, out_val_curr, out_prev_val);
+          // shmem_tensor_out_curr(slm_curr_idx) = out_val_curr + out_prev_val * exp_scale_bcast;
+
+          frag_s(base_indx) = sycl::native::exp2((frag_s(base_indx) - max_scale_bcast));
+          sum(indx) += frag_s(base_indx);
+        }
+      }
+    } else {
+      scale_exp_log2<Vec, FragsM, FragsN>(frag_s, max_val, sum);
+    }
   }
 
   Params params;
