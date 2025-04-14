@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,11 +45,7 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "cutlass/util/reference/device/tensor_gelu.h"
-#include "cutlass/tensor_view.h"
-#include "cutlass/coord.h"
-
-#include "common.hpp"
+#include "sycl_common.hpp"
 #include "helper.h"
 
 using namespace cute;
@@ -68,7 +64,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(100),
+    m(5120), n(4096), k(4096), l(1), iterations(20),
     alpha(1.f), beta(0.f)
   { }
 
@@ -157,48 +153,67 @@ struct ExampleRunner {
   //
   // Methods
   //
+  template <typename SrcT, typename DstT>
+  void convert_e4m3_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
+      SrcT* h_src = new SrcT[size];
+      syclcompat::memcpy(h_src, d_src, size * sizeof(SrcT));
+      syclcompat::wait();
+      
+      DstT* h_dst = new DstT[size];
+      for (size_t i = 0; i < size; ++i) {
+          h_dst[i] = static_cast<DstT>(h_src[i]);
+      }
+
+      syclcompat::memcpy(d_dst, h_dst, size * sizeof(DstT));
+      syclcompat::wait();
+  }
 
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
-    auto [M, N, K, L] = problem_size;
+      auto [M, N, K, L] = problem_size;
 
-    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
-    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+      cutlass::DeviceAllocation<half_t> block_A_fp16(block_A.size());
+      cutlass::DeviceAllocation<half_t> block_B_fp16(block_B.size());
 
-    cutlass::reference::device::GemmComplex(
-          {M, N, K},
+      // fp8 -> fp16
+      convert_e4m3_to_fp16<float_e4m3_t, half_t>(
+          block_A.get(),
+          block_A_fp16.get(),
+          block_A.size()
+      );
+      convert_e4m3_to_fp16<float_e4m3_t, half_t>(
+          block_B.get(),
+          block_B_fp16.get(),
+          block_B.size()
+      );
+
+      cutlass::TensorRef ref_A(block_A_fp16.get(), LayoutA::packed({M, K}));
+      cutlass::TensorRef ref_B(block_B_fp16.get(), LayoutB::packed({K, N}));
+      cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({ M, N }));
+      cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({ M, N }));
+
+      cutlass::reference::device::GemmComplex(
+          { M, N, K },
           alpha,
-          ref_A,
+          ref_A,  // fp16
           cutlass::ComplexTransform::kNone,
-          ref_B,
+          ref_B,  // fp16
           cutlass::ComplexTransform::kNone,
           beta,
-          ref_C,
-          ref_D,
+          ref_C,  //fp32
+          ref_D,  //fp32
           ElementAccumulator(0),
-          L,     // batch_count
-          M * K, // batch_stride_A
-          K * N, // batch_stride_B
-          M * N, // batch_stride_C
-          M * N  // batch_stride_D
-        );
+          L,
+          M * K,
+          K * N,
+          M * N,
+          M * N 
+      );
+      syclcompat::wait();
 
-    syclcompat::wait();
+      bool passed = cutlass::reference::device::BlockCompareEqual(
+          block_ref_D.get(), block_D.get(), block_D.size());
 
-    using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
-    for(int batch = 0, offset = 0; batch < L; batch++, offset += M * N) {
-      cutlass::reference::device::TensorGeLu(TensorView(block_ref_D.get() + offset, LayoutD::packed({M, N}),
-                                                        cutlass::make_Coord(M, N)));
-    }
-
-    syclcompat::wait();
-
-    // Check if output from CUTLASS kernel and reference kernel are equal or not
-    bool passed = cutlass::reference::device::BlockCompareEqual(
-      block_ref_D.get(), block_D.get(), block_D.size());
-
-    return passed;
+      return passed;
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
@@ -221,7 +236,7 @@ struct ExampleRunner {
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
   }
-
+  
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
@@ -240,7 +255,15 @@ struct ExampleRunner {
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    CUTLASS_CHECK(gemm_op.can_implement(arguments));
+    if (options.n < 16) {
+        std::cout << "Invalid Problem Size: N must be >= 16 for FP8 input with F16 MMA (XE_8x16x16_F32F16F16F32_TT). Got N=" << options.n << std::endl;
+        std::exit(1);
+    }
+
+    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
+      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      std::exit(1);
+    }
 
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 
@@ -298,45 +321,40 @@ int main(int argc, const char** argv)
   // Run examples
   //
 
-  // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
-  // information is used by the underlying kernel.
   cutlass::KernelHardwareInfo hw_info;
 
-  // Change device_id to another value if you are running on a machine with multiple GPUs and wish
-  // to use a GPU other than that with device ID 0.
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
   bool passed;
 
-  // The code section below describes datatype for input, output matrices and computation between
-  // elements in input matrices.
-  using ElementAccumulator = float;                   // <- data type of accumulator
-  using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
-  using ElementOutput = float;                        // <- data type of elements in output matrix D
+  using ElementAccumulator = float;
+  using ElementComputeEpilogue = float; 
+  // TODO: support E5M2
+  using ElementInputA = cutlass::float_e4m3_t; 
+  using ElementInputB = cutlass::float_e4m3_t; 
+  using ElementOutput = float;
 
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 
-  // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
+  // TODO: Consider smaller tile size to reduce register pressure
   using TiledMma =
-      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
+      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::GELU, ElementOutput,
-          ElementComputeEpilogue, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
+          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
@@ -353,7 +371,7 @@ int main(int argc, const char** argv)
           XE_2D_U32x8x16_ST_N,
           void, void>;
 
-// Mainloop
+  // Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
@@ -362,8 +380,8 @@ int main(int argc, const char** argv)
           ElementInputB,
           cutlass::gemm::TagToStrideB_t<LayoutB>,
           TiledMma,
-          GmemTiledCopyA, void, void, cute::identity,  // A
-          GmemTiledCopyB, void, void, cute::identity   // B
+          GmemTiledCopyA, void, void, cute::identity,
+          GmemTiledCopyB, void, void, cute::identity
   >;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<

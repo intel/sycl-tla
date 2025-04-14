@@ -36,9 +36,7 @@
 
 /// Helper to initialize a block of device data
 template <class Element>
-bool initialize_block(
-        cutlass::DeviceAllocation<Element>& block,
-        uint64_t seed=2023) {
+bool initialize_block(Element* block, std::size_t size, uint64_t seed=2023) {
 
   Element scope_max, scope_min;
   int bits_input = cutlass::sizeof_bits<Element>::value;
@@ -55,10 +53,17 @@ bool initialize_block(
   }
 
   cutlass::reference::device::BlockFillRandomUniform(
-       block.get(), block.size(), seed, scope_max, scope_min, 0);
+       block, size, seed, scope_max, scope_min, 0);
 
   syclcompat::wait();
   return true;
+}
+
+template <class Element>
+bool initialize_block(
+        cutlass::DeviceAllocation<Element>& block,
+        uint64_t seed=2023) {
+  return initialize_block<Element>(block.get(), block.size(), seed);
 }
 
 template <typename T1, typename T2>
@@ -70,8 +75,20 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
   std::ranlux24_base rng(std::random_device{}());
   rng.seed(seed);
 
-  using Limits = cutlass::platform::numeric_limits<T1>;
-  std::uniform_int_distribution<> dist(Limits::lowest(), Limits::max());
+  int bits_input = cute::sizeof_bits_v<T1>;
+  T1 scope_max, scope_min;
+  if (bits_input == 1) {
+   scope_max = T1(2);
+   scope_min = T1(0);
+  } else if (bits_input <= 8) {
+    scope_max = T1(2);
+    scope_min = T1(-2);
+  } else {
+    scope_max = T1(8);
+    scope_min = T1(-8);
+  }
+
+  std::uniform_int_distribution<> dist(scope_min, scope_max);
 
   if constexpr (cute::sizeof_bits_v<T1> >= 8) {
     auto block_host = std::vector<T1>(block_device.size());

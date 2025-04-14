@@ -26,11 +26,11 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
+set(TEST_BATCHES --l=2)
 
 cutlass_example_add_executable(
-  pvc_flash_attention
-  pvc_flash_attn.cpp
+  04_pvc_grouped_gemm
+  04_pvc_grouped_gemm.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
 )
-

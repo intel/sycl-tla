@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,14 +45,16 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "common.hpp"
+#include "cutlass/util/reference/device/tensor_relu.h"
+#include "cutlass/tensor_view.h"
+#include "cutlass/coord.h"
+
+#include "sycl_common.hpp"
 #include "helper.h"
 
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#define CUTLASS_SYCL_PROFILING_ENABLED
 
 // Command line options parsing
 struct Options {
@@ -66,7 +68,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(20),
+    m(5120), n(4096), k(4096), l(1), iterations(100),
     alpha(1.f), beta(0.f)
   { }
 
@@ -91,7 +93,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "PVC GEMM Example with PersistentTileScheduler\n\n"
+    out << "PVC GEMM Example\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
@@ -134,8 +136,6 @@ struct ExampleRunner {
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
-
-  int32_t count;
 
   //
   // Data members
@@ -186,6 +186,14 @@ struct ExampleRunner {
 
     syclcompat::wait();
 
+    using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
+    for(int batch = 0, offset = 0; batch < L; batch++, offset += M * N) {
+      cutlass::reference::device::TensorReLu(TensorView(block_ref_D.get() + offset, LayoutD::packed({M, N}),
+                                                        cutlass::make_Coord(M, N)));
+    }
+
+    syclcompat::wait();
+
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareEqual(
       block_ref_D.get(), block_D.get(), block_D.size());
@@ -206,27 +214,25 @@ struct ExampleRunner {
     block_A.reset(M * K * L);
     block_B.reset(K * N * L);
     block_C.reset(M * N * L);
+    block_D.reset(M * N * L);
+    block_ref_D.reset(M * N * L);
+
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
-
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
     initialize(problem_size);
-    using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90Params::RasterOrderOptions;
 
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
       {block_A.get(), stride_A, block_B.get(), stride_B},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
-      hw_info,
-      {1, RasterOrderOptions::AlongN}
+      hw_info
     };
 
     Gemm gemm_op;
@@ -251,15 +257,13 @@ struct ExampleRunner {
 
     if (options.iterations > 0) {
       GPU_Clock timer;
-      float elapsed_time_seconds = 0.f;
+      timer.start();
       for (int i = 0; i < options.iterations; ++i) {
-        timer.start();
         gemm_op.run();
-        syclcompat::wait();
-        elapsed_time_seconds += timer.seconds();
       }
+      syclcompat::wait();
 
-      float cute_time = elapsed_time_seconds / options.iterations;
+      float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
       printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
@@ -270,8 +274,8 @@ struct ExampleRunner {
 
 };
 
-template <typename Schedule>
-int run(int argc, const char** argv) {
+int main(int argc, const char** argv)
+{
   //
   // Parse options
   //
@@ -302,6 +306,8 @@ int run(int argc, const char** argv) {
   // to use a GPU other than that with device ID 0.
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
+  bool passed;
+
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
@@ -322,16 +328,15 @@ int run(int argc, const char** argv) {
   using TileShape = Shape<_256, _256, _32>;
 
   using TiledMma =
-      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                     Layout<TileShape>,
-                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages, Schedule>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
-          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+  using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, ElementOutput,
+          ElementComputeEpilogue, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
@@ -364,8 +369,7 @@ int run(int argc, const char** argv) {
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
   Shape<int, int, int, int>,
   CollectiveMainloop,
-  CollectiveEpilogue,
-  cutlass::gemm::PersistentScheduler
+  CollectiveEpilogue
   >;
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
@@ -373,17 +377,6 @@ int run(int argc, const char** argv) {
   ExampleRunner<Gemm> runner;
 
   CUTLASS_CHECK(runner.run(options, hw_info));
-
-  return 0;
-}
-
-int main(int argc, const char** argv) {
-
-  std::cout << "Running GEMM with Normal schedule" << std::endl;
-  run<cutlass::gemm::KernelPVC>(argc, argv);
-
-  std::cout << "\nRunning GEMM with Cooperative schedule" << std::endl;
-  run<cutlass::gemm::KernelPVCCooperative>(argc, argv);
 
   return 0;
 }
