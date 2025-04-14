@@ -29,19 +29,22 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief CUTLASS Intel PVC Gemm with Stream-K Scheduling
+    \brief CUTLASS Intel PVC Gemm with 2 Tile Hybrid Stream-K Scheduling (https://arxiv.org/pdf/2301.03598)
 
     This example implements a Stream-K scheduled GEMM on Intel PVC hardware. Stream-K avoids tail
     effects on performance where conventional tiling wouldn't evenly divide the work across hardware.
     Whereas the conventional GEMM implementation requires that each work-group handle a 'whole' tile
     (i.e. iterate across the entire range of K), Stream-K permits the scheduler to split tiles along
     the K dimension between work-groups. This requires inter work-group communication to combine
-    partial tile results.
+    partial tile results. The hybrid variant of the StreamK scheduling combines the best of vanilla
+    GEMM and basic StreamK to maximize performance.
 
     This example demonstrates 3 scheduling modes (DecompositionModes):
     - DataParallel - conventional GEMM
-    - Split-K  - split the K dimension into fixed size chunks
-    - Stream-K - split each tile arbitrarily along K to balance workloads
+    - Split-K  - split all the output tiles into fixed size chunks along the K dimension
+    - 2 Tile Hybrid Stream-K - apply basic StreamK scheduling to (sk_tiles = num_wgs + total_tiles % num_wgs)
+      and split them along the K dimension across multiple workgroups if needed. Apply Data Parallel scheduling
+      to the remaining tiles (total_tiles - sk_tiles).
 
     Verification for this example is a conventional GEMM, since Split/Stream-K is just a performance optimization of GEMM.
 
@@ -50,7 +53,12 @@
       $ ninja 03_pvc_gemm_streamk
       $ ./examples/sycl/03_pvc_gemm_streamk/03_pvc_gemm_streamk
 
-    Call with `--help` for information about available options
+    Call with `--help` for information about available options.
+
+    Note: the code may spill registers once compiled which will result in sub-optimal performance. This is because
+    of an issue inside Intel Graphics Compiler (IGC) related to VectorAliasBBThreshold being debugged internally. 
+    To avoid register spills, build the example by setting the environment variable:
+      $ export IGC_VectorAliasBBThreshold=10000
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"

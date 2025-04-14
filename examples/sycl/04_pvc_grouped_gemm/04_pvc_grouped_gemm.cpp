@@ -56,7 +56,12 @@
       $ ninja 04_pvc_grouped_gemm
       $ ./examples/sycl/04_pvc_grouped_gemm/04_pvc_grouped_gemm
 
-    Call with `--help` for information about available options
+    Call with `--help` for information about available options.
+
+    Note: the code may spill registers once compiled which will result in sub-optimal performance. This is because
+    of an issue inside Intel Graphics Compiler (IGC) related to VectorAliasBBThreshold being debugged internally. 
+    To avoid register spills, build the example by setting the environment variable:
+      $ export IGC_VectorAliasBBThreshold=10000
 */
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_array_epilogue.hpp"
