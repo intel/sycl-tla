@@ -125,7 +125,7 @@ using PvcGemmBF16BF16FP32_RCR_6 = cutlass::gemm::device::GemmConfiguration<
 using PvcGemmBF16BF16FP32_RCR_Linear = cutlass::gemm::device::GemmConfiguration<
         cutlass::arch::IntelPVC,
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
-        cutlass::bfloat16_t, cutlass::layout::ColumnMajor,
+        cutlass::bfloat16_t, cute::Stride<int64_t, _1, _0>, // Stride for batch is _0 (re-use the same B matrix)
         float, cutlass::layout::RowMajor,
         float, Shape<_256, _256, _32>,
         TiledMMA<MMAAtom, 

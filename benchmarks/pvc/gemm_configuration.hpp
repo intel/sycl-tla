@@ -83,11 +83,16 @@ struct GemmConfiguration<
       GmemTiledCopyA, GmemTiledCopyB, TileScheduler, EpilogueOp> {
   using DispatchPolicy = MainloopIntelPVC<3, std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>>;
 
+  // Configurations in benchmarks.hpp can pass either a layout tag (e.g. RowMajor) or a Stride directly
+  using StrideA = std::conditional_t<cute::is_tuple_v<LayoutA>, LayoutA, TagToStrideA_t<LayoutA>>;
+  using StrideB = std::conditional_t<cute::is_tuple_v<LayoutB>, LayoutB, TagToStrideB_t<LayoutB>>;
+  using StrideC = std::conditional_t<cute::is_tuple_v<LayoutC>, LayoutC, TagToStrideC_t<LayoutC>>;
+
   // Mainloop
   using CollectiveMainloop = collective::CollectiveMma<
     DispatchPolicy, TileShape,
-    bfloat16_t, TagToStrideA_t<LayoutA>,
-    bfloat16_t, TagToStrideB_t<LayoutB>,
+    bfloat16_t, StrideA,
+    bfloat16_t, StrideB,
     TiledMma,
     GmemTiledCopyA, void, void, identity, // A
     GmemTiledCopyB, void, void, identity // B
@@ -102,9 +107,9 @@ struct GemmConfiguration<
         EpilogueDispatchPolicy,
         TileShape,
         float,
-        TagToStrideC_t<LayoutC>,
+        StrideC,
         float,
-        TagToStrideC_t<LayoutC>,
+        StrideC,
         FusionCallBacks,
         XE_2D_U32x8x16_LD_N,
         void, void,
