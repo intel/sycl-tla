@@ -80,7 +80,8 @@ struct GemmConfiguration<
       float, LayoutC,
       float, TileShape,
       TileScheduler> {
-  using KernelScheduleType =std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>;
+  using KernelScheduleType = std::conditional_t<TileScheduler == Scheduler::Gemm,
+    cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>;
 
 
   static_assert(std::is_same_v<LayoutC, cutlass::layout::RowMajor>, "Column Major LayoutC unsupported in collective builder");

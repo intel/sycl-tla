@@ -39,43 +39,10 @@
 namespace cutlass::gemm::collective {
 
 namespace {
-template <typename LayoutA, class TileShape_MNK, int sgs_M>
-inline auto pick_load_atom_for_A() {
-  if constexpr (cute::is_same_v<LayoutA, cutlass::layout::RowMajor>) {
-    constexpr int tile_M = get<0>(TileShape_MNK{});
-    constexpr int tile_K = get<2>(TileShape_MNK{});
-    static_assert(tile_M % sgs_M == 0);
-    constexpr int atoms_in_M_dim = tile_M / sgs_M;
-    if constexpr (atoms_in_M_dim >= 32 && tile_K >= 32) {
-      return XE_2D_U16x32x32_LD_N{};
-    } else if constexpr (atoms_in_M_dim >= 32) {
-      return XE_2D_U16x32x16_LD_N{};
-    } else if constexpr (atoms_in_M_dim == 8 && tile_K >= 32) {
-      return XE_2D_U16x8x32_LD_N{};
-    } else {
-      return XE_2D_U16x16x16_LD_N{};
-    }
-  } else {
-    return XE_2D_U16x16x16_LD_T{};
-  }
-}
+// TODO(codeplay): generic selection methods are overcomplicated
 
-template <typename LayoutB, class TileShape_MNK, int sgs_N>
-inline auto pick_load_atom_for_B() {
-  if constexpr (cute::is_same_v<LayoutB, cutlass::layout::RowMajor>) {
-    constexpr int tile_N = get<1>(TileShape_MNK{});
-    constexpr int tile_K = get<2>(TileShape_MNK{});
-    constexpr int atoms_in_N_dim = tile_N / sgs_N;
-    if constexpr (atoms_in_N_dim >= 32 && tile_K >= 32) {
-      return XE_2D_U16x32x32_LD_V{};
-    } else {
-      return XE_2D_U16x16x16_LD_V{};
-    }
-  } else {
-    return XE_2D_U16x16x16_LD_T{};
-  }
-}
-
+// Generic way to pick the number of subgroups along the M dim
+// If tuning for a specific case, create a SubgroupTilingMap specialization
 template <typename LayoutA, class TileShape_MNK>
 constexpr inline int calculate_sgs_in_M() {
   constexpr int tile_M = get<0>(TileShape_MNK{});
@@ -98,6 +65,47 @@ constexpr inline int calculate_sgs_in_M() {
   }
 }
 
+// Generic way to pick a copy atom for A
+// If tuning for a specific case, create a SubgroupTilingMap specialization
+template <typename LayoutA, class TileShape_MNK, int sgs_M>
+inline auto pick_load_atom_for_A() {
+  if constexpr (cute::is_same_v<LayoutA, cutlass::layout::RowMajor>) {
+    constexpr int tile_M = get<0>(TileShape_MNK{});
+    constexpr int tile_K = get<2>(TileShape_MNK{});
+    static_assert(tile_M % sgs_M == 0);
+    constexpr int atoms_in_M_dim = tile_M / sgs_M;
+    if constexpr (atoms_in_M_dim >= 32 && tile_K >= 32) {
+      return XE_2D_U16x32x32_LD_N{};
+    } else if constexpr (atoms_in_M_dim >= 32) {
+      return XE_2D_U16x32x16_LD_N{};
+    } else if constexpr (atoms_in_M_dim == 8 && tile_K >= 32) {
+      return XE_2D_U16x8x32_LD_N{};
+    } else {
+      return XE_2D_U16x16x16_LD_N{};
+    }
+  } else {
+    return XE_2D_U16x16x16_LD_T{};
+  }
+}
+
+// Generic way to pick a copy atom for B
+// If tuning for a specific case, create a SubgroupTilingMap specialization
+template <typename LayoutB, class TileShape_MNK, int sgs_N>
+inline auto pick_load_atom_for_B() {
+  if constexpr (cute::is_same_v<LayoutB, cutlass::layout::RowMajor>) {
+    constexpr int tile_N = get<1>(TileShape_MNK{});
+    constexpr int tile_K = get<2>(TileShape_MNK{});
+    constexpr int atoms_in_N_dim = tile_N / sgs_N;
+    if constexpr (atoms_in_N_dim >= 32 && tile_K >= 32) {
+      return XE_2D_U16x32x32_LD_V{};
+    } else {
+      return XE_2D_U16x16x16_LD_V{};
+    }
+  } else {
+    return XE_2D_U16x16x16_LD_T{};
+  }
+}
+
 // Lookup table for subgroup layout
 // This is the default case
 template <typename TileShape, typename LayoutA, typename LayoutB>
@@ -115,7 +123,6 @@ struct SubgroupTilingMap {
       using sgs_N = Int<std::min(tile_N/atom_N, sgs_total/sgs_M::value)>;
       using GmemTiledCopyA = decltype(pick_load_atom_for_A<LayoutA, TileShape, sgs_M{}>());
       using GmemTiledCopyB = decltype(pick_load_atom_for_B<LayoutB, TileShape, sgs_N{}>());
-
 };
 
 template <>
@@ -222,16 +229,7 @@ struct CollectiveBuilder<
                                                   XE_8x16x16_F32BF16BF16F32_TT,
                                                   XE_8x16x16_F32F16F16F32_TT>>;
 
-      // We have too many subgroups, we can have at most 32, but only 8 are needed for 8x128 values (8x16 mma)
       // Prepare Template arguments required of CollectiveMainLoop
-      static constexpr auto tile_M = get<0>(TileShape_MNK{});
-      static constexpr auto tile_N = get<1>(TileShape_MNK{});
-      static constexpr auto tile_K = get<2>(TileShape_MNK{});
-
-      // number of subgroups in a dim is at most (values in a dim)/(atom size in a dim)
-      using atom_mnk = typename MMAAtom::Shape_MNK;
-      using max_subgroups = decltype(take<0,2>(shape_div(TileShape_MNK{}, atom_mnk{}))); // M, N
-
       using SgTilingMap = SubgroupTilingMap<TileShape_MNK, GmemLayoutATag, GmemLayoutBTag>;
       using sgs_M = typename SgTilingMap::sgs_M;
       using sgs_N = typename SgTilingMap::sgs_N;
@@ -261,7 +259,6 @@ struct CollectiveBuilder<
 
       using StrideA = cutlass::gemm::TagToStrideA_t<std::conditional_t<IsGroup, GmemLayoutATag*, GmemLayoutATag>>;
       using StrideB = cutlass::gemm::TagToStrideB_t<std::conditional_t<IsGroup, GmemLayoutBTag*, GmemLayoutBTag>>;
-
 
       using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
               DispatchPolicy,
