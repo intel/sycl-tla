@@ -207,10 +207,10 @@ struct ExampleRunner {
           ref_D,
           ElementAccumulator(0),
           L,     // batch_count
-          M * K, // batch_stride_A
-          0,     // batch_stride_B (no B batch)
-          M * N, // batch_stride_C
-          M * N  // batch_stride_D
+          get<2>(stride_A), // batch_stride_A
+          get<2>(stride_B), // batch_stride_B
+          get<2>(stride_C), // batch_stride_C
+          get<2>(stride_D)  // batch_stride_D
         );
 
     syclcompat::wait();
@@ -246,11 +246,11 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N); // No L in block_B because we re-use same B for every batch
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
+    block_A.reset(cute::cosize(make_layout(cute::make_shape(M, K, L), stride_A)));
+    block_B.reset(cute::cosize(make_layout(cute::make_shape(N, K, L), stride_B)));
+    block_C.reset(cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C)));
+    block_D.reset(cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C)));
+    block_ref_D.reset(cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C)));
     block_bias.reset(N * L);
 
     initialize_block(block_A, seed + 2023);
