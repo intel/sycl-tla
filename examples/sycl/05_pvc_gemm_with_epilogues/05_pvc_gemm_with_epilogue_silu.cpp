@@ -29,6 +29,26 @@
  *
  **************************************************************************************************/
 
+/*! \file
+    \brief CUTLASS Intel PVC Gemm with SiLu Activation Fn epilogue
+
+    This example constructs and executes a standard GEMM fused with a SiLu (Sigmoid Linear Unit)
+    activation epilogue. Aside from the epilogue operation, it is identical to
+    05_pvc_gemm_with_epilogue_relu.
+
+    The SiLu Element-wise activation function is applied as:
+
+    // D = SiLu(alpha * (A*B) + beta * C)
+
+    To build & run this example (from your build dir):
+
+      $ ninja 05_pvc_gemm_with_epilogue_silu
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_epilogue_silu
+
+    Call with `--help` for information about available options
+*/
+
+
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
@@ -310,11 +330,11 @@ int main(int argc, const char** argv)
 
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
-  using ElementAccumulator = float;                   // <- data type of accumulator
-  using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
-  using ElementOutput = float;                        // <- data type of elements in output matrix D
+  using ElementAccumulator = float;     // <- data type of accumulator
+  using ElementComputeEpilogue = float; // <- data type of epilogue operations
+  using ElementInputA = bfloat16_t;     // <- data type of elements in input matrix A
+  using ElementInputB = bfloat16_t;     // <- data type of elements in input matrix B
+  using ElementOutput = float;          // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
@@ -335,6 +355,7 @@ int main(int argc, const char** argv)
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
+  // The Linear Combination with SiLu epilogue
   using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::SiLu, ElementOutput,
           ElementComputeEpilogue, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
@@ -353,7 +374,7 @@ int main(int argc, const char** argv)
           XE_2D_U32x8x16_ST_N,
           void, void>;
 
-// Mainloop
+  // Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
