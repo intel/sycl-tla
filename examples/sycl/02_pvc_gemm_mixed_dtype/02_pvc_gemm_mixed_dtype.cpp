@@ -50,15 +50,17 @@
   reference GEMM.
 
   Note: due to a bug in the IGC compiler, it's currently necessary to build this example with the
-  following environment variable set (CMake handles this):
-      export IGC_allowDecompose2DBlockFuncs=0
+  following environment variable set (CMake handles this for AOT compilation; for JIT, please set
+  this in your environment):
 
-    To build & run this example (from your build dir):
+    export IGC_allowDecompose2DBlockFuncs=0
 
-      $ ninja 02_pvc_gemm_mixed_dtype
-      $ ./examples/sycl/02_pvc_gemm_mixed_dtype/02_pvc_gemm_mixed_dtype
+  To build & run this example (from your build dir):
 
-    Call with `--help` for information about available options
+    $ ninja 02_pvc_gemm_mixed_dtype
+    $ ./examples/sycl/02_pvc_gemm_mixed_dtype/02_pvc_gemm_mixed_dtype
+
+  Call with `--help` for information about available options
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
