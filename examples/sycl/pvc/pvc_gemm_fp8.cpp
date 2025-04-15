@@ -105,7 +105,8 @@
  };
  
  ///////////////////////////////////////////////////////////////////////////////////////////////////
- 
+#define A_ROW
+#define B_COL
  template <
    class Gemm
  >
@@ -159,19 +160,33 @@
    //
  
    bool verify(const Options &options) {
- 
-     using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-     using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
- 
-     // Workgroup-level tile
-     using TileShape = Shape<_256, _256, _32>;
- 
-     using TiledMma =
-       TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
-                Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                     Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
- 
+    #if defined(A_ROW) && defined(B_COL)
+    using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+    using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
+    #endif
+    #if defined(A_ROW) && defined(B_ROW)
+    using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+    using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
+    #endif
+
+    #if defined(A_COL) && defined(B_ROW)
+    using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;
+    using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+    #endif
+
+    #if defined(A_COL) && defined(B_COL)
+    using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;
+    using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
+    #endif
+    // Workgroup-level tile
+    using TileShape = Shape<_256, _256, _32>;
+  
+    using MMAAtom = MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>;
+    using TiledMma = TiledMMA<MMAAtom,
+                              Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, 
+                              Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                                   Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, 
+                                   _32>>;
      constexpr int PipelineStages = 3;
      using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
      using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
@@ -317,12 +332,14 @@
  
  };
  
-
  struct TransformA {
   template <class RTensor, class Trait, class TransTensor>
   CUTE_HOST_DEVICE auto operator()(RTensor const& in, Trait trait, TransTensor& out) {
+  #if defined(A_ROW)
     // auto mma_A = make_fragment_like<typename TiledMma::ValTypeA>(in);
     Layout A_selector = make_layout(make_shape(_8{}, _4{}, _2{}),  make_stride(_2{},_16{},_1{}));
+    // Layout A_selector = make_layout(make_shape(_8{}, _1{}, _2{}), make_stride(_2{},_16{}, _1{}));
+    // Layout A_selector = make_layout(make_shape(_8{}, _2{}, _2{}), make_stride(_2{}, _16{}, _1{}));
     CUTLASS_PRAGMA_UNROLL
     for(int i = 0; i < size<1>(out); i++) {
       CUTLASS_PRAGMA_UNROLL
@@ -330,16 +347,32 @@
         CUTLASS_PRAGMA_UNROLL
         for(int v = 0; v < size<0>(out); v++) {
           out(v, i, j) = static_cast<cutlass::bfloat16_t/*typename TiledMma::ValTypeA*/>(in.data()[A_selector(v, i, j)]);
-          // out(v, i, j) = 1;
+          // out(v, i, j) = (bfloat16_t)(1.0f);
         }
       }
     }
+  #endif 
+  #if defined(A_COL)
+  Layout A_selector = make_layout(make_shape(_8{},_4{},_2{}), make_stride(_1{},_8{},_32{}));
+  CUTLASS_PRAGMA_UNROLL
+    for(int i = 0; i < size<1>(out); i++) {
+      CUTLASS_PRAGMA_UNROLL
+      for(int j =0; j < size<2>(out); j++) {
+        CUTLASS_PRAGMA_UNROLL
+        for(int v = 0; v < size<0>(out); v++) {
+          out(v, i, j) = static_cast<cutlass::bfloat16_t/*typename TiledMma::ValTypeA*/>(in.data()[A_selector(v, i, j)]);
+          // out(v, i, j) = (bfloat16_t)(1.0f);
+        }
+      }
+    }
+  #endif
   }
  };
 
  struct TransformB {
   template <class RTensor, class Trait, class TransTensor>
   CUTE_HOST_DEVICE auto operator()(RTensor const& in, Trait trait, TransTensor& out) {
+    #if defined(B_ROW) && defined(A_ROW)
     //  auto mma_B = make_fragment_like<typename TiledMma::ValTypeB>(in);
      Layout B_selector = make_layout(make_shape(_16{}, make_shape(_2{}, _2{}), _2{}), make_stride(_4{}, make_stride(_1{}, _64{}) ,_2{}));
      CUTLASS_PRAGMA_UNROLL
@@ -349,10 +382,53 @@
          CUTLASS_PRAGMA_UNROLL
          for(int v = 0; v < size<0>(out); v++) {
           out(v, i, j) = static_cast<cutlass::bfloat16_t/*typename TiledMma::ValTypeB*/>(in.data()[B_selector(v, i, j)]);
-          //  out(v, i, j) = 1;
+          //  out(v, i, j) = (bfloat16_t)(1.0f);
          }
        }
      }
+     #endif
+     #if defined(B_ROW) && defined(A_COL)
+     Layout B_selector = make_layout(make_shape(_16{}, make_shape(_2{}, _2{}), _2{}), make_stride(_2{}, make_stride(_1{}, _64{}) ,_32{}));
+     CUTLASS_PRAGMA_UNROLL
+     for(int i = 0; i < size<1>(out); i++) {
+       CUTLASS_PRAGMA_UNROLL
+       for(int j =0; j < size<2>(out); j++) {
+         CUTLASS_PRAGMA_UNROLL
+         for(int v = 0; v < size<0>(out); v++) {
+          out(v, i, j) = static_cast<cutlass::bfloat16_t/*typename TiledMma::ValTypeB*/>(in.data()[B_selector(v, i, j)]);
+          //  out(v, i, j) = (bfloat16_t)(1.0f);
+         }
+       }
+     }
+     #endif
+     #if defined(B_COL) && defined(A_COL)
+     Layout B_selector = make_layout(make_shape(_16{}, _4{},_2{}), make_stride(_1{}, _32{},_16{}));
+     CUTLASS_PRAGMA_UNROLL
+     for(int i = 0; i < size<1>(out); i++) {
+       CUTLASS_PRAGMA_UNROLL
+       for(int j =0; j < size<2>(out); j++) {
+         CUTLASS_PRAGMA_UNROLL
+         for(int v = 0; v < size<0>(out); v++) {
+          out(v, i, j) = static_cast<cutlass::bfloat16_t/*typename TiledMma::ValTypeB*/>(in.data()[B_selector(v, i, j)]);
+          //  out(v, i, j) = (bfloat16_t)(1.0f);
+         }
+       }
+     }
+     #endif
+     #if defined(B_COL) && defined(A_ROW)
+     Layout B_selector = make_layout(make_shape(_16{}, _4{}, _2{}), make_stride(_2{}, _32{},_1{}));
+     CUTLASS_PRAGMA_UNROLL
+     for(int i = 0; i < size<1>(out); i++) {
+       CUTLASS_PRAGMA_UNROLL
+       for(int j =0; j < size<2>(out); j++) {
+         CUTLASS_PRAGMA_UNROLL
+         for(int v = 0; v < size<0>(out); v++) {
+          out(v, i, j) = static_cast<cutlass::bfloat16_t/*typename TiledMma::ValTypeB*/>(in.data()[B_selector(v, i, j)]);
+          //  out(v, i, j) = (bfloat16_t)(1.0f);
+         }
+       }
+     }
+     #endif
    }
   };
   
@@ -398,16 +474,39 @@
    using ElementInputB = cutlass::float_e4m3_t;        // <- data type of elements in input matrix B
    using ElementOutput = float;                        // <- data type of elements in output matrix D
  
-   using LayoutA = cutlass::layout::RowMajor;
-   using LayoutB = cutlass::layout::RowMajor;
    using LayoutC = cutlass::layout::RowMajor;
    using LayoutD = cutlass::layout::RowMajor;
  
    // Note: XE_2D_U8x32x32_LD_V is incompatible with our bf16 MMA atoms
+   // 2.8tflops  U8x32x32NLD_N 
+   // 1.4tflops  U8x16x32NLD_N
+   // 0.7tflops  U8x 8x32NLD_N
+   #if defined(A_COL) && defined(B_ROW)
+   using LayoutA = cutlass::layout::ColumnMajor;
+   using LayoutB = cutlass::layout::RowMajor;
+   using GmemTiledCopyA = XE_2D_U8x16x32_LD_T;
+   using GmemTiledCopyB = XE_2D_U8x32x32_LD_N;
+   #endif
+   #if defined(A_ROW) &&  defined(B_ROW)
+   using LayoutA = cutlass::layout::RowMajor;
+   using LayoutB = cutlass::layout::RowMajor;
    using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
    using GmemTiledCopyB = XE_2D_U8x32x32_LD_N;
-   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
- 
+   #endif
+
+   #if defined(A_COL) & defined(B_COL)
+   using LayoutA = cutlass::layout::ColumnMajor;
+   using LayoutB = cutlass::layout::ColumnMajor;
+   using GmemTiledCopyA = XE_2D_U8x16x32_LD_T;
+   using GmemTiledCopyB = XE_2D_U8x16x32_LD_T;
+   #endif
+   
+   #if defined(A_ROW) && defined(B_COL)
+   using LayoutA = cutlass::layout::RowMajor;
+   using LayoutB = cutlass::layout::ColumnMajor;
+   using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
+   using GmemTiledCopyB = XE_2D_U8x16x32_LD_T;
+   #endif
    // Workgroup-level tile
    using TileShape = Shape<_256, _256, _32>;
  
@@ -435,7 +534,11 @@
            FusionCallBacks,
            XE_2D_U32x8x16_LD_N,
            void, void,
+           #if defined(B_COL)
+           XE_2D_U32x8x16_ST_N,
+           #else
            void,
+           #endif
            void, void>;
  
    // Mainloop
