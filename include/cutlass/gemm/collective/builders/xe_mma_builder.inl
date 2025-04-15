@@ -197,7 +197,7 @@ template <
   class ElementAccumulator,
   class TileShape_MNK,
   class KernelScheduleType
-  > 
+  >
 struct CollectiveBuilder<
   arch::IntelPVC,
   arch::OpClassTensorOp,   // Reusing opClassTensorOp for Intel devices
@@ -210,7 +210,7 @@ struct CollectiveBuilder<
   ElementAccumulator,
   TileShape_MNK,
   Shape<_1, _1, _1>,    // Cluster Shape
-  cutlass::gemm::collective::StageCountAuto, 
+  cutlass::gemm::collective::StageCountAuto,
   KernelScheduleType,
   cute::enable_if_t<
     cute::is_any_of_v<KernelScheduleType, KernelScheduleAuto, KernelPVC, KernelPVCCooperative, KernelPVCPtrArrayCooperative> &&
@@ -219,7 +219,7 @@ struct CollectiveBuilder<
     cute::is_any_of_v<ElementB, bfloat16_t, half_t>
   >>{
       #ifdef SYCL_NVIDIA_TARGET
-        static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
+        static_assert(cutlass::detail::dependent_false<arch::IntelPVC>,
           "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
@@ -244,13 +244,13 @@ struct CollectiveBuilder<
 
       using KernelSchedule = std::conditional_t<cute::is_same_v<KernelScheduleType, KernelScheduleAuto>, KernelPVC, KernelScheduleType>;
       static constexpr int PipelineStages = IsGroup ? 2 : 3;
-      using DispatchPolicy = std::conditional_t<IsGroup, 
+      using DispatchPolicy = std::conditional_t<IsGroup,
                                                 cutlass::gemm::MainloopIntelPVCGroup<PipelineStages, KernelSchedule>,
                                                 cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelSchedule>>;
 
       // PVC pipeline does not use shared memory
-      using SmemLayoutAtomA = void; 
-      using SmemLayoutAtomB = void; 
+      using SmemLayoutAtomA = void;
+      using SmemLayoutAtomB = void;
       using SmemCopyAtomA = void;
       using SmemCopyAtomB = void;
 
