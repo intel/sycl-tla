@@ -156,11 +156,18 @@ struct ExampleRunner {
 
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
+    
+    int P = 8;
+    //int M2 = (M+P-1)/P*P;
+    int N2 = (N+P-1)/P*P;
+    int K2 = (K+P-1)/P*P;
 
-    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
-    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+    //cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
+    //cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
+    cutlass::TensorRef ref_A(block_A.get(), LayoutA(K2));
+    cutlass::TensorRef ref_B(block_B.get(), LayoutB(N2));
+    cutlass::TensorRef ref_C(block_C.get(), LayoutC(N2));
+    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD(N2));
 
     cutlass::reference::device::GemmComplex(
           {M, N, K},
@@ -174,10 +181,10 @@ struct ExampleRunner {
           ref_D,
           ElementAccumulator(0),
           L,     // batch_count
-          M * K, // batch_stride_A
-          K * N, // batch_stride_B
-          M * N, // batch_stride_C
-          M * N  // batch_stride_D
+          M * K2, // batch_stride_A
+          K * N2, // batch_stride_B
+          M * N2, // batch_stride_C
+          M * N2  // batch_stride_D
         );
 
     syclcompat::wait();
@@ -194,16 +201,31 @@ struct ExampleRunner {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
-    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
-    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
-    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
-    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
+    /*stride_A = cutlass::make_cute_padded_stride(StrideA{}, cute::make_shape(M, K, L), 16);
+    stride_B = cutlass::make_cute_padded_stride(StrideB{}, cute::make_shape(N, K, L), 16);
+    stride_C = cutlass::make_cute_padded_stride(StrideC{}, cute::make_shape(M, N, L), 16);
+    stride_D = cutlass::make_cute_padded_stride(StrideD{}, cute::make_shape(M, N, L), 16);*/
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
+    int P = 8;
+    //int M2 = (M+P-1)/P*P;
+    int N2 = (N+P-1)/P*P;
+    int K2 = (K+P-1)/P*P;
+
+    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K2, L));
+    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N2, K, L));
+    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N2, L));
+    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N2, L));
+
+    print("stride_A "); print(stride_A); print("\n");
+    print("stride_B "); print(stride_B); print("\n");
+    print("stride_C "); print(stride_C); print("\n");
+    print("stride_D "); print(stride_D); print("\n");
+
+    block_A.reset(M * K2 * L);
+    block_B.reset(K * N2 * L);
+    block_C.reset(M * N2 * L);
+    block_D.reset(M * N2 * L);
+    block_ref_D.reset(M * N2 * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
