@@ -106,7 +106,7 @@ inline auto pick_load_atom_for_B() {
   }
 }
 
-// Lookup table for subgroup layout
+// Lookup table for subgroup layout and copy instrinsic
 // This is the default case
 template <typename TileShape, typename LayoutA, typename LayoutB>
 struct SubgroupTilingMap {
