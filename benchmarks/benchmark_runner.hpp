@@ -255,16 +255,16 @@ struct BenchmarkRunnerGemm {
     }
 
     for (int i=0; i < count; i++) {
-      block_A[i].reset(M * K * L);
-      block_B[i].reset(K * N * L);
-      block_C[i].reset(M * N * L);
+      block_A[i].reset(static_cast<std::size_t>(M) * K * L);
+      block_B[i].reset(static_cast<std::size_t>(K) * N * L);
+      block_C[i].reset(static_cast<std::size_t>(M) * N * L);
       initialize_block(block_A[i], seed + i);
       initialize_block(block_B[i], seed + i);
       initialize_block(block_C[i], seed + i);
     }
 
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
+    block_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
 
   }
 
