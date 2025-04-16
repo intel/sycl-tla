@@ -205,11 +205,12 @@ public:
     CUTE_STATIC_ASSERT(is_static<TileShapeQK>::value);
     CUTE_STATIC_ASSERT(is_static<TileShapePV>::value);
     // Separate out problem shape for convenience
-    auto batch = get<0>(params.problem_shape);
-    auto num_heads_q = get<1>(params.problem_shape);
-    auto group_heads_q = num_heads_q / get<2>(params.problem_shape);
-    auto head_size_qk = get<5>(params.problem_shape);
-    auto head_size_vo = get<6>(params.problem_shape);
+    auto& batch = get<0>(params.problem_shape);
+    auto& num_heads_q = get<1>(params.problem_shape);
+    auto& num_head_kv = get<2>(params.problem_shape);
+    auto group_heads_q = num_heads_q / num_head_kv;
+    auto& head_size_qk = get<5>(params.problem_shape);
+    auto& head_size_vo = get<6>(params.problem_shape);
     // Preconditions
     static_assert(cute::rank(StrideQ{}) == 3, "StrideQ must be rank-3: [seq_len_qo, head_size_qk, batch * num_heads_q].");
     static_assert(cute::rank(StrideK{}) == 3, "StrideK must be rank-3: [head_size_qk, seq_len_kv, batch * num_heads_kv].");
@@ -251,8 +252,8 @@ public:
       }
 
       Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads_q));   //(m,k,l)
-      Tensor mK_nkl = cute::get_pvc_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * get<2>(params.problem_shape)));   //(n,k,l)
-      Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, seq_len_kv, (is_var_len ? 1 : batch) * get<2>(params.problem_shape)));   //(n,k,l)
+      Tensor mK_nkl = cute::get_pvc_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_head_kv));   //(n,k,l)
+      Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, seq_len_kv, (is_var_len ? 1 : batch) * num_head_kv));   //(n,k,l)
       Tensor mQ_mk = mQ_mkl(_, _, blk_l_coord);                                                    // (m,k)
       Tensor mK_nk = mK_nkl(_, _, blk_l_coord/group_heads_q);                                                    // (n,k)
       Tensor mV_nk = mV_nkl(_, _, blk_l_coord/group_heads_q);                                                    // (n,k)
