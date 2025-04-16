@@ -39,7 +39,7 @@
   - ConvertAndScaleWithZeroPoint:  Narrower type is converted to wider type, scaled and offset
 
   - Requirements:
-      - group must be multiple of k-block size
+      - dequantization group size (options.g) must be multiple of k-block size
       - scales & zeros must be MN-major
 
   The MMA operation itself takes bfloat16 input for both A and B, and so the narrower type is first

@@ -361,7 +361,7 @@ int main(int argc, const char** argv)
   // each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations). See
   // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 4,1,0) for
   // performance reasons.
-  using TiledMma =
+  using TiledMma =                    // M=8,N=16,K=16, D=f32,A=bf16,B=bf16,C=f32
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
