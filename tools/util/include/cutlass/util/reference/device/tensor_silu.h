@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,6 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+
 /* \file
   \brief Defines device-side elementwise operations on TensorView. Note, the operations defined
     in this header are not specialized for any particular data layout and are therefore not
@@ -78,9 +79,8 @@ struct TensorSiLuFunc {
 
   CUTLASS_DEVICE
   void operator()(TensorCoord const &coord) {
-    //epilogue::thread::Sigmoid<Element> sigmoid_op;
     Element const & value = params.view.at(coord);
-    params.view.at(coord) = value * sycl::native::recip(Element(1) + fast_exp(-value)); // * sigmoid_op(value);
+    params.view.at(coord) = value * sycl::native::recip(Element(1) + fast_exp(-value));
   }
 };
 
