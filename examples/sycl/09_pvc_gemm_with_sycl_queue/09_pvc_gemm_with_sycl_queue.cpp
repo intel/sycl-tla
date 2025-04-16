@@ -31,7 +31,7 @@
 
 /*! \file
     \brief CUTLASS Intel PVC Gemm Example with non-default SYCL queue.
-    This example modfies 00_pvc_gemm to use a non-default queue. The main changes are passing the
+    This example modifies 00_pvc_gemm to use a non-default queue. The main changes are passing the
     queue to gemm_op.initialize and gemm_op.run. Otherwise, changes are made to allocate memory with
     the correct queue.
 
