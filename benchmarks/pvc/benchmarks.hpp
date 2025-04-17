@@ -141,7 +141,7 @@ using PvcGemmBF16BF16FP32_RCR_Linear = cutlass::gemm::device::GemmConfiguration<
             cutlass::FloatRoundStyle::round_to_nearest>
 >;
 
-// TODO(joe): Does this batch GEMM config correspond to 'MoE group gemm with 256 experts'?
+// TODO(codeplay): Does this batch GEMM config correspond to 'MoE group gemm with 256 experts'?
 using PvcGemmBF16BF16FP32_RCR_Linear_MoE = cutlass::gemm::device::GemmConfiguration<
         cutlass::arch::IntelPVC,
         cutlass::bfloat16_t, cute::Stride<int64_t, _1, _0>, // Stride for batch is _0 (re-use the same A matrix)
