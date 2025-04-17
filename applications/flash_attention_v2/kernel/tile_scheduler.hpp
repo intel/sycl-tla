@@ -63,7 +63,6 @@ struct XeFlashIndividualTileScheduler {
     dim3 grid(size(ceil_div(shape<6>(problem_size), shape<1>(tile_shape))),
               size(ceil_div(shape<3>(problem_size), shape<0>(tile_shape))),
               size(shape<0>(problem_size) * shape<1>(problem_size)));
-   // printf("Grid %d, %d, %d\n", size(ceil_div(shape<6>(problem_size), shape<1>(tile_shape))),  size(ceil_div(shape<3>(problem_size), shape<0>(tile_shape))),  size(shape<0>(problem_size) * shape<1>(problem_size)));
     return Params{ grid, {shape<1>(problem_size)} };
   }
 
