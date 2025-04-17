@@ -67,3 +67,10 @@ cutlass_example_add_executable(
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
 )
+
+cutlass_example_add_executable(
+  05_pvc_gemm_with_epilogue_rmsnorm
+  05_pvc_gemm_with_epilogue_rmsnorm.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)

@@ -159,6 +159,20 @@ struct LinCombSoftmaxRow
     : LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
 };
 
+// D = rmsnorm((alpha * acc + beta * C))
+template<
+  class ElementWeight_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class CopyOpR2G_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct LinCombRMSNormRow
+    : LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
+};
+
 // D = alpha * acc + beta * C + per-row bias
 template<
   class ElementOutput_,
