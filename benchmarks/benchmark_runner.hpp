@@ -244,9 +244,10 @@ struct BenchmarkRunnerGemm {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    int size_A = cute::cosize(make_layout(cute::make_shape(M, K, L), stride_A));
-    int size_B = cute::cosize(make_layout(cute::make_shape(N, K, L), stride_B));
-    int size_C = cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C));
+    // TODO(codeplay): cute::cosize(some_large_layout) will overflow int32. What can we do about this?
+    std::size_t size_A = cute::cosize(make_layout(cute::make_shape(M, K, L), stride_A));
+    std::size_t size_B = cute::cosize(make_layout(cute::make_shape(N, K, L), stride_B));
+    std::size_t size_C = cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C));
     std::size_t mem_occupied_ABC = (size_A * sizeof(ElementA)) + (size_B * sizeof(ElementB)) + 
                                    (size_C * sizeof(ElementC));
     count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC)) + 1;
