@@ -279,7 +279,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
           idx = row * seq_len_kv;
           sum_idx = row;
           for (int col = 0; col < seq_len_kv; col++, idx++) {
-            if(row < discard_seq_coord) { 
+            if(is_causal && row < discard_seq_coord) { 
               host_S[idx] = 0;
             } else {
               host_S[idx] /= sum_vec[sum_idx];
