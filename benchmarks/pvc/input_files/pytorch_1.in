@@ -1,0 +1,41 @@
+# Benchmarks for required shapes for first Pytorch release
+
+ # TODO(codeplay): Confirm that these are the right layout for what's required
+# q_mm 1,8 4096 4096
+PvcGemmBF16BF16FP32_RRR_5 --m=1 --k=4096 --n=4096
+PvcGemmBF16BF16FP32_RRR_5 --m=8 --k=4096 --n=4096
+
+# k_mm 1,8 4096 1024
+# v_mm 1,8 4096 1024
+PvcGemmBF16BF16FP32_RRR_5 --m=1 --k=4096 --n=1024
+PvcGemmBF16BF16FP32_RRR_5 --m=8 --k=4096 --n=1024
+
+# qkv_fusion 1,8 4096 6144 = (4096 + 1024 + 1024)
+PvcGemmBF16BF16FP32_RRR_5 --m=1 --k=4096 --n=6144
+PvcGemmBF16BF16FP32_RRR_5 --m=8 --k=4096 --n=6144
+
+# mm_common 1,8 4096 4096
+PvcGemmBF16BF16FP32_RRR_5 --m=1 --k=4096 --n=4096
+PvcGemmBF16BF16FP32_RRR_5 --m=8 --k=4096 --n=4096
+
+# TODO(codeplay): Define the gemm configurations required for these:
+# mm_silu 1,8 4096 14336
+# --m=1 --k=4096 --n=14336
+# --m=8 --k=4096 --n=14336
+
+# mm_mul 1,8 4096 14336
+# --m=1 --k=4096 --n=14336
+# --m=8 --k=4096 --n=14336
+
+# mm_fusion 1,8 4096 28672 = (2x14336)
+# --m=1 --k=4096 --n=28672
+# --m=8 --k=4096 --n=28672
+
+# mm_add 1,8 14336 4096
+# --m=1 --k=14336 --n=4096
+# --m=8 --k=14336 --n=4096
+
+# lmhead_mm 1,8 4096 128256
+# --m=1 --k=4096 --n=128256
+# --m=8 --k=4096 --n=128256
+
