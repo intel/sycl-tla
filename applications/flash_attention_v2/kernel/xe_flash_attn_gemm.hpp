@@ -261,13 +261,7 @@ public:
       if(CausalMask && seq_coord < discard_seq_coord ) { // 1024 =0
         continue;
       }
-     /* if(cute::thread(0)) {
-        printf("seqlen %d, blockM cord %d, QJ_SGM %d, NUMBLOCK limit %d\n", seq_len, blk_m_coord, QK_SG_M, nblock_limit);
-     } */
-    /*  if(cute::thread(0, 16)) {
-      print("seqlen %d, blk_m_coord %d, blk_n_coord %d, QK_SG_M %d,  QK_BLK_M %d, QK_BLK_N %d, nblock_limit %d\n", 
-              seq_len,   blk_m_coord,    blk_n_coord,    QK_SG_M,     QK_BLK_M,    QK_BLK_N,    nblock_limit);
-     }  */
+    
       Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads_q));   //(m,k,l)
       Tensor mK_nkl = cute::get_pvc_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_head_kv));   //(n,k,l)
       Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, seq_len_kv, (is_var_len ? 1 : batch) * num_head_kv));   //(n,k,l)
