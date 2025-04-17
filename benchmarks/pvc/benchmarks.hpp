@@ -85,6 +85,46 @@ using PvcGemmBF16BF16FP32_RCR_256x256x32 = cutlass::gemm::device::GemmConfigurat
         float, Shape<_256, _256, _32>,
         Scheduler::Gemm>;
 
+using MMAAtom = MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>;
+using PvcGemmBF16BF16FP32_RCR_Linear = cutlass::gemm::device::GemmConfiguration<
+        cutlass::arch::IntelPVC,
+        cutlass::bfloat16_t, cutlass::layout::RowMajor,
+        cutlass::bfloat16_t, cute::Stride<int64_t, _1, _0>, // Stride for batch is _0 (re-use the same B matrix)
+        float, cutlass::layout::RowMajor,
+        float, Shape<_256, _256, _32>,
+        Scheduler::Gemm,
+        cutlass::epilogue::fusion::LinCombPerColBias<
+            float, float, float, float,
+            float, 128 / sizeof_bits_v<float>,
+            cutlass::FloatRoundStyle::round_to_nearest>,
+        TiledMMA<MMAAtom,
+                 Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>,
+                 Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>,
+                      _32>>,
+        XE_2D_U16x8x32_LD_N, XE_2D_U16x16x16_LD_T
+>;
+
+// TODO(codeplay): Does this batch GEMM config correspond to 'MoE group gemm with 256 experts'?
+using PvcGemmBF16BF16FP32_RCR_Linear_MoE = cutlass::gemm::device::GemmConfiguration<
+        cutlass::arch::IntelPVC,
+        cutlass::bfloat16_t, cute::Stride<int64_t, _1, _0>, // Stride for batch is _0 (re-use the same A matrix)
+        cutlass::bfloat16_t, cutlass::layout::ColumnMajor,
+        float, cutlass::layout::RowMajor,
+        float, Shape<_256, _256, _32>,
+        Scheduler::Gemm,
+        cutlass::epilogue::fusion::LinCombPerColBias<
+            float, float, float, float,
+            float, 128 / sizeof_bits_v<float>,
+            cutlass::FloatRoundStyle::round_to_nearest>,
+        TiledMMA<MMAAtom,
+                 Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>,
+                 Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                      Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>,
+                      _32>>,
+        XE_2D_U16x8x32_LD_N, XE_2D_U16x16x16_LD_T
+>;
+
 using PvcGemmBF16BF16FP32_CRR_256x256x32 = cutlass::gemm::device::GemmConfiguration<
         cutlass::arch::IntelPVC,
         cutlass::bfloat16_t, cutlass::layout::ColumnMajor,
@@ -107,6 +147,8 @@ CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_RRR_256x128x32);
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_RRR_128x256x16);
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_RRR_8x128x32);
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_RCR_256x256x32);
+CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_RCR_Linear);
+CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_RCR_Linear_MoE);
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_CRR_256x256x32);
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_CCR_256x256x32);
 
@@ -136,6 +178,8 @@ static void register_benchmarks() {
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_RRR_256x128x32);
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_RRR_128x256x16);
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_RRR_8x128x32);
+  CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_RCR_Linear);
+  CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_RCR_Linear_MoE);
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_RCR_256x256x32);
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_CRR_256x256x32);
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_CCR_256x256x32);

@@ -62,7 +62,9 @@ template<
   class ElementC, class LayoutC,
   class ElementAccumulator,
   class TileShape,
-  Scheduler TileScheduler>
+  Scheduler TileScheduler,
+  class EpilogueOp = epilogue::fusion::LinearCombination<float, float, float, float, FloatRoundStyle::round_to_nearest>,
+  class TiledMma = void, class GmemTiledCopyA = void, class GmemTiledCopyB = void>
 struct GemmConfiguration {
   static_assert(sizeof(ElementA) == 0, "No valid GemmConfiguration configuration exists.");
 };
@@ -71,43 +73,62 @@ struct GemmConfiguration {
 
 // bfloat16
 
+// use collective builder
 template<typename LayoutA, typename LayoutB, typename LayoutC,
-  class TileShape, Scheduler TileScheduler>
+  class TileShape, Scheduler TileScheduler, class EpilogueOp,
+  class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB>
 struct GemmConfiguration<
       arch::IntelPVC,
       bfloat16_t, LayoutA,
       bfloat16_t, LayoutB,
       float, LayoutC,
-      float, TileShape,
-      TileScheduler> {
+      float,
+      TileShape, TileScheduler, EpilogueOp,
+      TiledMma, GmemTiledCopyA, GmemTiledCopyB>
+{
   using KernelScheduleType = std::conditional_t<TileScheduler == Scheduler::Gemm,
-    cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>;
+  cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>;
+   using DispatchPolicy = MainloopIntelPVC<3, KernelScheduleType>;
 
+  // Configurations in benchmarks.hpp can pass either a layout tag (e.g. RowMajor) or a Stride directly
+  using StrideA = std::conditional_t<cute::is_tuple_v<LayoutA>, LayoutA, TagToStrideA_t<LayoutA>>;
+  using StrideB = std::conditional_t<cute::is_tuple_v<LayoutB>, LayoutB, TagToStrideB_t<LayoutB>>;
+  using StrideC = std::conditional_t<cute::is_tuple_v<LayoutC>, LayoutC, TagToStrideC_t<LayoutC>>;
 
   static_assert(std::is_same_v<LayoutC, cutlass::layout::RowMajor>, "Column Major LayoutC unsupported in collective builder");
   using LayoutD = LayoutC;
   using ClusterShape = Shape<_1, _1, _1>;
+  static constexpr bool use_collective_mma_builder = std::is_void_v<TiledMma>;
+  static_assert(!use_collective_mma_builder or (std::is_void_v<GmemTiledCopyA> and std::is_void_v<GmemTiledCopyB>),
+      "TiledMma, GmemTileCopyA, and GmemTileCopyB must be all void or none of them may be void.");
   // Mainloop
-  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+  using CollectiveMainloop = std::conditional_t<use_collective_mma_builder,
+    typename cutlass::gemm::collective::CollectiveBuilder<
     cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
-    bfloat16_t, LayoutA, sizeof(bfloat16_t),
-    bfloat16_t, LayoutB, sizeof(bfloat16_t),
+    bfloat16_t, StrideA, sizeof(bfloat16_t),
+    bfloat16_t, StrideB, sizeof(bfloat16_t),
     float,
     TileShape, ClusterShape,
     cutlass::gemm::collective::StageCountAuto,
     KernelScheduleType
-  >::CollectiveOp;
+  >::CollectiveOp,
+  collective::CollectiveMma<
+    DispatchPolicy, TileShape,
+    bfloat16_t, StrideA,
+    bfloat16_t, StrideB,
+    TiledMma,
+    GmemTiledCopyA, void, void, identity, // A
+    GmemTiledCopyB, void, void, identity // B
+  >>;
 
   // Epilogue
-  using EpilogueOp = epilogue::fusion::LinearCombination<float, float, float, float, FloatRoundStyle::round_to_nearest>;
-
   using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
     cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
     TileShape, ClusterShape,
     cutlass::epilogue::collective::EpilogueTileAuto, float,
     float,
-    float, LayoutC, sizeof(float),
-    float, LayoutD, sizeof(float),
+    float, StrideC, sizeof(float),
+    float, StrideC, sizeof(float),
     cutlass::epilogue::collective::EpilogueScheduleAuto,
     EpilogueOp
   >::CollectiveOp;

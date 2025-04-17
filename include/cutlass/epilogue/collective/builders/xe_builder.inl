@@ -145,7 +145,7 @@ template <
       ElementAccumulator,
       ElementCompute,
       ElementC,
-      GmemLayoutTagC,
+      GmemLayoutTagC, // TODO this needs to be a stride not a layout
       AlignmentC,
       ElementD,
       GmemLayoutTagD,
