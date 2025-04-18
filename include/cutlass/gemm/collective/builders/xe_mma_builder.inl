@@ -53,67 +53,67 @@ constexpr auto get_n_atoms(T_m tile_m, T_n tile_n){
 }
 
 
-template<typename dtype, bool is_t, bool is_v, typename T_m, typename T_n>
+template<bool is_t, bool is_v, typename T_m, typename T_n>
 constexpr auto select_copy_atom_16b(T_m tile_m, T_n tile_n){
   #define RETURN_ATOM(WIDTH, HEIGHT, LETTER) \
     return XE_2D_U16x##WIDTH##x##HEIGHT##_LD_##LETTER {};
   
-    if constexpr(is_t){
-      // We have copy atoms for very few _T sizes, with little pattern, we just list all manually
-      static_assert(tile_m % 16 == 0 && "Invalid tile_m");
-      if constexpr(tile_n == 8){
-        RETURN_ATOM(16, 8, T)
-      } else if(tile_n % 32 == 0){
-        RETURN_ATOM(16, 16, T)
-      } else{
-        static_assert(dependent_false<T_n> && "Invalid tile_n");
-      }
-    } else if constexpr(is_v){
-      #define SELECT_HEIGHT_V(WIDTH) \
-        if constexpr(tile_n == 16){ \
-          RETURN_ATOM(WIDTH, 16, V) \
-        } else if constexpr(tile_n % 32 == 0){ \
-          RETURN_ATOM(WIDTH, 32, V) \
-        } else{ \
-          static_assert(dependent_false<T_n> && "Invalid tile_n"); \
-        }
-
-      if constexpr(tile_m == 16){
-        SELECT_HEIGHT_V(16)
-      } else if constexpr(tile_m % 32 == 0){
-        SELECT_HEIGHT_V(32)
-      } else{
-        static_assert(dependent_false<T_m> && "Invalid tile_m");
-      }
-      #undef SELECT_HEIGHT_V
-    } else{ // _N
-      #define SELECT_WIDTH_N(HEIGHT) \
-        if constexpr(tile_m == 1){ \
-          RETURN_ATOM(1, HEIGHT, N) \
-        } else if constexpr(tile_m == 2){ \
-          RETURN_ATOM(2, HEIGHT, N) \
-        } else if constexpr(tile_m == 4){ \
-          RETURN_ATOM(4, HEIGHT, N) \
-        } else if constexpr(tile_m == 8){ \
-          RETURN_ATOM(8, HEIGHT, N) \
-        } else if constexpr(tile_m == 16){ \
-          RETURN_ATOM(16, HEIGHT, N) \
-        } else if constexpr(tile_m % 32 == 0){ \
-          RETURN_ATOM(32, HEIGHT, N) \
-        } else { \
-          static_assert(dependent_false<T_m> && "Invalid tile_m"); \
-        }
-      
-      if constexpr(tile_n == 16){
-        SELECT_WIDTH_N(16)
-      } else if constexpr(tile_n % 32 == 0){
-        SELECT_WIDTH_N(32)
-      } else {
-        static_assert(dependent_false<T_n> && "Invalid tile_n");
-      }
-      #undef SELECT_WIDTH_N
+  if constexpr(is_t){
+    // tile_m and tile_n have swapped role in case of _T
+    static_assert(tile_n % 16 == 0 && "Invalid tile_m");
+    if constexpr(tile_m == 8){
+      RETURN_ATOM(16, 8, T)
+    } else if constexpr(tile_m % 16 == 0){
+      RETURN_ATOM(16, 16, T)
+    } else{
+      static_assert(dependent_false<T_m> && "Invalid tile_n");
     }
-    #undef RETURN_ATOM
+  } else if constexpr(is_v){
+    #define SELECT_HEIGHT_V(WIDTH) \
+      if constexpr(tile_n == 16){ \
+        RETURN_ATOM(WIDTH, 16, V) \
+      } else if constexpr(tile_n % 32 == 0){ \
+        RETURN_ATOM(WIDTH, 32, V) \
+      } else{ \
+        static_assert(dependent_false<T_n> && "Invalid tile_n"); \
+      }
+
+    if constexpr(tile_m == 16){
+      SELECT_HEIGHT_V(16)
+    } else if constexpr(tile_m % 32 == 0){
+      SELECT_HEIGHT_V(32)
+    } else{
+      static_assert(dependent_false<T_m> && "Invalid tile_m");
+    }
+    #undef SELECT_HEIGHT_V
+  } else{ // _N
+    #define SELECT_WIDTH_N(HEIGHT) \
+      if constexpr(tile_m == 1){ \
+        RETURN_ATOM(1, HEIGHT, N) \
+      } else if constexpr(tile_m == 2){ \
+        RETURN_ATOM(2, HEIGHT, N) \
+      } else if constexpr(tile_m == 4){ \
+        RETURN_ATOM(4, HEIGHT, N) \
+      } else if constexpr(tile_m == 8){ \
+        RETURN_ATOM(8, HEIGHT, N) \
+      } else if constexpr(tile_m == 16){ \
+        RETURN_ATOM(16, HEIGHT, N) \
+      } else if constexpr(tile_m % 32 == 0){ \
+        RETURN_ATOM(32, HEIGHT, N) \
+      } else { \
+        static_assert(dependent_false<T_m> && "Invalid tile_m"); \
+      }
+    
+    if constexpr(tile_n == 16){
+      SELECT_WIDTH_N(16)
+    } else if constexpr(tile_n % 32 == 0){
+      SELECT_WIDTH_N(32)
+    } else {
+      static_assert(dependent_false<T_n> && "Invalid tile_n");
+    }
+    #undef SELECT_WIDTH_N
+  }
+  #undef RETURN_ATOM
 }
 
 template <
@@ -180,8 +180,8 @@ struct CollectiveBuilder<
                                                 cutlass::gemm::MainloopIntelPVCGroup<PipelineStages, KernelSchedule>,
                                                 cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelSchedule>>;
 
-      using GmemTiledCopyA = decltype(select_copy_atom_16b<ElementA, cute::is_same_v<GmemLayoutATag, cutlass::layout::ColumnMajor>, false>(tile_M/atoms_M{}, tile_K));
-      using GmemTiledCopyB = decltype(select_copy_atom_16b<ElementB, cute::is_same_v<GmemLayoutBTag, cutlass::layout::ColumnMajor>, true>(tile_N/atoms_N{}, tile_K));
+      using GmemTiledCopyA = decltype(select_copy_atom_16b<cute::is_same_v<GmemLayoutATag, cutlass::layout::ColumnMajor>, false>(tile_M/atoms_M{}, tile_K));
+      using GmemTiledCopyB = decltype(select_copy_atom_16b<cute::is_same_v<GmemLayoutBTag, cutlass::layout::ColumnMajor>, true>(tile_K, tile_N/atoms_N{}));
 
       // PVC pipeline does not use shared memory
       using SmemLayoutAtomA = void; 
