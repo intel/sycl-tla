@@ -231,11 +231,11 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(static_cast<std::size_t>(M) * K * L);
-    block_B.reset(static_cast<std::size_t>(K) * N * L);
-    block_C.reset(static_cast<std::size_t>(M) * N * L);
-    block_D.reset(static_cast<std::size_t>(M) * N * L);
-    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_A.reset(M * K * L);
+    block_B.reset(K * N * L);
+    block_C.reset(M * N * L);
+    block_D.reset(M * N * L);
+    block_ref_D.reset(M * N * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
@@ -340,16 +340,16 @@ int main(int argc, const char** argv)
   using ElementOutput = float;           // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
   // The 2D block copy operations used for the A and B matrices
-  using GmemTiledCopyA = XE_2D_U16x8x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
 
   // Workgroup-level tile
-  using TileShape = Shape<_8, _128, _32>;
+  using TileShape = Shape<_256, _256, _32>;
 
   // A TiledMMA struct defines a tiling of an MMA atom over M, N and K, combining both additional
   // hardware (sub-groups for Intel PVC) and iterations by each sub-group.
@@ -363,7 +363,7 @@ int main(int argc, const char** argv)
   // performance reasons.
   using TiledMma =                    // M=8,N=16,K=16, D=f32,A=bf16,B=bf16,C=f32
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_1, _4, _1>, Stride<_0, _1, _0>>>::TiledMMA;
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   // For Intel PVC, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
   constexpr int PipelineStages = 2;
