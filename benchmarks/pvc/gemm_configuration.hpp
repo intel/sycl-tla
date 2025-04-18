@@ -102,23 +102,24 @@ struct GemmConfiguration<
   static_assert(!use_collective_mma_builder or (std::is_void_v<GmemTiledCopyA> and std::is_void_v<GmemTiledCopyB>),
       "TiledMma, GmemTileCopyA, and GmemTileCopyB must be all void or none of them may be void.");
   // Mainloop
-  using CollectiveMainloop = std::conditional_t<use_collective_mma_builder,
-    typename cutlass::gemm::collective::CollectiveBuilder<
-    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
-    bfloat16_t, StrideA, sizeof(bfloat16_t),
-    bfloat16_t, StrideB, sizeof(bfloat16_t),
-    float,
-    TileShape, ClusterShape,
-    cutlass::gemm::collective::StageCountAuto,
-    KernelScheduleType
-  >::CollectiveOp,
-  collective::CollectiveMma<
-    DispatchPolicy, TileShape,
-    bfloat16_t, StrideA,
-    bfloat16_t, StrideB,
-    TiledMma,
-    GmemTiledCopyA, void, void, identity, // A
-    GmemTiledCopyB, void, void, identity // B
+  using CollectiveMainloop =
+    std::conditional_t<use_collective_mma_builder,
+      typename cutlass::gemm::collective::CollectiveBuilder<
+        cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+        bfloat16_t, LayoutA, sizeof(bfloat16_t),
+        bfloat16_t, LayoutB, sizeof(bfloat16_t),
+        float,
+        TileShape, ClusterShape,
+        cutlass::gemm::collective::StageCountAuto,
+        KernelScheduleType
+      >::CollectiveOp,
+      collective::CollectiveMma<
+        DispatchPolicy, TileShape,
+        bfloat16_t, StrideA,
+        bfloat16_t, StrideB,
+        TiledMma,
+        GmemTiledCopyA, void, void, identity, // A
+        GmemTiledCopyB, void, void, identity // B
   >>;
 
   // Epilogue
@@ -127,8 +128,8 @@ struct GemmConfiguration<
     TileShape, ClusterShape,
     cutlass::epilogue::collective::EpilogueTileAuto, float,
     float,
-    float, StrideC, sizeof(float),
-    float, StrideC, sizeof(float),
+    float, LayoutC, sizeof(float),
+    float, LayoutC, sizeof(float),
     cutlass::epilogue::collective::EpilogueScheduleAuto,
     EpilogueOp
   >::CollectiveOp;

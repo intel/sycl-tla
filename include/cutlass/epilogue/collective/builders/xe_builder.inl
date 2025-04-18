@@ -118,6 +118,33 @@ namespace detail {
         CopyOpG2R
       >;
   };
+
+  template <
+   class ElementOutput,
+   class ElementCompute,
+   class ElementBias,
+   class ElementSource,
+   class ElementScalar,
+   int AlignmentBias,
+   FloatRoundStyle RoundStyle
+  >
+  struct FusionOpInfo<cutlass::epilogue::fusion::LinCombPerColBias<ElementOutput, ElementCompute, ElementBias, ElementSource, ElementScalar, AlignmentBias, RoundStyle>> {
+      constexpr static bool HasBuilder = true;
+
+      template <
+        class DispatchPolicy,
+        class TileShape_MNK,
+        class EpilogueTile,
+        class CopyOpG2R>
+      using FusionCallbacks = cutlass::epilogue::fusion::FusionCallbacks<
+        DispatchPolicy,
+        cutlass::epilogue::fusion::LinCombPerColBias<
+          ElementOutput, ElementCompute, ElementBias, ElementSource,
+          ElementScalar, AlignmentBias, RoundStyle>,
+        TileShape_MNK,
+        EpilogueTile
+      >;
+  };
 }
 
   // Intel epilogue builder
@@ -153,8 +180,6 @@ template <
       EpilogueScheduleType, 
       FusionOpOrCallbacks,
       cute::enable_if_t<
-        cute::is_same_v<cute::remove_pointer_t<GmemLayoutTagC>,  cutlass::layout::RowMajor> &&
-        cute::is_same_v<cute::remove_pointer_t<GmemLayoutTagD>,  cutlass::layout::RowMajor> &&
         cute::is_same_v<EpilogueTileType, EpilogueTileAuto> &&
         cute::is_any_of_v<EpilogueScheduleType, EpilogueScheduleAuto, IntelPVCEpilogue, IntelPVCGroupEpilogue> &&
         detail::FusionOpInfo<FusionOpOrCallbacks>::HasBuilder
@@ -166,14 +191,21 @@ template <
       #endif
       static_assert(is_static<TileShape_MNK>::value);
       static_assert(cute::is_any_of_v<ElementC, float, void>, "ElementC needs to be float for the Intel pipeline");
-      
-      using EpilogueSchedule = std::conditional_t<cute::is_same_v<EpilogueScheduleType, EpilogueScheduleAuto>, 
-                                                  IntelPVCEpilogue, 
+      using EpilogueSchedule = std::conditional_t<cute::is_same_v<EpilogueScheduleType, EpilogueScheduleAuto>,
+                                                  IntelPVCEpilogue,
                                                   EpilogueScheduleType>;
       static constexpr bool IsGroup = cute::is_same_v<EpilogueSchedule, IntelPVCGroupEpilogue>;
-      using DispatchPolicy = std::conditional_t<IsGroup, 
-                                                IntelPVCGroupEpilogue, 
+      using DispatchPolicy = std::conditional_t<IsGroup,
+                                                IntelPVCGroupEpilogue,
                                                 IntelPVCEpilogue>;
+      using LayoutC = std::remove_pointer_t<GmemLayoutTagC>;
+      using LayoutD = std::remove_pointer_t<GmemLayoutTagD>;
+      using StrideC = std::conditional_t<cute::is_tuple_v<LayoutC>, LayoutC, cutlass::detail::TagToStrideC_t<std::conditional_t<IsGroup, LayoutC*, LayoutC>>>;
+      using StrideD = std::conditional_t<cute::is_tuple_v<LayoutD>, LayoutD, cutlass::detail::TagToStrideC_t<std::conditional_t<IsGroup, LayoutD*, LayoutD>>>;
+      static constexpr bool row_majorish_C = cute::detail::is_stride_leftmost<StrideC> or std::is_same_v<layout::RowMajor, LayoutC>;
+      static constexpr bool row_majorish_D = cute::detail::is_stride_leftmost<StrideD> or std::is_same_v<layout::RowMajor, LayoutD>;
+      static_assert(row_majorish_C and row_majorish_D, "Only M-Major/Row-Major layouts are supported in the xe epilogue collective builder");
+
       using CopyOpG2R = XE_2D_U32x8x16_LD_N;
       using CopyOpR2G = XE_2D_U32x8x16_ST_N;
 
@@ -191,16 +223,16 @@ template <
             DispatchPolicy,
             TileShape_MNK,
             ElementAccumulator,
-            cutlass::gemm::TagToStrideC_t<std::conditional_t<IsGroup, GmemLayoutTagC*, GmemLayoutTagC>>,
+            StrideC,
             ElementD,
-            cutlass::gemm::TagToStrideC_t<std::conditional_t<IsGroup, GmemLayoutTagD*, GmemLayoutTagD>>,
+            StrideD,
             FusionCallbacks,
             CopyOpG2R,
             SmemLayoutAtomC_,
             CopyOpS2R_,
             CopyOpR2G,
             SmemLayoutAtomD_,
-            CopyOpR2S_   
+            CopyOpR2S_
         >;
     };
 }
