@@ -252,13 +252,20 @@ public:
       Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(m,k,l)
       Tensor mK_nkl = cute::get_pvc_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
       Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, seq_len_kv, (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
+      Tensor mK_cache_nkl = cute::get_pvc_tensor(make_shape(seq_len_kv_cache, head_size_qk, (is_var_len ? 1 : batch) * num_heads));   // (n_cache,k,l)
+      Tensor mV_cache_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, seq_len_kv_cache, (is_var_len ? 1 : batch) * num_heads));   // (n_cache,k,l)
+
       Tensor mQ_mk = mQ_mkl(_, _, blk_l_coord);                                                    // (m,k)
       Tensor mK_nk = mK_nkl(_, _, blk_l_coord);                                                    // (n,k)
       Tensor mV_nk = mV_nkl(_, _, blk_l_coord);                                                    // (n,k)
+      Tensor mK_cache_nk = mK_cache_nkl(_, _, blk_l_coord);                                        // (n_cache, k)
+      Tensor mV_cache_nk = mV_cache_nkl(_, _, blk_l_coord);                                        // (n_cache, k)
 
       auto gQ = local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
       auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
       auto gV = local_tile(mV_nk, TileShapePV{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
+      auto gK_cache = local_tile(mK_cache_nk, TileShapeQK{}, make_coord(_, _, _), Step<X, _1, _1>{});
+      auto gV_cache = local_tile(mV_cache_nk, TileShapePV{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
 
       const int seq_coord = cute::min(seq_len_qo, blk_m_coord * QK_BLK_M + (sub_group_id / PV_ATOM_N) * QK_SG_M);
       const int l_coord = blk_l_coord;
@@ -266,8 +273,10 @@ public:
       const int causal_seq_len = cute::min(seq_len_kv, seq_coord) + QK_SG_M;
       const int non_causal_seq_len = seq_len_kv;
 
-      const int nblock_limit = CausalMask ? cute::ceil_div(causal_seq_len, QK_BLK_N)
+      const int nblock_cache = cute::ceil_div(seq_len_kv_cache, QK_BLK_N);
+      const int nblock_new = CausalMask ? cute::ceil_div(causal_seq_len, QK_BLK_N)
                                           : cute::ceil_div(non_causal_seq_len, QK_BLK_N);
+      int nblock_limit = nblock_cache + nblock_new;
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, batch_coord);
 
@@ -313,22 +322,31 @@ public:
       // MAIN LOOP: loop over K and V, perform fused attention + online softmax
       for (int nblock = 0; nblock < nblock_limit - static_cast<int>(CausalMask); nblock++) {
         barrier_arrive(barrier_scope);
-        // 1) Load K (performed inside mmaQK)
+
+        bool is_KV_cache = (nblock < nblock_cache);
+        int local_block = is_KV_cache ? nblock : (nblock - nblock_cache);
+
+        // 1) Load KV (performed inside mmaQK)
+        auto gK_ = is_KV_cache ? gK_cache(_, _, local_block, _) : gK(_, _, local_block, _);
+        auto gV_ = is_KV_cache ? gV_cache(_, _, local_block) : gV(_, _, local_block);
+
         // 2) Create Tensor S
         Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
         clear(tSr);
 
         // 3) Perform GEMM S = Q*K
-        collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
+        collective_mma.mmaQK(tSr, gQ, gK_, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, is_KV_cache);
 
         // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
         // prefetching it the same way as cutlass K matrix does not make sense
         prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock));
 
+        // 4) Fused softmax
         CollectiveSoftmaxEpilogue softmax(params.softmax);
         softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
-        collective_mma.mmaPV(out_reg, tSr, gV(_, _ , nblock), out_reg, mainloop_params);
+        // 5) Perform GEMM O = S*V
+        collective_mma.mmaPV(out_reg, tSr, gV_, out_reg, mainloop_params, is_KV_cache);
         
         // Prefetch the next K tile
         // there is no need to gaurd it with if statememt as prefetch will ignore out of bound reading
@@ -346,13 +364,13 @@ public:
         Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
         clear(tSr);
         // 3) Perform GEMM S = Q*K
-        collective_mma.mmaQK(tSr, gQ,  gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
+        collective_mma.mmaQK(tSr, gQ,  gK(_, _, nblock_new - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, false);
         // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
         // prefetching it the same way as cutlass K matrix does not make sense
-        prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock_limit - 1));
+        prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock_new - 1));
         // mask the elements of each tile where j > i
         const int item_id = thread_idx % SubgroupSize;
-        int col_idx = item_id + (nblock_limit - 1) * QK_BLK_N;
+        int col_idx = item_id + (nblock_new - 1) * QK_BLK_N;
         CUTLASS_PRAGMA_UNROLL
         for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
           CUTLASS_PRAGMA_UNROLL
@@ -360,16 +378,17 @@ public:
             int row_idx = m * Vec + seq_coord;
             CUTLASS_PRAGMA_UNROLL
             for (int row = 0; row < Vec; row++, row_idx++) { // 8
-              if (col_idx > row_idx)
-                tSr(row, m, n) = -INFINITY;
+                if (col_idx > row_idx) {
+                    tSr(row, m, n) = -INFINITY;
+                }
             }
           }
         }
 
         CollectiveSoftmaxEpilogue softmax(params.softmax);
-        softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
+        softmax((nblock_new - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
-        collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_limit - 1), out_reg, mainloop_params);
+        collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_new - 1), out_reg, mainloop_params, false);
       }
 
       auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, batch_coord);
