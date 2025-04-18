@@ -116,7 +116,7 @@ public:
   template <class ProblemShape>
   static constexpr Params to_underlying_arguments(ProblemShape const &problem_shape, Arguments const &args,
                                                   [[maybe_unused]] void *workspace) {
-    auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
+    auto [batch, num_heads, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = problem_shape;
 
     auto tensorO = make_tensor(make_gmem_ptr(static_cast<ElementO const*>(args.ptr_O)), 
                                                   make_layout(make_shape(seq_len_qo, head_size_vo, batch * num_heads), 
@@ -179,7 +179,7 @@ public:
     }
 
     // Indexing variables
-    auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
+    auto [batch, num_heads, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = problem_shape;
     // Represent the full output tensor
     Tensor mO_mnl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_vo, (is_var_len ? batch : 1) * num_heads));
     
@@ -204,7 +204,7 @@ public:
     if constexpr (!VarLen) {
       return params;
     } else {
-      auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
+      auto [batch, num_heads, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = problem_shape;
 
       auto qo_cumulative_length = get<2>(problem_shape).cumulative_length;
       int offset_o = num_heads * head_size_vo * qo_cumulative_length[l_coord];

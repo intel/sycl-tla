@@ -62,12 +62,12 @@ struct Options {
   bool varlen = false;
   std::string scheduler;
 
-  int batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo, iterations;
+  int batch, num_heads, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo, iterations;
   float softmax_scale;
 
   Options()
       : help(false), error(false), is_causal(false), varlen(false), batch(32), num_heads(16), seq_len_qo(512), head_size_qk(128),
-        seq_len_kv(512), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
+        seq_len_kv(512), seq_len_kv_cache(0), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -92,6 +92,7 @@ struct Options {
     cmd.get_cmd_line_argument("num_heads", num_heads, 16);
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 512);
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
+    cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
@@ -112,6 +113,7 @@ struct Options {
         << "  --num_heads=<int>           Sets the Number of Attention Heads of the Multi-Head Self Attention module\n"
         << "  --seq_len_qo=<int>          Sets the Sequence length of the Query input in Multi-Head Self Attention module\n"
         << "  --seq_len_kv=<int>          Sets the Sequence length of the Key-Value pair in Multi-Head Self Attention module\n"
+        << "  --seq_len_kv_cache=<int>    Sets the Sequence length of the Key-Value pair in Multi-Head Self Attention module\n"
         << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
         << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
         << "  --iterations=<int>          Iterations\n\n";
@@ -181,7 +183,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
       get<3>(problem_size) = cutlass::fmha::collective::VariableLength{max_seq_len_kv, cumulative_seqlen_kv.data()};
     }
 
-    auto [batch, num_heads, head_size_qk, head_size_vo] = cute::select<0,1,4,5>(problem_size);
+    auto [batch, num_heads, head_size_qk, head_size_vo] = cute::select<0,1,5,6>(problem_size);
     int seq_len_qo, seq_len_kv;
 
     int offset_q = 0;
@@ -369,8 +371,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
 
     get<2>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_q};
     get<3>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv};
-    get<4>(problem_size_for_launch) = get<4>(problem_size);
     get<5>(problem_size_for_launch) = get<5>(problem_size);
+    get<6>(problem_size_for_launch) = get<6>(problem_size);
     get<0>(problem_size_for_launch) = get<0>(problem_size);
     get<1>(problem_size_for_launch) = get<1>(problem_size);
 
@@ -380,7 +382,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
   /// Initialize operands to be used in the GEMM and reference GEMM
   ProblemShapeType initialize(const Options &options) {
     auto problem_shape_in =
-        cute::make_tuple(options.batch, options.num_heads, options.seq_len_qo, options.seq_len_kv, options.head_size_qk, options.head_size_vo);
+        cute::make_tuple(options.batch, options.num_heads, options.seq_len_qo, options.seq_len_kv, options.seq_len_kv_cache, options.head_size_qk, options.head_size_vo);
 
     ProblemShapeType problem_shape;
     decltype(problem_shape_in) problem_size;
@@ -395,7 +397,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
       problem_shape = problem_shape_in;
     }
 
-    auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_size;
+    auto [batch, num_heads, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = problem_size;
 
     stride_Q = cutlass::make_cute_packed_stride(StrideQ{}, cute::make_shape(seq_len_qo, head_size_qk, batch * num_heads));
     stride_K = cutlass::make_cute_packed_stride(StrideK{}, cute::make_shape(seq_len_kv, head_size_qk, batch * num_heads));
@@ -519,7 +521,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
       double gbps_pv = 2.0 * options.batch * options.num_heads * (options.seq_len_kv * options.seq_len_qo + options.seq_len_qo * options.head_size_vo);
       double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
       std::cout << "Batch: " << options.batch << "\tNumHeads: " << options.num_heads << "\tSeq Length QO: " << options.seq_len_qo
-                << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
+                << "\tSeq Length KV: " << options.seq_len_kv << "\tSeq Length KV Cache: " << options.seq_len_kv_cache
+                << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
                 << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false")
                 << "\t Scheduler: " << options.scheduler;
       printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
@@ -562,9 +565,9 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
         GmemTiledCopyStore>;
     using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::CollectiveSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
 
-    using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int>;
+    using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int>;
     using namespace cutlass::fmha::collective;
-    using ProblemShapeVarlen = cute::tuple<int, int, VariableLength, VariableLength, int, int>;
+    using ProblemShapeVarlen = cute::tuple<int, int, VariableLength, VariableLength, VariableLength, int, int>;
     using ProblemShapeType = std::conditional_t<isVarLen, ProblemShapeVarlen, ProblemShapeRegular>;
 
     // Mainloop

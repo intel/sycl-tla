@@ -53,7 +53,7 @@ public:
   //
   using ProblemShape = ProblemShape_;
 
-  static_assert(rank(ProblemShape{}) == 6, "ProblemShape{} should be <batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo>");
+  static_assert(rank(ProblemShape{}) == 7, "ProblemShape{} should be <batch, num_heads, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo>");
 
   // Mainloop derived types
   using CollectiveMainloop = CollectiveMainloop_;
@@ -190,7 +190,7 @@ public:
   static dim3 get_block_shape() { return dim3(MaxThreadsPerBlock, 1, 1); }
 
   CUTLASS_DEVICE
-  Shape<int, int, int, int, int, int> get_logical_problem_shape(ProblemShape const& problem_shape, int const& batch) {
+  Shape<int, int, int, int, int, int, int> get_logical_problem_shape(ProblemShape const& problem_shape, int const& batch) {
     if constexpr (is_var_len) {
       return cutlass::fmha::collective::apply_variable_length(problem_shape, batch);
     } else {
@@ -207,8 +207,8 @@ public:
     // Separate out problem shape for convenience
     auto batch = get<0>(params.problem_shape);
     auto num_heads = get<1>(params.problem_shape);
-    auto head_size_qk = get<4>(params.problem_shape);
-    auto head_size_vo = get<5>(params.problem_shape);
+    auto head_size_qk = get<5>(params.problem_shape);
+    auto head_size_vo = get<6>(params.problem_shape);
     // Preconditions
     static_assert(cute::rank(StrideQ{}) == 3, "StrideQ must be rank-3: [seq_len_qo, head_size_qk, batch * num_heads].");
     static_assert(cute::rank(StrideK{}) == 3, "StrideK must be rank-3: [head_size_qk, seq_len_kv, batch * num_heads].");
@@ -241,7 +241,7 @@ public:
       // logical_problem_shape = [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo]
       auto logical_problem_shape = get_logical_problem_shape(params.problem_shape, batch_coord);
 
-      auto [seq_len_qo, seq_len_kv] = select<2, 3>(logical_problem_shape);
+      auto [seq_len_qo, seq_len_kv, seq_len_kv_cache] = select<2, 3, 4>(logical_problem_shape);
 
       // Calculate the seq_len_idx (blk_m_coord * get<0>(WorkgroupTileShape{})) and check if it is still
       // within bounds of the actual seq_len_qo (get<2>(logical_problem_shape)).
