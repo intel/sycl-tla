@@ -147,9 +147,9 @@ public:
   CUTLASS_HOST_DEVICE
   FlashDecodeEpilogue(Params const &params_, TensorStorage const &) : params(params_) {}
 
-  template <class ProblemShape, class TileShape, class TileCoord, class STensorOut, class FragSum, class STensorSum, class TiledMma>
+  template <bool CausalMask, class ProblemShape, class TileShape, class TileCoord, class STensorOut, class FragSum, class STensorSum, class TiledMma>
   CUTLASS_DEVICE void operator()(ProblemShape problem_shape, TileShape tile_shape, TileCoord tile_coord, STensorOut &shmem_tensor_out,
-                                 FragSum &sum, STensorSum& shmem_tensor_sum, TiledMma tiled_mma) {
+                                 FragSum &sum, STensorSum& shmem_tensor_sum, TiledMma tiled_mma, bool const& active_sg) {
 
     using namespace cute;
 
@@ -173,15 +173,32 @@ public:
     // reduce sum across the whole workgroup through SLM
     // rest of the epilogue stays the same
 
-    CUTLASS_PRAGMA_UNROLL
-    for (int y = 0; y < FragsM; y++) {
-      CUTLASS_PRAGMA_UNROLL
-      for (int x = 0; x < Vec; x++) {
-        int indx = y * Vec + x;
-        auto cur_sum = reduce_over_group(sg, sum(indx), sycl::plus<>());
+    if constexpr (CausalMask) {
+      if (active_sg) {
+        CUTLASS_PRAGMA_UNROLL
+        for (int y = 0; y < FragsM; y++) {
+          CUTLASS_PRAGMA_UNROLL
+          for (int x = 0; x < Vec; x++) {
+            int indx = y * Vec + x;
+            auto cur_sum = reduce_over_group(sg, sum(indx), sycl::plus<>());
 
-        if(sg_local_id == 0) {
-          shmem_tensor_sum(indx + sg_group_id * FragsM * Vec) = cur_sum;
+            if(sg_local_id == 0) {
+              shmem_tensor_sum(indx + sg_group_id * FragsM * Vec) = cur_sum;
+            }
+          }
+        }
+      }
+    } else {
+      CUTLASS_PRAGMA_NO_UNROLL
+      for (int y = 0; y < FragsM; y++) {
+        CUTLASS_PRAGMA_NO_UNROLL
+        for (int x = 0; x < Vec; x++) {
+          int indx = y * Vec + x;
+          auto cur_sum = reduce_over_group(sg, sum(indx), sycl::plus<>());
+
+          if(sg_local_id == 0) {
+            shmem_tensor_sum(indx + sg_group_id * FragsM * Vec) = cur_sum;
+          }
         }
       }
     }
@@ -210,6 +227,7 @@ public:
             const int slm_curr_idx = sg_local_id + base_indx * SubgroupSize;
 
             ElementOutput out_val_curr = ElementOutput{0};
+            CUTLASS_PRAGMA_UNROLL
             for(int i = sg_group_id; i < ATOM_M * ATOM_N; i += ATOM_N) {
               auto out_val_prev = shmem_tensor_out(slm_curr_idx + i * out_reg.size() * SubgroupSize);
               out_val_curr += out_val_prev;

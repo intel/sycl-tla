@@ -281,7 +281,7 @@ public:
       }
 
       CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < PV_ATOM_M; i++) {
+      for (int i = 0; i < DispatchPolicy::Stages * PV_ATOM_M; i++) {
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < size<4>(pKgK); j++) {
           prefetch(tiled_prefetch_k, pKgK(_, _, _, i, j));
@@ -297,7 +297,7 @@ public:
       // different for each subgroup due to triangular nature of causal based operation
       static constexpr int barrier_scope = 3;
       // MAIN LOOP: loop over K and V, perform fused attention + online softmax
-      const int start_idx_k = sub_group_id / PV_ATOM_N;
+      int start_idx_k = sub_group_id / PV_ATOM_N;
       CUTLASS_PRAGMA_NO_UNROLL
       for (int qblock = 0; qblock < qblock_limit; qblock++) {
 
@@ -311,7 +311,7 @@ public:
 
         if constexpr (!CausalMask) {
           CUTLASS_PRAGMA_NO_UNROLL
-          for(int split = blk_k_coord; split < kv_splits; split++) {
+          for(int split = blk_k_coord; split < kv_splits; split++, start_idx_k += PV_ATOM_M) {
             barrier_arrive(barrier_scope);
 
             Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
@@ -327,7 +327,7 @@ public:
 
             // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
             // prefetching it the same way as cutlass K matrix does not make sense
-            prefetch(tiled_prefetch_v, pVgV(_, _, _, start_idx_k + split * PV_ATOM_M));
+            prefetch(tiled_prefetch_v, pVgV(_, _, _, start_idx_k));
 
             CollectiveSoftmaxEpilogue softmax(params.softmax);
             softmax(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
@@ -336,25 +336,27 @@ public:
             for (int i = 0; i < PV_ATOM_M; i++) {
               CUTLASS_PRAGMA_UNROLL
               for (int j = 0; j < size<4>(pKgK); j++) {
-                prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split + 1) * PV_ATOM_M, j));
+                prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split + 1) * DispatchPolicy::Stages * PV_ATOM_M, j));
               }
             }
 
-            collective_mma.mmaPV(out_reg, tSr, gV(_, _, start_idx_k + split * PV_ATOM_M), out_reg, mainloop_params);
+            collective_mma.mmaPV(out_reg, tSr, gV(_, _, start_idx_k), out_reg, mainloop_params);
 
             barrier_wait(barrier_scope);
           }
         } else {
 
           CUTLASS_PRAGMA_NO_UNROLL
-          for(int split = blk_k_coord; split < kv_splits; split++) {
+          for(int split = blk_k_coord; split < kv_splits; split++, start_idx_k += PV_ATOM_M) {
             barrier_arrive(barrier_scope);
 
             // 1) Load K (performed inside mmaQK)
             // 2) Create Tensor S
             Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
 
-            if(start_idx_k + split * PV_ATOM_M <= qblock) {
+            bool active_sg = start_idx_k <= qblock;
+
+            if(active_sg) {
               clear(tSr);
 
               auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, split, _), Step<X, _1, _1>{});
@@ -363,10 +365,10 @@ public:
 
               // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
               // prefetching it the same way as cutlass K matrix does not make sense
-              prefetch(tiled_prefetch_v, pVgV(_, _, _, start_idx_k + split * PV_ATOM_M));
+              prefetch(tiled_prefetch_v, pVgV(_, _, _, start_idx_k));
 
-              if(start_idx_k + split * PV_ATOM_M == qblock) {
-                int col_idx = (start_idx_k + split * PV_ATOM_M) * QK_SG_N + thread_idx % SubgroupSize;
+              if(start_idx_k == qblock) {
+                int col_idx = (start_idx_k) * QK_SG_N + thread_idx % SubgroupSize;
                 CUTLASS_PRAGMA_UNROLL
                 for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
                   CUTLASS_PRAGMA_UNROLL
@@ -391,17 +393,17 @@ public:
             CollectiveSoftmaxEpilogue softmax(params.softmax);
             softmax(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
 
-            if(start_idx_k + split * PV_ATOM_M <= qblock) {
+            if(active_sg) {
 
               CUTLASS_PRAGMA_UNROLL
               for (int i = 0; i < PV_ATOM_M; i++) {
                 CUTLASS_PRAGMA_UNROLL
                 for (int j = 0; j < size<4>(pKgK); j++) {
-                  prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split + 1) * PV_ATOM_M, j));
+                  prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split + 1) * DispatchPolicy::Stages * PV_ATOM_M, j));
                 }
               }
 
-              collective_mma.mmaPV(out_reg, tSr, gV(_, _, start_idx_k + split * PV_ATOM_M), out_reg, mainloop_params);
+              collective_mma.mmaPV(out_reg, tSr, gV(_, _, start_idx_k), out_reg, mainloop_params);
             }
 
             barrier_wait(barrier_scope);
@@ -419,7 +421,7 @@ public:
         // write output to SLM
         int idx = (thread_idx % SubgroupSize) + sub_group_id * out_reg.size() * SubgroupSize;
         CUTLASS_PRAGMA_UNROLL
-        for(int i = 0; i < out_reg.size(); i++) {
+        for(int i = 0; i < Vec * get<0>(FragsShapePV{}) * get<1>(FragsShapePV{}); i++) {
           shmem_out_tensor(idx + i * SubgroupSize) = out_reg(i);
         }
 
@@ -429,7 +431,7 @@ public:
 
         Tensor shmem_sum_tensor = make_tensor(make_smem_ptr(shmem_out_tensor.data() + shmem_out_tensor.size()), make_shape(Int<Num_SGs * Vec * FragsM>{}));
 
-        epilogue(logical_problem_shape, TileShapePV{}, blk_coord_mnkl, shmem_out_tensor, sum_reg, shmem_sum_tensor, tiled_mma);
+        epilogue.template operator()<CausalMask>(logical_problem_shape, TileShapePV{}, blk_coord_mnkl, shmem_out_tensor, sum_reg, shmem_sum_tensor, tiled_mma, start_idx_k <= qblock);
       }
     }
   }
