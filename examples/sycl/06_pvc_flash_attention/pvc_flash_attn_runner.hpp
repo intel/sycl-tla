@@ -156,12 +156,16 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
   StrideQ stride_Q;
   StrideK stride_K;
   StrideV stride_V;
+  StrideK stride_K_cache;
+  StrideV stride_V_cache;
   StrideO stride_O;
   uint64_t seed = 0;
 
   cutlass::DeviceAllocation<ElementQ> block_Q;
   cutlass::DeviceAllocation<ElementK> block_K;
   cutlass::DeviceAllocation<ElementV> block_V;
+  cutlass::DeviceAllocation<ElementK> block_K_cache;
+  cutlass::DeviceAllocation<ElementV> block_V_cache;
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
 
@@ -174,7 +178,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
   // Methods
   //
 
-  bool verify(ProblemShapeType problem_size, bool is_causal) {
+  bool verify(ProblemShapeType problem_size, bool is_causal, bool use_kv_cache) {
     
     if constexpr (isVarLen) {
       int max_seq_len_q = static_cast<int>(get<2>(problem_size));
@@ -184,11 +188,13 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
     }
 
     auto [batch, num_heads, head_size_qk, head_size_vo] = cute::select<0,1,5,6>(problem_size);
-    int seq_len_qo, seq_len_kv;
+    int seq_len_qo, seq_len_kv, seq_len_kv_cache;
 
     int offset_q = 0;
     int offset_k = 0;
     int offset_v = 0;
+    int offset_k_cache = 0;
+    int offset_v_cache = 0;
     int offset_o = 0;
     // loop over the batch dimension to compute the output
     // to avoid the risk of running out of device memory
@@ -197,19 +203,62 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
         auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(problem_size, b);
         seq_len_qo = get<2>(logical_problem_shape);
         seq_len_kv = get<3>(logical_problem_shape);
+        seq_len_kv_cache = get<4>(logical_problem_shape);
       } else {
         seq_len_qo = get<2>(problem_size);
         seq_len_kv = get<3>(problem_size);
+        seq_len_kv_cache = get<4>(problem_size);
       }
+      int seq_len_kv_total = use_kv_cache ? (seq_len_kv_cache + seq_len_kv) : seq_len_kv;
 
       for (int h = 0; h < num_heads; h++) {
         cutlass::DeviceAllocation<ElementOutput> block_S;
         block_S.reset(seq_len_qo * seq_len_kv);
 
+        ElementK* k_ptr;
+        ElementV* v_ptr;
+
+        if (use_kv_cache) {
+            cutlass::DeviceAllocation<ElementK> block_K_concat(head_size_qk * seq_len_kv_total);
+            cutlass::DeviceAllocation<ElementV> block_V_concat(seq_len_kv_total * head_size_vo);
+
+            // Concatenate K_cache and K_new
+            syclcompat::memcpy<ElementK>(
+                block_K_concat.get(),
+                block_K_cache.get() + offset_k_cache,
+                seq_len_kv_cache * head_size_qk
+            );
+            syclcompat::memcpy<ElementK>(
+                block_K_concat.get() + seq_len_kv_cache * head_size_qk,
+                block_K.get() + offset_k,
+                seq_len_kv * head_size_qk
+            );
+
+            // Concatenate V_cache and V_new
+            syclcompat::memcpy<ElementV>(
+                block_V_concat.get(),
+                block_V_cache.get() + offset_v_cache,
+                seq_len_kv_cache * head_size_vo
+            );
+            syclcompat::memcpy<ElementV>(
+                block_V_concat.get() + seq_len_kv_cache * head_size_vo,
+                block_V.get() + offset_v,
+                seq_len_kv * head_size_vo
+            );
+            syclcompat::wait();
+
+            k_ptr = block_K_concat.get() + offset_k_cache;
+            v_ptr = block_V_concat.get() + offset_v_cache;
+        }
+        else {
+            k_ptr = block_K.get() + offset_k;
+            v_ptr = block_V.get() + offset_v;
+        }
+
         cutlass::TensorRef ref_Q(block_Q.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
-        cutlass::TensorRef ref_K(block_K.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
-        cutlass::TensorRef ref_V(block_V.get() + offset_v, LayoutV::packed({seq_len_kv, head_size_vo}));
-        cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
+        cutlass::TensorRef ref_K(k_ptr, LayoutK::packed({head_size_qk, seq_len_kv_total }));
+        cutlass::TensorRef ref_V(v_ptr, LayoutV::packed({ seq_len_kv_total, head_size_vo}));
+        cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
         cutlass::TensorRef ref_O(block_ref_O.get() + offset_o, LayoutO::packed({seq_len_qo, head_size_vo}));
 
         cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv, head_size_qk}, 1.f, ref_Q,
@@ -217,9 +266,9 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
                                                 0.f, ref_S, ref_S, ElementAccumulator(0),
                                                 1,                   // batch_count
                                                 seq_len_qo * head_size_qk, // batch_stride_Q
-                                                seq_len_kv * head_size_qk, // batch_stride_K
-                                                seq_len_qo * seq_len_kv,   // batch_stride_S
-                                                seq_len_qo * seq_len_kv    // batch_stride_S
+                                                seq_len_kv_total * head_size_qk, // batch_stride_K
+                                                seq_len_qo * seq_len_kv_total,   // batch_stride_S
+                                                seq_len_qo * seq_len_kv_total    // batch_stride_S
         );
 
         syclcompat::wait();
@@ -295,8 +344,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
                                                 cutlass::ComplexTransform::kNone, ref_V, cutlass::ComplexTransform::kNone,
                                                 0.f, ref_O, ref_O, ElementAccumulator(0),
                                                 1,                   // batch_count
-                                                seq_len_qo * seq_len_kv,   // batch_stride_P
-                                                seq_len_kv * head_size_vo, // batch_stride_V
+                                                seq_len_qo * seq_len_kv_total,   // batch_stride_P
+                                                seq_len_kv_total * head_size_vo, // batch_stride_V
                                                 seq_len_qo * head_size_vo, // batch_stride_O
                                                 seq_len_qo * head_size_vo  // batch_stride_O
         );
@@ -308,6 +357,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
         offset_q += seq_len_qo * head_size_qk;
         offset_k += seq_len_kv * head_size_qk;
         offset_v += seq_len_kv * head_size_vo;
+        offset_k_cache += seq_len_kv_cache * head_size_qk;
+        offset_v_cache += seq_len_kv_cache * head_size_vo;
         offset_o += seq_len_qo * head_size_vo;
       }
     }
@@ -324,6 +375,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
   template<class ProblemShape>
   auto initialize_varlen(const ProblemShape& problem_size, const bool VarlenSame = true) {
     int num_batches = get<0>(problem_size);
+    int seq_len_kv_cache = get<4>(problem_size);
 
     // generate Q as --b times
     //    gaussian (--Q, --Q / 2) sampled positive
@@ -366,11 +418,13 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
     get<0>(problem_size_for_init) = 1;
     get<2>(problem_size_for_init) = total_seqlen_q;
     get<3>(problem_size_for_init) = total_seqlen_kv;
+    get<4>(problem_size_for_init) = seq_len_kv_cache;
 
     ProblemShapeType problem_size_for_launch;
 
     get<2>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_q};
     get<3>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv};
+    get<4>(problem_size_for_launch) = get<4>(problem_size);
     get<5>(problem_size_for_launch) = get<5>(problem_size);
     get<6>(problem_size_for_launch) = get<6>(problem_size);
     get<0>(problem_size_for_launch) = get<0>(problem_size);
@@ -402,17 +456,23 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
     stride_Q = cutlass::make_cute_packed_stride(StrideQ{}, cute::make_shape(seq_len_qo, head_size_qk, batch * num_heads));
     stride_K = cutlass::make_cute_packed_stride(StrideK{}, cute::make_shape(seq_len_kv, head_size_qk, batch * num_heads));
     stride_V = cutlass::make_cute_packed_stride(StrideV{}, cute::make_shape(head_size_vo, seq_len_kv, batch * num_heads));
+    stride_K_cache = cutlass::make_cute_packed_stride(StrideK{}, cute::make_shape(seq_len_kv_cache, head_size_qk, batch * num_heads));
+    stride_V_cache = cutlass::make_cute_packed_stride(StrideV{}, cute::make_shape(head_size_vo, seq_len_kv_cache, batch * num_heads));
     stride_O = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, batch * num_heads));
 
     block_Q.reset(batch * num_heads * seq_len_qo * head_size_qk);
     block_K.reset(batch * num_heads * seq_len_kv * head_size_qk);
     block_V.reset(batch * num_heads * seq_len_kv * head_size_vo);
+    block_K_cache.reset(batch * num_heads * seq_len_kv_cache * head_size_qk);
+    block_V_cache.reset(batch * num_heads * seq_len_kv_cache * head_size_vo);
     block_O.reset(batch * num_heads * seq_len_qo * head_size_vo);
     block_ref_O.reset(batch * num_heads * seq_len_qo * head_size_vo);
 
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
+    initialize_block(block_K_cache, seed + 2024);
+    initialize_block(block_V_cache, seed + 2025);
 
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
@@ -470,7 +530,11 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
     typename GemmKernel::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         problem_size,
-        {block_Q.get(), stride_Q, block_K.get(), stride_K, block_V.get(), stride_V},
+        {block_Q.get(), stride_Q,
+        block_K.get(), stride_K,
+        block_V.get(), stride_V,
+        block_K_cache.get(), stride_K_cache,
+        block_V_cache.get(), stride_V_cache},
         {options.softmax_scale},
         {block_O.get(), stride_O},
         hw_info};
@@ -498,7 +562,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.is_causal);
+    bool use_kv_cache = options.seq_len_kv_cache > 0;
+    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if (!passed) {
@@ -567,7 +632,7 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
 
     using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int>;
     using namespace cutlass::fmha::collective;
-    using ProblemShapeVarlen = cute::tuple<int, int, VariableLength, VariableLength, VariableLength, int, int>;
+    using ProblemShapeVarlen = cute::tuple<int, int, VariableLength, VariableLength, int, int, int>;
     using ProblemShapeType = std::conditional_t<isVarLen, ProblemShapeVarlen, ProblemShapeRegular>;
 
     // Mainloop
