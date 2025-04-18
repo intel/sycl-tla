@@ -145,10 +145,20 @@ namespace detail {
         EpilogueTile
       >;
   };
-}
 
-  // Intel epilogue builder
+template <typename T>
+struct is_rowmajorish { static constexpr bool value = cute::detail::is_stride_leftmost<T>; };
 
+template <>
+struct is_rowmajorish<cutlass::layout::RowMajor> { static constexpr bool value = true; };
+
+template <typename T>
+using is_rowmajorish_v = typename is_rowmajorish<T>::value;
+
+} // namespace detail
+
+
+// Intel epilogue builder
 template <
   class TileShape_MNK,
   class EpilogueTileType,
@@ -165,19 +175,19 @@ template <
   >
   struct CollectiveBuilder<
       arch::IntelPVC,
-      arch::OpClassTensorOp, 
+      arch::OpClassTensorOp,
       TileShape_MNK,
       Shape<_1, _1, _1>,    // Cluster Shape
       EpilogueTileType,
       ElementAccumulator,
       ElementCompute,
       ElementC,
-      GmemLayoutTagC, // TODO this needs to be a stride not a layout
+      GmemLayoutTagC,
       AlignmentC,
       ElementD,
       GmemLayoutTagD,
       AlignmentD,
-      EpilogueScheduleType, 
+      EpilogueScheduleType,
       FusionOpOrCallbacks,
       cute::enable_if_t<
         cute::is_same_v<EpilogueTileType, EpilogueTileAuto> &&
@@ -186,7 +196,7 @@ template <
       >
     >{
       #ifdef SYCL_NVIDIA_TARGET
-        static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
+        static_assert(cutlass::detail::dependent_false<arch::IntelPVC>,
           "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
@@ -200,11 +210,11 @@ template <
                                                 IntelPVCEpilogue>;
       using LayoutC = std::remove_pointer_t<GmemLayoutTagC>;
       using LayoutD = std::remove_pointer_t<GmemLayoutTagD>;
+      static constexpr bool row_majorish_C = detail::is_rowmajorish<LayoutC>::value;
+      static constexpr bool row_majorish_D = detail::is_rowmajorish<LayoutD>::value;
+      static_assert(row_majorish_C and row_majorish_D, "Only M-Major/Row-Major layouts are supported in the xe epilogue collective builder");
       using StrideC = std::conditional_t<cute::is_tuple_v<LayoutC>, LayoutC, cutlass::detail::TagToStrideC_t<std::conditional_t<IsGroup, LayoutC*, LayoutC>>>;
       using StrideD = std::conditional_t<cute::is_tuple_v<LayoutD>, LayoutD, cutlass::detail::TagToStrideC_t<std::conditional_t<IsGroup, LayoutD*, LayoutD>>>;
-      static constexpr bool row_majorish_C = cute::detail::is_stride_leftmost<StrideC> or std::is_same_v<layout::RowMajor, LayoutC>;
-      static constexpr bool row_majorish_D = cute::detail::is_stride_leftmost<StrideD> or std::is_same_v<layout::RowMajor, LayoutD>;
-      static_assert(row_majorish_C and row_majorish_D, "Only M-Major/Row-Major layouts are supported in the xe epilogue collective builder");
 
       using CopyOpG2R = XE_2D_U32x8x16_LD_N;
       using CopyOpR2G = XE_2D_U32x8x16_ST_N;
