@@ -42,7 +42,7 @@ namespace cutlass::gemm::collective {
   // Also the auto builder
 
 template<typename MMAAtom, typename T_m, typename T_n>
-constexpr auto get_n_atoms(T_m tile_m, T_n tile_n){
+constexpr auto get_num_atoms(T_m tile_m, T_n tile_n){
   constexpr auto atom_m = get<0>(typename MMAAtom::Shape_MNK{});
   constexpr auto atom_n = get<1>(typename MMAAtom::Shape_MNK{});
   // try to create the biggest number of atoms possible, up to 32, trying to fit the most, up to 8 in m dimension
@@ -164,7 +164,7 @@ struct CollectiveBuilder<
       static constexpr auto tile_N = get<1>(TileShape_MNK{});
       static constexpr auto tile_K = get<2>(TileShape_MNK{});
 
-      static constexpr auto n_atoms = get_n_atoms<MMAAtom>(tile_M, tile_N);
+      static constexpr auto n_atoms = get_num_atoms<MMAAtom>(tile_M, tile_N);
       using atoms_M = decltype(get<0>(n_atoms));
       using atoms_N = decltype(get<1>(n_atoms));
       using TiledMma =
