@@ -213,7 +213,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
 
       for (int h = 0; h < num_heads; h++) {
         cutlass::DeviceAllocation<ElementOutput> block_S;
-        block_S.reset(seq_len_qo * seq_len_kv);
+        block_S.reset(seq_len_qo * seq_len_kv_total);
 
         ElementK* k_ptr;
         ElementV* v_ptr;
@@ -222,7 +222,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
             cutlass::DeviceAllocation<ElementK> block_K_concat(head_size_qk * seq_len_kv_total);
             cutlass::DeviceAllocation<ElementV> block_V_concat(seq_len_kv_total * head_size_vo);
 
-            // Concatenate K_cache and K_new
+            // Concatenate K_cache and K
             syclcompat::memcpy<ElementK>(
                 block_K_concat.get(),
                 block_K_cache.get() + offset_k_cache,
@@ -234,7 +234,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
                 seq_len_kv * head_size_qk
             );
 
-            // Concatenate V_cache and V_new
+            // Concatenate V_cache and V
             syclcompat::memcpy<ElementV>(
                 block_V_concat.get(),
                 block_V_cache.get() + offset_v_cache,
@@ -247,8 +247,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
             );
             syclcompat::wait();
 
-            k_ptr = block_K_concat.get() + offset_k_cache;
-            v_ptr = block_V_concat.get() + offset_v_cache;
+            k_ptr = block_K_concat.get();
+            v_ptr = block_V_concat.get();
         }
         else {
             k_ptr = block_K.get() + offset_k;
@@ -256,12 +256,12 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
         }
 
         cutlass::TensorRef ref_Q(block_Q.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
-        cutlass::TensorRef ref_K(k_ptr, LayoutK::packed({head_size_qk, seq_len_kv_total }));
-        cutlass::TensorRef ref_V(v_ptr, LayoutV::packed({ seq_len_kv_total, head_size_vo}));
+        cutlass::TensorRef ref_K(k_ptr, LayoutK::packed({head_size_qk, seq_len_kv_total}));
+        cutlass::TensorRef ref_V(v_ptr, LayoutV::packed({seq_len_kv_total, head_size_vo}));
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
         cutlass::TensorRef ref_O(block_ref_O.get() + offset_o, LayoutO::packed({seq_len_qo, head_size_vo}));
 
-        cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv, head_size_qk}, 1.f, ref_Q,
+        cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv_total, head_size_qk}, 1.f, ref_Q,
                                                 cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
                                                 0.f, ref_S, ref_S, ElementAccumulator(0),
                                                 1,                   // batch_count
@@ -280,23 +280,25 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
         // delete this memory as it is no longer needed
         block_S.reset();
 
+        // apply causal mask to S
         if (is_causal) {
-          // apply mask to S
-          for (int row = 0; row < seq_len_qo; row++) {
-            for (int col = 0; col < seq_len_kv; col++) {
-              if (col > row)
-                host_S[col + row * seq_len_kv] = -INFINITY;
+            for (int row = 0; row < seq_len_qo; row++) {
+                int start_col = use_kv_cache ? seq_len_kv_cache : 0;
+                for (int col = start_col; col < seq_len_kv_total; col++) {
+                    if (col > row + start_col) {
+                        host_S[col + row * seq_len_kv_total] = -INFINITY;
+                    }
+                }
             }
-          }
         }
 
         // compute max element per row of S
         std::vector<ElementOutput> max_vec(seq_len_qo, -INFINITY);
         for (int row = 0; row < seq_len_qo; row++) {
-          int idx = row * seq_len_kv;
+          int idx = row * seq_len_kv_total;
           int max_idx = row;
           max_vec[max_idx] = host_S[idx++];
-          for (int col = 1; col < seq_len_kv; col++, idx++) {
+          for (int col = 1; col < seq_len_kv_total; col++, idx++) {
             if (max_vec[max_idx] < host_S[idx])
               max_vec[max_idx] = host_S[idx];
           }
@@ -304,9 +306,9 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
 
         // compute exp of S
         for (int row = 0; row < seq_len_qo; row++) {
-          int idx = row * seq_len_kv;
+          int idx = row * seq_len_kv_total;
           int max_idx = row;
-          for (int col = 0; col < seq_len_kv; col++, idx++) {
+          for (int col = 0; col < seq_len_kv_total; col++, idx++) {
             host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) / sqrt(static_cast<ElementOutput>((head_size_qk))));
           }
         }
@@ -314,16 +316,16 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
         // compute sum per row of S
         std::vector<ElementOutput> sum_vec(seq_len_qo, ElementOutput{0});
         for (int row = 0; row < seq_len_qo; row++) {
-          int idx = row * seq_len_kv;
+          int idx = row * seq_len_kv_total;
           int sum_idx = row;
-          for (int col = 0; col < seq_len_kv; col++, idx++) {
+          for (int col = 0; col < seq_len_kv_total; col++, idx++) {
             sum_vec[sum_idx] += host_S[idx];
           }
 
           // scale each row with the sum to compute softmax
-          idx = row * seq_len_kv;
+          idx = row * seq_len_kv_total;
           sum_idx = row;
-          for (int col = 0; col < seq_len_kv; col++, idx++) {
+          for (int col = 0; col < seq_len_kv_total; col++, idx++) {
             host_S[idx] /= sum_vec[sum_idx];
           }
         }
@@ -338,9 +340,9 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
         syclcompat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
         syclcompat::wait();
 
-        cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
+        cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
 
-        cutlass::reference::device::GemmComplex({seq_len_qo, head_size_vo, seq_len_kv}, 1.f, ref_P,
+        cutlass::reference::device::GemmComplex({seq_len_qo, head_size_vo, seq_len_kv_total}, 1.f, ref_P,
                                                 cutlass::ComplexTransform::kNone, ref_V, cutlass::ComplexTransform::kNone,
                                                 0.f, ref_O, ref_O, ElementAccumulator(0),
                                                 1,                   // batch_count
