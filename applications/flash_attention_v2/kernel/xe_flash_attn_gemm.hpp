@@ -277,6 +277,7 @@ public:
       const int nblock_new = CausalMask ? cute::ceil_div(causal_seq_len, QK_BLK_N)
                                           : cute::ceil_div(non_causal_seq_len, QK_BLK_N);
       int nblock_limit = nblock_cache + nblock_new;
+      bool is_first_block = (seq_len_kv_cache == 0) && ((nblock_new - 1) == 0);
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, batch_coord);
 
@@ -386,7 +387,7 @@ public:
         }
 
         CollectiveSoftmaxEpilogue softmax(params.softmax);
-        softmax((nblock_new - 1) == 0, tSr, max_reg, sum_reg, out_reg);
+        softmax(is_first_block, tSr, max_reg, sum_reg, out_reg);
 
         collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_new - 1), out_reg, mainloop_params, false);
       }
