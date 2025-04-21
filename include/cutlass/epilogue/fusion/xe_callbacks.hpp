@@ -448,7 +448,7 @@ template <
   class EpilogueTile_
 >
 struct FusionCallbacks<
-    epilogue::IntelPVCEpilogue,
+    epilogue::IntelXeEpilogue,
     fusion::LinCombPerColBias<ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_

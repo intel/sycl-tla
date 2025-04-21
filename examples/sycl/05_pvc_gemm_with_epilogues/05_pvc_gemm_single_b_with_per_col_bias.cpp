@@ -383,8 +383,8 @@ int main(int argc, const char** argv)
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXe<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeEpilogue;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinCombPerColBias<
       ElementOutput, ElementComputeEpilogue, ElementBias, ElementAccumulator,
