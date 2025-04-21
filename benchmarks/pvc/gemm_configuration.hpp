@@ -81,7 +81,7 @@ struct GemmConfiguration<
       float, LayoutC,
       float, TileShape, TiledMma,
       GmemTiledCopyA, GmemTiledCopyB, TileScheduler, EpilogueOp> {
-  using DispatchPolicy = MainloopIntelXe<3, std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>>;
+  using DispatchPolicy = MainloopIntelXe<3, std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelXe, cutlass::gemm::KernelXeCooperative>>;
 
   // Configurations in benchmarks.hpp can pass either a layout tag (e.g. RowMajor) or a Stride directly
   using StrideA = std::conditional_t<cute::is_tuple_v<LayoutA>, LayoutA, TagToStrideA_t<LayoutA>>;
