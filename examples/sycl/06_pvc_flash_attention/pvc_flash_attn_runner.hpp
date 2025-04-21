@@ -213,7 +213,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
         seq_len_kv = get<4>(problem_size);
         seq_len_kv_cache = get<5>(problem_size);
       }
-      int seq_len_kv_total = use_kv_cache ? (seq_len_kv_cache + seq_len_kv) : seq_len_kv;
+      int seq_len_kv_total = seq_len_kv_cache + seq_len_kv;
       int kv_group_update=1;
 
       for (int h = 0; h < num_heads_q; h++) {
@@ -391,7 +391,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
   template<class ProblemShape>
   auto initialize_varlen(const ProblemShape& problem_size, const bool VarlenSame = true) {
     int num_batches = get<0>(problem_size);
-    int seq_len_kv_cache = get<4>(problem_size);
+    int seq_len_kv_cache = get<5>(problem_size);
 
     // generate Q as --b times
     //    gaussian (--Q, --Q / 2) sampled positive
