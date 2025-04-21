@@ -175,9 +175,9 @@ public:
 
     if constexpr (CausalMask) {
       if (active_sg) {
-        CUTLASS_PRAGMA_UNROLL
+        CUTLASS_PRAGMA_NO_UNROLL
         for (int y = 0; y < FragsM; y++) {
-          CUTLASS_PRAGMA_UNROLL
+          CUTLASS_PRAGMA_NO_UNROLL
           for (int x = 0; x < Vec; x++) {
             int indx = y * Vec + x;
             auto cur_sum = reduce_over_group(sg, sum(indx), sycl::plus<>());
