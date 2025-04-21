@@ -48,6 +48,13 @@ cutlass_example_add_executable(
   TEST_BATCHES
 )
 
+cutlass_example_add_executable(
+  05_pvc_gemm_with_epilogue_silu
+  05_pvc_gemm_with_epilogue_silu.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)
+
 #TODO(Codeplay): enable batch > 1 test once implementation is fixed.
 cutlass_example_add_executable(
   05_pvc_gemm_with_epilogue_softmax
@@ -57,6 +64,13 @@ cutlass_example_add_executable(
 cutlass_example_add_executable(
   05_pvc_gemm_with_per_row_bias
   05_pvc_gemm_with_per_row_bias.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)
+
+cutlass_example_add_executable(
+  05_pvc_gemm_single_b_with_per_col_bias
+  05_pvc_gemm_single_b_with_per_col_bias.cpp
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
 )
