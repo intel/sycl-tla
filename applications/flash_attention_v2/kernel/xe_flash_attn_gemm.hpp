@@ -386,7 +386,7 @@ public:
         }
 
         CollectiveSoftmaxEpilogue softmax(params.softmax);
-        softmax(is_first_block, tSr, max_reg, sum_reg, out_reg);
+        softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
         collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_new - 1), out_reg, mainloop_params, false);
       }
