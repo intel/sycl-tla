@@ -1417,7 +1417,7 @@ struct Copy_Traits_<XE_2D_TF32x8x8_LD_T, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U32x1x16_LD_N, args_t...>
+struct Copy_Traits_<XE_2D_U32x1x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U32x1x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1707,8 +1707,8 @@ struct Copy_Traits_<XE_2D_U16x16x16_LD_T, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits_<XE_2D_U8x32x16_LD_T, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U8x32x16_LD_T, args_t...> {
+struct Copy_Traits_<XE_2D_U8x16x32_LD_T, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U8x16x32_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,_16>,
@@ -1721,7 +1721,7 @@ struct Copy_Traits_<XE_2D_U8x32x16_LD_T, args_t...>
 
   template <class... ArgT>
   Copy_Traits_(ArgT... args)
-      : XE_2D_LD_Unpack<XE_2D_U8x32x16_LD_T, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U8x16x32_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
@@ -1743,7 +1743,7 @@ struct Copy_Traits_<XE_2D_U8x32x8_LD_T, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x32x4_LD_T, args_t...>
+struct Copy_Traits_<XE_2D_U8x32x4_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x32x4_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1756,9 +1756,8 @@ struct Copy_Traits<XE_2D_U8x32x4_LD_T, args_t...>
   using RefLayout = DstLayout;
 
   template <class... ArgT>
-  Copy_Traits(ArgT... args)
+  Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U8x32x4_LD_T, args_t...>(args...) {}
-};
 };
 
 // template<class... args_t>
@@ -2307,6 +2306,7 @@ COPY_TRAIT_LD_DEF(XE_2D_U8x16x64_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x32x64_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x32x8_LD_T)
 COPY_TRAIT_LD_DEF(XE_2D_U8x32x4_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U8x16x32_LD_T)
 COPY_TRAIT_LD_DEF(XE_2D_U16x1x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U16x2x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U16x4x16_LD_N)
