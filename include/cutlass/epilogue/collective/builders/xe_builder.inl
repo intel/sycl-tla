@@ -147,13 +147,13 @@ namespace detail {
   };
 
 template <typename T>
-struct is_rowmajorish { static constexpr bool value = cute::detail::is_stride_leftmost<T>; };
+struct is_rowmajorish {
+  static_assert(cute::is_tuple_v<T>, "expected a tuple");
+  static constexpr bool value = cute::detail::is_stride_leftmost<T>;
+};
 
 template <>
 struct is_rowmajorish<cutlass::layout::RowMajor> { static constexpr bool value = true; };
-
-template <typename T>
-using is_rowmajorish_v = typename is_rowmajorish<T>::value;
 
 } // namespace detail
 
