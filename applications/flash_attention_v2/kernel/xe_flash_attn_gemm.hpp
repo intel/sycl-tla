@@ -324,11 +324,10 @@ public:
         barrier_arrive(barrier_scope);
 
         bool is_KV_cache = (nblock < nblock_cache);
-        int local_block = is_KV_cache ? nblock : (nblock - nblock_cache);
-
+   
         // 1) Load KV (performed inside mmaQK)
-        auto gK_ = is_KV_cache ? gK_cache(_, _, local_block, _) : gK(_, _, local_block, _);
-        auto gV_ = is_KV_cache ? gV_cache(_, _, local_block) : gV(_, _, local_block);
+        auto gK_ = is_KV_cache ? gK_cache(_, _, nblock, _) : gK(_, _, nblock - nblock_cache, _);
+        auto gV_ = is_KV_cache ? gV_cache(_, _, nblock) : gV(_, _, nblock - nblock_cache);
 
         // 2) Create Tensor S
         Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
