@@ -401,8 +401,8 @@ int main(int argc, const char** argv)
 
   using EpilogueTile = Shape<_16, _32>;
   constexpr int PipelineStages = 3;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXe<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeEpilogue;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinCombSoftmaxRow<ElementOutput,
           ElementComputeEpilogue, XE_2D_U32x8x16_ST_N, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;

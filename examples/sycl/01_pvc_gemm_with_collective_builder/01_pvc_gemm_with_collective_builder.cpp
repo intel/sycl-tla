@@ -327,7 +327,7 @@ int main(int argc, const char** argv)
   using TileShape = Shape<_256, _256, _32>;
   
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
-    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    cutlass::arch::IntelXe, cutlass::arch::OpClassTensorOp,
     ElementInputA, LayoutA, AlignmentA,
     ElementInputB, LayoutB, AlignmentB,
     ElementAccumulator,
@@ -341,7 +341,7 @@ int main(int argc, const char** argv)
           ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveBuilder<
-    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    cutlass::arch::IntelXe, cutlass::arch::OpClassTensorOp,
     TileShape, Shape<_1, _1, _1>,
     cutlass::epilogue::collective::EpilogueTileAuto, ElementComputeEpilogue,
     ElementAccumulator, 

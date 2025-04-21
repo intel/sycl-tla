@@ -30,7 +30,7 @@
  **************************************************************************************************/
 
 /*! \file
-  \brief Fusion callbacks specializations for the Intel PVC epilogue
+  \brief Fusion callbacks specializations for the Intel Xe epilogue
 */
 
 #pragma once
@@ -65,7 +65,7 @@ template <
   class EpilogueTile_
 >
 struct FusionCallbacks<
-    epilogue::IntelPVCEpilogue,
+    epilogue::IntelXeEpilogue,
     fusion::LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
@@ -120,7 +120,7 @@ template <
   class EpilogueTile_
 >
 struct FusionCallbacks<
-    epilogue::IntelPVCEpilogue,
+    epilogue::IntelXeEpilogue,
     fusion::LinCombEltAct<ActivationFn_, ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
@@ -198,7 +198,7 @@ template <
   class EpilogueTile
 >
 struct FusionCallbacks<
-    epilogue::IntelPVCEpilogue,
+    epilogue::IntelXeEpilogue,
     fusion::LinCombSoftmaxRow<ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle>,
     CtaTileShapeMNK,
     EpilogueTile
@@ -276,7 +276,7 @@ template <
   class CopyOpG2R
 >
 struct FusionCallbacks<
-    epilogue::IntelPVCEpilogue,
+    epilogue::IntelXeEpilogue,
     fusion::LinCombDeEltAct<
       GmemLayoutTagAux, ActivationFn, ElementOutput_, ElementCompute_,
       ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
@@ -358,7 +358,7 @@ template <
   class EpilogueTile_
 >
 struct FusionCallbacks<
-    epilogue::IntelPVCEpilogue,
+    epilogue::IntelXeEpilogue,
     fusion::LinCombPerRowBias<ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
@@ -423,7 +423,7 @@ template <
   class EpilogueTile
 >
 struct FusionCallbacks<
-  epilogue::IntelPVCEpilogue,
+  epilogue::IntelXeEpilogue,
   fusion::LinCombTopKSoftmaxCol<TopK, ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle>,
   CtaTileShapeMNK,
   EpilogueTile
@@ -487,7 +487,7 @@ template <
   class EpilogueTile_
 >
 struct FusionCallbacks<
-     epilogue::IntelPVCEpilogue,
+     epilogue::IntelXeEpilogue,
     fusion::LinCombPerRowBiasEltAct<
       ActivationFn_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_
     >,
@@ -565,7 +565,7 @@ template <
   class EpilogueTile_
 >
 struct FusionCallbacks<
-    epilogue::IntelPVCGroupEpilogue,
+    epilogue::IntelXeGroupEpilogue,
     fusion::LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_

@@ -47,7 +47,7 @@ from cutlass.utils.check import valid_stage_count
 from cutlass.utils.datatypes import td_from_profiler_td, td_from_profiler_op
 
 
-# The value '11' is used to encode Intel PVC GPU in the expected format.
+# The value '11' is used to encode Intel Xe GPU in the expected format.
 _generator_ccs = [11, 50, 60, 61, 70, 75, 80, 90]
 
 # Strip any additional information from the CUDA version
@@ -284,7 +284,7 @@ class ArchOptions:
 
         # Identify the method within CUTLASS generator script that generates kernel
         # descriptions for the target CC
-        generate_function_name = "GeneratePVC" if kernel_cc == 11 else "GenerateSM" + str(kernel_cc)
+        generate_function_name = "GenerateXe" if kernel_cc == 11 else "GenerateSM" + str(kernel_cc)
         if not hasattr(cutlass_library.generator, generate_function_name):
             cutlass.logger.warning(f"No generator found for architecture {kernel_cc}")
             return

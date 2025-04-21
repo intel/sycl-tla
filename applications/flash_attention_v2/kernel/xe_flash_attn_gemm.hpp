@@ -79,7 +79,7 @@ public:
 
   static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler> or 
                 cute::is_same_v<TileScheduler_, IndividualScheduler>,
-                "Unsupported TileScheduler for Intel PVC.");
+                "Unsupported TileScheduler for Intel Xe.");
   using TileSchedulerTag = TileScheduler_;
   using TileScheduler =
       typename detail::TileSchedulerSelector<TileScheduler_, ArchTag>::Scheduler;
@@ -249,9 +249,9 @@ public:
         continue;
       }
 
-      Tensor mQ_mkl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(m,k,l)
-      Tensor mK_nkl = cute::get_pvc_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
-      Tensor mV_nkl = cute::get_pvc_tensor(make_shape(head_size_vo, seq_len_kv, (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
+      Tensor mQ_mkl = cute::get_xe_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(m,k,l)
+      Tensor mK_nkl = cute::get_xe_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
+      Tensor mV_nkl = cute::get_xe_tensor(make_shape(head_size_vo, seq_len_kv, (is_var_len ? 1 : batch) * num_heads));   //(n,k,l)
       Tensor mQ_mk = mQ_mkl(_, _, blk_l_coord);                                                    // (m,k)
       Tensor mK_nk = mK_nkl(_, _, blk_l_coord);                                                    // (n,k)
       Tensor mV_nk = mV_nkl(_, _, blk_l_coord);                                                    // (n,k)

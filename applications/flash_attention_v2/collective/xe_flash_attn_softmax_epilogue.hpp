@@ -55,13 +55,13 @@ template <bool CausalMask_, class DispatchPolicy, class... Args> class Collectiv
 
 
 template <bool CausalMask_, class Element_>
-class CollectiveSoftmaxEpilogue<CausalMask_, epilogue::IntelPVCEpilogue, Element_> {
+class CollectiveSoftmaxEpilogue<CausalMask_, epilogue::IntelXeEpilogue, Element_> {
 public:
 
   //
   // Type Aliases
   //
-  using DispatchPolicy = epilogue::IntelPVCEpilogue;
+  using DispatchPolicy = epilogue::IntelXeEpilogue;
   using Element = Element_;
 
   static constexpr bool CausalMask = CausalMask_;

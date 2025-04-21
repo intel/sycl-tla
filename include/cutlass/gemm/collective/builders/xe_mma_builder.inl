@@ -38,7 +38,7 @@
 
 namespace cutlass::gemm::collective {
 
-  // Intel PVC 3 stage pipeline, using prefetch
+  // Intel Xe 3 stage pipeline, using prefetch
   // Also the auto builder
 
 template <
@@ -53,7 +53,7 @@ template <
   class KernelScheduleType
   > 
 struct CollectiveBuilder<
-  arch::IntelPVC,
+  arch::IntelXe,
   arch::OpClassTensorOp,   // Reusing opClassTensorOp for Intel devices
   ElementA,
   GmemLayoutATag,
@@ -67,7 +67,7 @@ struct CollectiveBuilder<
   cutlass::gemm::collective::StageCountAuto, 
   KernelScheduleType,
   cute::enable_if_t<
-    cute::is_any_of_v<KernelScheduleType, KernelScheduleAuto, KernelPVC, KernelPVCCooperative, KernelPVCPtrArrayCooperative> &&
+    cute::is_any_of_v<KernelScheduleType, KernelScheduleAuto, KernelXe, KernelXeCooperative, KernelXePtrArrayCooperative> &&
     cute::is_same_v<ElementA, ElementB> &&
     cute::is_any_of_v<ElementA, bfloat16_t, half_t> &&
     cute::is_any_of_v<ElementB, bfloat16_t, half_t>
@@ -75,7 +75,7 @@ struct CollectiveBuilder<
     >{
 
       #ifdef SYCL_NVIDIA_TARGET
-        static_assert(cutlass::detail::dependent_false<arch::IntelPVC>, 
+        static_assert(cutlass::detail::dependent_false<arch::IntelXe>,
           "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
@@ -93,13 +93,13 @@ struct CollectiveBuilder<
                                   Layout<TileShape_MNK>,
                                   Layout<Shape<atoms_M, atoms_N, _1>, Stride<atoms_N, _1, _0>>>::TiledMMA;
 
-      static constexpr bool IsGroup = cute::is_same_v<KernelScheduleType, KernelPVCPtrArrayCooperative>;
+      static constexpr bool IsGroup = cute::is_same_v<KernelScheduleType, KernelXePtrArrayCooperative>;
 
-      using KernelSchedule = std::conditional_t<cute::is_same_v<KernelScheduleType, KernelScheduleAuto>, KernelPVC, KernelScheduleType>;
+      using KernelSchedule = std::conditional_t<cute::is_same_v<KernelScheduleType, KernelScheduleAuto>, KernelXe, KernelScheduleType>;
       static constexpr int PipelineStages = IsGroup ? 2 : 3;
       using DispatchPolicy = std::conditional_t<IsGroup, 
-                                                cutlass::gemm::MainloopIntelPVCGroup<PipelineStages, KernelSchedule>,
-                                                cutlass::gemm::MainloopIntelPVC<PipelineStages, KernelSchedule>>;
+                                                cutlass::gemm::MainloopIntelXeGroup<PipelineStages, KernelSchedule>,
+                                                cutlass::gemm::MainloopIntelXe<PipelineStages, KernelSchedule>>;
 
       static constexpr auto tile_M = get<0>(TileShape_MNK{});
       static constexpr auto tile_N = get<1>(TileShape_MNK{});
@@ -115,7 +115,7 @@ struct CollectiveBuilder<
                                                                     XE_2D_U16x16x16_LD_V>,
                                                 XE_2D_U16x16x16_LD_T>;
 
-      // PVC pipeline does not use shared memory
+      // Xe pipeline does not use shared memory
       using SmemLayoutAtomA = void; 
       using SmemLayoutAtomB = void; 
       using SmemCopyAtomA = void;

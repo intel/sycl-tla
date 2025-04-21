@@ -256,11 +256,11 @@ struct Sm120TmaWarpSpecialized {
 };
 
 #if defined (SYCL_INTEL_TARGET)
-struct IntelPVCEpilogue {
+struct IntelXeEpilogue {
   static constexpr int SubgroupSize = 16;
 };
 
-struct IntelPVCGroupEpilogue {
+struct IntelXeGroupEpilogue {
   static constexpr int SubgroupSize = 16;
 };
 #endif

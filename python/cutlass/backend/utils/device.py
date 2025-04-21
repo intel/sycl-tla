@@ -78,7 +78,7 @@ def device_cc(device: int = -1) -> int:
         device = cutlass.device_id()
 
     if cutlass._use_sycl:
-        # Using '11' to encode Intel PVC as an integer in the expected format.
+        # Using '11' to encode Intel Xe as an integer in the expected format.
         return 11
 
     deviceProp = check_cuda_errors(cudart.cudaGetDeviceProperties(device))
