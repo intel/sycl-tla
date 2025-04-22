@@ -63,11 +63,11 @@ int main(int argc, const char **argv) {
 
     using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<Shape<_1024, _64, _64>>,
-                                      Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
+                                      Layout<Shape<_256, _256, _64>>,
+                                      Layout<Shape<_4, _4, _1>, Stride<_4, _1, _1>>>::TiledMMA;
 
-    return options.is_causal ? FMHAConfig<true, Shape<_1024, _64, _64, _64>, TiledMma>::run(options)
-                             : FMHAConfig<false, Shape<_1024, _64, _64, _64>, TiledMma>::run(options);
+    return options.is_causal ? FMHAConfig<true, Shape<_256, _256, _64, _64>, TiledMma>::run(options)
+                             : FMHAConfig<false, Shape<_256, _256, _64, _64>, TiledMma>::run(options);
   } else if (options.head_size_vo == 128) {
     using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,

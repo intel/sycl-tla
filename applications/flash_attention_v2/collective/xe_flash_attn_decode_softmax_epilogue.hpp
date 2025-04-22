@@ -167,7 +167,7 @@ public:
     constexpr int FragsM = get<1>(FragAccLayout{}.shape());
     constexpr int FragsN = get<2>(FragAccLayout{}.shape());
     Element max_prev = max_val;
-    static_assert(Vec * FragsM == 16, " the number of reg_max per workitem should be adopted accordingly.");
+    static_assert(Vec * FragsM == 16 || Vec * FragsM == 8, " the number of reg_max per workitem should be adopted accordingly.");
 
     reduce_max<Vec, FragsM, FragsN>(frag_s, shmem_tensor_max, max_val);
 
@@ -179,7 +179,7 @@ public:
 
       Element max_scale{max_val * params.scale};
       Element exp_scale{sycl::native::exp2(max_prev * params.scale - max_scale)};
-      // const int out_curr_idx = sg_local_id + sg_group_id * slm_out_rows * sg_size;
+
       CUTLASS_PRAGMA_UNROLL
       for (int indx = 0; indx < Vec * FragsM; indx++) {
         auto max_scale_bcast = group_broadcast(sg, max_scale, indx);
@@ -189,12 +189,6 @@ public:
         for (int z = 0; z < FragsN; z++) {
           auto base_indx = indx + (z * Vec * FragsM);
           out(base_indx) *= exp_scale_bcast;
-          // const int slm_curr_idx = out_curr_idx + base_indx * sg_size;
-
-          // auto out_val_curr = shmem_tensor_out_curr(slm_curr_idx);
-          // auto out_prev_val = shmem_tensor_out_prev(slm_curr_idx);
-          // printf("Softmax -> ThreadIdx: %lu | base_idx: %d | out_val_curr: %f | out_val_prev: %f\n", ThreadIdxX(), base_indx, out_val_curr, out_prev_val);
-          // shmem_tensor_out_curr(slm_curr_idx) = out_val_curr + out_prev_val * exp_scale_bcast;
 
           frag_s(base_indx) = sycl::native::exp2((frag_s(base_indx) - max_scale_bcast));
           sum(indx) += frag_s(base_indx);

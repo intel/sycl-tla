@@ -102,7 +102,7 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
   static constexpr auto PV_ATOM_N = get<2>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape());
   static constexpr auto PV_ATOM_K = get<3>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape());
 
-  using TileShapeQK = decltype(Shape<_16, decltype(get<0>(WorkgroupTileShape{})), decltype(get<3>(WorkgroupTileShape{}))>{}); // <BLK_M_Q, BLK_N_QK, BLK_K_QK>
+  using TileShapeQK = decltype(Shape<_8, decltype(get<0>(WorkgroupTileShape{})), decltype(get<3>(WorkgroupTileShape{}))>{}); // <BLK_M_Q, BLK_N_QK, BLK_K_QK>
 
   static constexpr auto QK_BLK_M = get<0>(TileShapeQK{});
   static constexpr auto QK_BLK_N = get<1>(TileShapeQK{});
