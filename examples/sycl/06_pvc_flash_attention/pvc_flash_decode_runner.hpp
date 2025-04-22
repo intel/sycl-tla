@@ -236,9 +236,10 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
         if (is_causal) {
           // apply mask to S
+          int column_offset = seq_len_kv - seq_len_qo;
           for (int row = 0; row < seq_len_qo; row++) {
             for (int col = 0; col < seq_len_kv; col++) {
-              if (col > row)
+              if (col - column_offset > row)
                 host_S[col + row * seq_len_kv] = -INFINITY;
             }
           }

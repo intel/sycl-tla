@@ -306,7 +306,7 @@ public:
 
       if constexpr (!CausalMask) {
         CUTLASS_PRAGMA_NO_UNROLL
-        for(int split = 0; split < kv_splits; split++, kv_tile_idx += PV_ATOM_M) {
+        for(int split = 0; split < kv_splits; split++) {
           barrier_arrive(barrier_scope);
 
           Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
@@ -322,7 +322,7 @@ public:
 
           // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
           // prefetching it the same way as cutlass K matrix does not make sense
-          prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx));
+          prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + split * PV_ATOM_M));
 
           CollectiveSoftmaxEpilogue softmax(params.softmax);
           softmax(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
@@ -335,7 +335,7 @@ public:
             }
           }
 
-          collective_mma.mmaPV(out_reg, tSr, gV(_, _, kv_tile_idx), out_reg, mainloop_params);
+          collective_mma.mmaPV(out_reg, tSr, gV(_, _, kv_tile_idx + split * PV_ATOM_M), out_reg, mainloop_params);
 
           // Prefetch the next Q tile
           // there is no need to guard it with if statememt as prefetch will ignore out of bound reading
@@ -349,44 +349,38 @@ public:
       } else {
 
         CUTLASS_PRAGMA_NO_UNROLL
-        for(int split = 0; split < kv_splits; split++, kv_tile_idx += PV_ATOM_M) {
+        for(int split = 0; split < kv_splits; split++) {
           barrier_arrive(barrier_scope);
 
           // 1) Load K (performed inside mmaQK)
           // 2) Create Tensor S
           Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
+          clear(tSr);
 
-          bool active_sg = kv_tile_idx <= blk_q_coord;
+          auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, split, _), Step<X, _1, _1>{});
+          // 3) Perform GEMM S = Q*K
+          collective_mma.mmaQK(tSr, gQ, gK, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
 
-          if(active_sg) {
-            clear(tSr);
-
-            auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, split, _), Step<X, _1, _1>{});
-            // 3) Perform GEMM S = Q*K
-            collective_mma.mmaQK(tSr, gQ, gK, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
-
-            if(kv_tile_idx == blk_q_coord) {
-              int col_idx = (kv_tile_idx) * QK_SG_N + thread_idx % SubgroupSize;
+          if(kv_tile_idx == PV_ATOM_M - 1 && split == kv_splits - 1) {
+            int column_offset = seq_len_kv - seq_len_qo;
+            int col_idx = (kv_tile_idx + split * PV_ATOM_M) * QK_SG_N + thread_idx % SubgroupSize;
+            CUTLASS_PRAGMA_UNROLL
+            for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
               CUTLASS_PRAGMA_UNROLL
-              for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
+              for (int m = 0; m < FragsM; m++) { // 2
+                int row_idx = m * Vec + blk_q_coord * QK_SG_M; // Use Vec based on seq_len_qo
                 CUTLASS_PRAGMA_UNROLL
-                for (int m = 0; m < FragsM; m++) { // 2
-                  int row_idx = m * Vec + blk_q_coord * QK_SG_M; // Use Vec based on seq_len_qo
-                  CUTLASS_PRAGMA_UNROLL
-                  for (int row = 0; row < Vec; row++, row_idx++) { // Set this bound based on seq_len_qo
-                    if (col_idx > row_idx)
-                      tSr(row, m, n) = -INFINITY;
-                  }
+                for (int row = 0; row < Vec; row++, row_idx++) { // Set this bound based on seq_len_qo
+                  if (col_idx - column_offset > row_idx)
+                    tSr(row, m, n) = -INFINITY;
                 }
               }
             }
-          } else {
-            fill(tSr, -INFINITY);
           }
 
           // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
           // prefetching it the same way as cutlass K matrix does not make sense
-          prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx));
+          prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + split * PV_ATOM_M));
 
           // Softmax needs to happen for invalid subgroups as well
           // because it has a barrier. Skipping Softmax computation
@@ -403,10 +397,7 @@ public:
             }
           }
 
-          if(active_sg) {
-            collective_mma.mmaPV(out_reg, tSr, gV(_, _, kv_tile_idx), out_reg, mainloop_params);
-          }
-
+          collective_mma.mmaPV(out_reg, tSr, gV(_, _, kv_tile_idx + split * PV_ATOM_M), out_reg, mainloop_params);
           // Prefetch the next Q tile
           // there is no need to guard it with if statememt as prefetch will ignore out of bound reading
           CUTLASS_PRAGMA_UNROLL
@@ -432,7 +423,7 @@ public:
 
       Tensor shmem_sum_tensor = make_tensor(make_smem_ptr(shmem_out_tensor.data() + shmem_out_tensor.size()), make_shape(Int<Num_SGs * Vec * FragsM>{}));
 
-      epilogue.template operator()<CausalMask>(logical_problem_shape, TileShapePV{}, blk_coord_mnkl, shmem_out_tensor, sum_reg, shmem_sum_tensor, tiled_mma, kv_tile_idx <= blk_q_coord);
+      epilogue(logical_problem_shape, TileShapePV{}, blk_coord_mnkl, shmem_out_tensor, sum_reg, shmem_sum_tensor, tiled_mma);
     }
   }
 };
