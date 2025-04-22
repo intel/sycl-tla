@@ -138,7 +138,7 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
   using SubgroupTileShapePV = decltype(make_shape(get<0>(TileShapePV{}), get<0>(TempShapePV{}), get<1>(TempShapePV{})));
   using FragsShapePV = decltype(cute::shape_div(take<0, 2>(SubgroupTileShapePV{}), take<0, 2>(typename TiledMmaQVO::AtomShape_MNK())));
 
-  static constexpr bool is_var_len = cutlass::fmha::collective::is_variable_length_v<tuple_element_t<2, ProblemShapeType>>;
+  static constexpr bool is_var_len = cutlass::fmha::collective::is_variable_length_v<tuple_element_t<3, ProblemShapeType>>;
 
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMmaQVO{});
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
@@ -184,11 +184,11 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
                                                   void *workspace) {
     (void)workspace;
 
-    auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
+    auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
 
-    auto tensorQ = make_tensor(make_gmem_ptr(args.ptr_Q), make_layout(make_shape(seq_len_qo, head_size_qk, batch * num_heads), args.dQ));
-    auto tensorK = make_tensor(make_gmem_ptr(args.ptr_K), make_layout(make_shape(seq_len_kv, head_size_qk, batch * num_heads), args.dK));
-    auto tensorV = make_tensor(make_gmem_ptr(args.ptr_V), make_layout(make_shape(head_size_vo, seq_len_kv, batch * num_heads), args.dV));
+    auto tensorQ = make_tensor(make_gmem_ptr(args.ptr_Q), make_layout(make_shape(seq_len_qo, head_size_qk, batch * num_heads_q), args.dQ));
+    auto tensorK = make_tensor(make_gmem_ptr(args.ptr_K), make_layout(make_shape(seq_len_kv, head_size_qk, batch * num_heads_kv), args.dK));
+    auto tensorV = make_tensor(make_gmem_ptr(args.ptr_V), make_layout(make_shape(head_size_vo, seq_len_kv, batch * num_heads_kv), args.dV));
     XE_Copy_Q copyQ{XE_Copy_Q{}.with(tensorQ)};
     XE_Copy_K copyK{XE_Copy_K{}.with(tensorK)};
     XE_Copy_V copyV{XE_Copy_V{}.with(tensorV)};
@@ -316,14 +316,14 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
     if constexpr (!is_var_len) {
       return params;
     } else {
-      auto [batch, num_heads, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
+      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
 
-      auto qo_cumulative_length = get<2>(problem_shape).cumulative_length;
-      auto kv_cumulative_length = get<3>(problem_shape).cumulative_length;
+      auto qo_cumulative_length = get<3>(problem_shape).cumulative_length;
+      auto kv_cumulative_length = get<4>(problem_shape).cumulative_length;
 
-      int offset_q = num_heads * head_size_qk * qo_cumulative_length[l_coord];
-      int offset_k = num_heads * head_size_qk * kv_cumulative_length[l_coord];
-      int offset_v = num_heads * head_size_vo * kv_cumulative_length[l_coord];
+      int offset_q = num_heads_q * head_size_qk * qo_cumulative_length[l_coord];
+      int offset_k = num_heads_kv * head_size_qk * kv_cumulative_length[l_coord];
+      int offset_v = num_heads_kv * head_size_vo * kv_cumulative_length[l_coord];
 
       auto q_traits = static_cast<traits_load_Q const&>(params.gmem_tiled_copy_q);
       ElementQ* q_ptr = (ElementQ*)q_traits.base_ptr;
@@ -334,13 +334,13 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
       auto v_traits = static_cast<traits_load_V const&>(params.gmem_tiled_copy_v);
       ElementV* v_ptr = (ElementV*)v_traits.base_ptr;
 
-      auto shape_q = make_shape(static_cast<int>(seq_len_qo), head_size_qk, num_heads);
+      auto shape_q = make_shape(static_cast<int>(seq_len_qo), head_size_qk, num_heads_q);
       StrideQ stride_q = cutlass::make_cute_packed_stride(StrideQ{}, shape_q);
 
-      auto shape_k = make_shape(static_cast<int>(seq_len_kv), head_size_qk, num_heads);
+      auto shape_k = make_shape(static_cast<int>(seq_len_kv), head_size_qk, num_heads_kv);
       StrideK stride_k = cutlass::make_cute_packed_stride(StrideK{}, shape_k);
 
-      auto shape_v = make_shape(head_size_vo, static_cast<int>(seq_len_kv), num_heads);
+      auto shape_v = make_shape(head_size_vo, static_cast<int>(seq_len_kv), num_heads_kv);
       StrideV stride_v = cutlass::make_cute_packed_stride(StrideV{}, shape_v);
 
       auto tensorQ = make_tensor(make_gmem_ptr(q_ptr + offset_q), make_layout(shape_q, stride_q));
