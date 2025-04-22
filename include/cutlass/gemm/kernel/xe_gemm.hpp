@@ -162,11 +162,28 @@ public:
     auto m = get<0>(args.problem_shape);
     auto n = get<1>(args.problem_shape);
     auto k = get<2>(args.problem_shape);
+    auto l = get<3>(args.problem_shape);
+    bool is_batch = l > 1;
+    auto check_stride = [is_batch](auto stride, int el_size){
+      auto a = get<0>(stride);
+      auto b = get<1>(stride);
+      auto valid_is_unit = a == _1{} || b == _1{};
+      auto inner = a == _1{} ? b : a;
+      auto valid_inner = inner % (16 / el_size) == 0;
+      auto valid_outer = !is_batch || get<2>(stride) % (64 / el_size) == 0;
+      return valid_is_unit && valid_inner && valid_outer;
+    };
+    bool strides_valid = check_stride(args.mainloop.dA, sizeof(ElementA)) &&
+                         check_stride(args.mainloop.dB, sizeof(ElementB)) &&
+                         check_stride(args.epilogue.dC, sizeof(ElementC)) &&
+                         check_stride(args.epilogue.dD, sizeof(ElementD));
     // TODO(codeplay): base *_valid on the atom shapes
     bool m_valid = m > 0;
-    bool n_valid = n > 0 && n % 4 == 0;
-    bool k_valid = k > 0 && k % get<2>(TileShape{}) == 0;
-    bool shape_implementable = true || (m_valid && n_valid && k_valid);
+    bool n_valid = n > 0 && n % (4 / sizeof(ElementB)) == 0 && 
+                            n % (4 / sizeof(ElementC)) == 0 && 
+                            n % (4 / sizeof(ElementD)) == 0;
+    bool k_valid = k > 0  && k % (4 / sizeof(ElementA)) == 0;
+    bool shape_implementable = m_valid && n_valid && k_valid && strides_valid;
 
     bool mode_implementable = args.mode == GemmUniversalMode::kGemm ||
           (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
