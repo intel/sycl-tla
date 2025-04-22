@@ -298,6 +298,7 @@ struct FusionCallbacks<
 
     using StrideWeight = Stride<_1, _0, int64_t>;
     ElementWeight const* weight_ptr = nullptr;
+    float eps = 1e-5;
     StrideWeight dWeight = {};
 
     operator typename Impl::Arguments() const {
@@ -313,7 +314,7 @@ struct FusionCallbacks<
             },                    // end binary op
             {} // ternary args : multiply_add
           },   // end ternary op
-          {output_ptr, weight_ptr} // unary args: activation
+          {output_ptr, weight_ptr, eps} // unary args: activation
         };   // end unary op
     }
   };

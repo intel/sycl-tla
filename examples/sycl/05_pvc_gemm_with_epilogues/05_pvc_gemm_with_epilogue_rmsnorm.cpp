@@ -68,7 +68,7 @@ struct Options {
   bool error;
 
   int m, n, k, l, iterations;
-  float alpha, beta;
+  float alpha, beta, eps;
 
   Options():
     help(false),
@@ -92,6 +92,7 @@ struct Options {
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
+    cmd.get_cmd_line_argument("eps", eps, 1e-5f);
     cmd.get_cmd_line_argument("iterations", iterations, 1);
   }
 
@@ -174,21 +175,6 @@ struct ExampleRunner {
     cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
     cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
     cutlass::TensorRef ref_W(block_W.get(), LayoutW::packed({1, N}));
-    // printf("ref_D:");
-    // for (int i = 0; i < 5; ++i) {
-    //     printf("%f ", block_A.get()[i]);
-    // }
-    // printf("\nstride:");
-    // auto stride = ref_D.stride();
-    // // auto layout = ref_A.layout();
-    // for (int i = 0; i < 3; ++i) {
-    //     printf("%d ", ref_D.stride(i));
-    // }
-    // printf("\n");
-    // printf("\nshape");
-    // for (int i = 0; i < 2; ++i) {
-    //     printf("%d ", ref_A.layout(i));
-    // }
     cutlass::reference::device::GemmComplex(
           {M, N, K},
           alpha,
@@ -219,29 +205,15 @@ struct ExampleRunner {
     syclcompat::memcpy(ptr_wgt, block_W.get(),
                        N * L * sizeof(ElementW));
     syclcompat::wait();
-    // printf("ptr_ref:\n");
-
-    // for (int m = 0; m < M; ++m) {
-    //     for (int nn = 0; nn < N / 16; ++nn) {
-    //         printf("%04d:(%03d) ", m, nn * 16);
-    //         for (int n = 0; n < 16; ++n) {
-    //             printf("%5.1f ", ptr_refD[m * N + nn * 16 + n]);
-    //         }
-    //         printf("\n");
-    //     }
-    // }
 
     constexpr float eps = 1e-5;
-    float p2[M * N];
-    float p2sum[M];
+    // rowwise rmsnorm
     for (int l = 0; l < L; l++) {
         for (int m = 0; m < M; m++) {
             float pow2_sum = (float)0;
             for (int n = 0; n < N; n++) {
-                p2[m * N + n] = pow(ptr_refD[l * M * N + m * N + n], 2);
-                pow2_sum += p2[m * N + n];
+                pow2_sum += pow(ptr_refD[l * M * N + m * N + n], 2);
             }
-            p2sum[m] = pow2_sum;
             float rms = 1.0f / sqrt(pow2_sum / (float)N + eps);
 
             for (int n = 0; n < N; n++) {
@@ -249,36 +221,6 @@ struct ExampleRunner {
             }
         }
     }
-    // printf("p2:\n");
-    // for (int m = 0; m < M; ++m) {
-    //     for (int nn = 0; nn < N / 16; ++nn) {
-    //         printf("%4d:(%2d) ", m, nn * 16);
-    //         for (int n = 0; n < 16; ++n) {
-    //             printf("%5.1f ", p2[m * N + nn * 16 + n]);
-    //         }
-    //         printf("\n");
-    //     }
-    // }
-    // printf("ptr_wgt:\n");
-    // for (int nn = 0; nn < 4; ++nn) {
-    //     printf("%d: ", nn * 16);
-    //     for (int n = 0; n < 16; ++n) {
-    //         printf("%5.1f ", (float)ptr_wgt[nn * 16 + n]);
-    //     }
-    //     printf("\n");
-    // }
-    // printf("p2sum:\n");
-    // for (int mm = 0; mm < M / 16; ++mm) {
-    //     for (int m = 0; m < 16; ++m) {
-    //         printf("%5.1f ", p2sum[mm * 16 + m]);
-    //     }
-    //     printf("\n");
-    // }
-
-    // printf("\n");
-    // syclcompat::memcpy(block_ref_D.get(), ptr,
-    //                    M * N * L * sizeof(ElementOutput));
-    // syclcompat::wait();
 
     ElementOutput *ptr_D =
         (ElementOutput *)std::malloc((size_t)M * N * L * sizeof(ElementOutput));
@@ -301,9 +243,7 @@ struct ExampleRunner {
             if (not isclose(val, expect, atol, rtol)) {
                 printf("(%d,%d,%d): host: %f and device: %f ratio: %f\n", b, n, m, expect, val, val / expect);
               err_cnt++;
-            } //  else{
-            //     printf("(%d,%d,%d): host: %f and device: %f\n", b, i, m, expect, val);
-            // }
+            }
           } else {
               printf("(%d,%d,%d): host: %f and device: %f\n", b, n, m, expect, val);
             err_cnt++;
@@ -341,22 +281,6 @@ struct ExampleRunner {
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
     initialize_block(block_W, seed + 2020);
-    // auto a_ptr = block_A.get();
-    // for (size_t m = 0; m < M; ++m) {
-    //     for (size_t k = 0; k < K; ++k) {
-    //         a_ptr[m * K + k] = (bfloat16_t)(float)(m * 1000 + k);
-    //     }
-    // }
-    // auto b_ptr = block_B.get();
-    // for (size_t k = 0; k < K; ++k) {
-    //     for (size_t n = 0; n < N; ++n) {
-    //         if (k == n)
-    //             b_ptr[k * N + n] = (bfloat16_t)1.0f;
-    //         else
-    //             b_ptr[k * N + n] = (bfloat16_t)0.0f;
-    //     }
-    // }
-    // printf("initialize done\n");
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -368,6 +292,7 @@ struct ExampleRunner {
       {options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D};
     epilogue_arguments.thread.output_ptr = block_D.get();
     epilogue_arguments.thread.weight_ptr = block_W.get();
+    epilogue_arguments.thread.eps = options.eps;
 
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,

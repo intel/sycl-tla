@@ -77,12 +77,14 @@ public:
   struct Arguments {
     ElementOutput* ptr_output;
     ElementWeight const*ptr_weight;
+    const float eps;
     // StrideOutput dOutput;
   };
 
   struct Params {
     XE_Copy_output xe_store_output;
     ElementWeight const *weight;
+    float eps;
     int inner_dim;
   };
 
@@ -96,7 +98,7 @@ public:
                             Layout<Shape<_1, Int<IntelPVCEpilogue::SubgroupSize>>>{},
                             make_layout(make_shape(get<0>(typename XE_Copy_output::BlockShape{}),
                                                    get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelPVCEpilogue::SubgroupSize>{})));
-    return {output, args.ptr_weight, N};
+    return {output, args.ptr_weight, args.eps, N};
   }
 
   template <class ProblemShape>
@@ -150,22 +152,6 @@ public:
     return EmptyProducerLoadCallbacks{};
   }
 
-  template <class VTensor>
-  CUTLASS_DEVICE static void
-  print_tensor(VTensor &t) {
-      print(t);
-      auto t_shape = t.shape();
-      auto t_stride = t.stride();
-      auto t_rank = rank(t_shape);
-      auto total = t.size();
-      for (auto i = 0; i < total; ++i) {
-          if ((i % get<0>(t_shape)) == 0)
-              print("\n%2d: ", i / get<0>(t_shape));
-          print("%5.1f ", t[i]);
-      }
-      print("\n");
-  }
-
   template<class RTensor, class CoordTensor>
   struct ConsumerStoreCallbacks : EmptyConsumerStoreCallbacks {
 
@@ -189,7 +175,7 @@ public:
     template<class STensor, class SyncFn, class VTensor>
     CUTLASS_DEVICE void
     reduce(STensor&& smem_buffer, SyncFn const& sync_fn, int epi_m, int epi_n, bool is_last_iteration, VTensor visit_results) {
-        constexpr float eps = 1e-5;
+        const float eps = params.eps;
         auto sg = syclcompat::get_nd_item<1>().get_sub_group();
         auto group = syclcompat::get_nd_item<1>().get_group()[0];
         auto group_id = group;
@@ -199,75 +185,15 @@ public:
             for(int epi_v = 0; epi_v < visit_results(0).size(); epi_v++) {
                 res_tensor(epi_v, epi_m, epi_n) = visit_results(0)[epi_v];
             }
-            // if (cute::thread0()) {
-            //     print("xe_store_output ");
-            //     print(params.xe_store_output);
-            //     print("\n");
-            //     print("\n");
-                // print_tensor(res_tensor);
-            //     for (int i = 0; i < 2; ++i) {
-            //         print("%5.1f ", res_tensor(0, 0, i));
-            //     }
-            //     print("\n");
-            //     print("Epi_M ");
-            //     print(Epi_M);
-            //     print("Sg_M ");
-            //     print(Sg_M);
-            //     print("Epi_N ");
-            //     print(Epi_N);
-            //     print("Sg_N ");
-            //     print(Sg_N);
-            //     print("epi_m ");
-            //     print(epi_m);
-            //     print(" epi_n ");
-            //     print(epi_n);
-            //     print("\n");
-            // }
 
             constexpr auto vec_size = min(Epi_M, Sg_N);
             constexpr auto vec_folds = Epi_M / vec_size;
             auto smem = syclcompat::local_mem<float[Sg_Nums * vec_size]>();
             Tensor stensor = make_tensor(make_smem_ptr(smem), make_shape(Int<vec_size>{}, Int<Sg_N>{}, Int<Sg_M>{}));
             auto wgt_ptr=params.weight;
-            // Tensor weight = make_tensor<ElementWeight>(params.weight, make_shape(Int<16>{})); // add bias offset here
             Tensor res =
                 make_tensor(static_cast<decltype(res_tensor) &&>(res_tensor).data(),
                             make_shape(Int<vec_size>{}, Int<vec_folds>{}, Int<Epi_N / IntelPVCEpilogue::SubgroupSize>{}));
-            // int ts = 256;
-            // int te = ts + 4;
-            // int bid = 0;
-            // for (int t = ts; t < te; ++t) {
-            //     if (cute::thread(t, bid)) {
-            //         printf("t%d: ", t);
-            //         print_tensor(res);
-            //         print("\n");
-            //     }
-            //     sync_fn();
-            // }
-            //     print("vec_size ");
-            //     print(vec_size);
-            //     print("\nvec_folds ");
-            //     print(vec_folds);
-            //     print("\nstensor:");
-            //     print(stensor);
-            //     print("\nres:");
-            //     print(res);
-            //     print("\n");
-            // }
-            // CUTLASS_PRAGMA_UNROLL
-            // for (int loop = 0; loop < vec_folds; loop++) {
-            //   auto loop_t = res(_, loop, _);
-            //   Tensor group_max = make_tensor<float>(make_shape(Int<vec_size>{}));
-            //   group_reduce_max<Sg_N>(stensor, loop_t, group_max);
-            //   CUTLASS_PRAGMA_UNROLL
-            //   for (int i = 0; i < Epi_N / IntelPVCEpilogue::SubgroupSize; i++) {
-            //     auto element_vec = loop_t(_, i);
-            //     CUTLASS_PRAGMA_UNROLL
-            //     for (int j = 0; j < vec_size; j++) {
-            //       element_vec(j) -= group_max(j);
-            //     }
-            //   }
-            // }
             // square
             Tensor pow2_buff = make_tensor_like<float>(res);
             CUTLASS_PRAGMA_UNROLL
@@ -284,58 +210,9 @@ public:
                     }
                 }
             }
-            // if (cute::thread0()) {
-            //     print("N: ");
-            //     print(params.inner_dim);
-            //     print("\n");
-            //     print("pow2: ");
-            //     print(pow2_buff);
-            //     print_tensor(pow2_buff);
-            //     print("\n");
-            // }
-
-            // auto gid = syclcompat::get_nd_item<1>().get_global_linear_id();
-            // if (cute::thread0()) {
-            //     print("Epi_N ");
-            //     print(Epi_N);
-            //     print("SubgroupSize");
-            //     print(IntelPVCEpilogue::SubgroupSize);
-            // }
             int gx = syclcompat::global_id::x() % 256;
             int gy = syclcompat::global_id::y();
-            auto gid = gx / 16 * 32 + gx % 16; // + syclcompat::local_id::y() * syclcompat::local_range::x();
-            // const float wgt_per_col = (float)wgt_ptr[gid + IntelPVCEpilogue::SubgroupSize]
-            // for (int t = ts; t < te; ++t) {
-            //     sync_fn();
-            //     if (cute::thread(t, bid)) {
-            //         print("gid ");
-            //         print(syclcompat::get_nd_item<1>().get_global_linear_id());
-            //         print(" z: ");
-            //         print(syclcompat::local_id::z());
-            //         print(" y: ");
-            //         print(syclcompat::local_id::y());
-            //         print(" x: ");
-            //         print(syclcompat::local_id::x());
-            //         print(" wz: ");
-            //         print(syclcompat::work_group_id::z());
-            //         print(" wy: ");
-            //         print(syclcompat::work_group_id::y());
-            //         print(" wx: ");
-            //         print(syclcompat::work_group_id::x());
-            //         print(" gz: ");
-            //         print(syclcompat::global_id::z());
-            //         print(" gy: ");
-            //         print(syclcompat::global_id::y());
-            //         print(" gx: ");
-            //         print(syclcompat::global_id::x());
-            //         print(" ");
-            //         for (int i = 0; i < 4; ++i) {
-            //             printf("%f ", (float)wgt_ptr[t / 16 * 32 + t % 16 + i]);
-            //         }
-            //         printf("\n");
-            //     }
-            //     sync_fn();
-            // }
+            auto gid = gx / 16 * 32 + gx % 16;
             CUTLASS_PRAGMA_UNROLL
             for (int loop = 0; loop < vec_folds; loop++) {
                 auto loop_t = res(_, loop, _);
@@ -343,11 +220,6 @@ public:
                 Tensor group_sum = make_tensor<float>(make_shape(Int<vec_size>{}));
                 float rev_dim = 1 / (float)params.inner_dim;
                 group_reduce_sum<Sg_N>(stensor, pow2_t, group_sum);
-                // if (cute::thread0()) {
-                //     print("group_sum: ");
-                //     print_tensor(group_sum);
-                //     print("\n");
-                // }
                 Tensor rms = make_tensor<float>(make_shape(Int<vec_size>{}));
                 CUTLASS_PRAGMA_UNROLL
                 for (int i = 0; i < vec_size; ++i) {
@@ -356,7 +228,6 @@ public:
                 CUTLASS_PRAGMA_UNROLL
                 for (int i = 0; i < Epi_N / IntelPVCEpilogue::SubgroupSize; i++) {
                     const float wgt_per_col = (float)wgt_ptr[gid + i * IntelPVCEpilogue::SubgroupSize];
-                    // const float wgt_per_col = 1.0f;
                     auto rmsnorm_vec = loop_t(_, i);
                     CUTLASS_PRAGMA_UNROLL
                     for (int j = 0; j < vec_size; j++) {
