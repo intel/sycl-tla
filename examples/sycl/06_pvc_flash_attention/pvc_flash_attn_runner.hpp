@@ -442,7 +442,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
     get<4>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv};
     get<5>(problem_size_for_launch) = get<5>(problem_size);
     get<6>(problem_size_for_launch) = get<6>(problem_size);
-    get<7>(problem_size_for_launch) = get<6>(problem_size);
+    get<7>(problem_size_for_launch) = get<7>(problem_size);
     get<0>(problem_size_for_launch) = get<0>(problem_size);
     get<1>(problem_size_for_launch) = get<1>(problem_size);
     get<2>(problem_size_for_launch) = get<2>(problem_size);
