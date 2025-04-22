@@ -293,7 +293,7 @@ public:
       // when causal mask is true. It is not possible to set the scope
       // of the barrier to workgroup level as the number n block is
       // different for each subgroup due to triangular nature of causal based operation
-      static constexpr int barrier_scope = CausalMask ? 3 : 2;
+      static constexpr int barrier_scope = 3;
       int kv_tile_idx = sub_group_id / PV_ATOM_N;
 
       ElementAccumulator max_reg = ElementAccumulator{-INFINITY};
