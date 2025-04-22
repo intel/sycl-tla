@@ -113,9 +113,9 @@ void copy(int global_M, int global_N) {
 
   auto tensor_shape = make_shape(global_M, global_N, 1);
   int tensor_size = size(tensor_shape);
-  cutlass::DeviceAllocation<dtype> src(tensor_size*32);
+  cutlass::DeviceAllocation<dtype> src(tensor_size);
 
-  Tensor tensor_S = make_tensor(make_gmem_ptr(src.get()), make_layout(tensor_shape, make_stride(_1{},32,_0{})));
+  Tensor tensor_S = make_tensor(make_gmem_ptr(src.get()), make_layout(tensor_shape, LayoutLeft{}));
 
   auto gridDim = syclcompat::dim3(1);
   auto blockDim = syclcompat::dim3(SUBGROUP_SIZE);
@@ -130,7 +130,7 @@ void copy(int global_M, int global_N) {
 int main(){
   // for 16b copies use integers as floating point types could lose precision for bigger indices
   // for 8b copies you have to work with overflow
-  copy<XE_2D_U16x32x32_LD_V, int16_t>(3, 5);
-  copy<XE_2D_U16x32x32_LD_N, int16_t>(3, 5);
+  copy<XE_2D_U16x32x32_LD_V, int16_t>(256, 256);
+  copy<XE_2D_U16x32x32_LD_N, int16_t>(256, 256);
   return 0;
 }
