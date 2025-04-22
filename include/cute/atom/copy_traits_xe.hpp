@@ -435,7 +435,7 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                                              make_shape(mma_atom_iters_in_copy_M, copy_iters_M),
                                              make_shape(mma_atom_iters_in_copy_N, copy_iters_N)),
                                   order);
-  static_assert(size(res) > 0, "Error in make_fragment_layout(), tile size migtht be smaller than copy atom");
+  static_assert(size(res) > 0, "Error in make_fragment_layout(), tile size might be smaller than copy atom");
   return res;
 };
 
