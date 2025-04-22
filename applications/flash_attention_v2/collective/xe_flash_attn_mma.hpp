@@ -154,7 +154,8 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
   using atom_load_V = Copy_Atom<traits_load_V, ElementV>;
   using val_layout_load_V = decltype(make_layout(shape_div(typename traits_load_V::BlockShape{}, CopyThreadShape{})));
   using XE_Copy_V = decltype(make_tiled_copy(atom_load_V{}, Layout<CopyThreadShape>{}, val_layout_load_V{}));
-
+  using TensorK = decltype(make_tensor(make_gmem_ptr(static_cast<ElementK const*>(nullptr)), make_shape(0,0,0), StrideK{}));   //(m, k)
+  using TensorV = decltype(make_tensor(make_gmem_ptr(static_cast<ElementV const*>(nullptr)), make_shape(0,0,0), StrideV{}));   //(n, k)
   // Host side kernel arguments
   struct Arguments {
     ElementQ const *ptr_Q;
@@ -175,6 +176,8 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     XE_Copy_V gmem_tiled_copy_v;
     XE_Copy_K gmem_tiled_copy_k_cache;
     XE_Copy_V gmem_tiled_copy_v_cache;
+    TensorK gmem_tensor_k_cache;
+    TensorV gmem_tensor_v_cache;
   };
 
   //
@@ -201,7 +204,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
     XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
 
-    return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache};
+    return Params{copyQ, copyK, copyV,  copyK_cache, copyV_cache, tensorK_cache, tensorV_cache};
   }
 
   template <class FragQccum, class TensorQ, class TensorK, class FragSrc>
@@ -335,19 +338,19 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
       int offset_v_cache = num_heads_kv * head_size_vo * seq_len_kv_cache;
 
       auto q_traits = static_cast<traits_load_Q const&>(params.gmem_tiled_copy_q);
-      ElementQ* q_ptr = (ElementQ*)q_traits.base_ptr;
+      const ElementQ* q_ptr = (const ElementQ*)q_traits.base_ptr;
 
       auto k_traits = static_cast<traits_load_K const&>(params.gmem_tiled_copy_k);
-      ElementK* k_ptr = (ElementK*)k_traits.base_ptr;
+      const ElementK* k_ptr = (const ElementK*)k_traits.base_ptr;
 
       auto v_traits = static_cast<traits_load_V const&>(params.gmem_tiled_copy_v);
-      ElementV* v_ptr = (ElementV*)v_traits.base_ptr;
+      const ElementV* v_ptr = (const ElementV*)v_traits.base_ptr;
 
       auto k_traits_cache = static_cast<traits_load_K const&>(params.gmem_tiled_copy_k_cache);
-      ElementK* k_cache_ptr = (ElementK*)k_traits_cache.base_ptr;
+      const ElementK* k_cache_ptr = (const ElementK*)k_traits_cache.base_ptr;
 
       auto v_traits_cache = static_cast<traits_load_V const&>(params.gmem_tiled_copy_v_cache);
-      ElementV* v_cache_ptr = (ElementV*)v_traits_cache.base_ptr;
+      const ElementV* v_cache_ptr = (const ElementV*)v_traits_cache.base_ptr;
 
       auto shape_q = make_shape(static_cast<int>(seq_len_qo), head_size_qk, num_heads_q);
       StrideQ stride_q = cutlass::make_cute_packed_stride(StrideQ{}, shape_q);
@@ -367,7 +370,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
       auto tensorQ = make_tensor(make_gmem_ptr(q_ptr + offset_q), make_layout(shape_q, stride_q));
       auto tensorK = make_tensor(make_gmem_ptr(k_ptr + offset_k), make_layout(shape_k, stride_k));
       auto tensorV = make_tensor(make_gmem_ptr(v_ptr + offset_v), make_layout(shape_v, stride_v));
-      auto tensorK_cache = make_tensor(make_gmem_ptr(k_cache_ptr + offset_k_cache), make_layout(shape_k_cache, shape_k_cache));
+      auto tensorK_cache = make_tensor(make_gmem_ptr(k_cache_ptr + offset_k_cache), make_layout(shape_k_cache, stride_k_cache));
       auto tensorV_cache = make_tensor(make_gmem_ptr(v_cache_ptr + offset_v_cache), make_layout(shape_v_cache, stride_v_cache));
 
       XE_Copy_Q copyQ{XE_Copy_Q{}.with(tensorQ)};
@@ -376,7 +379,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
       XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
       XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
 
-      return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache};
+      return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache, tensorK_cache, tensorV_cache};
     }
   }
 };

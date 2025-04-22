@@ -295,16 +295,21 @@ public:
       auto pQgQ = thr_prefetch_Q.partition_S(gQ);
       auto pKgK = thr_prefetch_K.partition_S(gK);
       auto pVgV = thr_prefetch_V.partition_S(gV);
-
+      // assuming the copy function is the same otherwise this need to have its own tile_prefetch
+      auto pKgK_cache = thr_prefetch_K.partition_S(gK_cache);
+      auto pVgV_cache = thr_prefetch_V.partition_S(gV_cache);
+      using Pefetch_K = decltype(tiled_prefetch_k);
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < size<3>(pQgQ); i++) {
         prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
       }
+      Pefetch_K prefetch_K = (seq_len_kv_cache == 0) ? tiled_prefetch_k: Pefetch_K{tiled_prefetch_k.with(mainloop_params.gmem_tensor_k_cache)};
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < DispatchPolicy::Stages; i++) {
+       // The headsize for both cached and non-cached version is the same
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < size<4>(pKgK); j++) {
-          prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
+          prefetch(prefetch_K, pKgK(_, _, _ , i, j));
         }
       }
 
@@ -344,7 +349,8 @@ public:
 
         // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
         // prefetching it the same way as cutlass K matrix does not make sense
-        prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock));
+        (is_KV_cache) ? prefetch(tiled_prefetch_v.with(mainloop_params.gmem_tensor_v_cache), pVgV_cache(_, _, _ , nblock))
+                      : prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock - nblock_cache));
 
         // 4) Fused softmax
         CollectiveSoftmaxEpilogue softmax(params.softmax);
@@ -355,9 +361,10 @@ public:
         
         // Prefetch the next K tile
         // there is no need to gaurd it with if statememt as prefetch will ignore out of bound reading
+        prefetch_K = (nblock + DispatchPolicy::Stages < nblock_cache) ? Pefetch_K{tiled_prefetch_k.with(mainloop_params.gmem_tensor_k_cache)}: tiled_prefetch_k;
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < size<4>(pKgK); j++) {
-          prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
+         prefetch(prefetch_K, pKgK_cache(_, _, _, nblock + DispatchPolicy::Stages, j));
         }
         barrier_wait(barrier_scope);
       }
