@@ -173,9 +173,9 @@ public:
     // reduce sum across the whole workgroup through SLM
     // rest of the epilogue stays the same
 
-    CUTLASS_PRAGMA_NO_UNROLL
+    CUTLASS_PRAGMA_UNROLL
     for (int y = 0; y < FragsM; y++) {
-      CUTLASS_PRAGMA_NO_UNROLL
+      CUTLASS_PRAGMA_UNROLL
       for (int x = 0; x < Vec; x++) {
         int indx = y * Vec + x;
         auto cur_sum = reduce_over_group(sg, sum(indx), sycl::plus<>());
