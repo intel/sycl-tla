@@ -127,8 +127,10 @@ public:
   static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize; // 8
   using FragsShapeQK = typename CollectiveMainloop::FragsShapeQK;
   using FragsShapePV = typename CollectiveMainloop::FragsShapePV;
-  static constexpr int FragsM = get<0>(FragsShapeQK{});                                          // 2
+  static constexpr int FragsM = get<0>(FragsShapeQK{});                                          // 1
   static constexpr int FragsN = get<1>(FragsShapeQK{});                                          // 4
+
+  static_assert(FragsM == get<0>(FragsShapePV{}) == 1, "Limit the seq_len_qo to 1 MMA Atom worth of data per work-group.");
 
   static constexpr bool is_var_len = CollectiveMainloop::is_var_len;
 

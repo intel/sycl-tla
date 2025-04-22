@@ -167,7 +167,7 @@ public:
     constexpr int FragsM = get<1>(FragAccLayout{}.shape());
     constexpr int FragsN = get<2>(FragAccLayout{}.shape());
     Element max_prev = max_val;
-    static_assert(Vec * FragsM == 16 || Vec * FragsM == 8, " the number of reg_max per workitem should be adopted accordingly.");
+    static_assert(Vec * FragsM == 8, " the number of reg_max per workitem should be adopted accordingly.");
 
     reduce_max<Vec, FragsM, FragsN>(frag_s, shmem_tensor_max, max_val);
 
