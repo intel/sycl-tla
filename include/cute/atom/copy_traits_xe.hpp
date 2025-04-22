@@ -216,6 +216,7 @@ struct XE_2D_LD_Unpack {
   uint32_t height;
   uint32_t pitch;
   uint32_t stride_l = 0;
+  uint32_t height_offset = 0;
 
 
 
@@ -253,6 +254,10 @@ struct XE_2D_LD_Unpack {
     if constexpr (stride_rank == 3) {
       stride_l = size<2>(tensor.stride());
     }
+    if(stride_l % pitch != 0){
+      CUTE_INVALID_CONTROL_PATH("Incompatible strides in tensor.\n");
+    };
+    height_offset = stride_l / pitch;
   }
 
   XE_2D_LD_Unpack(Traits_LD_t const &traits) : base_ptr(traits.base_ptr),
@@ -279,11 +284,12 @@ struct XE_2D_LD_Unpack {
     auto [m, n, l] = src.data().coord_;
     int x = is_need_reversed ? m : n;
     int y = is_need_reversed ? n : m;
+    y += l * traits.height_offset;
 
     constexpr auto inst_size_bits = detail::size_of_inst_bits<CopyOp, dtype>;
 
-    CopyOp::copy(base_addr + l * traits.stride_l,
-                 (traits.width * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>, traits.height,
+    CopyOp::copy(base_addr,
+                 (traits.width * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>, traits.height + l * traits.height_offset,
                  (traits.pitch * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>,
                  intel::coord_t{(int)(x * sizeof_bits_v<dtype> / inst_size_bits), y},
                  raw_pointer_cast(&((&*dst.data())[0])));
