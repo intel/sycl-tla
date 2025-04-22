@@ -4040,7 +4040,7 @@ bool TestXe(
   std::vector<int> problem_size_l = test_batch ? std::vector{1, 3, 4} : std::vector{1};
 
   constexpr int TileShapeK = cute::size<2>(typename Gemm::GemmKernel::TileShape{});
-  std::vector<int> problem_size_k{TileShapeK};
+  std::vector<int> problem_size_k{TileShapeK, TileShapeK*32};
 
   using DecompositionMode = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode;
   std::vector decomposition_modes = {DecompositionMode::Heuristic};
