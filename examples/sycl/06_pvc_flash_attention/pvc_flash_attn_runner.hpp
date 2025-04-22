@@ -371,10 +371,10 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
         if(kv_group_update % q_group_size==0) {
           offset_k += seq_len_kv * head_size_qk;
           offset_v += seq_len_kv * head_size_vo;
+          offset_k_cache += seq_len_kv_cache * head_size_qk;
+          offset_v_cache += seq_len_kv_cache * head_size_vo;
         }
         kv_group_update++;
-        offset_k_cache += seq_len_kv_cache * head_size_qk;
-        offset_v_cache += seq_len_kv_cache * head_size_vo;
         offset_o += seq_len_qo * head_size_vo;
       }
     }
