@@ -4018,7 +4018,7 @@ template <typename Gemm, template <class T> class ActivationFunctor =
 // TODO(Codeplay): remove the test_batch option once batching is enabled for all tests
 bool TestXe(
     double alpha = 1.0, double beta = 0.0,
-    bool test_batch = true, int max_alignment = 4,
+    bool test_batch = true, int max_alignment = 8,
     CheckEquality check_relative_equality = CheckEquality::RELATIVE) {
   using ElementScalar = typename Gemm::EpilogueOutputOp::ElementScalar;
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
