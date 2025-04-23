@@ -199,6 +199,8 @@ struct ExampleRunner {
     auto [M, N, K, L] = problem_size;
     
     // Padded values
+    // The inner dimension is padded. Since this example is all RowMajor,
+    // we require the following:
     int N_B = cute::ceil_div(N, AlignElemB) * AlignElemB;
     int N_C = cute::ceil_div(N, AlignElemC) * AlignElemC;
     int N_D = cute::ceil_div(N, AlignElemD) * AlignElemD;
