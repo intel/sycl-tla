@@ -455,6 +455,40 @@ using PvcGemmBF16BF16FP32_SplitK_RCR_2 = cutlass::gemm::device::GemmConfiguratio
         XE_2D_U16x8x32_LD_N, XE_2D_U16x16x16_LD_T,
         Scheduler::GemmSplitK>;
 
+using PvcGemmBF16BF16FP32_SplitK_RCR_3 = cutlass::gemm::device::GemmConfiguration<
+        cutlass::arch::IntelPVC,
+        cutlass::bfloat16_t, cutlass::layout::RowMajor,
+        cutlass::bfloat16_t, cutlass::layout::ColumnMajor,
+        float, cutlass::layout::RowMajor,
+        float, Shape<_32, _128, _32>,
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_32, _128, _32>>,
+                                      Layout<Shape<_2, _8, _1>, Stride<_8, _1, _0>>>::TiledMMA,
+        XE_2D_U16x16x32_LD_N, XE_2D_U16x16x16_LD_T,
+        Scheduler::GemmSplitK>;
+
+using PvcGemmBF16BF16FP32_SplitK_RCR_4 = cutlass::gemm::device::GemmConfiguration<
+        cutlass::arch::IntelPVC,
+        cutlass::bfloat16_t, cutlass::layout::RowMajor,
+        cutlass::bfloat16_t, cutlass::layout::ColumnMajor,
+        float, cutlass::layout::RowMajor,
+        float, Shape<_16, _128, _32>,
+        typename TiledMMAHelper<MMAAtom, Layout<Shape<_16, _128, _32>>,
+        Layout<Shape<_1, _8, _1>, Stride<_0, _1, _0>>>::TiledMMA,
+        XE_2D_U16x16x32_LD_N, XE_2D_U16x16x16_LD_T,
+        Scheduler::GemmSplitK>;
+
+
+using PvcGemmBF16BF16FP32_SplitK_RCR_5 = cutlass::gemm::device::GemmConfiguration<
+        cutlass::arch::IntelPVC,
+        cutlass::bfloat16_t, cutlass::layout::RowMajor,
+        cutlass::bfloat16_t, cutlass::layout::ColumnMajor,
+        float, cutlass::layout::RowMajor,
+        float, Shape<_8, _64, _32>,
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _64, _32>>,
+                                      Layout<Shape<_1, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA,
+        XE_2D_U16x8x32_LD_N, XE_2D_U16x16x16_LD_T,
+        Scheduler::GemmSplitK>;
+
 using PvcGemmBF16BF16FP32_SplitK_RRR_1 = cutlass::gemm::device::GemmConfiguration<
         cutlass::arch::IntelPVC,
         cutlass::bfloat16_t, cutlass::layout::RowMajor,
@@ -472,8 +506,9 @@ using PvcGemmBF16BF16FP32_SplitK_RRR_1 = cutlass::gemm::device::GemmConfiguratio
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RRR_1);
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_1);
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_2);
-
-
+CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_3);
+CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_4);
+CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_5);
 
 static void register_benchmarks() {
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_RRR_1);
@@ -506,6 +541,9 @@ static void register_benchmarks() {
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RRR_1);
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_1);
   CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_2);
+  CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_5);
+  CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_4);
+  CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_SplitK_RCR_5);
 
   CUTLASS_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen);
   CUTLASS_FMHA_BENCHMARK(PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen);
