@@ -101,7 +101,7 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
   static constexpr auto PV_ATOM_M = get<1>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape());
   static constexpr auto PV_ATOM_N = get<2>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape());
   static constexpr auto PV_ATOM_K = get<3>(typename TiledMmaQVO::ThrLayoutVMNK{}.shape());
-
+  // <8, 512, 64>
   using TileShapeQK = decltype(Shape<decltype(get<0>(MmaAtomShape())), decltype(get<0>(WorkgroupTileShape{})), decltype(get<3>(WorkgroupTileShape{}))>{}); // <BLK_M_Q, BLK_N_QK, BLK_K_QK>
 
   static constexpr auto QK_BLK_M = get<0>(TileShapeQK{});
@@ -120,15 +120,16 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
   static constexpr auto QK_ATOM_M = get<1>(typename TiledMmaQ::ThrLayoutVMNK{}.shape()); // 1
   static constexpr auto QK_ATOM_N = get<2>(typename TiledMmaQ::ThrLayoutVMNK{}.shape()); // 8
   static constexpr auto QK_ATOM_K = get<3>(typename TiledMmaQ::ThrLayoutVMNK{}.shape()); // 1
-
+//(512,64) /(8/1) -> (64,64)
   using TempShapeQK = decltype(cute::shape_div(take<1, 3>(TileShapeQK{}), take<2, 4>(typename TiledMmaQ::ThrLayoutVMNK{}.shape())));
+  // (8, 64,64)
   using SubgroupTileShapeQK = decltype(make_shape(get<0>(TileShapeQK{}), get<0>(TempShapeQK{}), get<1>(TempShapeQK{})));
   using FragsShapeQK = decltype(cute::shape_div(take<0, 2>(SubgroupTileShapeQK{}), take<0, 2>(typename TiledMmaQ::AtomShape_MNK())));
 
   static constexpr auto QK_SG_M = get<0>(SubgroupTileShapeQK{});
   static constexpr auto QK_SG_N = get<1>(SubgroupTileShapeQK{});
   static constexpr auto QK_SG_K = get<2>(SubgroupTileShapeQK{});
-
+  // <512, (64/128), 64>
   using TileShapePV = decltype(Shape<decltype(get<0>(TileShapeQK{})), decltype(get<1>(WorkgroupTileShape{})), decltype(QK_SG_N)>{}); // <BLK_M_PV, BLK_N_V, BLK_N_QK>
 
   static constexpr auto PV_BLK_N = get<1>(TileShapePV{});

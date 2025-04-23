@@ -191,15 +191,17 @@ public:
     Tensor out_reg = make_tensor<ElementOutput>(make_shape(Int<Vec>{}, Int<FragsM>{}, Int<FragsN>{}));
 
     if(sg_group_id < ATOM_N) {
-
       CUTLASS_PRAGMA_UNROLL
       for (int y = 0; y < FragsM; y++) {
         CUTLASS_PRAGMA_UNROLL
         for (int x = 0; x < Vec; x++) {
           int indx = y * Vec + x;
           ElementCompute cur_sum = ElementCompute{0};
-          for(int i = sg_group_id; i < ATOM_M * ATOM_N; i += ATOM_N) {
-            cur_sum += shmem_tensor_sum(i * Vec * FragsM + indx);
+          CUTLASS_PRAGMA_UNROLL
+          for(int i = 0; i < ATOM_M * ATOM_N; i ++) {
+            if (i % ATOM_N == sg_group_id) {
+              cur_sum += shmem_tensor_sum(i * Vec * FragsM + indx);
+            }
           }
 
           auto cur_scale = (cur_sum == 0.f || cur_sum != cur_sum) ? 1.f : sycl::native::recip(cur_sum);
@@ -211,9 +213,11 @@ public:
 
             ElementOutput out_val_curr = ElementOutput{0};
             CUTLASS_PRAGMA_UNROLL
-            for(int i = sg_group_id; i < ATOM_M * ATOM_N; i += ATOM_N) {
-              auto out_val_prev = shmem_tensor_out(slm_curr_idx + i * out_reg.size() * SubgroupSize);
-              out_val_curr += out_val_prev;
+            for(int i = 0; i < ATOM_M * ATOM_N; i++) {
+              if (i % ATOM_N == sg_group_id) {
+               auto out_val_prev = shmem_tensor_out(slm_curr_idx + i * out_reg.size() * SubgroupSize);
+               out_val_curr += out_val_prev;
+              }
             }
 
             out_reg(x, y, z) = out_val_curr * cur_scale;

@@ -121,7 +121,7 @@ public:
     }
   }
 
-  template <int Vec, int FragsM, int FragsN, class FragSrc, class STensorMax>
+  template <int Num_SGs, int Vec, int FragsM, int FragsN, class FragSrc, class STensorMax>
   CUTLASS_DEVICE void reduce_max(FragSrc &src, STensorMax &stensor_max, Element& max_val) {
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
     auto group = syclcompat::get_nd_item<1>().get_group();
@@ -151,7 +151,8 @@ public:
     for (int indx = 0; indx < Vec * FragsM; indx++) {
       Element curr_max = -INFINITY;
       if(sg_local_id == indx) {
-        for (int i = 0; i < sg.get_group_range()[0]; i++) {
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < Num_SGs; i++) {
           curr_max = sycl::max(curr_max, stensor_max(i * Vec * FragsM + sg_local_id));
         }
         max_val = curr_max;
@@ -159,7 +160,7 @@ public:
     }
   }
 
-  template <class FragAcc, class FragSum, class STensorMax, class FragOut>
+  template <int Num_SGs, class FragAcc, class FragSum, class STensorMax, class FragOut>
   CUTLASS_DEVICE void operator()(bool is_first, FragAcc &frag_s, Element& max_val, FragSum& sum, 
                                   STensorMax& shmem_tensor_max, FragOut& out/*, int const& slm_out_rows*/) {
     using FragAccLayout = typename FragAcc::layout_type;
@@ -169,7 +170,7 @@ public:
     Element max_prev = max_val;
     static_assert(Vec * FragsM == 8, " the number of reg_max per workitem should be adopted accordingly.");
 
-    reduce_max<Vec, FragsM, FragsN>(frag_s, shmem_tensor_max, max_val);
+    reduce_max<Num_SGs, Vec, FragsM, FragsN>(frag_s, shmem_tensor_max, max_val);
 
     if (!is_first) {
       auto sg = syclcompat::get_nd_item<1>().get_sub_group();
