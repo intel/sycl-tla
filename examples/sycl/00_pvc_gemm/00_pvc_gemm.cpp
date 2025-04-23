@@ -201,14 +201,14 @@ struct ExampleRunner {
     // Padded values
     // The inner dimension is padded. Since this example is all RowMajor,
     // we require the following:
-    int N_B = cute::ceil_div(N, AlignElemB) * AlignElemB;
-    int N_C = cute::ceil_div(N, AlignElemC) * AlignElemC;
-    int N_D = cute::ceil_div(N, AlignElemD) * AlignElemD;
-    int K_A = cute::ceil_div(K, AlignElemA) * AlignElemA;
+    int N_B = cute::round_up(N, AlignElemB);
+    int N_C = cute::round_up(N, AlignElemC);
+    int N_D = cute::round_up(N, AlignElemD);
+    int K_A = cute::round_up(K, AlignElemA);
     
     int AlignmentOuter = AlignmentPtr / AlignmentInner;
-    int M_ACD = cute::ceil_div(M, AlignmentOuter) * AlignmentOuter;
-    int K_B = cute::ceil_div(K, AlignmentOuter) * AlignmentOuter;
+    int M_ACD = cute::round_up(M, AlignmentOuter);
+    int K_B = cute::round_up(K, AlignmentOuter);
 
     cutlass::TensorRef ref_A(block_A.get(), LayoutA(K_A));
     cutlass::TensorRef ref_B(block_B.get(), LayoutB(N_B));
@@ -249,14 +249,14 @@ struct ExampleRunner {
     auto [M, N, K, L] = problem_shape_MNKL;
 
     // Padded values
-    int N_B = cute::ceil_div(N, AlignElemB) * AlignElemB;
-    int N_C = cute::ceil_div(N, AlignElemC) * AlignElemC;
-    int N_D = cute::ceil_div(N, AlignElemD) * AlignElemD;
-    int K_A = cute::ceil_div(K, AlignElemA) * AlignElemA;
+    int N_B = cute::round_up(N, AlignElemB);
+    int N_C = cute::round_up(N, AlignElemC);
+    int N_D = cute::round_up(N, AlignElemD);
+    int K_A = cute::round_up(K, AlignElemA);
 
     int AlignmentOuter = AlignmentPtr / AlignmentInner;
-    int M_ACD = cute::ceil_div(M, AlignmentOuter) * AlignmentOuter;
-    int K_B = cute::ceil_div(K, AlignmentOuter) * AlignmentOuter;
+    int M_ACD = cute::round_up(M, AlignmentOuter);
+    int K_B = cute::round_up(K, AlignmentOuter);
 
     // Complete the stride by combining static layout info (StrideA) with runtime size info (M,K,L)
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M_ACD, K_A, L));
