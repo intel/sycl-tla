@@ -265,7 +265,7 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M_ACD, N_D, L));
 
     block_A.reset(M_ACD * K_A * L);
-    block_B.reset(K * N_B * L);
+    block_B.reset(K_B * N_B * L);
     block_C.reset(M_ACD * N_C * L);
     block_D.reset(M_ACD * N_D * L);
     block_ref_D.reset(M_ACD * N_D * L);
