@@ -52,7 +52,6 @@ constexpr auto get_num_atoms(T_m tile_m, T_n tile_n){
   return make_shape(atoms_m, atoms_n);
 }
 
-
 template<bool is_t, bool is_v, typename T_m, typename T_n>
 constexpr auto select_copy_atom_16b(T_m tile_m, T_n tile_n){
   #define RETURN_ATOM(WIDTH, HEIGHT, LETTER) \
