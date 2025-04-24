@@ -49,12 +49,18 @@ runs:
       if: inputs.DPCPP_RELEASE == 'RELEASE'
       shell: bash
       run: |
+        wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | sudo gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+        echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | sudo tee /etc/apt/sources.list.d/intel-gpu-jammy.list
         wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo apt update
-        sudo apt install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp
+        sudo apt install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp libze-intel-gpu1 libze1 intel-opencl-icd clinfo libze-dev intel-ocloc
+        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.10.8/intel-igc-core-2_2.10.8+18926_amd64.deb
+        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.10.8/intel-igc-opencl-2_2.10.8+18926_amd64.deb
+        sudo dpkg -i --force-all intel-igc-core-2_2.10.8+18926_amd64.deb
+        sudo dpkg -i --force-all intel-igc-opencl-2_2.10.8+18926_amd64.deb
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh
