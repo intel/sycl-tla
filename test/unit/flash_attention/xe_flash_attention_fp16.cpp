@@ -37,7 +37,7 @@
 
 namespace cutlass {
 
-template<typename TileShape, typename TiledMma, bool HasCausalMask>
+template<typename TileShape, typename TiledMma, bool HasCausalMask, bool isVarLen>
 struct XE_Flash_Attention {
   using LayoutQ = cutlass::layout::RowMajor;
   using LayoutK = cutlass::layout::ColumnMajor;
@@ -50,6 +50,11 @@ struct XE_Flash_Attention {
   using ElementInputKV = half_t;
   using ElementOutput = float;
 
+  using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int>;
+  using ProblemShapeVarlen = cute::tuple<int, int, int, fmha::collective::VariableLength,
+                                         fmha::collective::VariableLength, int, int>;
+  using ProblemShapeType = std::conditional_t<isVarLen, ProblemShapeVarlen, ProblemShapeRegular>;
+
   static constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
@@ -58,110 +63,81 @@ struct XE_Flash_Attention {
   using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
   using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
   using GmemTiledCopyStore = XE_2D_U32x8x16_ST_N;
-  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogueAttention<
+  using CollectiveEpilogue = flash_attention::collective::CollectiveEpilogueAttention<
         EpilogueDispatchPolicy, TileShape, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
-  using CollectiveSoftmaxEpilogue = cutlass::epilogue::collective::CollectiveSoftmaxEpilogue<
+  using CollectiveSoftmaxEpilogue = flash_attention::collective::CollectiveSoftmaxEpilogue<
         HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;
 
   // Mainloop
-  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMmaAttention<
-        GEMMDispatchPolicy, TileShape, ElementInputQ, cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
-        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV, cutlass::gemm::TagToStrideB_t<LayoutV>, TiledMma,
+  using CollectiveMainloop = flash_attention::collective::CollectiveMmaAttention<
+        GEMMDispatchPolicy, ProblemShapeType, TileShape, ElementInputQ,
+        cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutV>, TiledMma,
         GmemTiledCopyQ, // Q
         GmemTiledCopyK, // K
         GmemTiledCopyV, // V,
         HasCausalMask>;
 
-    using Kernel = cutlass::gemm::kernel::GemmUniversalAttention<Shape<int, int, int, int, int, int>, CollectiveMainloop,
-                                                                     CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
+    using Kernel = flash_attention::kernel::GemmUniversalAttention<ProblemShapeType,
+                                                                   CollectiveMainloop, CollectiveSoftmaxEpilogue,
+                                                                   CollectiveEpilogue>;
 };
 
-TEST(XE_Flash_Attention_fp16, causal_with_head_size_64) {
+TEST(XE_Flash_Attention_fp16, causal) {
   using TileShape = Shape<_128, _64, _64, _64>;
   using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                                       Layout<Shape<_128, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
-  using Kernel = XE_Flash_Attention<TileShape, TiledMma, true>::Kernel;
+  using Kernel = XE_Flash_Attention<TileShape, TiledMma, true, false>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(64));
-}
-
-TEST(XE_Flash_Attention_fp16, noncausal_with_head_size_64) {
-  using TileShape = Shape<_128, _64, _64, _64>;
-  using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
-                                      Layout<Shape<_128, _64, _64>>,
-                                      Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
-
-  using Kernel = XE_Flash_Attention<TileShape, TiledMma, false>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(64));
-}
-
-TEST(XE_Flash_Attention_fp16, causal_with_head_size_96) {
-  using TileShape = Shape<_128, _64, _64, _64>;
-  using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
-                                      Layout<Shape<_128, _64, _64>>,
-                                      Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
-
-  using Kernel = XE_Flash_Attention<TileShape, TiledMma, true>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(96));
-}
-
-TEST(XE_Flash_Attention_fp16, noncausal_with_head_size_96) {
-  using TileShape = Shape<_128, _64, _64, _64>;
-  using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
-                                      Layout<Shape<_128, _64, _64>>,
-                                      Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
-
-  using Kernel = XE_Flash_Attention<TileShape, TiledMma, false>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(96));
-}
-
-TEST(XE_Flash_Attention_fp16, causal_with_head_size_128) {
-  using TileShape = Shape<_128, _128, _64, _64>;
-    using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
-                                      Layout<Shape<_128, _128, _64>>,
-                                      Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>>::TiledMMA;
-
-  using Kernel = XE_Flash_Attention<TileShape, TiledMma, true>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(128));
-}
-
-TEST(XE_Flash_Attention_fp16, noncausal_with_head_size_128) {
-  using TileShape = Shape<_128, _128, _64, _64>;
-    using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
-                                      Layout<Shape<_128, _128, _64>>,
-                                      Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>>::TiledMMA;
-
-  using Kernel = XE_Flash_Attention<TileShape, TiledMma, false>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(128));
-}
-
-TEST(XE_Flash_Attention_fp16, causal_with_head_size_192) {
-  using TileShape = Shape<_128, _128, _64, _64>;
-    using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
-                                      Layout<Shape<_128, _128, _64>>,
-                                      Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>>::TiledMMA;
-
-  using Kernel = XE_Flash_Attention<TileShape, TiledMma, true>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(192));
 }
 
-TEST(XE_Flash_Attention_fp16, noncausal_with_head_size_192) {
-  using TileShape = Shape<_128, _128, _64, _64>;
-    using TiledMma =
+TEST(XE_Flash_Attention_fp16, noncausal) {
+  using TileShape = Shape<_128, _64, _64, _64>;
+  using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
-                                      Layout<Shape<_128, _128, _64>>,
-                                      Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>>::TiledMMA;
+                                      Layout<Shape<_128, _64, _64>>,
+                                      Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
-  using Kernel = XE_Flash_Attention<TileShape, TiledMma, false>::Kernel;
+  using Kernel = XE_Flash_Attention<TileShape, TiledMma, false, false>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(64));
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(96));
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(128));
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(192));
+}
+
+TEST(XE_Flash_Attention_fp16, varlen_causal) {
+  using TileShape = Shape<_128, _64, _64, _64>;
+  using TiledMma =
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
+                                      Layout<Shape<_128, _64, _64>>,
+                                      Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
+
+  using Kernel = XE_Flash_Attention<TileShape, TiledMma, true, true>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(64));
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(96));
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(128));
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(192));
+}
+
+TEST(XE_Flash_Attention_fp16, varlen_noncausal) {
+  using TileShape = Shape<_128, _64, _64, _64>;
+  using TiledMma =
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
+                                      Layout<Shape<_128, _64, _64>>,
+                                      Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
+
+  using Kernel = XE_Flash_Attention<TileShape, TiledMma, false, true>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(64));
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(96));
+  EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(128));
   EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(192));
 }
 
