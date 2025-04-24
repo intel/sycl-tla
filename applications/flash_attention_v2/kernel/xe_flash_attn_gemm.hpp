@@ -334,7 +334,7 @@ public:
       for (int nblock = 0; nblock < nblock_limit - static_cast<int>(CausalMask); nblock++) {
         barrier_arrive(barrier_scope);
 
-        bool is_KV_cache = (nblock < nblock_cache);
+        bool is_KV_cache = nblock < nblock_cache;
 
         // 1) Load KV (performed inside mmaQK)
         auto gK_ = is_KV_cache ? gK_cache(_, _, nblock, _) : gK(_, _, nblock - nblock_cache, _);
