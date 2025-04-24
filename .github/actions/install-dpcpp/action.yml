@@ -54,7 +54,7 @@ runs:
         rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo apt update
-        sudo apt install -y --allow-downgrades intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc libze-dev intel-ocloc
+        sudo apt install -y --allow-downgrades intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc libze-dev
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh
