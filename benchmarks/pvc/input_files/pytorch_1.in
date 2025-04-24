@@ -18,11 +18,12 @@ PvcGemmBF16BF16FP32_RCR_6 --m=8 --k=4096 --n=6144
 PvcGemmBF16BF16FP32_RCR_6 --m=1 --k=4096 --n=4096
 PvcGemmBF16BF16FP32_RCR_6 --m=8 --k=4096 --n=4096
 
-# TODO(codeplay): Define the gemm configurations required for these:
+# TODO(codeplay): Enable these once epilogues properly supported
 # mm_silu 1,8 4096 14336
-# --m=1 --k=4096 --n=14336
-# --m=8 --k=4096 --n=14336
+# PvcGemmBF16BF16FP32_RCR_6_silu --m=1 --k=4096 --n=14336
+# PvcGemmBF16BF16FP32_RCR_6_silu --m=8 --k=4096 --n=14336
 
+# TODO(codeplay): Define the gemm configurations required for these:
 # mm_mul 1,8 4096 14336
 # --m=1 --k=4096 --n=14336
 # --m=8 --k=4096 --n=14336
