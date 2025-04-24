@@ -204,7 +204,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
     XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
 
-    return Params{copyQ, copyK, copyV,  copyK_cache, copyV_cache, tensorK_cache, tensorV_cache};
+    return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache, tensorK_cache, tensorV_cache};
   }
 
   template <class FragQccum, class TensorQ, class TensorK, class FragSrc>
