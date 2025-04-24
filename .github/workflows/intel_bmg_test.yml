@@ -24,7 +24,7 @@ jobs:
     strategy:
       matrix:
         compiler: [ NIGHTLY, RELEASE ]
-    name: Run Intel PVC tests
+    name: Run Intel BMG tests
     runs-on: cp-b580-gpu
     timeout-minutes: 30
 
