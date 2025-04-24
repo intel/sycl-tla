@@ -162,13 +162,13 @@ public:
 
   template <int Num_SGs, class FragAcc, class FragSum, class STensorMax, class FragOut>
   CUTLASS_DEVICE void operator()(bool is_first, FragAcc &frag_s, Element& max_val, FragSum& sum, 
-                                  STensorMax& shmem_tensor_max, FragOut& out/*, int const& slm_out_rows*/) {
+                                  STensorMax& shmem_tensor_max, FragOut& out) {
     using FragAccLayout = typename FragAcc::layout_type;
     constexpr int Vec = get<0>(FragAccLayout{}.shape());
     constexpr int FragsM = get<1>(FragAccLayout{}.shape());
     constexpr int FragsN = get<2>(FragAccLayout{}.shape());
     Element max_prev = max_val;
-    static_assert(Vec * FragsM == 8, " the number of reg_max per workitem should be adopted accordingly.");
+    static_assert(Vec * FragsM == 8, "No. of attention rows per subgroup should not exceed 1 MMA Atom worth of rows.");
 
     reduce_max<Num_SGs, Vec, FragsM, FragsN>(frag_s, shmem_tensor_max, max_val);
 
