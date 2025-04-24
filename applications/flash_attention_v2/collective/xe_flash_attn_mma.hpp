@@ -47,11 +47,25 @@ using namespace cute;
 
 template <typename To_type, typename Engine, typename Layout>
 CUTLASS_DEVICE auto convert_type(Tensor<Engine, Layout> const &tensor) {
-    using From_type = typename Engine::value_type;
-    constexpr int numel = decltype(size(tensor))::value;
-    cutlass::NumericArrayConverter<To_type, From_type, numel> convert_op;
-    auto frag = convert_op(*reinterpret_cast<const cutlass::Array<From_type, numel> *>(tensor.data()));
-    return make_tensor(make_rmem_ptr<To_type>(&frag), tensor.layout());
+#if defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER < 20250200)
+  Tensor tPr = make_tensor<To_type>(shape(tensor));
+  CUTLASS_PRAGMA_UNROLL
+  for (int p_idx = 0; p_idx < size(tPr); p_idx++) {
+  #ifdef __SYCL_DEVICE_ONLY__
+    // Temporary patch to avoid linking in the devicelib fallback unconditionally.
+    tPr(p_idx).storage = __spirv_ConvertFToBF16INTEL(tensor(p_idx));
+  #else
+    tPr(p_idx) = static_cast<To_type>(tensor(p_idx));
+  #endif
+  }
+  return tPr;
+#else
+  using From_type = typename Engine::value_type;
+  constexpr int numel = decltype(size(tensor))::value;
+  cutlass::NumericArrayConverter<To_type, From_type, numel> convert_op;
+  auto frag = convert_op(*reinterpret_cast<const cutlass::Array<From_type, numel> *>(tensor.data()));
+  return make_tensor(make_rmem_ptr<To_type>(&frag), tensor.layout());
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
