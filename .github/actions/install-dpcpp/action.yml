@@ -55,7 +55,7 @@ runs:
         echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo add-apt-repository ppa:kobuk-team/intel-graphics
         sudo apt update
-        sudo apt install -y --allow-downgrades intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp intel-graphics-compiler
+        sudo apt install -y --allow-downgrades intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh
