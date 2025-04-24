@@ -59,7 +59,7 @@ struct XeFlashIndividualTileScheduler {
       ProblemSize const& problem_size, KernelHardwareInfo hw_info,
       TileShape const& tile_shape) {
     using namespace cute;
-    // problem_size = [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache head_size_qk, head_size_vo]
+    // problem_size = [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo]
     dim3 grid(size(ceil_div(shape<7>(problem_size), shape<1>(tile_shape))),
               size(ceil_div(shape<3>(problem_size), shape<0>(tile_shape))),
               size(shape<0>(problem_size) * shape<1>(problem_size)));
