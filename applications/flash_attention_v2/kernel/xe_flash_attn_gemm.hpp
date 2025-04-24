@@ -349,7 +349,7 @@ public:
 
         // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
         // prefetching it the same way as cutlass K matrix does not make sense
-        (is_KV_cache) ? prefetch(tiled_prefetch_v.with(mainloop_params.gmem_tensor_v_cache), pVgV_cache(_, _, _ , nblock))
+        is_KV_cache ? prefetch(tiled_prefetch_v.with(mainloop_params.gmem_tensor_v_cache), pVgV_cache(_, _, _ , nblock))
                       : prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock - nblock_cache));
 
         // 4) Fused softmax
