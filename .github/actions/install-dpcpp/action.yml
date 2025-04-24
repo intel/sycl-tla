@@ -57,10 +57,10 @@ runs:
         echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo apt update
         sudo apt install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp libze-intel-gpu1 libze1 intel-opencl-icd clinfo libze-dev intel-ocloc
-        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.10.8/intel-igc-core-2_2.10.8+18926_amd64.deb
-        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.10.8/intel-igc-opencl-2_2.10.8+18926_amd64.deb
-        sudo dpkg -i --force-all intel-igc-core-2_2.10.8+18926_amd64.deb
-        sudo dpkg -i --force-all intel-igc-opencl-2_2.10.8+18926_amd64.deb
+        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.5.6/intel-igc-core-2_2.5.6+18417_amd64.deb
+        wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.5.6/intel-igc-opencl-2_2.5.6+18417_amd64.deb
+        sudo dpkg -i --force-all intel-igc-core-2_2.5.6+18417_amd64.deb
+        sudo dpkg -i --force-all intel-igc-opencl-2_2.5.6+18417_amd64.deb
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh
