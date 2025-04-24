@@ -264,9 +264,10 @@ public:
       const int kv_splits = ceil_div(seq_len_kv, get<1>(TileShapeQK{}));
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, batch_coord);
-
+    // TODO(Mehdi) the 32 is the maximum row we can commit. This block need to get fixed via passing correct block number to read
+      static constexpr auto QK_BLK_N_prefetch =  32 * 4 * PV_ATOM_N;   
       auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_q);
-      auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_K>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k);
+      auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_N_prefetch>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k);
       auto tiled_prefetch_v = cute::prefetch_selector<Shape<Int<PV_BLK_N>, Int<PV_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_v);
       auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
       auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
@@ -281,7 +282,7 @@ public:
       }
 
       CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < 1 + (QK_BLK_N / QK_BLK_K); i++) {
+      for (int i = 0; i < QK_BLK_N / QK_BLK_N_prefetch ; i++) {
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < size<4>(pKgK); j++) {
           prefetch(tiled_prefetch_k, pKgK(_, _, _, i, j));
@@ -327,10 +328,10 @@ public:
           prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + split * PV_ATOM_M));
 
           CollectiveSoftmaxEpilogue softmax(params.softmax);
-          softmax(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
+          softmax. template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
 
           CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i < QK_BLK_N / QK_BLK_K; i++) {
+          for (int i = 0; i <  QK_BLK_N / QK_BLK_N_prefetch; i++) {
             CUTLASS_PRAGMA_UNROLL
             for (int j = 0; j < size<4>(pKgK); j++) {
               prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split + 1) * (1 + QK_BLK_N / QK_BLK_K), j));
@@ -389,7 +390,7 @@ public:
           // for some subgroups would result in a stall.
           Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
           CollectiveSoftmaxEpilogue softmax(params.softmax);
-          softmax(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
+          softmax. template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
 
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < QK_BLK_N / QK_BLK_K; i++) {
