@@ -314,6 +314,7 @@ using PvcGemmBF16BF16FP32_RCR_6_silu = cutlass::gemm::device::GemmConfiguration<
             float, float, float, float,
             cutlass::FloatRoundStyle::round_to_nearest>>;
 
+// TODO(codeplay): Re-enable these once there is general support for epilogues
 // using PvcGemmBF16BF16FP32_RCR_Linear = cutlass::gemm::device::GemmConfiguration<
 //         cutlass::arch::IntelPVC,
 //         cutlass::bfloat16_t, cutlass::layout::RowMajor,
