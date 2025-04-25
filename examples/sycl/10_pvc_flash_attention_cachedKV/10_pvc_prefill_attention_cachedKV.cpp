@@ -33,7 +33,7 @@
 
     This example constructs and executes a Flash Attention Prefill with KV cache on Intel PVC. The
     definition of the GEMM, options etc for this example are defined in the associated
-    pvc_flash_attn_runner.hpp header file.
+    pvc_flash_attn_cachedKV_runner.hpp header file.
 
     See https://arxiv.org/pdf/2307.08691 for details of Flash Attention V2 algorithm
 
@@ -51,7 +51,7 @@
     Call with `--help` for information about available options
 */
 
-#include "pvc_flash_attn_kv_cache_runner.hpp"
+#include "pvc_flash_attn_cachedKV_runner.hpp"
 
 int main(int argc, const char **argv) {
   //
