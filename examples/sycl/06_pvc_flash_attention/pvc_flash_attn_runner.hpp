@@ -532,8 +532,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
       syclcompat::wait();
 
       double effective_seq_len_kv = options.is_causal ?
-        (options.seq_len_kv + options.seq_len_kv_cache) / 2.0 :
-        (options.seq_len_kv + options.seq_len_kv_cache);
+        options.seq_len_kv / 2.0 :
+        options.seq_len_kv;
       
       double cute_time = timer.seconds() / options.iterations;
       double flops_qk = 2.0 * options.batch * options.num_heads_q * options.seq_len_qo * effective_seq_len_kv * options.head_size_qk;
