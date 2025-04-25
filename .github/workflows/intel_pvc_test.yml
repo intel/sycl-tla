@@ -27,7 +27,7 @@ jobs:
 #        compiler: [ NIGHTLY, RELEASE ]
         compiler: [ NIGHTLY ]
     name: Run Intel PVC tests
-    runs-on: idc-xlarge
+    runs-on: idc-gpu-6xlarge
     timeout-minutes: 30
 
     steps:

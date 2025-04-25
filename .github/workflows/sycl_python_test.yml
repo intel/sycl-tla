@@ -25,7 +25,7 @@ jobs:
     # strategy:
     #   matrix:
     #     compiler: [ NIGHTLY, RELEASE ]
-    runs-on: idc-xlarge
+    runs-on: idc-gpu-6xlarge
     timeout-minutes: 60
 
     steps:
