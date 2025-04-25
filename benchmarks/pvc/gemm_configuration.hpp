@@ -100,9 +100,15 @@ struct GemmConfiguration<
 
   // Epilogue
   using EpilogueDispatchPolicy = epilogue::IntelPVCEpilogue;
-  using FusionCallBacks = epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
-          decltype(tile_shape(TiledMma()))>;
 
+  // TODO(codeplay): Refactor this following Testbed3x approach. See benchmark_runner.hpp
+  using FusionCallBacks = std::conditional_t<
+      EpilogueOp::IsAuxInSupported, // ~Is mul_add
+      epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
+                                        decltype(tile_shape(TiledMma())), XE_2D_U32x8x16_LD_N>,
+      epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
+                                        decltype(tile_shape(TiledMma()))>>;
+  
   using CollectiveEpilogue = epilogue::collective::CollectiveEpilogue<
         EpilogueDispatchPolicy,
         TileShape,
