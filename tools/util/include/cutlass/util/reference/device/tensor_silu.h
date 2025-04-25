@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,8 +28,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+
 /* \file
-  \brief Defines device-side epilogue operations on TensorView. Note, the operations defined
+  \brief Defines device-side elementwise operations on TensorView. Note, the operations defined
     in this header are not specialized for any particular data layout and are therefore not
     intended to offer the best possible performance. Rather, they are intended to be generic
     reference implementations to support the CUTLASS unit tests.
@@ -56,115 +57,30 @@ namespace detail {
 
 template <
   typename Element,               ///< Element type
-  typename Layout,                ///< Layout function
-  typename ElementBias,           ///< Bias element type
-  typename LayoutBias>            ///< Bias layout function
-struct TensorPerRowBiasFunc {
+  typename Layout>                ///< Layout function
+struct TensorSiLuFunc {
 
   /// View type
-  using TensorViewD = TensorView<Element, Layout>;
-  using BiasView = TensorView<ElementBias, LayoutBias>;
+  using TensorView = TensorView<Element, Layout>;
 
   /// Coordinate in tensor's index space
-  using TensorCoord = typename TensorViewD::TensorCoord;
+  using TensorCoord = typename TensorView::TensorCoord;
 
   /// Parameters structure
   struct Params {
-
-    //
-    // Data members
-    //
-
-    TensorViewD view;
-    BiasView bias_view;
-
-
-    //
-    // Methods
-    //
-
-    Params(
-      TensorViewD view_ = TensorViewD(),
-      BiasView bias_view_ = BiasView()
-    ):
-      view(view_), bias_view{bias_view_} { }
+    TensorView view;
+    Params(TensorView view_ = TensorView()): view(view_) {}
   };
-
-  //
-  // Data members
-  //
 
   Params params;
 
-  //
-  // Methods
-  //
-
   CUTLASS_DEVICE
-  TensorPerRowBiasFunc(Params const &params): params(params) { }
+  TensorSiLuFunc(Params const &params): params(params) {}
 
   CUTLASS_DEVICE
   void operator()(TensorCoord const &coord) {
     Element const & value = params.view.at(coord);
-    TensorCoord bias_coord = cutlass::make_Coord(coord.row(), 0);
-    params.view.at(coord) = value + params.bias_view.at(bias_coord);
-  }
-};
-
-template <
-  typename Element,               ///< Element type
-  typename Layout,                ///< Layout function
-  typename ElementBias,           ///< Bias element type
-  typename LayoutBias>            ///< Bias layout function
-struct TensorPerColBiasFunc {
-
-  /// View type
-  using TensorViewD = TensorView<Element, Layout>;
-  using BiasView = TensorView<ElementBias, LayoutBias>;
-
-  /// Coordinate in tensor's index space
-  using TensorCoord = typename TensorViewD::TensorCoord;
-
-  /// Parameters structure
-  struct Params {
-
-    //
-    // Data members
-    //
-
-    TensorViewD view;
-    BiasView bias_view;
-
-
-    //
-    // Methods
-    //
-
-    Params(
-      TensorViewD view_ = TensorViewD(),
-      BiasView bias_view_ = BiasView()
-    ):
-      view(view_), bias_view{bias_view_} { }
-  };
-
-  //
-  // Data members
-  //
-
-  Params params;
-
-  //
-  // Methods
-  //
-
-  CUTLASS_DEVICE
-  TensorPerColBiasFunc(Params const &params): params(params) { }
-
-  CUTLASS_DEVICE
-  void operator()(TensorCoord const &coord) {
-    Element const & value = params.view.at(coord);
-    TensorCoord bias_coord = cutlass::make_Coord(0, coord.column());
-    params.view.at(coord) = value + params.bias_view.at(bias_coord);
+    params.view.at(coord) = value * sycl::native::recip(Element(1) + fast_exp(-value));
   }
 };
 
@@ -172,46 +88,26 @@ struct TensorPerColBiasFunc {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Apply PerRowBias on a tensor
+/// Apply SiLu on a tensor
 template <
   typename Element,               ///< Element type
-  typename Layout,                ///< Layout function
-  typename ElementBias,
-  typename LayoutBias>
-void TensorPerRowBias(
-  TensorView<Element, Layout> view,       ///< destination tensor
-  TensorView<ElementBias, LayoutBias> bias_view) {         ///< bias tensor 
-  
-  using Func = detail::TensorPerRowBiasFunc<Element, Layout, ElementBias, LayoutBias>;
+  typename Layout>                ///< Layout function
+void TensorSiLu(
+  TensorView<Element, Layout> view) {       ///< destination tensor
+
+  using Func = detail::TensorSiLuFunc<Element, Layout>;
   using Params = typename Func::Params;
 
   TensorForEach<Func, Layout::kRank, Params>(
     view.extent(),
-    Params(view, bias_view)
+    Params(view)
   );
 }
 
-/// Apply PerColBias on a tensor
-template <
-  typename Element,               ///< Element type
-  typename Layout,                ///< Layout function
-  typename ElementBias,
-  typename LayoutBias>
-void TensorPerColBias(
-  TensorView<Element, Layout> view,       ///< destination tensor
-  TensorView<ElementBias, LayoutBias> bias_view) {         ///< bias tensor 
-  
-  using Func = detail::TensorPerColBiasFunc<Element, Layout, ElementBias, LayoutBias>;
-  using Params = typename Func::Params;
-
-  TensorForEach<Func, Layout::kRank, Params>(
-    view.extent(),
-    Params(view, bias_view)
-  );
-}
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace device
 } // namespace reference
 } // namespace cutlass
+
