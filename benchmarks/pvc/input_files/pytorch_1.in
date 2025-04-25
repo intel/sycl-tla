@@ -31,8 +31,8 @@ PvcGemmBF16BF16FP32_RCR_6 --m=1 --k=4096 --n=28672
 PvcGemmBF16BF16FP32_RCR_6 --m=8 --k=4096 --n=28672
 
 # mm_add 1,8 14336 4096
-# --m=1 --k=14336 --n=4096
-# --m=8 --k=14336 --n=4096
+PvcGemmBF16BF16FP32_RCR_6 --m=1 --k=14336 --n=4096 --beta=1
+PvcGemmBF16BF16FP32_RCR_6 --m=8 --k=14336 --n=4096 --beta=1
 
 # lmhead_mm 1,8 4096 128256
 PvcGemmBF16BF16FP32_RCR_6 --m=1 --k=4096 --n=128256
