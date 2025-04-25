@@ -541,7 +541,7 @@ struct NumericConverter<cutlass::bfloat16_t, float, FloatRoundStyle::round_to_ne
   static result_type convert(source_type const & s) {
     #ifdef __SYCL_DEVICE_ONLY__
     // Temporary patch to avoid linking in the devicelib fallback unconditionally.
-    // Thisis the work around to fix performance regression in 2025.1 
+    // This is the work around to fix performance regression in 2025.1 
     result_type res;
     res.storage=(__spirv_ConvertFToBF16INTEL(s));
     return res;
