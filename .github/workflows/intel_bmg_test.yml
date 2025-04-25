@@ -23,7 +23,9 @@ jobs:
   run-tests:
     strategy:
       matrix:
-        compiler: [ NIGHTLY, RELEASE ]
+        # Disable the release check due to an issue with IGC versions 2.7 to 2.10.8.
+        #        compiler: [ NIGHTLY, RELEASE ]
+        compiler: [ NIGHTLY ]
     name: Run Intel BMG tests
     runs-on: cp-b580-gpu
     timeout-minutes: 30

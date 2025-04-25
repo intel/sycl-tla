@@ -19,7 +19,7 @@ runs:
       if: inputs.DPCPP_RELEASE == 'NIGHTLY'
       shell: bash
       run: |
-        sudo apt update && sudo apt install -y intel-opencl-icd g++
+        sudo apt update && sudo apt install -y intel-opencl-icd ocl-icd-opencl-dev g++
         dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         export DPCPP_PATH=${{ inputs.DPCPP_PATH }}
         mkdir -p $DPCPP_PATH
@@ -45,23 +45,22 @@ runs:
         export CC=$DPCPP_PATH/bin/clang
         export CXX=$DPCPP_PATH/bin/clang++
         EOF
-# Disable the release check becasue and issue with IGC 2.7 - 2.10.8
-#    - name: Install DPCPP
-#      if: inputs.DPCPP_RELEASE == 'RELEASE'
-#      shell: bash
-#      run: |
-#        wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-#        sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-#        rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-#        echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
-#        sudo apt update
-#        sudo apt install -y --allow-downgrades intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc libze-dev
-#        . /opt/intel/oneapi/setvars.sh
-#        cat <<EOF | tee setvars.sh
-#        . /opt/intel/oneapi/setvars.sh
-#        export CC=icx
-#        export CXX=icpx
-#        export C_INCLUDE_PATH=$CMPLR_ROOT/include:$C_INCLUDE_PATH
-#        export CPLUS_INCLUDE_PATH=$CMPLR_ROOT/include:$CPLUS_INCLUDE_PATH
-#        export LD_LIBRARY_PATH=$CMPLR_ROOT/lib:$LD_LIBRARY_PATH
-#        EOF
+    - name: Install DPCPP
+      if: inputs.DPCPP_RELEASE == 'RELEASE'
+      shell: bash
+      run: |
+        wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+        sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+        rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+        echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+        sudo apt update
+        sudo apt install -y --allow-downgrades intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc libze-dev
+        . /opt/intel/oneapi/setvars.sh
+        cat <<EOF | tee setvars.sh
+        . /opt/intel/oneapi/setvars.sh
+        export CC=icx
+        export CXX=icpx
+        export C_INCLUDE_PATH=$CMPLR_ROOT/include:$C_INCLUDE_PATH
+        export CPLUS_INCLUDE_PATH=$CMPLR_ROOT/include:$CPLUS_INCLUDE_PATH
+        export LD_LIBRARY_PATH=$CMPLR_ROOT/lib:$LD_LIBRARY_PATH
+        EOF
