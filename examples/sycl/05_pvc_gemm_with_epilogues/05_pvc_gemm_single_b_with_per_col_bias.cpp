@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,44 +28,40 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-
 /*! \file
-    \brief GEMM + Binary Activation Function using CUTLASS 3 APIs for Intel PVC architecture.
+    \brief CUTLASS Intel PVC Gemm with per-col-bias epilogue (aka Linear layer)
 
-    This example demonstates an implementation of GEMM + element-wise binary activation function,
-    with an auxiliary tensor. Aside from the epilogue operation, it is identical to 00_pvc_gemm.
+    This example constructs and executes a standard GEMM (with ColumnMajor B) fused with a
+    per-col-bias epilogue. Batch size is also treated differently in this example: when a batch size
+    is defined by e.g. `--l=16`, this defines the number of A matrices. A single B (weights) matrix
+    is used for the whole batch. Note the use of `LayoutA` but `StrideB`, as we need to communicate
+    the 'batch broadcast' stride (_0).
 
     CUTLASS 3.x epilogues are implemented using the Epilogue Visitor Tree design pattern, and
     typically combine 'Linear Combination' (i.e. `D = alpha * A*B + beta * C`) with an additional
     epilogue operation.
 
-    In this case, an element-wise binary activation function is applied:
+    In this case, a col-wise bias value is added:
 
-    // Z = Aux
-    // dY = alpha * (A*B) + beta * C
-    // D = d_activation(dY, Z)
+    // D = alpha * (A*B) + beta * C + bias
 
-    The auxiliary vector is created as a 2-D tensor of size MxN. 1-D auxiliary tensors are not yet
-    supported. The input values are randomized and the results are verified against a reference
-    implementation.
+    This implies loading auxiliary data (containing the bias values) of shape M*L (each col shares a
+    single bias value)
 
     To build & run this example (from your build dir):
 
-      $ ninja 05_pvc_gemm_with_epilogue_lincombdeeltact
-      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_epilogue_lincombdeeltact
+      $ ninja 05_pvc_gemm_with_per_col_bias
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_per_col_bias
 
     Call with `--help` for information about available options
 */
-
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
-#include "cutlass/epilogue/thread/activation.h"
 #include "cutlass/gemm/device/gemm_universal.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/collective/collective_mma.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
-#include "cutlass/epilogue/collective/collective_builder.hpp"
 
 #include <cute/tensor.hpp>
 #include <random>
@@ -75,7 +71,7 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "cutlass/util/reference/device/tensor_relu.h"
+#include "cutlass/util/reference/device/tensor_epilogue.h"
 #include "cutlass/tensor_view.h"
 #include "cutlass/coord.h"
 
@@ -86,8 +82,6 @@ using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-enum class Activation { Sum, Mult };
-
 // Command line options parsing
 struct Options {
 
@@ -96,14 +90,12 @@ struct Options {
 
   int m, n, k, l, iterations;
   float alpha, beta;
-  Activation activation;
 
   Options():
     help(false),
     error(false),
     m(5120), n(4096), k(4096), l(1), iterations(100),
-    alpha(1.f), beta(0.f),
-    activation(Activation::Sum)
+    alpha(1.f), beta(0.f)
   { }
 
   // Parses the command line
@@ -122,22 +114,12 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
-    std::string activation_str = "sum";
-    cmd.get_cmd_line_argument("activation", activation_str);
-    if (activation_str == "sum") {
-      activation = Activation::Sum;
-    } else if (activation_str == "mult") {
-      activation = Activation::Mult;
-    } else {
-      std::cerr << "invalid activation. Choose \"sum\" or \"mult\".\n";
-      std::exit(1);
-    }
   }
 
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "PVC GEMM + Epilogue LinCombDeEltAct Example\n\n"
+    out << "PVC GEMM with Per Col Bias Example\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
@@ -146,8 +128,7 @@ struct Options {
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
-      << "  --iterations=<int>          Iterations\n\n"
-      << "  --activation=[sum|mult]     Elementwise Binary Activation Function\n\n";
+      << "  --iterations=<int>          Iterations\n\n";
 
     return out;
   }
@@ -155,25 +136,8 @@ struct Options {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <typename T>
-struct sum_vals {
-  CUTLASS_HOST_DEVICE
-  T operator()(T a, T b) const {
-    return a + b;
-  }
-};
-
-template <typename T>
-struct diff_vals {
-  CUTLASS_HOST_DEVICE
-  T operator()(T a, T b) const {
-    return a - b;
-  }
-};
-
 template <
-  class Gemm,
-  template <class> class ActivationFn
+  class Gemm
 >
 struct ExampleRunner {
 
@@ -183,9 +147,12 @@ struct ExampleRunner {
   using StrideD = typename Gemm::GemmKernel::StrideD;
 
   using LayoutA = typename Gemm::LayoutA;
+  // Gemm::LayoutB is `ColumnMajor` which drops the _0 batch stride, but due to the implementation
+  // of cutlass::TensorRef, this isn't an issue for our verification.
   using LayoutB = typename Gemm::LayoutB;
   using LayoutC = typename Gemm::LayoutC;
   using LayoutD = typename Gemm::LayoutD;
+  using LayoutBias = cutlass::layout::ColumnMajor;
 
   using ElementA = typename Gemm::ElementA;
   using ElementB = typename Gemm::ElementB;
@@ -196,7 +163,7 @@ struct ExampleRunner {
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
-
+  using ElementBias = typename CollectiveEpilogue::ThreadEpilogueOp::ElementBias;
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
   //
@@ -214,9 +181,8 @@ struct ExampleRunner {
   cutlass::DeviceAllocation<ElementB> block_B;
   cutlass::DeviceAllocation<ElementC> block_C;
   cutlass::DeviceAllocation<ElementOutput> block_D;
-  cutlass::DeviceAllocation<ElementOutput> block_Aux;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
-
+  cutlass::DeviceAllocation<ElementBias> block_bias;
   //
   // Methods
   //
@@ -228,7 +194,6 @@ struct ExampleRunner {
     cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
     cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
     cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
-    cutlass::TensorRef ref_Aux(block_Aux.get(), LayoutD::packed({M, N}));
 
     cutlass::reference::device::GemmComplex(
           {M, N, K},
@@ -242,18 +207,31 @@ struct ExampleRunner {
           ref_D,
           ElementAccumulator(0),
           L,     // batch_count
-          M * K, // batch_stride_A
-          K * N, // batch_stride_B
-          M * N, // batch_stride_C
-          M * N  // batch_stride_D
+          get<2>(stride_A), // batch_stride_A
+          get<2>(stride_B), // batch_stride_B
+          get<2>(stride_C), // batch_stride_C
+          get<2>(stride_D)  // batch_stride_D
         );
 
-    cutlass::reference::device::BlockElementwiseOp<ActivationFn>(
-      block_ref_D.get(), block_ref_D.get(), block_Aux.get(), block_D.size());
+    syclcompat::wait();
+
+    for(int batch = 0, offset = 0; batch < L; batch++, offset += M * N) {
+      auto D_view = 
+          cutlass::TensorView(
+          block_ref_D.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N));
+
+      auto bias_view =
+          cutlass::TensorView(
+          block_bias.get() + batch * N, LayoutBias::packed({1, N}), cutlass::make_Coord(1, N));
+
+      cutlass::reference::device::TensorPerColBias(D_view, bias_view);
+    }
+
+    syclcompat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareEqual(
-      block_ref_D.get(), block_D.get(), block_D.size());
+        block_ref_D.get(), block_D.get(), block_D.size());
 
     return passed;
   }
@@ -268,17 +246,17 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
-    block_Aux.reset(M * N * L);
+    block_A.reset(cute::cosize(make_layout(cute::make_shape(M, K, L), stride_A)));
+    block_B.reset(cute::cosize(make_layout(cute::make_shape(N, K, L), stride_B)));
+    block_C.reset(cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C)));
+    block_D.reset(cute::cosize(make_layout(cute::make_shape(M, N, L), stride_D)));
+    block_ref_D.reset(cute::cosize(make_layout(cute::make_shape(M, N, L), stride_D)));
+    block_bias.reset(N * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
-    initialize_block(block_Aux, seed + 2020);
+    initialize_block(block_bias, seed + 2020);
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -286,19 +264,27 @@ struct ExampleRunner {
 
     initialize(problem_size);
 
+    using StrideBias = Stride<_0, _1, int64_t>;
+    StrideBias dBias = {};
+
+    if(options.l > 1) {
+      cute::get<2>(dBias) = static_cast<int64_t>(options.n);
+    } else {
+      cute::get<2>(dBias) = static_cast<int64_t>(0);
+    }
+
     using EpilogueArguments = typename Gemm::GemmKernel::EpilogueArguments;
     EpilogueArguments epilogue_arguments{
       {options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D};
-    epilogue_arguments.thread.aux_ptr = block_Aux.get();
-    epilogue_arguments.thread.dAux = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
+    epilogue_arguments.thread.bias_ptr = block_bias.get();
+    epilogue_arguments.thread.dBias = dBias; 
 
     typename Gemm::GemmKernel::Arguments arguments{
-      cutlass::gemm::GemmUniversalMode::kGemm,            // mode
-      problem_size,                                       // problem_shape
-      {block_A.get(), stride_A, block_B.get(), stride_B}, // mainloop
-      epilogue_arguments,                                 // epilogue
-      hw_info                                             // hw_info
-                                                          // scheduler
+      cutlass::gemm::GemmUniversalMode::kGemm,
+      problem_size,
+      {block_A.get(), stride_A, block_B.get(), stride_B},
+      epilogue_arguments,
+      hw_info
     };
 
     Gemm gemm_op;
@@ -306,10 +292,7 @@ struct ExampleRunner {
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
-      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      std::exit(1);
-    }
+    CUTLASS_CHECK(gemm_op.can_implement(arguments))
 
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 
@@ -322,7 +305,7 @@ struct ExampleRunner {
     bool passed = verify(problem_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+    if (!passed) return cutlass::Status::kErrorInternal;
 
     if (options.iterations > 0) {
       GPU_Clock timer;
@@ -337,94 +320,10 @@ struct ExampleRunner {
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
       printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
     }
-
     return cutlass::Status::kSuccess;
   }
-
 };
 
-// The code section below describes datatype for input, output matrices and computation between
-// elements in input matrices.
-using ElementAccumulator = float;     // <- data type of accumulator
-using ElementComputeEpilogue = float; // <- data type of epilogue operations
-using ElementAux = float;             // <- data type of epilogue operations
-using ElementInputA = bfloat16_t;     // <- data type of elements in input matrix A
-using ElementInputB = bfloat16_t;     // <- data type of elements in input matrix B
-using ElementOutput = float;          // <- data type of elements in output matrix D
-
-using LayoutA = cutlass::layout::RowMajor;
-using LayoutB = cutlass::layout::RowMajor;
-using LayoutC = cutlass::layout::RowMajor;
-using LayoutD = cutlass::layout::RowMajor;
-
-using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
-
-// Workgroup-level tile
-using TileShape = Shape<_256, _256, _32>;
-
-using TiledMma =
-    typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                  Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
-
-constexpr int PipelineStages = 2;
-using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
-
-using CopyOpG2R = XE_2D_U32x8x16_LD_N;
-template <template <class> class ActivationFn>
-using EpilogueOp = cutlass::epilogue::fusion::LinCombDeEltAct<
-    LayoutC,
-    ActivationFn,
-    ElementOutput,
-    ElementComputeEpilogue>;
-
-using EpilogueTile = decltype(take<0,2>(TileShape{}));
-
-template <template <class> class ActivationFn>
-using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-        EpilogueDispatchPolicy,
-        EpilogueOp<ActivationFn>,
-        TileShape,
-        EpilogueTile,
-        CopyOpG2R
-        >;
-
-template <template <class> class ActivationFn>
-using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-        EpilogueDispatchPolicy,                 // IntelPVCEpilogue
-        TileShape,                              // CtaTileMNK
-        ElementAccumulator,                     // ElementC
-        cutlass::gemm::TagToStrideC_t<LayoutC>, // StrideC
-        ElementOutput,                          // ElementD
-        cutlass::gemm::TagToStrideC_t<LayoutD>, // StrideD
-        FusionCallBacks<ActivationFn>,          // FusionCallBacks
-        CopyOpG2R,                              // CopyOpG2R
-        void,                                   // SmemLayoutAtomC
-        void,                                   // CopyOpS2R
-        XE_2D_U32x8x16_ST_N,                    // CopyOpR2G
-        void,                                   // SmemLayoutAtomD
-        void>;                                  // CopyOpR2S
-
-// Mainloop
-using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
-        GEMMDispatchPolicy,
-        TileShape,
-        ElementInputA,
-        cutlass::gemm::TagToStrideA_t<LayoutA>,
-        ElementInputB,
-        cutlass::gemm::TagToStrideB_t<LayoutB>,
-        TiledMma,
-        GmemTiledCopyA, void, void, cute::identity,  // A
-        GmemTiledCopyB, void, void, cute::identity   // B
->;
-
-template <template <class> class ActivationFn>
-using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-  Shape<int, int, int, int>,
-  CollectiveMainloop,
-  CollectiveEpilogue<ActivationFn>
->;
 int main(int argc, const char** argv)
 {
   //
@@ -459,17 +358,72 @@ int main(int argc, const char** argv)
 
   bool passed;
 
+  // The code section below describes datatype for input, output matrices and computation between
+  // elements in input matrices.
+  using ElementAccumulator = float;         // <- data type of accumulator
+  using ElementComputeEpilogue = float;     // <- data type of epilogue operations
+  using ElementBias = float;                // <- data type of bias
+  using ElementInputA = bfloat16_t;         // <- data type of elements in input matrix A
+  using ElementInputB = bfloat16_t;         // <- data type of elements in input matrix B
+  using ElementOutput = float;              // <- data type of elements in output matrix D
 
-  if (options.activation == Activation::Sum){
-    using SumGemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel<sum_vals>>;
-    ExampleRunner<SumGemm, sum_vals> runner;
-    CUTLASS_CHECK(runner.run(options, hw_info));
-  } else {
-    assert(options.activation == Activation::Mult);
-    using MultGemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel<cutlass::multiplies>>;
-    ExampleRunner<MultGemm, cutlass::multiplies> runner;
-    CUTLASS_CHECK(runner.run(options, hw_info));
-  }
+  using LayoutA = cutlass::layout::RowMajor;
+  using StrideB = cute::Stride<int64_t, _1, _0>; // Stride for batch is _0 (re-use the same B matrix)
+  using LayoutC = cutlass::layout::RowMajor;
+  using LayoutD = cutlass::layout::RowMajor;
+
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
+
+  // Workgroup-level tile
+  using TileShape = Shape<_256, _256, _32>;
+
+  using TiledMma =
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+
+  constexpr int PipelineStages = 2;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+
+  using EpilogueOp = cutlass::epilogue::fusion::LinCombPerColBias<
+      ElementOutput, ElementComputeEpilogue, ElementBias, ElementAccumulator,
+      ElementAccumulator, 128 / sizeof_bits_v<ElementBias>,
+      cutlass::FloatRoundStyle::round_to_nearest>;
+
+  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
+      EpilogueDispatchPolicy, EpilogueOp, TileShape,
+      decltype(tile_shape(TiledMma()))>;
+  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
+      EpilogueDispatchPolicy, TileShape, ElementAccumulator,
+      cutlass::gemm::TagToStrideC_t<LayoutC>, ElementOutput,
+      cutlass::gemm::TagToStrideC_t<LayoutD>, FusionCallBacks,
+      XE_2D_U32x8x16_LD_N, void, void, XE_2D_U32x8x16_ST_N, void, void>;
+
+  // Mainloop
+  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
+          GEMMDispatchPolicy,
+          TileShape,
+          ElementInputA,
+          cutlass::gemm::TagToStrideA_t<LayoutA>,
+          ElementInputB,
+          StrideB,
+          TiledMma,
+          GmemTiledCopyA, void, void, cute::identity,  // A
+          GmemTiledCopyB, void, void, cute::identity   // B
+  >;
+
+  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
+  Shape<int, int, int, int>,
+  CollectiveMainloop,
+  CollectiveEpilogue
+  >;
+
+  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+
+  ExampleRunner<Gemm> runner;
+
+  CUTLASS_CHECK(runner.run(options, hw_info));
 
   return 0;
 }
