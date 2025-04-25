@@ -1,3 +1,4 @@
+# Benchmarks with --seq_len_kv=77 are disabled as they are not supported by 2d block loads
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096   --batch=1 --num_heads_q=8  --num_heads_kv=8  --head_size_qk=40 --head_size_vo=40
 #PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=77   --batch=1 --num_heads_q=8  --num_heads_kv=8  --head_size_qk=40 --head_size_vo=40
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024   --batch=1 --num_heads_q=8  --num_heads_kv=8  --head_size_qk=80 --head_size_vo=80
