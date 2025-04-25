@@ -23,7 +23,7 @@ jobs:
   run-tests:
     strategy:
       matrix:
-        #Disable the release check becasue and issue with IGC 2.7 - 2.10.8
+# Disable the release check due to an issue with IGC versions 2.7 to 2.10.8.
 #        compiler: [ NIGHTLY, RELEASE ]
         compiler: [ NIGHTLY ]
     name: Run Intel PVC tests
