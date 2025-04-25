@@ -368,7 +368,7 @@ public:
         auto& prefetch_k_selector = sel_prefetch_k ? tiled_prefetch_k_cache: tiled_prefetch_k;
         auto& pKgK_ = sel_prefetch_k  ? pKgK_cache : pKgK;
         CUTLASS_PRAGMA_UNROLL
-        for (int j = 0; j < size<4>(pKgK); j++) {
+        for (int j = 0; j < size<4>(pKgK_); j++) {
               prefetch(prefetch_k_selector, pKgK_(_, _, _, (nblock + DispatchPolicy::Stages) - (!sel_prefetch_k) * nblock_cache , j));         
         }
         barrier_wait(barrier_scope);
