@@ -176,8 +176,6 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     XE_Copy_V gmem_tiled_copy_v;
     XE_Copy_K gmem_tiled_copy_k_cache;
     XE_Copy_V gmem_tiled_copy_v_cache;
-    TensorK gmem_tensor_k_cache;
-    TensorV gmem_tensor_v_cache;
   };
 
   //
@@ -204,7 +202,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
     XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
 
-    return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache, tensorK_cache, tensorV_cache};
+    return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache};
   }
 
   template <class FragQccum, class TensorQ, class TensorK, class FragSrc>
@@ -379,7 +377,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
       XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
       XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
 
-      return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache, tensorK_cache, tensorV_cache};
+      return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache};
     }
   }
 };

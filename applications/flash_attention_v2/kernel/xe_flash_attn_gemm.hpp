@@ -289,6 +289,8 @@ public:
       auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_q);
       auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_N>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k);
       auto tiled_prefetch_v = cute::prefetch_selector<Shape<Int<PV_BLK_N>, Int<PV_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_v);
+      auto tiled_prefetch_k_cache = cute::prefetch_selector<Shape<Int<QK_BLK_N>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k_cache);
+      auto tiled_prefetch_v_cache = cute::prefetch_selector<Shape<Int<PV_BLK_N>, Int<PV_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_v_cache);
       auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
       auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
       auto thr_prefetch_V = tiled_prefetch_v.get_slice(thread_idx);
@@ -298,18 +300,18 @@ public:
       // assuming the copy function is the same otherwise this need to have its own tile_prefetch
       auto pKgK_cache = thr_prefetch_K.partition_S(gK_cache);
       auto pVgV_cache = thr_prefetch_V.partition_S(gV_cache);
-      using Pefetch_K = decltype(tiled_prefetch_k);
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < size<3>(pQgQ); i++) {
         prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
       }
-      Pefetch_K prefetch_K = (seq_len_kv_cache == 0) ? tiled_prefetch_k: Pefetch_K{tiled_prefetch_k.with(mainloop_params.gmem_tensor_k_cache)};
+      auto& prefetch_K = (seq_len_kv_cache == 0) ? tiled_prefetch_k: tiled_prefetch_k_cache;
+      auto& pKgK1_ = (seq_len_kv_cache == 0) ? pKgK: pKgK_cache;
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < DispatchPolicy::Stages; i++) {
        // The headsize for both cached and non-cached version is the same
         CUTLASS_PRAGMA_UNROLL
-        for (int j = 0; j < size<4>(pKgK); j++) {
-          prefetch(prefetch_K, pKgK(_, _, _ , i, j));
+        for (int j = 0; j < size<4>(pKgK1_); j++) {
+          prefetch(prefetch_K, pKgK1_(_, _, _ , i, j));
         }
       }
 
@@ -349,7 +351,7 @@ public:
 
         // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
         // prefetching it the same way as cutlass K matrix does not make sense
-        is_KV_cache ? prefetch(tiled_prefetch_v.with(mainloop_params.gmem_tensor_v_cache), pVgV_cache(_, _, _ , nblock))
+        is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV_cache(_, _, _ , nblock))
                       : prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock - nblock_cache));
 
         // 4) Fused softmax
@@ -361,10 +363,13 @@ public:
         
         // Prefetch the next K tile
         // there is no need to gaurd it with if statememt as prefetch will ignore out of bound reading
-        prefetch_K = (nblock + DispatchPolicy::Stages < nblock_cache) ? Pefetch_K{tiled_prefetch_k.with(mainloop_params.gmem_tensor_k_cache)}: tiled_prefetch_k;
+       
+        bool sel_prefetch_k = (nblock + DispatchPolicy::Stages) < nblock_cache;
+        auto& prefetch_k_selector = sel_prefetch_k ? tiled_prefetch_k_cache: tiled_prefetch_k;
+        auto& pKgK_ = sel_prefetch_k  ? pKgK_cache : pKgK;
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < size<4>(pKgK); j++) {
-         prefetch(prefetch_K, pKgK_cache(_, _, _, nblock + DispatchPolicy::Stages, j));
+              prefetch(prefetch_k_selector, pKgK_(_, _, _, (nblock + DispatchPolicy::Stages) - (!sel_prefetch_k) * nblock_cache , j));         
         }
         barrier_wait(barrier_scope);
       }
