@@ -229,7 +229,7 @@ public:
       }
 
       // Indexing variables
-      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = problem_shape;
+      auto [batch, num_heads_q, seq_len_qo, head_size_vo] = select<0, 1, 3, 7>(problem_shape);
       // Represent the full output tensor
       Tensor mO_mnl = cute::get_pvc_tensor(make_shape(seq_len_qo, head_size_vo, (is_var_len ? batch : 1) * num_heads_q));
       
@@ -253,7 +253,7 @@ public:
     if constexpr (!VarLen) {
       return params;
     } else {
-      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = problem_shape;
+      auto [batch, num_heads_q, seq_len_qo, head_size_vo] = select<0, 1, 3, 7>(problem_shape);
 
       auto qo_cumulative_length = get<3>(problem_shape).cumulative_length;
       int offset_o = num_heads_q * head_size_vo * qo_cumulative_length[l_coord];

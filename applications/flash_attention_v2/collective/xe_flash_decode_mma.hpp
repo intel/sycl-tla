@@ -47,11 +47,11 @@ using namespace cute;
 
 template <typename To_type, typename Engine, typename Layout>
 CUTLASS_DEVICE auto convert_type(Tensor<Engine, Layout> const &tensor) {
-    using From_type = typename Engine::value_type;
-    constexpr int numel = decltype(size(tensor))::value;
-    cutlass::NumericArrayConverter<To_type, From_type, numel> convert_op;
-    auto frag = convert_op(*reinterpret_cast<const cutlass::Array<From_type, numel> *>(tensor.data()));
-    return make_tensor(make_rmem_ptr<To_type>(&frag), tensor.layout());
+  using From_type = typename Engine::value_type;
+  constexpr int numel = decltype(size(tensor))::value;
+  cutlass::NumericArrayConverter<To_type, From_type, numel> convert_op;
+  auto frag = convert_op(*reinterpret_cast<const cutlass::Array<From_type, numel> *>(tensor.data()));
+  return make_tensor(make_rmem_ptr<To_type>(&frag), tensor.layout());
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -111,8 +111,8 @@ struct FlashDecodeMma<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileSha
   using Q_Atom_Shape = decltype(Shape<_1, Int<PV_ATOM_M>, _1>{});
   using Q_Atom_Stride = decltype(Stride<_1, Int<PV_ATOM_N>, _1>{});
 
-  // This TiledMma is only required to serve the specific tiling requirements for matrix Q.
-  // This is due to the consumption of matrix Q by all subgroups within a workgroup.
+  // This TiledMma is required to serve the specific tiling requirements for QK GEMM.
+  // This is due to the consumption of the same part of matrix Q by all subgroups within a workgroup.
   using TiledMmaQ = typename TiledMMAHelper<typename TiledMmaQVO::Atom, 
                                             Layout<TileShapeQK>,
                                             Layout<Q_Atom_Shape, Q_Atom_Stride>>::TiledMMA;
