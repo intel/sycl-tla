@@ -1,4 +1,4 @@
-name: "SYCL Intel PVC Test"
+name: "SYCL Intel BMG Test"
 
 on:
   push:
@@ -23,11 +23,11 @@ jobs:
   run-tests:
     strategy:
       matrix:
-# Disable the release check due to an issue with IGC versions 2.7 to 2.10.8.
-#        compiler: [ NIGHTLY, RELEASE ]
+        # Disable the release check due to an issue with IGC versions 2.7 to 2.10.8.
+        #        compiler: [ NIGHTLY, RELEASE ]
         compiler: [ NIGHTLY ]
-    name: Run Intel PVC tests
-    runs-on: cp-gpumax-1100-gpu
+    name: Run Intel BMG tests
+    runs-on: cp-b580-gpu
     timeout-minutes: 30
 
     steps:
@@ -54,7 +54,7 @@ jobs:
         run: |
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
-            -DDPCPP_SYCL_TARGET=intel_gpu_pvc
+            -DDPCPP_SYCL_TARGET=intel_gpu_bmg_g21
           cmake --build .
 
       - name: Unit test
