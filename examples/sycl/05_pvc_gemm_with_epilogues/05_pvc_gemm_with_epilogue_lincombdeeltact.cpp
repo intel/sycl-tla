@@ -367,9 +367,9 @@ using TiledMma =
     typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
                                   Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
-  constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeDPAS16<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeDPAS16;
+constexpr int PipelineStages = 2;
+using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeDPAS16<PipelineStages>;
+using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeDPAS16;
 
 using CopyOpG2R = XE_2D_U32x8x16_LD_N;
 template <template <class> class ActivationFn>
