@@ -172,8 +172,8 @@ struct BenchmarkRunnerGemm {
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
   using FusionOp = typename Gemm::EpilogueOutputOp;
-  static_assert(cute::is_base_of_v<cutlass::epilogue::fusion::FusionOperation, FusionOp>);
 
+  // TODO(codeplay): Epilogue detection here should be replaced w/ general solution (see other TODO)
   using FusionSilu = cutlass::epilogue::fusion::LinCombEltAct<
       cutlass::epilogue::thread::SiLu, ElementOutput, ElementCompute, ElementAccumulator,
       ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
@@ -184,10 +184,23 @@ struct BenchmarkRunnerGemm {
       ElementOutput, ElementCompute, ElementAccumulator, ElementAccumulator,
       FloatRoundStyle::round_to_nearest>;
 
+  // Epilogue used in ampere/gemm_configuration.hpp
+  using DefaultEpilogue = epilogue::collective::DefaultEpilogue<
+    float,
+    cutlass::gemm::TagToStrideC_t<LayoutC>,
+    cutlass::gemm::TagToStrideC_t<LayoutC>,
+    epilogue::thread::LinearCombination<float, 1>,
+    cutlass::gemm::EpilogueDefault>;
+
   static constexpr bool epi_is_deeltactmul = std::is_same_v<FusionOp, FusionDeEltMul>;
   static constexpr bool epi_is_silu = std::is_same_v<FusionOp, FusionSilu>;
   static constexpr bool epi_is_lincomb = std::is_same_v<FusionOp, FusionLinComb>;
-  static_assert(epi_is_deeltactmul || epi_is_silu || epi_is_lincomb, "Failed to determine benchmark epilogue");
+  static constexpr bool epi_is_default = std::is_same_v<CollectiveEpilogue, DefaultEpilogue>;
+  static_assert(cute::is_base_of_v<cutlass::epilogue::fusion::FusionOperation, FusionOp> ||
+                    epi_is_default,
+                "Failed to determine benchmark epilogue");
+  static_assert(epi_is_default || epi_is_deeltactmul || epi_is_silu || epi_is_lincomb,
+                "Failed to determine benchmark epilogue");
 
   int32_t count;
 
