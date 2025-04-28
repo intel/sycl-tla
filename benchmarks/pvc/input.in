@@ -16,9 +16,8 @@ PvcGemmBF16BF16FP32_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=4096 --k=1
 PvcGemmBF16BF16FP32_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=8192 --k=16384 --n=4096
 PvcGemmBF16BF16FP32_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=1024 --k=16384 --n=8192
 PvcGemmBF16BF16FP32_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=8192 --k=16384 --n=1024
-# TODO(Codeplay): these are broken
-# PvcGemmBF16BF16FP32_RRR_128x256x16 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=128 --n=16384
-# PvcGemmBF16BF16FP32_RRR_8x128x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=16384 --n=128
+PvcGemmBF16BF16FP32_RRR_128x256x16 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=128 --n=16384
+PvcGemmBF16BF16FP32_RRR_8x128x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=16384 --n=128
 PvcGemmBF16BF16FP32_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4 --m=32768 --k=128 --n=4096
 PvcGemmBF16BF16FP32_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4 --m=32768 --k=4096 --n=128
 PvcGemmBF16BF16FP32_RRR_256x128x32 --bm_name=bf16_bf16_fp32 --l=32 --m=4096 --k=4096 --n=128
@@ -37,8 +36,8 @@ PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=40
 PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=8192 --k=16384 --n=4096
 PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=1024 --k=16384 --n=8192
 PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=8192 --k=16384 --n=1024
-# PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=128 --n=16384
-# PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=16384 --n=128
+PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=128 --n=16384
+PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=16384 --n=128
 PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4 --m=32768 --k=128 --n=4096
 PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4 --m=32768 --k=4096 --n=128
 PvcGemmBF16BF16FP32_StreamK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=32 --m=4096 --k=4096 --n=128
@@ -54,25 +53,25 @@ PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=409
 PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=8192 --k=16384 --n=4096
 PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=1024 --k=16384 --n=8192
 PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=1 --m=8192 --k=16384 --n=1024
-# PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=128 --n=16384
-# PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=16384 --n=128
+PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=128 --n=16384
+PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4096 --m=8 --k=16384 --n=128
 PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4 --m=32768 --k=128 --n=4096
 PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=4 --m=32768 --k=4096 --n=128
 PvcGemmBF16BF16FP32_SplitK_RRR_256x256x32 --bm_name=bf16_bf16_fp32 --l=32 --m=4096 --k=4096 --n=128
 
 # FMHA BFloat16 benchmarks
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=32 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=64 --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=32 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
@@ -95,24 +94,24 @@ PvcFMHABF16BF16FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_l
 PvcFMHABF16BF16FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
 PvcFMHABF16BF16FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
 
-PvcFMHABF16BF16FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
-PvcFMHABF16BF16FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+PvcFMHABF16BF16FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
+PvcFMHABF16BF16FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
 
 PvcFMHABF16BF16FP32_RCR_h192_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=16 --num_heads_q=128 --num_heads_kv=128   --head_size_vo=192 --head_size_qk=192
 PvcFMHABF16BF16FP32_RCR_h192_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=16 --num_heads_q=128 --num_heads_kv=128   --head_size_vo=192 --head_size_qk=192
 
 PvcFMHABF16BF16FP32_RCR_h64_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64 --head_size_vo=64
-PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64  --head_size_vo=64 
+PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=32 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=64 --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=32 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=64  --head_size_vo=64
 PvcFMHABF16BF16FP32_RCR_h64_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
@@ -135,8 +134,8 @@ PvcFMHABF16BF16FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len
 PvcFMHABF16BF16FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
 PvcFMHABF16BF16FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
 
-PvcFMHABF16BF16FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
-PvcFMHABF16BF16FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+PvcFMHABF16BF16FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
+PvcFMHABF16BF16FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
 
 
 
@@ -145,17 +144,17 @@ PvcFMHABF16BF16FP32_RCR_h192_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len
 
 # FMHA FP16 benchmarks
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=32 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=64 --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=32 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
@@ -178,33 +177,33 @@ PvcFMHAFP16FP16FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_l
 PvcFMHAFP16FP16FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
 PvcFMHAFP16FP16FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
 
-PvcFMHAFP16FP16FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
-PvcFMHAFP16FP16FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+PvcFMHAFP16FP16FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
+PvcFMHAFP16FP16FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
 
 PvcFMHAFP16FP16FP32_RCR_h192_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=16 --num_heads_q=128 --num_heads_kv=128   --head_size_vo=192 --head_size_qk=192
 PvcFMHAFP16FP16FP32_RCR_h192_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=16 --num_heads_q=128 --num_heads_kv=128   --head_size_vo=192 --head_size_qk=192
 
-PvcFMHAFP16FP16FP32_RCR_h192_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
-PvcFMHAFP16FP16FP32_RCR_h192_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+PvcFMHAFP16FP16FP32_RCR_h192_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
+PvcFMHAFP16FP16FP32_RCR_h192_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=32  --num_heads_kv=32  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=4  --num_heads_q=48  --num_heads_kv=48  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=32 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=32 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64 --head_size_vo=64
-PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64  --head_size_vo=64 
+PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=32 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=32 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=64 --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=32 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=64  --head_size_vo=64
 PvcFMHAFP16FP16FP32_RCR_h64_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
 PvcFMHAFP16FP16FP32_RCR_h64_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
 
-PvcFMHAFP16FP16FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
-PvcFMHAFP16FP16FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+PvcFMHAFP16FP16FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
+PvcFMHAFP16FP16FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128
 
 PvcFMHAFP16FP16FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
 PvcFMHAFP16FP16FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
