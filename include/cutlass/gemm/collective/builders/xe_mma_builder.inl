@@ -165,7 +165,7 @@ struct CollectiveBuilder<
       using TiledMma =
           typename TiledMMAHelper<MMAAtom,
                                   Layout<TileShape_MNK>,
-                                  Layout<Shape<sgs_M, sgs_N, _1>, Stride<sgs_N, _1, _0>>>::TiledMMA;
+                                  Layout<Shape<atoms_M, atoms_N, _1>, Stride<atoms_N, _1, _0>>>::TiledMMA;
 
       static constexpr bool IsGroup = cute::is_same_v<KernelScheduleType, KernelPVCPtrArrayCooperative>;
 
