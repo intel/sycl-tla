@@ -68,7 +68,7 @@ struct DualGemmMma<MainloopIntelXeDPAS16<Stages, Schedule>, TileShape_, ElementA
   using GmemTiledCopyB = GmemTiledCopyB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
 
-  static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopIntelXe requires that A and B have same type.");
+  static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopIntelXeDPAS16 requires that A and B have same type.");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 

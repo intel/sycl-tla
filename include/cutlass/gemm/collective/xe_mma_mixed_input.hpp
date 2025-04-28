@@ -142,7 +142,7 @@ public:
 
   static_assert(!cute::is_same_v<ElementA, ElementB>, "Mixed precision GEMM requires different types for A and B!");
   static_assert(std::is_same_v<LargerElementType, MmaType>,
-               "MainloopIntelXeMixedPrecision has the restriction that mixed dtype always converts the "
+               "MainloopIntelXeDPAS16MixedPrecision has the restriction that mixed dtype always converts the "
                "narrower input type to the larger one and performs GEMM using the DPAS for the larger input type.");
 
   static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");

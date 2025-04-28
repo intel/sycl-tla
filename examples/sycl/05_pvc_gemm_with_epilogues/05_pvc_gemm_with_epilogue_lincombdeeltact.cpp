@@ -392,7 +392,7 @@ using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
 
 template <template <class> class ActivationFn>
 using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-        EpilogueDispatchPolicy,                 // IntelXeEpilogue
+        EpilogueDispatchPolicy,                 // IntelXeDPAS16
         TileShape,                              // CtaTileMNK
         ElementAccumulator,                     // ElementC
         cutlass::gemm::TagToStrideC_t<LayoutC>, // StrideC
