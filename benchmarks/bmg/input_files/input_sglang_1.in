@@ -1,6 +1,5 @@
-# Benchmarks for required shapes for first Pytorch release
+# Benchmarks for required shapes for first SGLang release
 
-# TODO(codeplay): Confirm that these are the right layout for what's required
 # q_mm 1,8 4096 4096
 PvcGemmBF16BF16FP32_RCR_6 --bm_name=q_mm --m=1 --k=4096 --n=4096
 PvcGemmBF16BF16FP32_RCR_6 --bm_name=q_mm --m=8 --k=4096 --n=4096
