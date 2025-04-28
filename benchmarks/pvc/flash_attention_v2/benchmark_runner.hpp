@@ -535,7 +535,7 @@ template <class FMHAConfiguration> struct BenchmarkRunnerFMHA {
     extra_label << "layoutV=RowMajor ";
 
     state.SetLabel(extra_label.str());
-    // when num_qk is not equal to num-kv we use buttom up approach for the masiking. 
+    // when seq_len_qo is not equal to seq_len_kv we use bottom up approach for the masking. 
     // Following changes will adjust the effective_seq_len_kv when masking applied for such cases. 
     auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
     auto discard_seq_coord = options.seq_len_qo - offset;
