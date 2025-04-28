@@ -184,7 +184,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
   //
 
   bool verify(ProblemShapeType problem_size, bool is_causal, bool use_kv_cache) {
-    
+
     if constexpr (isVarLen) {
       int max_seq_len_q = static_cast<int>(get<3>(problem_size));
       int max_seq_len_kv = static_cast<int>(get<4>(problem_size));
@@ -212,11 +212,11 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
         auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(problem_size, b);
         seq_len_qo = get<3>(logical_problem_shape);
         seq_len_kv = get<4>(logical_problem_shape);
-	seq_len_kv_cache = get<5>(logical_problem_shape);
+	      seq_len_kv_cache = get<5>(logical_problem_shape);
       } else {
         seq_len_qo = get<3>(problem_size);
         seq_len_kv = get<4>(problem_size);
-	seq_len_kv_cache = get<5>(problem_size);
+	      seq_len_kv_cache = get<5>(problem_size);
       }
 
       int seq_len_kv_total = seq_len_kv_cache + seq_len_kv;
@@ -609,14 +609,14 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
       double cute_time = timer.seconds() / options.iterations;
       auto full_tile_offset = options.seq_len_kv - options.seq_len_qo;
-      auto effective_seq_len_kv = options.is_causal ? full_tile_offset + (options.seq_len_kv / 2.0) : options.seq_len_kv;
+      auto effective_seq_len_kv = options.is_causal ?  options.seq_len_kv_cache + full_tile_offset + options.seq_len_kv / 2.0 : options.seq_len_kv + options.seq_len_kv_cache;
 
       double flops_qk = 2.0 * options.batch * options.num_heads_q * options.seq_len_qo * effective_seq_len_kv * options.head_size_qk;
       double flops_pv = 2.0 * options.batch * options.num_heads_q * options.seq_len_qo * options.head_size_vo * effective_seq_len_kv;
       double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
-      double gbps_qk = 2.0 * options.batch * options.num_heads_q * (options.seq_len_qo * options.head_size_qk + (effective_seq_len_kv + options.seq_len_kv_cache) * options.head_size_qk);
-      double gbps_pv = 2.0 * options.batch * options.num_heads_q * ((effective_seq_len_kv + options.seq_len_kv_cache) * options.seq_len_qo + (effective_seq_len_kv + options.seq_len_kv_cache) * options.head_size_vo);
-      double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
+      double gbps_qk = 2.0 * options.batch * options.num_heads_q * (options.seq_len_qo * options.head_size_qk + effective_seq_len_kv * options.head_size_qk);
+      double gbps_pv = 2.0 * options.batch * options.num_heads_q * (options.seq_len_qo + effective_seq_len_kv) * options.head_size_vo;
+      double gbps = ((gbps_qk + gbps_pv) * 1e-9) / (cute_time);
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q << "\tNumHeads_kv: " << options.num_heads_kv << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tSeq Length KV Cache: " << options.seq_len_kv_cache << "\tHead Size QK: " << options.head_size_qk
                 << "\tHead Size VO: " << options.head_size_vo << "\tCausal Mask: " << (options.is_causal ? "true" : "false")
