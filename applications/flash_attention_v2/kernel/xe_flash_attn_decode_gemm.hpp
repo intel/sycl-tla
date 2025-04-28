@@ -269,9 +269,18 @@ public:
       const int kv_splits = kv_splits_new + kv_splits_cache;
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, batch_coord);
-      // TODO(Codeplay): the 32 is the maximum row we can commit. This block need to get fixed via passing correct block number to read
-      static constexpr auto QK_BLK_N_prefetch =  32 * 4 * PV_ATOM_N;   
-      auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_q);
+      // For Decode, QK_BLK_M is set to 1 MMA Atom worth of data (in our case 8), this is because seq_len_qo == 1.
+      // So we need to perform atleast 1 MMA op to calculate the output properly. The size required for prefetching
+      // Q is small (8 x QK_BLK_K), which leads to the use of a smaller size Prefetch Atom that throws a runtime error on
+      // the device. Doing redundant prefetch for Q removes the runtime error.
+      // TODO (Codeplay): Investigate the runtime error and execution stall for smaller prefetch size.
+      auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M * PV_ATOM_M>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_q);
+      // QK_BLK_N is set such that we get SubgroupTileShapeQK = 8x64x64. This requires QK_BLK_N == 64 * PV_ATOM_M so we can
+      // distribute seq_len_kv across multiple subgroups within a workgroup using SplitK decomposition. Passing QK_BLK_N directly
+      // to prefetch_selector results in runtime error (example size QK_BLK_N=512). So we pass a feasible size to prefetch_selector
+      // and loop over the rest to load the whole QK_BLK_N x QK_BLK_K chunk of data.
+      // TODO(Codeplay): (QK_SG_N * PV_ATOM_M) / 4 is the maximum row we can commit. This block need to get fixed via passing correct block number to read
+      static constexpr auto QK_BLK_N_prefetch =  (QK_SG_N * PV_ATOM_M) >> 2;
       auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_N_prefetch>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k);
       auto tiled_prefetch_v = cute::prefetch_selector<Shape<Int<PV_BLK_N>, Int<PV_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_v);
 
@@ -321,7 +330,6 @@ public:
       if constexpr (!CausalMask) {
         CUTLASS_PRAGMA_NO_UNROLL
         for(int split = 0; split < kv_splits; split++) {
-          barrier_arrive(barrier_scope);
 
           Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
           
@@ -344,16 +352,6 @@ public:
           CollectiveSoftmaxEpilogue softmax(params.softmax);
           softmax.template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
 
-          CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i <  QK_BLK_N / QK_BLK_N_prefetch; i++) {
-            // The headsize for both cached and non-cached version is the same
-            CUTLASS_PRAGMA_UNROLL
-            for (int j = 0; j < size<4>(pKgK); j++) {
-              is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, i + (split + 1) * (QK_BLK_N / QK_BLK_K), j))
-                          : prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split + 1 - kv_splits_cache) * (QK_BLK_N / QK_BLK_K), j));
-            }
-          }
-
           auto gV_ = is_KV_cache ? gV(_, _, kv_tile_idx + split * PV_ATOM_M)
                                  : gV(_, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M);
 
@@ -366,21 +364,30 @@ public:
             prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
           }
 
-          barrier_wait(barrier_scope);
+          CUTLASS_PRAGMA_UNROLL
+          for (int i = 0; i <  QK_BLK_N / QK_BLK_N_prefetch; i++) {
+            // The headsize for both cached and non-cached version is the same
+            CUTLASS_PRAGMA_UNROLL
+            for (int j = 0; j < size<4>(pKgK); j++) {
+              is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, i + split * (QK_BLK_N / QK_BLK_N_prefetch), j))
+                          : prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split - kv_splits_cache) * (QK_BLK_N / QK_BLK_N_prefetch), j));
+            }
+          }
         }
       } else {
 
         CUTLASS_PRAGMA_NO_UNROLL
         for(int split = 0; split < kv_splits; split++) {
-          barrier_arrive(barrier_scope);
+
+          Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
+
+          bool is_KV_cache = split < kv_splits_cache;
+          auto gK_ = is_KV_cache ? gK(_, _, split, _) : gK(_, _, split - kv_splits_cache, _);
 
           // 1) Load K (performed inside mmaQK)
           // 2) Create Tensor S
           Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
           clear(tSr);
-
-          bool is_KV_cache = split < kv_splits_cache;
-          auto gK_ = is_KV_cache ? gK(_, _, split, _) : gK(_, _, split - kv_splits_cache, _);
 
           // 3) Perform GEMM S = Q*K
           collective_mma.mmaQK(tSr, gQ, gK_, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, is_KV_cache);
@@ -407,22 +414,8 @@ public:
           is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV(_, _, _, kv_tile_idx + split * PV_ATOM_M))
                       : prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M));
 
-          // Softmax needs to happen for invalid subgroups as well
-          // because it has a barrier. Skipping Softmax computation
-          // for some subgroups would result in a stall.
-          Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
           CollectiveSoftmaxEpilogue softmax(params.softmax);
           softmax.template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
-
-          CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i <  QK_BLK_N / QK_BLK_N_prefetch; i++) {
-            // The headsize for both cached and non-cached version is the same
-            CUTLASS_PRAGMA_UNROLL
-            for (int j = 0; j < size<4>(pKgK); j++) {
-              is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, i + (split + 1) * (QK_BLK_N / QK_BLK_K), j))
-                          : prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split + 1 - kv_splits_cache) * (QK_BLK_N / QK_BLK_K), j));
-            }
-          }
 
           auto gV_ = is_KV_cache ? gV(_, _, kv_tile_idx + split * PV_ATOM_M)
                                  : gV(_, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M);
@@ -435,7 +428,15 @@ public:
             prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
           }
 
-          barrier_wait(barrier_scope);
+          CUTLASS_PRAGMA_UNROLL
+          for (int i = 0; i <  QK_BLK_N / QK_BLK_N_prefetch; i++) {
+            // The headsize for both cached and non-cached version is the same
+            CUTLASS_PRAGMA_UNROLL
+            for (int j = 0; j < size<4>(pKgK); j++) {
+              is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, i + split * (QK_BLK_N / QK_BLK_N_prefetch), j))
+                          : prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split - kv_splits_cache) * (QK_BLK_N / QK_BLK_N_prefetch), j));
+            }
+          }
         }
       }
 
