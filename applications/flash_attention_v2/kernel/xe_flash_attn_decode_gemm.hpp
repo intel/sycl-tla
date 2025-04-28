@@ -327,117 +327,72 @@ public:
 
       auto smem = syclcompat::local_mem<ElementAccumulator[(((Vec * get<0>(FragsShapePV{}) * get<1>(FragsShapePV{})) + 1) * Num_SGs * SubgroupSize)]>();
 
-      if constexpr (!CausalMask) {
-        CUTLASS_PRAGMA_NO_UNROLL
-        for(int split = 0; split < kv_splits; split++) {
+      CUTLASS_PRAGMA_UNROLL
+      for(int split = 0; split < kv_splits - CausalMask; split++) {
 
-          Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
-          
-          bool is_KV_cache = split < kv_splits_cache;
-          auto gK_ = is_KV_cache ? gK(_, _, split, _) : gK(_, _, split - kv_splits_cache, _);
+        Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
 
-          // 1) Load K (performed inside mmaQK)
-          // 2) Create Tensor S
-          Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
-          clear(tSr);
+        bool is_KV_cache = split < kv_splits_cache;
+        auto gK_ = is_KV_cache ? gK(_, _, split, _) : gK(_, _, split - kv_splits_cache, _);
 
-          // 3) Perform GEMM S = Q*K
-          collective_mma.mmaQK(tSr, gQ, gK_, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, is_KV_cache);
+        // 1) Load K (performed inside mmaQK)
+        // 2) Create Tensor S
+        Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
+        clear(tSr);
 
-          // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
-          // prefetching it the same way as cutlass K matrix does not make sense
-          is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV(_, _, _, kv_tile_idx + split * PV_ATOM_M))
-                      : prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M));
+        // 3) Perform GEMM S = Q*K
+        collective_mma.mmaQK(tSr, gQ, gK_, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, is_KV_cache);
 
-          CollectiveSoftmaxEpilogue softmax(params.softmax);
-          softmax.template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
+        // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
+        // prefetching it the same way as cutlass K matrix does not make sense
+        is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV(_, _, _, kv_tile_idx + split * PV_ATOM_M))
+                    : prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M));
 
-          auto gV_ = is_KV_cache ? gV(_, _, kv_tile_idx + split * PV_ATOM_M)
-                                 : gV(_, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M);
+        CollectiveSoftmaxEpilogue softmax(params.softmax);
+        softmax.template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
 
-          collective_mma.mmaPV(out_reg, tSr, gV_, out_reg, mainloop_params, is_KV_cache);
+        auto gV_ = is_KV_cache ? gV(_, _, kv_tile_idx + split * PV_ATOM_M)
+                                : gV(_, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M);
 
-          // Prefetch the next Q tile
-          // there is no need to guard it with if statememt as prefetch will ignore out of bound reading
+        collective_mma.mmaPV(out_reg, tSr, gV_, out_reg, mainloop_params, is_KV_cache);
+
+        // Prefetch the next Q tile
+        // there is no need to guard it with if statememt as prefetch will ignore out of bound reading
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < size<3>(pQgQ); i++) {
+          prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
+        }
+
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i <  QK_BLK_N / QK_BLK_N_prefetch; i++) {
+          // The headsize for both cached and non-cached version is the same
           CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i < size<3>(pQgQ); i++) {
-            prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
-          }
-
-          CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i <  QK_BLK_N / QK_BLK_N_prefetch; i++) {
-            // The headsize for both cached and non-cached version is the same
-            CUTLASS_PRAGMA_UNROLL
-            for (int j = 0; j < size<4>(pKgK); j++) {
-              is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, i + split * (QK_BLK_N / QK_BLK_N_prefetch), j))
-                          : prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split - kv_splits_cache) * (QK_BLK_N / QK_BLK_N_prefetch), j));
-            }
+          for (int j = 0; j < size<4>(pKgK); j++) {
+            is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, i + split * (QK_BLK_N / QK_BLK_N_prefetch), j))
+                        : prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split - kv_splits_cache) * (QK_BLK_N / QK_BLK_N_prefetch), j));
           }
         }
-      } else {
+      }
 
-        CUTLASS_PRAGMA_NO_UNROLL
-        for(int split = 0; split < kv_splits; split++) {
+      if constexpr (CausalMask) {
+        Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
 
-          Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
+        // 1) Load K (performed inside mmaQK)
+        // 2) Create Tensor S
+        Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
+        clear(tSr);
 
-          bool is_KV_cache = split < kv_splits_cache;
-          auto gK_ = is_KV_cache ? gK(_, _, split, _) : gK(_, _, split - kv_splits_cache, _);
+        // 3) Perform GEMM S = Q*K
+        collective_mma.mmaQK(tSr, gQ, gK(_, _, kv_splits - 1 - kv_splits_cache, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, false);
 
-          // 1) Load K (performed inside mmaQK)
-          // 2) Create Tensor S
-          Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
-          clear(tSr);
+        // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
+        // prefetching it the same way as cutlass K matrix does not make sense
+        prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + (kv_splits - 1 - kv_splits_cache) * PV_ATOM_M));
 
-          // 3) Perform GEMM S = Q*K
-          collective_mma.mmaQK(tSr, gQ, gK_, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, is_KV_cache);
+        CollectiveSoftmaxEpilogue softmax(params.softmax);
+        softmax.template operator()<Num_SGs>((kv_splits - 1 - kv_splits_cache) == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
 
-          if(kv_tile_idx == PV_ATOM_M - 1 && split == kv_splits - 1) {
-            int column_offset = seq_len_kv - seq_len_qo + seq_len_kv_cache;
-            int col_idx = (kv_tile_idx + split * PV_ATOM_M) * QK_SG_N + thread_idx % SubgroupSize;
-            CUTLASS_PRAGMA_UNROLL
-            for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
-              CUTLASS_PRAGMA_UNROLL
-              for (int m = 0; m < FragsM; m++) { // 2
-                int row_idx = m * Vec + blk_q_coord * QK_SG_M; // Use Vec based on seq_len_qo
-                CUTLASS_PRAGMA_UNROLL
-                for (int row = 0; row < Vec; row++, row_idx++) { // Set this bound based on seq_len_qo
-                  if (col_idx - column_offset > row_idx)
-                    tSr(row, m, n) = -INFINITY;
-                }
-              }
-            }
-          }
-
-          // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
-          // prefetching it the same way as cutlass K matrix does not make sense
-          is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV(_, _, _, kv_tile_idx + split * PV_ATOM_M))
-                      : prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M));
-
-          CollectiveSoftmaxEpilogue softmax(params.softmax);
-          softmax.template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
-
-          auto gV_ = is_KV_cache ? gV(_, _, kv_tile_idx + split * PV_ATOM_M)
-                                 : gV(_, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M);
-
-          collective_mma.mmaPV(out_reg, tSr, gV_, out_reg, mainloop_params, is_KV_cache);
-          // Prefetch the next Q tile
-          // there is no need to guard it with if statememt as prefetch will ignore out of bound reading
-          CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i < size<3>(pQgQ); i++) {
-            prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
-          }
-
-          CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i <  QK_BLK_N / QK_BLK_N_prefetch; i++) {
-            // The headsize for both cached and non-cached version is the same
-            CUTLASS_PRAGMA_UNROLL
-            for (int j = 0; j < size<4>(pKgK); j++) {
-              is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, i + split * (QK_BLK_N / QK_BLK_N_prefetch), j))
-                          : prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split - kv_splits_cache) * (QK_BLK_N / QK_BLK_N_prefetch), j));
-            }
-          }
-        }
+        collective_mma.mmaPV(out_reg, tSr, gV(_, _, kv_tile_idx + (kv_splits - 1 - kv_splits_cache) * PV_ATOM_M), out_reg, mainloop_params, false);
       }
 
       Tensor shmem_out_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<(Vec * get<0>(FragsShapePV{}) * get<1>(FragsShapePV{})) * SubgroupSize * Num_SGs>{}));
