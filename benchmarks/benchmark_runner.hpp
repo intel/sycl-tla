@@ -434,18 +434,20 @@ private:
   static void initialize_counters(::benchmark::State& state) {
     state.counters["avg_runtime_ms"] = 0;
     state.counters["best_runtime_ms"] = std::numeric_limits<double>::max();
+    state.counters["worst_runtime_ms"] = -std::numeric_limits<double>::max();
   }
 
   static void update_counters(::benchmark::State& state, double ms_elapsed) {
     state.PauseTiming();
     state.counters["total_runtime_ms"] += ms_elapsed;
     state.counters["best_runtime_ms"] = std::min<double>(state.counters["best_runtime_ms"], ms_elapsed);
+    state.counters["worst_runtime_ms"] = std::max<double>(state.counters["worst_runtime_ms"], ms_elapsed);
     state.ResumeTiming();
   }
 
   static void finalize_counters(::benchmark::State& state,  double gflop, double mega_bytes_transferred) {
     state.counters["avg_runtime_ms"] =
-      state.counters["total_runtime_ms"] / static_cast<double>(state.iterations());
+      (state.counters["total_runtime_ms"] -state.counters["best_runtime_ms"] - state.counters["worst_runtime_ms"] ) / static_cast<double>(state.iterations() - 2);
     state.counters["avg_tflops"] = gflop / state.counters["avg_runtime_ms"];
     state.counters["avg_throughput"] = mega_bytes_transferred / state.counters["avg_runtime_ms"];
     state.counters["best_tflop"] = gflop / state.counters["best_runtime_ms"];

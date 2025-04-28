@@ -143,7 +143,7 @@ struct GemmConfiguration<
     } else {
       static_assert(TileScheduler == Scheduler::GemmSplitK);
       typename GemmKernel::Arguments arguments{};
-      arguments.scheduler = {1, StreamKMode::SplitK};
+      arguments.scheduler = {2, StreamKMode::SplitK};
       return arguments;
     }
   }
