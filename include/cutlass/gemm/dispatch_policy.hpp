@@ -964,8 +964,12 @@ struct MainloopSm100ArrayTmaUmmaWarpSpecializedFastF32 {
 
 
 #if defined(SYCL_INTEL_TARGET)
+
+// Specialization of the GEMM mainloop for Intel Xe architectures.
+// This version is tuned for operations using DPAS instructions with a subgroup size of 16.
+// Suitable for use with Intel Battlemage (Xe2) and PVC (Xe) architectures.
 template<int Stages_, class KernelSchedule = KernelXe>
-struct MainloopIntelXe {
+struct MainloopIntelXeDPAS16 {
   constexpr static int Stages = Stages_;
   constexpr static int SubgroupSize = 16;
   using ArchTag = arch::IntelXe;
@@ -974,21 +978,11 @@ struct MainloopIntelXe {
 };
 
 template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
-struct MainloopIntelXeGroup {
-  constexpr static int Stages = Stages_;
-  constexpr static int SubgroupSize = 16;
-  using ArchTag = arch::IntelXe;
-  using Schedule = KernelScheduler;
-  using ClusterShape = Shape<_1,_1,_1>;
+struct MainloopIntelXeDPAS16Group : MainloopIntelXeDPAS16<Stages_, KernelScheduler> {
 };
 
 template<int Stages_>
-struct MainloopIntelXeMixedPrecision {
-  constexpr static int Stages = Stages_;
-  constexpr static int SubgroupSize = 16;
-  using ArchTag = arch::IntelXe;
-  using Schedule = KernelXe;
-  using ClusterShape = Shape<_1,_1,_1>;
+struct MainloopIntelXeDPAS16MixedPrecision : MainloopIntelXeDPAS16<Stages_> {
 };
 
 template<int Stages_, class KernelSchedule = KernelXe>

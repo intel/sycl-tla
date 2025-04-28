@@ -61,10 +61,10 @@ void group_reduce_sum_partial(STensor &stensor, RTensor &vec, OutTensor &out) {
   auto sg_local_id = sg.get_local_id()[0];
 
   auto slm_base = stensor(_, _, sg_group_id / SgN);
-  static constexpr auto step = SgN / IntelXeEpilogue::SubgroupSize;
+  static constexpr auto step = SgN / IntelXeDPAS16::SubgroupSize;
   static constexpr auto n_step = row / SgN;
 
-  if constexpr (row < IntelXeEpilogue::SubgroupSize) {
+  if constexpr (row < IntelXeDPAS16::SubgroupSize) {
     if (sg_local_id < row) {
       slm_base(sg_local_id, sg_group_id_n) = vec(sg_local_id);
     }
@@ -79,7 +79,7 @@ void group_reduce_sum_partial(STensor &stensor, RTensor &vec, OutTensor &out) {
   sycl::group_barrier(group);
 
   Tensor s_slice = make_tensor(static_cast<decltype(slm_base) &&>(slm_base).data(), 
-                        make_shape(Int<n_step>{}, Int<SgN>{}, Int<step>{}, Int<IntelXeEpilogue::SubgroupSize>{}));
+                        make_shape(Int<n_step>{}, Int<SgN>{}, Int<step>{}, Int<IntelXeDPAS16::SubgroupSize>{}));
   
   if constexpr (SgN <= row) {
     auto local_vec = s_slice(_, sg_group_id_n, _, sg_local_id);
@@ -139,10 +139,10 @@ void group_reduce_max_partial(STensor &stensor, RTensor &vec, OutTensor &out) {
   auto sg_local_id = sg.get_local_id()[0];
 
   auto slm_base = stensor(_, _, sg_group_id / SgN);
-  static constexpr auto step = SgN / IntelXeEpilogue::SubgroupSize;
+  static constexpr auto step = SgN / IntelXeDPAS16::SubgroupSize;
   static constexpr auto n_step = row / SgN;
 
-  if constexpr (row < IntelXeEpilogue::SubgroupSize) {
+  if constexpr (row < IntelXeDPAS16::SubgroupSize) {
     if (sg_local_id < row) {
       slm_base(sg_local_id, sg_group_id_n) = vec(sg_local_id);
     }
@@ -157,7 +157,7 @@ void group_reduce_max_partial(STensor &stensor, RTensor &vec, OutTensor &out) {
   sycl::group_barrier(group);
 
   Tensor s_slice = make_tensor(static_cast<decltype(slm_base) &&>(slm_base).data(), 
-                        make_shape(Int<n_step>{}, Int<SgN>{}, Int<step>{}, Int<IntelXeEpilogue::SubgroupSize>{}));
+                        make_shape(Int<n_step>{}, Int<SgN>{}, Int<step>{}, Int<IntelXeDPAS16::SubgroupSize>{}));
 
   if constexpr (SgN <= row) {
     auto local_vec = s_slice(_, sg_group_id_n, _, sg_local_id);
@@ -277,9 +277,9 @@ public:
   using Trait_Output = Copy_Traits<CopyOpR2G>;
   using XE_Copy_output = decltype(make_tiled_copy(Copy_Atom<Trait_Output, ElementOutput>{}
                                              .with(static_cast<ElementOutput const*>(nullptr),int32_t(0), int32_t(0)),
-                                             Layout<Shape<_1, Int<IntelXeEpilogue::SubgroupSize>>>{},
+                                             Layout<Shape<_1, Int<IntelXeDPAS16::SubgroupSize>>>{},
                                              make_layout(make_shape(get<0>(typename Trait_Output::BlockShape{}),
-                                                                    get<1>(typename Trait_Output::BlockShape{}) / Int<IntelXeEpilogue::SubgroupSize>{}))));
+                                                                    get<1>(typename Trait_Output::BlockShape{}) / Int<IntelXeDPAS16::SubgroupSize>{}))));
 
   struct SharedStorage { };
 
@@ -299,9 +299,9 @@ public:
     auto [M, N, K, L] = problem_shape_MNKL;
     XE_Copy_output output = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpR2G>, ElementOutput>{}.with(
                             args.ptr_output, M, N),
-                            Layout<Shape<_1, Int<IntelXeEpilogue::SubgroupSize>>>{},
+                            Layout<Shape<_1, Int<IntelXeDPAS16::SubgroupSize>>>{},
                             make_layout(make_shape(get<0>(typename XE_Copy_output::BlockShape{}),
-                                                   get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelXeEpilogue::SubgroupSize>{})));
+                                                   get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelXeDPAS16::SubgroupSize>{})));
     
     return {output};
   }
@@ -393,7 +393,7 @@ public:
 
       Tensor res =
           make_tensor(static_cast<decltype(res_tensor) &&>(res_tensor).data(),
-                      make_shape(Int<vec_size>{}, Int<vec_folds>{}, Int<Epi_N / IntelXeEpilogue::SubgroupSize>{}));
+                      make_shape(Int<vec_size>{}, Int<vec_folds>{}, Int<Epi_N / IntelXeDPAS16::SubgroupSize>{}));
 
       CUTLASS_PRAGMA_UNROLL
       for (int loop = 0; loop < vec_folds; loop++) {
@@ -401,7 +401,7 @@ public:
         Tensor group_max = make_tensor<float>(make_shape(Int<vec_size>{}));
         group_reduce_max<Sg_N>(stensor, loop_t, group_max);
         CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < Epi_N / IntelXeEpilogue::SubgroupSize; i++) {
+        for (int i = 0; i < Epi_N / IntelXeDPAS16::SubgroupSize; i++) {
           auto element_vec = loop_t(_, i);
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < vec_size; j++) {
@@ -413,7 +413,7 @@ public:
       for (int loop = 0; loop < vec_folds; loop++) {
         auto loop_t = res(_, loop, _);
         CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < Epi_N / IntelXeEpilogue::SubgroupSize; i++) {
+        for (int i = 0; i < Epi_N / IntelXeDPAS16::SubgroupSize; i++) {
           auto exp_vec = loop_t(_, i);
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < vec_size; j++) {
@@ -429,7 +429,7 @@ public:
         group_reduce_sum<Sg_N>(stensor, loop_t, group_sum);
       
         CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < Epi_N / IntelXeEpilogue::SubgroupSize; i++) {
+        for (int i = 0; i < Epi_N / IntelXeDPAS16::SubgroupSize; i++) {
           auto softmax_vec = loop_t(_, i);
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < vec_size; j++) {

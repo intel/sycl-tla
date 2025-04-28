@@ -29,6 +29,7 @@
  *
  **************************************************************************************************/
 #pragma once
+#include "cutlass/gemm/dispatch_policy.hpp"
 
 namespace cutlass {
 namespace flash_attention{
@@ -55,8 +56,8 @@ struct FMHAConfig {
   static constexpr bool VarLen = VarLen_;
   
   static constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXe<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeEpilogue;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeDPAS16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeDPAS16;
 
   using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
   using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;

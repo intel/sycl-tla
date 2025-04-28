@@ -54,12 +54,12 @@ template <class DispatchPolicy, class... Args> class CollectiveEpilogueAttention
 };
 
 template <class CtaTileMNK_, class ElementO_, class StrideO_, class ElementLSE_, class CopyOpO_>
-class CollectiveEpilogueAttention<epilogue::IntelXeEpilogue, CtaTileMNK_, ElementO_, StrideO_, ElementLSE_, CopyOpO_> {
+class CollectiveEpilogueAttention<epilogue::IntelXeDPAS16, CtaTileMNK_, ElementO_, StrideO_, ElementLSE_, CopyOpO_> {
 public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = epilogue::IntelXeEpilogue;
+  using DispatchPolicy = epilogue::IntelXeDPAS16;
   using CtaTileMNK = CtaTileMNK_;
   using ElementO = ElementO_;
   using ElementAccumulator = ElementO_;

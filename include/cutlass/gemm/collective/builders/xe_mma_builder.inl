@@ -176,8 +176,8 @@ struct CollectiveBuilder<
       using KernelSchedule = std::conditional_t<cute::is_same_v<KernelScheduleType, KernelScheduleAuto>, KernelXe, KernelScheduleType>;
       static constexpr int PipelineStages = IsGroup ? 2 : 3;
       using DispatchPolicy = std::conditional_t<IsGroup, 
-                                                cutlass::gemm::MainloopIntelXeGroup<PipelineStages, KernelSchedule>,
-                                                cutlass::gemm::MainloopIntelXe<PipelineStages, KernelSchedule>>;
+                                                cutlass::gemm::MainloopIntelXeDPAS16Group<PipelineStages, KernelSchedule>,
+                                                cutlass::gemm::MainloopIntelXeDPAS16<PipelineStages, KernelSchedule>>;
 
       using GmemTiledCopyA = decltype(select_copy_atom_16b<cute::is_same_v<GmemLayoutATag, cutlass::layout::ColumnMajor>, false>(tile_M/atoms_M{}, tile_K));
       using GmemTiledCopyB = decltype(select_copy_atom_16b<cute::is_same_v<GmemLayoutBTag, cutlass::layout::ColumnMajor>, true>(tile_K, tile_N/atoms_N{}));

@@ -61,7 +61,7 @@ template <
   class SmemCopyAtomB_,
   class TransformB_>
 struct CollectiveMma<
-    MainloopIntelXeMixedPrecision<Stages>,
+    MainloopIntelXeDPAS16MixedPrecision<Stages>,
     TileShape_,
     ElementAOptionalTuple,
     StrideA_,
@@ -93,7 +93,7 @@ public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = MainloopIntelXeMixedPrecision<Stages>;
+  using DispatchPolicy = MainloopIntelXeDPAS16MixedPrecision<Stages>;
   using WorkgroupTileShape = TileShape_;
 
   

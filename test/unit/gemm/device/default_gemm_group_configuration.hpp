@@ -91,7 +91,7 @@ struct DefaultGemmGroupConfiguration<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeEpilogue,
+    epilogue::IntelXeDPAS16,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -104,7 +104,7 @@ struct DefaultGemmGroupConfiguration<
       float, float,
       float, LayoutC, 1,
       float, LayoutC, 1,
-      epilogue::IntelXeGroupEpilogue,
+      epilogue::IntelXeDPAS16Group,
       EpilogueOp
     >::CollectiveOp;
 
@@ -149,7 +149,7 @@ struct DefaultGemmGroupConfiguration<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeEpilogue,
+    epilogue::IntelXeDPAS16,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -162,7 +162,7 @@ struct DefaultGemmGroupConfiguration<
       float, float,
       float, LayoutC, 1,
       float, LayoutC, 1,
-      epilogue::IntelXeGroupEpilogue,
+      epilogue::IntelXeDPAS16Group,
       EpilogueOp
     >::CollectiveOp;
 

@@ -75,7 +75,7 @@ namespace collective {
       class CopyOpR2G_, 
       class ElemWiseBinary_>
   class DualGemmElemActEpilogue<
-      IntelXeEpilogue,
+      IntelXeDPAS16,
       CtaTileMNK_,
       ElementC_,
       StrideC_,
@@ -88,7 +88,7 @@ public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = IntelXeEpilogue;
+  using DispatchPolicy = IntelXeDPAS16;
   using CtaTileMNK = CtaTileMNK_;
   using ElementC = ElementC_;
   using ElementAccumulator = ElementD_;

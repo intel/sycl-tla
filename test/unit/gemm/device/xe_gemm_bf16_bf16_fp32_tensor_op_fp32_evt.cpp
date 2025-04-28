@@ -140,7 +140,7 @@ TEST(Xe_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue_drelu, 256x256x32) {
 TEST(XE_Device_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue, 256x256x32_LinCombPerRowBias) {
   using ElementBias = float;
 
-  using EpilogueDispatchPolicy = epilogue::IntelXeEpilogue;
+  using EpilogueDispatchPolicy = epilogue::IntelXeDPAS16;
   using EpilogueOp = epilogue::fusion::LinCombPerRowBias<
       ElementOutput, ElementComputeEpilogue, ElementBias, ElementAccumulator,
       ElementAccumulator, 128 / sizeof_bits_v<ElementBias>,
@@ -171,7 +171,7 @@ TEST(XE_Device_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue, 256x256x32_LinC
 TEST(XE_Device_Gemm_bf16t_bf16t_f32_tensor_op_gmma_f32_epilogue, 256x256x32_LinCombPerColBias) {
   using ElementBias = float;
 
-  using EpilogueDispatchPolicy = epilogue::IntelXeEpilogue;
+  using EpilogueDispatchPolicy = epilogue::IntelXeDPAS16;
   using EpilogueOp = epilogue::fusion::LinCombPerColBias<
       ElementOutput, ElementComputeEpilogue, ElementBias, ElementAccumulator,
       ElementAccumulator, 128 / sizeof_bits_v<ElementBias>,

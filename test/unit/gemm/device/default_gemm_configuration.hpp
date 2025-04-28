@@ -1468,7 +1468,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeEpilogue,
+    epilogue::IntelXeDPAS16,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -1576,7 +1576,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeEpilogue,
+    epilogue::IntelXeDPAS16,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -1655,7 +1655,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
 {
   using TileShape = Shape<_256, _256, _32>;
 
-  using DispatchPolicy = MainloopIntelXe<3>;
+  using DispatchPolicy = MainloopIntelXeDPAS16<3>;
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x32_S32S8S8S32_TT>,
                Layout<TileShape>,
@@ -1686,14 +1686,14 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeEpilogue,
+    epilogue::IntelXeDPAS16,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
   >;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelXeEpilogue,
+    epilogue::IntelXeDPAS16,
     TileShape,
     int32_t, TagToStrideC_t<LayoutC>,
     int32_t, TagToStrideC_t<LayoutC>,
@@ -1762,7 +1762,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
 {
   using TileShape = Shape<_256, _256, _32>;
 
-  using DispatchPolicy = MainloopIntelXe<3>;
+  using DispatchPolicy = MainloopIntelXeDPAS16<3>;
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x8_F32TF32TF32F32_TT>,
                Layout<TileShape>,
@@ -1793,14 +1793,14 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeEpilogue,
+    epilogue::IntelXeDPAS16,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
   >;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelXeEpilogue,
+    epilogue::IntelXeDPAS16,
     TileShape,
     float, TagToStrideC_t<LayoutC>,
     float, TagToStrideC_t<LayoutC>,

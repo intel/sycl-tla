@@ -79,7 +79,7 @@ template <
   bool WriteOutput_
 >
 class DualGemmEpilogue<
-    IntelXeEpilogue,
+    IntelXeDPAS16,
     CtaTileMNK_,
     ElementC_,
     StrideC_,
@@ -94,7 +94,7 @@ public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = IntelXeEpilogue;
+  using DispatchPolicy = IntelXeDPAS16;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
   using ElementC = ElementC_;

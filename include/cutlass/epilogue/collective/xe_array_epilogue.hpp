@@ -69,7 +69,7 @@ template <
   class CopyOpR2S_
 >
 class CollectiveEpilogue<
-    IntelXeGroupEpilogue,
+    IntelXeDPAS16Group,
     CtaTileMNK_,
     ElementC_,
     StrideC_,
@@ -87,7 +87,7 @@ public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = IntelXeGroupEpilogue;
+  using DispatchPolicy = IntelXeDPAS16Group;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
   using ElementC = ElementC_;

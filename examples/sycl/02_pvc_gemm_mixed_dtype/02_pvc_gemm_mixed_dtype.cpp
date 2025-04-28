@@ -269,8 +269,8 @@ struct ExampleRunner {
                                       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
     constexpr int PipelineStages = 3;
-    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXe<PipelineStages>;
-    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeEpilogue;
+    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeDPAS16<PipelineStages>;
+    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeDPAS16;
 
     using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementCompute,
             ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
@@ -548,8 +548,8 @@ int main(int argc, const char** argv)
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3; // prefetch 3 iters of data for A and B
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeMixedPrecision<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeEpilogue;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeDPAS16MixedPrecision<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeDPAS16;
 
   // Default (Linear Combination) epilogue
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
