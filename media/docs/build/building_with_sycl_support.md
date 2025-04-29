@@ -41,7 +41,7 @@ Only Linux platforms are supported.
 
 To build CUTLASS SYCL support for Intel GPUs, you need the DPC++ compiler;
 you can use the latest [[nightly build](https://github.com/intel/llvm/releases)] 
-or a oneAPI toolkit from 2025.0 onwards.
+or a oneAPI toolkit from 2025.1 onwards. The Intel Graphics Compiler (minimum version ????) is also required.
 
 Building the tests and the examples requires oneMKL for random number generation.
 
