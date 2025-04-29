@@ -120,13 +120,13 @@ def valid_stage_count(
 
     if kernel_cc == 11:
         if (td.stages is None or td.stages == 0):
-            # Support for Intel Xe GPU currently does not allow explicit
+            # Support for Intel PVC GPU currently does not allow explicit
             # specification of the stage count. With None or 0, the 
             # CollectiveBuilder automatically determines the stage count to use.
             return (True, "")
         elif verbose:
             cutlass.logger.warning(
-                "Setting an explicit stage count for Intel Xe GPU is currently "
+                "Setting an explicit stage count for Intel PVC GPU is currently "
                 "not supported.")
 
     if td.stages <= 0:
