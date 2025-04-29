@@ -543,7 +543,7 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
       double flops_pv = sizeof(ElementQ) *  options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
       double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
       double gbps_qk = sizeof (ElementQ) * options.batch * options.num_heads_q * (effective_seq_len_qo * options.head_size_qk + effective_seq_len_kv * options.head_size_qk);
-      double gbps_pv = sizeof (ElementQ) * options.batch * options.num_heads_q * (effective_seq_len_kv * effective_seq_len_qo) + sizeof (ElementOutput) * options.batch * options.num_heads_q* effective_seq_len_qo * options.head_size_vo;
+      double gbps_pv = sizeof (ElementQ) * options.batch * options.num_heads_q * (effective_seq_len_kv * options.head_size_vo) + sizeof (ElementOutput) * options.batch * options.num_heads_q* effective_seq_len_qo * options.head_size_vo;
       double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q  << "\tNumHeads_kv: " << options.num_heads_kv  << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
