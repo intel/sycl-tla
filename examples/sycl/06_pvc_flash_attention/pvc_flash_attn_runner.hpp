@@ -542,7 +542,8 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
       double flops_qk = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * effective_seq_len_kv * options.head_size_qk;
       double flops_pv = 2.0 *  options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
       double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
-      double gbps_qk = sizeof(ElementQ) * options.batch * (options.num_heads_q * effective_seq_len_qo * options.head_size_qk + options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);
+      double gbps_qk =  options.batch * (sizeof(ElementQ) * options.num_heads_q * effective_seq_len_qo * options.head_size_qk + 
+                                         sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);
       double gbps_pv = sizeof(ElementV) * options.batch * options.num_heads_kv * effective_seq_len_kv * options.head_size_vo +
                      sizeof(ElementOutput) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
       double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
