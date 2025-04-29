@@ -271,7 +271,7 @@ struct BenchmarkRunnerGemm {
       block_D.reset(size_C);
       block_ref_D.reset(size_C);
     } catch (std::exception const &e) {
-      state.SkipWithError("Problem size too large for device.");
+      state.SkipWithError(e.what());
     }
   }
 
