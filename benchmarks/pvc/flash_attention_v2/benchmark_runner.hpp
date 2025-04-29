@@ -547,7 +547,7 @@ template <class FMHAConfiguration> struct BenchmarkRunnerFMHA {
     double flops_pv = sizeof (ElementQ) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
     double gflops = (flops_qk + flops_pv) * 1e-9;
     double gbps_qk = sizeof (ElementQ) * options.batch * options.num_heads_q * (effective_seq_len_qo * options.head_size_qk + effective_seq_len_kv * options.head_size_qk);
-    double gbps_pv = sizeof (ElementQ) * options.batch * options.num_heads_q * effective_seq_len_kv * effective_seq_len_qo   +  sizeof(ElementOutput) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
+    double gbps_pv = sizeof (ElementQ) * options.batch * options.num_heads_q * effective_seq_len_kv * options.head_size_vo   +  sizeof(ElementOutput) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
     double mega_bytes_transferred = (gbps_qk + gbps_pv) * (1e-6);
 
     initialize_counters(state);
