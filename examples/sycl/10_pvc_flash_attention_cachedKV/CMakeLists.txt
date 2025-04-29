@@ -1,4 +1,4 @@
-# Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,52 +26,11 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-if(SYCL_INTEL_TARGET)
 
 set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
+set(CUTLASS_EXAMPLES_DIR ${CMAKE_SOURCE_DIR}/examples)
 
-cutlass_test_unit_add_executable(
-  cutlass_test_unit_flash_attention_xe
-  xe_flash_attention_bf16.cpp
-  xe_flash_attention_fp16.cpp
+cutlass_example_add_executable(
+  10_pvc_prefill_attention_cachedKV
+  10_pvc_prefill_attention_cachedKV.cpp
 )
-
-cutlass_test_unit_add_executable(
-  cutlass_test_unit_flash_decode_xe
-  xe_flash_decode_bf16.cpp
-  xe_flash_decode_fp16.cpp
-)
-
-add_custom_target(
-  cutlass_test_unit_flash_attention
-  DEPENDS
-  cutlass_test_unit_flash_attention_xe
-)
-
-add_custom_target(
-  cutlass_test_unit_flash_decode
-  DEPENDS
-  cutlass_test_unit_flash_decode_xe
-)
-
-add_custom_target(
-  test_unit_flash_attention
-  DEPENDS
-  test_unit_flash_attention_xe
-)
-
-add_custom_target(
-  test_unit_flash_decode
-  DEPENDS
-  test_unit_flash_decode_xe
-)
-
-else()
-  # Dummy targets if not building for Intel
-  add_custom_target(cutlass_test_unit_flash_attention)
-  add_custom_target(test_unit_flash_attention)
-
-  add_custom_target(cutlass_test_unit_flash_decode)
-  add_custom_target(test_unit_flash_decode)
-
-endif()
