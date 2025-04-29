@@ -35,7 +35,7 @@
     and epilogue for given data layouts & types, on selected hardware. Compared to `00_pvc_gemm`,
     this example omits the MMA and copy operation definitions, as the CollectiveBuilder will select
     these. Additionally, instead of specifying the DispatchPolicy, we provide only the device architecture
-    (cutlass::arch::IntelPVC).
+    (cutlass::arch::IntelXe).
 
     This example also demonstrates the use of a ReLU activation epilogue, fusing the ReLU operation
     with the GEMM in a single kernel.
@@ -351,7 +351,7 @@ int main(int argc, const char** argv)
     ElementInputA, LayoutA, AlignmentA,
     ElementInputB, LayoutB, AlignmentB,
     ElementAccumulator,
-    TileShape, Shape<_1, _1, _1>,                 // the ClusterShape is always <1,1,1> on IntelPVC
+    TileShape, Shape<_1, _1, _1>,                 // the ClusterShape is always <1,1,1> on IntelXe
     cutlass::gemm::collective::StageCountAuto,    // let the builder select the number of pipeline stages (i.e. prefetch iters)
     cutlass::gemm::collective::KernelScheduleAuto // let the builder select the mainloop schedule
   >::CollectiveOp;
