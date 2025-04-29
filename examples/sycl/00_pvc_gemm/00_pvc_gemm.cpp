@@ -367,8 +367,8 @@ int main(int argc, const char** argv)
 
   // For Intel PVC, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeDPAS16<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeDPAS16;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   // This is the 'default' epilogue operation (Linear Combination) which performs everything in:
   // (D = alpha * (A*B) + beta * C)

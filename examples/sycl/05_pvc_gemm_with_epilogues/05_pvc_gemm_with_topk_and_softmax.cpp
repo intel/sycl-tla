@@ -127,8 +127,8 @@ using TiledMma =
     typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
                                   Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 constexpr int PipelineStages = 3;
-using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeDPAS16<PipelineStages>;
-using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeDPAS16;
+using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
 // Top-K + Softmax fusion operation
 using EpilogueFusionOperation     = std::conditional_t<EnableTopKSoftmax,

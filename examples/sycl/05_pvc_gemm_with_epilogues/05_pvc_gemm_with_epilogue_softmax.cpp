@@ -413,8 +413,8 @@ int main(int argc, const char** argv)
 
   using EpilogueTile = Shape<_16, _32>;
   constexpr int PipelineStages = 3;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeDPAS16<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeDPAS16;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   // Linear Combination + Row-wise Softmax Epilogue
   using EpilogueOp = cutlass::epilogue::fusion::LinCombSoftmaxRow<ElementOutput,

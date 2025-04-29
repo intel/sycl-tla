@@ -156,7 +156,7 @@ template <
         cute::is_same_v<cute::remove_pointer_t<GmemLayoutTagC>,  cutlass::layout::RowMajor> &&
         cute::is_same_v<cute::remove_pointer_t<GmemLayoutTagD>,  cutlass::layout::RowMajor> &&
         cute::is_same_v<EpilogueTileType, EpilogueTileAuto> &&
-        cute::is_any_of_v<EpilogueScheduleType, EpilogueScheduleAuto, IntelXeDPAS16, IntelXeDPAS16Group> &&
+        cute::is_any_of_v<EpilogueScheduleType, EpilogueScheduleAuto, IntelXeXMX16, IntelXeXMX16Group> &&
         detail::FusionOpInfo<FusionOpOrCallbacks>::HasBuilder
       >
     >{
@@ -168,12 +168,12 @@ template <
       static_assert(cute::is_any_of_v<ElementC, float, void>, "ElementC needs to be float for the Intel pipeline");
       
       using EpilogueSchedule = std::conditional_t<cute::is_same_v<EpilogueScheduleType, EpilogueScheduleAuto>, 
-                                                  IntelXeDPAS16,
+                                                  IntelXeXMX16,
                                                   EpilogueScheduleType>;
-      static constexpr bool IsGroup = cute::is_same_v<EpilogueSchedule, IntelXeDPAS16Group>;
+      static constexpr bool IsGroup = cute::is_same_v<EpilogueSchedule, IntelXeXMX16Group>;
       using DispatchPolicy = std::conditional_t<IsGroup, 
-                                                IntelXeDPAS16Group,
-                                                IntelXeDPAS16>;
+                                                IntelXeXMX16Group,
+                                                IntelXeXMX16>;
       using CopyOpG2R = XE_2D_U32x8x16_LD_N;
       using CopyOpR2G = XE_2D_U32x8x16_ST_N;
 
@@ -185,7 +185,7 @@ template <
 
       //TODO(Codeplay): Should FusionCallbacks use DispatchPolicy IntelXeGroupEpilogue for group gemm? That does not work.
       using FusionCallbacks = typename detail::FusionOpInfo<FusionOpOrCallbacks>::template FusionCallbacks<
-                                  IntelXeDPAS16, TileShape_MNK, TileShape_MNK, CopyOpG2R>;
+                                  IntelXeXMX16, TileShape_MNK, TileShape_MNK, CopyOpG2R>;
 
       using CollectiveOp = cutlass::epilogue::collective::CollectiveEpilogue<
             DispatchPolicy,

@@ -969,7 +969,7 @@ struct MainloopSm100ArrayTmaUmmaWarpSpecializedFastF32 {
 // This version is tuned for operations using DPAS instructions with a subgroup size of 16.
 // Suitable for use with Intel Battlemage (Xe2) and PVC (Xe) architectures.
 template<int Stages_, class KernelSchedule = KernelXe>
-struct MainloopIntelXeDPAS16 {
+struct MainloopIntelXeXMX16 {
   constexpr static int Stages = Stages_;
   constexpr static int SubgroupSize = 16;
   using ArchTag = arch::IntelXe;
@@ -978,11 +978,11 @@ struct MainloopIntelXeDPAS16 {
 };
 
 template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
-struct MainloopIntelXeDPAS16Group : MainloopIntelXeDPAS16<Stages_, KernelScheduler> {
+struct MainloopIntelXeXMX16Group : MainloopIntelXeXMX16<Stages_, KernelScheduler> {
 };
 
 template<int Stages_>
-struct MainloopIntelXeDPAS16MixedPrecision : MainloopIntelXeDPAS16<Stages_> {
+struct MainloopIntelXeXMX16MixedPrecision : MainloopIntelXeXMX16<Stages_> {
 };
 
 template<int Stages_, class KernelSchedule = KernelXe>
