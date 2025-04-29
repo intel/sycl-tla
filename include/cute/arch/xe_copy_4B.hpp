@@ -439,7 +439,7 @@ struct XeSubgroup2DBlockPrefetch<4, 8, 16, 1> {
     void operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate) {
         intel_sub_group_2d_block_prefetch_32b_16r8x1c(
-            (__global void*)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+            (__global void*)(srcBasePointer), memoryWidth, memoryHeight, memoryPitch, coordinate);
     }
 };
 #endif

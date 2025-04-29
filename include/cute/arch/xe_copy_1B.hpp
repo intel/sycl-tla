@@ -404,7 +404,7 @@ struct XeSubgroup2DBlockPrefetch<1, 32, 8, 1> {
     void operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate) {
         __builtin_IB_subgroup_block_read_prefetch_u8_m8k32v1(
-            (intptr_t)srcBasePointer, memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate, CacheControl::kL1C_L3C);
+            (intptr_t)srcBasePointer, memoryWidth, memoryHeight, memoryPitch, coordinate, CacheControl::kL1C_L3C);
     }
 };
 
@@ -414,7 +414,7 @@ struct XeSubgroup2DBlockPrefetch<1, 32, 1, 2> {
     void operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate) {
         intel_sub_group_2d_block_prefetch_8b_1r32x2c(
-            (__global void*)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+            (__global void*)(srcBasePointer), memoryWidth, memoryHeight, memoryPitch, coordinate);
     }
 };
 
@@ -424,7 +424,7 @@ struct XeSubgroup2DBlockPrefetch<1, 32, 2, 2> {
     void operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate) {
         intel_sub_group_2d_block_prefetch_8b_2r32x2c(
-            (__global void*)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+            (__global void*)(srcBasePointer), memoryWidth, memoryHeight, memoryPitch, coordinate);
     }
 };
 
@@ -434,7 +434,7 @@ struct XeSubgroup2DBlockPrefetch<1, 32, 4, 2> {
     void operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate) {
         intel_sub_group_2d_block_prefetch_8b_4r32x2c(
-            (__global void*)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+            (__global void*)(srcBasePointer), memoryWidth, memoryHeight, memoryPitch, coordinate);
     }
 };
 
@@ -444,7 +444,7 @@ struct XeSubgroup2DBlockPrefetch<1, 32, 8, 2> {
     void operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate) {
         intel_sub_group_2d_block_prefetch_8b_8r32x2c(
-            (__global void*)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+            (__global void*)(srcBasePointer), memoryWidth, memoryHeight, memoryPitch, coordinate);
     }
 };
 
@@ -454,7 +454,7 @@ struct XeSubgroup2DBlockPrefetch<1, 16, 32, 1> {
     void operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate) {
         intel_sub_group_2d_block_prefetch_8b_32r16x1c(
-            (__global void*)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+            (__global void*)(srcBasePointer), memoryWidth, memoryHeight, memoryPitch, coordinate);
     }
 };
 #endif
