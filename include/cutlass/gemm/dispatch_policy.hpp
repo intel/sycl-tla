@@ -982,7 +982,7 @@ struct MainloopIntelPVCGroup {
   using ClusterShape = Shape<_1,_1,_1>;
 };
 
-template<int Stages_, class KernelScheduler>
+template<int Stages_, class KernelScheduler = KernelPVC>
 struct MainloopIntelPVCMixedPrecision {
   constexpr static int Stages = Stages_;
   constexpr static int SubgroupSize = 16;

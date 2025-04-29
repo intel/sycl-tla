@@ -142,7 +142,7 @@ public:
                                                ElementB>;
 
   static_assert(!cute::is_same_v<ElementA, ElementB>, "Mixed precision GEMM requires different types for A and B!");
-  static_assert(std::is_same_v<LargerElementType, MmaType>,
+  static_assert(std::is_same_v<LargerElementType, MmaType> || (std::is_same_v<LargerElementType, _Float16> && std::is_same_v<MmaType, half_t>),
                "MainloopIntelPVCMixedPrecision has the restriction that mixed dtype always converts the "
                "narrower input type to the larger one and performs GEMM using the DPAS for the larger input type.");
 
@@ -313,24 +313,7 @@ public:
     auto &&out = tCrA_mma;
 
     if constexpr (sizeof_bits_v<SrcType> < 8) {
-      using format_type = uint8_t;
-      static constexpr auto src_bits = sizeof_bits_v<SrcType>;
-      static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
-      auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
-      static constexpr auto loop_cnt = decltype(size<0>(out))::value;
-      static constexpr auto v_cnt = decltype(size(out))::value / scalar / loop_cnt;
-      auto&& dst_ptr = *(vector_t<ushort, SG_N>*)(out.data());
-      #pragma unroll
-      for (int v = 0; v < v_cnt; v++) {
-        #pragma unroll
-        for (int j = 0; j < scalar; j++) {
-          #pragma unroll
-          for (int i = 0; i < loop_cnt; i++) {
-            dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>((uint32_t)/*(static_cast<SrcType>*/(
-              (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf)));
-          }
-        }
-      }
+      convert_int_subbyte_to_half(out, in);
     } else {
       auto const& src = tCrA_load(_, _, _);
       auto const& dst = tCrA_mma(_, _, _);
@@ -378,14 +361,18 @@ public:
         // 4 different scale/zero values per thread, no exchange needed
         static constexpr auto DPAS = decltype(size<0>(in))::value;
         static constexpr auto N = decltype(size<1>(in))::value;
+        static constexpr auto K = decltype(size<2>(in))::value;
 
         CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < N; ++i) {
+        for (int k = 0; k < K; ++k) {
           CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < DPAS; ++j) {
-            tCrA_mma(_, i, _)[j] *= tCrS_input(i);
-            if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              tCrA_mma(_, i, _)[j] += tCrZ_input(i);
+          for (int i = 0; i < N; ++i) {
+            CUTLASS_PRAGMA_UNROLL
+            for (int j = 0; j < DPAS; ++j) {
+              tCrA_mma(j, i, k) *= tCrS_input(i);
+              if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
+                tCrA_mma(j, i, k) += tCrZ_input(i);
+              }
             }
           }
         }
@@ -438,7 +425,7 @@ public:
 
     // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
     // layout else we need mode N_iter from fragment_B layout.
-    static constexpr auto scale_traits_size = decltype(size(GmemTiledCopyScale))::value / SubgroupSize;
+    static constexpr auto scale_traits_size = decltype(size(GmemTiledCopyScale::BlockShape{}))::value / SubgroupSize;
     static constexpr auto traits_num = SG_N / size<1>(GmemTiledCopyScale::BlockShape{});
     using FragScaleLayout = std::conditional_t<IsATransformed,
                                                Layout<Shape<Int<scale_traits_size>, Int<traits_num>, _1>>,
@@ -492,11 +479,11 @@ public:
     Tensor copy_iter_s = [&](){
       if constexpr(IsATransformed){
         return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
-                           make_layout(make_shape(<Int<scale_traits_size>{}, Int<traits_num>{}, _1{}, k_tile_count),
+                           make_layout(make_shape(Int<scale_traits_size>{}, Int<traits_num>{}, _1{}, k_tile_count),
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }else{
         return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
-                           make_layout(make_shape(<Int<scale_traits_size>{}, Int<traits_num>{}, _1{}, k_tile_count),
+                           make_layout(make_shape(Int<scale_traits_size>{}, Int<traits_num>{}, _1{}, k_tile_count),
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }
     }();
