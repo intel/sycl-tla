@@ -280,7 +280,7 @@ struct XeFlashPersistentTileScheduler {
     struct TileSchedulerSelector<
         FlashDecodeIndividualScheduler,
         ArchTag,
-        cute::enable_if_t<cute::is_same_v<ArchTag, cutlass::arch::IntelPVC>>>
+        cute::enable_if_t<cute::is_same_v<ArchTag, cutlass::arch::IntelXe>>>
     {
       using Scheduler = kernel::XeFlashDecodeIndividualTileScheduler;
     };
