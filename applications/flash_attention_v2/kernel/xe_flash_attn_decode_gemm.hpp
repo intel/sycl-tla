@@ -404,6 +404,10 @@ public:
         collective_mma.mmaPV(out_reg, tSr, gV(_, _, kv_tile_idx + (kv_splits_new - 1) * PV_ATOM_M), out_reg, mainloop_params, false);
       }
 
+      // need to apply barrier here to avoid race condition
+      auto group = syclcompat::get_nd_item<1>().get_group();
+      sycl::group_barrier(group);
+
       Tensor shmem_out_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<(Vec * get<0>(FragsShapePV{}) * get<1>(FragsShapePV{})) * SubgroupSize * Num_SGs>{}));
       // write output to SLM
       int idx = (thread_idx % SubgroupSize) + sub_group_id * out_reg.size() * SubgroupSize;
