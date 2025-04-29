@@ -298,7 +298,7 @@ struct BenchmarkRunnerGemm {
     if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess)
       state.SkipWithError("GEMM failed to initialize.");
 
-    if(state.error_occurred()) return;
+    if (state.error_occurred()) return;
 
     // Run the GEMM
     gemm_op.run();
