@@ -1,6 +1,6 @@
 # SYCL CUTLASS Changelog
 
-## [RELEASE NAME GOES HERE](https://github.com/codeplay/cutlass-fork/releases/tag/v???) (2025-04-30)
+## [Cutlass 3.8 sycl backend version 0.1](https://github.com/codeplay/cutlass-fork/releases/tag/v???) (2025-04-30)
 
 - GEMM/StreamK/SplitK with support for bfloat16 data type
 - Flash attention prefill and decode with KV cache with support for bfloat16 data type
