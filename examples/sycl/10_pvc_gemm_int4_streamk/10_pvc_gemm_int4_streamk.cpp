@@ -76,8 +76,6 @@ struct Options {
 
   bool splitk, dp;
 
-  bool a_narrower;
-  int mode;
   int m, n, k, l, iterations;
   int g, warmup;
   float alpha, beta;
@@ -87,9 +85,8 @@ struct Options {
     help(false),
     error(false),
     m(5120), n(4096), k(4096), l(1), iterations(20),
-    g(128), mode(2), a_narrower(false),
-    alpha(1.f), beta(0.f), warmup(0), flush_cache(0),
-    cache_cnt(3), splitk(false), dp(false)
+    g(128), alpha(1.f), beta(0.f), warmup(0), flush_cache(0),
+    cache_cnt(3), splitk(true), dp(false), splits(2)
   { }
 
   // Parses the command line
@@ -109,12 +106,11 @@ struct Options {
       dp = true;
     }
 
-    cmd.get_cmd_line_argument("m", m, 5120);
+    cmd.get_cmd_line_argument("m", m, 32);
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("g", g, 128);
-    cmd.get_cmd_line_argument("mode", mode, 2);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
@@ -122,8 +118,8 @@ struct Options {
     cmd.get_cmd_line_argument("flush_cache", flush_cache, 0);
     cmd.get_cmd_line_argument("cache_cnt", cache_cnt, 3);
     cmd.get_cmd_line_argument("l3_cache", l3_cache, 192);
-    cmd.get_cmd_line_argument("splits", splits, 0);
-    cmd.get_cmd_line_argument("splitk", splitk, 0);
+    cmd.get_cmd_line_argument("splits", splits, 2);
+    cmd.get_cmd_line_argument("splitk", splitk, true);
   }
 
   /// Prints the usage statement.
@@ -373,7 +369,7 @@ struct ExampleRunner {
     cutlass::DeviceAllocation<Element>& block, 
     Options const& options) {
 
-#if INT4_DEBUG
+#ifdef INT4_DEBUG
     std::vector<Element> stage(block.size(), Element(1.0f));
     for (int i =0; i < 1; i++) {
       for (int j =0; j < 4096; j++) {
@@ -422,12 +418,20 @@ return true;
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
 
-    block_B.reset(K * N * L);
-
     block_A.reset(M * K * L);
     block_A_dq.reset(M * K * L);
 
-    block_B_dq.reset(K * N * L);
+    if (options.flush_cache) {
+      auto l3_cache_size = options.l3_cache * MByte;
+      auto elements = max(K * N * L, l3_cache_size * 8 / sizeof_bits_v<ElementQuant>);
+
+      block_B.reset(elements * options.cache_cnt);
+      block_B_dq.reset(elements * options.cache_cnt);
+    } else {
+      block_B.reset(K * N * L);
+      block_B_dq.reset(K * N * L);
+    }
+
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
@@ -522,10 +526,13 @@ return true;
           if (i < options.warmup) {
             CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
           } else {
+            auto l3_cache_size = options.l3_cache * MByte;
+            auto elements = max(options.k * options.n * options.l, l3_cache_size * 8 / sizeof_bits_v<ElementQuant>);
+
             typename Gemm::GemmKernel::Arguments arguments1{
               cutlass::gemm::GemmUniversalMode::kGemm,
               problem_size,
-              {block_A.get(), stride_A, block_B.get() + ((i - options.warmup + 1) % options.cache_cnt) * l3_cache_size / 2,
+              {block_A.get(), stride_A, block_B.get() + ((i - options.warmup + 1) % options.cache_cnt) * elements / 2,
                 stride_B, block_scale.get(), stride_S, options.g, block_zero.get()},
               {{options.alpha, options.beta},
               block_C.get(),
