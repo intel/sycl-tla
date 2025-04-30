@@ -23,9 +23,6 @@ jobs:
   run-tests:
     strategy:
       matrix:
-        compiler: [ NIGHTLY, RELEASE ]
-        intel_graphics: [ RELEASE, STAGING ]
-        gpu: [PVC, BMG]
         include:
           - compiler: NIGHTLY
             gpu: PVC
