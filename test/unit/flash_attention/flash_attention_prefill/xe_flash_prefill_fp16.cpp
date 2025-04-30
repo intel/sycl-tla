@@ -30,10 +30,10 @@
  **************************************************************************************************/
 
 /*! \file
-    \brief Tests for Xe flash attention bf16
+    \brief Tests for Xe flash attention prefill fp16
 */
 
-#include "flash_attention_testbed_3x.hpp"
+#include "flash_prefill_testbed_3x.hpp"
 
 namespace cutlass {
 
@@ -46,8 +46,8 @@ struct XE_Flash_Attention {
 
   using ElementAccumulator = float;
   using ElementComputeEpilogue = float;
-  using ElementInputQ = bfloat16_t;
-  using ElementInputKV = bfloat16_t;
+  using ElementInputQ = half_t;
+  using ElementInputKV = half_t;
   using ElementOutput = float;
 
   using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int>;
@@ -85,10 +85,10 @@ struct XE_Flash_Attention {
                                                                    CollectiveEpilogue>;
 };
 
-TEST(XE_Flash_Attention_bf16, causal) {
+TEST(XE_Flash_Attention_fp16, causal) {
   using TileShape = Shape<_128, _64, _64, _64>;
   using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                                       Layout<Shape<_128, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
@@ -99,10 +99,10 @@ TEST(XE_Flash_Attention_bf16, causal) {
   EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(192));
 }
 
-TEST(XE_Flash_Attention_bf16, noncausal) {
+TEST(XE_Flash_Attention_fp16, noncausal) {
   using TileShape = Shape<_128, _64, _64, _64>;
   using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                                       Layout<Shape<_128, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
@@ -113,10 +113,10 @@ TEST(XE_Flash_Attention_bf16, noncausal) {
   EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(192));
 }
 
-TEST(XE_Flash_Attention_bf16, varlen_causal) {
+TEST(XE_Flash_Attention_fp16, varlen_causal) {
   using TileShape = Shape<_128, _64, _64, _64>;
   using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                                       Layout<Shape<_128, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
@@ -127,10 +127,10 @@ TEST(XE_Flash_Attention_bf16, varlen_causal) {
   EXPECT_TRUE(test::flash_attention::TestAll<Kernel>(192));
 }
 
-TEST(XE_Flash_Attention_bf16, varlen_noncausal) {
+TEST(XE_Flash_Attention_fp16, varlen_noncausal) {
   using TileShape = Shape<_128, _64, _64, _64>;
   using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                                       Layout<Shape<_128, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
