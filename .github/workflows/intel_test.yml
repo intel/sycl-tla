@@ -27,13 +27,14 @@ jobs:
         gpu: [PVC, BMG]
         include:
           - gpu: PVC
+            intel_graphics: [ release ]
             sycl_target: intel_gpu_pvc
             runner: cp-gpumax-1100-gpu
           - gpu: BMG
             intel_graphics: [ release, staging ]
             sycl_target: intel_gpu_bmg_g21
             runner: cp-b580-gpu
-    name: Run Intel ${{ matrix.compiler }} tests on ${{ matrix.gpu }}
+    name: Run Intel ${{ matrix.compiler }} tests on ${{ matrix.gpu }} with intel-graphics ${{ matrix.intel_graphics }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
 
