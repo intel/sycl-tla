@@ -27,7 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # TODO(Codeplay): Re-enable Flash Decode tests once IGC issue is fixed in the CI.
-if(SYCL_INTEL_TARGET AND NOT CUTLASS_SYCL_RUNNING_CI)
+if(NOT CUTLASS_SYCL_RUNNING_CI)
 
 cutlass_test_unit_add_executable(
   cutlass_test_unit_flash_attention_decode_xe
@@ -48,7 +48,7 @@ add_custom_target(
 )
 
 else()
-  # Dummy targets if not building for Intel
+  # Dummy targets if not building for the CI
   add_custom_target(cutlass_test_unit_flash_attention_decode)
   add_custom_target(test_unit_flash_attention_decode)
 

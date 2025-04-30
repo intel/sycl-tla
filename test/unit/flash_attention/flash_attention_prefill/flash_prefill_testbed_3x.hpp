@@ -29,7 +29,7 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief Tests for device-wide Flash Attention interface
+    \brief Tests for device-wide Flash Attention Prefill interface
 */
 
 #pragma once

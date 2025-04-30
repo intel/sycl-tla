@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@
  **************************************************************************************************/
 
 /*! \file
-    \brief Tests for Xe flash attention fp16
+    \brief Tests for Xe flash attention decode fp16
 */
 
 #include "flash_decode_testbed_3x.hpp"
@@ -38,7 +38,7 @@
 namespace cutlass {
 
 template<typename TileShape, typename TiledMma, bool HasCausalMask, bool isVarLen>
-struct XE_Flash_Decode {
+struct XE_Flash_Attention_Decode {
   using LayoutQ = cutlass::layout::RowMajor;
   using LayoutK = cutlass::layout::ColumnMajor;
   using LayoutV = cutlass::layout::RowMajor;
@@ -85,56 +85,56 @@ struct XE_Flash_Decode {
                                                        CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
 };
 
-TEST(XE_Flash_Decode_fp16, causal) {
+TEST(XE_Flash_Attention_Decode_fp16, causal) {
   using TileShape = Shape<_512, _64, _64, _64>;
   using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                                       Layout<Shape<_512, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
-  using Kernel = XE_Flash_Decode<TileShape, TiledMma, true, false>::Kernel;
+  using Kernel = XE_Flash_Attention_Decode<TileShape, TiledMma, true, false>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(96));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(128));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(192));
 }
 
-TEST(XE_Flash_Decode_fp16, noncausal) {
+TEST(XE_Flash_Attention_Decode_fp16, noncausal) {
   using TileShape = Shape<_512, _64, _64, _64>;
   using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                                       Layout<Shape<_512, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
-  using Kernel = XE_Flash_Decode<TileShape, TiledMma, false, false>::Kernel;
+  using Kernel = XE_Flash_Attention_Decode<TileShape, TiledMma, false, false>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(96));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(128));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(192));
 }
 
-TEST(XE_Flash_Decode_fp16, varlen_causal) {
+TEST(XE_Flash_Attention_Decode_fp16, varlen_causal) {
   using TileShape = Shape<_512, _64, _64, _64>;
   using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                                       Layout<Shape<_512, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
-  using Kernel = XE_Flash_Decode<TileShape, TiledMma, true, true>::Kernel;
+  using Kernel = XE_Flash_Attention_Decode<TileShape, TiledMma, true, true>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(96));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(128));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(192));
 }
 
-TEST(XE_Flash_Decode_fp16, varlen_noncausal) {
+TEST(XE_Flash_Attention_Decode_fp16, varlen_noncausal) {
   using TileShape = Shape<_512, _64, _64, _64>;
   using TiledMma =
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                                       Layout<Shape<_512, _64, _64>>,
                                       Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
 
-  using Kernel = XE_Flash_Decode<TileShape, TiledMma, false, true>::Kernel;
+  using Kernel = XE_Flash_Attention_Decode<TileShape, TiledMma, false, true>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(96));
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(128));
