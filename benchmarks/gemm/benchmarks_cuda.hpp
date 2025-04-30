@@ -31,8 +31,7 @@
 
 #pragma once
 
-#include "../benchmark_runner.hpp"
-#include "gemm_configuration.hpp"
+#include "gemm_configuration_cuda.hpp"
 
 using AmpereGemmBF16BF16FP32_CCC = cutlass::gemm::device::GemmConfiguration<
         cutlass::arch::Sm80,

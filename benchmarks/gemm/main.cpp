@@ -1,5 +1,5 @@
 /***************************************************************************************************
-* Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+* Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,78 +35,10 @@
 
 #include "benchmark_runner.hpp"
 #if defined(SYCL_NVIDIA_TARGET) || !defined(CUTLASS_ENABLE_SYCL)
-#include "ampere/benchmarks.hpp"
+#include "benchmarks_cuda.hpp"
 #elif defined(SYCL_INTEL_TARGET)
-#include "pvc/benchmarks.hpp"
-#include "pvc/flash_attention_v2/benchmarks.hpp"
+#include "benchmarks_sycl.hpp"
 #endif
-
-#include <benchmark/benchmark.h>
-#include <iostream>
-#include <sstream>
-#include <fstream>
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-// Command line options parsing
-struct BenckmarkOptions {
-
-  bool help;
-  bool error;
-  std::string config_file;
-
-  BenckmarkOptions():
-          help(false),
-          error(false)
-  { }
-
-  // Parses the command line
-  void parse(int argc, char const **args) {
-    cutlass::CommandLine cmd(argc, args);
-
-    if (cmd.check_cmd_line_flag("help")) {
-      help = true;
-      return;
-    }
-
-    cmd.get_cmd_line_argument("config_file", config_file);
-  }
-
-  /// Prints the usage statement.
-  std::ostream & print_usage(std::ostream &out) const {
-
-    out << "Benchmark\n\n"
-        << "Options:\n\n"
-        << "  --config_file               Configuration file\n\n";
-
-    return out;
-  }
-};
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-template <typename BenchOptions>
-auto benchmark_main(int argc, const char **argv) -> int {
-  BenchOptions options;
-
-  options.parse(argc, argv);
-
-  if (options.error) {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
-  }
-
-  cutlass::KernelHardwareInfo hw_info;
-  hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
-  const auto benchmark_config = argv[0];
-  auto runner = cutlass::benchmark::BenchmarkRegistry<BenchOptions>::get_benchmark(benchmark_config);
-
-  std::stringstream benchmark_name;
-  benchmark_name << benchmark_config << "/" << options.benchmark_name();
-  ::benchmark::RegisterBenchmark(benchmark_name.str(), runner, options, hw_info)->UseManualTime();
-  return 0;
-}
 
 int main(int argc, const char** argv) {
 
@@ -136,7 +68,7 @@ int main(int argc, const char** argv) {
     return 1;
   }
 
-  register_benchmarks();
+  register_gemm_benchmarks();
 
   std::string line;
   while (std::getline(file, line)) {
@@ -161,13 +93,8 @@ int main(int argc, const char** argv) {
       std::string const& benchmark_config = line_argv.data()[0];
 
       // Call the secondary main function with the parsed arguments
-      if(benchmark_config.find("Gemm") != std::string::npos) {
-        benchmark_main<cutlass::benchmark::GEMMOptions>(line_argc, line_argv.data());
-      } else {
-#if defined SYCL_INTEL_TARGET
-        benchmark_main<cutlass::benchmark::FMHAOptions>(line_argc, line_argv.data());
-#endif
-      }
+      benchmark_main<cutlass::benchmark::GEMMOptions>(line_argc, line_argv.data());
+
     }
   }
   file.close();
