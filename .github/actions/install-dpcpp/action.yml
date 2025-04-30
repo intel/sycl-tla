@@ -30,6 +30,8 @@ runs:
           if [[ "${{ inputs.IGC }}" == "staging" ]]; then
             sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           fi
+          sudo apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
+          sudo apt-get install -y libze-dev intel-ocloc
         fi
         sudo apt update && sudo apt install -y intel-opencl-icd ocl-icd-opencl-dev g++
         dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
@@ -65,6 +67,8 @@ runs:
           if [[ "${{ inputs.IGC }}" != "staging" ]]; then
             sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           fi
+          sudo apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
+          sudo apt-get install -y libze-dev intel-ocloc
         fi
         wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
