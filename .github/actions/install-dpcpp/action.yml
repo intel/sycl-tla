@@ -29,6 +29,7 @@ runs:
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
           if [[ "${{ inputs.IGC }}" == "staging" ]]; then
             sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
+          fi
         fi
         sudo apt update && sudo apt install -y intel-opencl-icd ocl-icd-opencl-dev g++
         dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
