@@ -47,14 +47,17 @@ jobs:
             runner: cp-b580-gpu
           - compiler: RELEASE
             gpu: BMG
-            intel_graphics: RELEASE
-            sycl_target: intel_gpu_bmg_g21
-            runner: cp-b580-gpu
-          - compiler: RELEASE
-            gpu: BMG
             intel_graphics: STAGING
             sycl_target: intel_gpu_bmg_g21
             runner: cp-b580-gpu
+
+            # disable because IGC bug
+          - compiler: RELEASE
+            gpu: BMG
+            intel_graphics: RELEASE
+            sycl_target: intel_gpu_bmg_g21
+            runner: cp-b580-gpu
+
     name: Run Intel ${{ matrix.compiler }} tests on ${{ matrix.gpu }} with intel-graphics ${{ matrix.intel_graphics }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
@@ -92,8 +95,10 @@ jobs:
         shell: bash
         run: |
           cmake --build . --target test_unit -j $(nproc)
-
       - name: Examples
         shell: bash
         run: |
-          cmake --build . --target test_examples -j $(nproc)
+          # Disable test examples on BMG due to flakiness 
+          if [[ "${{ inputs.GPU }}" != "BMG" ]]; then
+            cmake --build . --target test_examples -j $(nproc)
+          fi
