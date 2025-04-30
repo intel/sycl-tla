@@ -35,5 +35,7 @@ cutlass_example_add_executable(
   TEST_BATCHES
 )
 # TODO(codeplay): Remove these once IGC VectorAliasThreshold issue is fixed
-set_target_properties( 04_pvc_grouped_gemm PROPERTIES CXX_COMPILER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
-set_target_properties( 04_pvc_grouped_gemm PROPERTIES CXX_LINKER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
+if(NOT WIN32)
+  set_target_properties( 04_pvc_grouped_gemm PROPERTIES CXX_COMPILER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
+  set_target_properties( 04_pvc_grouped_gemm PROPERTIES CXX_LINKER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
+endif()

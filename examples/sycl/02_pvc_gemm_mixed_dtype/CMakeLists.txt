@@ -26,20 +26,23 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(TEST_BATCHES --l=2)
-set(TEST_MODE_1 --l=2 --mode=1)
-set(TEST_MODE_0 --l=2 --mode=0)
-set(TEST_A_NARROW l=2 --a_narrower)
+# TODO(codeplay): Remove once IGC block load loop hoisting bug is fixed or a Windows work-around is available
+if(NOT WIN32)
+  set(TEST_BATCHES --l=2)
+  set(TEST_MODE_1 --l=2 --mode=1)
+  set(TEST_MODE_0 --l=2 --mode=0)
+  set(TEST_A_NARROW l=2 --a_narrower)
 
-cutlass_example_add_executable(
-  02_pvc_gemm_mixed_dtype
-  02_pvc_gemm_mixed_dtype.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-  TEST_MODE_1
-  TEST_MODE_0
-  TEST_A_NARROW
-)
+  cutlass_example_add_executable(
+    02_pvc_gemm_mixed_dtype
+    02_pvc_gemm_mixed_dtype.cpp
+    TEST_COMMAND_OPTIONS
+    TEST_BATCHES
+    TEST_MODE_1
+    TEST_MODE_0
+    TEST_A_NARROW
+  )
   # TODO(codeplay): Remove these once IGC block load loop hoisting bug is fixed
   set_target_properties( 02_pvc_gemm_mixed_dtype PROPERTIES CXX_COMPILER_LAUNCHER "IGC_allowDecompose2DBlockFuncs=0" )
   set_target_properties( 02_pvc_gemm_mixed_dtype PROPERTIES CXX_LINKER_LAUNCHER "IGC_allowDecompose2DBlockFuncs=0" )
+endif()
