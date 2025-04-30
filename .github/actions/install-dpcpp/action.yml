@@ -63,8 +63,8 @@ runs:
       if: inputs.DPCPP_RELEASE == 'RELEASE'
       shell: bash
       run: |
-        if [[ "${{ inputs.GPU }}" != "BMG" ]]; then
-          if [[ "${{ inputs.IGC }}" != "staging" ]]; then
+        if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
+          if [[ "${{ inputs.IGC }}" == "staging" ]]; then
             sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           fi
           sudo apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
