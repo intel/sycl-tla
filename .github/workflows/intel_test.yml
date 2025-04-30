@@ -26,15 +26,34 @@ jobs:
         compiler: [ NIGHTLY, RELEASE ]
         gpu: [PVC, BMG]
         include:
-          - gpu: PVC
+          - compiler: NIGHTLY
+            gpu: PVC
             intel_graphics: release
             sycl_target: intel_gpu_pvc
             runner: cp-gpumax-1100-gpu
-          - gpu: BMG
+          - compiler: RELEASE
+            gpu: PVC
+            intel_graphics: release
+            sycl_target: intel_gpu_pvc
+            runner: cp-gpumax-1100-gpu
+
+          - compiler: NIGHTLY
+            gpu: BMG
             intel_graphics: release
             sycl_target: intel_gpu_bmg_g21
             runner: cp-b580-gpu
-          - gpu: BMG
+          - compiler: NIGHTLY
+            gpu: BMG
+            intel_graphics: staging
+            sycl_target: intel_gpu_bmg_g21
+            runner: cp-b580-gpu
+          - compiler: RELEASE
+            gpu: BMG
+            intel_graphics: release
+            sycl_target: intel_gpu_bmg_g21
+            runner: cp-b580-gpu
+          - compiler: RELEASE
+            gpu: BMG
             intel_graphics: staging
             sycl_target: intel_gpu_bmg_g21
             runner: cp-b580-gpu
