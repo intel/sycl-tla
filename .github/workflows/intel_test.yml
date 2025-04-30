@@ -24,37 +24,38 @@ jobs:
     strategy:
       matrix:
         compiler: [ NIGHTLY, RELEASE ]
+        intel_graphics: [ RELEASE, STAGING ]
         gpu: [PVC, BMG]
         include:
           - compiler: NIGHTLY
             gpu: PVC
-            intel_graphics: release
+            intel_graphics: RELEASE
             sycl_target: intel_gpu_pvc
             runner: cp-gpumax-1100-gpu
           - compiler: RELEASE
             gpu: PVC
-            intel_graphics: release
+            intel_graphics: RELEASE
             sycl_target: intel_gpu_pvc
             runner: cp-gpumax-1100-gpu
 
           - compiler: NIGHTLY
             gpu: BMG
-            intel_graphics: release
+            intel_graphics: RELEASE
             sycl_target: intel_gpu_bmg_g21
             runner: cp-b580-gpu
           - compiler: NIGHTLY
             gpu: BMG
-            intel_graphics: staging
+            intel_graphics: STAGING
             sycl_target: intel_gpu_bmg_g21
             runner: cp-b580-gpu
           - compiler: RELEASE
             gpu: BMG
-            intel_graphics: release
+            intel_graphics: RELEASE
             sycl_target: intel_gpu_bmg_g21
             runner: cp-b580-gpu
           - compiler: RELEASE
             gpu: BMG
-            intel_graphics: staging
+            intel_graphics: STAGING
             sycl_target: intel_gpu_bmg_g21
             runner: cp-b580-gpu
     name: Run Intel ${{ matrix.compiler }} tests on ${{ matrix.gpu }} with intel-graphics ${{ matrix.intel_graphics }}
