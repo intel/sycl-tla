@@ -26,8 +26,8 @@ runs:
       if: inputs.DPCPP_RELEASE == 'NIGHTLY'
       shell: bash
       run: |
-        if [[ "${{ inputs.GPU }}" != "BMG" ]]; then
-          if [[ "${{ inputs.IGC }}" != "staging" ]]; then
+        if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
+          if [[ "${{ inputs.IGC }}" == "staging" ]]; then
             sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
         fi
         sudo apt update && sudo apt install -y intel-opencl-icd ocl-icd-opencl-dev g++
