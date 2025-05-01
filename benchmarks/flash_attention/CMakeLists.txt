@@ -26,7 +26,5 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention)
 add_subdirectory(flash_attention_prefill)
-
-add_custom_target(cutlass_benchmarks_flash_attention DEPENDS cutlass_benchmarks_flash_attention_prefill)
-add_custom_target(benchmarks_flash_attention DEPENDS benchmarks_flash_attention_prefill)

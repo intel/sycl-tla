@@ -35,6 +35,8 @@ set(CONFIG_FILE_INTEL_SGLANG_SPLITK --config_file=${CMAKE_SOURCE_DIR}/benchmarks
 
 set(CONFIG_FILE_CUDA --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/ampere/input_files/input_gemm.in)
 
+cutlass_benchmark_add_suite(cutlass_benchmarks_gemm)
+
 if(CUTLASS_ENABLE_SYCL)
 
 if(SYCL_INTEL_TARGET)
@@ -42,6 +44,7 @@ if(SYCL_INTEL_TARGET)
 cutlass_benchmark_add_executable(
     cutlass_benchmarks_gemm_sycl
     main.cpp
+    SUITE cutlass_benchmarks_gemm
     TEST_COMMAND_OPTIONS
     CONFIG_FILE_INTEL_DEFAULT
     # CONFIG_FILE_INTEL_LINEAR
@@ -54,24 +57,20 @@ else()
 cutlass_benchmark_add_executable(
     cutlass_benchmarks_gemm_sycl
     main.cpp
+    SUITE cutlass_benchmarks_gemm
     TEST_COMMAND_OPTIONS
     CONFIG_FILE_CUDA
 )
 endif()
-
-add_custom_target(cutlass_benchmarks_gemm DEPENDS cutlass_benchmarks_gemm_sycl)
-add_custom_target(benchmarks_gemm DEPENDS benchmarks_gemm_sycl)
 
 else()
 
 cutlass_benchmark_add_executable(
     cutlass_benchmarks_gemm_cuda
     main.cu
+    SUITE cutlass_benchmarks_gemm
     TEST_COMMAND_OPTIONS
     CONFIG_FILE_CUDA
 )
-
-add_custom_target(cutlass_benchmarks_gemm DEPENDS cutlass_benchmarks_gemm_cuda)
-add_custom_target(benchmarks_gemm DEPENDS benchmarks_gemm_cuda)
 
 endif()

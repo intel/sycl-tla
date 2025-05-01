@@ -32,13 +32,14 @@ set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
 set(CONFIG_FILE_PVC --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/pvc/input_files/input_flash_attention_prefill.in)
 set(CONFIG_FILE_BMG --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_prefill_extend.in)
 
+cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_prefill
+                            SUPERSUITE cutlass_benchmarks_flash_attention)
+
 cutlass_benchmark_add_executable(
     cutlass_benchmarks_flash_attention_prefill_xe
     main.cpp
     TEST_COMMAND_OPTIONS
     CONFIG_FILE_PVC
     CONFIG_FILE_BMG
+    SUITE cutlass_benchmarks_flash_attention_prefill
 )
-
-add_custom_target(cutlass_benchmarks_flash_attention_prefill DEPENDS cutlass_benchmarks_flash_attention_prefill_xe)
-add_custom_target(benchmarks_flash_attention_prefill DEPENDS benchmarks_flash_attention_prefill_xe)
