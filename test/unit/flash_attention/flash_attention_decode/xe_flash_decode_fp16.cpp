@@ -67,7 +67,7 @@ struct XE_Flash_Attention_Decode {
   using CollectiveEpilogue = flash_attention::collective::FlashDecodeEpilogue<
         EpilogueDispatchPolicy, TileShape, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
-  using CollectiveSoftmaxEpilogue = flash_attention::collective::FlashDecodeSoftmaxEpilogue<
+  using FlashPrefillSoftmaxEpilogue = flash_attention::collective::FlashDecodeSoftmaxEpilogue<
         HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;
 
   // Mainloop
@@ -82,7 +82,7 @@ struct XE_Flash_Attention_Decode {
         HasCausalMask>;
 
     using Kernel = flash_attention::kernel::FMHADecode<ProblemShapeType, CollectiveMainloop,
-                                                       CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
+                                                       FlashPrefillSoftmaxEpilogue, CollectiveEpilogue>;
 };
 
 TEST(XE_Flash_Attention_Decode_fp16, causal) {

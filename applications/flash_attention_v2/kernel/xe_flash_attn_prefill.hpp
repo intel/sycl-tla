@@ -35,18 +35,17 @@
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/kernel_hardware_info.hpp"
 
-#include "flash_attention_v2/collective/xe_flash_attn_mma.hpp"
-#include "flash_attention_v2/kernel/tile_scheduler.hpp"
+#include "flash_attention_v2/collective/xe_flash_attn_prefill_mma.hpp"
 
 namespace cutlass::flash_attention::kernel {
 
-template <class ProblemShape, class CollectiveMainloop, class CollectiveSoftmaxEpilogue_, class CollectiveEpilogue, class TileScheduler_ = void>
-class GemmUniversalAttention;
+template <class ProblemShape, class CollectiveMainloop, class FlashPrefillSoftmaxEpilogue_, class CollectiveEpilogue, class TileScheduler_ = void>
+class FMHAPrefill;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-template <class ProblemShape_, class CollectiveMainloop_, class CollectiveSoftmaxEpilogue_, class CollectiveEpilogue_, class TileScheduler_>
-class GemmUniversalAttention {
+template <class ProblemShape_, class CollectiveMainloop_, class FlashPrefillSoftmaxEpilogue_, class CollectiveEpilogue_, class TileScheduler_>
+class FMHAPrefill {
 
 public:
   //
@@ -74,9 +73,9 @@ public:
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
 
-  using CollectiveSoftmaxEpilogue = CollectiveSoftmaxEpilogue_;
-  using SoftmaxArguments = typename CollectiveSoftmaxEpilogue::Arguments;
-  using SoftmaxParams = typename CollectiveSoftmaxEpilogue::Params;
+  using FlashPrefillSoftmaxEpilogue = FlashPrefillSoftmaxEpilogue_;
+  using SoftmaxArguments = typename FlashPrefillSoftmaxEpilogue::Arguments;
+  using SoftmaxParams = typename FlashPrefillSoftmaxEpilogue::Params;
 
   static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler> or 
                 cute::is_same_v<TileScheduler_, IndividualScheduler>,
@@ -166,7 +165,7 @@ public:
     (void)workspace;
     return {args.mode, args.problem_shape,
             CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
-            CollectiveSoftmaxEpilogue::to_underlying_arguments(args.softmax),
+            FlashPrefillSoftmaxEpilogue::to_underlying_arguments(args.softmax),
             CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace),
             TileScheduler::to_underlying_arguments(args.problem_shape, args.hw_info, WorkgroupTileShape{})};
   }
@@ -330,7 +329,7 @@ public:
         // prefetching it the same way as cutlass K matrix does not make sense
         prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock));
 
-        CollectiveSoftmaxEpilogue softmax(params.softmax);
+        FlashPrefillSoftmaxEpilogue softmax(params.softmax);
         softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
         collective_mma.mmaPV(out_reg, tSr, gV(_, _ , nblock), out_reg, mainloop_params);
@@ -371,7 +370,7 @@ public:
           }
         }
 
-        CollectiveSoftmaxEpilogue softmax(params.softmax);
+        FlashPrefillSoftmaxEpilogue softmax(params.softmax);
         softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
         collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_limit - 1), out_reg, mainloop_params);

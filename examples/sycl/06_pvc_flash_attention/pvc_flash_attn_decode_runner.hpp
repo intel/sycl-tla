@@ -35,7 +35,7 @@
 #include "flash_attention_v2/collective/fmha_fusion.hpp"
 #include "flash_attention_v2/kernel/tile_scheduler.hpp"
 #include "cutlass/util/packed_stride.hpp"
-#include "flash_attention_v2/kernel/xe_flash_attn_decode_gemm.hpp"
+#include "flash_attention_v2/kernel/xe_flash_attn_decode.hpp"
 #include "flash_attention_v2/collective/xe_flash_attn_decode_epilogue.hpp"
 #include "flash_attention_v2/collective/xe_flash_attn_decode_softmax_epilogue.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
@@ -660,7 +660,7 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
     using CollectiveEpilogue = cutlass::flash_attention::collective::FlashDecodeEpilogue<
         EpilogueDispatchPolicy, TileShape, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
-    using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashDecodeSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
+    using FlashPrefillSoftmaxEpilogue = cutlass::flash_attention::collective::FlashDecodeSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
 
     using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
     using namespace cutlass::fmha::collective;
@@ -677,7 +677,7 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
         Causal>;
 
     using FMHAKernel = cutlass::flash_attention::kernel::FMHADecode<ProblemShapeType, CollectiveMainloop,
-                                                                     CollectiveSoftmaxEpilogue, CollectiveEpilogue, Scheduler>;
+                                                                     FlashPrefillSoftmaxEpilogue, CollectiveEpilogue, Scheduler>;
 
     ExampleRunner<FMHAKernel, isVarLen> runner;
 
