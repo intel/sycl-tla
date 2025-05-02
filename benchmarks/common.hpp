@@ -37,7 +37,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass {
-  std::size_t get_llc_size() {
+  static CUTLASS_HOST_DEVICE std::size_t get_llc_size() {
     #if defined(CUTLASS_ENABLE_SYCL)
       return syclcompat::get_default_queue().get_device().get_info<sycl::info::device::global_mem_cache_size>();   
     #else
@@ -86,8 +86,8 @@ namespace benchmark {
       }
     }
   };
-} // benchmark
-} // cutlass
+} // namespace benchmark
+} // namespace cutlass
 
 
 
@@ -122,7 +122,7 @@ struct BenckmarkOptions {
 
     out << "Benchmark\n\n"
         << "Options:\n\n"
-        << "  --config_file               Configuration file\n\n";
+        << "  --config_file=/path/to/config_file.in\n\n";
 
     return out;
   }
@@ -152,3 +152,26 @@ CUTLASS_HOST_DEVICE auto benchmark_main(int argc, const char **argv) -> int {
   return 0;
 }
 
+
+template <typename BenchOptions>
+CUTLASS_HOST_DEVICE void register_benchmarks(std::string line) {
+  // Split the line into arguments
+  std::istringstream iss(line);
+  std::vector<std::string> args;
+  std::string arg;
+
+  while (iss >> arg) {
+    args.push_back(arg);
+  }
+
+  // Prepare argc and argv for secondary_main
+  int line_argc = static_cast<int>(args.size());
+  std::vector<const char*> line_argv(line_argc);
+
+  for (int i = 0; i < line_argc; ++i) {
+    line_argv[i] = args[i].c_str(); // Convert std::string to char*
+  }
+
+  // Call the secondary main function with the parsed arguments
+  benchmark_main<BenchOptions>(line_argc, line_argv.data());
+}

@@ -73,28 +73,7 @@ int main(int argc, const char** argv) {
   std::string line;
   while (std::getline(file, line)) {
     if (!line.empty() && line.find("#") != 0) {
-      // Split the line into arguments
-      std::istringstream iss(line);
-      std::vector<std::string> args;
-      std::string arg;
-
-      while (iss >> arg) {
-        args.push_back(arg);
-      }
-
-      // Prepare argc and argv for secondary_main
-      int line_argc = static_cast<int>(args.size());
-      std::vector<const char*> line_argv(line_argc);
-
-      for (int i = 0; i < line_argc; ++i) {
-        line_argv[i] = &args[i][0]; // Convert std::string to char*
-      }
-
-      std::string const& benchmark_config = line_argv.data()[0];
-
-      // Call the secondary main function with the parsed arguments
-      benchmark_main<cutlass::benchmark::GEMMOptions>(line_argc, line_argv.data());
-
+      register_benchmarks<cutlass::benchmark::GEMMOptions>(line);
     }
   }
   file.close();

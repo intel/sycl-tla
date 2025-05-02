@@ -49,7 +49,7 @@
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "../examples/common/sycl_common.hpp"
-#include "../../common.cpp"
+#include "../../common.hpp"
 
 using namespace cute;
 

@@ -50,7 +50,7 @@
 #include "cutlass/util/reference/device/tensor_fill.h"
 #include "cutlass/util/reference/device/tensor_silu.h"
 
-#include "../common.cpp"
+#include "../common.hpp"
 
 #include <benchmark/benchmark.h>
 
