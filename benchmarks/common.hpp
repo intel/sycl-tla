@@ -131,7 +131,7 @@ struct BenckmarkOptions {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <typename BenchOptions>
-CUTLASS_HOST_DEVICE auto benchmark_main(int argc, const char **argv) -> int {
+auto benchmark_main(int argc, const char **argv) -> int {
   BenchOptions options;
 
   options.parse(argc, argv);
