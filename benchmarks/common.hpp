@@ -169,7 +169,7 @@ void register_benchmarks(std::string line) {
   std::vector<const char*> line_argv(line_argc);
 
   for (int i = 0; i < line_argc; ++i) {
-    line_argv[i] = args[i].c_str(); // Convert std::string to char*
+    line_argv[i] = args[i].c_str();
   }
 
   // Call the secondary main function with the parsed arguments
