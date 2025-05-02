@@ -568,8 +568,6 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
         {block_O.get(), stride_O},
         hw_info};
 
-    // FMHAKernel gemm_op;
-
     size_t workspace_size = FMHAKernel::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 

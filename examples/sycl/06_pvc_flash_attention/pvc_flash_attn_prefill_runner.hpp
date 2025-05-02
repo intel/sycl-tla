@@ -491,8 +491,6 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
         {block_O.get(), stride_O},
         hw_info};
 
-    // FMHAPrefillKernel gemm_op;
-
     // Define device-global scratch memory
     size_t workspace_size = FMHAPrefillKernel::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
