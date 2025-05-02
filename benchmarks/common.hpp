@@ -154,7 +154,7 @@ auto benchmark_main(int argc, const char **argv) -> int {
 
 
 template <typename BenchOptions>
-CUTLASS_HOST_DEVICE void register_benchmarks(std::string line) {
+void register_benchmarks(std::string line) {
   // Split the line into arguments
   std::istringstream iss(line);
   std::vector<std::string> args;
