@@ -37,7 +37,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass {
-  static CUTLASS_HOST_DEVICE std::size_t get_llc_size() {
+  static inline std::size_t get_llc_size() {
     #if defined(CUTLASS_ENABLE_SYCL)
       return syclcompat::get_default_queue().get_device().get_info<sycl::info::device::global_mem_cache_size>();   
     #else
