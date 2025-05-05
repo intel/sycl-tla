@@ -28,9 +28,19 @@
 
 
 if(SYCL_INTEL_TARGET)
-  add_subdirectory(pvc)
+  add_subdirectory(00_pvc_gemm)
+  add_subdirectory(01_pvc_gemm_with_collective_builder)
+  add_subdirectory(02_pvc_gemm_mixed_dtype)
+  add_subdirectory(03_pvc_gemm_streamk)
+  add_subdirectory(04_pvc_grouped_gemm)
+  add_subdirectory(05_pvc_gemm_with_epilogues)
+  add_subdirectory(06_pvc_flash_attention)
+  add_subdirectory(07_pvc_dual_gemm)
+  add_subdirectory(08_pvc_gemm_f8)
+  add_subdirectory(09_pvc_gemm_with_sycl_queue)
+  add_subdirectory(10_pvc_flash_attention_cachedKV)
 endif()
 
 if (CUTLASS_ENABLE_SYCL)
-  add_subdirectory(device_agnostic)
+  add_subdirectory(generics)
 endif()

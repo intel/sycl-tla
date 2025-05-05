@@ -179,8 +179,14 @@ CUTE_HOST_DEVICE auto prefetch_selector(TiledCopy<TiledCopyArgs...> const& tiled
   int L = 1;
   auto data = make_gmem_ptr(static_cast<const typename Tiled_Copy::ValType*>(tiled_copy.base_ptr));
   auto shape = make_shape(M, N, L);
-  auto order = std::conditional_t<Tiled_Copy::is_need_reversed, Step<_0, _1, _2>, Step<_1, _0, _2>>{};
-  auto tensor = make_tensor(data, make_ordered_layout(shape, order));
+  auto stride = [=](){
+      if constexpr (Tiled_Copy::is_need_reversed){
+        return make_stride(_1{}, tiled_copy.pitch, tiled_copy.stride_l);
+      }else{
+        return make_stride(tiled_copy.pitch, _1{}, tiled_copy.stride_l);
+      }
+    }();
+  auto tensor = make_tensor(data, make_layout(shape, stride));
   return cute::prefetch_selector<TileShape, Num_SGs, subgroup_size>(tensor);
 }
 
@@ -421,14 +427,16 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
   Int mma_atom_iters_in_copy_N = copy_size_N / mma_atom_size_N;
   Int copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
   Int copy_iters_N = total_mma_atom_iters_N / mma_atom_iters_in_copy_N;
+
   auto order = std::conditional_t<TiledCopy::is_convention_MN,
                                   Step<Step<_0, _1>, Step<_2, _4>, Step<_3, _5>>,
                                   Step<Step<_0, _1>, Step<_3, _5>, Step<_2, _4>>>{};
-
-  return make_ordered_layout(make_shape(mma_atom_shape_2d,
-                                        make_shape(mma_atom_iters_in_copy_M, copy_iters_M),
-                                        make_shape(mma_atom_iters_in_copy_N, copy_iters_N)),
-                             order);
+  auto res =  make_ordered_layout(make_shape(mma_atom_shape_2d,
+                                             make_shape(mma_atom_iters_in_copy_M, copy_iters_M),
+                                             make_shape(mma_atom_iters_in_copy_N, copy_iters_N)),
+                                  order);
+  static_assert(size(res) > 0, "Error in make_fragment_layout(), tile size might be smaller than copy atom");
+  return res;
 };
 
 // clang-format off
@@ -1649,8 +1657,8 @@ struct Copy_Traits_<XE_2D_U16x16x8_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x8_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_16>,
-                           Stride< _0, _1>>;
+  using SrcLayout = Layout<Shape <_16, Shape <_16, _8>>,
+                           Stride< _0, Stride< _1,_16>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape < _16,Shape <_16, _8>>,
                            Stride<_128,Stride< _1,_16>>>;
@@ -2305,11 +2313,11 @@ COPY_TRAIT_ST_DEF(XE_2D_U32x2x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x4x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x8x16_ST_N)
 
-// Generate the PVC coordinate tensor
+// Generate the Xe coordinate tensor
 template <class GShape>
 CUTE_HOST_DEVICE constexpr
 auto
-get_pvc_tensor(GShape const& g_shape) {
+get_xe_tensor(GShape const& g_shape) {
   return make_counting_tensor(make_identity_layout(g_shape));
 }
 

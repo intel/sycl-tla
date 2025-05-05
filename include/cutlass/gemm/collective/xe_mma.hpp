@@ -47,13 +47,13 @@ using namespace cute;
 template <int Stages, class Schedule, class TileShape_, class ElementA_, class StrideA_, class ElementB_, class StrideB_,
           class TiledMma_, class GmemTiledCopyA_, class SmemLayoutAtomA_, class SmemCopyAtomA_, class TransformA_,
           class GmemTiledCopyB_, class SmemLayoutAtomB_, class SmemCopyAtomB_, class TransformB_>
-struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
+struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
                      GmemTiledCopyA_, SmemLayoutAtomA_, SmemCopyAtomA_, TransformA_, GmemTiledCopyB_, SmemLayoutAtomB_,
                      SmemCopyAtomB_, TransformB_> {
   //
   // Type Aliases
   //
-  using DispatchPolicy = MainloopIntelPVC<Stages, Schedule>;
+  using DispatchPolicy = MainloopIntelXeXMX16<Stages, Schedule>;
   using WorkgroupTileShape = TileShape_;
   using ElementA = ElementA_;
   using StrideA = StrideA_;
@@ -71,7 +71,9 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
 
-  static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopIntelPVC requires that A and B have same type.");
+  static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopIntelXeXMX16 requires that A and B have same type.");
+  static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
+  static_assert(std::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -145,10 +147,11 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
-  template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator>
+  template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator, class BlkCoord>
   CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,
-                                 KTileIterator k_tile_iter, int k_tile_count, int const &K_start, int thread_idx,
+                                 KTileIterator k_tile_iter, int k_tile_count, BlkCoord const &blk_coord, int const &K_start, int thread_idx,
                                  Params const &mainloop) {
+    (void)blk_coord;
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
@@ -196,7 +199,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
       PRINT(tCrA);
       PRINT(tArA);
-      PRINT(mainloop.copy_A);
+      PRINT(mainloop.tiled_copy_a);
 
       print("======================= B: \n");
       PRINT(tCgB);
@@ -204,7 +207,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
       PRINT(tCrB);
       PRINT(tBrB);
-      PRINT(mainloop.copy_B);
+      PRINT(mainloop.tiled_copy_b);
       }
 #undef PRINT
 #endif

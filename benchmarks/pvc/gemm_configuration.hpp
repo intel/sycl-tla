@@ -62,7 +62,8 @@ template<
   class ElementAccumulator,
   class TileShape, class TiledMma,
   class GmemTiledCopyA, class GmemTiledCopyB,
-  Scheduler TileScheduler>
+  Scheduler TileScheduler,
+  class EpilogueOp = epilogue::fusion::LinearCombination<float, float, float, float, FloatRoundStyle::round_to_nearest>>
 struct GemmConfiguration {
   static_assert(sizeof(ElementA) == 0, "No valid GemmConfiguration configuration exists.");
 };
@@ -72,39 +73,49 @@ struct GemmConfiguration {
 // bfloat16
 
 template<typename LayoutA, typename LayoutB, typename LayoutC,
-  class TileShape, class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB, Scheduler TileScheduler>
+  class TileShape, class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB, Scheduler TileScheduler, class EpilogueOp>
 struct GemmConfiguration<
-      arch::IntelPVC,
+      arch::IntelXe,
       bfloat16_t, LayoutA,
       bfloat16_t, LayoutB,
       float, LayoutC,
       float, TileShape, TiledMma,
-      GmemTiledCopyA, GmemTiledCopyB, TileScheduler> {
-  using DispatchPolicy = MainloopIntelPVC<3, std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelPVC, cutlass::gemm::KernelPVCCooperative>>;
+      GmemTiledCopyA, GmemTiledCopyB, TileScheduler, EpilogueOp> {
+  using DispatchPolicy = MainloopIntelXeXMX16<3, std::conditional_t<TileScheduler == Scheduler::Gemm, cutlass::gemm::KernelXe, cutlass::gemm::KernelXeCooperative>>;
+
+  // Configurations in benchmarks.hpp can pass either a layout tag (e.g. RowMajor) or a Stride directly
+  using StrideA = std::conditional_t<cute::is_tuple_v<LayoutA>, LayoutA, TagToStrideA_t<LayoutA>>;
+  using StrideB = std::conditional_t<cute::is_tuple_v<LayoutB>, LayoutB, TagToStrideB_t<LayoutB>>;
+  using StrideC = std::conditional_t<cute::is_tuple_v<LayoutC>, LayoutC, TagToStrideC_t<LayoutC>>;
 
   // Mainloop
   using CollectiveMainloop = collective::CollectiveMma<
     DispatchPolicy, TileShape,
-    bfloat16_t, TagToStrideA_t<LayoutA>,
-    bfloat16_t, TagToStrideB_t<LayoutB>,
+    bfloat16_t, StrideA,
+    bfloat16_t, StrideB,
     TiledMma,
     GmemTiledCopyA, void, void, identity, // A
     GmemTiledCopyB, void, void, identity // B
   >;
 
   // Epilogue
-  using EpilogueDispatchPolicy = epilogue::IntelPVCEpilogue;
-  using EpilogueOp = epilogue::fusion::LinearCombination<float, float, float, float, FloatRoundStyle::round_to_nearest>;
-  using FusionCallBacks = epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
-          decltype(tile_shape(TiledMma()))>;
+  using EpilogueDispatchPolicy = epilogue::IntelXeXMX16;
+
+  // TODO(codeplay): Refactor this following Testbed3x approach. See benchmark_runner.hpp
+  using FusionCallBacks = std::conditional_t<
+      EpilogueOp::IsAuxInSupported, // ~Is mul_add
+      epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
+                                        decltype(tile_shape(TiledMma())), XE_2D_U32x8x16_LD_N>,
+      epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
+                                        decltype(tile_shape(TiledMma()))>>;
 
   using CollectiveEpilogue = epilogue::collective::CollectiveEpilogue<
         EpilogueDispatchPolicy,
         TileShape,
         float,
-        TagToStrideC_t<LayoutC>,
+        StrideC,
         float,
-        TagToStrideC_t<LayoutC>,
+        StrideC,
         FusionCallBacks,
         XE_2D_U32x8x16_LD_N,
         void, void,
@@ -132,7 +143,7 @@ struct GemmConfiguration<
     } else {
       static_assert(TileScheduler == Scheduler::GemmSplitK);
       typename GemmKernel::Arguments arguments{};
-      arguments.scheduler = {1, StreamKMode::SplitK};
+      arguments.scheduler = {2, StreamKMode::SplitK};
       return arguments;
     }
   }
