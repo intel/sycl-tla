@@ -39,12 +39,12 @@
 
 namespace cutlass::flash_attention::kernel {
 
-template <class ProblemShape, class CollectiveMainloop, class FlashPrefillSoftmaxEpilogue_, class CollectiveEpilogue, class TileScheduler_ = void>
+template <class ProblemShape, class CollectiveMainloop, class CollectiveSoftmaxEpilogue_, class CollectiveEpilogue, class TileScheduler_ = void>
 class FMHADecode;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-template <class ProblemShape_, class CollectiveMainloop_, class FlashPrefillSoftmaxEpilogue_, class CollectiveEpilogue_, class TileScheduler_>
+template <class ProblemShape_, class CollectiveMainloop_, class CollectiveSoftmaxEpilogue_, class CollectiveEpilogue_, class TileScheduler_>
 class FMHADecode {
 
 public:
@@ -73,9 +73,9 @@ public:
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
 
-  using FlashPrefillSoftmaxEpilogue = FlashPrefillSoftmaxEpilogue_;
-  using SoftmaxArguments = typename FlashPrefillSoftmaxEpilogue::Arguments;
-  using SoftmaxParams = typename FlashPrefillSoftmaxEpilogue::Params;
+  using CollectiveSoftmaxEpilogue = CollectiveSoftmaxEpilogue_;
+  using SoftmaxArguments = typename CollectiveSoftmaxEpilogue::Arguments;
+  using SoftmaxParams = typename CollectiveSoftmaxEpilogue::Params;
 
   static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, FlashDecodeIndividualScheduler>,
                 "Unsupported TileScheduler for Intel PVC.");
@@ -165,7 +165,7 @@ public:
     (void)workspace;
     return {args.mode, args.problem_shape,
             CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
-            FlashPrefillSoftmaxEpilogue::to_underlying_arguments(args.softmax),
+            CollectiveSoftmaxEpilogue::to_underlying_arguments(args.softmax),
             CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace),
             TileScheduler::to_underlying_arguments(args.problem_shape, args.hw_info, WorkgroupTileShape{})};
   }
@@ -342,7 +342,7 @@ public:
         is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV(_, _, _, kv_tile_idx + split * PV_ATOM_M))
                     : prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + (split - kv_splits_cache) * PV_ATOM_M));
 
-        FlashPrefillSoftmaxEpilogue softmax(params.softmax);
+        CollectiveSoftmaxEpilogue softmax(params.softmax);
         softmax.template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
 
         auto gV_ = is_KV_cache ? gV(_, _, kv_tile_idx + split * PV_ATOM_M)
@@ -398,7 +398,7 @@ public:
         // prefetching it the same way as cutlass K matrix does not make sense
         prefetch(tiled_prefetch_v, pVgV(_, _, _, kv_tile_idx + (kv_splits_new - 1) * PV_ATOM_M));
 
-        FlashPrefillSoftmaxEpilogue softmax(params.softmax);
+        CollectiveSoftmaxEpilogue softmax(params.softmax);
         softmax.template operator()<Num_SGs>((kv_splits - 1) == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
 
         collective_mma.mmaPV(out_reg, tSr, gV(_, _, kv_tile_idx + (kv_splits_new - 1) * PV_ATOM_M), out_reg, mainloop_params, false);

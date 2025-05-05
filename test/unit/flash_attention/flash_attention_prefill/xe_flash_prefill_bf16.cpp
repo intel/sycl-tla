@@ -66,7 +66,7 @@ struct XE_Flash_Attention_Prefill {
   using CollectiveEpilogue = flash_attention::collective::FlashPrefillEpilogue<
         EpilogueDispatchPolicy, TileShape, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
-  using FlashPrefillSoftmaxEpilogue = flash_attention::collective::FlashPrefillSoftmaxEpilogue<
+  using CollectiveSoftmaxEpilogue = flash_attention::collective::FlashPrefillSoftmaxEpilogue<
         HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;
 
   // Mainloop
@@ -81,7 +81,7 @@ struct XE_Flash_Attention_Prefill {
         HasCausalMask>;
 
   using Kernel = flash_attention::kernel::FMHAPrefill<ProblemShapeType, CollectiveMainloop,
-                                                      FlashPrefillSoftmaxEpilogue, CollectiveEpilogue>;
+                                                      CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
 };
 
 TEST(XE_Flash_Attention_Prefill_bf16, causal) {

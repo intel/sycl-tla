@@ -39,12 +39,12 @@
 
 namespace cutlass::flash_attention::kernel {
 
-template <class ProblemShape, class CollectiveMainloop, class FlashPrefillSoftmaxEpilogue_, class CollectiveEpilogue, class TileScheduler_ = void>
+template <class ProblemShape, class CollectiveMainloop, class CollectiveSoftmaxEpilogue_, class CollectiveEpilogue, class TileScheduler_ = void>
 class FMHAPrefillCached;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-template <class ProblemShape_, class CollectiveMainloop_, class FlashPrefillSoftmaxEpilogue_, class CollectiveEpilogue_, class TileScheduler_>
+template <class ProblemShape_, class CollectiveMainloop_, class CollectiveSoftmaxEpilogue_, class CollectiveEpilogue_, class TileScheduler_>
 class FMHAPrefillCached {
 
 public:
@@ -73,9 +73,9 @@ public:
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
 
-  using FlashPrefillSoftmaxEpilogue = FlashPrefillSoftmaxEpilogue_;
-  using SoftmaxArguments = typename FlashPrefillSoftmaxEpilogue::Arguments;
-  using SoftmaxParams = typename FlashPrefillSoftmaxEpilogue::Params;
+  using CollectiveSoftmaxEpilogue = CollectiveSoftmaxEpilogue_;
+  using SoftmaxArguments = typename CollectiveSoftmaxEpilogue::Arguments;
+  using SoftmaxParams = typename CollectiveSoftmaxEpilogue::Params;
 
   static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler> or 
                 cute::is_same_v<TileScheduler_, IndividualScheduler>,
@@ -165,7 +165,7 @@ public:
     (void)workspace;
     return {args.mode, args.problem_shape,
             CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
-            FlashPrefillSoftmaxEpilogue::to_underlying_arguments(args.softmax),
+            CollectiveSoftmaxEpilogue::to_underlying_arguments(args.softmax),
             CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace),
             TileScheduler::to_underlying_arguments(args.problem_shape, args.hw_info, WorkgroupTileShape{})};
   }
@@ -355,7 +355,7 @@ public:
                       : prefetch(tiled_prefetch_v, pVgV(_, _, _ , nblock - nblock_cache));
 
         // 4) Fused softmax
-        FlashPrefillSoftmaxEpilogue softmax(params.softmax);
+        CollectiveSoftmaxEpilogue softmax(params.softmax);
         softmax(nblock == 0, tSr, max_reg, sum_reg, out_reg);
 
         // 5) Perform GEMM O = S*V
@@ -402,7 +402,7 @@ public:
           }
         }
 
-        FlashPrefillSoftmaxEpilogue softmax(params.softmax);
+        CollectiveSoftmaxEpilogue softmax(params.softmax);
         softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
         collective_mma.mmaPV(out_reg, tSr,  gV(_, _ , nblock_new - 1), out_reg, mainloop_params, false);

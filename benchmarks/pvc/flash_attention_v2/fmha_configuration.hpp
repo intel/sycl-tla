@@ -67,7 +67,7 @@ struct FMHAConfig {
       EpilogueDispatchPolicy, TileShape, ElementO, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementO,
       GmemTiledCopyO>;
 
-  using FlashPrefillSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementO>;
+  using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementO>;
 
   using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int>;
   using ProblemShapeVarlen = cute::tuple<int, int, int, fmha::collective::VariableLength, fmha::collective::VariableLength, int, int>;
@@ -83,7 +83,7 @@ struct FMHAConfig {
       Causal>;
 
   using GemmKernel = cutlass::flash_attention::kernel::FMHAPrefill<ProblemShapeType, CollectiveMainloop,
-                                                                    FlashPrefillSoftmaxEpilogue, CollectiveEpilogue>;
+                                                                    CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
 };
 
 } // namespace flash_attention

@@ -658,7 +658,7 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
     using CollectiveEpilogue = cutlass::flash_attention::collective::FlashDecodeEpilogue<
         EpilogueDispatchPolicy, TileShape, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
-    using FlashPrefillSoftmaxEpilogue = cutlass::flash_attention::collective::FlashDecodeSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
+    using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashDecodeSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
 
     using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
     using namespace cutlass::fmha::collective;
@@ -675,7 +675,7 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
         Causal>;
 
     using FMHAKernel = cutlass::flash_attention::kernel::FMHADecode<ProblemShapeType, CollectiveMainloop,
-                                                                     FlashPrefillSoftmaxEpilogue, CollectiveEpilogue, Scheduler>;
+                                                                     CollectiveSoftmaxEpilogue, CollectiveEpilogue, Scheduler>;
 
     ExampleRunner<FMHAKernel, isVarLen> runner;
 
