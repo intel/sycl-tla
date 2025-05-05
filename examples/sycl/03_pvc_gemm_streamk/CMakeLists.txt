@@ -35,4 +35,4 @@ cutlass_example_add_executable(
   TEST_BATCHES
 )
 # TODO(codeplay): Remove these once IGC VectorAliasThreshold issue is fixed
-target_link_options( 02_pvc_gemm_mixed_dtype PRIVATE -Xs "-options \"-igc_opts 'VectorAliasBBThreshold=10000'\"" )
+target_link_options( 03_pvc_gemm_streamk PRIVATE -Xs "-options \"-igc_opts 'VectorAliasBBThreshold=10000'\"" )
