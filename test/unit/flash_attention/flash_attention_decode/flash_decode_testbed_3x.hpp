@@ -231,6 +231,11 @@ struct TestbedImpl {
     std::normal_distribution<double> dist_kv(cute::get<4>(problem_size), cute::get<4>(problem_size) / 2);
     std::normal_distribution<double> dist_kv_cache(cute::get<5>(problem_size), cute::get<5>(problem_size) / 2);
 
+    // Use Cacheline Size to calculate alignment
+    constexpr int cacheline_bytes = 64;
+    constexpr int AlignmentQ = cacheline_bytes / sizeof(ElementQ);    // Alignment of Q matrix in units of elements
+    constexpr int AlignmentKV = cacheline_bytes / sizeof(ElementK);   // Alignment of Kand V matrix in units of elements
+
     auto generate_positive_int = [](auto& dist, auto& gen) {
       int result = 0;
       do {
@@ -251,9 +256,9 @@ struct TestbedImpl {
     int max_seqlen_kv_cache = 0;
 
     for (int i = 0; i < num_batches; i++) {
-      int seqlen_q = VarlenSame ? cute::get<3>(problem_size) : generate_positive_int(dist_q, rng);
-      int seqlen_kv = VarlenSame ? cute::get<4>(problem_size) : generate_positive_int(dist_kv, rng);
-      int seqlen_kv_cache = VarlenSame ? cute::get<5>(problem_size) : generate_positive_int(dist_kv_cache, rng);
+      int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
+      int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
+      int seqlen_kv_cache = cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
 
       total_seqlen_q += seqlen_q;
       total_seqlen_kv += seqlen_kv;

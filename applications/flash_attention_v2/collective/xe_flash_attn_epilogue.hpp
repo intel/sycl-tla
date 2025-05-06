@@ -199,12 +199,13 @@ public:
     copy(params.xe_store_o, out, tOgO);
   }
 
-  template <bool VarLen, class ProblemShapeType>
-  CUTLASS_DEVICE static constexpr Params get_updated_copies(Params const& params, ProblemShapeType const& problem_shape, int const& l_coord) {
+  template <bool VarLen, class ProblemShapeType, class LogicalProblemShapeType>
+  CUTLASS_DEVICE static constexpr Params get_updated_copies(Params const& params, ProblemShapeType const& problem_shape, 
+                                                            LogicalProblemShapeType const& logical_problem_shape, int const& l_coord) {
     if constexpr (!VarLen) {
       return params;
     } else {
-      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_shape;
+      auto [batch, num_heads_q, seq_len_qo, head_size_vo] = select<0, 1, 3, 6>(logical_problem_shape);
 
       auto qo_cumulative_length = get<3>(problem_shape).cumulative_length;
       int offset_o = num_heads_q * head_size_vo * qo_cumulative_length[l_coord];
