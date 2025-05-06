@@ -349,8 +349,13 @@ struct BenchmarkRunnerGemm {
 
     Gemm gemm_op;
 
+    device_memory::allocation<uint8_t> workspace;
     size_t workspace_size = Gemm::get_workspace_size(arguments);
-    device_memory::allocation<uint8_t> workspace(workspace_size);
+    try {
+      workspace.reset(workspace_size);
+    } catch (std::exception const &e) {
+      state.SkipWithError(e.what());
+    }
 
     if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess)
       state.SkipWithError("GEMM unable to implement given args.");
@@ -441,7 +446,7 @@ private:
   static void initialize_counters(::benchmark::State& state) {
     state.counters["avg_runtime_ms"] = 0;
     state.counters["best_runtime_ms"] = std::numeric_limits<double>::max();
-    state.counters["worst_runtime_ms"] = -std::numeric_limits<double>::max();
+    state.counters["worst_runtime_ms"] = std::numeric_limits<double>::lowest();
   }
 
   static void update_counters(::benchmark::State& state, double ms_elapsed) {
