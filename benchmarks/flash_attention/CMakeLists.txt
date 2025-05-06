@@ -26,15 +26,5 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
-
-cutlass_example_add_executable(
-  06_pvc_prefill_attention
-  06_pvc_prefill_attention.cpp
-)
-
-cutlass_example_add_executable(
-  06_pvc_decode_attention
-  06_pvc_decode_attention.cpp
-)
+cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention)
+add_subdirectory(flash_attention_prefill)
