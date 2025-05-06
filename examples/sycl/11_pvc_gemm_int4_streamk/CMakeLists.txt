@@ -29,11 +29,11 @@
 set(TEST_BATCHES --l=2)
 
 cutlass_example_add_executable(
-  10_pvc_gemm_int4_streamk
-  10_pvc_gemm_int4_streamk.cpp
+  11_pvc_gemm_int4_streamk
+  11_pvc_gemm_int4_streamk.cpp
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
 )
 # TODO(codeplay): Remove these once IGC VectorAliasThreshold issue is fixed
-set_target_properties( 10_pvc_gemm_int4_streamk PROPERTIES CXX_COMPILER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
-set_target_properties( 10_pvc_gemm_int4_streamk PROPERTIES CXX_LINKER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
+set_target_properties( 11_pvc_gemm_int4_streamk PROPERTIES CXX_COMPILER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
+set_target_properties( 11_pvc_gemm_int4_streamk PROPERTIES CXX_LINKER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )

@@ -309,11 +309,8 @@ public:
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
-    auto &&in = tCrA_load;
-    auto &&out = tCrA_mma;
-
     if constexpr (sizeof_bits_v<SrcType> < 8) {
-      convert_int_subbyte_to_half(out, in);
+      convert_int_subbyte_to_half(tCrA_mma, tCrA_load);
     } else {
       auto const& src = tCrA_load(_, _, _);
       auto const& dst = tCrA_mma(_, _, _);
@@ -321,7 +318,6 @@ public:
       auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
       constexpr int num_elements = decltype(size(src))::value;
 
-    // TODO(Codeplay): (perf) consider replacing `pack` with `num_elements` here - See xe_flash_attn_mma.hpp
       constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
       using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
       using SrcArray = cutlass::Array<SrcType, pack>;
@@ -359,9 +355,9 @@ public:
         // 16 x 4 x 2 values for B
         // 16 x 2 of these are same K
         // 4 different scale/zero values per thread, no exchange needed
-        static constexpr auto DPAS = decltype(size<0>(in))::value;
-        static constexpr auto N = decltype(size<1>(in))::value;
-        static constexpr auto K = decltype(size<2>(in))::value;
+        static constexpr auto DPAS = decltype(size<0>(tCrA_load))::value;
+        static constexpr auto N = decltype(size<1>(tCrA_load))::value;
+        static constexpr auto K = decltype(size<2>(tCrA_load))::value;
 
         CUTLASS_PRAGMA_UNROLL
         for (int k = 0; k < K; ++k) {
