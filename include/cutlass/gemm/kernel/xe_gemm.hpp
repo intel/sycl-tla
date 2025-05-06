@@ -172,8 +172,8 @@ public:
     auto check_stride = [is_batch](auto stride, int el_size){
       auto a = get<0>(stride);
       auto b = get<1>(stride);
-      auto valid_is_unit = a == _1{} || b == _1{};
-      auto inner = a == _1{} ? b : a;
+      auto valid_is_unit = a == 1 || b == 1;
+      auto inner = a == 1 ? b : a;
       auto valid_inner = inner % (inner_alignment_requirement / el_size) == 0;
       auto valid_outer = !is_batch || get<2>(stride) % (outer_alignment_requirement / el_size) == 0;
       return valid_is_unit && valid_inner && valid_outer;
