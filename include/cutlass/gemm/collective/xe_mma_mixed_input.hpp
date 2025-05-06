@@ -62,7 +62,7 @@ template <
   class SmemCopyAtomB_,
   class TransformB_>
 struct CollectiveMma<
-    MainloopIntelPVCMixedPrecision<Stages, Schedule>,
+    MainloopIntelXeXMX16MixedPrecision<Stages, Schedule>,
     TileShape_,
     ElementAOptionalTuple,
     StrideA_,
@@ -94,7 +94,7 @@ public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = MainloopIntelPVCMixedPrecision<Stages, Schedule>;
+  using DispatchPolicy = MainloopIntelXeXMX16MixedPrecision<Stages, Schedule>;
   using WorkgroupTileShape = TileShape_;
 
   
@@ -143,7 +143,7 @@ public:
 
   static_assert(!cute::is_same_v<ElementA, ElementB>, "Mixed precision GEMM requires different types for A and B!");
   static_assert(std::is_same_v<LargerElementType, MmaType> || (std::is_same_v<LargerElementType, _Float16> && std::is_same_v<MmaType, half_t>),
-               "MainloopIntelPVCMixedPrecision has the restriction that mixed dtype always converts the "
+               "MainloopIntelXeXMX16MixedPrecision has the restriction that mixed dtype always converts the "
                "narrower input type to the larger one and performs GEMM using the DPAS for the larger input type.");
 
   static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
