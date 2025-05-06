@@ -32,6 +32,7 @@
 
 #include <cute/arch/copy.hpp>
 #include <cute/config.hpp>
+#include <cute/util/sycl_vec.hpp>
 #include <cute/arch/xe_copy_2B.hpp>
 #include "cute/pointer.hpp"
 
@@ -463,6 +464,8 @@ struct XeSubgroup2DBlockPrefetch<1, 16, 32, 1> {
 namespace cute
 {
 struct XE_2D_U8x1x32_LD_N {
+  using BlockShape = Shape<_1, _32>;
+  using inst_dtype = int8_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -472,7 +475,7 @@ struct XE_2D_U8x1x32_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 1, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -484,7 +487,7 @@ struct XE_2D_U8x1x32_LD_N {
     detail::XeSubgroup2DBlockPrefetch<1, 32, 1, 1>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -492,6 +495,7 @@ struct XE_2D_U8x1x32_LD_N {
 
 struct XE_2D_U8x2x32_LD_N {
   using BlockShape = Shape<_2, _32>;
+  using inst_dtype = int8_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -501,7 +505,7 @@ struct XE_2D_U8x2x32_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 2, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -513,7 +517,7 @@ struct XE_2D_U8x2x32_LD_N {
     detail::XeSubgroup2DBlockPrefetch<1, 32, 2, 1>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -546,7 +550,7 @@ struct XE_2D_U8x4x32_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 4, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -558,7 +562,7 @@ struct XE_2D_U8x4x32_LD_N {
     detail::XeSubgroup2DBlockPrefetch<1, 32, 4, 1>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -575,7 +579,7 @@ struct XE_2D_U8x8x32_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -587,7 +591,7 @@ struct XE_2D_U8x8x32_LD_N {
     detail::XeSubgroup2DBlockPrefetch<1, 32, 8, 1>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -604,7 +608,7 @@ struct XE_2D_U8x16x32_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -616,7 +620,7 @@ struct XE_2D_U8x16x32_LD_N {
     detail::XeSubgroup2DBlockPrefetch<2, 16, 16, 1>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -633,7 +637,7 @@ struct XE_2D_U8x32x32_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 32, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -652,7 +656,7 @@ struct XE_2D_U4x16x16_LD_T {
         __builtin_IB_subgroup_block_read_flat_transpose_u32_k2(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -671,7 +675,7 @@ struct XE_2D_U4x32x16_LD_T {
         __builtin_IB_subgroup_block_read_flat_transpose_u32_k4(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -723,7 +727,7 @@ struct XE_2D_U4x32x64_LD_N {
 
    *reinterpret_cast<intel::ushort32 *>(cute::raw_pointer_cast(dst_iter)) = *reinterpret_cast<intel::ushort32 *>(cute::raw_pointer_cast(dst_tmp.begin()));
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -774,7 +778,7 @@ struct XE_2D_U4x16x64_LD_N {
 
    *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_iter)) = *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_tmp.begin()));
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -790,7 +794,7 @@ struct XE_2D_U8x1x64_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 1, 2>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -802,7 +806,7 @@ struct XE_2D_U8x1x64_LD_N {
     detail::XeSubgroup2DBlockPrefetch<1, 32, 1, 2>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -819,7 +823,7 @@ struct XE_2D_U8x2x64_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 2, 2>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -831,7 +835,7 @@ struct XE_2D_U8x2x64_LD_N {
     detail::XeSubgroup2DBlockPrefetch<1, 32, 2, 2>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -848,7 +852,7 @@ struct XE_2D_U8x4x64_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 4, 2>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -860,7 +864,7 @@ struct XE_2D_U8x4x64_LD_N {
     detail::XeSubgroup2DBlockPrefetch<1, 32, 4, 2>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -877,7 +881,7 @@ struct XE_2D_U8x8x64_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 8, 2>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -889,7 +893,7 @@ struct XE_2D_U8x8x64_LD_N {
     detail::XeSubgroup2DBlockPrefetch<1, 32, 8, 2>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -906,7 +910,7 @@ struct XE_2D_U8x16x64_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 16, 2>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -918,7 +922,7 @@ struct XE_2D_U8x16x64_LD_N {
    detail::XeSubgroup2DBlockPrefetch<2, 16, 16, 2>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -935,7 +939,7 @@ struct XE_2D_U8x32x64_LD_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoad<1, 32, 32, 2>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -947,7 +951,7 @@ struct XE_2D_U8x32x64_LD_N {
     detail::XeSubgroup2DBlockPrefetch<2, 16, 32, 2>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -966,7 +970,7 @@ struct XE_2D_U8x32x16_LD_V {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockTransform<1, 16, 32, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 
@@ -978,7 +982,7 @@ struct XE_2D_U8x32x16_LD_V {
     detail::XeSubgroup2DBlockPrefetch<1, 16, 32, 1>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-PVC hardware");
+          "Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
@@ -995,7 +999,7 @@ struct XE_2D_U8x32x32_LD_V {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockTransform<1, 16, 32, 2>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -1011,7 +1015,7 @@ struct XE_2D_U8x32x64_LD_V {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockTransform<1, 16, 32, 4>{}(baseoffset, width, height, pitch, coord, dst);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -1027,7 +1031,7 @@ struct XE_2D_U8x1x16_ST_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockStore<1, 16, 1, 1>{}(baseoffset, width, height, pitch, coord, src);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -1043,7 +1047,7 @@ struct XE_2D_U8x2x16_ST_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockStore<1, 16, 2, 1>{}(baseoffset, width, height, pitch, coord, src);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -1059,7 +1063,7 @@ struct XE_2D_U8x4x16_ST_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockStore<1, 16, 4, 1>{}(baseoffset, width, height, pitch, coord, src);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -1073,7 +1077,7 @@ struct XE_2D_U8x8x16_ST_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockStore<1, 16, 8, 1>{}(baseoffset, width, height, pitch, coord, src);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
@@ -1087,7 +1091,7 @@ struct XE_2D_U8x8x32_ST_N {
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockStore<1, 16, 8, 2>{}(baseoffset, width, height, pitch, coord, src);
 #else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };

@@ -72,12 +72,12 @@ struct CollectiveMmaAttention {
 template <int Stages, class ProblemShapeType_, class TileShape_, class ElementQ_, class StrideQ_, class ElementK_, class StrideK_,
           class ElementV_, class StrideV_, class TiledMma_, class GmemTiledCopyQ_, class GmemTiledCopyK_,
           class GmemTiledCopyV_, bool CausalMask_>
-struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_, TileShape_, ElementQ_, StrideQ_, ElementK_, StrideK_, ElementV_,
+struct CollectiveMmaAttention<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, TileShape_, ElementQ_, StrideQ_, ElementK_, StrideK_, ElementV_,
                               StrideV_, TiledMma_, GmemTiledCopyQ_, GmemTiledCopyK_, GmemTiledCopyV_, CausalMask_> {
   //
   // Type Aliases
   //
-  using DispatchPolicy = gemm::MainloopIntelPVC<Stages>;
+  using DispatchPolicy = gemm::MainloopIntelXeXMX16<Stages>;
   using TileShape = TileShape_;
   using WorkgroupTileShape = TileShape; // <BLK_M_Q, BLK_N_V, BLK_N_QK, BLK_K_QK>
   using ProblemShapeType = ProblemShapeType_;
@@ -235,12 +235,14 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     PRINT(gQ);
     PRINT(tCrQ);
     PRINT(tCgQ);
+    PRINT(tQrQ);
     PRINT(tQgQ);
 
     print("=====================  K :\n");
     PRINT(gK);
     PRINT(tCrK);
     PRINT(tCgK);
+    PRINT(tKrK);
     PRINT(tKgK);
 
     print("=====================  Config: \n");
@@ -286,6 +288,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelPVC<Stages>, ProblemShapeType_,
     PRINT(gV);
     PRINT(tCrV);
     PRINT(tCgV);
+    PRINT(tVrV);
     PRINT(tVgV);
 
     print("=====================  Config: \n");

@@ -55,7 +55,7 @@ struct XE_8x16x16_F32BF16BF16F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -75,7 +75,7 @@ struct XE_4x16x16_F32BF16BF16F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -95,7 +95,7 @@ struct XE_2x16x16_F32BF16BF16F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -116,7 +116,7 @@ struct XE_1x16x16_F32BF16BF16F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, bfloat16_t, bfloat16_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32BF16BF16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32BF16BF16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -221,7 +221,7 @@ struct XE_8x16x16_F32F16F16F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32F16F16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32F16F16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -242,7 +242,7 @@ struct XE_4x16x16_F32F16F16F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x16_F32F16F16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x16_F32F16F16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -263,7 +263,7 @@ struct XE_2x16x16_F32F16F16F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
   d = detail::XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x16_F32F16F16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x16_F32F16F16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -284,7 +284,7 @@ struct XE_1x16x16_F32F16F16F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, half_t, half_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32F16F16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32F16F16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -392,7 +392,7 @@ struct XE_8x16x32_S32S8S8S32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32S8S8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32S8S8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -413,7 +413,7 @@ struct XE_4x16x32_S32S8S8S32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32S8S8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32S8S8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -434,7 +434,7 @@ struct XE_2x16x32_S32S8S8S32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32S8S8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32S8S8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -455,7 +455,7 @@ struct XE_1x16x32_S32S8S8S32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32S8S8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32S8S8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -476,7 +476,7 @@ struct XE_8x16x32_S32U8U8S32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32U8U8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32U8U8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -497,7 +497,7 @@ struct XE_4x16x32_S32U8U8S32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32U8U8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32U8U8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -518,7 +518,7 @@ struct XE_2x16x32_S32U8U8S32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32U8U8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32U8U8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -539,7 +539,7 @@ struct XE_1x16x32_S32U8U8S32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<int32_t, uint8_t, uint8_t, int32_t>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32U8U8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32U8U8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -560,7 +560,7 @@ struct XE_8x16x8_F32TF32TF32F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x8_F32TF32TF32F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x8_F32TF32TF32F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -581,7 +581,7 @@ struct XE_4x16x8_F32TF32TF32F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x8_F32TF32TF32F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x8_F32TF32TF32F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -602,7 +602,7 @@ struct XE_2x16x8_F32TF32TF32F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x8_F32TF32TF32F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x8_F32TF32TF32F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -623,7 +623,7 @@ struct XE_1x16x8_F32TF32TF32F32_TT
 #if defined(CUTE_ARCH_XE_ENABLED)
     d = detail::XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float>{}(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x8_F32TF32TF32F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x8_F32TF32TF32F32_TT on non-Xe hardware");
 #endif
   }
 };
