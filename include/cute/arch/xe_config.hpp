@@ -91,6 +91,9 @@ struct XeSubgroup2DBlockStore {
 };
 }
 #endif
+
+#if defined(CUTE_ARCH_XE_SPIRV_ENABLED)
+
 // SPIRV copy definitions
 SYCL_EXTERNAL __attribute__((convergent)) void __spirv_Subgroup2DBlockLoadINTEL(
     int ElementSize, int BlockWidth, int BlockHeight, int BlockCount,
@@ -105,15 +108,14 @@ SYCL_EXTERNAL __attribute__((convergent)) void __spirv_Subgroup2DBlockLoadTransp
     const void* src_base_pointer, int memory_width, int memory_height,
     int memory_pitch,  cute::intel::coord_t coordinate, void* dst_pointer);
 SYCL_EXTERNAL __attribute__((convergent)) void __spirv_Subgroup2DBlockStoreINTEL(
-    int ElementSize, int BlockWidth, int BlockHeight, int BlockCount, 
+    int ElementSize, int BlockWidth, int BlockHeight, int BlockCount,
     void* src_pointer, const void* dst_base_pointer, int memory_width,
-    int memory_height, int memory_pitch,  cute::intel::coord_t coordinate);    
+    int memory_height, int memory_pitch,  cute::intel::coord_t coordinate);
 SYCL_EXTERNAL __attribute__((convergent)) void __spirv_Subgroup2DBlockPrefetchINTEL(
     int ElementSize, int BlockWidth, int BlockHeight, int BlockCount,
     const void* src_base_pointer, int memory_width, int memory_height,
     int memory_pitch,  cute::intel::coord_t coordinate);
 
-#if defined(CUTE_ARCH_XE_SPIRV_ENABLED)
 namespace cute::detail {
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
 struct XeSubgroup2DBlockLoad {
@@ -202,6 +204,8 @@ namespace cute::detail{
   };
 } // namespace cute::detail end
 
+#if defined(CUTE_ARCH_XE_BUILTIN_ENABLED)
+
 // mma_bf16
 SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::float8 acc));
 SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::float4 acc));
@@ -238,7 +242,6 @@ SYCL_DEVICE_OCL(cute::intel::half4 intel_sub_group_f16_f16_matrix_mad_k16(cute::
 SYCL_DEVICE_OCL(cute::intel::half2 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::half2 acc));
 SYCL_DEVICE_OCL(        sycl::half intel_sub_group_f16_f16_matrix_mad_k16(              short a, cute::intel::int8 b,         sycl::half acc));
 
-#if defined(CUTE_ARCH_XE_BUILTIN_ENABLED)
 namespace cute::detail
 {
 template<>
@@ -328,6 +331,8 @@ struct XeSubgroupMatrixMultiplyAccumulate<float, tfloat32_t, tfloat32_t, float> 
 // @param AccRegisters
 // @param Operands code 
 // @return DRegisters
+#if defined(CUTE_ARCH_XE_SPIRV_ENABLED)
+
 SYCL_EXTERNAL cute::intel::float8 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short8, cute::intel::int8, cute::intel::float8, int32_t);
 SYCL_EXTERNAL cute::intel::float4 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short4, cute::intel::int8, cute::intel::float4, int32_t);
 SYCL_EXTERNAL cute::intel::float2 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short2, cute::intel::int8, cute::intel::float2, int32_t);
@@ -371,7 +376,7 @@ struct SPIRV_MMAOperands {
   static constexpr int SPIRV_MatrixATf32 = 0x100;
   static constexpr int SPIRV_MatrixBTf32 = 0x200;
 };
-#if defined(CUTE_ARCH_XE_SPIRV_ENABLED)
+
 namespace cute::detail
 {
 template<>
