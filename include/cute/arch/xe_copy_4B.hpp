@@ -731,10 +731,10 @@ struct XE_2D_TF32x16x16_LD_N {
     CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                         int height, int pitch,
                                         intel::coord_t coord) {
-#if defined(SYCL_INTEL_TARGET)
-      detail::XeSubgroup2DBlockPrefetch<4, 8, 16, 1>{}(baseoffset, width, height, pitch, coord);#else
-      CUTE_INVALID_CONTROL_PATH(
-              "Trying to use block prefetch on non-Xe hardware");
+#if defined(CUTE_ARCH_XE_ENABLED)
+   detail::XeSubgroup2DBlockPrefetch<4, 8, 16, 1>{}(baseoffset, width, height, pitch, coord);
+#else
+      CUTE_INVALID_CONTROL_PATH("Trying to use block prefetch on non-Xe hardware");
 #endif
     }
   };
