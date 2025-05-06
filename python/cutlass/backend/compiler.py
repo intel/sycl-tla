@@ -163,6 +163,7 @@ class ArtifactManager:
                                        "-DCUTLASS_ENABLE_SYCL",
                                        "-fsycl-rtc-mode",
                                        "-DSYCL_INTEL_TARGET",
+                                       "-DCUTLASS_SYCL_BUILTIN_ENABLE"  # TODO(Codeplay): remove this when the spirv functions are available for PVC
                                        "-shared", "-fPIC",
                                        "-fno-sycl-dead-args-optimization",
                                        "-Xspirv-translator -spirv-ext=+SPV_INTEL_split_barrier",
