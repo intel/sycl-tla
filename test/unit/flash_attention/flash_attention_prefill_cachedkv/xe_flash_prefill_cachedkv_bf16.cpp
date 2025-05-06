@@ -60,7 +60,7 @@ struct XE_Flash_Attention_Prefill_CachedKV {
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-  using GmemTiledCopyQ = XE_2D_U16x8x32_LD_N;
+  using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
   using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
   using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
   using GmemTiledCopyStore = XE_2D_U32x8x16_ST_N;
