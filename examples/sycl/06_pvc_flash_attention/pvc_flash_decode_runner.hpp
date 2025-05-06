@@ -388,7 +388,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
   }
 
   template<class ProblemShape>
-  auto initialize_varlen(const ProblemShape& problem_size, const bool VarlenSame = true) {
+  auto initialize_varlen(const ProblemShape& problem_size) {
     int num_batches = get<0>(problem_size);
 
     // generate Q as --b times
@@ -398,6 +398,11 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
     std::normal_distribution<double> dist_q(get<3>(problem_size), get<3>(problem_size) / 2);
     std::normal_distribution<double> dist_kv(get<4>(problem_size), get<4>(problem_size) / 2);
     std::normal_distribution<double> dist_kv_cache(get<5>(problem_size), get<5>(problem_size) / 2);
+
+    // Use Cacheline Size to calculate alignment
+    constexpr int cacheline_bytes = 64;
+    constexpr int AlignmentQ = cacheline_bytes / sizeof(ElementQ);    // Alignment of Q matrix in units of elements
+    constexpr int AlignmentKV = cacheline_bytes / sizeof(ElementK);   // Alignment of Kand V matrix in units of elements
 
     auto generate_positive_int = [](auto& dist, auto& gen) {
       int result = 0;
@@ -419,9 +424,9 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
     int max_seqlen_kv_cache = 0;
 
     for (int i = 0; i < num_batches; i++) {
-      int seqlen_q = VarlenSame ? get<3>(problem_size) : generate_positive_int(dist_q, rng);
-      int seqlen_kv = VarlenSame ? get<4>(problem_size) : generate_positive_int(dist_kv, rng);
-      int seqlen_kv_cache = VarlenSame ? get<5>(problem_size) : generate_positive_int(dist_kv_cache, rng);
+      int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
+      int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
+      int seqlen_kv_cache = cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
 
       total_seqlen_q += seqlen_q;
       total_seqlen_kv += seqlen_kv;
