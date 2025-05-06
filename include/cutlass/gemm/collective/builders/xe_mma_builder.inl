@@ -121,7 +121,7 @@ struct pick_mma_atom{
   static_assert(dependent_false<ElementAB> && "no mma atom for this combination of types");
 };
 
-#define PICK_MMA(ElementAB, ElementCD, ATOM)               \
+#define PICK_MMA(ElementAB, ElementCD, ATOM)             \
 template <> struct pick_mma_atom<ElementAB, ElementCD> { \
   using atom = MMA_Atom<ATOM>;                           \
 };
