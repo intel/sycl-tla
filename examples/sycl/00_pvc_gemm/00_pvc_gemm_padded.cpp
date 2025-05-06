@@ -37,6 +37,9 @@
     for the GEMM in TFLOPS.
 
     This example makes use of PVCs subgroup cooperative 2d-block copy operations and DPAS instructions.
+    To support more input shapes using these instructions, rows of the input/output matrices are padded
+    to a multiple of 16 and each matrix in batch is padded to a multiple of 64, as required by these 
+    instructions.
 
     The shapes of the A and B matrix are defined at runtime by `options.m`, `.n` and `.k`, and the
     batch size is defined by `options.l`. The tile shape, which defines how much work is executed by
@@ -81,6 +84,11 @@
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// The alignment requirement in bytes on inner dimmension that will work for both PVC and BMG
+constexpr int AlignmentInner = 16;
+// The alignment requirement in bytes on outer dimmension that will work for both PVC and BMG
+constexpr int AlignmentPtr = 64;
 
 // Command line options parsing
 struct Options {
@@ -157,11 +165,17 @@ struct ExampleRunner {
 
   using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
   using ElementC = typename Gemm::ElementC;
+  using ElementD = typename Gemm::ElementD;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
+
+  static constexpr int AlignElemA = AlignmentInner / sizeof(ElementA);
+  static constexpr int AlignElemB = AlignmentInner / sizeof(ElementB);
+  static constexpr int AlignElemC = AlignmentInner / sizeof(ElementB);
+  static constexpr int AlignElemD = AlignmentInner / sizeof(ElementD);
 
   //
   // Data members
@@ -186,11 +200,23 @@ struct ExampleRunner {
 
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
+    
+    // Padded values
+    // The inner dimension is padded. Since this example is all RowMajor,
+    // we require the following:
+    int N_B = cute::round_up(N, AlignElemB);
+    int N_C = cute::round_up(N, AlignElemC);
+    int N_D = cute::round_up(N, AlignElemD);
+    int K_A = cute::round_up(K, AlignElemA);
+    
+    int AlignmentOuter = AlignmentPtr / AlignmentInner;
+    int M_ACD = cute::round_up(M, AlignmentOuter);
+    int K_B = cute::round_up(K, AlignmentOuter);
 
-    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
-    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+    cutlass::TensorRef ref_A(block_A.get(), LayoutA(K_A));
+    cutlass::TensorRef ref_B(block_B.get(), LayoutB(N_B));
+    cutlass::TensorRef ref_C(block_C.get(), LayoutC(N_C));
+    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD(N_D));
 
     cutlass::reference::device::GemmComplex(
           {M, N, K},
@@ -204,10 +230,10 @@ struct ExampleRunner {
           ref_D,
           ElementAccumulator(0),
           L,     // batch_count
-          M * K, // batch_stride_A
-          K * N, // batch_stride_B
-          M * N, // batch_stride_C
-          M * N  // batch_stride_D
+          M_ACD * K_A, // batch_stride_A
+          K_B * N_B, // batch_stride_B
+          M_ACD * N_C, // batch_stride_C
+          M_ACD * N_D  // batch_stride_D
         );
 
     // CUTLASS on SYCL uses the compatibility library syclcompat for e.g. default in-order queue
@@ -225,17 +251,27 @@ struct ExampleRunner {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
-    // Complete the stride by combining static layout info (StrideA) with runtime size info (M,K,L)
-    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
-    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
-    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
-    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
+    // Padded values
+    int N_B = cute::round_up(N, AlignElemB);
+    int N_C = cute::round_up(N, AlignElemC);
+    int N_D = cute::round_up(N, AlignElemD);
+    int K_A = cute::round_up(K, AlignElemA);
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
+    int AlignmentOuter = AlignmentPtr / AlignmentInner;
+    int M_ACD = cute::round_up(M, AlignmentOuter);
+    int K_B = cute::round_up(K, AlignmentOuter);
+
+    // Complete the stride by combining static layout info (StrideA) with runtime size info (M,K,L)
+    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M_ACD, K_A, L));
+    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N_B, K_B, L));
+    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M_ACD, N_C, L));
+    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M_ACD, N_D, L));
+
+    block_A.reset(M_ACD * K_A * L);
+    block_B.reset(K_B * N_B * L);
+    block_C.reset(M_ACD * N_C * L);
+    block_D.reset(M_ACD * N_D * L);
+    block_ref_D.reset(M_ACD * N_D * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);

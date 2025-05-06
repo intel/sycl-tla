@@ -34,3 +34,10 @@ cutlass_example_add_executable(
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
 )
+
+cutlass_example_add_executable(
+  00_pvc_gemm_padded
+  00_pvc_gemm_padded.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)
