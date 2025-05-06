@@ -514,7 +514,7 @@ void convert_int_subbyte_to_half(Dst & out, Src const& in) {
   static constexpr auto is_src_signed = is_signed<SrcType>::value;
 
 auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(in.data()));
-  auto&& dst_ptr = *(cute::intel::vector_t<ushort, decltype(size(out))::value>*)(out.data());
+  auto& dst = *reinterpret_cast<cute::intel::vector_t<ushort, decltype(size(out))::value>*>(out.data());
 
   #pragma unroll
   for (int v = 0; v < v_cnt; v++) {
