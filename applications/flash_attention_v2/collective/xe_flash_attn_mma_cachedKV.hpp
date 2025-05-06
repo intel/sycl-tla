@@ -319,12 +319,13 @@ struct CollectiveMmaAttention<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeTy
     cute::gemm(tiled_mma, accum, tPr, tCrV, frag_src);
   }
 
-  template <class ProblemShape>
-  CUTLASS_DEVICE static constexpr Params get_updated_copies(Params const& params, ProblemShape const& problem_shape, int const& l_coord) {
+  template <class ProblemShape, class LogicalProblemShape>
+  CUTLASS_DEVICE static constexpr Params get_updated_copies(Params const& params, ProblemShape const& problem_shape, 
+                                                            LogicalProblemShape const& logical_problem_shape, int const& l_coord) {
     if constexpr (!is_var_len) {
       return params;
     } else {
-      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = problem_shape;
+      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = logical_problem_shape;
 
       auto qo_cumulative_length = get<3>(problem_shape).cumulative_length;
       auto kv_cumulative_length = get<4>(problem_shape).cumulative_length;
