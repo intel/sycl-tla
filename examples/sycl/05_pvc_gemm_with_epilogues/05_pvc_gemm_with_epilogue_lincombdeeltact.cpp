@@ -268,12 +268,12 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
-    block_Aux.reset(M * N * L);
+    block_A.reset(static_cast<std::size_t>(M) * K * L);
+    block_B.reset(static_cast<std::size_t>(K) * N * L);
+    block_C.reset(static_cast<std::size_t>(M) * N * L);
+    block_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_Aux.reset(static_cast<std::size_t>(M) * N * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
@@ -368,8 +368,8 @@ using TiledMma =
                                   Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
 constexpr int PipelineStages = 2;
-using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
 using CopyOpG2R = XE_2D_U32x8x16_LD_N;
 template <template <class> class ActivationFn>
@@ -392,7 +392,7 @@ using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
 
 template <template <class> class ActivationFn>
 using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-        EpilogueDispatchPolicy,                 // IntelPVCEpilogue
+        EpilogueDispatchPolicy,                 // IntelXeXMX16
         TileShape,                              // CtaTileMNK
         ElementAccumulator,                     // ElementC
         cutlass::gemm::TagToStrideC_t<LayoutC>, // StrideC

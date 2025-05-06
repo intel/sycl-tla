@@ -32,7 +32,7 @@
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
-#include "77_blackwell_fmha/collective/fmha_fusion.hpp"
+#include "flash_attention_v2/collective/fmha_fusion.hpp"
 #include "flash_attention_v2/kernel/tile_scheduler.hpp"
 #include "cutlass/util/packed_stride.hpp"
 #include "flash_attention_v2/kernel/xe_flash_attn_gemm.hpp"
@@ -417,11 +417,11 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
     stride_V = cutlass::make_cute_packed_stride(StrideV{}, cute::make_shape(head_size_vo, seq_len_kv, batch * num_heads_kv));
     stride_O = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, batch * num_heads_q));
 
-    block_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
-    block_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
-    block_V.reset(batch * num_heads_kv * seq_len_kv * head_size_vo);
-    block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
-    block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
+    block_Q.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_qk);
+    block_K.reset(static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv * head_size_qk);
+    block_V.reset(static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv * head_size_vo);
+    block_O.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo);
+    block_ref_O.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo);
 
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
@@ -530,13 +530,22 @@ template <class GemmKernel, bool isVarLen> struct ExampleRunner {
         run(params);
       }
       syclcompat::wait();
-
+    // when seq_len_qo is not equal to seq_len_kv we use bottom up approach for the masking. 
+      // Following changes will adjust the effective_seq_len_kv when masking applied for such cases
+      auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
+      auto discard_seq_coord = options.seq_len_qo - offset;
+      auto full_tile_offset = options.seq_len_kv - offset;
+      // offset + 1 is going to be ceil_div
+      auto effective_seq_len_kv = options.is_causal ? full_tile_offset + ((offset + 1) / 2.0): options.seq_len_kv;
+      auto effective_seq_len_qo = options.is_causal ? options.seq_len_qo - discard_seq_coord : options.seq_len_qo;
       double cute_time = timer.seconds() / options.iterations;
-      double flops_qk = 2.0 * options.batch * options.num_heads_q * options.seq_len_qo * options.seq_len_kv * options.head_size_qk;
-      double flops_pv = 2.0 * options.batch * options.num_heads_q * options.seq_len_qo * options.head_size_vo * options.seq_len_kv;
+      double flops_qk = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * effective_seq_len_kv * options.head_size_qk;
+      double flops_pv = 2.0 *  options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
       double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
-      double gbps_qk = 2.0 * options.batch * options.num_heads_q * (options.seq_len_qo * options.head_size_qk + options.seq_len_kv * options.head_size_qk);
-      double gbps_pv = 2.0 * options.batch * options.num_heads_q * (options.seq_len_kv * options.seq_len_qo + options.seq_len_qo * options.head_size_vo);
+      double gbps_qk =  options.batch * (sizeof(ElementQ) * options.num_heads_q * effective_seq_len_qo * options.head_size_qk + 
+                                         sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);
+      double gbps_pv = sizeof(ElementV) * options.batch * options.num_heads_kv * effective_seq_len_kv * options.head_size_vo +
+                     sizeof(ElementOutput) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
       double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q  << "\tNumHeads_kv: " << options.num_heads_kv  << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
@@ -570,8 +579,8 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
     using ElementOutput = float;          // <- data type of elements in output matrix D
         
     constexpr int PipelineStages = 2;
-    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-    using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
     using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
     using GmemTiledCopyK = XE_2D_U16x16x16_LD_T; // _T designates a transposed block load operation
