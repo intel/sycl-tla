@@ -116,14 +116,14 @@ constexpr auto select_copy_atom_16b(T_m tile_m, T_n tile_n){
 }
 
 namespace {
-template <typename ElementA, typename ElementC>
+template <typename ElementAB, typename ElementCD>
 struct pick_mma_atom{
-  static_assert(dependent_false<ElementA> && "no mma atom for this combination of types");
+  static_assert(dependent_false<ElementAB> && "no mma atom for this combination of types");
 };
 
-#define PICK_MMA(ElementA, ElementC, ATOM)             \
-template <> struct pick_mma_atom<ElementA, ElementC> { \
-  using atom = MMA_Atom<ATOM>;                         \
+#define PICK_MMA(ElementAB, ElementCD, ATOM)               \
+template <> struct pick_mma_atom<ElementAB, ElementCD> { \
+  using atom = MMA_Atom<ATOM>;                           \
 };
 
 PICK_MMA(bfloat16_t, float, XE_8x16x16_F32BF16BF16F32_TT);
