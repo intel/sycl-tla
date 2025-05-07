@@ -163,7 +163,7 @@ struct MixedGemmUniversalAdapterBuilder {
   template <typename CollectiveMainloop>
   using GemmUniversalAdapter =
       device::GemmUniversalAdapter<kernel::GemmUniversal<
-          ProblemShape, CollectiveMainloop, CollectiveEpilogue, cutlass::gemm::StreamKScheduler>>;
+          ProblemShape, CollectiveMainloop, CollectiveEpilogue/*, cutlass::gemm::StreamKScheduler*/>>;
 };
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -473,12 +473,15 @@ return true;
          stride_C,
          block_D.get(),
          stride_D},
-        hw_info,
+        hw_info
+#if 0
+        ,
         {options.splits, // Setting splits > 1 will force SplitK decomposition
           // Set the decomposition mode based on user provided options
           options.dp ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::DataParallel :
           options.splitk ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::SplitK :
                               cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::StreamK}
+#endif
       };
 
     Gemm gemm_op;
@@ -632,7 +635,7 @@ int main(int argc, const char** argv)
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 4;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages, cutlass::gemm::KernelXeCooperative>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages/*, cutlass::gemm::KernelXeCooperative*/>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
