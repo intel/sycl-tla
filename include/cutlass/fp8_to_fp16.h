@@ -28,10 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
- 
+
  #pragma once
 
-#include <cutlass/half.h> 
+#include <cutlass/half.h>
 #include <cute/util/sycl_vec.hpp>
 
 using half_t = cutlass::half_t;
@@ -114,4 +114,16 @@ static inline unsigned short E4M3_to_FP16(unsigned char xin) {
     x16.i ^= (((signed short)sgn_x) << 8);
 
     return (unsigned short)x16.i;
+}
+
+static inline unsigned short E5M2_to_FP16(unsigned char xin) {
+  // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
+  unsigned short half_representation = xin;
+  return half_representation <<= 8;
+}
+
+static inline ushort16 E5M2_to_FP16_vec16(uchar16 xin) {
+  // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
+  ushort16 half_representation = convert_ushort16(xin);
+  return half_representation <<= 8;
 }
