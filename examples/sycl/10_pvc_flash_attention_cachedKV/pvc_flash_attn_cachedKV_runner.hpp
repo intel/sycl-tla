@@ -432,7 +432,7 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
     for (int i = 0; i < num_batches; i++) {
       int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
-      int seqlen_kv_cache = cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
+      int seqlen_kv_cache = cute::get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
 
       total_seqlen_q += seqlen_q;
       total_seqlen_kv += seqlen_kv;

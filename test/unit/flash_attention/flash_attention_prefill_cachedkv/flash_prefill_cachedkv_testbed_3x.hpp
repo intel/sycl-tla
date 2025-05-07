@@ -155,6 +155,12 @@ struct TestbedImpl {
     ProblemShapeType problem_shape;
     ProblemShape problem_size;
 
+    if (cute::get<5>(problem_shape_in) > 0) {
+      use_kv_cache = true;
+    } else {
+      use_kv_cache = false;
+    }
+
     if constexpr (isVarLen) {
       auto [problem_shape_init, problem_shape_launch] = initialize_varlen(problem_shape_in);
       problem_shape = problem_shape_launch;
@@ -188,12 +194,6 @@ struct TestbedImpl {
     initialize_block(block_K_cache, seed + 2024);
     initialize_block(block_V_cache, seed + 2025);
 
-    if (seq_len_kv_cache > 0) {
-      use_kv_cache = true;
-    } else {
-      use_kv_cache = false;
-    }
-
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
       device_cumulative_seqlen_q.copy_from_host(
@@ -210,6 +210,7 @@ struct TestbedImpl {
       device_cumulative_seqlen_kv_cache.copy_from_host(
         cumulative_seqlen_kv_cache.data(), cumulative_seqlen_kv_cache.size());
     }
+
     if constexpr (isVarLen) {
       cute::get<3>(problem_shape).cumulative_length = device_cumulative_seqlen_q.get();
       cute::get<4>(problem_shape).cumulative_length = device_cumulative_seqlen_kv.get();
@@ -258,7 +259,7 @@ struct TestbedImpl {
     for (int i = 0; i < num_batches; i++) {
       int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
-      int seqlen_kv_cache = cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
+      int seqlen_kv_cache = !use_kv_cache ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
 
       total_seqlen_q += seqlen_q;
       total_seqlen_kv += seqlen_kv;
@@ -283,13 +284,12 @@ struct TestbedImpl {
 
     cute::get<3>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_q};
     cute::get<4>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv};
-    cute::get<6>(problem_size_for_launch) = cute::get<6>(problem_size);
     cute::get<5>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv_cache};
-    cute::get<7>(problem_size_for_launch) = cute::get<7>(problem_size);
     cute::get<0>(problem_size_for_launch) = cute::get<0>(problem_size);
     cute::get<1>(problem_size_for_launch) = cute::get<1>(problem_size);
     cute::get<2>(problem_size_for_launch) = cute::get<2>(problem_size);
-
+    cute::get<6>(problem_size_for_launch) = cute::get<6>(problem_size);
+    cute::get<7>(problem_size_for_launch) = cute::get<7>(problem_size);
 
     return cute::make_tuple(problem_size_for_init, problem_size_for_launch);
   }
@@ -450,7 +450,11 @@ struct TestbedImpl {
           idx = row * seq_len_kv_total;
           sum_idx = row;
           for (int col = 0; col < seq_len_kv_total; col++, idx++) {
-            host_S[idx] /= sum_vec[sum_idx];
+            if(HasCausalMask && row < discard_seq_coord) { 
+              host_S[idx] = 0;
+            } else {
+              host_S[idx] /= sum_vec[sum_idx];
+            }
           }
         }
 

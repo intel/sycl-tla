@@ -334,8 +334,8 @@ struct CollectiveMmaAttention<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeTy
       int offset_q = num_heads_q * head_size_qk * qo_cumulative_length[l_coord];
       int offset_k = num_heads_kv * head_size_qk * kv_cumulative_length[l_coord];
       int offset_v = num_heads_kv * head_size_vo * kv_cumulative_length[l_coord];
-      int offset_k_cache = num_heads_kv * head_size_qk * kv_cached_cumulative_length[l_coord];
-      int offset_v_cache = num_heads_kv * head_size_vo * kv_cached_cumulative_length[l_coord];
+      int offset_k_cache = seq_len_kv_cache == 0 ? 0 : num_heads_kv * head_size_qk * kv_cached_cumulative_length[l_coord];
+      int offset_v_cache = seq_len_kv_cache == 0 ? 0 : num_heads_kv * head_size_vo * kv_cached_cumulative_length[l_coord];
 
       auto q_traits = static_cast<traits_load_Q const&>(params.gmem_tiled_copy_q);
       const ElementQ* q_ptr = (const ElementQ*)q_traits.base_ptr;
