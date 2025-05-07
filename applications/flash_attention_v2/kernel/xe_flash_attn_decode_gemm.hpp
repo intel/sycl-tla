@@ -268,7 +268,7 @@ public:
       const int kv_splits_cache = ceil_div(seq_len_kv_cache, get<1>(TileShapeQK{}));
       const int kv_splits = kv_splits_new + kv_splits_cache;
 
-      auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, logical_problem_shape, batch_coord);
+      auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, batch_coord);
       // For Decode, QK_BLK_M is set to 1 MMA Atom worth of data (in our case 8), this is because seq_len_qo == 1.
       // So we need to perform atleast 1 MMA op to calculate the output properly. The size required for prefetching
       // Q is small (8 x QK_BLK_K), which leads to the use of a smaller size Prefetch Atom that throws a runtime error on
@@ -416,7 +416,7 @@ public:
         shmem_out_tensor(idx + i * SubgroupSize) = out_reg(i);
       }
 
-      auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, logical_problem_shape, batch_coord);
+      auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, batch_coord);
       CollectiveEpilogue epilogue{epilogue_params, shared_storage.epilogue};
       auto blk_coord_mnkl = make_coord(blk_q_coord, blk_v_coord, _, blk_l_coord);
 
