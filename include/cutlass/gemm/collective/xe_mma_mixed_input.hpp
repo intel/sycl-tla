@@ -530,7 +530,7 @@ public:
 
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
-      barrier_arrive(barrier_scope);
+      // barrier_arrive(barrier_scope);
 
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), frag_copy_A);
@@ -542,6 +542,12 @@ public:
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
         copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrZ);
       }
+
+      if(prefetch_k < k_tile_count) {
+        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
+        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
+      }
+
       if constexpr (IsATransformed) {
         transform_quant(quant_frag, mma_A, fragment_scale_input,
                         fragment_zero_input);
@@ -550,13 +556,9 @@ public:
                         fragment_zero_input);
       }
 
-      if(prefetch_k < k_tile_count) {
-        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
-      }
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
-      barrier_wait(barrier_scope);
+      // barrier_wait(barrier_scope);
     }
   }
 };
