@@ -27,10 +27,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 set(TEST_BATCHES --l=2)
+set(TEST_LARGE "--l=513 --m=8 --n=16384 --k=512")
 
 cutlass_example_add_executable(
   00_pvc_gemm
   00_pvc_gemm.cpp
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
+  TEST_LARGE
 )
