@@ -367,7 +367,6 @@ public:
           auto tz = tCrZ_input(i);
           static constexpr auto size_dk = decltype(size(tCrA_mma))::value / N;
 
-          // auto* src = raw_pointer_cast(tCrA_load(_, i, _).data());
           auto* dst = raw_pointer_cast(tCrA_mma(_, i, _).data());
 
           CUTLASS_PRAGMA_UNROLL
@@ -376,15 +375,6 @@ public:
             dst[k] += tz;
           }
         }
-          //   CUTLASS_PRAGMA_UNROLL
-          //   for (int j = 0; j < DPAS; ++j) {
-          //     tCrA_mma(j, i, k) *= tCrS_input(i);
-          //     if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-          //       tCrA_mma(j, i, k) += tCrZ_input(i);
-          //     }
-          //   }
-        //   }
-        // }
       }
     }
   }
