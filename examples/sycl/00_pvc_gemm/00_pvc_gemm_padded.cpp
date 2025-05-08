@@ -71,7 +71,6 @@
 #include "cutlass/util/GPU_Clock.hpp"
 
 #include <cute/tensor.hpp>
-#include <random>
 
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
