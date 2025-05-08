@@ -123,7 +123,7 @@ struct RandomUniformFunc {
   explicit RandomUniformFunc(Params const &params):
       params(params),
       distribution(static_cast<FloatType>(params.min), static_cast<FloatType>(params.max)),
-      generator(params.seed, ThreadIdxX() + BlockIdxX() * BlockDimX()) {}
+      generator(params.seed, {0, ThreadIdxX() + BlockIdxX() * BlockDimX()}) {}
 
   /// Compute random value and update RNG state
   CUTLASS_HOST_DEVICE
