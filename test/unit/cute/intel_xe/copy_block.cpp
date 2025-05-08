@@ -356,9 +356,7 @@ TEST(PVC_CuTe_Xe, block_2d_16bits_vnni) {
 }
 
 TEST(PVC_CuTe_Xe, block_2d_32bits_transpose) {
-  #if defined(CUTE_ARCH_COPY_XE_BUILTIN_ENABLED)
   copy_op<uint32_t, XE_2D_U32x16x2_LD_T, XE_2D_U32x2x16_ST_N, 16, 2, true>{}();
   copy_op<uint32_t, XE_2D_U32x16x4_LD_T, XE_2D_U32x4x16_ST_N, 16, 4, true>{}();
-  #endif
   copy_op<uint32_t, XE_2D_U32x16x8_LD_T, XE_2D_U32x8x16_ST_N, 16, 8, true>{}();
 }
