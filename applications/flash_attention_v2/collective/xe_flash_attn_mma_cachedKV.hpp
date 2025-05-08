@@ -319,6 +319,10 @@ struct CollectiveMmaAttention<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeTy
     cute::gemm(tiled_mma, accum, tPr, tCrV, frag_src);
   }
 
+  // For Fixed Sequence Length, ProblemShape == LogicalProblemShape
+  // For Variable Sequence Length,
+  // LogicalProblemShape = Shape<int, int, int, int, int, int, int, int>
+  // ProblemShape = Shape<int, int, int, VariableSeqlen, VariableSeqlen, VariableSeqlen, int, int>
   template <class ProblemShape, class LogicalProblemShape>
   CUTLASS_DEVICE static constexpr Params get_updated_copies(Params const& params, ProblemShape const& problem_shape, 
                                                             LogicalProblemShape const& logical_problem_shape, int const& l_coord) {

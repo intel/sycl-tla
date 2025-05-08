@@ -410,7 +410,7 @@ struct TestbedImpl {
           // apply mask to S
           for (int row = 0; row < seq_len_qo; row++) {
             for (int col = start_col; col < seq_len_kv_total; col++) {
-              if ((col - full_tile_offset) > (row + start_col - discard_seq_coord))
+              if (col - full_tile_offset > row + start_col - discard_seq_coord)
                 host_S[col + row * seq_len_kv_total] = -INFINITY;
             }
           }
