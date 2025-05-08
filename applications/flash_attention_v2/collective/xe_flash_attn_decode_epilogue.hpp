@@ -248,6 +248,10 @@ public:
     }
   }
 
+  // For Fixed Sequence Length, ProblemShapeType == LogicalProblemShapeType
+  // For Variable Sequence Length,
+  // LogicalProblemShapeType = Shape<int, int, int, int, int, int, int, int>
+  // ProblemShapeType = Shape<int, int, int, VariableSeqlen, VariableSeqlen, VariableSeqlen, int, int>
   template <bool VarLen, class ProblemShapeType, class LogicalProblemShapeType>
   CUTLASS_DEVICE static constexpr Params get_updated_copies(Params const& params, ProblemShapeType const& problem_shape,
                                                             LogicalProblemShapeType const& logical_problem_shape, int const& l_coord) {
