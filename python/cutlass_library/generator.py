@@ -10759,16 +10759,16 @@ def GenerateSM90(manifest, cuda_version):
 
 def GeneratePVC_TensorOp_16b_gemm(manifest, cuda_version):
     layouts = [
-      [[LayoutType.RowMajor, 2], [LayoutType.RowMajor, 2], [LayoutType.RowMajor, 2]],
-      [[LayoutType.RowMajor, 2], [LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 2]],
-      [[LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 2], [LayoutType.RowMajor, 2]],
-      [[LayoutType.ColumnMajor, 2], [LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 2]],
+      [[LayoutType.RowMajor, 2], [LayoutType.RowMajor, 2], [LayoutType.RowMajor, 4]],
+      [[LayoutType.RowMajor, 2], [LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 4]],
+      [[LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 2], [LayoutType.RowMajor, 4]],
+      [[LayoutType.ColumnMajor, 2], [LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 4]],
     ]
 
     math_instructions = [
       MathInstruction(
           [8, 16, 16],
-          DataType.bf16, DataType.bf16, DataType.bf16,
+          DataType.bf16, DataType.bf16, DataType.f32,
           OpcodeClass.TensorOp,
           MathOperation.multiply_add)
     ]

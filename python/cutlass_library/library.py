@@ -123,7 +123,6 @@ ShortDataTypeNames = {
   DataType.f16: 'h',
   DataType.f32: 's',
   DataType.f64: 'd',
-  DataType.bf16: 'bf16',
   DataType.cf32: 'c',
   DataType.cf64: 'z',
   DataType.f8: 'f8',      
