@@ -66,7 +66,7 @@ using namespace cute;
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 using MmaType = _Float16;
-using QuantType = int4_t;//_BitInt(4);
+using QuantType = _BitInt(4);
 
 // Command line options parsing
 struct Options {
@@ -369,7 +369,7 @@ struct ExampleRunner {
     cutlass::DeviceAllocation<Element>& block, 
     Options const& options) {
 
-#ifdef INT4_DEBUG
+#if 1//def INT4_DEBUG
     std::vector<Element> stage(block.size(), Element(1.0f));
     for (int i =0; i < 1; i++) {
       for (int j =0; j < 4096; j++) {
@@ -624,15 +624,15 @@ int main(int argc, const char** argv)
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
   using GmemTiledCopyA = XE_2D_U4x16x16_LD_T;
-  using GmemTiledCopyB = XE_2D_U16x32x16_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile
-  using TileShape = Shape<_32, _128, _16>;
+  using TileShape = Shape<_256, _256, _32>;
 
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_1, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 4;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages/*, cutlass::gemm::KernelXeCooperative*/>;

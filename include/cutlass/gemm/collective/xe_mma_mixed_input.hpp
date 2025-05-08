@@ -359,19 +359,31 @@ public:
         static constexpr auto N = decltype(size<1>(tCrA_load))::value;
         static constexpr auto K = decltype(size<2>(tCrA_load))::value;
 
+
         CUTLASS_PRAGMA_UNROLL
-        for (int k = 0; k < K; ++k) {
+        for (int i = 0; i < N; ++i) {
+          auto ts = tCrS_input(i);
+          auto tz = tCrZ_input(i);
+          static constexpr auto size_dk = decltype(size(tCrA_mma))::value / N;
+
+          auto* src = raw_pointer_cast(tCrA_load(_, i, _).data());
+          auto* dst = raw_pointer_cast(tCrA_mma(_, i, _).data());
+
           CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i < N; ++i) {
-            CUTLASS_PRAGMA_UNROLL
-            for (int j = 0; j < DPAS; ++j) {
-              tCrA_mma(j, i, k) *= tCrS_input(i);
-              if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-                tCrA_mma(j, i, k) += tCrZ_input(i);
-              }
-            }
+          for (int k = 0; k < size_dk; ++k) {
+            dst[k] *= ts;
+            dst[k] += tz;
           }
         }
+          //   CUTLASS_PRAGMA_UNROLL
+          //   for (int j = 0; j < DPAS; ++j) {
+          //     tCrA_mma(j, i, k) *= tCrS_input(i);
+          //     if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
+          //       tCrA_mma(j, i, k) += tCrZ_input(i);
+          //     }
+          //   }
+        //   }
+        // }
       }
     }
   }

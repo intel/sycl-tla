@@ -505,7 +505,7 @@ void convert_int_subbyte_to_half(Dst & out, Src const& in) {
   static_assert(std::is_same_v<half_t, typename Dst::value_type> ||
                 std::is_same_v<_Float16, typename Dst::value_type>);
 
-  using format_type = uint8_t;
+  using format_type = uint32_t;
 
   static constexpr auto src_bits = sizeof_bits_v<SrcType>;
   static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
@@ -513,23 +513,31 @@ void convert_int_subbyte_to_half(Dst & out, Src const& in) {
   static constexpr auto v_cnt = decltype(size(out))::value / scalar / loop_cnt;
   static constexpr auto is_src_signed = is_signed<SrcType>::value;
 
-auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(in.data()));
-auto& dst = *reinterpret_cast<cute::intel::vector_t<ushort, decltype(size(out))::value>*>(out.data());
 
   #pragma unroll
-  for (int v = 0; v < v_cnt; v++) {
+  for (int v = 0; v < 4; v++) {
+    static constexpr auto size_dk =  decltype(size(out))::value / 4;
+    auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(in(_, v, _).data()));
+    auto& dst = *reinterpret_cast<cute::intel::vector_t<ushort, size_dk>*>(out(_, v, _).data());
+    
+
     #pragma unroll
-    for (int j = 0; j < scalar; j++) {
-      #pragma unroll
-      for (int i = 0; i < loop_cnt; i++) {
-        if constexpr (is_src_signed) {
-          dst[v * loop_cnt * scalar + j + i * scalar] = cutlass::platform::bit_cast<ushort>(static_cast<_Float16>(
-              (int32_t)(static_cast<SrcType>((src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf))));
-        } else {
-          dst[v * loop_cnt * scalar + j + i * scalar] = cutlass::platform::bit_cast<ushort>(static_cast<_Float16>(
-              (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf));
-        }
+    for (int j = 0; j < size_dk; j++) {
+      if constexpr (is_src_signed) {
+        dst[j] = cutlass::platform::bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>((src_ptr[j / scalar] >> (src_bits * j)) & 0xf))));
+      } else {
+        dst[j] = cutlass::platform::bit_cast<ushort>(static_cast<_Float16>((src_ptr[j / scalar] >> (src_bits * j)) & 0xf));
       }
+      // #pragma unroll
+      // for (int i = 0; i < loop_cnt; i++) {
+      //   if constexpr (is_src_signed) {
+      //     dst[v * loop_cnt * scalar + j + i * scalar] = cutlass::platform::bit_cast<ushort>(static_cast<_Float16>(
+      //         (int32_t)(static_cast<SrcType>((src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf))));
+      //   } else {
+      //     dst[v * loop_cnt * scalar + j + i * scalar] = cutlass::platform::bit_cast<ushort>(static_cast<_Float16>(
+      //         (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf));
+      //   }
+      // }
     }
   }
 }
