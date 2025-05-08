@@ -367,7 +367,8 @@ public:
           auto tz = tCrZ_input(i);
           static constexpr auto size_dk = decltype(size(tCrA_mma))::value / N;
 
-          auto* dst = raw_pointer_cast(tCrA_mma(_, i, _).data());
+          // auto* dst = raw_pointer_cast(tCrA_mma(_, i, _).data());
+          auto& dst = *reinterpret_cast<cute::intel::vector_t<_Float16, size_dk>*>(raw_pointer_cast(tCrA_mma(_, i, _).data()));
 
           CUTLASS_PRAGMA_UNROLL
           for (int k = 0; k < size_dk; ++k) {
