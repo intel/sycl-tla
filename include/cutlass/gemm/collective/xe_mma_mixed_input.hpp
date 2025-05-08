@@ -37,6 +37,7 @@
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
 #include "cute/tensor_predicate.hpp"
+#include "cutlass/util/mixed_dtype_utils.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -366,7 +367,7 @@ public:
           auto tz = tCrZ_input(i);
           static constexpr auto size_dk = decltype(size(tCrA_mma))::value / N;
 
-          auto* src = raw_pointer_cast(tCrA_load(_, i, _).data());
+          // auto* src = raw_pointer_cast(tCrA_load(_, i, _).data());
           auto* dst = raw_pointer_cast(tCrA_mma(_, i, _).data());
 
           CUTLASS_PRAGMA_UNROLL

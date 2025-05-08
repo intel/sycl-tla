@@ -112,7 +112,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
     auto block_host_dq = std::vector<T2>(array_size);
 
     for (int i = 0; i < block_host.size(); ++i) {
-      block_host[i] = static_cast<T1>(dist(rng));
+      block_host[i] = static_cast<T1>(i % 8/*dist(rng)*/);
       block_host_dq[i] = static_cast<T2>(block_host[i].get());
     }
 

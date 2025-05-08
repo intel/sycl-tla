@@ -66,7 +66,7 @@ using namespace cute;
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 using MmaType = _Float16;
-using QuantType = _BitInt(4);
+using QuantType = int4_t;//_BitInt(4);
 
 // Command line options parsing
 struct Options {
