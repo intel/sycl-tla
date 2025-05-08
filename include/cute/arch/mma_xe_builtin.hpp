@@ -33,7 +33,7 @@
 
 // mma_bf16
 SYCL_EXTERNAL cute::intel::float8 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::float8 acc);
-SYCL_DEVICE_OCL cute::intel::float4 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::float4 acc);
+SYCL_EXTERNAL cute::intel::float4 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::float4 acc);
 SYCL_EXTERNAL cute::intel::float2 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::float2 acc);
 SYCL_EXTERNAL               float intel_sub_group_bf16_bf16_matrix_mad_k16(              short a, cute::intel::int8 b,               float acc);
 // mma_half
@@ -70,7 +70,7 @@ SYCL_EXTERNAL         sycl::half intel_sub_group_f16_f16_matrix_mad_k16(        
 namespace cute::detail
 {
 
-template <class DElement, class AElement, class BElement, class CElement>
+template <class ElementD, class ElementA, class ElementB, class ElementC>
 struct XeSubgroupMatrixMultiplyAccumulate {
     static_assert(dependent_false<>, "Unsupported MMA Configuration.");
 };
