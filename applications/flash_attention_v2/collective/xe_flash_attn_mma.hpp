@@ -308,17 +308,17 @@ struct CollectiveMmaAttention<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeTy
     cute::gemm(tiled_mma, accum, tPr, tCrV, frag_src);
   }
 
-  // For Fixed Sequence Length, ProblemShape == LogicalProblemShape
-  // For Variable Sequence Length,
-  // LogicalProblemShape = Shape<int, int, int, int, int, int, int>
-  // ProblemShape = Shape<int, int, int, VariableSeqlen, VariableSeqlen, int, int>
-  template <class ProblemShape, class LogicalProblemShape>
+  // SequenceLengthShape = Shape<int, int>
+  // For Fixed Sequence Length, ProblemShape = Shape<int, int, int, int, int, int, int>
+  // For Variable Sequence Length, ProblemShape = Shape<int, int, int, VariableSeqlen, VariableSeqlen, int, int>
+  template <class ProblemShape, class SequenceLengthShape>
   CUTLASS_DEVICE static constexpr Params get_updated_copies(Params const& params, ProblemShape const& problem_shape, 
-                                                            LogicalProblemShape const& logical_problem_shape, int const& l_coord) {
+                                                            SequenceLengthShape const& sequence_length_shape, int const& l_coord) {
     if constexpr (!is_var_len) {
       return params;
     } else {
-      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = logical_problem_shape;
+      auto [num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = select<1, 2, 5, 6>(problem_shape);
+      auto [seq_len_qo, seq_len_kv] = sequence_length_shape;
 
       auto qo_cumulative_length = get<3>(problem_shape).cumulative_length;
       auto kv_cumulative_length = get<4>(problem_shape).cumulative_length;
