@@ -408,7 +408,7 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
   constexpr auto mma_atom_shape = get<0>(TLShape{});
   constexpr int total_mma_atom_iters_M = get<1>(TLShape{});
   constexpr int total_mma_atom_iters_N = get<2>(TLShape{});
-  constexpr auto mma_atom_shape_2d = prepend<2>(Int<mma_atom_shape>{}, _1{});
+  constexpr auto mma_atom_shape_2d = prepend<2>(mma_atom_shape, _1{});
 
   constexpr int mma_atom_size_M =
       Int<!TiledCopy::is_convention_MN ? size<0>(mma_atom_shape_2d) : size<1>(mma_atom_shape_2d)>{};
