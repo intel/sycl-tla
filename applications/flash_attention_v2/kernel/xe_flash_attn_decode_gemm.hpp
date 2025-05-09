@@ -190,11 +190,11 @@ public:
   static dim3 get_block_shape() { return dim3(MaxThreadsPerBlock, 1, 1); }
 
   CUTLASS_DEVICE
-  Shape<int, int, int, int, int, int, int, int> get_logical_problem_shape(ProblemShape const& problem_shape, int const& batch) {
+  Shape<int, int, int> get_sequence_length_shape(ProblemShape const& problem_shape, int const& batch) {
     if constexpr (is_var_len) {
-      return cutlass::fmha::collective::apply_variable_length(problem_shape, batch);
+      return cutlass::fmha::collective::apply_variable_length(select<3, 4, 5>(problem_shape), batch);
     } else {
-      return problem_shape;
+      return select<3, 4, 5>(problem_shape);
     }
   }
 
@@ -243,11 +243,11 @@ public:
 
       // Get problem shape for the current batch_blk_idx. For variable sequence length, it loads the sequence length
       // from Global memory for the given batch_blk_idx and returns the appropriate problem_shape. For fixed sequence
-      // length, logical_problem_shape == params.problem_shape.
-      // logical_problem_shape = [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo]
-      auto logical_problem_shape = get_logical_problem_shape(params.problem_shape, batch_coord);
+      // length, sequence_length_shape == select<3, 4, 5>(params.problem_shape).
+      // sequence_length_shape = [seq_len_qo, seq_len_kv, seq_len_kv_cache]
+      auto sequence_length_shape = get_sequence_length_shape(params.problem_shape, batch_coord);
 
-      auto [seq_len_qo, seq_len_kv, seq_len_kv_cache] = select<3, 4, 5>(logical_problem_shape);
+      auto [seq_len_qo, seq_len_kv, seq_len_kv_cache] = sequence_length_shape;
 
       Tensor mQ_mkl = cute::get_xe_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads_q));   //(m,k,l)
       Tensor mK_nkl = cute::get_xe_tensor(make_shape(cute::max(seq_len_kv, seq_len_kv_cache), head_size_qk, (is_var_len ? 1 : batch) * num_heads_kv));   //(n,k,l)
@@ -268,7 +268,7 @@ public:
       const int kv_splits_cache = ceil_div(seq_len_kv_cache, get<1>(TileShapeQK{}));
       const int kv_splits = kv_splits_new + kv_splits_cache;
 
-      auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, logical_problem_shape, batch_coord);
+      auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, sequence_length_shape, batch_coord);
       // For Decode, QK_BLK_M is set to 1 MMA Atom worth of data (in our case 8), this is because seq_len_qo == 1.
       // So we need to perform atleast 1 MMA op to calculate the output properly. The size required for prefetching
       // Q is small (8 x QK_BLK_K), which leads to the use of a smaller size Prefetch Atom that throws a runtime error on
@@ -417,13 +417,13 @@ public:
         shmem_out_tensor(idx + i * SubgroupSize) = out_reg(i);
       }
 
-      auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, logical_problem_shape, batch_coord);
+      auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, sequence_length_shape, batch_coord);
       CollectiveEpilogue epilogue{epilogue_params, shared_storage.epilogue};
       auto blk_coord_mnkl = make_coord(blk_q_coord, blk_v_coord, _, blk_l_coord);
 
       Tensor shmem_sum_tensor = make_tensor(make_smem_ptr(shmem_out_tensor.data() + shmem_out_tensor.size()), make_shape(Int<Num_SGs * Vec * FragsM>{}));
 
-      epilogue(logical_problem_shape, TileShapePV{}, blk_coord_mnkl, shmem_out_tensor, sum_reg, shmem_sum_tensor, tiled_mma);
+      epilogue(params.problem_shape, sequence_length_shape, TileShapePV{}, blk_coord_mnkl, shmem_out_tensor, sum_reg, shmem_sum_tensor, tiled_mma);
     }
   }
 };
