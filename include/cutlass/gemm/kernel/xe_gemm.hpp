@@ -183,11 +183,17 @@ public:
                          check_stride(args.epilogue.dC, sizeof(ElementC)) &&
                          check_stride(args.epilogue.dD, sizeof(ElementD));
     // TODO(codeplay): base *_valid on the atom shapes
-    bool m_valid = m > 0;
-    bool n_valid = n > 0 && n % (width_alignment_requirement / sizeof(ElementB)) == 0 && 
-                            n % (width_alignment_requirement / sizeof(ElementC)) == 0 && 
-                            n % (width_alignment_requirement / sizeof(ElementD)) == 0;
-    bool k_valid = k > 0  && k % (width_alignment_requirement / sizeof(ElementA)) == 0;
+    auto check_dim = [](int dimm, int el_size, bool do_check){
+      return !do_check || dimm % (width_alignment_requirement / el_size) == 0;
+    };
+    bool m_valid = m > 0 && check_dim(m, sizeof(ElementA), get<0>(args.mainloop.dA) == _1{}) &&
+                            check_dim(m, sizeof(ElementC), get<0>(args.epilogue.dC) == _1{}) &&
+                            check_dim(m, sizeof(ElementD), get<0>(args.epilogue.dD) == _1{});
+    bool n_valid = n > 0 && check_dim(n, sizeof(ElementB), get<1>(args.mainloop.dB) == _1{}) &&
+                            check_dim(n, sizeof(ElementC), get<1>(args.epilogue.dC) == _1{}) && 
+                            check_dim(n, sizeof(ElementD), get<1>(args.epilogue.dD) == _1{});
+    bool k_valid = k > 0 && check_dim(k, sizeof(ElementA), get<0>(args.mainloop.dA) == _1{}) &&
+                            check_dim(k, sizeof(ElementB), get<0>(args.mainloop.dB) == _1{});
     bool shape_implementable = m_valid && n_valid && k_valid && strides_valid;
 
     bool mode_implementable = args.mode == GemmUniversalMode::kGemm ||
