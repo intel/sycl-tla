@@ -146,7 +146,7 @@ struct LinCombTopKSoftmaxCol
     : LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
 };
 
-// D = softmax(alpha * acc + beta * C)
+// D = splitk(alpha * acc + beta * C)
 template<
   class ElementOutput_,
   class ElementCompute_,
