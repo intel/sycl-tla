@@ -59,7 +59,7 @@ SYCL_EXTERNAL               short __spirv_SubgroupMatrixMultiplyAccumulateINTEL(
 SYCL_EXTERNAL cute::intel::half8 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short8, cute::intel::int8, cute::intel::half8, int32_t);
 SYCL_EXTERNAL cute::intel::half4 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short4, cute::intel::int8, cute::intel::half4, int32_t);
 SYCL_EXTERNAL cute::intel::half2 __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t, cute::intel::short2, cute::intel::int8, cute::intel::half2, int32_t);
-SYCL_EXTERNAL         sycl::half __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t,               short, cute::intel::int8,         sycl::half, int32_t);
+SYCL_EXTERNAL cute::intel::half  __spirv_SubgroupMatrixMultiplyAccumulateINTEL(int32_t,               short, cute::intel::int8,  cute::intel::half, int32_t);
 
 struct SPIRV_MMAOperands {
   static constexpr int SPIRV_MatrixASigned = 0x1;
