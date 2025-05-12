@@ -37,6 +37,7 @@ import os
 import sqlite3
 import subprocess
 import tempfile
+from functools import lru_cache
 
 from cuda import cuda, nvrtc
 from cutlass_library import SubstituteTemplate
@@ -71,6 +72,54 @@ def compile_with_nvcc(cmd, source, error_file):
         # verbosity. Otherwise, simply point to the error log file.
         logger.warning(error_log)
         raise Exception(f"Invalid Kernel. See '{error_file}' for details.")
+
+
+@lru_cache(maxsize=None)
+def _find_library(ld_path, lib_name):
+    for directory in ld_path.split(os.pathsep):
+        if directory:
+            candidate = os.path.join(directory, lib_name)
+            if os.path.isfile(candidate):
+                return candidate
+
+    return None
+
+
+def find_library(lib_name):
+    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+    return _find_library(ld_path, lib_name)
+
+
+def link_devicelib(spirv_file):
+    bfloat16_devicelib = find_library("libsycl-native-bfloat16.spv")
+    if bfloat16_devicelib is None:
+        bfloat16_devicelib = find_library("libsycl-fallback-bfloat16.spv")
+
+    if bfloat16_devicelib is None:
+        logger.debug("Could not find bfloat16 device library. "
+                     "Set LD_LIBRARY_PATH to point to library")
+        return None
+
+    base, ext = os.path.splitext(spirv_file)
+    linked_file = f"{base}_linked{ext}"
+
+    cmd_template = "spirv-link ${options} ${lib} ${kernel_file} -o ${output}"
+    values = {
+        "options": "--allow-partial-linkage --use-highest-version",
+        "lib": str(bfloat16_devicelib),
+        "kernel_file": str(spirv_file),
+        "output": str(linked_file)
+    }
+    cmd = SubstituteTemplate(cmd_template, values)
+    try:
+        compile_with_nvcc(cmd.split(" "), spirv_file,
+                          "./cutlass_bfloat16_devicelib_spirv_link_error_"
+                          f"{os.path.basename(base)}.txt")
+    except Exception:
+        logger.debug(f"Linking {spirv_file} with bfloat16 device library failed")
+        return None
+
+    return linked_file
 
 
 class CompilationOptions:
@@ -166,6 +215,7 @@ class ArtifactManager:
                                        "-shared", "-fPIC",
                                        "-fno-sycl-dead-args-optimization",
                                        "-Xspirv-translator -spirv-ext=+SPV_INTEL_split_barrier",
+                                       "-fno-sycl-instrument-device-code",
                                        "-fsycl-range-rounding=disable"]
         self.nvcc()
         self.compiled_cache_device = {}
@@ -373,8 +423,18 @@ class ArtifactManager:
                 # subgroup size.
                 q = dpctl.SyclQueue(cutlass.sycl_device())
                 op_name = f"__sycl_kernel_{operation_list[0].name()}"
+                cubin_image = None
                 for f in spv_files:
-                    with open(f, "rb") as spirv_file:
+                    # The generated SPIR-V might use bfloat16 device library
+                    # functions, which require linking with the device library.
+                    linked_file = link_devicelib(f)
+                    if linked_file is None:
+                        # Allow to proceed even if linking failed, as in some
+                        # cases linking isn't required and kernels can still
+                        # be detected.
+                        linked_file = f
+
+                    with open(linked_file, "rb") as spirv_file:
                         spirv_image = spirv_file.read()
                         program = dpctl.program.create_program_from_spirv(
                             q, spirv_image)
@@ -465,7 +525,7 @@ class ArtifactManager:
                 self._nvcc_compile_options, arch, include_paths, False)
         else:
             cutlass.initialize_sycl_context()
-            arch = "spir64"
+            arch = "intel_gpu_pvc"
             host_compile_options = CompilationOptions(
                 ["-std=c++17", "-DCUTLASS_ENABLE_SYCL", "-DSYCL_INTEL_TARGET"],
                 arch, include_paths, True)
@@ -505,6 +565,8 @@ class ArtifactManager:
                 operation_list, compile_options, host_compile_options)
 
             if self._is_sycl():
+                if cubin_image is None:
+                    raise RuntimeError("SYCL compilation failed, see debug log")
                 q = dpctl.SyclQueue(cutlass.sycl_device())
                 program = dpctl.program.create_program_from_spirv(
                     q, cubin_image)
