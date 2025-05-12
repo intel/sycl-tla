@@ -335,7 +335,6 @@ struct XE_2D_U16x32x32_LD_N {
                                       int height, int pitch,
                                       intel::coord_t coord) {
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
-      // __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
     detail::XeSubgroup2DBlockPrefetch<2, 16, 32, 2>{}(baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
