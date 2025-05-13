@@ -25,7 +25,7 @@
  * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
  * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
 
@@ -53,13 +53,39 @@
 #include "helper.h"
 
 using namespace cute;
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 template<typename T>
 inline
 bool isclose(T a, T b, float atol, float rtol) {
     return std::abs((float)a - (float)b) <= atol + rtol * std::abs((float)b);
 }
+
+template<typename T>
+inline
+void verify_acc(T expect, T val, const float atol, const float rtol, int &err_cnt) {
+}
+
+template<typename T>
+inline
+void random_fill(T *src, int seed, size_t N, float max, float min) {
+    if constexpr(std::is_same_v<T, float> || std::is_same_v<T, bfloat16_t> || std::is_same_v<T, half_t>) {
+        std::random_device rd;
+        std::mt19937 gen(seed);
+        std::uniform_real_distribution<float> dis(min, max);
+        T *buff =
+            (T *)std::malloc(N * sizeof(T));
+
+        for (size_t i = 0; i < N; ++i) {
+            buff[i] = (T)(dis(gen));
+        }
+        syclcompat::memcpy(src, buff, N * sizeof(T));
+        syclcompat::wait();
+        std::free(buff);
+    } else {
+        assert(0 & "Not supported dtype");
+    }
+}
+
 // Command line options parsing
 struct Options {
 
@@ -91,7 +117,7 @@ struct Options {
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
-    cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("iterations", iterations, 0);
   }
 
   /// Prints the usage statement.
@@ -195,70 +221,150 @@ struct ExampleRunner {
 
     syclcompat::wait();
     // 256x128x64
-    ElementOutput *ptr1 =
+    ElementOutput *ptr_ref_D1 =
         (ElementOutput *)std::malloc(M * NUM_HEAD * NOPE_DIM * L * sizeof(ElementOutput));
     // 256x128x128
-    ElementOutput *ptr2 =
+    ElementOutput *ptr_ref_D2 =
         (ElementOutput *)std::malloc(M * NUM_HEAD * ROPE_DIM * L * sizeof(ElementOutput));
-    ElementOutput *ptr=
+    ElementOutput *ptr_ref_D =
         (ElementOutput *)std::malloc(M * N * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr, block_ref_D.get(),
+    syclcompat::memcpy(ptr_ref_D, block_ref_D.get(),
                        M * N * L * sizeof(ElementOutput));
     syclcompat::wait();
-
+    printf("res:");
+    for (int l = 0; l < L; ++l) {
+        for (int m = 0; m < M; ++m) {
+            for (int n = 0; n < N; ++n) {
+                if ((n % 16) == 0)
+                    printf("\n(%03d:%04d): ", m, n);
+                printf("% 7.3f ", ptr_ref_D[l * M * N + m * N + n]);
+            }
+        }
+    }
+    printf("\n");
     for (int l = 0; l < L; l++) {
       for (int i = 0; i < M; i++) {
         for (int j = 0; j < NUM_HEAD; j++) {
             for (int k = 0; k < NOPE_DIM + ROPE_DIM; ++k) {
                 if (k < NOPE_DIM) {
-                    ptr1[l * M * NUM_HEAD * NOPE_DIM + i * NUM_HEAD * NOPE_DIM + j * NOPE_DIM + k] = ptr[l * M * N + i * N + j * (NOPE_DIM + ROPE_DIM) + k];
+                    ptr_ref_D1[l * M * NUM_HEAD * NOPE_DIM + i * NUM_HEAD * NOPE_DIM + j * NOPE_DIM + k] =
+                        ptr_ref_D[l * M * N + i * N + j * (NOPE_DIM + ROPE_DIM) + k];
                 } else {
-                    ptr2[l * M * NUM_HEAD * ROPE_DIM + i * NUM_HEAD * ROPE_DIM + j * ROPE_DIM + k - NOPE_DIM] = ptr[l * M * N + i * N + j * (NOPE_DIM + ROPE_DIM) + k];
+                    ptr_ref_D2[l * M * NUM_HEAD * ROPE_DIM + i * NUM_HEAD * ROPE_DIM + j * ROPE_DIM + k - NOPE_DIM] =
+                        ptr_ref_D[l * M * N + i * N + j * (NOPE_DIM + ROPE_DIM) + k];
                 }
             }
         }
       }
     }
 
-    syclcompat::memcpy(block_ref_D.get(), ptr,
-                       M * N * L * sizeof(ElementOutput));
+    ElementOutput *ptr_test_D =
+        (ElementOutput *)std::malloc((size_t)M * N * L * sizeof(ElementOutput));
+    syclcompat::memcpy(ptr_test_D, block_D.get(),
+                       (size_t)M * N * L * sizeof(ElementOutput));
+
+    // 256x128x64
+    ElementOutput *ptr_test_D1 =
+        (ElementOutput *)std::malloc(M * NUM_HEAD * NOPE_DIM * L * sizeof(ElementOutput));
+    // 256x128x128
+    ElementOutput *ptr_test_D2 =
+        (ElementOutput *)std::malloc(M * NUM_HEAD * ROPE_DIM * L * sizeof(ElementOutput));
+    syclcompat::memcpy(ptr_test_D1, block_D1.get(),
+                       M * NUM_HEAD * NOPE_DIM * L * sizeof(ElementOutput));
+    syclcompat::memcpy(ptr_test_D2, block_D2.get(),
+                       M * NUM_HEAD * ROPE_DIM * L * sizeof(ElementOutput));
     syclcompat::wait();
 
-    ElementOutput *ptr_refD =
-        (ElementOutput *)std::malloc((size_t)M * N * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr_refD, block_D.get(),
-                       (size_t)M * N * L * sizeof(ElementOutput));
+
     syclcompat::wait();
 
     uint32_t err_cnt = 0;
-    float atol = 1e-4;
-    float rtol = 1e-4;
+    constexpr float atol = 1e-4;
+    constexpr float rtol = 1e-4;
     for (int b = 0; b < L; b++) {
       for (int i = 0; i < M; i++) {
         for (int j = 0; j < N; j++) {
           int idx = b * M * N + i * N + j;
-          auto expect = ptr[idx];
-          auto val = ptr_refD[idx];
-
+          auto expect = ptr_ref_D[idx];
+          auto val = ptr_test_D[idx];
           if (not (std::isinf(val) || std::isnan(val))) {
-            if (not isclose(val, expect, atol, rtol)) {
-                std::cout << "(" << b << ", " << i << ", " << j
-                          << "): " << "host: " << ptr[idx]
-                          << "   and device: " << ptr_refD[idx] << std::endl;
-                err_cnt++;
-            }
+              if (not isclose(val, expect, atol, rtol)) {
+                  std::cout << "(" << b << ", " << i << ", " << j
+                            << "): " << "host: " << expect
+                            << "   and device: " << val << std::endl;
+                  err_cnt++;
+              }
           } else {
-            std::cout << "(" << b << ", " << i << ", " << j
-                      << "): " << "host: " << expect << "   and device: " << val
-                      << std::endl;
-            err_cnt++;
+              std::cout << "(" << b << ", " << i << ", " << j
+                        << "): " << "host: " << expect << "   and device: " << val
+                        << std::endl;
+              err_cnt++;
           }
         }
       }
     }
+    constexpr int NUM_HEAD = 8;
+    constexpr int NOPE_DIM = 128;
+    constexpr int ROPE_DIM = 64;
+    printf("CHECK d1:\n");
+    // check d1
+    for (int b = 0; b < L; b++) {
+      for (int i = 0; i < M; i++) {
+        for (int j = 0; j < NUM_HEAD; j++) {
+            for (int k = 0; k < NOPE_DIM; ++k) {
+                int idx = b * M * NUM_HEAD * NOPE_DIM + i * NUM_HEAD * NOPE_DIM + j * NOPE_DIM + k;
+                auto expect = ptr_ref_D1[idx];
+                auto val = ptr_test_D1[idx];
+                if (not (std::isinf(val) || std::isnan(val))) {
+                    if (not isclose(val, expect, atol, rtol)) {
+                        std::cout << "(" << b << ", " << i << ", " << j << ", " << k
+                                  << "): " << "host: " << expect
+                                  << "   and device: " << val << std::endl;
+                        err_cnt++;
+                    }
+                } else {
+                    std::cout << "(" << b << ", " << i << ", " << j
+                              << "): " << "host: " << expect << "   and device: " << val
+                              << std::endl;
+                    err_cnt++;
+                }
+            }
+        }
+      }
+    }
+    printf("CHECK d2:\n");
+    // check d2
+    for (int b = 0; b < L; b++) {
+      for (int i = 0; i < M; i++) {
+        for (int j = 0; j < NUM_HEAD; j++) {
+            for (int k = 0; k < ROPE_DIM; ++k) {
+                int idx = b * M * NUM_HEAD * ROPE_DIM + i * NUM_HEAD * ROPE_DIM + j * ROPE_DIM + k;
+                auto expect = ptr_ref_D2[idx];
+                auto val = ptr_test_D2[idx];
+                if (not (std::isinf(val) || std::isnan(val))) {
+                    if (not isclose(val, expect, atol, rtol)) {
+                        std::cout << "(" << b << ", " << i << ", " << j << ", " << k
+                                  << "): " << "host: " << expect
+                                  << "   and device: " << val << std::endl;
+                        err_cnt++;
+                    }
+                } else {
+                    std::cout << "(" << b << ", " << i << ", " << j
+                              << "): " << "host: " << expect << "   and device: " << val
+                              << std::endl;
+                    err_cnt++;
+                }
+            }
+        }
+      }
+    }
 
-    std::free(ptr_refD);
-    std::free(ptr);
+    std::free(ptr_test_D);
+    std::free(ptr_test_D1);
+    std::free(ptr_test_D2);
+    std::free(ptr_ref_D);
+    std::free(ptr_ref_D1);
+    std::free(ptr_ref_D2);
     std::cout << "err count: " << err_cnt
               << ", pass rate: " << 100 - (100 * err_cnt / (M * N * L)) << "%"
               << std::endl;
@@ -283,9 +389,9 @@ struct ExampleRunner {
     block_D2.reset(M * NUM_HEAD * ROPE_DIM * L);
     block_ref_D.reset(M * N * L);
 
-    initialize_block(block_A, seed + 2023);
-    initialize_block(block_B, seed + 2022);
-    initialize_block(block_C, seed + 2021);
+    random_fill(block_A.get(), seed + 2023, block_A.size(), -1.0, 1.0);
+    random_fill(block_B.get(), seed + 2022, block_B.size(), -1.0, 1.0);
+    random_fill(block_C.get(), seed + 2021, block_C.size(), -1.0, 1.0);
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
