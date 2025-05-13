@@ -74,54 +74,6 @@ def compile_with_nvcc(cmd, source, error_file):
         raise Exception(f"Invalid Kernel. See '{error_file}' for details.")
 
 
-@lru_cache(maxsize=None)
-def _find_library(ld_path, lib_name):
-    for directory in ld_path.split(os.pathsep):
-        if directory:
-            candidate = os.path.join(directory, lib_name)
-            if os.path.isfile(candidate):
-                return candidate
-
-    return None
-
-
-def find_library(lib_name):
-    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
-    return _find_library(ld_path, lib_name)
-
-
-def link_devicelib(spirv_file):
-    bfloat16_devicelib = find_library("libsycl-native-bfloat16.spv")
-    if bfloat16_devicelib is None:
-        bfloat16_devicelib = find_library("libsycl-fallback-bfloat16.spv")
-
-    if bfloat16_devicelib is None:
-        logger.debug("Could not find bfloat16 device library. "
-                     "Set LD_LIBRARY_PATH to point to library")
-        return None
-
-    base, ext = os.path.splitext(spirv_file)
-    linked_file = f"{base}_linked{ext}"
-
-    cmd_template = "spirv-link ${options} ${lib} ${kernel_file} -o ${output}"
-    values = {
-        "options": "--allow-partial-linkage --use-highest-version",
-        "lib": str(bfloat16_devicelib),
-        "kernel_file": str(spirv_file),
-        "output": str(linked_file)
-    }
-    cmd = SubstituteTemplate(cmd_template, values)
-    try:
-        compile_with_nvcc(cmd.split(" "), spirv_file,
-                          "./cutlass_bfloat16_devicelib_spirv_link_error_"
-                          f"{os.path.basename(base)}.txt")
-    except Exception:
-        logger.debug(f"Linking {spirv_file} with bfloat16 device library failed")
-        return None
-
-    return linked_file
-
-
 class CompilationOptions:
     """
     Compilation options.
@@ -425,16 +377,7 @@ class ArtifactManager:
                 op_name = f"__sycl_kernel_{operation_list[0].name()}"
                 cubin_image = None
                 for f in spv_files:
-                    # The generated SPIR-V might use bfloat16 device library
-                    # functions, which require linking with the device library.
-                    linked_file = link_devicelib(f)
-                    if linked_file is None:
-                        # Allow to proceed even if linking failed, as in some
-                        # cases linking isn't required and kernels can still
-                        # be detected.
-                        linked_file = f
-
-                    with open(linked_file, "rb") as spirv_file:
+                    with open(f, "rb") as spirv_file:
                         spirv_image = spirv_file.read()
                         program = dpctl.program.create_program_from_spirv(
                             q, spirv_image)
