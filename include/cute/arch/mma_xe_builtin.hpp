@@ -61,11 +61,6 @@ SYCL_EXTERNAL cute::intel::short8 intel_sub_group_bf16_bf16_matrix_mad_k16(cute:
 SYCL_EXTERNAL cute::intel::short4 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::short4 acc);
 SYCL_EXTERNAL cute::intel::short2 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::short2 acc);
 SYCL_EXTERNAL               short intel_sub_group_bf16_bf16_matrix_mad_k16(              short a, cute::intel::int8 b,               short acc);
-// mma_half with half accumulator:
-SYCL_EXTERNAL cute::intel::half8 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::half8 acc);
-SYCL_EXTERNAL cute::intel::half4 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::half4 acc);
-SYCL_EXTERNAL cute::intel::half2 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::half2 acc);
-SYCL_EXTERNAL         sycl::half intel_sub_group_f16_f16_matrix_mad_k16(              short a, cute::intel::int8 b,         sycl::half acc);
 
 namespace cute::detail
 {
@@ -101,16 +96,7 @@ struct XeSubgroupMatrixMultiplyAccumulate<bfloat16_t, bfloat16_t, bfloat16_t, bf
       return intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
     }
 };
-  
-template<>
-struct XeSubgroupMatrixMultiplyAccumulate<half_t, half_t, half_t, half_t> {
-    template<typename ARegisters, typename BRegisters, typename CRegisters>
-    CUTE_HOST_DEVICE
-    auto operator()(ARegisters a, BRegisters b, CRegisters c) {
-      return intel_sub_group_f16_f16_matrix_mad_k16(a, b, c);
-    }
-};
-  
+
 template<>
 struct XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t> {
     template<typename ARegisters, typename BRegisters, typename CRegisters>
