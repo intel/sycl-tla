@@ -26,25 +26,51 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(TEST_BATCHES --l=2)
-set(TEST_LARGE "--l=513 --m=8 --n=16384 --k=512") # B matrix capacity > uint32_max
-set(TEST_SMALL_SHAPE --m=4 --n=8 --k=8 --l=2)
+# Pass these configuration files for the CI
+set(CONFIG_FILE_INTEL_DEFAULT --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/pvc/input_files/input_gemm.in)
+set(CONFIG_FILE_INTEL_LINEAR --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/pvc/input_files/input_linear.in)
+set(CONFIG_FILE_INTEL_PYTORCH --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/pvc/input_files/input_pytorch_2.in)
+set(CONFIG_FILE_INTEL_SGLANG --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_sglang_gemm.in)
+set(CONFIG_FILE_INTEL_SGLANG_SPLITK --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_sglang_gemm_splitk.in)
 
+set(CONFIG_FILE_CUDA --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/ampere/input_files/input_gemm.in)
 
-cutlass_example_add_executable(
-  00_pvc_gemm
-  00_pvc_gemm.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-  TEST_LARGE
-  TEST_SMALL_SHAPE
+cutlass_benchmark_add_suite(cutlass_benchmarks_gemm)
+
+if(CUTLASS_ENABLE_SYCL)
+
+if(SYCL_INTEL_TARGET)
+
+cutlass_benchmark_add_executable(
+    cutlass_benchmarks_gemm_sycl
+    main.cpp
+    SUITE cutlass_benchmarks_gemm
+    TEST_COMMAND_OPTIONS
+    CONFIG_FILE_INTEL_DEFAULT
+    # CONFIG_FILE_INTEL_LINEAR
+    CONFIG_FILE_INTEL_PYTORCH
+    CONFIG_FILE_INTEL_SGLANG
+    CONFIG_FILE_INTEL_SGLANG_SPLITK
 )
 
-set(TEST_SMALL_SHAPE_PADDABLE --m=1 --n=1 --k=2 --l=2)
-cutlass_example_add_executable(
-  00_pvc_gemm_padded
-  00_pvc_gemm_padded.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-  TEST_SMALL_SHAPE_PADDABLE
+else()
+cutlass_benchmark_add_executable(
+    cutlass_benchmarks_gemm_sycl
+    main.cpp
+    SUITE cutlass_benchmarks_gemm
+    TEST_COMMAND_OPTIONS
+    CONFIG_FILE_CUDA
 )
+endif()
+
+else()
+
+cutlass_benchmark_add_executable(
+    cutlass_benchmarks_gemm_cuda
+    main.cu
+    SUITE cutlass_benchmarks_gemm
+    TEST_COMMAND_OPTIONS
+    CONFIG_FILE_CUDA
+)
+
+endif()
