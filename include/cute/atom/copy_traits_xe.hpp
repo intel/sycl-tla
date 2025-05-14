@@ -405,41 +405,73 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
 template <class TiledCopy, class TLShape>
 CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                                                      TLShape &&fragment_top_level_shape) {
-  constexpr auto mma_atom_shape = get<0>(TLShape{});
-  constexpr int total_mma_atom_iters_M = get<1>(TLShape{});
-  constexpr int total_mma_atom_iters_N = get<2>(TLShape{});
-  constexpr auto mma_atom_shape_2d = prepend<2>(mma_atom_shape, _1{});
+  constexpr auto mma_atom_regs_shape = get<0>(TLShape{});
+  constexpr int total_mma_atom_iters_regs_M = get<1>(TLShape{});
+  constexpr int total_mma_atom_iters_regs_N = get<2>(TLShape{});
+  constexpr auto mma_atom_regs_shape_2d = prepend<2>(mma_atom_regs_shape, _1{});
 
-  constexpr int mma_atom_size_M =
-      Int<!TiledCopy::is_convention_MN ? size<0>(mma_atom_shape_2d) : size<1>(mma_atom_shape_2d)>{};
-  constexpr int mma_atom_size_N =
-      Int<!TiledCopy::is_convention_MN ? size<1>(mma_atom_shape_2d) : size<0>(mma_atom_shape_2d)>{};
+  constexpr int mma_atom_global_M =
+      Int<TiledCopy::is_column_major ? size<0>(mma_atom_regs_shape_2d) : size<1>(mma_atom_regs_shape_2d)>{};
+  constexpr int mma_atom_global_N =
+      Int<TiledCopy::is_column_major ? size<1>(mma_atom_regs_shape_2d) : size<0>(mma_atom_regs_shape_2d)>{};
+  constexpr int total_mma_atom_iters_global_M = TiledCopy::is_column_major ? total_mma_atom_iters_regs_M : total_mma_atom_iters_regs_N;
+  constexpr int total_mma_atom_iters_global_N = TiledCopy::is_column_major ? total_mma_atom_iters_regs_N : total_mma_atom_iters_regs_M;
 
-  using ThreadLayout_ = Shape<_1, Int<size(typename TiledCopy::Traits_LD_t::ThrID{})>>;
-  using ThreadLayout = std::conditional_t<TiledCopy::is_convention_MN,
-                                          ThreadLayout_,
-                                          decltype(cute::reverse(ThreadLayout_{}))>;
-  auto thread_copy_shape = shape_div(typename TiledCopy::BlockShape{}, ThreadLayout{});
-  auto copy_size_M = size<0>(thread_copy_shape);
-  auto copy_size_N = size<1>(thread_copy_shape);
+  using ThreadLayoutRegs = Shape<_1, Int<size(typename TiledCopy::Traits_LD_t::ThrID{})>>;
+  using ThreadLayoutGlobal = std::conditional_t<!TiledCopy::is_column_major,
+                                          ThreadLayoutRegs,
+                                          decltype(cute::reverse(ThreadLayoutRegs{}))>;
+  auto thread_copy_global_shape = shape_div(typename TiledCopy::BlockShape{}, ThreadLayoutGlobal{});
+  auto copy_global_M = size<0>(thread_copy_global_shape);
+  auto copy_global_N = size<1>(thread_copy_global_shape);
 
-  static_assert(copy_size_M >= mma_atom_size_M, "MMA atom larger than copy atom is not currently supported.");
-  static_assert(copy_size_N >= mma_atom_size_N, "MMA atom larger than copy atom is not currently supported.");
-  constexpr int mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size_M;
-  constexpr int mma_atom_iters_in_copy_N = copy_size_N / mma_atom_size_N;
-  constexpr int copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
-  constexpr int copy_iters_N = total_mma_atom_iters_N / mma_atom_iters_in_copy_N;
+  //static_assert(copy_global_M >= mma_atom_global_M, "MMA atom larger than copy atom is not currently supported.");
+  //static_assert(copy_global_N >= mma_atom_global_N, "MMA atom larger than copy atom is not currently supported.");
+  constexpr int mma_atom_iters_in_copy_global_M = copy_global_M / mma_atom_global_M;
+  constexpr int mma_atom_iters_in_copy_global_N = copy_global_N / mma_atom_global_N;
+  //constexpr int copy_iters_global_M = total_mma_atom_iters_global_M / mma_atom_iters_in_copy_global_M;
+  //constexpr int copy_iters_global_N = total_mma_atom_iters_global_N / mma_atom_iters_in_copy_global_N;
 
   auto order = std::conditional_t<TiledCopy::is_convention_MN,
                                   Step<Step<_0, _1>, Step<_2, _4>, Step<_3, _5>>,
                                   Step<Step<_0, _1>, Step<_3, _5>, Step<_2, _4>>>{};
-  auto res = make_ordered_layout(
-      make_shape(mma_atom_shape_2d,
-                 make_shape(Int<mma_atom_iters_in_copy_M>{}, Int<copy_iters_M>{}),
-                 make_shape(Int<mma_atom_iters_in_copy_N>{}, Int<copy_iters_N>{})),
+  #define LOG_THREAD 0
+  #define LOG_GROUP 0
+  #define PRINT(x) print(#x ": "); print(x); print("\n");
+  if (cute::thread(LOG_THREAD, LOG_GROUP)) {
+    print("is_column_major: "); print(TiledCopy::is_column_major); print("\n");
+    print("is_need_reversed: "); print(TiledCopy::is_need_reversed); print("\n");
+    print("is_convention_MN: "); print(TiledCopy::is_convention_MN); print("\n");
+    PRINT(mma_atom_regs_shape)
+    PRINT(total_mma_atom_iters_regs_M)
+    PRINT(total_mma_atom_iters_regs_N)
+    PRINT(total_mma_atom_iters_global_M)
+    PRINT(total_mma_atom_iters_global_N)
+    PRINT(mma_atom_regs_shape_2d)
+    PRINT(mma_atom_global_M)
+    PRINT(mma_atom_global_N)
+    PRINT(typename TiledCopy::BlockShape{})
+    PRINT(ThreadLayoutGlobal{})
+    PRINT(copy_global_M)
+    PRINT(copy_global_N)
+    PRINT(mma_atom_iters_in_copy_global_M)
+    PRINT(mma_atom_iters_in_copy_global_N)
+    print("ASSERT: "); print(copy_global_M >= mma_atom_global_M); print("\n");
+    print("ASSERT: "); print(copy_global_N >= mma_atom_global_N); print("\n");
+    print("ASSERT2: "); print(total_mma_atom_iters_global_M >= mma_atom_iters_in_copy_global_M); print("\n");
+    print("ASSERT2: "); print(total_mma_atom_iters_global_N >= mma_atom_iters_in_copy_global_N); print("\n");
+    //PRINT(copy_iters_global_M)
+    //PRINT(copy_iters_global_N)
+    print("\n");
+  }
+  return fragment_top_level_shape;
+  /*auto res = make_ordered_layout(
+      make_shape(mma_atom_regs_shape_2d,
+                 make_shape(Int<mma_atom_iters_in_copy_global_M>{}, Int<copy_iters_global_M>{}),
+                 make_shape(Int<mma_atom_iters_in_copy_global_N>{}, Int<copy_iters_global_N>{})),
       order);
   static_assert(size(res) > 0, "Error in make_fragment_layout(), tile size might be smaller than copy atom");
-  return res;
+  return res;*/
 };
 
 // clang-format off
@@ -1738,7 +1770,7 @@ struct Copy_Traits_<XE_2D_U8x32x8_LD_T, args_t...>
                            Stride<_0, Stride<_1, _8, _16>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape < _16,Shape <_8, _2, _8>>,
-                           Stride<_256,Stride<_1, _8, _16>>>;
+                           Stride<_128,Stride<_1, _8, _16>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
@@ -1756,7 +1788,7 @@ struct Copy_Traits_<XE_2D_U8x32x4_LD_T, args_t...>
                            Stride<_0, Stride<_1, _8, _16>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape < _16,Shape <_8, _2, _4>>,
-                           Stride<_256,Stride<_1, _8, _16>>>;
+                           Stride<_64, Stride<_1, _8, _16>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 

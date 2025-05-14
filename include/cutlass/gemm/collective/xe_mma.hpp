@@ -190,7 +190,9 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);
 
-#if CUTLASS_ENABLE_DEBUG_PRINTS
+//#if CUTLASS_ENABLE_DEBUG_PRINTS
+#define LOG_THREAD 0
+#define LOG_GROUP 0
 #define PRINT(x) print(#x ": "); print(x); print("\n");
     if (cute::thread(LOG_THREAD, LOG_GROUP)) {
       print("======================= A: \n");
@@ -210,12 +212,12 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
       PRINT(mainloop.tiled_copy_b);
       }
 #undef PRINT
-#endif
+//#endif
 
     //
     // Mainloop
     //
-    const auto k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
+    /*const auto k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
     constexpr int barrier_scope = 2;
     int prefetch_k = k_start_idx;
 
@@ -239,7 +241,7 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
 
       cute::gemm(tiled_mma, tCrA, tCrB, accum);
       barrier_wait(barrier_scope);
-    }
+    }*/
   }
 };
 
