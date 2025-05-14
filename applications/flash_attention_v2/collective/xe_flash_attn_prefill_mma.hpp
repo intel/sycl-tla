@@ -63,7 +63,7 @@ CUTLASS_DEVICE auto convert_type(Tensor<Engine, Layout> const &tensor) {
 template <class DispatchPolicy, class ProblemShapeType_, class TileShape_, class ElementQ_, class StrideQ_, class ElementK_, class StrideK_,
           class ElementV_, class StrideV_, class TiledMma_, class GmemTiledCopyQ_, class GmemTiledCopyK_,
           class GmemTiledCopyV_, bool CausalMask_>
-struct CollectiveMmaAttention {
+struct FlashPrefillMma {
   static_assert(cutlass::detail::dependent_false<ElementQ_>, "Could not find a mainloop specialization.");
 };
 
@@ -72,7 +72,7 @@ struct CollectiveMmaAttention {
 template <int Stages, class ProblemShapeType_, class TileShape_, class ElementQ_, class StrideQ_, class ElementK_, class StrideK_,
           class ElementV_, class StrideV_, class TiledMma_, class GmemTiledCopyQ_, class GmemTiledCopyK_,
           class GmemTiledCopyV_, bool CausalMask_>
-struct CollectiveMmaAttention<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, TileShape_, ElementQ_, StrideQ_, ElementK_, StrideK_, ElementV_,
+struct FlashPrefillMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, TileShape_, ElementQ_, StrideQ_, ElementK_, StrideK_, ElementV_,
                               StrideV_, TiledMma_, GmemTiledCopyQ_, GmemTiledCopyK_, GmemTiledCopyV_, CausalMask_> {
   //
   // Type Aliases
@@ -177,7 +177,7 @@ struct CollectiveMmaAttention<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeTy
   // Methods
   //
 
-  CollectiveMmaAttention() = default;
+  FlashPrefillMma() = default;
 
   static constexpr Params to_underlying_arguments(ProblemShapeType const &problem_shape, Arguments const &args,
                                                   void *workspace) {

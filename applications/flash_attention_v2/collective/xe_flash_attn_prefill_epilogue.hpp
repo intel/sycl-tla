@@ -49,12 +49,12 @@ namespace collective {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class DispatchPolicy, class... Args> class CollectiveEpilogueAttention {
+template <class DispatchPolicy, class... Args> class FlashPrefillEpilogue {
   static_assert(cutlass::detail::dependent_false<DispatchPolicy>, "Could not find an epilogue specialization.");
 };
 
 template <class CtaTileMNK_, class ElementO_, class StrideO_, class ElementLSE_, class CopyOpO_>
-class CollectiveEpilogueAttention<epilogue::IntelXeXMX16, CtaTileMNK_, ElementO_, StrideO_, ElementLSE_, CopyOpO_> {
+class FlashPrefillEpilogue<epilogue::IntelXeXMX16, CtaTileMNK_, ElementO_, StrideO_, ElementLSE_, CopyOpO_> {
 public:
   //
   // Type Aliases
@@ -145,7 +145,7 @@ public:
   }
 
   CUTLASS_HOST_DEVICE
-  CollectiveEpilogueAttention(Params const &params_, TensorStorage const &) : params(params_) {}
+  FlashPrefillEpilogue(Params const &params_, TensorStorage const &) : params(params_) {}
 
   template <class ProblemShape, class SequenceLengthShape, class TileCoord, class FragOut, class FragMax, class FragSum, class TiledMma>
   CUTLASS_DEVICE void operator()(ProblemShape problem_shape, SequenceLengthShape sequence_length_shape, TileCoord tile_coord, FragOut &out,
