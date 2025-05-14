@@ -40,11 +40,16 @@
 #define SYCL_DEVICE_OCL(x) inline x { CUTE_INVALID_CONTROL_PATH("Trying to use XE built-in on non-XE hardware"); }
 #endif
 
-// mma_bf16
+// mma_bf16 with float acc
 SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::float8 acc));
 SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::float4 acc));
 SYCL_DEVICE_OCL(cute::intel::float2 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::float2 acc));
 SYCL_DEVICE_OCL(float  intel_sub_group_bf16_bf16_matrix_mad_k16(short a, cute::intel::int8 b, float acc));
+// mma bf16 with bf16 acc
+SYCL_DEVICE_OCL(cute::intel::short8 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::short8 acc));
+SYCL_DEVICE_OCL(cute::intel::short4 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::short4 acc));
+SYCL_DEVICE_OCL(cute::intel::short2 intel_sub_group_bf16_bf16_matrix_mad_k16(cute::intel::short2 a, cute::intel::int8 b, cute::intel::short2 acc));
+SYCL_DEVICE_OCL(short  intel_sub_group_bf16_bf16_matrix_mad_k16(short a, cute::intel::int8 b, short acc));
 // mma_half
 SYCL_DEVICE_OCL(cute::intel::float8 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short8 a, cute::intel::int8 b, cute::intel::float8 acc));
 SYCL_DEVICE_OCL(cute::intel::float4 intel_sub_group_f16_f16_matrix_mad_k16(cute::intel::short4 a, cute::intel::int8 b, cute::intel::float4 acc));
@@ -73,6 +78,87 @@ namespace cute {
 //# of vector component of a x subgroup-size x function name
 //float8 intel_sub_group_bf16_bf16_matrix_mad_k16(short8 a, int8 b, float8 acc);
 //TODO: Is A really not transposed? Maybe better a macro than separate define for 1,2,4,8
+struct XE_8x16x16_BF16BF16BF16BF16_TT
+{
+  using DRegisters = intel::short8[1];
+  using ARegisters = intel::short8[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = intel::short8[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(intel::short8      & d,
+      intel::short8 const& a,
+      intel::int8   const& b,
+      intel::short8 const& c)
+  {
+#if defined(SYCL_INTEL_TARGET)
+    d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_BF16BF16BF16BF16_TT on non-Xe hardware");
+#endif
+  }
+};
+struct XE_4x16x16_BF16BF16BF16BF16_TT
+{
+  using DRegisters = intel::short4[1];
+  using ARegisters = intel::short4[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = intel::short4[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(intel::short4      & d,
+      intel::short4 const& a,
+      intel::int8   const& b,
+      intel::short4 const& c)
+  {
+#if defined(SYCL_INTEL_TARGET)
+    d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x16_BF16BF16BF16BF16_TT on non-Xe hardware");
+#endif
+  }
+};
+struct XE_2x16x16_BF16BF16BF16BF16_TT
+{
+  using DRegisters = intel::short2[1];
+  using ARegisters = intel::short2[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = intel::short2[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(intel::short2      & d,
+      intel::short2 const& a,
+      intel::int8   const& b,
+      intel::short2 const& c)
+  {
+#if defined(SYCL_INTEL_TARGET)
+    d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x16_BF16BF16BF16BF16_TT on non-Xe hardware");
+#endif
+  }
+};
+struct XE_1x16x16_BF16BF16BF16BF16_TT
+{
+  using DRegisters = short[1];
+  using ARegisters = short[1];
+  using BRegisters = intel::int8[1];
+  using CRegisters = short[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(short &            d,
+      short const &      a,
+      intel::int8 const& b,
+      short const &      c)
+  {
+#if defined(SYCL_INTEL_TARGET)
+    d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_BF16BF16BF16BF16_TT on non-Xe hardware");
+#endif
+  }
+};
+
 struct XE_8x16x16_F32BF16BF16F32_TT
 {
   using DRegisters = intel::float8[1];
@@ -89,7 +175,7 @@ struct XE_8x16x16_F32BF16BF16F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -109,7 +195,7 @@ struct XE_4x16x16_F32BF16BF16F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -129,7 +215,7 @@ struct XE_2x16x16_F32BF16BF16F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32BF16BF16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -150,7 +236,7 @@ struct XE_1x16x16_F32BF16BF16F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32BF16BF16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32BF16BF16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -175,7 +261,7 @@ struct XE_8x16x16_F32F16F16F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_f16_f16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32F16F16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32F16F16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -196,7 +282,7 @@ struct XE_4x16x16_F32F16F16F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_f16_f16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x16_F32F16F16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x16_F32F16F16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -217,7 +303,7 @@ struct XE_2x16x16_F32F16F16F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_f16_f16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x16_F32F16F16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x16_F32F16F16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -238,7 +324,7 @@ struct XE_1x16x16_F32F16F16F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_f16_f16_matrix_mad_k16(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32F16F16F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x16_F32F16F16F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -263,7 +349,7 @@ struct XE_8x16x32_S32S8S8S32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_i8_i8_matrix_mad_k32(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32S8S8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32S8S8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -284,7 +370,7 @@ struct XE_4x16x32_S32S8S8S32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_i8_i8_matrix_mad_k32(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32S8S8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32S8S8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -305,7 +391,7 @@ struct XE_2x16x32_S32S8S8S32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_i8_i8_matrix_mad_k32(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32S8S8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32S8S8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -326,7 +412,7 @@ struct XE_1x16x32_S32S8S8S32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_i8_i8_matrix_mad_k32(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32S8S8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32S8S8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -347,7 +433,7 @@ struct XE_8x16x32_S32U8U8S32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_u8_u8_matrix_mad_k32(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32U8U8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x32_S32U8U8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -368,7 +454,7 @@ struct XE_4x16x32_S32U8U8S32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_u8_u8_matrix_mad_k32(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32U8U8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x32_S32U8U8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -389,7 +475,7 @@ struct XE_2x16x32_S32U8U8S32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_u8_u8_matrix_mad_k32(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32U8U8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x32_S32U8U8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -410,7 +496,7 @@ struct XE_1x16x32_S32U8U8S32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_u8_u8_matrix_mad_k32(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32U8U8S32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x32_S32U8U8S32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -431,7 +517,7 @@ struct XE_8x16x8_F32TF32TF32F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_tf32_tf32_matrix_mad_k8(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x8_F32TF32TF32F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x8_F32TF32TF32F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -452,7 +538,7 @@ struct XE_4x16x8_F32TF32TF32F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_tf32_tf32_matrix_mad_k8(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x8_F32TF32TF32F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_4x16x8_F32TF32TF32F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -473,7 +559,7 @@ struct XE_2x16x8_F32TF32TF32F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_tf32_tf32_matrix_mad_k8(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x8_F32TF32TF32F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_2x16x8_F32TF32TF32F32_TT on non-Xe hardware");
 #endif
   }
 };
@@ -494,7 +580,7 @@ struct XE_1x16x8_F32TF32TF32F32_TT
 #if defined(SYCL_INTEL_TARGET)
     d = intel_sub_group_tf32_tf32_matrix_mad_k8(a, b, c);
 #else
-    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x8_F32TF32TF32F32_TT on non-PVC hardware");
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_1x16x8_F32TF32TF32F32_TT on non-Xe hardware");
 #endif
   }
 };

@@ -52,7 +52,7 @@ class GemmUniversal<
   CollectiveMainloop_,
   CollectiveEpilogue_,
   TileScheduler_,
-  cute::enable_if_t<cute::is_base_of_v<KernelPVC, typename CollectiveMainloop_::DispatchPolicy::Schedule>>>
+  cute::enable_if_t<cute::is_base_of_v<KernelXe, typename CollectiveMainloop_::DispatchPolicy::Schedule>>>
 {
 public:
   //
@@ -80,7 +80,7 @@ public:
   using MainloopParams = typename CollectiveMainloop::Params;
 
   static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler>,
-    "Intel PVC does not support specializing the tile scheduler.");
+    "Intel Xe does not support specializing the tile scheduler.");
   using TileSchedulerTag = TileScheduler_;
   using TileScheduler = typename detail::TileSchedulerSelector<
     TileScheduler_, ArchTag, WorkgroupTileShape,
@@ -162,11 +162,39 @@ public:
     auto m = get<0>(args.problem_shape);
     auto n = get<1>(args.problem_shape);
     auto k = get<2>(args.problem_shape);
+    auto l = get<3>(args.problem_shape);
+    bool is_batch = l > 1;
+    // all these requirements are in bytes
+    constexpr int inner_alignment_requirement = 16;
+    constexpr int outer_alignment_requirement = 64;
+    constexpr int width_alignment_requirement = 4;
+
+    auto check_stride = [is_batch](auto stride, int el_size){
+      auto a = get<0>(stride);
+      auto b = get<1>(stride);
+      auto valid_is_unit = a == 1 || b == 1;
+      auto inner = a == 1 ? b : a;
+      auto valid_inner = inner % (inner_alignment_requirement / el_size) == 0;
+      auto valid_outer = !is_batch || get<2>(stride) % (outer_alignment_requirement / el_size) == 0;
+      return valid_is_unit && valid_inner && valid_outer;
+    };
+    bool strides_valid = check_stride(args.mainloop.dA, sizeof(ElementA)) &&
+                         check_stride(args.mainloop.dB, sizeof(ElementB)) &&
+                         check_stride(args.epilogue.dC, sizeof(ElementC)) &&
+                         check_stride(args.epilogue.dD, sizeof(ElementD));
     // TODO(codeplay): base *_valid on the atom shapes
-    bool m_valid = m > 0;
-    bool n_valid = n > 0 && n % 4 == 0;
-    bool k_valid = k > 0 && k % get<2>(TileShape{}) == 0;
-    bool shape_implementable = (m_valid && n_valid && k_valid);
+    auto check_dim = [](int dimm, int el_size, bool do_check){
+      return !do_check || dimm % (width_alignment_requirement / el_size) == 0;
+    };
+    bool m_valid = m > 0 && check_dim(m, sizeof(ElementA), get<0>(args.mainloop.dA) == _1{}) &&
+                            check_dim(m, sizeof(ElementC), get<0>(args.epilogue.dC) == _1{}) &&
+                            check_dim(m, sizeof(ElementD), get<0>(args.epilogue.dD) == _1{});
+    bool n_valid = n > 0 && check_dim(n, sizeof(ElementB), get<1>(args.mainloop.dB) == _1{}) &&
+                            check_dim(n, sizeof(ElementC), get<1>(args.epilogue.dC) == _1{}) && 
+                            check_dim(n, sizeof(ElementD), get<1>(args.epilogue.dD) == _1{});
+    bool k_valid = k > 0 && check_dim(k, sizeof(ElementA), get<0>(args.mainloop.dA) == _1{}) &&
+                            check_dim(k, sizeof(ElementB), get<0>(args.mainloop.dB) == _1{});
+    bool shape_implementable = m_valid && n_valid && k_valid && strides_valid;
 
     bool mode_implementable = args.mode == GemmUniversalMode::kGemm ||
           (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
@@ -239,8 +267,8 @@ public:
     constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     constexpr auto subgroup_shape = SubgroupTileShape{};                   
 
-    Tensor mA_mkl = cute::get_pvc_tensor(make_shape(M,K,L));   //(m,k,l)
-    Tensor mB_nkl = cute::get_pvc_tensor(make_shape(N,K,L));   //(n,k,l)
+    Tensor mA_mkl = cute::get_xe_tensor(make_shape(M,K,L));   //(m,k,l)
+    Tensor mB_nkl = cute::get_xe_tensor(make_shape(N,K,L));   //(n,k,l)
 
     Tensor gA = local_tile(mA_mkl, select<0,2>(blk_shape), make_coord(m_coord,_,l_coord));
     Tensor gB = local_tile(mB_nkl, select<1,2>(blk_shape), make_coord(n_coord,_,l_coord));

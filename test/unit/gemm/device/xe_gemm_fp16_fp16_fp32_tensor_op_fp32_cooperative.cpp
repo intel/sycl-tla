@@ -47,20 +47,20 @@ struct XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative {
   using ElementB = cute::half_t;
 
   using Config = gemm::device::DefaultGemmConfigurationToCutlass3Types<
-    arch::OpClassTensorOp, arch::IntelPVC,
+    arch::OpClassTensorOp, arch::IntelXe,
     ElementA, LayoutA,
     ElementB, LayoutB,
     float, layout::RowMajor,
     float>;
 
   using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    cutlass::arch::IntelXe, cutlass::arch::OpClassTensorOp,
     ElementA, LayoutA, 1,
     ElementB, LayoutB, 1,
     float,
     typename Config::TileShape, Shape<_1, _1, _1>,
     cutlass::gemm::collective::StageCountAuto,
-    cutlass::gemm::KernelPVCCooperative
+    cutlass::gemm::KernelXeCooperative
   >::CollectiveOp;
 
   using GemmKernel = gemm::kernel::GemmUniversal<
@@ -78,7 +78,7 @@ TEST(XE_Device_Gemm_fp16t_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
   using LayoutB = layout::RowMajor;
   using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative<LayoutA, LayoutB>::Gemm;
   // TODO(Codeplay): Enable batch tests
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, false));
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
 TEST(XE_Device_Gemm_fp16n_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
@@ -86,7 +86,7 @@ TEST(XE_Device_Gemm_fp16n_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
   using LayoutB = layout::RowMajor;
   using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative<LayoutA, LayoutB>::Gemm;
   // TODO(Codeplay): Enable batch tests
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, false));
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
 TEST(XE_Device_Gemm_fp16t_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
@@ -94,7 +94,7 @@ TEST(XE_Device_Gemm_fp16t_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
   using LayoutB = layout::ColumnMajor;
   using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative<LayoutA, LayoutB>::Gemm;
   // TODO(Codeplay): Enable batch tests
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, false));
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
 TEST(XE_Device_Gemm_fp16n_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
@@ -102,7 +102,7 @@ TEST(XE_Device_Gemm_fp16n_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
   using LayoutB = layout::ColumnMajor;
   using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative<LayoutA, LayoutB>::Gemm;
   // TODO(Codeplay): Enable batch tests
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, false));
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 }
 } // namespace cutlass
