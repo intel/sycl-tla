@@ -91,8 +91,6 @@ struct GemmConfiguration<
   using StrideB = std::conditional_t<cute::is_tuple_v<LayoutB>, LayoutB, TagToStrideB_t<LayoutB>>;
   using StrideC = std::conditional_t<cute::is_tuple_v<LayoutC>, LayoutC, TagToStrideC_t<LayoutC>>;
 
-  // TODO is this static assert needed?
-  static_assert(std::is_same_v<LayoutC, cutlass::layout::RowMajor>, "Column Major LayoutC unsupported in collective builder");
   using ClusterShape = Shape<_1, _1, _1>;
   static constexpr bool use_collective_mma_builder = std::is_void_v<TiledMma>;
   static_assert(
