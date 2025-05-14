@@ -220,7 +220,9 @@ struct FusionCallbacks<
     ElementOutput* output_ptr = nullptr;
     ElementOutput *output_ptr1 = nullptr;
     ElementOutput *output_ptr2 = nullptr;
-
+    size_t NUM_HEAD = 0;
+    size_t NOPE_DIM = 0;
+    size_t ROPE_DIM = 0;
     operator typename Impl::Arguments() const {
       return
         {    // unary op: activation(beta * C + (alpha * acc))
@@ -234,7 +236,7 @@ struct FusionCallbacks<
             },                    // end binary op
             {} // ternary args : multiply_add
           },   // end ternary op
-          {output_ptr, output_ptr1, output_ptr2} // unary args: activation
+          {output_ptr, output_ptr1, output_ptr2, NUM_HEAD, NOPE_DIM, ROPE_DIM} // unary args: activation
         };   // end unary op
     }
   };

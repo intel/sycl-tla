@@ -92,14 +92,15 @@ struct Options {
   bool help;
   bool error;
 
-  int m, n, k, l, iterations;
+  int m, n, k, l, num_head, nope_dim, rope_dim, iterations;
   float alpha, beta;
 
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(100),
-    alpha(1.f), beta(0.f)
+    m(5120), n(4096), k(4096), l(1),
+    num_head(128), nope_dim(128), rope_dim(64),
+    iterations(100), alpha(1.f), beta(0.f)
   { }
 
   // Parses the command line
@@ -115,6 +116,9 @@ struct Options {
     cmd.get_cmd_line_argument("n", n, 24576);
     cmd.get_cmd_line_argument("k", k, 1536);
     cmd.get_cmd_line_argument("l", l, 1);
+    cmd.get_cmd_line_argument("num-head", num_head, 128);
+    cmd.get_cmd_line_argument("nope-dim", nope_dim, 128);
+    cmd.get_cmd_line_argument("rope-dim", rope_dim, 64);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 0);
@@ -130,6 +134,9 @@ struct Options {
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+      << "  --num-head=<int>            Sets the num_head for splitk fusion\n"
+      << "  --nope-dim=<int>            Sets the nope_dim for splitk fusion\n"
+      << "  --rope-dim=<int>            Sets the rope_dim for splitk fusion\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
       << "  --iterations=<int>          Iterations\n\n";
@@ -167,9 +174,6 @@ struct ExampleRunner {
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
-  static constexpr int NUM_HEAD = 128;
-  static constexpr int NOPE_DIM = 128;
-  static constexpr int ROPE_DIM = 64;
   //
   // Data members
   //
@@ -193,9 +197,9 @@ struct ExampleRunner {
   // Methods
   //
 
-  bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
+  bool verify(const ProblemShapeType& problem_size, const ProblemShapeType &splitk_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
-
+    auto [NUM_HEAD, NOPE_DIM, ROPE_DIM, _] = splitk_size;
     cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
     cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
     cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
@@ -231,17 +235,17 @@ struct ExampleRunner {
     syclcompat::memcpy(ptr_ref_D, block_ref_D.get(),
                        M * N * L * sizeof(ElementOutput));
     syclcompat::wait();
-    printf("res:");
-    for (int l = 0; l < L; ++l) {
-        for (int m = 0; m < M; ++m) {
-            for (int n = 0; n < N; ++n) {
-                if ((n % 16) == 0)
-                    printf("\n(%03d:%04d): ", m, n);
-                printf("% 7.3f ", ptr_ref_D[l * M * N + m * N + n]);
-            }
-        }
-    }
-    printf("\n");
+    // printf("res:");
+    // for (int l = 0; l < L; ++l) {
+    //     for (int m = 0; m < M; ++m) {
+    //         for (int n = 0; n < N; ++n) {
+    //             if ((n % 16) == 0)
+    //                 printf("\n(%03d:%04d): ", m, n);
+    //             printf("% 7.3f ", ptr_ref_D[l * M * N + m * N + n]);
+    //         }
+    //     }
+    // }
+    // printf("\n");
     for (int l = 0; l < L; l++) {
       for (int i = 0; i < M; i++) {
         for (int j = 0; j < NUM_HEAD; j++) {
@@ -303,9 +307,7 @@ struct ExampleRunner {
         }
       }
     }
-    constexpr int NUM_HEAD = 8;
-    constexpr int NOPE_DIM = 128;
-    constexpr int ROPE_DIM = 64;
+
     printf("CHECK d1:\n");
     // check d1
     for (int b = 0; b < L; b++) {
@@ -372,9 +374,10 @@ struct ExampleRunner {
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
-  void initialize(const ProblemShapeType& problem_size) {
+  void initialize(const ProblemShapeType& problem_size, const ProblemShapeType &splitk_size) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
+    auto [NUM_HEAD, NOPE_DIM, ROPE_DIM, _] = splitk_size;
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
@@ -396,14 +399,18 @@ struct ExampleRunner {
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
+    ProblemShapeType splitk_size = ProblemShapeType{options.num_head, options.nope_dim, options.rope_dim, 1};
 
-    initialize(problem_size);
+    initialize(problem_size, splitk_size);
     using EpilogueArguments = typename Gemm::GemmKernel::EpilogueArguments;
     EpilogueArguments epilogue_arguments{
       {options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D};
     epilogue_arguments.thread.output_ptr = block_D.get();
     epilogue_arguments.thread.output_ptr1 = block_D1.get();
     epilogue_arguments.thread.output_ptr2 = block_D2.get();
+    epilogue_arguments.thread.NUM_HEAD = options.num_head;
+    epilogue_arguments.thread.NOPE_DIM = options.nope_dim;
+    epilogue_arguments.thread.ROPE_DIM = options.rope_dim;
 
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
@@ -428,7 +435,7 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
+    bool passed = verify(problem_size, splitk_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
     if (!passed) return cutlass::Status::kErrorInternal;
 
