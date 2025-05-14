@@ -121,7 +121,7 @@ struct Options {
     cmd.get_cmd_line_argument("rope-dim", rope_dim, 64);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
-    cmd.get_cmd_line_argument("iterations", iterations, 0);
+    cmd.get_cmd_line_argument("iterations", iterations, 100);
   }
 
   /// Prints the usage statement.
@@ -235,17 +235,6 @@ struct ExampleRunner {
     syclcompat::memcpy(ptr_ref_D, block_ref_D.get(),
                        M * N * L * sizeof(ElementOutput));
     syclcompat::wait();
-    // printf("res:");
-    // for (int l = 0; l < L; ++l) {
-    //     for (int m = 0; m < M; ++m) {
-    //         for (int n = 0; n < N; ++n) {
-    //             if ((n % 16) == 0)
-    //                 printf("\n(%03d:%04d): ", m, n);
-    //             printf("% 7.3f ", ptr_ref_D[l * M * N + m * N + n]);
-    //         }
-    //     }
-    // }
-    // printf("\n");
     for (int l = 0; l < L; l++) {
       for (int i = 0; i < M; i++) {
         for (int j = 0; j < NUM_HEAD; j++) {
@@ -285,28 +274,6 @@ struct ExampleRunner {
     uint32_t err_cnt = 0;
     constexpr float atol = 1e-4;
     constexpr float rtol = 1e-4;
-    for (int b = 0; b < L; b++) {
-      for (int i = 0; i < M; i++) {
-        for (int j = 0; j < N; j++) {
-          int idx = b * M * N + i * N + j;
-          auto expect = ptr_ref_D[idx];
-          auto val = ptr_test_D[idx];
-          if (not (std::isinf(val) || std::isnan(val))) {
-              if (not isclose(val, expect, atol, rtol)) {
-                  std::cout << "(" << b << ", " << i << ", " << j
-                            << "): " << "host: " << expect
-                            << "   and device: " << val << std::endl;
-                  err_cnt++;
-              }
-          } else {
-              std::cout << "(" << b << ", " << i << ", " << j
-                        << "): " << "host: " << expect << "   and device: " << val
-                        << std::endl;
-              err_cnt++;
-          }
-        }
-      }
-    }
 
     printf("CHECK d1:\n");
     // check d1
@@ -378,7 +345,8 @@ struct ExampleRunner {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
     auto [NUM_HEAD, NOPE_DIM, ROPE_DIM, _] = splitk_size;
-
+    assert((NOPE_DIM % 32 == 0) && (NOPE_DIM / 32>0) && "NOPE_DIM should be divisible by 32");
+    assert((ROPE_DIM % 32 == 0) && (ROPE_DIM / 32>0) && "ROPE_DIM should be divisible by 32");
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));

@@ -174,46 +174,9 @@ public:
   get_producer_load_callbacks(ProducerLoadArgs<Args...> const& args) {
     return EmptyProducerLoadCallbacks{};
   }
-  template <class VTensor>
-  CUTLASS_DEVICE static void
-  print_tensor_orig(VTensor &t) {
-      print(t);
-      auto t_shape = t.shape();
-      auto t_stride = t.stride();
-      auto t_rank = rank(t_shape);
-      auto total = t.size();
-      for (auto i = 0; i < total; ++i) {
-          if ((i % get<0>(t_shape)) == 0)
-              print("\n%2d: ", i / get<0>(t_shape));
-          print("%7.3f ", t[i]);
-      }
-      print("\n");
-  }
-  template <class VTensor>
-  CUTLASS_DEVICE static void
-  print_tensor(VTensor &t) {
-      print(t);
-      for (int k = 0; k < 2; ++k) {
-          for (int j = 0; j < 2; ++j) {
-              printf("\n%2d: ", (k * 2 + j) * 8);
-              for (int i = 0; i < 8; ++i) {
-                  printf("%7.3f ", t(i, j, k));
-              }
-          }
-      }
-      printf("\n");
-  }
-  template <class CoordTensor>
-  CUTLASS_DEVICE static void
-  print_coord(CoordTensor &t) {
-      for (int i = 0; i < t.kRank; ++i) {
-          printf("%d ", t.idx[i]);
-      }
-      printf("\n");
-  }
   template<class RTensor, class CoordTensor>
   struct ConsumerStoreCallbacks : EmptyConsumerStoreCallbacks {
-    
+
     CUTLASS_DEVICE
     ConsumerStoreCallbacks(RTensor&& res_tensor, CoordTensor&& coord, CoordTensor&& coord1, CoordTensor&& coord2, Params const& params)
       : res_tensor(cute::forward<RTensor>(res_tensor)),
@@ -231,7 +194,7 @@ public:
     CUTLASS_DEVICE auto
     visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, int epi_n,
           Array<ElementInput, FragmentSize> const& frg_input) {
-      
+
       return frg_acc;
     }
 
@@ -245,74 +208,20 @@ public:
       constexpr auto vec_size = min(Epi_M, Sg_N);
       constexpr auto vec_folds = Epi_M / vec_size;
 
-      auto smem = syclcompat::local_mem<float[Sg_Nums * vec_size]>();
-      Tensor stensor = make_tensor(make_smem_ptr(smem), make_shape(Int<vec_size>{}, Int<Sg_N>{}, Int<Sg_M>{}));
-
       Tensor res =
           make_tensor(static_cast<decltype(res_tensor) &&>(res_tensor).data(),
                       make_shape(Int<vec_size>{}, Int<vec_folds>{}, Int<Epi_N / IntelPVCEpilogue::SubgroupSize>{}));
-      // constexpr int tid = 160;
-      // constexpr int bid = 0;
-      auto m_coord = get<0>(coord[0]);
       auto n_coord = get<1>(coord[0]);
-      auto l_coord = get<2>(coord[0]);
-      // if (cute::thread(tid, bid)) {
-      //     printf("res: ");
-      //     print(res_tensor);
-      //     printf("\n");
-      //     print_tensor_orig(res_tensor);
-      //     print_tensor(res_tensor);
-      //     printf("\nxe_store:\n");
-      //     print(params.xe_store_output);
-      //     printf("\ncoord:\n");
-      //     print(coord);
-      //     printf("m %d n %d l %d\n", m_coord, n_coord, l_coord);
-      // }
-      auto NUM_HEAD = params.NUM_HEAD;
       auto NOPE_DIM = params.NOPE_DIM;
       auto ROPE_DIM = params.ROPE_DIM;
       auto ROW_DIM = NOPE_DIM + ROPE_DIM;
-      auto ROW_1_DIM = NUM_HEAD * NOPE_DIM;
-      auto ROW_2_DIM = NUM_HEAD * ROPE_DIM;
-      // constexpr auto thr_stride = 8 * 2; // vec_size*vec_folds
       int col = n_coord;
       int idx_2 = col % ROW_DIM;
-      // int idx_1 = col / ROW_DIM;
-      // int idx_0_tid = m_coord;
-      // if (cute::thread(tid, bid)) {
-      //     printf("tid %d bid %d m %d n %d blockdim %d tidx 0st %d 1st %d 2nd %d\n", tidx, bidx, m_coord, n_coord, BlockDimX(), idx_0_tid, idx_1, idx_2);
-      // }
-      // if ((tidx >= tid) && (tidx < tid + 16) && (bidx == bid)) {
       if (idx_2 < NOPE_DIM) {
-          // static_assert(cute::is_same_v<decltype(coord), int>);
           copy(params.xe_store_output1, res_tensor, coord1);
-          // copy to first tensor
-          // for (int j = 0; j < 2; ++j) { // vec_folds
-          //     for (int i = 0; i < 8; ++i) { // vec_size
-          //         int idx_0 = j * 8 + i + idx_0_tid;
-          //         for (int k = 0; k < 2; ++k) { // Epi_N / IntelPVCEpilogue::SubgroupSize
-          //             params.ptr_output1[idx_0 * ROW_1_DIM + idx_1 * NOPE_DIM + (k * thr_stride + idx_2)] = res_tensor(i, j, k);
-          //                              // ---idx_0-----------------idx_1-------------------idx_2------
-          //         }
-          //     }
-          // }
       } else {
-          // int rope_idx_2 = idx_2 - NOPE_DIM;
-          // // copy to second tensor
-          // for (int j = 0; j < 2; ++j) { // vec_folds
-          //     for (int i = 0; i < 8; ++i) { // vec_size
-          //         int idx_0 = j * 8 + i + idx_0_tid;
-          //         for (int k = 0; k < 2; ++k) { // Epi_N / IntelPVCEpilogue::SubgroupSize
-          //             params.ptr_output2[idx_0 * ROW_2_DIM + idx_1 * ROPE_DIM + (k * thr_stride + rope_idx_2)] = res_tensor(i, j, k);
-          //                              // ---idx_0-----------------idx_1-------------------idx_2------
-          //         }
-          //     }
-          // }
           copy(params.xe_store_output2, res_tensor, coord2);
       }
-      // }
-      // sync_fn();
-      copy(params.xe_store_output, res_tensor, coord);
     }
     else {
       for(int epi_v = 0; epi_v < visit_results(0).size(); epi_v++) {
@@ -321,7 +230,7 @@ public:
     }
     }
   };
-  
+
   template <
   bool ReferenceSrc, // do register tensors reference the src or dst layout of the tiled copy
   class... Args
@@ -339,18 +248,18 @@ public:
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux = local_tile(mAux_mnl, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord,l_offset));
     Tensor tCgAux = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux);
+    unsigned long sg_n_coord_d1 = sg_n_coord % 6; // syk have to hard code here 192
+    unsigned long sg_n_coord_d0 = sg_n_coord / 6; // 6*32=192
 
-    unsigned long sg_n_coord_d1 = sg_n_coord % 6; // 192
-    unsigned long sg_n_coord_d0 = sg_n_coord / 6;
-
+    auto NUM_HEAD = N / 192;
     unsigned long sg_n_coord_1 = sg_n_coord_d0 * 4 + sg_n_coord_d1; // nope_dim 128
     unsigned long sg_n_coord_2 = sg_n_coord_d0 * 2 + sg_n_coord_d1 - 4; // rope_dim 64
-    Tensor mAux_mnl1 = cute::get_pvc_tensor(make_shape(M,8 * 128,L));
+    Tensor mAux_mnl1 = cute::get_pvc_tensor(make_shape(M,NUM_HEAD * 128,L));
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux1 = local_tile(mAux_mnl1, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord_1,l_offset));
     Tensor tCgAux1 = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux1);
 
-    Tensor mAux_mnl2 = cute::get_pvc_tensor(make_shape(M,8 * 64,L));
+    Tensor mAux_mnl2 = cute::get_pvc_tensor(make_shape(M,NUM_HEAD * 64,L));
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux2 = local_tile(mAux_mnl2, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord_2,l_offset));
     Tensor tCgAux2 = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux2);
