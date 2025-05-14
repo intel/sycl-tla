@@ -28,7 +28,25 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief CUTLASS Intel PVC Gemm with ReLU epilogue using Collective Builder.
 
+    The Collective Builder classes provide a simplified interface for constructing the mainloop
+    and epilogue for given data layouts & types, on selected hardware. Compared to `00_pvc_gemm`,
+    this example omits the MMA and copy operation definitions, as the CollectiveBuilder will select
+    these. Additionally, instead of specifying the DispatchPolicy, we provide only the device architecture
+    (cutlass::arch::IntelXe).
+
+    This example also demonstrates the use of a ReLU activation epilogue, fusing the ReLU operation
+    with the GEMM in a single kernel.
+
+    To build & run this example (from your build dir):
+
+      $ ninja 01_pvc_gemm_with_collective_builder
+      $ ./01_pvc_gemm_with_collective_builder
+
+    Call with `--help` for information about available options
+*/
 
 #include "cutlass/gemm/device/gemm_universal.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
@@ -186,8 +204,10 @@ struct ExampleRunner {
     syclcompat::wait();
 
     using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
-    cutlass::reference::device::TensorReLu(TensorView(block_ref_D.get(), LayoutD::packed({M, N}),
-                                                      cutlass::make_Coord(M, N)));
+    for (int batch = 0, offset = 0; batch < L; batch++, offset += M * N) {
+      cutlass::reference::device::TensorReLu(TensorView(
+          block_ref_D.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)));
+    }
 
     syclcompat::wait();
 
@@ -208,11 +228,11 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
+    block_A.reset(static_cast<std::size_t>(M) * K * L);
+    block_B.reset(static_cast<std::size_t>(K) * N * L);
+    block_C.reset(static_cast<std::size_t>(M) * N * L);
+    block_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
@@ -307,11 +327,11 @@ int main(int argc, const char** argv)
 
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
-  using ElementAccumulator = float;                   // <- data type of accumulator
-  using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
-  using ElementOutput = float;                        // <- data type of elements in output matrix D
+  using ElementAccumulator = float;     // <- data type of accumulator
+  using ElementComputeEpilogue = float; // <- data type of epilogue operations
+  using ElementInputA = bfloat16_t;     // <- data type of elements in input matrix A
+  using ElementInputB = bfloat16_t;     // <- data type of elements in input matrix B
+  using ElementOutput = float;          // <- data type of elements in output matrix D
 
   constexpr int AlignmentA = sizeof(ElementInputA);
   constexpr int AlignmentB = sizeof(ElementInputB);
@@ -327,21 +347,22 @@ int main(int argc, const char** argv)
   using TileShape = Shape<_256, _256, _32>;
   
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
-    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    cutlass::arch::IntelXe, cutlass::arch::OpClassTensorOp,
     ElementInputA, LayoutA, AlignmentA,
     ElementInputB, LayoutB, AlignmentB,
     ElementAccumulator,
-    TileShape, Shape<_1, _1, _1>,
-    cutlass::gemm::collective::StageCountAuto,
-    cutlass::gemm::collective::KernelScheduleAuto
+    TileShape, Shape<_1, _1, _1>,                 // the ClusterShape is always <1,1,1> on IntelXe
+    cutlass::gemm::collective::StageCountAuto,    // let the builder select the number of pipeline stages (i.e. prefetch iters)
+    cutlass::gemm::collective::KernelScheduleAuto // let the builder select the mainloop schedule
   >::CollectiveOp;
 
+  // Define a Linear Combination, Elementwise Activation (LinCombEltAct) epilogue with ReLU activation
   using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, 
           ElementOutput, ElementComputeEpilogue, ElementAccumulator, 
           ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveBuilder<
-    cutlass::arch::IntelPVC, cutlass::arch::OpClassTensorOp,
+    cutlass::arch::IntelXe, cutlass::arch::OpClassTensorOp,
     TileShape, Shape<_1, _1, _1>,
     cutlass::epilogue::collective::EpilogueTileAuto, ElementComputeEpilogue,
     ElementAccumulator, 

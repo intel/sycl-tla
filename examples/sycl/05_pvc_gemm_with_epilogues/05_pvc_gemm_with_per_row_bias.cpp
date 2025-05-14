@@ -28,7 +28,29 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+/*! \file
+    \brief CUTLASS Intel PVC Gemm with per-row-bias epilogue
 
+    This example constructs and executes a standard GEMM fused with a per-row-bias epilogue.
+    Aside from the epilogue operation, it is identical to 00_pvc_gemm.
+
+    CUTLASS 3.x epilogues are implemented using the Epilogue Visitor Tree design pattern, and
+    typically combine 'Linear Combination' (i.e. `D = alpha * A*B + beta * C`) with an additional
+    epilogue operation.
+
+    In this case, a row-wise bias value is added:
+
+    // D = alpha * (A*B) + beta * C + bias
+
+    This implies loading auxiliary data (containing the bias values) of shape M*L (each row shares a single bias value)
+
+    To build & run this example (from your build dir):
+
+      $ ninja 05_pvc_gemm_with_per_row_bias
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_per_row_bias
+
+    Call with `--help` for information about available options
+*/
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
@@ -218,12 +240,12 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
-    block_bias.reset(M * L);
+    block_A.reset(static_cast<std::size_t>(M) * K * L);
+    block_B.reset(static_cast<std::size_t>(K) * N * L);
+    block_C.reset(static_cast<std::size_t>(M) * N * L);
+    block_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_bias.reset(static_cast<std::size_t>(M) * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
@@ -240,16 +262,18 @@ struct ExampleRunner {
     StrideBias dBias = {};
 
     if(options.l > 1) {
-      cute::get<2>(dBias) = static_cast<int64_t>(options.m);
+      cute::get<2>(dBias) = static_cast<int64_t>(options.m); // Stride between bias vectors in batch
     } else {
       cute::get<2>(dBias) = static_cast<int64_t>(0);
     }
 
+    // The epilogue operation requires a pointer to the bias data and information about its layout
+    // in memory, in addition to the usual C and D matrix info
     using EpilogueArguments = typename Gemm::GemmKernel::EpilogueArguments;
     EpilogueArguments epilogue_arguments{
       {options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D};
-    epilogue_arguments.thread.bias_ptr = block_bias.get();
-    epilogue_arguments.thread.dBias = dBias; 
+    epilogue_arguments.thread.bias_ptr = block_bias.get(); // per-row-bias data
+    epilogue_arguments.thread.dBias = dBias;               // and its stride
 
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
@@ -355,9 +379,10 @@ int main(int argc, const char** argv)
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
+  // The Linear Combination + Per Row Bias epilogue operation
   using EpilogueOp = cutlass::epilogue::fusion::LinCombPerRowBias<
       ElementOutput, ElementComputeEpilogue, ElementBias, ElementAccumulator,
       ElementAccumulator, 128 / sizeof_bits_v<ElementBias>,

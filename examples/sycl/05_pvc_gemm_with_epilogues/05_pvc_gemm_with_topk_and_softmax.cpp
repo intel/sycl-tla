@@ -49,6 +49,13 @@
     Note that some numerical error (smaller than 1e-5) is to be expected, but this is true
     in most efficient reduction kernels, because floating point addition is not necessarily
     associative.
+
+    To build & run this example (from your build dir):
+
+      $ ninja 05_pvc_gemm_with_topk_and_softmax
+      $ ./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_topk_and_softmax
+
+    Call with `--help` for information about available options
 */
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
@@ -109,7 +116,7 @@ constexpr int AlignmentD  = 128 / cutlass::sizeof_bits<ElementD>::value;    // M
 // Core kernel configurations
 using ElementAccumulator  = float;                                          // Element type for internal accumulation
 using ElementCompute      = float;                                          // Element type for epilogue computation
-using ArchTag             = cutlass::arch::IntelPVC;                            // Tag indicating the minimum SM that supports the intended feature
+using ArchTag             = cutlass::arch::IntelXe;                            // Tag indicating the minimum SM that supports the intended feature
 using OperatorClass       = cutlass::arch::OpClassTensorOp;                 // Operator class tag
 using TileShape           = Shape<_256, _256, _32>;                            // Threadblock-level tile size
 using ClusterShape        = Shape<_1,_1,_1>;                                // Shape of the threadblocks in a cluster
@@ -120,8 +127,8 @@ using TiledMma =
     typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
                                   Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 constexpr int PipelineStages = 3;
-using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
 // Top-K + Softmax fusion operation
 using EpilogueFusionOperation     = std::conditional_t<EnableTopKSoftmax,
