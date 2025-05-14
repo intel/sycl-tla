@@ -157,49 +157,52 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
           Tensor<EngineIn, LayoutIn> const& in,
           Tensor<EngineOut, LayoutOut>& out) {
 
-      static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
-      static_assert(is_rmem<EngineOut>::value, "Output tensor for A conversion must come from registers");
-      static_assert(cosize_v<LayoutIn> == cosize_v<LayoutOut>);
-      static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
-      static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
+    static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
+    static_assert(is_rmem<EngineOut>::value, "Output tensor for A conversion must come from registers");
+    static_assert(cosize_v<LayoutIn> == cosize_v<LayoutOut>);
+    static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
+    static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
 
-      using SrcType = typename EngineIn::value_type;
-      using DstType = typename EngineOut::value_type;
+    using SrcType = typename EngineIn::value_type;
+    using DstType = typename EngineOut::value_type;
 
-      static_assert(std::is_same_v<SrcType, uint8_t>, "Expected fp8 (E4M3) input as uint8_t");
-      static_assert(std::is_same_v<DstType, half_t>, "Expected fp16 output as half_t");
+    static_assert(std::is_same_v<SrcType, uint8_t>, "Expected fp8 (E4M3) input as uint8_t");
+    static_assert(std::is_same_v<DstType, half_t>, "Expected fp16 output as half_t");
 
-      auto const& src = in(_, _, _);
-      auto const& dst = out(_, _, _);
+    auto const& src = in(_, _, _);
+    auto const& dst = out(_, _, _);
 
-      SrcType const* pSrc = src.data();
-      DstType* pDst = dst.data();
+    SrcType const* pSrc = src.data();
+    DstType* pDst = dst.data();
 
-      constexpr int num_elements = decltype(size(src))::value;
-      constexpr int vec_size = 16;
-      // TODO(Codeplay): Move conversion to NumericArrayConverter
-      CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < num_elements / vec_size; ++i) {
-          // vectorized load
-          cute::intel::uchar16 src_vec;
-          CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < vec_size; ++j) {
-              src_vec[j] = pSrc[i * vec_size + j];
-          }
-          // vectorized convert fp8 -> fp16
-          cute::intel::ushort16 dst_vec;
-          if constexpr (std::is_same_v<ElementA, float_e4m3_t>) {
-            dst_vec = E4M3_to_FP16_vec16(src_vec);
-          } else {
-            dst_vec = E5M2_to_FP16_vec16(src_vec);
-          }
-          // vectorized store
-          CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < vec_size; ++j) {
-              reinterpret_cast<uint16_t*>(pDst)[i * vec_size + j] = dst_vec[j];
-
-          }
+    constexpr int num_elements = decltype(size(src))::value;
+    constexpr int vec_size = 16;
+    constexpr int iters = num_elements / vec_size;
+    using SrcArray = cutlass::Array<uint8_t, vec_size>;
+    using DstArray = cutlass::Array<uint16_t, vec_size>;
+    // TODO(Codeplay): Move conversion to NumericArrayConverter
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < iters; ++i) {
+      if constexpr (std::is_same_v<ElementA, float_e5m2_t>) {
+        SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
+        DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
+        *pDstArr = E5M2_to_FP16_vec16(*pSrcArr);
+      } else {
+        cute::intel::uchar16 src_vec;
+        CUTLASS_PRAGMA_UNROLL
+        for (int j = 0; j < vec_size; ++j) {
+            src_vec[j] = pSrc[i * vec_size + j];
+        }
+        // vectorized convert fp8 -> fp16
+        cute::intel::ushort16 dst_vec;
+        dst_vec = E4M3_to_FP16_vec16(src_vec);
+        // vectorized store
+        CUTLASS_PRAGMA_UNROLL
+        for (int j = 0; j < vec_size; ++j) {
+            reinterpret_cast<uint16_t*>(pDst)[i * vec_size + j] = dst_vec[j];
+        }
       }
+    }
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
