@@ -41,9 +41,9 @@ using ushort16_array = cutlass::Array<uint16_t, 16>;
 using uint8_array = cutlass::Array<uint8_t, 16>;
 
 template<typename T1, typename T2>
-static inline T2 convert_ushort16(T1 x) {
+static inline T2 convert_ushort16(T1 const &x) {
   T2 result;
-  #pragma unroll
+  CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < 16; ++i) {
       result[i] = static_cast<uint16_t>(x[i]);
   }
