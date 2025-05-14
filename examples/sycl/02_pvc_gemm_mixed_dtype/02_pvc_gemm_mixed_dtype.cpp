@@ -269,8 +269,8 @@ struct ExampleRunner {
                                       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
     constexpr int PipelineStages = 3;
-    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-    using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
     using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementCompute,
             ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
@@ -391,15 +391,15 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
 
-    block_A.reset(M * K * L);
-    block_A_dq.reset(M * K * L);
-    block_B.reset(K * N * L);
-    block_B_dq.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
-    block_scale.reset(scale_k * L * dq_mn_size);
-    block_zero.reset(scale_k * L * dq_mn_size);
+    block_A.reset(static_cast<std::size_t>(M) * K * L);
+    block_A_dq.reset(static_cast<std::size_t>(M) * K * L);
+    block_B.reset(static_cast<std::size_t>(K) * N * L);
+    block_B_dq.reset(static_cast<std::size_t>(K) * N * L);
+    block_C.reset(static_cast<std::size_t>(M) * N * L);
+    block_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_scale.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
+    block_zero.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
 
     initialize_mixed_dtype_block(block_A, block_A_dq, seed + 2023);
     initialize_mixed_dtype_block(block_B, block_B_dq, seed + 2022);
@@ -548,8 +548,8 @@ int main(int argc, const char** argv)
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3; // prefetch 3 iters of data for A and B
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   // Default (Linear Combination) epilogue
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,

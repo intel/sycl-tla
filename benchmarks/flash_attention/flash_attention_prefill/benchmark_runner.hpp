@@ -32,7 +32,6 @@
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
-#include "77_blackwell_fmha/collective/fmha_fusion.hpp"
 #include "flash_attention_v2/kernel/tile_scheduler.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/util/packed_stride.hpp"
@@ -50,8 +49,7 @@
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "../examples/common/sycl_common.hpp"
-
-#include "../benchmarks/benchmark_runner.hpp"
+#include "../../common.hpp"
 
 using namespace cute;
 
@@ -105,14 +103,14 @@ struct FMHAOptions {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class FMHAConfiguration> struct BenchmarkRunnerFMHA {
+template <class FMHAPrefillConfiguration> struct BenchmarkRunnerFMHA {
 
-  using GemmKernel = typename FMHAConfiguration::GemmKernel;
+  using GemmKernel = typename FMHAPrefillConfiguration::GemmKernel;
   
-  using LayoutQ = typename FMHAConfiguration::LayoutQ;
-  using LayoutK = typename FMHAConfiguration::LayoutK;
-  using LayoutV = typename FMHAConfiguration::LayoutV;
-  using LayoutO = typename FMHAConfiguration::LayoutO;
+  using LayoutQ = typename FMHAPrefillConfiguration::LayoutQ;
+  using LayoutK = typename FMHAPrefillConfiguration::LayoutK;
+  using LayoutV = typename FMHAPrefillConfiguration::LayoutV;
+  using LayoutO = typename FMHAPrefillConfiguration::LayoutO;
 
   using StrideQ = typename GemmKernel::StrideQ;
   using StrideK = typename GemmKernel::StrideK;
@@ -130,8 +128,8 @@ template <class FMHAConfiguration> struct BenchmarkRunnerFMHA {
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
   using ProblemShapeType = typename GemmKernel::ProblemShape;
-  static constexpr bool Causal = FMHAConfiguration::Causal;
-  static constexpr bool isVarLen = FMHAConfiguration::VarLen;
+  static constexpr bool Causal = FMHAPrefillConfiguration::Causal;
+  static constexpr bool isVarLen = FMHAPrefillConfiguration::VarLen;
 
   int32_t count;
 
@@ -402,10 +400,10 @@ template <class FMHAConfiguration> struct BenchmarkRunnerFMHA {
     stride_V = cutlass::make_cute_packed_stride(StrideV{}, cute::make_shape(head_size_vo, seq_len_kv, batch * num_heads_kv));
     stride_O = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, batch * num_heads_q));
 
-    auto mem_size_q = batch * num_heads_q * seq_len_qo * head_size_qk;
-    auto mem_size_k = batch * num_heads_kv * seq_len_kv * head_size_qk;
-    auto mem_size_v = batch * num_heads_kv * seq_len_kv * head_size_vo;
-    auto mem_size_o = batch * num_heads_q * seq_len_qo * head_size_vo;
+    std::size_t mem_size_q = static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_qk;
+    std::size_t mem_size_k = static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv * head_size_qk;
+    std::size_t mem_size_v = static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv * head_size_vo;
+    std::size_t mem_size_o = static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo;
 
     std::size_t mem_occupied_QKV = (mem_size_q * sizeof(ElementQ)) + (mem_size_k * sizeof(ElementK)) + 
                                    (mem_size_v * sizeof(ElementV));
@@ -536,13 +534,21 @@ template <class FMHAConfiguration> struct BenchmarkRunnerFMHA {
     extra_label << "layoutV=RowMajor ";
 
     state.SetLabel(extra_label.str());
-
-    double flops_qk = 2.0 * options.batch * options.num_heads_q * options.seq_len_qo * options.seq_len_kv * options.head_size_qk;
-    double flops_pv = 2.0 * options.batch * options.num_heads_q * options.seq_len_qo * options.head_size_vo * options.seq_len_kv;
+    // when seq_len_qo is not equal to seq_len_kv we use bottom up approach for the masking. 
+    // Following changes will adjust the effective_seq_len_kv when masking applied for such cases. 
+    auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
+    auto discard_seq_coord = options.seq_len_qo - offset;
+    auto full_tile_offset = options.seq_len_kv - offset;
+    auto effective_seq_len_kv = Causal ? full_tile_offset + ((offset + 1) / 2.0): options.seq_len_kv;
+    auto effective_seq_len_qo = Causal ? options.seq_len_qo - discard_seq_coord  : options.seq_len_qo;
+   
+    double flops_qk = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * effective_seq_len_kv * options.head_size_qk;
+    double flops_pv = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
     double gflops = (flops_qk + flops_pv) * 1e-9;
-
-    double gbps_qk = 2.0 * options.batch * options.num_heads_q * (options.seq_len_qo * options.head_size_qk + options.seq_len_kv * options.head_size_qk);
-    double gbps_pv = 2.0 * options.batch * options.num_heads_q * (options.seq_len_kv * options.seq_len_qo + options.seq_len_qo * options.head_size_vo);
+    double gbps_qk =  options.batch * (sizeof(ElementQ) * options.num_heads_q * effective_seq_len_qo * options.head_size_qk + 
+                      sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);    
+    double gbps_pv = sizeof(ElementV) * options.batch * options.num_heads_kv * effective_seq_len_kv * options.head_size_vo +
+                     sizeof(ElementOutput) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
     double mega_bytes_transferred = (gbps_qk + gbps_pv) * (1e-6);
 
     initialize_counters(state);
@@ -610,9 +616,9 @@ private:
 
 }
 
-#define CUTLASS_FMHA_BENCHMARK(F) cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::FMHAOptions>::Register(#F, &F##_func)
+#define CUTLASS_FMHA_PREFILL_BENCHMARK(F) cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::FMHAOptions>::Register(#F, &F##_func)
 
-#define CUTLASS_CREATE_FMHA_BENCHMARK(F)                          \
+#define CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(F)                          \
   static void F##_func(                                           \
       ::benchmark::State& state,                                  \
       cutlass::benchmark::FMHAOptions const& options,                 \

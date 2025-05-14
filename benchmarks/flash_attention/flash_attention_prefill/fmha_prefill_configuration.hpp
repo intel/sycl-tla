@@ -29,6 +29,7 @@
  *
  **************************************************************************************************/
 #pragma once
+#include "cutlass/gemm/dispatch_policy.hpp"
 
 namespace cutlass {
 namespace flash_attention{
@@ -36,7 +37,7 @@ namespace flash_attention{
 template <typename ElementQ_, typename ElementK_, typename ElementV_, typename LayoutQ_,
           typename LayoutK_, typename LayoutV_, typename LayoutO_, bool Causal_, bool VarLen_,
           typename TileShape_, typename TiledMma_> 
-struct FMHAConfig {
+struct FMHAPrefillConfig {
 
   using ElementO = float;     // <- data type of accumulator
   using ElementInputQ = ElementQ_;     // <- data type of elements in input matrix Q
@@ -55,8 +56,8 @@ struct FMHAConfig {
   static constexpr bool VarLen = VarLen_;
   
   static constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
   using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;

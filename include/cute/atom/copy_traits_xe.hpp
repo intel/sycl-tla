@@ -282,7 +282,7 @@ struct XE_2D_LD_Unpack {
 
     constexpr auto inst_size_bits = detail::size_of_inst_bits<CopyOp, dtype>;
 
-    CopyOp::copy(base_addr + l * traits.stride_l,
+    CopyOp::copy(base_addr + static_cast<size_t>(l) * traits.stride_l,
                  (traits.width * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>, traits.height,
                  (traits.pitch * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>,
                  intel::coord_t{(int)(x * sizeof_bits_v<dtype> / inst_size_bits), y},
@@ -384,7 +384,7 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
     
     auto [m, n, l] = dst.data().coord_;
 
-    CopyOp::copy(base_addr + l * traits.stride_l,
+    CopyOp::copy(base_addr + static_cast<size_t>(l) * traits.stride_l,
                  traits.width * sizeof(dtype), traits.height,
                  traits.pitch * sizeof(dtype),
                  intel::coord_t{(int)n, (int)m}, &*src.data());
@@ -405,12 +405,14 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
 template <class TiledCopy, class TLShape>
 CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                                                      TLShape &&fragment_top_level_shape) {
-  auto [mma_atom_shape, total_mma_atom_iters_M, total_mma_atom_iters_N] = fragment_top_level_shape;
-  auto mma_atom_shape_2d = prepend<2>(mma_atom_shape, _1{});
+  constexpr auto mma_atom_shape = get<0>(TLShape{});
+  constexpr int total_mma_atom_iters_M = get<1>(TLShape{});
+  constexpr int total_mma_atom_iters_N = get<2>(TLShape{});
+  constexpr auto mma_atom_shape_2d = prepend<2>(mma_atom_shape, _1{});
 
-  Int mma_atom_size_M =
+  constexpr int mma_atom_size_M =
       Int<!TiledCopy::is_convention_MN ? size<0>(mma_atom_shape_2d) : size<1>(mma_atom_shape_2d)>{};
-  Int mma_atom_size_N =
+  constexpr int mma_atom_size_N =
       Int<!TiledCopy::is_convention_MN ? size<1>(mma_atom_shape_2d) : size<0>(mma_atom_shape_2d)>{};
 
   using ThreadLayout_ = Shape<_1, Int<size(typename TiledCopy::Traits_LD_t::ThrID{})>>;
@@ -418,23 +420,26 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                                           ThreadLayout_,
                                           decltype(cute::reverse(ThreadLayout_{}))>;
   auto thread_copy_shape = shape_div(typename TiledCopy::BlockShape{}, ThreadLayout{});
-  Int copy_size_M = size<0>(thread_copy_shape);
-  Int copy_size_N = size<1>(thread_copy_shape);
+  auto copy_size_M = size<0>(thread_copy_shape);
+  auto copy_size_N = size<1>(thread_copy_shape);
 
   static_assert(copy_size_M >= mma_atom_size_M, "MMA atom larger than copy atom is not currently supported.");
   static_assert(copy_size_N >= mma_atom_size_N, "MMA atom larger than copy atom is not currently supported.");
-  Int mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size_M;
-  Int mma_atom_iters_in_copy_N = copy_size_N / mma_atom_size_N;
-  Int copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
-  Int copy_iters_N = total_mma_atom_iters_N / mma_atom_iters_in_copy_N;
+  constexpr int mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size_M;
+  constexpr int mma_atom_iters_in_copy_N = copy_size_N / mma_atom_size_N;
+  constexpr int copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
+  constexpr int copy_iters_N = total_mma_atom_iters_N / mma_atom_iters_in_copy_N;
+
   auto order = std::conditional_t<TiledCopy::is_convention_MN,
                                   Step<Step<_0, _1>, Step<_2, _4>, Step<_3, _5>>,
                                   Step<Step<_0, _1>, Step<_3, _5>, Step<_2, _4>>>{};
-
-  return make_ordered_layout(make_shape(mma_atom_shape_2d,
-                                        make_shape(mma_atom_iters_in_copy_M, copy_iters_M),
-                                        make_shape(mma_atom_iters_in_copy_N, copy_iters_N)),
-                             order);
+  auto res = make_ordered_layout(
+      make_shape(mma_atom_shape_2d,
+                 make_shape(Int<mma_atom_iters_in_copy_M>{}, Int<copy_iters_M>{}),
+                 make_shape(Int<mma_atom_iters_in_copy_N>{}, Int<copy_iters_N>{})),
+      order);
+  static_assert(size(res) > 0, "Error in make_fragment_layout(), tile size might be smaller than copy atom");
+  return res;
 };
 
 // clang-format off
@@ -1655,8 +1660,8 @@ struct Copy_Traits_<XE_2D_U16x16x8_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x8_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_16>,
-                           Stride< _0, _1>>;
+  using SrcLayout = Layout<Shape <_16, Shape <_16, _8>>,
+                           Stride< _0, Stride< _1,_16>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape < _16,Shape <_16, _8>>,
                            Stride<_128,Stride< _1,_16>>>;
@@ -2311,11 +2316,11 @@ COPY_TRAIT_ST_DEF(XE_2D_U32x2x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x4x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x8x16_ST_N)
 
-// Generate the PVC coordinate tensor
+// Generate the Xe coordinate tensor
 template <class GShape>
 CUTE_HOST_DEVICE constexpr
 auto
-get_pvc_tensor(GShape const& g_shape) {
+get_xe_tensor(GShape const& g_shape) {
   return make_counting_tensor(make_identity_layout(g_shape));
 }
 
