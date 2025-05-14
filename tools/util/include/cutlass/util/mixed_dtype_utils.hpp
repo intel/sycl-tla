@@ -192,10 +192,11 @@ static void dequantize(DequantizedElement* dq_buffer,
       ElementZero, decltype(scale_layout_bcast), decltype(thr_layout)>>(
       blocks, tpb, dq_buffer, q_buffer, operand_layout, scale_buffer,
       zero_buffer, scale_layout_bcast, thr_layout);
+  syclcompat::wait_and_throw();
 #else
   dequantize_kernel<<<blocks, tpb, 0, stream>>>(dq_buffer, q_buffer, operand_layout, scale_buffer, zero_buffer, scale_layout_bcast, thr_layout);
-#endif
   CUDA_CHECK(cudaStreamSynchronize(stream));
+#endif
 }
 
 template <typename T>
@@ -470,10 +471,11 @@ void reorder_tensor(
     decltype(tiled_copy)
     >>(sycl_grid, NumThreads,
       S, D, tiled_copy);
+  syclcompat::wait_and_throw();
 #else
   reorder_tensor_kernel<TileShape><<<blocks, NumThreads>>>(S, D, tiled_copy);
-#endif
   CUDA_CHECK(cudaDeviceSynchronize());
+#endif
 }
 
 // In-place version
