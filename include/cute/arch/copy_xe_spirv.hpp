@@ -293,6 +293,7 @@ struct XeSubgroup2DBlockTranspose<4, 4, 16, 1> {
   }
 };
 
+// TODO(Codeplay): Remove these Prefetch specializations once spirv prefetch performance bug is fixed.
 template<>
 struct XeSubgroup2DBlockPrefetch<1, 32, 1, 1> {
   CUTE_HOST_DEVICE void
