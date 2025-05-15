@@ -38,18 +38,16 @@ using half_t = cutlass::half_t;
 using uchar16 = cute::intel::uchar16;
 using ushort16 = cute::intel::ushort16;
 using ushort16_array = cutlass::Array<uint16_t, 16>;
-using uint8_array = cutlass::Array<uint8_t, 16>;
+using uchar16_array = cutlass::Array<uint8_t, 16>;
 
-template<typename T1, typename T2>
-static inline T2 convert_ushort16(T1 const &x) {
-  T2 result;
-  CUTLASS_PRAGMA_UNROLL
-  for (int i = 0; i < 16; ++i) {
-      result[i] = static_cast<uint16_t>(x[i]);
-  }
-  return result;
+static inline ushort16 convert_ushort16(uchar16 x) {
+    ushort16 result;
+    #pragma unroll
+    for (int i = 0; i < 16; ++i) {
+        result[i] = static_cast<uint16_t>(x[i]);
+    }
+    return result;
 }
-
 
 static inline unsigned short E4M3_to_FP16(unsigned char xin) {
   unsigned char xa, sgn_x, nan_mask, den_mask;
@@ -110,13 +108,13 @@ static inline ushort16 E4M3_to_FP16_vec16(uchar16 xin) {
   den_mask &= 0x48;
   xa += 0x40 & ~(zero_mask * 0x40);
 
-  ushort16 x16 = convert_ushort16<uchar16, ushort16>(xa) << 7;
-  ushort16 den_corr = convert_ushort16<uchar16, ushort16>(den_mask & ~zero_mask) << 7;
+  ushort16 x16 = convert_ushort16(xa) << 7;
+  ushort16 den_corr = convert_ushort16(den_mask & ~zero_mask) << 7;
 
   ushort16 result = x16 - den_corr;
-  result &= ~(convert_ushort16<uchar16, ushort16>(zero_mask) << 7);
+  result &= ~(convert_ushort16(zero_mask) << 7);
 
-  ushort16 sign_ext = convert_ushort16<uchar16, ushort16>(sgn_x) << 8;
+  ushort16 sign_ext = convert_ushort16(sgn_x) << 8;
   result ^= sign_ext;
 
   return result;
@@ -129,12 +127,10 @@ static inline unsigned short E5M2_to_FP16(unsigned char xin) {
   return half_representation <<= 8;
 }
 
-static inline ushort16_array E5M2_to_FP16_vec16(uint8_array const &xin) {
+static inline void E5M2_to_FP16_vec16(uchar16_array const &xin, ushort16_array &xout) {
   // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
-  auto half_representation = convert_ushort16<uint8_array, ushort16_array>(xin);
   CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < 16; i++) {
-    half_representation[i] = (static_cast<uint16_t>(half_representation[i])) << 8;
+    xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
   }
-  return half_representation;
 }

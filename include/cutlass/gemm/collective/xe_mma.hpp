@@ -181,12 +181,23 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
     using SrcArray = cutlass::Array<uint8_t, vec_size>;
     using DstArray = cutlass::Array<uint16_t, vec_size>;
     // TODO(Codeplay): Move conversion to NumericArrayConverter
+    // We don't know why the compiler only vectorizes the conversion
+    // when we use an array of size 16, instead of simply converting
+    // each element in a loop because these arrays are separate for each work-item.
+    // To clarify, since each array is created for a work-item's elements,
+    // the computation corresponding to the elements belonging to one work item
+    // is not implicitly vectorized across a subgroup.
+    // Instead, one element of each work-item would on a separate lane,
+    // and all lanes would be in convergence.
+    // Somehow the compiler is unable to determine convergence without
+    // such a workaround.
+    // Ref: https://github.com/codeplaysoftware/cutlass-sycl/pull/284#discussion_r2020421508
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < iters; ++i) {
       if constexpr (std::is_same_v<ElementA, float_e5m2_t>) {
         SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
         DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
-        *pDstArr = E5M2_to_FP16_vec16(*pSrcArr);
+        E5M2_to_FP16_vec16(*pSrcArr, *pDstArr);
       } else {
         cute::intel::uchar16 src_vec;
         CUTLASS_PRAGMA_UNROLL
