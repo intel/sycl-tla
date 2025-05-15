@@ -64,14 +64,14 @@ struct XE_Flash_Attention_Prefill_CachedKV {
   using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
   using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
   using GmemTiledCopyStore = XE_2D_U32x8x16_ST_N;
-  using CollectiveEpilogue = flash_attention::collective::CollectiveEpilogueAttention<
+  using CollectiveEpilogue = flash_attention::collective::FlashPrefillCachedEpilogue<
         EpilogueDispatchPolicy, TileShape, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
-  using CollectiveSoftmaxEpilogue = flash_attention::collective::CollectiveSoftmaxEpilogue<
+  using FlashPrefillSoftmaxEpilogue = flash_attention::collective::FlashPrefillSoftmaxEpilogue<
         HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;
 
   // Mainloop
-  using CollectiveMainloop = flash_attention::collective::CollectiveMmaAttention<
+  using CollectiveMainloop = flash_attention::collective::FlashPrefillCachedMma<
         GEMMDispatchPolicy, ProblemShapeType, TileShape, ElementInputQ,
         cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
         cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV,
@@ -81,8 +81,8 @@ struct XE_Flash_Attention_Prefill_CachedKV {
         GmemTiledCopyV, // V,
         HasCausalMask>;
 
-    using Kernel = flash_attention::kernel::GemmUniversalAttention<ProblemShapeType, CollectiveMainloop,
-                                                       CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
+    using Kernel = flash_attention::kernel::FMHAPrefillCached<ProblemShapeType, CollectiveMainloop,
+                                                       FlashPrefillSoftmaxEpilogue, CollectiveEpilogue>;
 };
 
 TEST(XE_Flash_Attention_Prefill_CachedKV_fp16, causal) {
