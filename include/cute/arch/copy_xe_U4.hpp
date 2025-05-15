@@ -47,7 +47,7 @@ struct XE_2D_U4x16x16_LD_T {
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
-    detail::XeSubgroup2DBlockTranspose<4, 2, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
+    detail::XeSubgroup2DBlockLoadTranspose<4, 2, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
@@ -64,7 +64,7 @@ struct XE_2D_U4x32x16_LD_T {
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
-    detail::XeSubgroup2DBlockTranspose<4, 4, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
+    detail::XeSubgroup2DBlockLoadTranspose<4, 4, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
