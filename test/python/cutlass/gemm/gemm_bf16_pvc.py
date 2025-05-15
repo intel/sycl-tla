@@ -60,7 +60,6 @@ class GemmBF16PVC(unittest.TestCase):
 
 add_test_pvc_bf16 = partial(add_test_gemm, cls=GemmBF16PVC, cc=11,
                             element=dtype,
-
                             compilation_modes=["dpcpp"],
                             opclass=cutlass.OpcodeClass.TensorOp,
                             stages=0,
