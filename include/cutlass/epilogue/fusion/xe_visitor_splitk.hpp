@@ -248,18 +248,23 @@ public:
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux = local_tile(mAux_mnl, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord,l_offset));
     Tensor tCgAux = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux);
-    unsigned long sg_n_coord_d1 = sg_n_coord % 6; // syk have to hard code here 192
-    unsigned long sg_n_coord_d0 = sg_n_coord / 6; // 6*32=192
+    auto nope_dim = params.NOPE_DIM;
+    auto rope_dim = params.ROPE_DIM;
+    auto inner_dim_sg = (nope_dim + rope_dim) / 32;
+    auto nope_dim_sg = nope_dim / 32;
+    auto rope_dim_sg = rope_dim / 32;
+    unsigned long sg_n_coord_d1 = sg_n_coord % inner_dim_sg;
+    unsigned long sg_n_coord_d0 = sg_n_coord / inner_dim_sg;
 
-    auto NUM_HEAD = N / 192;
-    unsigned long sg_n_coord_1 = sg_n_coord_d0 * 4 + sg_n_coord_d1; // nope_dim 128
-    unsigned long sg_n_coord_2 = sg_n_coord_d0 * 2 + sg_n_coord_d1 - 4; // rope_dim 64
-    Tensor mAux_mnl1 = cute::get_pvc_tensor(make_shape(M,NUM_HEAD * 128,L));
+    auto num_head = N / inner_dim_sg;
+    unsigned long sg_n_coord_1 = sg_n_coord_d0 * nope_dim_sg + sg_n_coord_d1;
+    unsigned long sg_n_coord_2 = sg_n_coord_d0 * rope_dim_sg + sg_n_coord_d1 - nope_dim_sg;
+    Tensor mAux_mnl1 = cute::get_pvc_tensor(make_shape(M,num_head * nope_dim,L));
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux1 = local_tile(mAux_mnl1, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord_1,l_offset));
     Tensor tCgAux1 = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux1);
 
-    Tensor mAux_mnl2 = cute::get_pvc_tensor(make_shape(M,NUM_HEAD * 64,L));
+    Tensor mAux_mnl2 = cute::get_pvc_tensor(make_shape(M,num_head * rope_dim,L));
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux2 = local_tile(mAux_mnl2, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord_2,l_offset));
     Tensor tCgAux2 = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux2);
