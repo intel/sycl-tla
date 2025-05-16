@@ -201,10 +201,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
         for (int j = 0; j < chunk_size; ++j) {
           src_vec[j] = pSrc[i * chunk_size + j];
         }
-        // vectorized convert fp8 -> fp16
         cute::intel::ushort16 dst_vec;
         dst_vec = E4M3_to_FP16_chunk16(src_vec);
-        // vectorized store
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < chunk_size; ++j) {
           reinterpret_cast<uint16_t*>(pDst)[i * chunk_size + j] = dst_vec[j];
