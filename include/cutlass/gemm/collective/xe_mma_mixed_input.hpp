@@ -305,6 +305,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     Tensor<EngineScales, LayoutScales>& tCrS_input,
     Tensor<EngineZeros, LayoutZeros>& tCrZ_input
   ) {
+    using namespace cutlass::platform;
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
@@ -316,8 +317,8 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
-    auto &&in = tCrA_load;
-    auto &&out = tCrA_mma;
+    auto &in = tCrA_load;
+    auto &out = tCrA_mma;
 
     static constexpr auto DPAS = decltype(size<0>(in))::value;
     static constexpr auto N = decltype(size<1>(in))::value;
@@ -327,20 +328,14 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     static constexpr auto src_bits = sizeof_bits_v<SrcType>;
     static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
     static constexpr auto loop_cnt = decltype(size(out))::value / N;
-
     static_assert((scalar % N) == 0);
-
-    using namespace cutlass::platform;
-
-    auto* src = (format_type*)(raw_pointer_cast(in.data()));
-    auto* dst = raw_pointer_cast(tCrA_mma.data());
 
     // for tuning performance
     static constexpr auto spilits = 8;
-
     static constexpr auto vec_size = loop_cnt / spilits;
 
-    auto d_tensor = make_tensor(tCrA_mma.data(), Shape<Int<vec_size>, Int<spilits>, Int<N>>{});
+    auto s_tensor = make_tensor((format_type*)(raw_pointer_cast(in.data())), Shape<Int<loop_cnt / scalar>, Int<N>>{});
+    auto d_tensor = make_tensor(out.data(), Shape<Int<vec_size>, Int<spilits>, Int<N>>{});
 
 #define ALGORITHM 0
 
@@ -350,28 +345,28 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
       const auto ts = tCrS_input(j);
       const auto tz = tCrZ_input(j);
 
+      auto& src = *(vector_t<format_type, loop_cnt / scalar>*)(s_tensor(_, j).data());
+
       CUTLASS_PRAGMA_UNROLL
       for (int s = 0; s < spilits; s++) {
-        // auto dst = d_tensor(_, _, s, j);
+
+        auto idx =  vec_size * s / scalar;
+        auto src1 = src[idx];
+
         auto& dst = *(vector_t<_Float16, vec_size>*)(d_tensor(_, s, j).data());
 
+        static_assert(vec_size <= scalar);
 
-          CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i < vec_size; i++) {
-            auto dst_idx = i;
-            auto offset = i + vec_size * s + j * vec_size * spilits;
-            auto idx = offset / scalar;
-            auto shift = i % scalar;
-
-            dst[dst_idx] = static_cast<_Float16>(/*(static_cast<SrcType>*/(src[idx] >> (src_bits * shift)) & 0xf);
-  #ifdef QUANTIZATION
-  #if ALGORITHM == 0
-            dst[dst_idx] *= ts;
-            dst[dst_idx] += tz;
-  #endif
-  #endif
-          }
-        // }
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < vec_size; i++) {
+          dst[i] = static_cast<_Float16>(/*(static_cast<SrcType>*/(src1 >> (src_bits * i)) & 0xf);
+#ifdef QUANTIZATION
+#if ALGORITHM == 0
+          dst[i] *= ts;
+          dst[i] += tz;
+#endif
+#endif
+        }
       }
     }
 #endif
@@ -379,8 +374,8 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 #ifdef QUANTIZATION
 #if ALGORITHM != 0
     static constexpr auto spilits1 = 1;
-    static constexpr auto size_dk = decltype(size(tCrA_mma))::value / N;
-    auto tmp1 = make_tensor(tCrA_mma.data(), Shape<Int<size_dk/spilits1>, Int<spilits1>, Int<N>>{});
+    static constexpr auto size_dk = decltype(size(out))::value / N;
+    auto tmp1 = make_tensor(out.data(), Shape<Int<size_dk/spilits1>, Int<spilits1>, Int<N>>{});
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < N; ++i) {
