@@ -272,6 +272,12 @@ public:
     return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, tiled_copy_zero, args.group_size};
   }
 
+#ifdef __SYCL_DEVICE_ONLY__
+template <class T, int N> using vector_t = T __attribute__((ext_vector_type(N)));
+#else
+template <class T, int N> using vector_t = sycl::marray<T, N>;
+#endif
+
   // Helper functions to select packing for conversion
   template <class SrcType,
             class DstType,
@@ -310,74 +316,89 @@ public:
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
-    if constexpr (sizeof_bits_v<SrcType> < 8) {
-      convert_int_subbyte_to_half(tCrA_mma, tCrA_load);
-    } else {
-      auto const& src = tCrA_load(_, _, _);
-      auto const& dst = tCrA_mma(_, _, _);
-      auto pSrc = const_cast<SrcType*>(raw_pointer_cast(src.data()));
-      auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
-      constexpr int num_elements = decltype(size(src))::value;
+    auto &&in = tCrA_load;
+    auto &&out = tCrA_mma;
 
-      constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
-      using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
-      using SrcArray = cutlass::Array<SrcType, pack>;
-      using DstArray = cutlass::Array<DstType, pack>;
-      constexpr int iters = num_elements / pack;
+    static constexpr auto DPAS = decltype(size<0>(in))::value;
+    static constexpr auto N = decltype(size<1>(in))::value;
+    static constexpr auto K = decltype(size<2>(in))::value;
+
+    using format_type = ushort;
+    static constexpr auto src_bits = sizeof_bits_v<SrcType>;
+    static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
+    static constexpr auto loop_cnt = decltype(size(out))::value / N;
+
+    static_assert((scalar % N) == 0);
+
+    using namespace cutlass::platform;
+
+    auto* src = (format_type*)(raw_pointer_cast(in.data()));
+    auto* dst = raw_pointer_cast(tCrA_mma.data());
+
+    // for tuning performance
+    static constexpr auto spilits = 4;
+
+    static constexpr auto vec_size = loop_cnt / spilits;
+
+    auto d_tensor = make_tensor(tCrA_mma.data(), Shape<Int<vec_size>, Int<spilits>, Int<N>>{});
+
+#define ALGORITHM 0
+
+#ifdef DATA_CONVERT
+    CUTLASS_PRAGMA_UNROLL
+    for (int j = 0; j < N; j++) {
+      const auto ts = tCrS_input(j);
+      const auto tz = tCrZ_input(j);
 
       CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < iters; ++i) {
-        SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
-        DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
-        *pDstArr = Converter::convert(*pSrcArr);
+      for (int s = 0; s < spilits; s++) {
+        // auto dst = d_tensor(_, _, s, j);
+        auto& dst = *(vector_t<_Float16, vec_size>*)(d_tensor(_, s, j).data());
+
+
+          CUTLASS_PRAGMA_UNROLL
+          for (int i = 0; i < vec_size; i++) {
+            auto dst_idx = i;
+            auto offset = (s * vec_size + dst_idx) * N + j;
+            auto idx = offset / scalar;
+            auto shift = offset % scalar;
+
+            dst[dst_idx] = static_cast<_Float16>(/*(static_cast<SrcType>*/(src[idx] >> (src_bits * shift)) & 0xf);
+  #ifdef QUANTIZATION
+  #if ALGORITHM == 0
+            dst[dst_idx] *= ts;
+            dst[dst_idx] += tz;
+  #endif
+  #endif
+          }
+        // }
       }
     }
+#endif
 
-    if constexpr (ModeHasScales) {
-      if constexpr(IsATransformed){
-        // The current scale load atom (1x32) gives 2 scale values to
-        // each thread. All threads need access to all other threads
-        // scale values, and each scale value is reused twice (unrolled)
+#ifdef QUANTIZATION
+#if ALGORITHM != 0
+    static constexpr auto spilits1 = 1;
+    static constexpr auto size_dk = decltype(size(tCrA_mma))::value / N;
+    auto tmp1 = make_tensor(tCrA_mma.data(), Shape<Int<size_dk/spilits1>, Int<spilits1>, Int<N>>{});
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < N; ++i) {
+      auto ts = tCrS_input(i);
+      auto tz = tCrZ_input(i);
+      CUTLASS_PRAGMA_UNROLL
+      for (int s = 0; s < spilits1; s++) {
+        auto dst = tmp1(_, s, i);
+        // auto& dst = *reinterpret_cast<cute::intel::vector_t<_Float16, size_dk / spilits1>*>(raw_pointer_cast(tmp1(_, s, i).data()));
         CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < 16; ++i) {
-          CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < 2; ++j) {
-            auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
-            tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
-            tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
-            if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
-              tCrA_mma(_, _, 0)[j * 16 + i] += zero;
-              tCrA_mma(_, _, 1)[j * 16 + i] += zero;
-            }
-          }
-        }
-      } else {
-        // 16 x 4 x 2 values for B
-        // 16 x 2 of these are same K
-        // 4 different scale/zero values per thread, no exchange needed
-        static constexpr auto DPAS = decltype(size<0>(tCrA_load))::value;
-        static constexpr auto N = decltype(size<1>(tCrA_load))::value;
-        static constexpr auto K = decltype(size<2>(tCrA_load))::value;
-
-
-        CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < N; ++i) {
-          auto ts = tCrS_input(i);
-          auto tz = tCrZ_input(i);
-          static constexpr auto size_dk = decltype(size(tCrA_mma))::value / N;
-
-          // auto* dst = raw_pointer_cast(tCrA_mma(_, i, _).data());
-          auto& dst = *reinterpret_cast<cute::intel::vector_t<_Float16, size_dk>*>(raw_pointer_cast(tCrA_mma(_, i, _).data()));
-
-          CUTLASS_PRAGMA_UNROLL
-          for (int k = 0; k < size_dk; ++k) {
-            dst[k] *= ts;
-            dst[k] += tz;
-          }
+        for (int k = 0; k < (size_dk / spilits1); ++k) {
+          dst[k] *= ts;
+          dst[k] += tz;
         }
       }
     }
+#endif
+#endif
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
@@ -524,11 +545,13 @@ public:
     constexpr int barrier_scope = 2;
     int prefetch_k = k_start_idx;
 
+#ifdef IPREFETCH
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
       prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
       prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
     }
+#endif
 
     const int k_reload_factor = mainloop.group_size / BLK_K; 
 
@@ -540,18 +563,21 @@ public:
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), frag_copy_A);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), frag_copy_B);
 
+#ifdef QUANTIZATION
       if constexpr(ModeHasScales){
         copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrS);
       }
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
         copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrZ);
       }
+#endif
 
+#ifdef IPREFETCH
       if(prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
-
+#endif
       if constexpr (IsATransformed) {
         transform_quant(quant_frag, mma_A, fragment_scale_input,
                         fragment_zero_input);
