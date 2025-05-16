@@ -235,13 +235,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
-    using element_dtype =
-    std::conditional_t< std::is_same_v<ElementA, float_e4m3_t> || std::is_same_v<ElementA, float_e5m2_t>,
-                        uint8_t,          // if ElementA is FP8
-                        ElementA>; 
-
-    Tensor tCrA = make_tensor<element_dtype>(make_fragment_layout(mainloop.tiled_copy_a, tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<element_dtype>(make_fragment_layout(mainloop.tiled_copy_b, tCgB(_,_,_,0).shape()));
+    Tensor tCrA = make_tensor<uint8_t>(make_fragment_layout(mainloop.tiled_copy_a, tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<uint8_t>(make_fragment_layout(mainloop.tiled_copy_b, tCgB(_,_,_,0).shape()));
 
     Tensor tCrA_fp16 = make_fragment_like<half_t>(tCrA);
     Tensor tCrB_fp16 = make_fragment_like<half_t>(tCrB);
@@ -263,28 +258,6 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);
 
-#if CUTLASS_ENABLE_DEBUG_PRINTS
-#define PRINT(x) print(#x ": "); print(x); print("\n");
-    if (cute::thread(LOG_THREAD, LOG_GROUP)) {
-      print("======================= A: \n");
-      PRINT(tCgA);
-      PRINT(tAgA);
-
-      PRINT(tCrA);
-      PRINT(tArA);
-      PRINT(mainloop.tiled_copy_a);
-
-      print("======================= B: \n");
-      PRINT(tCgB);
-      PRINT(tBgB);
-
-      PRINT(tCrB);
-      PRINT(tBrB);
-      PRINT(mainloop.tiled_copy_b);
-      }
-#undef PRINT
-#endif
-
     //
     // Mainloop
     //
@@ -305,21 +278,17 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
 
-      if constexpr (std::is_same_v<ElementA, float_e4m3_t> || std::is_same_v<ElementA, float_e5m2_t>) {
-        // TODO: register pressure
-        convert_FP8_to_FP16(tCrA, tCrA_fp16);
-        convert_FP8_to_FP16(tCrB, tCrB_fp16);
-      }
+      // TODO: register pressure
+      convert_FP8_to_FP16(tCrA, tCrA_fp16);
+      convert_FP8_to_FP16(tCrB, tCrB_fp16);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
       }
-      if constexpr (std::is_same_v<ElementA, float_e4m3_t>  || std::is_same_v<ElementA, float_e5m2_t>) {
-        cute::gemm(tiled_mma, tCrA_fp16, tCrB_fp16, accum);
-      } else {
-        cute::gemm(tiled_mma, tCrA, tCrB, accum);        
-      }
+
+      cute::gemm(tiled_mma, tCrA_fp16, tCrB_fp16, accum);
+
       barrier_wait(barrier_scope);
     }
   }
