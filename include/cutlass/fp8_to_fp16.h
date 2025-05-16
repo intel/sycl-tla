@@ -34,11 +34,8 @@
 #include <cutlass/half.h>
 #include <cute/util/sycl_vec.hpp>
 
-using half_t = cutlass::half_t;
 using uchar16 = cute::intel::uchar16;
 using ushort16 = cute::intel::ushort16;
-using ushort16_array = cutlass::Array<uint16_t, 16>;
-using uchar16_array = cutlass::Array<uint8_t, 16>;
 
 static inline ushort16 convert_ushort16(uchar16 x) {
     ushort16 result;
@@ -91,7 +88,7 @@ static inline unsigned short E4M3_to_FP16(unsigned char xin) {
 
 
 
-static inline ushort16 E4M3_to_FP16_vec16(uchar16 xin) {
+static inline ushort16 E4M3_to_FP16_chunk16(uchar16 xin) {
   uchar16 xa = xin & 0x7F;
   uchar16 sgn_x = xin ^ xa;
 
@@ -121,16 +118,11 @@ static inline ushort16 E4M3_to_FP16_vec16(uchar16 xin) {
 }
 
 
-static inline unsigned short E5M2_to_FP16(unsigned char xin) {
-  // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
-  unsigned short half_representation = xin;
-  return half_representation <<= 8;
-}
-
-static inline void E5M2_to_FP16_vec16(uchar16_array const &xin, ushort16_array &xout) {
+template<int N>
+static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin, cutlass::Array<uint16_t, N> &xout) {
   // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
   CUTLASS_PRAGMA_UNROLL
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < N; i++) {
     xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
   }
 }

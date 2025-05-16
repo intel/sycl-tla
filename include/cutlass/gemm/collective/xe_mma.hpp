@@ -32,7 +32,6 @@
 
 #include "cutlass/cutlass.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
-#include "cutlass/fp8_to_fp16.h"
 
 #include "cute/algorithm/functional.hpp"
 #include "cute/atom/mma_atom.hpp"
@@ -147,75 +146,6 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
     return Params{tiled_copy_a, tiled_copy_b};
   }
 
-  template <class EngineIn,
-      class EngineOut,
-      class LayoutIn,
-      class LayoutOut,
-      class... Ts>
-  CUTLASS_DEVICE
-  void convert_FP8_to_FP16(
-          Tensor<EngineIn, LayoutIn> const& in,
-          Tensor<EngineOut, LayoutOut>& out) {
-
-    static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
-    static_assert(is_rmem<EngineOut>::value, "Output tensor for A conversion must come from registers");
-    static_assert(cosize_v<LayoutIn> == cosize_v<LayoutOut>);
-    static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
-    static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
-
-    using SrcType = typename EngineIn::value_type;
-    using DstType = typename EngineOut::value_type;
-
-    static_assert(std::is_same_v<SrcType, uint8_t>, "Expected fp8 (E4M3) input as uint8_t");
-    static_assert(std::is_same_v<DstType, half_t>, "Expected fp16 output as half_t");
-
-    auto const& src = in(_, _, _);
-    auto const& dst = out(_, _, _);
-
-    SrcType const* pSrc = src.data();
-    DstType* pDst = dst.data();
-
-    constexpr int num_elements = decltype(size(src))::value;
-    constexpr int vec_size = 16;
-    constexpr int iters = num_elements / vec_size;
-    using SrcArray = cutlass::Array<uint8_t, vec_size>;
-    using DstArray = cutlass::Array<uint16_t, vec_size>;
-    // TODO(Codeplay): Move conversion to NumericArrayConverter
-    // We don't know why the compiler only vectorizes the conversion
-    // when we use an array of size 16, instead of simply converting
-    // each element in a loop because these arrays are separate for each work-item.
-    // To clarify, since each array is created for a work-item's elements,
-    // the computation corresponding to the elements belonging to one work item
-    // is not implicitly vectorized across a subgroup.
-    // Instead, one element of each work-item would on a separate lane,
-    // and all lanes would be in convergence.
-    // Somehow the compiler is unable to determine convergence without
-    // such a workaround.
-    // Ref: https://github.com/codeplaysoftware/cutlass-sycl/pull/284#discussion_r2020421508
-    CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < iters; ++i) {
-      if constexpr (std::is_same_v<ElementA, float_e5m2_t>) {
-        SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
-        DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
-        E5M2_to_FP16_vec16(*pSrcArr, *pDstArr);
-      } else {
-        cute::intel::uchar16 src_vec;
-        CUTLASS_PRAGMA_UNROLL
-        for (int j = 0; j < vec_size; ++j) {
-            src_vec[j] = pSrc[i * vec_size + j];
-        }
-        // vectorized convert fp8 -> fp16
-        cute::intel::ushort16 dst_vec;
-        dst_vec = E4M3_to_FP16_vec16(src_vec);
-        // vectorized store
-        CUTLASS_PRAGMA_UNROLL
-        for (int j = 0; j < vec_size; ++j) {
-            reinterpret_cast<uint16_t*>(pDst)[i * vec_size + j] = dst_vec[j];
-        }
-      }
-    }
-  }
-
   /// Perform a subgroup-scoped matrix multiply-accumulate
   template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator, class BlkCoord>
   CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,
@@ -240,16 +170,8 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
-    using element_dtype =
-    std::conditional_t< std::is_same_v<ElementA, float_e4m3_t> || std::is_same_v<ElementA, float_e5m2_t>,
-                        uint8_t,          // if ElementA is FP8
-                        ElementA>; 
-
-    Tensor tCrA = make_tensor<element_dtype>(make_fragment_layout(mainloop.tiled_copy_a, tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<element_dtype>(make_fragment_layout(mainloop.tiled_copy_b, tCgB(_,_,_,0).shape()));
-
-    Tensor tCrA_fp16 = make_fragment_like<half_t>(tCrA);
-    Tensor tCrB_fp16 = make_fragment_like<half_t>(tCrB);
+    Tensor tCrA = make_tensor<ElementA>(make_fragment_layout(mainloop.tiled_copy_a, tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementB>(make_fragment_layout(mainloop.tiled_copy_b, tCgB(_,_,_,0).shape()));
 
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
@@ -310,21 +232,12 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
 
-      if constexpr (std::is_same_v<ElementA, float_e4m3_t> || std::is_same_v<ElementA, float_e5m2_t>) {
-        // TODO: register pressure
-        convert_FP8_to_FP16(tCrA, tCrA_fp16);
-        convert_FP8_to_FP16(tCrB, tCrB_fp16);
-      }
-
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
       }
-      if constexpr (std::is_same_v<ElementA, float_e4m3_t>  || std::is_same_v<ElementA, float_e5m2_t>) {
-        cute::gemm(tiled_mma, tCrA_fp16, tCrB_fp16, accum);
-      } else {
-        cute::gemm(tiled_mma, tCrA, tCrB, accum);        
-      }
+
+      cute::gemm(tiled_mma, tCrA, tCrB, accum);
       barrier_wait(barrier_scope);
     }
   }
