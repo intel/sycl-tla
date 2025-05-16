@@ -33,7 +33,7 @@ unset IGC_VectorAliasBBThreshold
 # https://github.com/intel/llvm/releases/tag/nightly-2024-05-16
 # https://ubit-gfx.intel.com/build/19168301/artifacts
 sycl_compiler_path=/opt/cutlass/compiler/20250515/
-#gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29375/extract/
+gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29375/extract/
 export CPATH=$sycl_compiler_path:$sycl_compiler_path/include/:$sycl_compiler_path/include/sycl/
 export LIBRARY_PATH=$gpu_driver_path/usr/lib/x86_64-linux-gnu/:$sycl_compiler_path/lib/
 export LD_LIBRARY_PATH=$LIBRARY_PATH

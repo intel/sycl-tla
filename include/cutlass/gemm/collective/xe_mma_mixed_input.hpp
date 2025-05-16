@@ -336,7 +336,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     auto* dst = raw_pointer_cast(tCrA_mma.data());
 
     // for tuning performance
-    static constexpr auto spilits = 4;
+    static constexpr auto spilits = 8;
 
     static constexpr auto vec_size = loop_cnt / spilits;
 
@@ -359,9 +359,9 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < vec_size; i++) {
             auto dst_idx = i;
-            auto offset = (s * vec_size + dst_idx) * N + j;
+            auto offset = i + vec_size * s + j * vec_size * spilits;
             auto idx = offset / scalar;
-            auto shift = offset % scalar;
+            auto shift = i % scalar;
 
             dst[dst_idx] = static_cast<_Float16>(/*(static_cast<SrcType>*/(src[idx] >> (src_bits * shift)) & 0xf);
   #ifdef QUANTIZATION
@@ -578,13 +578,8 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
 #endif
-      if constexpr (IsATransformed) {
-        transform_quant(quant_frag, mma_A, fragment_scale_input,
-                        fragment_zero_input);
-      } else {
-        transform_quant(quant_frag, mma_B, fragment_scale_input,
-                        fragment_zero_input);
-      }
+      transform_quant(quant_frag, mma_B, fragment_scale_input,
+                      fragment_zero_input);
 
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);

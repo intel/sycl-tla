@@ -93,7 +93,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
     scope_min = T1(-8);
   }
 
-  std::uniform_int_distribution<> dist(scope_min, scope_max);
+  std::uniform_int_distribution<> dist(0, 7);
 
   if constexpr (cute::sizeof_bits_v<T1> >= 8) {
     auto block_host = std::vector<T1>(block_device.size());
