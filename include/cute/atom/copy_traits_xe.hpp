@@ -123,13 +123,6 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
     Layout<Shape<Int<sgs_non_contig>, Shape<Int<SubgroupSize >, Int<sgs_contig>>>,
            Stride<Int<SubgroupSize * sgs_contig>,  Stride<_1, Int<SubgroupSize>>>>
   >;
-#define PRINT(x) print(#x ": "); print(x); print("\n");
-    /*if (cute::thread(0, 0)) {
-      PRINT(iters_contig);
-      PRINT(iters_non_contig);
-    }*/
-    constexpr int iters_M = is_need_reversed ? iters_contig : iters_non_contig;
-    constexpr int iters_N = is_need_reversed ? iters_non_contig : iters_contig;
 
   #define RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, CONTIG) \
     using PrefetchTraits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##NON_CONTIG##x##CONTIG##_LD_N, decltype(tensor.stride())>; \
@@ -139,18 +132,6 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
     using ScalarPrefetchShape =  decltype(product_each(raked_product(ScalarLayout{}, \
                                                         Layout<typename PrefetchTraits::BlockShape>{}).shape())); \
     using PrefetchValLayout = decltype(make_layout(shape_div(ScalarPrefetchShape{}, CopyThreadShape{}))); \
-    /*using IterLayout = decltype(make_layout(make_shape(Int<iters_M>{}, Int<iters_N>{}))); \
-    using PrefetchValLayout2 = decltype(raked_product(IterLayout{}, PrefetchValLayout{})); \
-    using PrefetchValLayout3 = decltype(logical_product(PrefetchValLayout{}, IterLayout{})); \
-    if (cute::thread(0, 0)) { \
-      print("XE_2D_U" #DTYPE_SIZE "x" #NON_CONTIG "x" #CONTIG "_LD_N\n"); \
-      PRINT(PrefetchTilingLayout{}); \
-      PRINT(PrefetchValLayout{}); \
-      PRINT(IterLayout{}); \
-      PRINT(PrefetchValLayout2{}); \
-      PRINT(PrefetchValLayout3{}); \
-      print("\n"); \
-    }*/ \
     return make_tiled_copy(PrefetchAtom{}.with(tensor), \
                            PrefetchTilingLayout{}, \
                            PrefetchValLayout{});
@@ -316,14 +297,6 @@ struct XE_2D_LD_Unpack {
 
       constexpr auto inst_size_bits = detail::size_of_inst_bits<CopyOp, dtype>;
 
-    /*if (cute::thread(0, 0)) {
-#define PRINT(x) print(#x ": "); print(x); print("\n");
-      print("cpy\n");
-      PRINT(m);
-      PRINT(n);
-      PRINT(is_need_reversed);
-      PRINT(typename Traits_LD_t::SrcLayout{});
-    }*/
       CopyOp::copy(base_addr + static_cast<size_t>(l) * traits.stride_l,
                   (traits.width * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>, traits.height,
                   (traits.pitch * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>,
@@ -353,13 +326,6 @@ struct XE_2D_LD_Unpack {
 
     constexpr auto inst_size_bits = detail::size_of_inst_bits<CopyOp, dtype_proxy>;
 
-    /*if (cute::thread(0, 0)) {
-#define PRINT(x) print(#x ": "); print(x); print("\n");
-      print("pf\n");
-      PRINT(m);
-      PRINT(n);
-      PRINT(typename Traits_LD_t::SrcLayout{});
-    }*/
     CopyOp::PREFETCH::copy(base_addr + l * traits.stride_l * dtype_size,
                            (traits.width * dtype_size_bits) / sizeof_bits_v<int8_t>, traits.height,
                            (traits.pitch * dtype_size_bits) / sizeof_bits_v<int8_t>,
