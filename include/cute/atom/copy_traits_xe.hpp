@@ -540,6 +540,21 @@ struct Copy_Traits_<XE_2D_U8x8x32_LD_N, args_t...>
 };
 
 template <class... args_t>
+struct Copy_Traits_<XE_2D_U8x8x32_LD_N::PREFETCH, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U8x8x32_LD_N::PREFETCH, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_8,  _2, _8>>,
+                           Stride< _0,Stride< _1,_128,_256>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16,Shape <_8,  _2, _8>>,
+                           Stride<_16,Stride< _1,_128,_256>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+  using XE_2D_LD_Unpack<XE_2D_U8x1x64_LD_N::PREFETCH, args_t...>::XE_2D_LD_Unpack;
+};
+
+template <class... args_t>
 struct Copy_Traits_<XE_2D_U8x16x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x16x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
