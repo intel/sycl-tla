@@ -153,8 +153,11 @@ namespace detail {
 template <class CopyOp, class = void>
 constexpr bool is_prefetch = false;
 
+//template <class CopyOp>
+//constexpr bool is_prefetch<CopyOp, void_t<typename CopyOp::PREFETCH>> = is_same_v<CopyOp, typename CopyOp::PREFETCH>;
+
 template <class CopyOp>
-constexpr bool is_prefetch<CopyOp, void_t<typename CopyOp::PREFETCH>> = is_same_v<CopyOp, typename CopyOp::PREFETCH>;
+constexpr bool is_prefetch<CopyOp, void_t<decltype(CopyOp{}.copy(nullptr, 0,0,0, {0,0}))>> = true;
 
 } // end namespace detail
 

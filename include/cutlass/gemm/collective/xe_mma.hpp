@@ -211,6 +211,20 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
       }
 #undef PRINT
 #endif
+    /*if (cute::thread(0, 0)) {
+#define PRINT(x) print(#x ": "); print(x); print("\n");
+      PRINT(gA);
+      PRINT(gB);
+      print("\n");
+      PRINT(pAgA);
+      PRINT(pBgB);
+      print("\n");
+      PRINT(tAgA);
+      PRINT(tBgB);
+      PRINT(tiled_prefetch_a);
+      PRINT(tiled_prefetch_b);
+      print("\n");
+    }*/
 
     //
     // Mainloop
@@ -221,20 +235,49 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
 
     CUTLASS_PRAGMA_UNROLL
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
+      /*if (cute::thread(0, 0)) {
+        print("prefetch 0 A\n");
+      }*/
       prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+      /*if (cute::thread(0, 0)) {
+        print("prefetch 0 B\n");
+      }*/
       prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+      /*if (cute::thread(0, 0)) {
+        print("prefetch 0 done\n\n");
+      }*/
     }
 
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
+      /*if (cute::thread(0, 0)) {
+        print("copy A\n");
+      }*/
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
+      /*if (cute::thread(0, 0)) {
+        print("copy B\n");
+      }*/
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
+      /*if (cute::thread(0, 0)) {
+        print("copy done\n");
+      }*/
 
       if (prefetch_k < k_tile_count) {
+        /*if (cute::thread(0, 0)) {
+          print("regular prefetch A\n");
+        }*/
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+        
+        /*if (cute::thread(0, 0)) {
+          print("regular prefetch B\n");
+        }*/
         prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+        
+        /*if (cute::thread(0, 0)) {
+          print("regular prefetch done\n\n");
+        }*/
       }
 
       cute::gemm(tiled_mma, tCrA, tCrB, accum);

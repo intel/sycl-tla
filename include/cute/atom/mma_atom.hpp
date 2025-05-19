@@ -534,6 +534,11 @@ struct ThrMMA : TiledMMA
     auto thr_tensor = make_tensor(static_cast<ATensor&&>(atensor).data(), this->thrfrg_A(atensor.layout()));
 
     auto thr_vmk = make_coord(get<0>(thr_vmnk_), make_coord(get<1>(thr_vmnk_), get<3>(thr_vmnk_)));
+    /*if (cute::thread(0, 0)) {
+#define PRINT(x) print(#x ": "); print(x); print("\n");
+      print("for copy A:\n");
+      PRINT(thr_tensor);
+    }*/
     return thr_tensor(thr_vmk, make_coord(_, repeat<rank<1,1>(thr_tensor)>(_)));
   }
 
@@ -545,6 +550,12 @@ struct ThrMMA : TiledMMA
     auto thr_tensor = make_tensor(static_cast<BTensor&&>(btensor).data(), this->thrfrg_B(btensor.layout()));
 
     auto thr_vnk = make_coord(get<0>(thr_vmnk_), make_coord(get<2>(thr_vmnk_), get<3>(thr_vmnk_)));
+    
+    /*if (cute::thread(0, 0)) {
+#define PRINT(x) print(#x ": "); print(x); print("\n");
+      print("for copy B:\n");
+      PRINT(thr_tensor);
+    }*/
     return thr_tensor(thr_vnk, make_coord(_, repeat<rank<1,1>(thr_tensor)>(_)));
   }
 
