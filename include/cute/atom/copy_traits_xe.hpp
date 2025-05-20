@@ -589,6 +589,59 @@ struct Copy_Traits_<XE_2D_U4x16x64_LD_N, args_t...>
   Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U4x16x64_LD_N, args_t...>(args...) {}
 };
+template <class... args_t>
+struct Copy_Traits_<XE_2D_U4x16x64_LD_NN, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U4x16x64_LD_NN, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_4, _2, _16, _2>>,
+                           Stride<_0,Stride <_1, _128, _8, _4>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16,Shape <_4, _2, _16, _2>>,
+                           Stride<_16,Stride <_1, _128, _8, _4>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgT>
+  Copy_Traits_(ArgT... args)
+      : XE_2D_LD_Unpack<XE_2D_U4x16x64_LD_NN, args_t...>(args...) {}
+};
+
+template <class... args_t>
+struct Copy_Traits_<XE_2D_U4x16x32_LD_NN, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U4x16x32_LD_NN, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_4, _1, _16, _2>>,
+                           Stride<_0,Stride <_1, _128, _8, _4>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16,Shape <_4, _1, _16, _2>>,
+                           Stride<_16,Stride <_1, _128, _8, _4>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgT>
+  Copy_Traits_(ArgT... args)
+      : XE_2D_LD_Unpack<XE_2D_U4x16x32_LD_NN, args_t...>(args...) {}
+};
+
+template <class... args_t>
+struct Copy_Traits_<XE_2D_U4x32x32_LD_NN, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U4x32x32_LD_NN, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_4, _1, _32, _2>>,
+                           Stride<_0,Stride <_1, _128, _8, _4>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16,Shape <_4, _1, _32, _2>>,
+                           Stride<_16,Stride <_1, _128, _8, _4>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgT>
+  Copy_Traits_(ArgT... args)
+      : XE_2D_LD_Unpack<XE_2D_U4x32x32_LD_NN, args_t...>(args...) {}
+};
 
 template <class... args_t>
 struct Copy_Traits_<XE_2D_U4x16x16_LD_T, args_t...>
