@@ -697,5 +697,10 @@ int main(int argc, const char** argv)
   options.k = 4096;
   run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4>(options);
 
+  options.m = 4096;
+  options.n = 4096;
+  options.k = 4096;
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::RowMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x32_LD_NN, 512, 128, 32, 8, 4>(options);
+
   return 0;
 }
