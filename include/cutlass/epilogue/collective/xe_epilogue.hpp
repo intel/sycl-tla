@@ -395,7 +395,6 @@ private:
   FusionCallbacks fusion_callbacks;
 };
 
-
 template <
   class CtaTileMNK_,
   class ElementC_,
@@ -410,7 +409,7 @@ template <
   class CopyOpR2S_
 >
 class CollectiveEpilogue<
-    IntelPVCEpilogue,
+    IntelXeXMX16,
     CtaTileMNK_,
     ElementC_,
     StrideC_,
@@ -428,7 +427,7 @@ public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = IntelPVCEpilogue;
+  using DispatchPolicy = IntelXeXMX16;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
   using ElementC = ElementC_;

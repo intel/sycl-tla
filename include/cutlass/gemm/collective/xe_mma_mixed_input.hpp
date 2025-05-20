@@ -128,7 +128,7 @@ public:
 
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
-  using GmemTiledCopyScale = XE_2D_U16x1x32_LD_N;  // TODO(Codeplay): generalize
+  using GmemTiledCopyScale = std::conditional_t<cute::detail::is_stride_leftmost<StrideB_>, XE_2D_U16x1x32_LD_NN, XE_2D_U16x1x32_LD_N>;  // TODO(Codeplay): generalize
 
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;

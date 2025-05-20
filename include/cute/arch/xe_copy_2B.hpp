@@ -112,6 +112,10 @@ SYCL_DEVICE_BUILTIN(
     cute::intel::ushort2 __builtin_IB_subgroup_block_read_flat_u16_m1k16v2(
         intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
+        SYCL_DEVICE_BUILTIN(
+cute::intel::uint __builtin_IB_subgroup_block_read_flat_u16_m1k32v1(
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
+        int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort4 __builtin_IB_subgroup_block_read_flat_u16_m2k16v2(
         intptr_t baseoffset, int width_minus_one, int height_minus_one,
@@ -267,6 +271,24 @@ struct XE_2D_U16x1x16_LD_N {
     *reinterpret_cast<cute::intel::ushort *>(dst) =
         __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+struct XE_2D_U16x1x16_LD_NN {
+  using BlockShape = Shape<_1, _16>;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(SYCL_INTEL_TARGET)
+   auto ret =
+        __builtin_IB_subgroup_block_read_flat_u16_m1k32v1(
+            (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+    std::memcpy((void*)dst, (void*)(&ret), sizeof(ret));
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
