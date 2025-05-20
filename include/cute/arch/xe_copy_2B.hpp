@@ -629,22 +629,6 @@ struct XE_2D_U16x16x16_LD_V {
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
-
-  struct PREFETCH {
-    using BlockShape = BlockShape;
-    CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                      int height, int pitch,
-                                      intel::coord_t coord) {
-#if defined(SYCL_INTEL_TARGET)
-      __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v1(
-          (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          CacheControl::kL1C_L3C);
-#else
-      CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-Xe hardware");
-#endif
-    }
-  };
 };
 
 struct XE_2D_U16x32x16_LD_V {
@@ -663,22 +647,6 @@ struct XE_2D_U16x32x16_LD_V {
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
-
-  struct PREFETCH {
-    using BlockShape = BlockShape;
-    CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                      int height, int pitch,
-                                      intel::coord_t coord) {
-#if defined(SYCL_INTEL_TARGET)
-      __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v1(
-          (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          CacheControl::kL1C_L3C);
-#else
-      CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-Xe hardware");
-#endif
-    }
-  };
 };
 
 struct XE_2D_U16x16x32_LD_V {
@@ -697,22 +665,6 @@ struct XE_2D_U16x16x32_LD_V {
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
-
-  struct PREFETCH {
-    using BlockShape = BlockShape;
-    CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                      int height, int pitch,
-                                      intel::coord_t coord) {
-#if defined(SYCL_INTEL_TARGET)
-      __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
-          (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          CacheControl::kL1C_L3C);
-#else
-      CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-Xe hardware");
-#endif
-    }
-  };
 };
 
 struct XE_2D_U16x32x32_LD_V {
@@ -731,22 +683,6 @@ struct XE_2D_U16x32x32_LD_V {
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
-
-  struct PREFETCH {
-    using BlockShape = BlockShape;
-    CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                      int height, int pitch,
-                                      intel::coord_t coord) {
-#if defined(SYCL_INTEL_TARGET)
-      __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
-          (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
-          CacheControl::kL1C_L3C);
-#else
-      CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-Xe hardware");
-#endif
-    }
-  };
 };
 
 struct XE_2D_U16x16x8_LD_T {
