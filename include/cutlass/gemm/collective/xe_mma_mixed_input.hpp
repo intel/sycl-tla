@@ -441,8 +441,8 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 
     // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
     // layout else we need mode N_iter from fragment_B layout.
-    static constexpr auto scale_traits_size = decltype(size(GmemTiledCopyScale::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto traits_num = SG_N / size<1>(GmemTiledCopyScale::BlockShape{});
+    static constexpr auto scale_traits_size = decltype(size(typename GmemTiledCopyScale::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto traits_num = SG_N / size<1>(typename GmemTiledCopyScale::BlockShape{});
     using FragScaleLayout = std::conditional_t<IsATransformed,
                                                Layout<Shape<Int<scale_traits_size>, Int<traits_num>, _1>>,
                                                Layout<Shape<Int<scale_traits_size>, Int<traits_num>, _1>>>;
