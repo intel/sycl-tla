@@ -328,7 +328,7 @@ struct ExampleRunner {
         gemm_op.run();
       }
       syclcompat::wait();
-    double io =
+      double io =
         options.l *
         (options.m * options.k * sizeof(ElementA) + options.k * options.n * sizeof(ElementB) +
          options.m * options.n * sizeof(ElementOutput)) *
@@ -404,8 +404,8 @@ int main(int argc, const char** argv)
 
   using EpilogueTile = Shape<_16, _32>;
   constexpr int PipelineStages = 3;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinCombRMSNormRow<ElementWeight, ElementOutput,
           ElementComputeEpilogue, XE_2D_U32x8x16_ST_N, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;

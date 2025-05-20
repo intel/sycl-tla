@@ -272,7 +272,7 @@ template <
   class EpilogueTile
 >
 struct FusionCallbacks<
-    epilogue::IntelPVCEpilogue,
+    epilogue::IntelXeXMX16,
     fusion::LinCombRMSNormRow<ElementWeight_, ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle>,
     CtaTileShapeMNK,
     EpilogueTile

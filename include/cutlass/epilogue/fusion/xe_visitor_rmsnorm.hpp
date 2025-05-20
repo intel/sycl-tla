@@ -68,9 +68,9 @@ public:
   using Trait_Output = Copy_Traits<CopyOpR2G>;
   using XE_Copy_output = decltype(make_tiled_copy(Copy_Atom<Trait_Output, ElementOutput>{}
                                              .with(static_cast<ElementOutput const*>(nullptr),int32_t(0), int32_t(0)),
-                                             Layout<Shape<_1, Int<IntelPVCEpilogue::SubgroupSize>>>{},
+                                             Layout<Shape<_1, Int<IntelXeXMX16::SubgroupSize>>>{},
                                              make_layout(make_shape(get<0>(typename Trait_Output::BlockShape{}),
-                                                                    get<1>(typename Trait_Output::BlockShape{}) / Int<IntelPVCEpilogue::SubgroupSize>{}))));
+                                                                    get<1>(typename Trait_Output::BlockShape{}) / Int<IntelXeXMX16::SubgroupSize>{}))));
 
   struct SharedStorage { };
 
@@ -95,9 +95,9 @@ public:
     auto [M, N, K, L] = problem_shape_MNKL;
     XE_Copy_output output = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpR2G>, ElementOutput>{}.with(
                             args.ptr_output, M, N),
-                            Layout<Shape<_1, Int<IntelPVCEpilogue::SubgroupSize>>>{},
+                            Layout<Shape<_1, Int<IntelXeXMX16::SubgroupSize>>>{},
                             make_layout(make_shape(get<0>(typename XE_Copy_output::BlockShape{}),
-                                                   get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelPVCEpilogue::SubgroupSize>{})));
+                                                   get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelXeXMX16::SubgroupSize>{})));
     return {output, args.ptr_weight, args.eps, N};
   }
 
@@ -193,7 +193,7 @@ public:
             auto wgt_ptr=params.weight;
             Tensor res =
                 make_tensor(static_cast<decltype(res_tensor) &&>(res_tensor).data(),
-                            make_shape(Int<vec_size>{}, Int<vec_folds>{}, Int<Epi_N / IntelPVCEpilogue::SubgroupSize>{}));
+                            make_shape(Int<vec_size>{}, Int<vec_folds>{}, Int<Epi_N / IntelXeXMX16::SubgroupSize>{}));
             // square
             Tensor pow2_buff = make_tensor_like<float>(res);
             CUTLASS_PRAGMA_UNROLL
@@ -201,7 +201,7 @@ public:
                 auto loop_t = res(_, loop, _);
                 auto pow2_t = pow2_buff(_, loop, _);
                 CUTLASS_PRAGMA_UNROLL
-                for (int i = 0; i < Epi_N / IntelPVCEpilogue::SubgroupSize; i++) {
+                for (int i = 0; i < Epi_N / IntelXeXMX16::SubgroupSize; i++) {
                     auto x_vec = loop_t(_, i);
                     auto p2_vec = pow2_t(_, i);
                     CUTLASS_PRAGMA_UNROLL
@@ -213,6 +213,9 @@ public:
             int gx = syclcompat::global_id::x() % 256;
             int gy = syclcompat::global_id::y();
             auto gid = gx / 16 * 32 + gx % 16;
+            if (cute::thread0()) {
+                printf("threadx %d blockx %d blockdimx %d\n", ThreadIdxX(), BlockIdxX(), BlockDimX());
+            }
             CUTLASS_PRAGMA_UNROLL
             for (int loop = 0; loop < vec_folds; loop++) {
                 auto loop_t = res(_, loop, _);
@@ -226,8 +229,8 @@ public:
                     rms(i) = pow(group_sum(i) * rev_dim + eps, -0.5);
                 }
                 CUTLASS_PRAGMA_UNROLL
-                for (int i = 0; i < Epi_N / IntelPVCEpilogue::SubgroupSize; i++) {
-                    const float wgt_per_col = (float)wgt_ptr[gid + i * IntelPVCEpilogue::SubgroupSize];
+                for (int i = 0; i < Epi_N / IntelXeXMX16::SubgroupSize; i++) {
+                    const float wgt_per_col = (float)wgt_ptr[gid + i * IntelXeXMX16::SubgroupSize];
                     auto rmsnorm_vec = loop_t(_, i);
                     CUTLASS_PRAGMA_UNROLL
                     for (int j = 0; j < vec_size; j++) {
@@ -259,7 +262,7 @@ public:
 
     auto [sg_m_coord, sg_n_coord, k_coord, l_offset] = args.tile_coord_mnkl;
     auto [M, N, K, L] = args.problem_shape_mnkl;
-    Tensor mAux_mnl = cute::get_pvc_tensor(make_shape(M,N,L));
+    Tensor mAux_mnl = cute::get_xe_tensor(make_shape(M,N,L));
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux = local_tile(mAux_mnl, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord,l_offset));
     Tensor tCgAux = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux);
