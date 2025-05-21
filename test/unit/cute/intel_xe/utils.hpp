@@ -59,6 +59,7 @@ void verify(uint32_t m, uint32_t n, uint32_t k, atype *A, btype *B, ctype *C,
             bool row_a = true, bool row_b = true) {
   int cnt = 0;
   bool is_normal = true;
+
   for (int i = 0; i < m; i++) {
     for (int j = 0; j < n; j++) {
       ctype expect = ctype(0);
@@ -114,7 +115,7 @@ template <typename T> static void fill_matrix(cutlass::host_vector<T> &M) {
 
   std::uniform_real_distribution<float> dist((T)start, (T)end);
   for (int i = 0; i < M.size(); i++)
-    M[i] = static_cast<T>(static_cast<int>(std::round(dist(rng))));
+    M[i] = static_cast<T>(dist(rng));
 }
 
 template <class kernel> void run(uint32_t m, uint32_t n, uint32_t k) {
