@@ -48,6 +48,7 @@
 #include "cutlass/epilogue/fusion/sm90_visitor_store_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_compute_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/xe_visitor_softmax.hpp"
+#include "cutlass/epilogue/fusion/xe_visitor_rmsnorm.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -232,6 +233,88 @@ struct FusionCallbacks<
             {} // ternary args : multiply_add
           },   // end ternary op
           {output_ptr} // unary args: activation
+        };   // end unary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
+
+// D = rmsnorm(alpha * acc + beta * C)
+template<
+  // int FragmentSize,
+  class CtaTileShapeMNK,
+  class EpilogueTile,
+  class ElementWeight,
+  class ElementOutput,
+  class ElementCompute,
+  class CopyOpR2G,
+  class ElementSource = ElementOutput,
+  class ElementScalar = ElementCompute,
+  FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest
+>
+using XeLinCombRMSNormRow =
+  Sm90EVT<XeRMSNormRowReduction<CtaTileShapeMNK, EpilogueTile, ElementWeight, ElementOutput, ElementCompute, CopyOpR2G, RoundStyle>, // rmsnorm(beta * C + (alpha * acc))
+    Sm90LinearCombination<ElementCompute, ElementCompute, ElementSource, ElementScalar, RoundStyle> // beta * C + (alpha * acc)
+  >;
+
+template <
+  // int FragmentSize,
+  class ElementWeight_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementSource_,
+  class ElementScalar_,
+  class CopyOpR2G_,
+  FloatRoundStyle RoundStyle,
+  class CtaTileShapeMNK,
+  class EpilogueTile
+>
+struct FusionCallbacks<
+    epilogue::IntelXeXMX16,
+    fusion::LinCombRMSNormRow<ElementWeight_, ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle>,
+    CtaTileShapeMNK,
+    EpilogueTile
+> : XeLinCombRMSNormRow<CtaTileShapeMNK, EpilogueTile, ElementWeight_, ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle> {
+
+  using ElementWeight = ElementWeight_;
+  using ElementOutput = ElementOutput_;
+  using ElementCompute = ElementCompute_;
+  using ElementSource = ElementSource_;
+  using ElementScalar = ElementScalar_;
+  using Impl = XeLinCombRMSNormRow<CtaTileShapeMNK, EpilogueTile,
+                                   typename cutlass::detail::get_unpacked_element_type<ElementWeight>::type,
+                                   typename cutlass::detail::get_unpacked_element_type<ElementOutput>::type,
+                                   ElementCompute, CopyOpR2G_, ElementSource, ElementScalar, RoundStyle>;
+  using Operation = fusion::LinCombRMSNormRow<ElementWeight_, ElementOutput_, ElementCompute, CopyOpR2G_, ElementSource, ElementScalar, RoundStyle>;
+
+  struct Arguments {
+    ElementScalar alpha = ElementScalar(1);
+    ElementScalar beta = ElementScalar(0);
+    ElementScalar const* alpha_ptr = nullptr;
+    ElementScalar const* beta_ptr = nullptr;
+    ElementOutput* output_ptr = nullptr;
+
+    using StrideWeight = Stride<_1, _0, int64_t>;
+    ElementWeight const* weight_ptr = nullptr;
+    float eps = 1e-5;
+    StrideWeight dWeight = {};
+
+    operator typename Impl::Arguments() const {
+      return
+        {    // unary op: activation(beta * C + (alpha * acc))
+          {    // ternary op : beta * C + (alpha * acc)
+            {{beta}, {beta_ptr}}, // leaf args : beta
+            {},                   // leaf args : C
+            {                     // binary op : alpha * acc
+              {{alpha}, {alpha_ptr}}, // leaf args : alpha
+              {},                     // leaf args : acc
+              {}                  // binary args : multiplies
+            },                    // end binary op
+            {} // ternary args : multiply_add
+          },   // end ternary op
+          {output_ptr, weight_ptr, eps} // unary args: activation
         };   // end unary op
     }
   };
