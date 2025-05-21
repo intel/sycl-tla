@@ -65,6 +65,9 @@ it will load a 32×32 block such that:
 
 The same applies to the LD_V and LD_T operations.
 
+> ⚠️ VNNI combines elements from multiple rows of a single column, packing them into 32-bit values.
+It does not transform or modify the actual data, it only changes the packing format. 
+
 ### Data Distribution (Packed Copies)
 
 When using MMA operations with **U8** or **U4** data types, such as `XE_8x16x32_S32S8S8S32_TT`, 
@@ -86,6 +89,11 @@ each with **32 elements**
 | 15        | Column 30, 31  |
 
 ---
+
+Note: The number of adjacent columns assigned to each work-item is based on the number of columns 
+in the 2D block copy operation divided by the number of work-items (16). In this case, each work-item 
+loads 2 columns because the block has 32 columns. If the copy operation has 64 columns, then each 
+work-item will load 4 adjacent columns.
 
 ## Supported Layout Modes
 
