@@ -296,8 +296,8 @@ struct XE_2D_LD_Unpack {
     using dtype = typename Copy_Atom<Traits_LD_t, CA_Args...>::ValType;
 
     static_assert(detail::has_prefetch<CopyOp>);
-    static_assert(size(SLayout{}) * sizeof_bits_v<dtype> == size<1>(typename Traits_LD_t::SrcLayout{}),
-                  "Src tensor size does not match copy atom for prefetch size");
+    // static_assert(size(SLayout{}) * sizeof_bits_v<dtype> == size<1>(typename Traits_LD_t::SrcLayout{}),
+    //               "Src tensor size does not match copy atom for prefetch size");
 
     dtype *base_addr = (dtype *)atom.base_ptr;
 

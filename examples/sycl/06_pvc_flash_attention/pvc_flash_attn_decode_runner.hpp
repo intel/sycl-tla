@@ -645,7 +645,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
   }
 };
 
-template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig {
+template <bool Causal, typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout> struct FMHAConfig {
 
   template <bool isVarLen, class Scheduler>
   static int run(const Options &options) {
@@ -669,13 +669,14 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
     using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
     using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
+    using MMAOperation = XE_8x16x16_F32BF16BF16F32_TT;
     using GmemTiledCopyQ = XE_2D_U16x8x32_LD_N;
     using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
     using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
     using GmemTiledCopyStore = XE_2D_U32x8x16_ST_N;
     using CollectiveEpilogue = cutlass::flash_attention::collective::FlashDecodeEpilogue<
-        EpilogueDispatchPolicy, TileShape, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
-        GmemTiledCopyStore>;
+        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>,
+        ElementOutput, GmemTiledCopyStore>;
     using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashDecodeSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
 
     using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
@@ -685,12 +686,10 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
 
     // Mainloop
     using CollectiveMainloop = cutlass::flash_attention::collective::FlashDecodeMma<
-        GEMMDispatchPolicy, ProblemShapeType, TileShape, ElementInputQ, cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
-        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV, cutlass::gemm::TagToStrideB_t<LayoutV>, TiledMma,
-        GmemTiledCopyQ, // Q
-        GmemTiledCopyK, // K
-        GmemTiledCopyV, // V,
-        Causal>;
+        GEMMDispatchPolicy, ProblemShapeType, ElementInputQ, cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV, cutlass::gemm::TagToStrideB_t<LayoutV>, MMAOperation,
+        TileShapeQK, TileShapePV, SubgroupLayout, GmemTiledCopyQ/* Q */, GmemTiledCopyK/* K */,
+        GmemTiledCopyV/* V */, Causal>;
 
     using FMHAKernel = cutlass::flash_attention::kernel::FMHADecode<ProblemShapeType, CollectiveMainloop,
                                                                      CollectiveSoftmaxEpilogue, CollectiveEpilogue, Scheduler>;

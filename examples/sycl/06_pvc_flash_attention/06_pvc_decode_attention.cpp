@@ -52,21 +52,22 @@ int main(int argc, const char **argv) {
 
   if (options.head_size_vo == 64 || options.head_size_vo == 96 || options.head_size_vo == 192) {
 
-    using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<Shape<_512, _64, _64>>,
-                                      Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
+    using ShapeQK = Shape<_8, _512, _64>;
+    using ShapePV = Shape<_8, _32, _512>;
+    using ShapeOutput = Shape<_8, _64, _512>;
+    using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
 
-    return options.is_causal ? FMHAConfig<true, Shape<_512, _64, _64, _64>, TiledMma>::run(options)
-                             : FMHAConfig<false, Shape<_512, _64, _64, _64>, TiledMma>::run(options);
+    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options)
+                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options);
   } else if (options.head_size_vo == 128) {
-    using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<Shape<_512, _128, _64>>,
-                                      Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>>::TiledMMA;
 
-    return options.is_causal ? FMHAConfig<true, Shape<_512, _128, _64, _64>, TiledMma>::run(options)
-                             : FMHAConfig<false, Shape<_512, _128, _64, _64>, TiledMma>::run(options);
+    using ShapeQK = Shape<_8, _1024, _64>;
+    using ShapePV = Shape<_8, _32, _1024>;
+    using ShapeOutput = Shape<_8, _128, _1024>;
+    using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
+
+    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options)
+                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options);
   } else {
     std::cerr << "Aborting execution." << std::endl;
     return -1;
