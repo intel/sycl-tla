@@ -28,8 +28,8 @@
 
 cutlass_test_unit_add_executable(
   cutlass_test_unit_flash_attention_decode_xe
-  xe_flash_decode_bf16.cpp
-  xe_flash_decode_fp16.cpp
+  xe_flash_decode_bf16_fp32_fp32.cpp
+  xe_flash_decode_fp16_fp32_fp32.cpp
 )
 
 add_custom_target(
