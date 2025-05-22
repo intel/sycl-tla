@@ -178,7 +178,7 @@ public:
     CUTLASS_PRAGMA_UNROLL
     for (int y = 0; y < FragsM; y++) {
       CUTLASS_PRAGMA_UNROLL
-      for (int x = 0; x < 1; x++) {// only 1 value is written per row
+      for (int x = 0; x < 1; x++) {// only 1 row is valid
         int indx = y * Vec + x;
         auto cur_sum = reduce_over_group(sg, sum(indx), sycl::plus<>());
 
@@ -199,7 +199,7 @@ public:
       CUTLASS_PRAGMA_UNROLL
       for (int y = 0; y < FragsM; y++) {
         CUTLASS_PRAGMA_UNROLL
-        for (int x = 0; x < 1; x++) { // only 1 value is written per row
+        for (int x = 0; x < 1; x++) { // only 1 row is valid
           int indx = y * Vec + x;
           ElementCompute cur_sum = ElementCompute{0};
           CUTLASS_PRAGMA_UNROLL

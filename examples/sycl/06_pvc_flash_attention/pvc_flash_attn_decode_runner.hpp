@@ -602,12 +602,6 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
     // Verify that the result is correct
     bool use_kv_cache = options.seq_len_kv_cache > 0;
-    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
-
-    if (!passed) {
-      return cutlass::Status::kErrorInternal;
-    }
 
     if (options.iterations > 0) {
       GPU_Clock timer;
@@ -639,6 +633,13 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
                 << "\tHead Size VO: " << options.head_size_vo << "\tCausal Mask: " << (options.is_causal ? "true" : "false")
                 << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false") << "\t Scheduler: " << options.scheduler;
       printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
+    }
+
+    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
+    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+
+    if (!passed) {
+      return cutlass::Status::kErrorInternal;
     }
 
     return cutlass::Status::kSuccess;

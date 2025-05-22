@@ -102,7 +102,8 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
 
   using QK_Subgroup_Layout = Layout<Shape<_1, Int<ATOM_M>, _1>, Stride<_1, Int<ATOM_N>, _1>>;
   // Incorrect layout for PV used to avoid problems for 8x2 Subgroup Layout case.
-  // using PV_Subgroup_Layout = Layout<Shape<_1, _1, Int<ATOM_M>>, Stride<_1, _1, Int<ATOM_N>>>;
+  // Correct layout would look like:
+  // using PV_Subgroup_Layout = Layout<Shape<_1, Int<ATOM_N>, Int<ATOM_M>>, Stride<_1, _1, Int<ATOM_N>>>;
   // TODO (Codeplay): Fix PV_Subgroup_Layout.
   using PV_Subgroup_Layout = Layout<Shape<_1, _1, Int<ATOM_M>>, Stride<_1, _1, Int<ATOM_N>>>;
 
