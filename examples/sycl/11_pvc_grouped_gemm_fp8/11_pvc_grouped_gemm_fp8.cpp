@@ -90,13 +90,10 @@ using ProblemShape = cutlass::gemm::GroupProblemShape<Shape<int,int,int>>; // <M
 
 using ElementAccumulator = float;     // <- data type of accumulator
 using ElementComputeEpilogue = float; // <- data type of epilogue operations
-using ElementA = cutlass::float_e4m3_t;          // <- data type of elements in input matrix A
-using ElementB = cutlass::float_e4m3_t;          // <- data type of elements in input matrix B
 using ElementOutput = float;          // <- data type of elements in output matrix D
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define CUTLASS_SYCL_PROFILING_ENABLED
 
 // Command line options parsing
 struct Options {
@@ -255,7 +252,7 @@ struct ExampleRunner {
   //
 
   template <typename SrcT, typename DstT>
-  void convert_e4m3_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
+  void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
       SrcT* h_src = new SrcT[size];
       syclcompat::memcpy(h_src, d_src, size * sizeof(SrcT));
       syclcompat::wait();
@@ -269,6 +266,7 @@ struct ExampleRunner {
       syclcompat::wait();
   }
 
+  template<typename ElementType>
   bool verify(const Options &options) {
     bool passed = true;
     // Verify against individual reference GEMMs
@@ -282,12 +280,12 @@ struct ExampleRunner {
       cutlass::DeviceAllocation<half_t> block_B_fp16(block_B.size());
 
       // fp8 -> fp16
-      convert_e4m3_to_fp16<float_e4m3_t, half_t>(
+      convert_fp8_to_fp16<ElementType, half_t>(
           block_A.get(),
           block_A_fp16.get(),
           block_A.size()
       );
-      convert_e4m3_to_fp16<float_e4m3_t, half_t>(
+      convert_fp8_to_fp16<ElementType, half_t>(
           block_B.get(),
           block_B_fp16.get(),
           block_B.size()
@@ -378,6 +376,7 @@ void allocate(const Options &options) {
 }
 
 /// Initialize operands to be used in the GEMM and reference GEMM
+template<typename ElementType>
 void initialize(const Options &options) {
 
   uint64_t seed = 2020;
@@ -389,8 +388,8 @@ void initialize(const Options &options) {
   // Assign pointers
   //
 
-  std::vector<ElementA *> ptr_A_host(options.groups);
-  std::vector<ElementB *> ptr_B_host(options.groups);
+  std::vector<ElementType *> ptr_A_host(options.groups);
+  std::vector<ElementType *> ptr_B_host(options.groups);
   std::vector<ElementC *> ptr_C_host(options.groups);
   std::vector<ElementC *> ptr_D_host(options.groups);
   std::vector<ElementAccumulator *> ptr_alpha_host(options.groups);
@@ -481,7 +480,7 @@ void initialize(const Options &options) {
       fusion_args.dAlpha = {cute::_0{}, cute::_0{}, 1};
       fusion_args.dBeta = {cute::_0{}, cute::_0{}, 1};
     }
-    using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90Group<ProblemShape>::RasterOrderOptions;
+    using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerXeGroup<ProblemShape>::RasterOrderOptions;
 
     // Per-GEMM problem shape info may only exist on the device.
     if (host_problem_shapes_available) {
@@ -508,9 +507,10 @@ void initialize(const Options &options) {
     return arguments;
   }
 
+  template<typename ElementType>
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info, bool host_problem_shapes_available = true) {
     allocate(options);
-    initialize(options);
+    initialize<ElementType>(options);
 
     Gemm gemm_op;
 
@@ -529,7 +529,7 @@ void initialize(const Options &options) {
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(options);
+    bool passed = verify<ElementType>(options);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if(!passed) return cutlass::Status::kErrorInternal;
@@ -561,26 +561,10 @@ void initialize(const Options &options) {
 
 };
 
-int main(int argc, const char** argv)
+
+template<typename ElementType>
+int launcher(Options& options)
 {
-  //
-  // Parse options
-  //
-
-  Options options;
-
-  options.parse(argc, argv);
-
-  if (options.help) {
-    options.print_usage(std::cout) << std::endl;
-    return 0;
-  }
-
-  if (options.error) {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
-  }
-
   //
   // Run examples
   //
@@ -635,9 +619,9 @@ int main(int argc, const char** argv)
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
-          ElementA,
+          ElementType,
           cutlass::gemm::TagToStrideA_t<LayoutA*>,
-          ElementB,
+          ElementType,
           cutlass::gemm::TagToStrideB_t<LayoutB*>,
           TiledMma,
           GmemTiledCopyA, void, void, cute::identity,  // A
@@ -655,7 +639,32 @@ int main(int argc, const char** argv)
 
   ExampleRunner<Gemm> runner;
 
-  CUTLASS_CHECK(runner.run(options, hw_info));
+  CUTLASS_CHECK(runner.template run<ElementType>(options, hw_info));
 
+  return 0;
+}
+
+int main(int argc, const char** argv)
+{
+  //
+  // Parse options
+  //
+
+  Options options;
+
+  options.parse(argc, argv);
+
+  if (options.help) {
+    options.print_usage(std::cout) << std::endl;
+    return 0;
+  }
+
+  if (options.error) {
+    std::cerr << "Aborting execution." << std::endl;
+    return -1;
+  }
+
+  launcher<cutlass::float_e5m2_t>(options);
+  launcher<cutlass::float_e4m3_t>(options);
   return 0;
 }
