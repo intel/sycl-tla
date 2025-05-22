@@ -50,12 +50,21 @@ int main(int argc, const char **argv) {
     return -1;
   }
 
-  if (options.head_size_vo == 64 || options.head_size_vo == 96 || options.head_size_vo == 192) {
+  if (options.head_size_vo == 64) {
 
-    using ShapeQK = Shape<_8, _512, _64>;
-    using ShapePV = Shape<_8, _32, _512>;
-    using ShapeOutput = Shape<_8, _64, _512>;
-    using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
+    using ShapeQK = Shape<_8, _1024, _64>;
+    using ShapePV = Shape<_8, _32, _1024>;
+    using ShapeOutput = Shape<_8, _64, _1024>;
+    using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
+
+    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options)
+                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options);
+  } else if (options.head_size_vo == 96) {
+
+    using ShapeQK = Shape<_8, _1024, _64>;
+    using ShapePV = Shape<_8, _32, _1024>;
+    using ShapeOutput = Shape<_8, _96, _1024>;
+    using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
 
     return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options)
                              : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options);
@@ -64,6 +73,15 @@ int main(int argc, const char **argv) {
     using ShapeQK = Shape<_8, _1024, _64>;
     using ShapePV = Shape<_8, _32, _1024>;
     using ShapeOutput = Shape<_8, _128, _1024>;
+    using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
+
+    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options)
+                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options);
+  } else if (options.head_size_vo == 192) {
+
+    using ShapeQK = Shape<_8, _1024, _64>;
+    using ShapePV = Shape<_8, _32, _1024>;
+    using ShapeOutput = Shape<_8, _192, _1024>;
     using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
 
     return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout>::run(options)

@@ -109,7 +109,7 @@ public:
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
     const auto max_scale = max * params.scale;
     CUTLASS_PRAGMA_UNROLL
-    for (int indx = 0; indx < Vec * FragsM; indx++) {
+    for (int indx = 0; indx < FragsM; indx++) {
       const auto max_scale_bcast = group_broadcast(sg, max_scale, indx);
       CUTLASS_PRAGMA_UNROLL
       for (int z = 0; z < FragsN; z++) {
@@ -129,7 +129,7 @@ public:
     const int sg_local_id = sg.get_local_id()[0];
 
     CUTLASS_PRAGMA_UNROLL
-    for (int indx = 0; indx < Vec * FragsM; indx++) {
+    for (int indx = 0; indx < FragsM; indx++) {
       auto curr_max = group_broadcast(sg, max_val, indx);
       CUTLASS_PRAGMA_UNROLL
       for (int z = 0; z < FragsN; z++) {
@@ -141,19 +141,19 @@ public:
       curr_max = reduce_over_group(sg, curr_max, sycl::maximum<>());
 
       if(sg_local_id == 0) {
-        stensor_max(indx + sg_group_id * Vec * FragsM) = curr_max;
+        stensor_max(indx + sg_group_id * FragsM) = curr_max;
       }
     }
 
     sycl::group_barrier(group);
 
     CUTLASS_PRAGMA_UNROLL
-    for (int indx = 0; indx < Vec * FragsM; indx++) {
+    for (int indx = 0; indx < FragsM; indx++) {
       Element curr_max = -INFINITY;
       if(sg_local_id == indx) {
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < Num_SGs; i++) {
-          curr_max = sycl::max(curr_max, stensor_max(i * Vec * FragsM + sg_local_id));
+          curr_max = sycl::max(curr_max, stensor_max(i * FragsM + sg_local_id));
         }
         max_val = curr_max;
       }
@@ -184,7 +184,7 @@ public:
       Element exp_scale{sycl::native::exp2(max_prev * params.scale - max_scale)};
 
       CUTLASS_PRAGMA_UNROLL
-      for (int indx = 0; indx < Vec * FragsM; indx++) {
+      for (int indx = 0; indx < FragsM; indx++) {
         auto max_scale_bcast = group_broadcast(sg, max_scale, indx);
         auto exp_scale_bcast = group_broadcast(sg, exp_scale, indx);
         sum(indx) *= exp_scale_bcast;

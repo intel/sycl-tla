@@ -116,6 +116,7 @@ public:
   static constexpr int QK_SG_N = CollectiveMainloop::QK_SG_N;
 
   static constexpr int PV_BLK_N = get<1>(TileShapePV{});
+  static constexpr int PV_BLK_K = get<2>(TileShapePV{});
   static constexpr int Epilogue_BLK_N = get<1>(TileShapeOutput{});
   static constexpr int Epilogue_BLK_K = get<2>(TileShapeOutput{});
 
@@ -281,17 +282,11 @@ public:
       // the device. Doing redundant prefetch for Q removes the runtime error.
       // TODO (Codeplay): Investigate the runtime error and execution stall for smaller prefetch size.
       auto tiled_prefetch_q = cute::prefetch_selector<Shape<Int<QK_BLK_M * ATOM_M>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_q);
-      // QK_BLK_N is set such that we get SubgroupTileShapeQK = 8x64x64. This requires QK_BLK_N == 64 * ATOM_M so we can
-      // distribute seq_len_kv across multiple subgroups within a workgroup using SplitK decomposition. Passing QK_BLK_N directly
-      // to prefetch_selector results in runtime error (example size QK_BLK_N=512). So we pass a feasible size to prefetch_selector
-      // and loop over the rest to load the whole QK_BLK_N x QK_BLK_K chunk of data.
-      // TODO(Codeplay): (QK_SG_N * ATOM_M) / 4 is the maximum row we can commit. This block need to get fixed via passing correct block number to read
-      static constexpr auto QK_BLK_N_prefetch =  (QK_SG_N * ATOM_M) >> 2;
-      auto tiled_prefetch_k = cute::prefetch_selector<Shape<Int<QK_BLK_N_prefetch>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k);
-      auto tiled_prefetch_v = cute::prefetch_selector<Shape<Int<PV_BLK_N>, Int<QK_BLK_N_prefetch>>, Num_SGs>(mainloop_params.gmem_tiled_copy_v);
+      auto tiled_prefetch_k = cute::prefetch_selector<decltype(take<1,3>(SubgroupTileShapeQK{})), Num_SGs>(mainloop_params.gmem_tiled_copy_k);
+      auto tiled_prefetch_v = cute::prefetch_selector<decltype(take<1,3>(SubgroupTileShapePV{})), Num_SGs>(mainloop_params.gmem_tiled_copy_v);
 
-      auto tiled_prefetch_k_cache = cute::prefetch_selector<Shape<Int<QK_BLK_N_prefetch>, Int<QK_BLK_K>>, Num_SGs>(mainloop_params.gmem_tiled_copy_k_cache);
-      auto tiled_prefetch_v_cache = cute::prefetch_selector<Shape<Int<PV_BLK_N>, Int<QK_BLK_N_prefetch>>, Num_SGs>(mainloop_params.gmem_tiled_copy_v_cache);
+      auto tiled_prefetch_k_cache = cute::prefetch_selector<decltype(take<1,3>(SubgroupTileShapeQK{})), Num_SGs>(mainloop_params.gmem_tiled_copy_k_cache);
+      auto tiled_prefetch_v_cache = cute::prefetch_selector<decltype(take<1,3>(SubgroupTileShapePV{})), Num_SGs>(mainloop_params.gmem_tiled_copy_v_cache);
 
       auto thr_prefetch_Q = tiled_prefetch_q.get_slice(thread_idx);
       auto thr_prefetch_K = tiled_prefetch_k.get_slice(thread_idx);
@@ -300,24 +295,24 @@ public:
       auto pKgK = thr_prefetch_K.partition_S(gK_prefetch);
       auto pVgV = thr_prefetch_V.partition_S(gV_prefetch);
 
+      int kv_tile_idx = sub_group_id / ATOM_N;
+
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < size<3>(pQgQ); i++) {
         prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
       }
 
+      // The headsize for both cached and non-cached version is the same.
+      // each sub-group gets a different base offset for prefetch to load it's own
+      // required data for matrix K.
       CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < QK_BLK_N / QK_BLK_N_prefetch; i++) {
-        // The headsize for both cached and non-cached version is the same
-        CUTLASS_PRAGMA_UNROLL
-        for (int j = 0; j < size<4>(pKgK); j++) {
-          (seq_len_kv_cache == 0) ? prefetch(tiled_prefetch_k, pKgK(_, _, _, i, j))
-                                  : prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, i, j));
-        }
+      for (int j = 0; j < size<4>(pKgK); j++) {
+        (seq_len_kv_cache == 0) ? prefetch(tiled_prefetch_k, pKgK(_, _, _, kv_tile_idx, j))
+                                : prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, kv_tile_idx, j));
       }
 
       // Perform the collective scoped MMA
       CollectiveMainloop collective_mma;
-      int kv_tile_idx = sub_group_id / ATOM_N;
 
       ElementAccumulator max_reg = ElementAccumulator{-INFINITY};
       Tensor sum_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
@@ -325,32 +320,26 @@ public:
       clear(out_reg);
       clear(sum_reg);
 
-      auto smem = syclcompat::local_mem<ElementAccumulator[((Int<size(AccumShape{}) + 1>{}) * Num_SGs * SubgroupSize)]>();
-      Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * Vec * FragsM>{}));
+      auto smem = syclcompat::local_mem<ElementAccumulator[((Int<size(AccumShape{}) / Vec + 1>{}) * Num_SGs * SubgroupSize)]>();
+      Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * FragsM>{}));
 
       CUTLASS_PRAGMA_UNROLL
       for(int split = 0; split < kv_splits - CausalMask; split++) {
         bool is_KV_cache = split < kv_splits_cache;
         auto gK_ = is_KV_cache ? gK(_, _, split, _) : gK(_, _, split - kv_splits_cache, _);
 
-        // 1) Load K (performed inside mmaQK)
-        // 2) Create Tensor S
         Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
         clear(tSr);
 
-        // 3) Perform GEMM S = Q*K
+        // Perform GEMM S = Q*K
         collective_mma.mmaQK(tSr, gQ, gK_, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, is_KV_cache);
 
-        // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
-        // prefetching it the same way as cutlass K matrix does not make sense
-
+        // each sub-group gets a different base offset for prefetch to load it's own
+        // required data for matrix V.
         CUTLASS_PRAGMA_UNROLL
         for(int v = 0; v < VSlicer; v++) {
-          CUTLASS_PRAGMA_UNROLL
-          for(int k = 0; k < (QK_BLK_N / QK_BLK_N_prefetch); k++) {
-            is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV(_, _, _, v, split * (QK_BLK_N / QK_BLK_N_prefetch) + k))
-                        : prefetch(tiled_prefetch_v, pVgV(_, _, _, v, (split - kv_splits_cache) * (QK_BLK_N / QK_BLK_N_prefetch) + k));
-          }
+          is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV(_, _, _, v, split * QK_SG_N + kv_tile_idx))
+                      : prefetch(tiled_prefetch_v, pVgV(_, _, _, v, (split - kv_splits_cache) * QK_SG_N + kv_tile_idx));
         }
 
         CollectiveSoftmaxEpilogue softmax(params.softmax);
@@ -361,38 +350,33 @@ public:
         collective_mma.template mmaPV<VSlicer>(out_reg, tSr, gV_, out_reg, mainloop_params, is_KV_cache);
 
         // Prefetch the next Q tile
-        // there is no need to guard it with if statememt as prefetch will ignore out of bound reading
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < size<3>(pQgQ); i++) {
           prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
         }
 
+        // The headsize for both cached and non-cached version is the same.
+        // each sub-group gets a different base offset for prefetch to load it's own
+        // required data for matrix K.
         CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i <  QK_BLK_N / QK_BLK_N_prefetch; i++) {
-          // The headsize for both cached and non-cached version is the same
-          CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < size<4>(pKgK); j++) {
-            is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, i + split * (QK_BLK_N / QK_BLK_N_prefetch), j))
-                        : prefetch(tiled_prefetch_k, pKgK(_, _, _, i + (split - kv_splits_cache) * (QK_BLK_N / QK_BLK_N_prefetch), j));
-          }
+        for (int j = 0; j < size<4>(pKgK); j++) {
+          is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, /* i + */ (split + 1) * QK_SG_N + kv_tile_idx, j))
+                      : prefetch(tiled_prefetch_k, pKgK(_, _, _, /* i +  */(split - kv_splits_cache + 1) * QK_SG_N + kv_tile_idx, j));
         }
       }
 
       if constexpr (CausalMask) {
-        // 1) Load K (performed inside mmaQK)
-        // 2) Create Tensor S
         Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
         clear(tSr);
 
-        // 3) Perform GEMM S = Q*K
+        // Perform GEMM S = Q*K
         collective_mma.mmaQK(tSr, gQ, gK(_, _, kv_splits_new - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, false);
 
+        // each sub-group gets a different base offset for prefetch to load it's own
+        // required data for matrix V.
         CUTLASS_PRAGMA_UNROLL
         for(int v = 0; v < VSlicer; v++) {
-          CUTLASS_PRAGMA_UNROLL
-          for(int k = 0; k < (QK_BLK_N / QK_BLK_N_prefetch); k++) {
-            prefetch(tiled_prefetch_v, pVgV(_, _, _, v, (kv_splits_new - 1) * (QK_BLK_N / QK_BLK_N_prefetch) + k));
-          }
+          prefetch(tiled_prefetch_v, pVgV(_, _, _, v, (kv_splits_new - 1) * QK_SG_N + kv_tile_idx));
         }
 
         const int required_sgs = ceil_div(seq_len_kv, QK_SG_N);
@@ -423,19 +407,20 @@ public:
       auto group = syclcompat::get_nd_item<1>().get_group();
       sycl::group_barrier(group);
 
-      Tensor shmem_out_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<size(AccumShape{}) * SubgroupSize * Num_SGs>{}));
+      Tensor shmem_out_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<(size(AccumShape{}) / Vec) * SubgroupSize * Num_SGs>{}));
       // write output to SLM
-      int idx = (thread_idx % SubgroupSize) + sub_group_id * out_reg.size() * SubgroupSize;
+      int idx = (thread_idx % SubgroupSize) + (sub_group_id * out_reg.size() * SubgroupSize) / Vec;
+      // only the first row has actual data, rest of the rows are invalid.
       CUTLASS_PRAGMA_UNROLL
-      for(int i = 0; i < Int<size(AccumShape{})>{}; i++) {
-        shmem_out_tensor(idx + i * SubgroupSize) = out_reg(i);
+      for(int i = 0; i < Int<size(AccumShape{}) / Vec>{}; i++) {
+        shmem_out_tensor(idx + i * SubgroupSize) = out_reg(i * Vec);
       }
 
       auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, sequence_length_shape, batch_coord);
       CollectiveEpilogue epilogue{epilogue_params, shared_storage.epilogue};
       auto blk_coord_mnkl = make_coord(blk_q_coord, blk_v_coord, _, blk_l_coord);
 
-      Tensor shmem_sum_tensor = make_tensor(make_smem_ptr(shmem_out_tensor.data() + shmem_out_tensor.size()), make_shape(Int<Num_SGs * Vec * FragsM>{}));
+      Tensor shmem_sum_tensor = make_tensor(make_smem_ptr(shmem_out_tensor.data() + shmem_out_tensor.size()), make_shape(Int<Num_SGs * FragsM>{}));
 
       epilogue(params.problem_shape, sequence_length_shape, blk_coord_mnkl, shmem_out_tensor, sum_reg, shmem_sum_tensor);
     }

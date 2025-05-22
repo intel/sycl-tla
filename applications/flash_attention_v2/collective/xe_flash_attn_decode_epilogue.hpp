@@ -178,12 +178,12 @@ public:
     CUTLASS_PRAGMA_UNROLL
     for (int y = 0; y < FragsM; y++) {
       CUTLASS_PRAGMA_UNROLL
-      for (int x = 0; x < Vec; x++) {
+      for (int x = 0; x < 1; x++) {// only 1 value is written per row
         int indx = y * Vec + x;
         auto cur_sum = reduce_over_group(sg, sum(indx), sycl::plus<>());
 
         if(sg_local_id == 0) {
-          shmem_tensor_sum(indx + sg_group_id * FragsM * Vec) = cur_sum;
+          shmem_tensor_sum(indx + sg_group_id * FragsM) = cur_sum;
         }
       }
     }
@@ -199,13 +199,13 @@ public:
       CUTLASS_PRAGMA_UNROLL
       for (int y = 0; y < FragsM; y++) {
         CUTLASS_PRAGMA_UNROLL
-        for (int x = 0; x < Vec; x++) {
+        for (int x = 0; x < 1; x++) { // only 1 value is written per row
           int indx = y * Vec + x;
           ElementCompute cur_sum = ElementCompute{0};
           CUTLASS_PRAGMA_UNROLL
-          for(int i = 0; i < ATOM_M * ATOM_N; i ++) {
+          for(int i = 0; i < ATOM_M * ATOM_N; i++) {
             if (i % ATOM_N == sg_group_id) {
-              cur_sum += shmem_tensor_sum(i * Vec * FragsM + indx);
+              cur_sum += shmem_tensor_sum(i * FragsM + indx);
             }
           }
 
@@ -213,14 +213,14 @@ public:
 
           CUTLASS_PRAGMA_UNROLL
           for (int z = 0; z < FragsN; z++) {
-            auto base_indx = indx + (z * Vec * FragsM);
+            auto base_indx = indx + (z * FragsM);
             const int slm_curr_idx = sg_local_id + base_indx * SubgroupSize;
 
             ElementOutput out_val_curr = ElementOutput{0};
             CUTLASS_PRAGMA_UNROLL
             for(int i = 0; i < ATOM_M * ATOM_N; i++) {
               if (i % ATOM_N == sg_group_id) {
-               auto out_val_prev = shmem_tensor_out(slm_curr_idx + i * out_reg.size() * SubgroupSize);
+               auto out_val_prev = shmem_tensor_out(slm_curr_idx + i * (out_reg.size() / Vec) * SubgroupSize);
                out_val_curr += out_val_prev;
               }
             }
