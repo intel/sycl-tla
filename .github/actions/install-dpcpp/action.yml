@@ -35,9 +35,7 @@ runs:
           sudo apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
           sudo apt-get install -y libze-dev intel-ocloc
         else
-          wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | sudo gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
           sudo apt update
-          sudo apt install -y gpg-agent wget
           . /etc/os-release
           if [[ ! " jammy noble " =~ " ${VERSION_CODENAME} " ]]; then
             echo "Ubuntu version ${VERSION_CODENAME} not supported"
@@ -96,9 +94,7 @@ runs:
           sudo apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
           sudo apt-get install -y libze-dev intel-ocloc
         else
-          wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | sudo gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
           sudo apt update
-          sudo apt install -y gpg-agent wget
           . /etc/os-release
           if [[ ! " jammy noble " =~ " ${VERSION_CODENAME} " ]]; then
             echo "Ubuntu version ${VERSION_CODENAME} not supported"
