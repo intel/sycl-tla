@@ -35,8 +35,6 @@ runs:
           sudo apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
           sudo apt-get install -y libze-dev intel-ocloc
         else
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${VERSION_CODENAME} unified" | \
-          sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
           sudo apt update
           sudo apt install -y \
             intel-opencl-icd libze-intel-gpu1 libze1 \
@@ -86,8 +84,6 @@ runs:
           sudo apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
           sudo apt-get install -y libze-dev intel-ocloc
         else
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${VERSION_CODENAME} unified" | \
-          sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
           sudo apt update
           sudo apt install -y \
             intel-opencl-icd libze-intel-gpu1 libze1 \
