@@ -30,7 +30,6 @@ runs:
           sudo apt install -y \
             libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev
         fi
-        EOF
     - name: Install Intel graphics drivers
       if: inputs.IGC == 'STAGING'
       shell: bash
@@ -40,4 +39,3 @@ runs:
           sudo apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
           sudo apt-get install -y libze-dev intel-ocloc
         fi
-        EOF
