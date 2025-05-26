@@ -311,7 +311,7 @@ using PvcGemmFP16FP16FP32_SplitK_RCR_5 = cutlass::gemm::device::GemmConfiguratio
         float, Shape<_8, _64, _32>,  Scheduler::GemmSplitK,
         typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<Shape<_8, _64, _32>>,
                                         Layout<Shape<_1, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA,
-        XE_2D_U16x8x32_LD_N, XE_2D_U16x16x16_LD_T,
+        XE_2D_U16x8x32_LD_N, XE_2D_U16x16x16_LD_T
         >;
 
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmFP16FP16FP32_RCR_5);
