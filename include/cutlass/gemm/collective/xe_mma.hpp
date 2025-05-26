@@ -190,7 +190,7 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);
 
-//#if CUTLASS_ENABLE_DEBUG_PRINTS
+#if CUTLASS_ENABLE_DEBUG_PRINTS
 #define LOG_THREAD 0
 #define LOG_GROUP 0
 #define PRINT(x) print(#x ": "); print(x); print("\n");
@@ -212,7 +212,7 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
       PRINT(mainloop.tiled_copy_b);
       }
 #undef PRINT
-//#endif
+#endif
 
     //
     // Mainloop

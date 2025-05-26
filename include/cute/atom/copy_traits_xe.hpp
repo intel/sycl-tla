@@ -409,17 +409,10 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
   constexpr int total_mma_atom_iters_regs_M = get<1>(TLShape{});
   constexpr int total_mma_atom_iters_regs_N = get<2>(TLShape{});
   //TODO simplify
-  //constexpr auto tmp1 = prepend<2>(cute::reverse(mma_atom_regs_shape), _1{});
-  //constexpr auto tmp2 = append<2>(cute::reverse(mma_atom_regs_shape), _1{});
-  //constexpr int mma_vals_regs_M = TiledCopy::is_convention_MN ? size<1>(tmp1) : size<1>(tmp2);
-  //constexpr int mma_vals_regs_N = TiledCopy::is_convention_MN ? size<0>(tmp1) : size<0>(tmp2);
-  //constexpr auto mma_atom_regs_shape_2d = make_shape(Int<mma_vals_regs_M>{}, Int<mma_vals_regs_N>{});
   constexpr auto mma_atom_regs_shape_2d = std::conditional_t<TiledCopy::is_convention_MN, 
                                                              decltype(append<2>(cute::reverse(mma_atom_regs_shape), _1{})), 
                                                              decltype(prepend<2>(cute::reverse(mma_atom_regs_shape), _1{}))>{};
   
-  // TiledCopy::is_convention_MN ? prepend<2>(cute::reverse(mma_atom_regs_shape), _1{}) : append<2>(cute::reverse(mma_atom_regs_shape), _1{}); //TODO reverse
-
   constexpr int mma_vals_global_M =
       Int<TiledCopy::is_column_major ? size<1>(mma_atom_regs_shape_2d) : size<0>(mma_atom_regs_shape_2d)>{};
   constexpr int mma_vals_global_N =
@@ -438,8 +431,6 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
   auto copy_vals_global_M = size<0>(thread_copy_global_shape);
   auto copy_vals_global_N = size<1>(thread_copy_global_shape);
 
-  //static_assert(copy_vals_global_M >= mma_vals_global_M, "MMA atom larger than copy atom is not currently supported.");
-  //static_assert(copy_vals_global_N >= mma_vals_global_N, "MMA atom larger than copy atom is not currently supported.");
   constexpr int mma_atom_iters_in_copy_global_M = copy_vals_global_M / mma_vals_global_M;
   constexpr int mma_atom_iters_in_copy_global_N = copy_vals_global_N / mma_vals_global_N;
   constexpr int copy_iters_global_M = total_mma_atom_iters_global_M / mma_atom_iters_in_copy_global_M;
@@ -460,7 +451,7 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                  make_shape(Int<mma_atom_iters_in_copy_regs_N>{}, Int<copy_iters_regs_N>{})),
       order);
       
-  #define LOG_THREAD 0
+  /*#define LOG_THREAD 0
   #define LOG_GROUP 0
   #define PRINT(x) print(#x ": "); print(x); print("\n");
   if (cute::thread(LOG_THREAD, LOG_GROUP)) {
@@ -496,7 +487,7 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
     PRINT(TLShape{})
     PRINT(res)
     print("\n");
-  }
+  }*/
   static_assert(size(res) > 0, "Error in make_fragment_layout(), tile size might be smaller than copy atom");
   //return fragment_top_level_shape;
   return res;
