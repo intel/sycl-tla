@@ -442,23 +442,23 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
   //static_assert(copy_vals_global_N >= mma_vals_global_N, "MMA atom larger than copy atom is not currently supported.");
   constexpr int mma_atom_iters_in_copy_global_M = copy_vals_global_M / mma_vals_global_M;
   constexpr int mma_atom_iters_in_copy_global_N = copy_vals_global_N / mma_vals_global_N;
-  //constexpr int copy_iters_global_M = total_mma_atom_iters_global_M / mma_atom_iters_in_copy_global_M;
-  //constexpr int copy_iters_global_N = total_mma_atom_iters_global_N / mma_atom_iters_in_copy_global_N;
+  constexpr int copy_iters_global_M = total_mma_atom_iters_global_M / mma_atom_iters_in_copy_global_M;
+  constexpr int copy_iters_global_N = total_mma_atom_iters_global_N / mma_atom_iters_in_copy_global_N;
   
   constexpr int mma_atom_iters_in_copy_regs_M = TiledCopy::is_column_major ? mma_atom_iters_in_copy_global_N : mma_atom_iters_in_copy_global_M;
   constexpr int mma_atom_iters_in_copy_regs_N = TiledCopy::is_column_major ? mma_atom_iters_in_copy_global_M : mma_atom_iters_in_copy_global_N;
-  //constexpr int copy_iters_regs_M = TiledCopy::is_column_major ? copy_iters_global_N : copy_iters_global_M;
-  //constexpr int copy_iters_regs_N = TiledCopy::is_column_major ? copy_iters_global_M : copy_iters_global_N;
+  constexpr int copy_iters_regs_M = TiledCopy::is_column_major ? copy_iters_global_N : copy_iters_global_M;
+  constexpr int copy_iters_regs_N = TiledCopy::is_column_major ? copy_iters_global_M : copy_iters_global_N;
 
   auto order = std::conditional_t<TiledCopy::is_convention_MN,
                                   Step<Step<_0, _1>, Step<_2, _4>, Step<_3, _5>>,
                                   Step<Step<_0, _1>, Step<_3, _5>, Step<_2, _4>>>{};
                                   
-  /*auto res = make_ordered_layout(
-      make_shape(mma_atom_regs_shape_2d,
+  auto res = make_ordered_layout(
+      make_shape(cute::reverse(mma_atom_regs_shape_2d),
                  make_shape(Int<mma_atom_iters_in_copy_regs_M>{}, Int<copy_iters_regs_M>{}),
                  make_shape(Int<mma_atom_iters_in_copy_regs_N>{}, Int<copy_iters_regs_N>{})),
-      order);*/
+      order);
       
   #define LOG_THREAD 0
   #define LOG_GROUP 0
@@ -483,23 +483,23 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
     PRINT(copy_vals_global_N)
     PRINT(mma_atom_iters_in_copy_global_M)
     PRINT(mma_atom_iters_in_copy_global_N)
-    //PRINT(copy_iters_global_M)
-    //PRINT(copy_iters_global_N)
+    PRINT(copy_iters_global_M)
+    PRINT(copy_iters_global_N)
     print("ASSERT: "); print(copy_vals_global_M >= mma_vals_global_M); print("\n");
     print("ASSERT: "); print(copy_vals_global_N >= mma_vals_global_N); print("\n");
     print("ASSERT2: "); print(total_mma_atom_iters_global_M >= mma_atom_iters_in_copy_global_M); print("\n");
     print("ASSERT2: "); print(total_mma_atom_iters_global_N >= mma_atom_iters_in_copy_global_N); print("\n");
     PRINT(mma_atom_iters_in_copy_regs_M)
     PRINT(mma_atom_iters_in_copy_regs_N)
-    //PRINT(copy_iters_regs_M)
-    //PRINT(copy_iters_regs_N)
-    //PRINT(TLShape{})
-    //PRINT(res)
+    PRINT(copy_iters_regs_M)
+    PRINT(copy_iters_regs_N)
+    PRINT(TLShape{})
+    PRINT(res)
     print("\n");
   }
-  //static_assert(size(res) > 0, "Error in make_fragment_layout(), tile size might be smaller than copy atom");
-  return fragment_top_level_shape;
-  //return res;
+  static_assert(size(res) > 0, "Error in make_fragment_layout(), tile size might be smaller than copy atom");
+  //return fragment_top_level_shape;
+  return res;
 };
 
 // clang-format off

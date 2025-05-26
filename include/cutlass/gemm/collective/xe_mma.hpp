@@ -217,7 +217,7 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
     //
     // Mainloop
     //
-    /*const auto k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
+    const auto k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
     constexpr int barrier_scope = 2;
     int prefetch_k = k_start_idx;
 
@@ -241,7 +241,7 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
 
       cute::gemm(tiled_mma, tCrA, tCrB, accum);
       barrier_wait(barrier_scope);
-    }*/
+    }
   }
 };
 
