@@ -410,25 +410,23 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
 template <class TiledCopy, class TLShape>
 CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                                                      TLShape &&fragment_top_level_shape) {
-  constexpr auto mma_atom_regs_shape = get<0>(TLShape{});
+  // TODO(Codeplay): reverse values in 2d (U8) MMA atoms instead
+  constexpr auto mma_atom_regs_shape = cute::reverse(get<0>(TLShape{}));
   using MmaValsShapeRegs2d = std::conditional_t<TiledCopy::is_convention_MN, 
-                                                decltype(prepend<2>(mma_atom_regs_shape, _1{})), 
-                                                decltype(append<2>(mma_atom_regs_shape, _1{}))>;
-  using MmaValsShapeGlobal = detail::conditional_reverse_t<!TiledCopy::is_column_major, MmaValsShapeRegs2d>;
+                                                decltype(append<2>(mma_atom_regs_shape, _1{})), 
+                                                decltype(prepend<2>(mma_atom_regs_shape, _1{}))>;
 
+  using ThreadLayout_ = Shape<Int<size(typename TiledCopy::Traits_LD_t::ThrID{})>, _1>;
+  using ThreadLayoutRegs = detail::conditional_reverse_t<TiledCopy::is_convention_MN, ThreadLayout_>;
+  using BlockShapeRegs = typename TiledCopy::BlockShape;
   using TotalMmaAtomItersRegs = decltype(select<1,2>(TLShape{}));
-  using TotalMmaAtomItersGlobal = detail::conditional_reverse_t<TiledCopy::is_column_major, TotalMmaAtomItersRegs>;
 
-  using ThreadLayoutRegs = Shape<_1, Int<size(typename TiledCopy::Traits_LD_t::ThrID{})>>;
-  using ThreadLayoutGlobal = detail::conditional_reverse_t<TiledCopy::is_need_reversed, ThreadLayoutRegs>;
-  using BlockShapeGlobal = detail::conditional_reverse_t<TiledCopy::is_column_major, typename TiledCopy::BlockShape>;
-
-  using CopyValsGlobalShape = decltype(shape_div(BlockShapeGlobal{}, ThreadLayoutGlobal{}));
-  using MmaItersInCopyGlobal = decltype(shape_div(CopyValsGlobalShape{}, MmaValsShapeGlobal{}));
-  using CopyItersGlobal = decltype(shape_div(TotalMmaAtomItersGlobal{}, MmaItersInCopyGlobal{}));
-
-  using MmaItersInCopyRegs = detail::conditional_reverse_t<TiledCopy::is_column_major, MmaItersInCopyGlobal>;
-  using CopyItersRegs = detail::conditional_reverse_t<TiledCopy::is_column_major, CopyItersGlobal>;
+  using CopyValsShapeRegs = decltype(shape_div(BlockShapeRegs{}, ThreadLayoutRegs{}));
+  static_assert(get<0>(CopyValsShapeRegs{}) >= get<0>(MmaValsShapeRegs2d{}) || 
+                  get<1>(CopyValsShapeRegs{}) <= get<1>(MmaValsShapeRegs2d{}), 
+                "It is not possible to have MMA atom be bigger than copy atom in one dimension and smaller in other dimension!");
+  using MmaItersInCopyRegs = decltype(ceil_div(CopyValsShapeRegs{}, MmaValsShapeRegs2d{}));
+  using CopyItersRegs = decltype(shape_div(TotalMmaAtomItersRegs{}, MmaItersInCopyRegs{}));
 
   auto order = std::conditional_t<TiledCopy::is_convention_MN,
                                   Step<Step<_0, _1>, Step<_2, _4>, Step<_3, _5>>,
@@ -438,53 +436,7 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
       prepend(cute::zip(MmaItersInCopyRegs{}, CopyItersRegs{}), MmaValsShapeRegs2d{}),
       order);
       
-  #define LOG_THREAD 0
-  #define LOG_GROUP 0
-  #define PRINT(x) print(#x ": "); print(x); print("\n");
-  /*if (cute::thread(LOG_THREAD, LOG_GROUP)) {
-    print("is_column_major: "); print(TiledCopy::is_column_major); print("\n");
-    print("is_need_reversed: "); print(TiledCopy::is_need_reversed); print("\n");
-    print("is_convention_MN: "); print(TiledCopy::is_convention_MN); print("\n");
-    PRINT(mma_atom_regs_shape)
-    PRINT(mma_atom_regs_shape_2d)
-    PRINT(MmaValsShapeRegs2d{})
-    PRINT(total_mma_atom_iters_regs_M)
-    PRINT(total_mma_atom_iters_regs_N)
-    PRINT(TotalMmaAtomItersRegs{})
-    PRINT(total_mma_atom_iters_global_M)
-    PRINT(total_mma_atom_iters_global_N)
-    PRINT(TotalMmaAtomItersGlobal{})
-    PRINT(mma_vals_global_M)
-    PRINT(mma_vals_global_N)
-    PRINT(MmaValsShapeGlobal{})
-    PRINT(ThreadLayoutGlobal{})
-    print("(regs) "); PRINT(typename TiledCopy::BlockShape{})
-    PRINT(BlockShapeGlobal{})
-    PRINT(copy_vals_global_M)
-    PRINT(copy_vals_global_N)
-    PRINT(CopyValsGlobalShape{})
-    PRINT(mma_atom_iters_in_copy_global_M)
-    PRINT(mma_atom_iters_in_copy_global_N)
-    PRINT(MmaItersInCopyGlobal{})
-    PRINT(copy_iters_global_M)
-    PRINT(copy_iters_global_N)
-    print("ASSERT: "); print(copy_vals_global_M >= mma_vals_global_M); print("\n");
-    print("ASSERT: "); print(copy_vals_global_N >= mma_vals_global_N); print("\n");
-    print("ASSERT2: "); print(total_mma_atom_iters_global_M >= mma_atom_iters_in_copy_global_M); print("\n");
-    print("ASSERT2: "); print(total_mma_atom_iters_global_N >= mma_atom_iters_in_copy_global_N); print("\n");
-    PRINT(mma_atom_iters_in_copy_regs_M)
-    PRINT(mma_atom_iters_in_copy_regs_N)
-    PRINT(MmaItersInCopyRegs{})
-    PRINT(copy_iters_regs_M)
-    PRINT(copy_iters_regs_N)
-    PRINT(CopyItersRegs{})
-    PRINT(MN_shape{})
-    PRINT(TLShape{})
-    PRINT(res)
-    print("\n");
-  }*/
   static_assert(size(res) > 0, "Error in make_fragment_layout(), tile size might be smaller than copy atom");
-  //return fragment_top_level_shape;
   return res;
 };
 
