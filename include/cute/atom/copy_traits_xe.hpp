@@ -65,6 +65,11 @@ static constexpr bool is_stride_leftmost = std::is_same_v<_1, decltype(get<0>(T{
 template <class T>
 static constexpr bool is_stride_leftmost<T, cute::void_t<decltype(T{}.stride())>> = std::is_same_v<_1, decltype(get<0>(T{}.stride()))>;
 
+template<bool Condition, typename T>
+using conditional_reverse_t = std::conditional_t<Condition,
+                                                  decltype(cute::reverse(T{})),
+                                                  T>;
+
 // Swap the Src or Dst Layout of a Copy_Traits if the logical/memory layouts differ 
 template <bool is_convention_MN, typename LayoutIn, typename BlockShape>
 auto get_logical_layout(LayoutIn &&, BlockShape &&) {
@@ -406,74 +411,61 @@ template <class TiledCopy, class TLShape>
 CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                                                      TLShape &&fragment_top_level_shape) {
   constexpr auto mma_atom_regs_shape = get<0>(TLShape{});
-  constexpr int total_mma_atom_iters_regs_M = get<1>(TLShape{});
-  constexpr int total_mma_atom_iters_regs_N = get<2>(TLShape{});
-  //TODO simplify
-  constexpr auto mma_atom_regs_shape_2d = std::conditional_t<TiledCopy::is_convention_MN, 
-                                                             decltype(append<2>(cute::reverse(mma_atom_regs_shape), _1{})), 
-                                                             decltype(prepend<2>(cute::reverse(mma_atom_regs_shape), _1{}))>{};
-  
-  constexpr int mma_vals_global_M =
-      Int<TiledCopy::is_column_major ? size<1>(mma_atom_regs_shape_2d) : size<0>(mma_atom_regs_shape_2d)>{};
-  constexpr int mma_vals_global_N =
-      Int<TiledCopy::is_column_major ? size<0>(mma_atom_regs_shape_2d) : size<1>(mma_atom_regs_shape_2d)>{};
-  constexpr int total_mma_atom_iters_global_M = TiledCopy::is_column_major ? total_mma_atom_iters_regs_N : total_mma_atom_iters_regs_M;
-  constexpr int total_mma_atom_iters_global_N = TiledCopy::is_column_major ? total_mma_atom_iters_regs_M : total_mma_atom_iters_regs_N;
+  using MmaValsShapeRegs2d = std::conditional_t<TiledCopy::is_convention_MN, 
+                                                decltype(prepend<2>(mma_atom_regs_shape, _1{})), 
+                                                decltype(append<2>(mma_atom_regs_shape, _1{}))>;
+  using MmaValsShapeGlobal = detail::conditional_reverse_t<!TiledCopy::is_column_major, MmaValsShapeRegs2d>;
+
+  using TotalMmaAtomItersRegs = decltype(select<1,2>(TLShape{}));
+  using TotalMmaAtomItersGlobal = detail::conditional_reverse_t<TiledCopy::is_column_major, TotalMmaAtomItersRegs>;
 
   using ThreadLayoutRegs = Shape<_1, Int<size(typename TiledCopy::Traits_LD_t::ThrID{})>>;
-  using ThreadLayoutGlobal = std::conditional_t<!TiledCopy::is_need_reversed,
-                                          ThreadLayoutRegs,
-                                          decltype(cute::reverse(ThreadLayoutRegs{}))>;
-  using BlockShapeGlobal = std::conditional_t<!TiledCopy::is_column_major,
-                                          typename TiledCopy::BlockShape,
-                                          decltype(cute::reverse(typename TiledCopy::BlockShape{}))>;
-  auto thread_copy_global_shape = shape_div(BlockShapeGlobal{}, ThreadLayoutGlobal{});
-  auto copy_vals_global_M = size<0>(thread_copy_global_shape);
-  auto copy_vals_global_N = size<1>(thread_copy_global_shape);
+  using ThreadLayoutGlobal = detail::conditional_reverse_t<TiledCopy::is_need_reversed, ThreadLayoutRegs>;
+  using BlockShapeGlobal = detail::conditional_reverse_t<TiledCopy::is_column_major, typename TiledCopy::BlockShape>;
 
-  constexpr int mma_atom_iters_in_copy_global_M = copy_vals_global_M / mma_vals_global_M;
-  constexpr int mma_atom_iters_in_copy_global_N = copy_vals_global_N / mma_vals_global_N;
-  constexpr int copy_iters_global_M = total_mma_atom_iters_global_M / mma_atom_iters_in_copy_global_M;
-  constexpr int copy_iters_global_N = total_mma_atom_iters_global_N / mma_atom_iters_in_copy_global_N;
-  
-  constexpr int mma_atom_iters_in_copy_regs_M = TiledCopy::is_column_major ? mma_atom_iters_in_copy_global_N : mma_atom_iters_in_copy_global_M;
-  constexpr int mma_atom_iters_in_copy_regs_N = TiledCopy::is_column_major ? mma_atom_iters_in_copy_global_M : mma_atom_iters_in_copy_global_N;
-  constexpr int copy_iters_regs_M = TiledCopy::is_column_major ? copy_iters_global_N : copy_iters_global_M;
-  constexpr int copy_iters_regs_N = TiledCopy::is_column_major ? copy_iters_global_M : copy_iters_global_N;
+  using CopyValsGlobalShape = decltype(shape_div(BlockShapeGlobal{}, ThreadLayoutGlobal{}));
+  using MmaItersInCopyGlobal = decltype(shape_div(CopyValsGlobalShape{}, MmaValsShapeGlobal{}));
+  using CopyItersGlobal = decltype(shape_div(TotalMmaAtomItersGlobal{}, MmaItersInCopyGlobal{}));
+
+  using MmaItersInCopyRegs = detail::conditional_reverse_t<TiledCopy::is_column_major, MmaItersInCopyGlobal>;
+  using CopyItersRegs = detail::conditional_reverse_t<TiledCopy::is_column_major, CopyItersGlobal>;
 
   auto order = std::conditional_t<TiledCopy::is_convention_MN,
                                   Step<Step<_0, _1>, Step<_2, _4>, Step<_3, _5>>,
                                   Step<Step<_0, _1>, Step<_3, _5>, Step<_2, _4>>>{};
                                   
   auto res = make_ordered_layout(
-      make_shape(cute::reverse(mma_atom_regs_shape_2d),
-                 make_shape(Int<mma_atom_iters_in_copy_regs_M>{}, Int<copy_iters_regs_M>{}),
-                 make_shape(Int<mma_atom_iters_in_copy_regs_N>{}, Int<copy_iters_regs_N>{})),
+      prepend(cute::zip(MmaItersInCopyRegs{}, CopyItersRegs{}), MmaValsShapeRegs2d{}),
       order);
       
-  /*#define LOG_THREAD 0
+  #define LOG_THREAD 0
   #define LOG_GROUP 0
   #define PRINT(x) print(#x ": "); print(x); print("\n");
-  if (cute::thread(LOG_THREAD, LOG_GROUP)) {
+  /*if (cute::thread(LOG_THREAD, LOG_GROUP)) {
     print("is_column_major: "); print(TiledCopy::is_column_major); print("\n");
     print("is_need_reversed: "); print(TiledCopy::is_need_reversed); print("\n");
     print("is_convention_MN: "); print(TiledCopy::is_convention_MN); print("\n");
     PRINT(mma_atom_regs_shape)
     PRINT(mma_atom_regs_shape_2d)
-    //PRINT(total_mma_atom_iters_regs_M)
-    //PRINT(total_mma_atom_iters_regs_N)
+    PRINT(MmaValsShapeRegs2d{})
+    PRINT(total_mma_atom_iters_regs_M)
+    PRINT(total_mma_atom_iters_regs_N)
+    PRINT(TotalMmaAtomItersRegs{})
     PRINT(total_mma_atom_iters_global_M)
     PRINT(total_mma_atom_iters_global_N)
+    PRINT(TotalMmaAtomItersGlobal{})
     PRINT(mma_vals_global_M)
     PRINT(mma_vals_global_N)
-    //PRINT(ThreadLayoutRegs{})
+    PRINT(MmaValsShapeGlobal{})
     PRINT(ThreadLayoutGlobal{})
     print("(regs) "); PRINT(typename TiledCopy::BlockShape{})
     PRINT(BlockShapeGlobal{})
     PRINT(copy_vals_global_M)
     PRINT(copy_vals_global_N)
+    PRINT(CopyValsGlobalShape{})
     PRINT(mma_atom_iters_in_copy_global_M)
     PRINT(mma_atom_iters_in_copy_global_N)
+    PRINT(MmaItersInCopyGlobal{})
     PRINT(copy_iters_global_M)
     PRINT(copy_iters_global_N)
     print("ASSERT: "); print(copy_vals_global_M >= mma_vals_global_M); print("\n");
@@ -482,8 +474,11 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
     print("ASSERT2: "); print(total_mma_atom_iters_global_N >= mma_atom_iters_in_copy_global_N); print("\n");
     PRINT(mma_atom_iters_in_copy_regs_M)
     PRINT(mma_atom_iters_in_copy_regs_N)
+    PRINT(MmaItersInCopyRegs{})
     PRINT(copy_iters_regs_M)
     PRINT(copy_iters_regs_N)
+    PRINT(CopyItersRegs{})
+    PRINT(MN_shape{})
     PRINT(TLShape{})
     PRINT(res)
     print("\n");
