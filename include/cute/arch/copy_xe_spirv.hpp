@@ -227,7 +227,7 @@ struct XeSubgroup2DBlockLoad {
 };
 
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockTransform {
+struct XeSubgroup2DBlockLoadTransform {
   template<typename T>
   CUTE_HOST_DEVICE
   void operator()(const void *srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -240,7 +240,7 @@ struct XeSubgroup2DBlockTransform {
 };
 
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockTranspose {
+struct XeSubgroup2DBlockLoadTranspose {
   template<typename T>
   CUTE_HOST_DEVICE
   void operator()(const void *srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -288,7 +288,7 @@ struct XeSubgroup2DBlockLoad<1, 16, 32, 2> {
 };
 
 template<>
-struct XeSubgroup2DBlockTranspose<4, 2, 16, 1> {
+struct XeSubgroup2DBlockLoadTranspose<4, 2, 16, 1> {
   template<typename T>
   CUTE_HOST_DEVICE
   void operator()(const void *srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -299,7 +299,7 @@ struct XeSubgroup2DBlockTranspose<4, 2, 16, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTranspose<4, 4, 16, 1> {
+struct XeSubgroup2DBlockLoadTranspose<4, 4, 16, 1> {
   template<typename T>
   CUTE_HOST_DEVICE void
   operator()(const void *srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -309,6 +309,7 @@ struct XeSubgroup2DBlockTranspose<4, 4, 16, 1> {
   }
 };
 
+// TODO(Codeplay): Remove these Prefetch specializations once spirv prefetch performance bug is fixed.
 template<>
 struct XeSubgroup2DBlockPrefetch<1, 32, 1, 1> {
   CUTE_HOST_DEVICE void

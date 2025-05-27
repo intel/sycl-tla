@@ -73,11 +73,11 @@ struct XeSubgroup2DBlockLoad {
   static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
 };
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockTransform {
+struct XeSubgroup2DBlockLoadTransform {
   static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
 };
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockTranspose {
+struct XeSubgroup2DBlockLoadTranspose {
   static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
 };
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
@@ -604,7 +604,7 @@ struct XeSubgroup2DBlockLoad<1, 32, 32, 2> {
 };
 
 template<>
-struct XeSubgroup2DBlockTransform<1, 16, 32, 1> {
+struct XeSubgroup2DBlockLoadTransform<1, 16, 32, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -615,7 +615,7 @@ struct XeSubgroup2DBlockTransform<1, 16, 32, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTransform<1, 16, 32, 2> {
+struct XeSubgroup2DBlockLoadTransform<1, 16, 32, 2> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -626,7 +626,7 @@ struct XeSubgroup2DBlockTransform<1, 16, 32, 2> {
 };
 
 template<>
-struct XeSubgroup2DBlockTransform<1, 16, 32, 4> {
+struct XeSubgroup2DBlockLoadTransform<1, 16, 32, 4> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -914,7 +914,7 @@ struct XeSubgroup2DBlockLoad<2, 16, 32, 2> {
 };
 
 template<>
-struct XeSubgroup2DBlockTransform<2, 16, 16, 1> {
+struct XeSubgroup2DBlockLoadTransform<2, 16, 16, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -925,7 +925,7 @@ struct XeSubgroup2DBlockTransform<2, 16, 16, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTransform<2, 16, 32, 1> {
+struct XeSubgroup2DBlockLoadTransform<2, 16, 32, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -936,7 +936,7 @@ struct XeSubgroup2DBlockTransform<2, 16, 32, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTransform<2, 16, 16, 2> {
+struct XeSubgroup2DBlockLoadTransform<2, 16, 16, 2> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -947,7 +947,7 @@ struct XeSubgroup2DBlockTransform<2, 16, 16, 2> {
 };
 
 template<>
-struct XeSubgroup2DBlockTransform<2, 16, 32, 2> {
+struct XeSubgroup2DBlockLoadTransform<2, 16, 32, 2> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -1290,7 +1290,7 @@ struct XeSubgroup2DBlockLoad<4, 8, 32, 2> {
 };
 
 template<>
-struct XeSubgroup2DBlockTranspose<4, 1, 16, 1> {
+struct XeSubgroup2DBlockLoadTranspose<4, 1, 16, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -1301,7 +1301,7 @@ struct XeSubgroup2DBlockTranspose<4, 1, 16, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTranspose<4, 2, 16, 1> {
+struct XeSubgroup2DBlockLoadTranspose<4, 2, 16, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -1312,7 +1312,7 @@ struct XeSubgroup2DBlockTranspose<4, 2, 16, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTranspose<4, 4, 16, 1> {
+struct XeSubgroup2DBlockLoadTranspose<4, 4, 16, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -1323,7 +1323,7 @@ struct XeSubgroup2DBlockTranspose<4, 4, 16, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTranspose<4, 8, 16, 1> {
+struct XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -1388,7 +1388,7 @@ struct XeSubgroup2DBlockPrefetch<4, 8, 16, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTranspose<8, 1, 8, 1> {
+struct XeSubgroup2DBlockLoadTranspose<8, 1, 8, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -1399,7 +1399,7 @@ struct XeSubgroup2DBlockTranspose<8, 1, 8, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTranspose<8, 2, 8, 1> {
+struct XeSubgroup2DBlockLoadTranspose<8, 2, 8, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
@@ -1410,7 +1410,7 @@ struct XeSubgroup2DBlockTranspose<8, 2, 8, 1> {
 };
 
 template<>
-struct XeSubgroup2DBlockTranspose<8, 4, 8, 1> {
+struct XeSubgroup2DBlockLoadTranspose<8, 4, 8, 1> {
     template<typename T>
     CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,

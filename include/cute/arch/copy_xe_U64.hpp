@@ -44,7 +44,7 @@ struct XE_2D_U64x8x1_LD_T {
                                     T *dst) {
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 8, "Expected T to have size 8");
-    detail::XeSubgroup2DBlockTranspose<8, 1, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
+    detail::XeSubgroup2DBlockLoadTranspose<8, 1, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
@@ -60,7 +60,7 @@ struct XE_2D_U64x8x2_LD_T {
                                     T *dst) {
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 8, "Expected T to have size 8");
-    detail::XeSubgroup2DBlockTranspose<8, 2, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
+    detail::XeSubgroup2DBlockLoadTranspose<8, 2, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
@@ -76,7 +76,7 @@ struct XE_2D_U64x8x4_LD_T {
                                     T *dst) {
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 8, "Expected T to have size 8");
-    detail::XeSubgroup2DBlockTranspose<8, 4, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
+    detail::XeSubgroup2DBlockLoadTranspose<8, 4, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
