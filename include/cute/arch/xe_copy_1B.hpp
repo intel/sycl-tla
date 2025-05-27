@@ -164,6 +164,9 @@ SYCL_DEVICE_BUILTIN(
   cute::intel::uchar32 __builtin_IB_subgroup_block_read_flat_u8_m32k16v1(
       intptr_t baseoffset, int width_minus_one, int height_minus_one,
       int pitch_minus_one, cute::intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m32k32v1(
+    intptr_t baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
 
 #undef SYCL_DEVICE_BUILTIN
 
@@ -478,6 +481,8 @@ struct XE_2D_U8x16x32_LD_N {
 
 struct XE_2D_U8x32x32_LD_N {
   using BlockShape = Shape<_32, _32>;
+  static constexpr bool is_transpose = true;
+  using inst_dtype = uint8_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -488,6 +493,7 @@ struct XE_2D_U8x32x32_LD_N {
     *reinterpret_cast<intel::ushort32 *>(dst) =
         __builtin_IB_subgroup_block_read_flat_u8_m32k32v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
@@ -498,9 +504,20 @@ struct XE_2D_U8x32x32_LD_N {
                                       int height, int pitch,
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
-      __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
+      __builtin_IB_subgroup_block_read_prefetch_u8_m32k32v1(
           (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
           CacheControl::kL1C_L3C);
+          // #define PRINT(x) print(#x ": "); print(x); print("\n");
+
+          // if (thread(63, 0)) {
+          //   PRINT((intptr_t)baseoffset);
+          //   PRINT(width);
+          //   PRINT(height);
+          //   PRINT(pitch);
+          //   PRINT(coord[0]);
+          //   PRINT(coord[1]);
+          // }
+
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");

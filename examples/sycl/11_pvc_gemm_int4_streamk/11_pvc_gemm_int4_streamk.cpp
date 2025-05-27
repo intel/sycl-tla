@@ -602,7 +602,7 @@ void run_int4(Options const& options) {
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
                                     Layout<Shape<Int<thread_m>, Int<thread_n>, _1>, Stride<Int<thread_n>, _1, _0>>>::TiledMMA;
 
-  constexpr int PipelineStages = 4;
+  constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
@@ -677,25 +677,25 @@ int main(int argc, const char** argv)
     return -1;
   }
 
-  options.m = 32;
-  options.n = 4096;
-  options.k = 4096;
+  // options.m = 32;
+  // options.n = 4096;
+  // options.k = 4096;
+  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 32, 128, 32, 1, 4>(options);
+
+  // options.m = 32;
+  // options.n = 14336;
+  // options.k = 4096;
   run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 32, 128, 32, 1, 4>(options);
 
-  options.m = 32;
-  options.n = 14336;
-  options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 32, 128, 32, 1, 4>(options);
+  // options.m = 48;
+  // options.n = 4096;
+  // options.k = 4096;
+  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4>(options);
 
-  options.m = 48;
-  options.n = 4096;
-  options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4>(options);
-
-  options.m = 48;
-  options.n = 14336;
-  options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4>(options);
+  // options.m = 48;
+  // options.n = 14336;
+  // options.k = 4096;
+  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4>(options);
 
   return 0;
 }
