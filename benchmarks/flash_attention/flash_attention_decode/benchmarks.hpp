@@ -34,41 +34,45 @@
 #include "benchmark_runner.hpp"
 #include "fmha_decode_configuration.hpp"
 
+template <int KVTile, int NumSGs>
 struct Shape_h64 {
-  using ShapeQK = Shape<_8, _512, _64>;
-  using ShapePV = Shape<_8, _32, _512>;
-  using ShapeOutput = Shape<_8, _64, _512>;
-  using SubgroupLayout = Layout<Shape<_8, _1, _1>>;
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _64, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
 };
 
+template <int KVTile, int NumSGs>
 struct Shape_h96 {
-  using ShapeQK = Shape<_8, _1024, _64>;
-  using ShapePV = Shape<_8, _32, _1024>;
-  using ShapeOutput = Shape<_8, _96, _1024>;
-  using SubgroupLayout = Layout<Shape<_16, _1, _1>>;
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _96, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
 };
 
+template <int KVTile, int NumSGs>
 struct Shape_h128 {
-  using ShapeQK = Shape<_8, _1024, _64>;
-  using ShapePV = Shape<_8, _32, _1024>;
-  using ShapeOutput = Shape<_8, _128, _1024>;
-  using SubgroupLayout = Layout<Shape<_16, _1, _1>>;
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _128, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
 };
 
+template <int KVTile, int NumSGs>
 struct Shape_h192 {
-  using ShapeQK = Shape<_8, _1024, _64>;
-  using ShapePV = Shape<_8, _32, _1024>;
-  using ShapeOutput = Shape<_8, _192, _1024>;
-  using SubgroupLayout = Layout<Shape<_16, _1, _1>>;
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _192, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
 };
 
 template<class QKVType, bool Causal, bool VarLen, class TileShapeConfig>
 struct FMHADecodeConfigGen {
 
-using GmemTiledCopyQ = cute::XE_2D_U16x8x32_LD_N;
+using GmemTiledCopyQ = cute::XE_2D_U16x1x16_LD_N;
 using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
 using GmemTiledCopyV = cute::XE_2D_U16x32x32_LD_V;
-using GmemTiledCopyO = cute::XE_2D_U32x8x16_ST_N;
+using GmemTiledCopyO = cute::XE_2D_U32x1x16_ST_N;
 
 using type = cutlass::flash_attention::FMHADecodeConfig<
       QKVType, float, float, GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV,
@@ -77,109 +81,213 @@ using type = cutlass::flash_attention::FMHADecodeConfig<
       Causal, VarLen>;
 };
 
-using PvcFMHADecodeBF16BF16FP32_RCR_h64_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, false, Shape_h64>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h96_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, false, Shape_h96>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h128_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, false, Shape_h128>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h192_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, false, Shape_h192>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h64_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, true, Shape_h64>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h96_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, true, Shape_h96>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h128_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, true, Shape_h128>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h192_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, true, Shape_h192>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, false, Shape_h64<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, false, Shape_h96<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, false, Shape_h128<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, false, Shape_h192<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, true, Shape_h64<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, true, Shape_h96<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, true, Shape_h128<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, true, Shape_h192<512, 8>>::type;
 
-using PvcFMHADecodeBF16BF16FP32_RCR_h64_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, false, Shape_h64>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h96_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, false, Shape_h96>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h128_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, false, Shape_h128>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h192_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, false, Shape_h192>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h64_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, true, Shape_h64>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h96_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, true, Shape_h96>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h128_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, true, Shape_h128>::type;
-using PvcFMHADecodeBF16BF16FP32_RCR_h192_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, true, Shape_h192>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, false, Shape_h64<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, false, Shape_h96<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, false, Shape_h128<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, false, Shape_h192<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, true, Shape_h64<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  true, true, Shape_h96<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, true, Shape_h128<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, true, true, Shape_h192<1024, 16>>::type;
 
-using PvcFMHADecodeFP16FP16FP32_RCR_h64_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  true, false, Shape_h64>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h96_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  true, false, Shape_h96>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h128_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, true, false, Shape_h128>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h192_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, true, false, Shape_h192>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h64_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  true, true, Shape_h64>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h96_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  true, true, Shape_h96>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h128_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t, true, true, Shape_h128>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h192_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t, true, true, Shape_h192>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, false, Shape_h64<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, false, Shape_h96<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, false, Shape_h128<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, false, Shape_h192<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, true, Shape_h64<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, true, Shape_h96<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, true, Shape_h128<512, 8>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, true, Shape_h192<512, 8>>::type;
 
-using PvcFMHADecodeFP16FP16FP32_RCR_h64_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  false, false, Shape_h64>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h96_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  false, false, Shape_h96>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h128_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, false, false, Shape_h128>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h192_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, false, false, Shape_h192>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h64_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  false, true, Shape_h64>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h96_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  false, true, Shape_h96>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h128_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t, false, true, Shape_h128>::type;
-using PvcFMHADecodeFP16FP16FP32_RCR_h192_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t, false, true, Shape_h192>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, false, Shape_h64<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, false, Shape_h96<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, false, Shape_h128<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, false, Shape_h192<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, true, Shape_h64<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t,  false, true, Shape_h96<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, true, Shape_h128<1024, 16>>::type;
+using PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, false, true, Shape_h192<1024, 16>>::type;
+
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  true, false, Shape_h64<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  true, false, Shape_h96<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, true, false, Shape_h128<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, true, false, Shape_h192<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  true, true, Shape_h64<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  true, true, Shape_h96<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t, true, true, Shape_h128<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t, true, true, Shape_h192<512, 8>>::type;
+
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  true, false, Shape_h64<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  true, false, Shape_h96<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, true, false, Shape_h128<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, true, false, Shape_h192<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  true, true, Shape_h64<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  true, true, Shape_h96<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t, true, true, Shape_h128<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t, true, true, Shape_h192<1024, 16>>::type;
+
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  false, false, Shape_h64<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  false, false, Shape_h96<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, false, false, Shape_h128<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, false, false, Shape_h192<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  false, true, Shape_h64<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  false, true, Shape_h96<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t, false, true, Shape_h128<512, 8>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t, false, true, Shape_h192<512, 8>>::type;
+
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  false, false, Shape_h64<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t,  false, false, Shape_h96<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, false, false, Shape_h128<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, false, false, Shape_h192<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  false, true, Shape_h64<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t,  false, true, Shape_h96<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t, false, true, Shape_h128<1024, 16>>::type;
+using PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t, false, true, Shape_h192<1024, 16>>::type;
 
 
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h64_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h64_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h96_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h96_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h128_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h128_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h192_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h192_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h64_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h64_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h96_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h96_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h128_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h128_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h192_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h192_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_NonCausal_FixedLen);
 
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h64_Causal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h64_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h96_Causal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h96_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h128_Causal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h128_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h192_Causal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h192_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h64_Causal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h64_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h96_Causal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h96_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h128_Causal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h128_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h192_Causal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h192_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_NonCausal_FixedLen);
+
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_NonCausal_VarLen);
+
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_NonCausal_VarLen);
 
 static void register_flash_attention_decode_benchmarks() {
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h64_Causal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h64_NonCausal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h96_Causal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h96_NonCausal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h128_Causal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h128_NonCausal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h192_Causal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h192_NonCausal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h64_Causal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h64_NonCausal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h96_Causal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h96_NonCausal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h128_Causal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h128_NonCausal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h192_Causal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h192_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_NonCausal_FixedLen);
 
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h64_Causal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h64_NonCausal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h96_Causal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h96_NonCausal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h128_Causal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h128_NonCausal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h192_Causal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_h192_NonCausal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h64_Causal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h64_NonCausal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h96_Causal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h96_NonCausal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h128_Causal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h128_NonCausal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h192_Causal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_h192_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h64_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h96_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h128_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile512_h192_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h64_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h96_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h128_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile512_h192_NonCausal_VarLen);
+
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_NonCausal_FixedLen);
+
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h64_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h96_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h128_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeBF16BF16FP32_RCR_KVTile1024_h192_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h64_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h96_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h128_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(PvcFMHADecodeFP16FP16FP32_RCR_KVTile1024_h192_NonCausal_VarLen);
 }

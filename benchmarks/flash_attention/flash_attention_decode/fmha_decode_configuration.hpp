@@ -39,11 +39,11 @@ template<typename DispatchPolicy, typename input, typename output> struct MMAOP 
 };
 
 template <typename DispatchPolicy> struct MMAOP <DispatchPolicy, bfloat16_t, float> {
-    using TYPE = cute::XE_8x16x16_F32BF16BF16F32_TT;
+    using TYPE = cute::XE_1x16x16_F32BF16BF16F32_TT;
 };
 
 template <typename DispatchPolicy> struct MMAOP <DispatchPolicy, half_t, float> {
-    using TYPE = cute::XE_8x16x16_F32F16F16F32_TT;
+    using TYPE = cute::XE_1x16x16_F32F16F16F32_TT;
 };
 
 template <typename ElementInputType_, typename ElementAccumulatorType_, typename ElementOutputType_,

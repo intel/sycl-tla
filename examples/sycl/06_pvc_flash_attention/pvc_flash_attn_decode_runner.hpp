@@ -602,6 +602,12 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
     // Verify that the result is correct
     bool use_kv_cache = options.seq_len_kv_cache > 0;
+    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
+    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+
+    if (!passed) {
+      return cutlass::Status::kErrorInternal;
+    }
 
     if (options.iterations > 0) {
       GPU_Clock timer;
@@ -635,20 +641,13 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
       printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
     }
 
-    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
-
-    if (!passed) {
-      return cutlass::Status::kErrorInternal;
-    }
-
     return cutlass::Status::kSuccess;
   }
 };
 
-template <bool Causal, typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout> struct FMHAConfig {
+template <bool Causal, typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, bool isVarLen> struct FMHAConfig {
 
-  template <bool isVarLen, class Scheduler>
+  template <class Scheduler = cutlass::flash_attention::FlashDecodeIndividualScheduler>
   static int run(const Options &options) {
     //
     // Run examples
@@ -670,11 +669,11 @@ template <bool Causal, typename TileShapeQK, typename TileShapePV, typename Tile
     using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
     using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-    using MMAOperation = XE_8x16x16_F32BF16BF16F32_TT;
-    using GmemTiledCopyQ = XE_2D_U16x8x32_LD_N;
+    using MMAOperation = XE_1x16x16_F32BF16BF16F32_TT;
+    using GmemTiledCopyQ = XE_2D_U16x1x16_LD_N;
     using GmemTiledCopyK = XE_2D_U16x16x16_LD_T;
     using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
-    using GmemTiledCopyStore = XE_2D_U32x8x16_ST_N;
+    using GmemTiledCopyStore = XE_2D_U32x1x16_ST_N;
     using CollectiveEpilogue = cutlass::flash_attention::collective::FlashDecodeEpilogue<
         EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>,
         ElementOutput, GmemTiledCopyStore>;
@@ -699,13 +698,5 @@ template <bool Causal, typename TileShapeQK, typename TileShapePV, typename Tile
 
     CUTLASS_CHECK(runner.run(options, hw_info));
     return 0;    
-  }
-
-  static int run(const Options &options) {
-    if(options.varlen) {
-      return run<true, cutlass::flash_attention::FlashDecodeIndividualScheduler>(options);
-    } else {
-      return run<false, cutlass::flash_attention::FlashDecodeIndividualScheduler>(options);
-    }
   }
 };

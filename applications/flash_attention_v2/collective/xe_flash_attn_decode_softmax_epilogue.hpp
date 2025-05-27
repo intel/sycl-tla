@@ -170,7 +170,7 @@ public:
     constexpr int FragsNS = get<2>(FragAccLayout{}.shape());
     constexpr int FragsNOut = size(select<2,3>(FragOutLayout{}.shape()));
     Element max_prev = max_val;
-    static_assert(Vec * FragsM == 8, "No. of attention rows per subgroup should not exceed 1 MMA Atom worth of rows.");
+    static_assert(Vec * FragsM == 1, "No. of attention rows per subgroup should not exceed 1 MMA Atom worth of rows.");
 
     reduce_max<Num_SGs, Vec, FragsM, FragsNS>(frag_s, shmem_tensor_max, max_val);
 

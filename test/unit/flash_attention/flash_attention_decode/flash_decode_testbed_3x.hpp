@@ -61,6 +61,40 @@
 namespace test {
 namespace flash_attention {
 
+using namespace cute;
+
+template <int KVTile, int NumSGs>
+struct Shape_h64 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _64, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template <int KVTile, int NumSGs>
+struct Shape_h96 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _96, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template <int KVTile, int NumSGs>
+struct Shape_h128 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _128, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template <int KVTile, int NumSGs>
+struct Shape_h192 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _192, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
 template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
          typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
          typename MMAOperation, bool HasCausalMask, bool isVarLen>
@@ -86,10 +120,10 @@ struct XE_Flash_Attention_Decode {
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-  using GmemTiledCopyQ = cute::XE_2D_U16x8x32_LD_N;
+  using GmemTiledCopyQ = cute::XE_2D_U16x1x16_LD_N;
   using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
   using GmemTiledCopyV = cute::XE_2D_U16x32x32_LD_V;
-  using GmemTiledCopyStore = cute::XE_2D_U32x8x16_ST_N;
+  using GmemTiledCopyStore = cute::XE_2D_U32x1x16_ST_N;
   using CollectiveEpilogue = cutlass::flash_attention::collective::FlashDecodeEpilogue<
         EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>,
         ElementOutput, GmemTiledCopyStore>;

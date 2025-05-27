@@ -296,8 +296,8 @@ struct XE_2D_LD_Unpack {
     using dtype = typename Copy_Atom<Traits_LD_t, CA_Args...>::ValType;
 
     static_assert(detail::has_prefetch<CopyOp>);
-    // static_assert(size(SLayout{}) * sizeof_bits_v<dtype> == size<1>(typename Traits_LD_t::SrcLayout{}),
-    //               "Src tensor size does not match copy atom for prefetch size");
+    static_assert(size(SLayout{}) * sizeof_bits_v<dtype> == size<1>(typename Traits_LD_t::SrcLayout{}),
+                  "Src tensor size does not match copy atom for prefetch size");
 
     dtype *base_addr = (dtype *)atom.base_ptr;
 
@@ -423,12 +423,14 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
   auto copy_size_M = size<0>(thread_copy_shape);
   auto copy_size_N = size<1>(thread_copy_shape);
 
-  static_assert(copy_size_M >= mma_atom_size_M, "MMA atom larger than copy atom is not currently supported.");
-  static_assert(copy_size_N >= mma_atom_size_N, "MMA atom larger than copy atom is not currently supported.");
-  constexpr int mma_atom_iters_in_copy_M = copy_size_M / mma_atom_size_M;
-  constexpr int mma_atom_iters_in_copy_N = copy_size_N / mma_atom_size_N;
+  constexpr int mma_atom_iters_in_copy_M = copy_size_M > mma_atom_size_M ? copy_size_M / mma_atom_size_M : 1;
+  constexpr int mma_atom_iters_in_copy_N = copy_size_N > mma_atom_size_N ? copy_size_N / mma_atom_size_N : 1;
   constexpr int copy_iters_M = total_mma_atom_iters_M / mma_atom_iters_in_copy_M;
   constexpr int copy_iters_N = total_mma_atom_iters_N / mma_atom_iters_in_copy_N;
+
+  // This case would need to rearrange data in registers between copy and mma calls
+  static_assert(copy_size_M >= mma_atom_size_M || copy_size_N <= mma_atom_size_N, 
+    "It is not possible to have MMA atom be bigger than copy atom in one dimension and smaller in other dimension!");
 
   auto order = std::conditional_t<TiledCopy::is_convention_MN,
                                   Step<Step<_0, _1>, Step<_2, _4>, Step<_3, _5>>,
@@ -833,11 +835,12 @@ struct Copy_Traits_<XE_2D_U16x1x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x1x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_16>,
-                           Stride< _0, _1>>;
+
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _1>>,
+                           Stride< _0,Stride< _1,_256>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,_16>,
-                           Stride<_16, _1>>;
+  using DstLayout = Layout<Shape <_16,Shape <_16,  _1>>,
+                           Stride<_16,Stride< _1,_256>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 

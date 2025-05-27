@@ -246,7 +246,7 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     PRINT(tQrQ);
     PRINT(tQgQ);
 
-    print("=====================  K :\n");
+     print("=====================  K :\n");
     PRINT(gK);
     PRINT(tCrK);
     PRINT(tCgK);

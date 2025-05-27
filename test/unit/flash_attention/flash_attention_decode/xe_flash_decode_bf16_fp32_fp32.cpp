@@ -37,41 +37,25 @@
 
 namespace cutlass {
 
-using ShapeQK_h64 = Shape<_8, _512, _64>;
-using ShapePV_h64 = Shape<_8, _32, _512>;
-using ShapeOutput_h64 = Shape<_8, _64, _512>;
+using MMAOperationBF16 = XE_1x16x16_F32BF16BF16F32_TT;
 
-using ShapeQK_h96 = Shape<_8, _1024, _64>;
-using ShapePV_h96 = Shape<_8, _32, _1024>;
-using ShapeOutput_h96 = Shape<_8, _96, _1024>;
-
-using ShapeQK_h128 = Shape<_8, _1024, _64>;
-using ShapePV_h128 = Shape<_8, _32, _1024>;
-using ShapeOutput_h128 = Shape<_8, _128, _1024>;
-
-using ShapeQK_h192 = Shape<_8, _1024, _64>;
-using ShapePV_h192 = Shape<_8, _32, _1024>;
-using ShapeOutput_h192 = Shape<_8, _192, _1024>;
-
-using SubgroupLayout_h64 = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
-using SubgroupLayout_h96 = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
-using SubgroupLayout_h128 = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
-using SubgroupLayout_h192 = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
-
-using MMAOperationBF16 = XE_8x16x16_F32BF16BF16F32_TT;
-
-#define EXECUTE_TEST_BF16(NAME, NAME_CAUSAL_VARLEN, DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, MMAOperation, CAUSAL, VARLEN, HEADSIZE) \
+#define EXECUTE_TEST_BF16(NAME, NAME_CAUSAL_VARLEN, DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, MMAOperation, CAUSAL, VARLEN, HEADSIZE, KVTILE, NUMSG) \
 TEST(NAME##HEADSIZE, NAME_CAUSAL_VARLEN) { \
-  using Kernel = test::flash_attention::XE_Flash_Attention_Decode<DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, ShapeQK_h##HEADSIZE, ShapePV_h##HEADSIZE, \
-                                            ShapeOutput_h##HEADSIZE, SubgroupLayout_h##HEADSIZE, MMAOperation, CAUSAL, VARLEN>::Kernel; \
+  using Shape_h = test::flash_attention::Shape_h##HEADSIZE<KVTILE, NUMSG>; \
+  using Kernel = test::flash_attention::XE_Flash_Attention_Decode<DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, typename Shape_h::ShapeQK, typename Shape_h::ShapePV, \
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, CAUSAL, VARLEN>::Kernel; \
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEADSIZE)); \
 }
 
 #define EXECUTE_TEST_HEAD_SIZE_BF16(NAME, CAUSAL, VARLEN) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 64) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 96) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 128) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 192)
+EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 64, 512, 8) \
+EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 64, 1024, 16) \
+EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 96, 512, 8) \
+EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 96, 1024, 16) \
+EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 128, 512, 8) \
+EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 128, 1024, 16) \
+EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 192, 512, 8) \
+EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 192, 1024, 16)
 
 
 EXECUTE_TEST_HEAD_SIZE_BF16(causal, true, false)
