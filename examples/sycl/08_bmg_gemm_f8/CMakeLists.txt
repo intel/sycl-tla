@@ -34,8 +34,3 @@ cutlass_example_add_executable(
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
 )
-
-cutlass_example_add_executable(
-  06_pvc_prefill_attention_cachedKV
-  06_pvc_prefill_attention_prefill_cachedKV.cpp
-)
