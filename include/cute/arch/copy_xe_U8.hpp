@@ -223,7 +223,10 @@ struct XE_2D_U8x32x32_LD_N {
                                     T *dst) {
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
-    detail::XeSubgroup2DBlockLoad<1, 16, 32, 2>{}(baseoffset, width, height, pitch, coord, dst);
+    // detail::XeSubgroup2DBlockLoad<1, 16, 32, 2>{}(baseoffset, width, height, pitch, coord, dst);
+    // Use the transform (VNNI) version as it provides better performance when loading the A matrix for
+    // GEMM FP8 and GEMM mixed-precision types.
+    detail::XeSubgroup2DBlockLoadTransform<1, 16, 32, 2>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
