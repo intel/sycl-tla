@@ -59,10 +59,10 @@ void verify(uint32_t m, uint32_t n, uint32_t k, atype *A, btype *B, ctype *C,
             bool row_a = true, bool row_b = true) {
   int cnt = 0;
   bool is_normal = true;
-  using accum_type = conditional_t<sizeof_bits_v<ctype> == 32, ctype, float>;
+
   for (int i = 0; i < m; i++) {
     for (int j = 0; j < n; j++) {
-      accum_type expect = accum_type(0);
+      ctype expect = ctype(0);
       for (int z = 0; z < k; z++) {
         auto a = row_a ? A[i * k + z] : A[i + z * m];
         auto b = row_b ? B[z * n + j] : B[z + j * k];
@@ -71,10 +71,15 @@ void verify(uint32_t m, uint32_t n, uint32_t k, atype *A, btype *B, ctype *C,
 
       ctype val = C[i * n + j];
 
-      if (isnormal(val) && isnormal(expect)) {
-        auto error = std::abs((expect - val) / val);
-        if (error > 0.02f) {
-          cnt++;
+      if constexpr(std::is_floating_point_v<ctype>) {
+        if (isnormal(val) && isnormal(expect)) {
+          auto error = std::abs((expect - val) / val);
+          if (error > 0.01f) {
+            cnt++;
+          }
+        } else {
+          // TODO(codeplay): Assert that at least some values are non-zero.
+          if(!(expect == 0 && val == 0)) is_normal = false;
         }
       } else {
         if (val != expect) {
