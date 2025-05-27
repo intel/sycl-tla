@@ -134,8 +134,8 @@ CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
       cute::copy(tZero_gZero(_, _, _, ii), rmem_zero);
       cute::transform(rmem_op_q, rmem_op_scaled, [] (const QuantizedElement& elt) { return ElementScale(elt); } );
       cute::transform(rmem_zero, rmem_zero_buf, [] (const ElementZero& elt) { return ElementScale(elt); } );
+      cute::transform(rmem_op_scaled, rmem_zero_buf, rmem_op_scaled, cute::minus{});
       cute::transform(rmem_op_scaled, rmem_scale, rmem_op_scaled, cute::multiplies{});
-      cute::transform(rmem_op_scaled, rmem_zero_buf, rmem_op_scaled, cute::plus{});
       cute::transform(rmem_op_scaled, rmem_op_dq, [] (const ElementScale& elt) { return DequantizedElement(elt); } );
       cute::copy(rmem_op_dq, tOpDq_gOpDq(_, _, _, ii));
     }

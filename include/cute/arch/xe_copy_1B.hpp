@@ -481,7 +481,6 @@ struct XE_2D_U8x16x32_LD_N {
 
 struct XE_2D_U8x32x32_LD_N {
   using BlockShape = Shape<_32, _32>;
-  static constexpr bool is_transpose = true;
   using inst_dtype = uint8_t;
 
   template <class T>
@@ -507,17 +506,6 @@ struct XE_2D_U8x32x32_LD_N {
       __builtin_IB_subgroup_block_read_prefetch_u8_m32k32v1(
           (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
           CacheControl::kL1C_L3C);
-          // #define PRINT(x) print(#x ": "); print(x); print("\n");
-
-          // if (thread(63, 0)) {
-          //   PRINT((intptr_t)baseoffset);
-          //   PRINT(width);
-          //   PRINT(height);
-          //   PRINT(pitch);
-          //   PRINT(coord[0]);
-          //   PRINT(coord[1]);
-          // }
-
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");

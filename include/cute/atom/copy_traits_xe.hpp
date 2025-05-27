@@ -119,7 +119,7 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
            Stride<Int<SubgroupSize * sgs_contig>,  Stride<_1, Int<SubgroupSize>>>>
   >;
 
-#define RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, CONTIG) \
+  #define RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, CONTIG) \
     using PrefetchTraits = Copy_Traits<XE_2D_U##DTYPE_SIZE##x##NON_CONTIG##x##CONTIG##_LD_N, decltype(tensor.stride())>; \
     using PrefetchAtom = Copy_Atom<PrefetchTraits, dtype>; \
     using Scalar = Int<cute::max(1, DTYPE_SIZE / dtype_size_bits)>; \
@@ -131,20 +131,9 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
                            PrefetchTilingLayout{}, \
                            PrefetchValLayout{});
 
-#define RETURN_STATEMENT_4(NON_CONTIG, DTYPE_SIZE, CONTIG) \
-    auto stensor = make_tensor( \
-        make_gmem_ptr(tensor.data()), \
-        make_layout(tensor.shape(), make_stride(size<1>(tensor.shape()), 1, 0))); \
-    using PrefetchTraits1 = Copy_Traits<XE_2D_U8x32x32_LD_N, decltype(stensor.stride())>; \
-    using PrefetchAtom1 = Copy_Atom<PrefetchTraits1, dtype>; \
-    return make_tiled_copy(PrefetchAtom1{}.with(stensor), \
-                           Layout<Shape<_4, Shape<_16, _1>>, Stride<_16, Stride<_1, _16>>>{}, \
-                           Layout<Shape<_32, _4>>{});
-
-
   #define CHOOSE_PREFETCH_FOR_TYPE(NON_CONTIG) \
     if constexpr (dtype_size_bits == 4){ \
-      RETURN_STATEMENT_4(NON_CONTIG, 16, 32); \
+      RETURN_STATEMENT(NON_CONTIG, 16, 32); \
     } else if constexpr (dtype_size_bits == 8){ \
       RETURN_STATEMENT(NON_CONTIG, 8, 64); \
     } else if constexpr (dtype_size_bits == 16){ \
@@ -307,8 +296,8 @@ struct XE_2D_LD_Unpack {
     using dtype = typename Copy_Atom<Traits_LD_t, CA_Args...>::ValType;
 
     static_assert(detail::has_prefetch<CopyOp>);
-    // static_assert(size(SLayout{}) * sizeof_bits_v<dtype> == size<1>(typename Traits_LD_t::SrcLayout{}),
-    //               "Src tensor size does not match copy atom for prefetch size");
+    static_assert(size(SLayout{}) * sizeof_bits_v<dtype> == size<1>(typename Traits_LD_t::SrcLayout{}),
+                  "Src tensor size does not match copy atom for prefetch size");
 
     dtype *base_addr = (dtype *)atom.base_ptr;
 
@@ -2304,7 +2293,6 @@ struct Copy_Traits<COPY_OP, args_t...> : Copy_Traits_<COPY_OP, args_t...>{ \
 COPY_TRAIT_LD_DEF(XE_2D_U8x1x32_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x2x32_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x4x32_LD_N)
-
 COPY_TRAIT_LD_DEF(XE_2D_U8x8x32_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x1x64_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x2x64_LD_N)

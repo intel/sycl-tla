@@ -359,11 +359,10 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < vec_size; i++) {
-          dst[i] = static_cast<_Float16>(/*(static_cast<SrcType>*/(src1 >> (src_bits * i)) & 0xf);
+          auto data = static_cast<_Float16>(/*(static_cast<SrcType>*/(src1 >> (src_bits * i)) & 0xf);
 #ifdef QUANTIZATION
 #if ALGORITHM == 0
-          dst[i] *= ts;
-          dst[i] += tz;
+          dst[i]  = (data - tz) * ts;
 #endif
 #endif
         }
