@@ -128,7 +128,6 @@ public:
 
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
-  using GmemTiledCopyScale = std::conditional_t<cute::detail::is_stride_leftmost<StrideB_>, XE_2D_U16x1x32_LD_NN, XE_2D_U16x1x32_LD_N>;  // TODO(Codeplay): generalize
 
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;
@@ -186,7 +185,10 @@ public:
   static constexpr auto SG_N = ceil_div(BLK_N, ATOM_N);
   static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
-  
+
+  static_assert(SG_N == 16 || SG_N == 32);
+  using GmemTiledCopyScale = std::conditional_t<SG_N == 16, XE_2D_U16x1x16_LD_N, XE_2D_U16x1x32_LD_N>;
+
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
