@@ -63,7 +63,7 @@ namespace flash_attention {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
-         typename TileShapeQK, typename TileShapePV, typename TileShapeOutPut, typename SubgroupLayout, 
+         typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
          typename MMAOperation, bool HasCausalMask, bool isVarLen, int PipelineStages>
 struct XE_Flash_Attention_Prefill_CachedKV {
   using LayoutQ = cutlass::layout::RowMajor;
@@ -91,7 +91,7 @@ struct XE_Flash_Attention_Prefill_CachedKV {
   using GmemTiledCopyV = cute::XE_2D_U16x16x32_LD_V;
   using GmemTiledCopyStore = cute::XE_2D_U32x8x16_ST_N;
   using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillCachedEpilogue<
-        EpilogueDispatchPolicy, MMAOperation, TileShapeOutPut, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
+        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
   using FlashPrefillSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<
         HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;

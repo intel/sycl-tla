@@ -651,7 +651,7 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
   }
 };
 
-template <bool Causal, typename TileShapeQK, typename TileShapePV, typename TileShapeOutPut, typename SubgroupLayout, int PipelineStages> struct FMHAConfig {
+template <bool Causal, typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, int PipelineStages> struct FMHAConfig {
 
   template <bool isVarLen, class Scheduler>
   static int run(const Options &options) {
@@ -678,7 +678,7 @@ template <bool Causal, typename TileShapeQK, typename TileShapePV, typename Tile
     using GmemTiledCopyV = XE_2D_U16x16x32_LD_V;
     using GmemTiledCopyStore = XE_2D_U32x8x16_ST_N;
     using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillCachedEpilogue<
-        EpilogueDispatchPolicy, MMAOperation, TileShapeOutPut, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
+        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
     using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
 

@@ -49,12 +49,12 @@ namespace collective {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class DispatchPolicy, class MMAOperation_, class TileShapeOutPut_, class SubgroupLayout_, class... Args> class FlashPrefillCachedEpilogue {
+template <class DispatchPolicy, class MMAOperation_, class TileShapeOutput_, class SubgroupLayout_, class... Args> class FlashPrefillCachedEpilogue {
   static_assert(cutlass::detail::dependent_false<DispatchPolicy>, "Could not find an epilogue specialization.");
 };
 
-template <class MMAOperation_, class TileShapeOutPut_, class SubgroupLayout_, class ElementO_, class StrideO_, class ElementLSE_, class CopyOpO_>
-class FlashPrefillCachedEpilogue<epilogue::IntelXeXMX16,  MMAOperation_, TileShapeOutPut_, SubgroupLayout_, ElementO_, StrideO_, ElementLSE_, CopyOpO_> {
+template <class MMAOperation_, class TileShapeOutput_, class SubgroupLayout_, class ElementO_, class StrideO_, class ElementLSE_, class CopyOpO_>
+class FlashPrefillCachedEpilogue<epilogue::IntelXeXMX16,  MMAOperation_, TileShapeOutput_, SubgroupLayout_, ElementO_, StrideO_, ElementLSE_, CopyOpO_> {
 public:
   //
   // Type Aliases
@@ -66,16 +66,16 @@ public:
   using ElementLSE = ElementLSE_;
   using CopyOpO = CopyOpO_;
   using SubgroupLayout = SubgroupLayout_;
-  using TileShapeOutPut = TileShapeOutPut_;
-  using TiledMmaOutput = typename TiledMMAHelper<MMA_Atom<MMAOperation_>, Layout<TileShapeOutPut>, SubgroupLayout>::TiledMMA;
+  using TileShapeOutput = TileShapeOutput_;
+  using TiledMmaOutput = typename TiledMMAHelper<MMA_Atom<MMAOperation_>, Layout<TileShapeOutput>, SubgroupLayout>::TiledMMA;
   using GmemTiledCopyO = CopyOpO;
   using ElementOutput = ElementO_;
   using ElementCompute = ElementO_;
-  using SubgroupTileShape = decltype(cute::shape_div(TileShapeOutPut{}, (SubgroupLayout{}.shape())));
+  using SubgroupTileShape = decltype(cute::shape_div(TileShapeOutput{}, (SubgroupLayout{}.shape())));
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
-  static_assert(cute::rank(TileShapeOutPut{}) == 3, "TileShapeOutPut must be rank-3: [CTA_M_QO, CTA_N_VO, CTA_K_PV]");
+  static_assert(cute::rank(TileShapeOutput{}) == 3, "TileShapeOutput must be rank-3: [CTA_M_QO, CTA_N_VO, CTA_K_PV]");
   static_assert(cute::rank(StrideO{}) == 3, "StrideO must be rank-3: [seq_len_qo, head_size_vo, batch * num_heads]");
 
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
@@ -158,9 +158,10 @@ public:
     static constexpr bool is_var_len = cutlass::fmha::collective::is_variable_length_v<tuple_element_t<2, ProblemShape>>;
   
     using FragOutLayout = typename FragOut::layout_type;
-    constexpr int Vec = get<0>(FragOutLayout{}.shape());
-    constexpr int FragsM = get<1>(FragOutLayout{}.shape());
-    constexpr int FragsN = size(select<2,3>(FragOutLayout{}.shape()));
+
+    constexpr int Vec    = shape<0>(FragOutLayout{});
+    constexpr int FragsM = shape<1>(FragOutLayout{});
+    constexpr int FragsN = size(select<2,3>(shape(FragOutLayout{})));
 
     auto g = syclcompat::get_nd_item<1>().get_sub_group();
     auto out_reg = make_tensor(static_cast<decltype(out) &&>(out).data() , Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
@@ -187,7 +188,7 @@ public:
     
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord;
     // Tile the output tensor per WG
-    Tensor g_wg_O = local_tile(mO_mnl, select<0,1>(TileShapeOutPut{}), make_coord(m_coord,n_coord,l_coord));             // (BLK_M,BLK_N,m,n,l)
+    Tensor g_wg_O = local_tile(mO_mnl, select<0,1>(TileShapeOutput{}), make_coord(m_coord,n_coord,l_coord));             // (BLK_M,BLK_N,m,n,l)
     static constexpr auto ATOM_N = get<2>(typename TiledMmaOutput::ThrLayoutVMNK{}.shape());
     auto m_sg = get_sub_group_id() / ATOM_N;
     auto n_sg = get_sub_group_id() % ATOM_N;

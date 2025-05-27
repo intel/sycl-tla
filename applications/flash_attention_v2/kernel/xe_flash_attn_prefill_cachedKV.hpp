@@ -90,7 +90,7 @@ public:
   using ElementLSE = typename CollectiveEpilogue::ElementLSE;
   using EpilogueArguments = typename CollectiveEpilogue::Arguments;
   using EpilogueParams = typename CollectiveEpilogue::Params;
-  using TileShapeOutPut = typename CollectiveEpilogue::TileShapeOutPut;
+  using TileShapeOutput = typename CollectiveEpilogue::TileShapeOutput;
   using TiledMmaOutput = typename CollectiveEpilogue::TiledMmaOutput;
 
 
@@ -114,8 +114,8 @@ public:
 
   static constexpr int QK_SG_M = CollectiveMainloop::QK_SG_M;
 
-  static constexpr int Epilogue_BLK_N = get<1>(TileShapeOutPut{});
-  static constexpr int Epilogue_BLK_K = get<2>(TileShapeOutPut{});
+  static constexpr int Epilogue_BLK_N = get<1>(TileShapeOutput{});
+  static constexpr int Epilogue_BLK_K = get<2>(TileShapeOutput{});
 
   static constexpr int PV_ATOM_M = CollectiveMainloop::PV_ATOM_M;
   static constexpr int PV_ATOM_N = CollectiveMainloop::PV_ATOM_N;
@@ -128,7 +128,7 @@ public:
   // The FragsN here used for Creation of S matrix so we use the FragsN for S shape
   static constexpr int FragsN = CollectiveMainloop::FragsNS; 
 
-  static constexpr int VSlicer = get<1>(TileShapeOutPut{})/(get<1>(TileShapePV{})* PV_ATOM_N); //ceil_div(FragsNOut,FragsNS);
+  static constexpr int VSlicer = get<1>(TileShapeOutput{})/(get<1>(TileShapePV{})* PV_ATOM_N); //ceil_div(FragsNOut,FragsNS);
   using AccumeShape =  decltype(make_shape(Int<Vec>{}, Int<FragsM>{}, get<1>(TileShapePV{})/get<1>(MmaAtomShape()), Int<VSlicer>{}));
 
   static constexpr bool is_var_len = CollectiveMainloop::is_var_len;
@@ -170,7 +170,7 @@ public:
             CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
             CollectiveSoftmaxEpilogue::to_underlying_arguments(args.softmax),
             CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace),
-            TileScheduler::to_underlying_arguments(args.problem_shape, args.hw_info, TileShapeOutPut{})};
+            TileScheduler::to_underlying_arguments(args.problem_shape, args.hw_info, TileShapeOutput{})};
   }
 
   static bool can_implement(Arguments const &args) {
@@ -248,9 +248,9 @@ public:
 
       auto [seq_len_qo, seq_len_kv, seq_len_kv_cache] = sequence_length_shape;
 
-      // Calculate the seq_len_idx (blk_m_coord * get<0>(TileShapeOutPut{})) and check if it is still
+      // Calculate the seq_len_idx (blk_m_coord * get<0>(TileShapeOutput{})) and check if it is still
       // within bounds of the actual seq_len_qo (get<0>(sequence_length_shape)).
-      if (blk_m_coord * get<0>(TileShapeOutPut{}) >= seq_len_qo) {
+      if (blk_m_coord * get<0>(TileShapeOutput{}) >= seq_len_qo) {
         continue;
       }
 
@@ -283,9 +283,9 @@ public:
 
       auto gQ = local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
       auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
-      auto gV = local_tile(mV_nk, TileShapeOutPut{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
+      auto gV = local_tile(mV_nk, TileShapeOutput{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
       auto gK_cache = local_tile(mK_cache_nk, TileShapeQK{}, make_coord(_, _, _), Step<X, _1, _1>{});
-      auto gV_cache = local_tile(mV_cache_nk, TileShapeOutPut{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
+      auto gV_cache = local_tile(mV_cache_nk, TileShapeOutput{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, sequence_length_shape, batch_coord);
       // we limit the horisontal size to two subgroup, the empirical resutls show that reading the two cacheline side by side in gives better performance and 

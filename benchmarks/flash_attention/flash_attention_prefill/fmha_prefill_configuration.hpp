@@ -47,7 +47,7 @@ namespace flash_attention{
   
 template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
           typename GmemTiledCopyQ, typename GmemTiledCopyK, typename GmemTiledCopyV, typename GmemTiledCopyO,
-          typename TileShapeQK, typename TileShapePV, typename TileShapeOutPut, typename SubgroupLayout, 
+          typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
           bool HasCausal, bool IsVarLen, int PipelineStages>
 struct FMHAPrefillConfig {
 
@@ -66,7 +66,7 @@ struct FMHAPrefillConfig {
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
   using MMAOperation = typename MMAOP<GEMMDispatchPolicy, ElementInputType,ElementAccumulator>::Type;
   using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillEpilogue<
-                                    EpilogueDispatchPolicy, MMAOperation, TileShapeOutPut, 
+                                    EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, 
                                     SubgroupLayout, ElementAccumulator, 
                                     cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
                                     GmemTiledCopyO>;
