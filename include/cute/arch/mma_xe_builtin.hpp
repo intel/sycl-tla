@@ -101,7 +101,7 @@ struct XeSubgroupMatrixMultiplyAccumulate<bfloat16_t, bfloat16_t, bfloat16_t, bf
       return intel_sub_group_bf16_bf16_matrix_mad_k16(a, b, c);
     }
 };
-  
+
 template<>
 struct XeSubgroupMatrixMultiplyAccumulate<half_t, half_t, half_t, half_t> {
     template<typename ARegisters, typename BRegisters, typename CRegisters>
@@ -110,7 +110,7 @@ struct XeSubgroupMatrixMultiplyAccumulate<half_t, half_t, half_t, half_t> {
       return intel_sub_group_f16_f16_matrix_mad_k16(a, b, c);
     }
 };
-  
+
 template<>
 struct XeSubgroupMatrixMultiplyAccumulate<int32_t, int8_t, int8_t, int32_t> {
     template<typename ARegisters, typename BRegisters, typename CRegisters>
