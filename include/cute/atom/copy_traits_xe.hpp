@@ -65,11 +65,6 @@ static constexpr bool is_stride_leftmost = std::is_same_v<_1, decltype(get<0>(T{
 template <class T>
 static constexpr bool is_stride_leftmost<T, cute::void_t<decltype(T{}.stride())>> = std::is_same_v<_1, decltype(get<0>(T{}.stride()))>;
 
-template<bool Condition, typename T>
-using conditional_reverse_t = std::conditional_t<Condition,
-                                                  decltype(cute::reverse(T{})),
-                                                  T>;
-
 // Swap the Src or Dst Layout of a Copy_Traits if the logical/memory layouts differ 
 template <bool is_convention_MN, typename LayoutIn, typename BlockShape>
 auto get_logical_layout(LayoutIn &&, BlockShape &&) {
@@ -410,6 +405,9 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
 template <class TiledCopy, class TLShape>
 CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                                                      TLShape &&fragment_top_level_shape) {
+  // Shapes are be reversed for col major case between registers and global memory, 
+  // so all variables contain in their name whether thy refer to the shape in registers or in global memory
+
   // TODO(Codeplay): reverse values in 2d (U8) MMA atoms instead
   constexpr auto mma_atom_regs_shape = cute::reverse(get<0>(TLShape{}));
   using MmaValsShapeRegs2d = std::conditional_t<TiledCopy::is_convention_MN, 
@@ -417,7 +415,9 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                                                 decltype(prepend<2>(mma_atom_regs_shape, _1{}))>;
 
   using ThreadLayout_ = Shape<Int<size(typename TiledCopy::Traits_LD_t::ThrID{})>, _1>;
-  using ThreadLayoutRegs = detail::conditional_reverse_t<TiledCopy::is_convention_MN, ThreadLayout_>;
+  using ThreadLayoutRegs = std::conditional_t<TiledCopy::is_convention_MN, 
+                                              decltype(cute::reverse(ThreadLayout_{})),
+                                              ThreadLayout_>;
   using BlockShapeRegs = typename TiledCopy::BlockShape;
   using TotalMmaAtomItersRegs = decltype(select<1,2>(TLShape{}));
 

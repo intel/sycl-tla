@@ -191,8 +191,6 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
     auto pBgB = thr_prefetch_B.partition_S(gB);
 
 #if CUTLASS_ENABLE_DEBUG_PRINTS
-#define LOG_THREAD 0
-#define LOG_GROUP 0
 #define PRINT(x) print(#x ": "); print(x); print("\n");
     if (cute::thread(LOG_THREAD, LOG_GROUP)) {
       print("======================= A: \n");
