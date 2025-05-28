@@ -202,7 +202,7 @@ struct XE_2D_LD_Unpack {
   // Assume LD_T/LD_N will be used for column/row major matrices respectively
   static constexpr bool is_transpose_copy = detail::is_transpose_load<CopyOp>;
 
-  // We need reverse some parameters becasue intel xe 2d copy intrinsic always assume the matrix use (M, N):(N, 1) - row major convention
+  // We need to reverse some parameters becasue intel xe 2d copy intrinsic always assume the matrix use (M, N):(N, 1) layout
   // M-major if we label the matrix shape (M,N,L). M-major for matrix A or C is col-major. For matrix B it is row-major.
   static constexpr bool is_tensor_M_major = detail::is_stride_leftmost<StrideOrTensor>;
 
