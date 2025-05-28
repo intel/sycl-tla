@@ -118,7 +118,7 @@ static inline ushort16 E4M3_to_FP16_chunk16(uchar16 xin) {
 }
 
 
-template<int N>
+template <int N>
 static inline void E5M2_to_FP16(cutlass::Array<uint16_t, N> const &xin, cutlass::Array<uint32_t, N> &xout) {
   // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43,
   // except that since 32-bit registers & int32 ALUs are used, convert 2 FP8 elements at a time.
@@ -146,7 +146,7 @@ static inline void E5M2_to_FP16(cutlass::Array<uint16_t, N> const &xin, cutlass:
   }
 }
 
-template<int N>
+template <int N>
 static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin, cutlass::Array<uint16_t, N> &xout) {
   // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
   CUTLASS_PRAGMA_UNROLL
