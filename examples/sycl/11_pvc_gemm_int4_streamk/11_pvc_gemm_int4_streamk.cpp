@@ -285,7 +285,11 @@ struct ExampleRunner {
     cache_dtype* mem_to = (cache_dtype*)dev_cache_block.get();
     cache_dtype* mem_from = (cache_dtype*)(dev_cache_block.get() + sizeof(cache_dtype));
 
+#ifdef COMPILER_VERSION
     q.parallel_for(sycl::nd_range<1>(l3_cache_size / sizeof(cache_dtype), 1024), [=](auto idx) {
+#else
+    q.parallel_for(sycl::nd_range<1>(l3_cache_size / sizeof(cache_dtype) / 1024, 1024), [=](auto idx) {
+#endif
       int i = idx.get_global_id();
       *mem_to += mem_from[i];
     });
@@ -541,6 +545,10 @@ struct ExampleRunner {
 
     if (options.iterations > 0) {
       for (int i = 0; i < options.iterations; ++i) {
+        if (options.flush_cache) {
+          flush_cache(l3_cache_size);
+        }
+
         GPU_Clock timer;
         timer.start();
         gemm_op.run();

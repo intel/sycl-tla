@@ -68,7 +68,7 @@ target=./examples/sycl/11_pvc_gemm_int4_streamk/11_pvc_gemm_int4_streamk
 
 cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
--DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only $1 $2 $3" \
+-DCMAKE_CXX_FLAGS=" -DCOMPILER_VERSION -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only $1 $2 $3" \
 && ninja -v $target && \
 $target --m=32 --n=14336 --k=4096 --l=1 --iterations=20
 

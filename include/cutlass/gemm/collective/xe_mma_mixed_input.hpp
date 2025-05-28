@@ -44,6 +44,45 @@
 namespace cutlass::gemm::collective {
 using namespace cute;
 /////////////////////////////////////////////////////////////////////////////////////////////////
+template <class datatype, size_t N = 32>
+struct scale_zero_copy_traits {
+  static_assert(dependent_false<datatype> && "Invalid zero point datatype"); \
+};
+
+// template<>
+// struct scale_zero_copy_traits<int4_t, 32> {
+//   using type = XE_2D_U4x1x32_LD_N;
+// };
+
+// template<>
+// struct scale_zero_copy_traits<uint4_t, 32> {
+//   using type = XE_2D_U4x1x32_LD_N;
+// };
+
+// template<>
+// struct scale_zero_copy_traits<_BitInt(4), 32> {
+//   using type = XE_2D_U4x1x32_LD_N;
+// };
+
+template<>
+struct scale_zero_copy_traits<int8_t, 16> {
+  using type = XE_2D_U8x1x16_LD_N;
+};
+
+template<>
+struct scale_zero_copy_traits<int8_t, 32> {
+  using type = XE_2D_U8x1x32_LD_N;
+};
+
+template<>
+struct scale_zero_copy_traits<_Float16, 16> {
+  using type = XE_2D_U16x1x16_LD_N;
+};
+
+template<>
+struct scale_zero_copy_traits<_Float16, 32> {
+  using type = XE_2D_U16x1x32_LD_N;
+};
 
 template <
   int Stages,
@@ -112,7 +151,7 @@ public:
   using ElementQuant = cute::conditional_t<IsATransformed, ElementA, ElementB>;
 
   static_assert(cute::is_same_v<ElementMMA, ElementScale> || cute::is_same_v<ElementScale, void>, "Quantization scale type must match MMA type.");
-  static_assert(cute::is_same_v<ElementMMA, ElementZero> || cute::is_same_v<ElementZero, void>, "Quantization zero point must match MMA type.");
+  // static_assert(cute::is_same_v<ElementMMA, ElementZero> || cute::is_same_v<ElementZero, void>, "Quantization zero point must match MMA type.");
 
   // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
   using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, ElementMMA, ElementScale>;
@@ -123,6 +162,8 @@ public:
 
   // These are always MN major, and we use the same for Scale and Zero
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
+  using StrideZero = StrideScale;
+
   using TiledMma = TiledMma_;
   using ElementAccumulator = typename TiledMma::ValTypeC;
 
@@ -187,7 +228,8 @@ public:
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
 
   static_assert(SG_N == 16 || SG_N == 32);
-  using GmemTiledCopyScale = std::conditional_t<SG_N == 16, XE_2D_U16x1x16_LD_N, XE_2D_U16x1x32_LD_N>;
+  using GmemTiledCopyScale = typename scale_zero_copy_traits<ElementScale, SG_N>::type;
+  using GmemTiledCopyZero = typename scale_zero_copy_traits<ElementZero, SG_N>::type;
 
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
@@ -209,8 +251,12 @@ public:
   using atom_load_scale = Copy_Atom<traits_load_scale, NonVoidElementScale>;
   using val_layout_load_scale = decltype(make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Scale = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
-  using Copy_Zero = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
   
+  using traits_load_zero = Copy_Traits<GmemTiledCopyZero, StrideZero>;
+  using atom_load_zero = Copy_Atom<traits_load_zero, NonVoidElementZero>;
+  using val_layout_load_zero = decltype(make_layout(shape_div(typename traits_load_zero::BlockShape{}, CopyThreadShapeRev{}))); 
+  using Copy_Zero = decltype(make_tiled_copy(atom_load_zero{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero{}));
+
   // Host side kernel arguments
   struct Arguments {
     ElementA const* ptr_A;
@@ -313,7 +359,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
     static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineScales::value_type>);
-    static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineZeros::value_type>);
+    // static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineZeros::value_type>);
     static_assert(std::is_same_v<LayoutScales, LayoutZeros>);
 
     using SrcType = typename EngineIn::value_type;
@@ -339,8 +385,6 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     auto s_tensor = make_tensor((format_type*)(raw_pointer_cast(in.data())), Shape<Int<loop_cnt / scalar>, Int<N>>{});
     auto d_tensor = make_tensor(out.data(), Shape<Int<vec_size>, Int<spilits>, Int<N>>{});
 
-#define ALGORITHM 0
-
 #ifdef DATA_CONVERT
     CUTLASS_PRAGMA_UNROLL
     for (int j = 0; j < N; j++) {
@@ -361,39 +405,15 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < vec_size; i++) {
-          auto data = static_cast<_Float16>(/*(static_cast<SrcType>*/(src1 >> (src_bits * i)) & 0xf);
+          auto data = (src1 >> (src_bits * i)) & 0xf;
 #ifdef QUANTIZATION
-#if ALGORITHM == 0
-          dst[i]  = (data - tz) * ts;
-#endif
+          dst[i]  = (static_cast<decltype(tz)>(data) - tz) * ts;
+#else
+          dst[i] = static_cast<_Float16>(data);
 #endif
         }
       }
     }
-#endif
-
-#ifdef QUANTIZATION
-#if ALGORITHM != 0
-    static constexpr auto spilits1 = 1;
-    static constexpr auto size_dk = decltype(size(out))::value / N;
-    auto tmp1 = make_tensor(out.data(), Shape<Int<size_dk/spilits1>, Int<spilits1>, Int<N>>{});
-
-    CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < N; ++i) {
-      auto ts = tCrS_input(i);
-      auto tz = tCrZ_input(i);
-      CUTLASS_PRAGMA_UNROLL
-      for (int s = 0; s < spilits1; s++) {
-        auto dst = tmp1(_, s, i);
-        // auto& dst = *reinterpret_cast<cute::intel::vector_t<_Float16, size_dk / spilits1>*>(raw_pointer_cast(tmp1(_, s, i).data()));
-        CUTLASS_PRAGMA_UNROLL
-        for (int k = 0; k < (size_dk / spilits1); ++k) {
-          dst[k] *= ts;
-          dst[k] += tz;
-        }
-      }
-    }
-#endif
 #endif
   }
 
