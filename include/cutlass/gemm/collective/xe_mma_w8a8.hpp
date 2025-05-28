@@ -143,7 +143,7 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     auto mB_nkl = make_tensor(make_gmem_ptr(args.ptr_B), make_layout(make_shape(N, K, L), args.dB));
     Copy_A tiled_copy_a{Copy_A{}.with(mA_mkl)};
     Copy_B tiled_copy_b{Copy_B{}.with(mB_nkl)};
-    
+
     return Params{tiled_copy_a, tiled_copy_b};
   }
 
@@ -176,6 +176,7 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     DstType* pDst = dst.data();
 
     constexpr int num_elements = decltype(size(src))::value;
+
     // TODO(Codeplay): Move conversion to NumericArrayConverter
     if constexpr (std::is_same_v<ElementA, float_e5m2_t>) {
       // Using something as simple as the following code surprisingly
@@ -184,12 +185,28 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       // for (int i = 0; i < num_elements; i++) {
       //   reinterpret_cast<uint16_t*>(pDst)[i] = (static_cast<uint16_t>((pSrc[i]))) << 8;
       // }
-      // The root-cause is unknown, but private memory use is seen in this case.
-      using SrcArray = cutlass::Array<uint8_t, num_elements>;
-      using DstArray = cutlass::Array<uint16_t, num_elements>;
+      // The root-cause is unknown, but private memory use is seen in that case.
+      // We're using a workaround that doesn't use private memory.
+      using src_dtype = std::conditional_t<num_elements >= 8,
+                        uint16_t,
+                        uint8_t>;
+      using dst_dtype = std::conditional_t<num_elements >= 8,
+                        uint32_t,
+                        uint16_t>;
+      using SrcArray = std::conditional_t<num_elements >= 8,
+                       cutlass::Array<src_dtype, num_elements / 2>,
+                       cutlass::Array<src_dtype, num_elements>>;
+      using DstArray = std::conditional_t<num_elements >= 8,
+                       cutlass::Array<dst_dtype, num_elements / 2>,
+                       cutlass::Array<dst_dtype, num_elements>>;
       SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc);
       DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst);
-      E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
+      if constexpr (num_elements >= 8) {
+        // convert 2 FP8 elements at a time
+        E5M2_to_FP16<num_elements / 2>(*pSrcArr, *pDstArr);
+      } else {
+        E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
+      }
     } else {
       // E4M3 -> FP16 conversion
       constexpr int chunk_size = 16;
@@ -244,16 +261,16 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
     Tensor tBrB = thr_copy_B.retile_D(tCrB);
-    
+
     // Retile global counting tensors for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
-    
+
     auto tiled_prefetch_a = cute::prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.tiled_copy_a);
     auto tiled_prefetch_b = cute::prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(mainloop.tiled_copy_b);
     auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
     auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);
-    
+
     // Partition global tile for prefetch
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);

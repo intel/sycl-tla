@@ -119,9 +119,36 @@ static inline ushort16 E4M3_to_FP16_chunk16(uchar16 xin) {
 
 
 template<int N>
+static inline void E5M2_to_FP16(cutlass::Array<uint16_t, N> const &xin, cutlass::Array<uint32_t, N> &xout) {
+  // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43,
+  // except that since 32-bit registers & int32 ALUs are used, convert 2 FP8 elements at a time.
+  CUTLASS_PRAGMA_UNROLL
+  for (int i = 0; i < N; i += 4) {
+    // Manually unroll since using CUTLASS_PRAGMA_UNROLL or
+    // #pragma unroll is not helping here with DPCPP nightly dated March 25.
+    // More recent DPCPP nightlies are currently not working with cutlass
+    uint32_t tmp0 = static_cast<uint32_t>(xin[i]);
+    uint32_t tmp1 = static_cast<uint32_t>(xin[i + 1]);
+    uint32_t tmp2 = static_cast<uint32_t>(xin[i + 2]);
+    uint32_t tmp3 = static_cast<uint32_t>(xin[i + 3]);
+    uint32_t lo0 = (tmp0 & 0x000000FF) << 8;
+    uint32_t lo1 = (tmp1 & 0x000000FF) << 8;
+    uint32_t lo2 = (tmp2 & 0x000000FF) << 8;
+    uint32_t lo3 = (tmp3 & 0x000000FF) << 8;
+    uint32_t hi0 = (tmp0 & 0x0000FF00) << 16;
+    uint32_t hi1 = (tmp1 & 0x0000FF00) << 16;
+    uint32_t hi2 = (tmp2 & 0x0000FF00) << 16;
+    uint32_t hi3 = (tmp3 & 0x0000FF00) << 16;
+    xout[i] = hi0 | lo0;
+    xout[i + 1] = hi1 | lo1;
+    xout[i + 2] = hi2 | lo2;
+    xout[i + 3] = hi3 | lo3;
+  }
+}
+
+template<int N>
 static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin, cutlass::Array<uint16_t, N> &xout) {
   // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
-  CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < N; i++) {
     xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
   }
