@@ -1723,10 +1723,7 @@ struct Copy_Traits_<XE_2D_U16x16x16_LD_V::PREFETCH, args_t...>
                            Stride<_16,Stride< _1,_256,_512>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
-
-  template <class... ArgTs>
-  Copy_Traits_(ArgTs... args)
-      : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_V::PREFETCH, args_t...>(args...) {}
+  using XE_2D_LD_Unpack<XE_2D_U32x16x8_LD_T::PREFETCH, args_t...>::XE_2D_LD_Unpack;
 };
 
 template <class... args_t>
@@ -1745,6 +1742,21 @@ struct Copy_Traits_<XE_2D_U16x32x16_LD_V, args_t...>
   template <class... ArgTs>
   Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x32x16_LD_V, args_t...>(args...) {}
+};
+
+template <class... args_t>
+struct Copy_Traits_<XE_2D_U16x32x16_LD_V::PREFETCH, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U16x32x16_LD_V::PREFETCH, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
+                           Stride< _0,Stride< _1,_256,_512>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
+                           Stride<_16,Stride< _1,_256,_512>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+  using XE_2D_LD_Unpack<XE_2D_U32x16x8_LD_T::PREFETCH, args_t...>::XE_2D_LD_Unpack;
 };
 
 template <class... args_t>
@@ -1767,6 +1779,22 @@ struct Copy_Traits_<XE_2D_U16x32x32_LD_V, args_t...>
 };
 
 template <class... args_t>
+struct Copy_Traits_<XE_2D_U16x32x32_LD_V::PREFETCH, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U16x32x32_LD_V::PREFETCH, args_t...> {
+  // Logical thread id to thread idx
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2,  _2,  _16>>,
+                           Stride<_0,Stride< _1,_512,_256,_1024>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16,Shape <_16,  _2,  _2,  _16>>,
+                           Stride<_16,Stride< _1,_512,_256,_1024>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+  using XE_2D_LD_Unpack<XE_2D_U32x16x8_LD_T::PREFETCH, args_t...>::XE_2D_LD_Unpack;
+};
+
+template <class... args_t>
 struct Copy_Traits_<XE_2D_U16x16x32_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_V, args_t...> {
   // Logical thread id to thread idx
@@ -1783,6 +1811,22 @@ struct Copy_Traits_<XE_2D_U16x16x32_LD_V, args_t...>
   template <class... ArgTs>
   Copy_Traits_(ArgTs... args)
       : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_V, args_t...>(args...) {}
+};
+
+template <class... args_t>
+struct Copy_Traits_<XE_2D_U16x16x32_LD_V::PREFETCH, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U16x16x32_LD_V::PREFETCH, args_t...> {
+  // Logical thread id to thread idx
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2,  _2,   _8>>,
+                           Stride<_0,Stride< _1,_512,_256,_1024>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16,Shape <_16,  _2,  _2,   _8>>,
+                           Stride<_16,Stride< _1,_512,_256,_1024>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+  using XE_2D_LD_Unpack<XE_2D_U32x16x8_LD_T::PREFETCH, args_t...>::XE_2D_LD_Unpack;
 };
 
 template <class... args_t>
@@ -2414,6 +2458,10 @@ COPY_TRAIT_LD_DEF(XE_2D_U16x2x32_LD_N::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U16x4x32_LD_N::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U16x8x32_LD_N::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U8x32x16_LD_V::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_V::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x32x16_LD_V::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x32_LD_V::PREFETCH)
+COPY_TRAIT_LD_DEF(XE_2D_U16x32x32_LD_V::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U32x16x8_LD_T::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_N::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_U16x32x16_LD_N::PREFETCH)
