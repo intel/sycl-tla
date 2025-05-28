@@ -175,59 +175,41 @@ public:
     // reduce sum across the whole workgroup through SLM
     // rest of the epilogue stays the same as prefill
 
-    CUTLASS_PRAGMA_UNROLL
-    for (int y = 0; y < FragsM; y++) {
-      CUTLASS_PRAGMA_UNROLL
-      for (int x = 0; x < 1; x++) {// only 1 row is valid
-        int indx = y * Vec + x;
-        auto cur_sum = reduce_over_group(sg, sum(indx), sycl::plus<>());
+    auto cur_sum = reduce_over_group(sg, sum, sycl::plus<>());
 
-        if(sg_local_id == 0) {
-          shmem_tensor_sum(indx + sg_group_id * FragsM) = cur_sum;
-        }
-      }
+    if(sg_local_id == 0) {
+      shmem_tensor_sum(sg_group_id) = cur_sum;
     }
 
     sycl::group_barrier(group);
 
-    Tensor out_reg = make_tensor<ElementOutput>(make_shape(Int<Vec>{}, Int<FragsM>{}, Int<FragsN>{}));
+    Tensor out_reg = make_tensor<ElementOutput>(make_shape(Int<1>{}, Int<1>{}, Int<FragsN>{}));
 
     // only ATOM_N subgroups are needed to do reduction across the whole workgroup
     // using SLM, and write the final output to Global Memory.
 
-    if(sg_group_id < ATOM_N) {
+    if(sg_group_id==0) {
+     
+      ElementCompute cur_sum = ElementCompute{0};
       CUTLASS_PRAGMA_UNROLL
-      for (int y = 0; y < FragsM; y++) {
+      for(int i = 0; i < ATOM_M; i++) {
+          cur_sum += shmem_tensor_sum(i);
+      }
+
+      auto cur_scale = (cur_sum == 0.0f || cur_sum != cur_sum) ? 1.0f : sycl::native::recip(cur_sum);
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int z = 0; z < FragsN; z++) {
+        const int slm_curr_idx = sg_local_id + z * SubgroupSize;
+
+        ElementOutput out_val_curr = ElementOutput{0};
         CUTLASS_PRAGMA_UNROLL
-        for (int x = 0; x < 1; x++) { // only 1 row is valid
-          int indx = y * Vec + x;
-          ElementCompute cur_sum = ElementCompute{0};
-          CUTLASS_PRAGMA_UNROLL
-          for(int i = 0; i < ATOM_M * ATOM_N; i++) {
-            if (i % ATOM_N == sg_group_id) {
-              cur_sum += shmem_tensor_sum(i * FragsM + indx);
-            }
-          }
-
-          auto cur_scale = (cur_sum == 0.0f || cur_sum != cur_sum) ? 1.0f : sycl::native::recip(cur_sum);
-
-          CUTLASS_PRAGMA_UNROLL
-          for (int z = 0; z < FragsN; z++) {
-            auto base_indx = indx + (z * FragsM);
-            const int slm_curr_idx = sg_local_id + base_indx * SubgroupSize;
-
-            ElementOutput out_val_curr = ElementOutput{0};
-            CUTLASS_PRAGMA_UNROLL
-            for(int i = 0; i < ATOM_M * ATOM_N; i++) {
-              if (i % ATOM_N == sg_group_id) {
-               auto out_val_prev = shmem_tensor_out(slm_curr_idx + i * (out_reg.size() / Vec) * SubgroupSize);
-               out_val_curr += out_val_prev;
-              }
-            }
-
-            out_reg(x, y, z) = out_val_curr * cur_scale;
-          }
+        for(int i = 0; i < ATOM_M; i++) {
+            auto out_val_prev = shmem_tensor_out(slm_curr_idx + i * (out_reg.size()) * SubgroupSize);
+            out_val_curr += out_val_prev;
         }
+
+        out_reg(0, 0, z) = out_val_curr * cur_scale;
       }
 
       // Indexing variables

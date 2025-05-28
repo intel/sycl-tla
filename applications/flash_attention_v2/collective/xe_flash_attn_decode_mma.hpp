@@ -96,9 +96,9 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
   using MmaAtom = MMA_Atom<MMAOp_>;
-  static constexpr auto ATOM_M = decltype(get<0>(SubgroupLayout{}.shape()))::value;
-  static constexpr auto ATOM_N = decltype(get<1>(SubgroupLayout{}.shape()))::value;
-  static constexpr auto ATOM_K = decltype(get<2>(SubgroupLayout{}.shape()))::value;
+  static constexpr auto ATOM_M = decltype(get<0>(SubgroupLayout{}.shape()))::value; //8
+  static constexpr auto ATOM_N = decltype(get<1>(SubgroupLayout{}.shape()))::value; //1
+  static constexpr auto ATOM_K = decltype(get<2>(SubgroupLayout{}.shape()))::value; //1
 
   using QK_Subgroup_Layout = Layout<Shape<_1, Int<ATOM_M>, _1>, Stride<_1, Int<ATOM_N>, _1>>;
   // Incorrect layout for PV used to avoid problems for 8x2 Subgroup Layout case.
@@ -120,7 +120,7 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
   // (8, 64,64)
   using SubgroupTileShapeQK = decltype(make_shape(get<0>(TileShapeQK{}), Int<get<1>(TileShapeQK{}) / ATOM_M>{}, get<2>(TileShapeQK{})));
   using FragsShapeS = decltype(cute::shape_div(take<0, 2>(SubgroupTileShapeQK{}), take<0, 2>(MmaAtomShape())));
-  static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize; // 8
+  static constexpr int Vec = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize; // 1
   static constexpr int FragsM = get<0>(FragsShapeS{}); // 1
   static constexpr int FragsNS = get<1>(FragsShapeS{}); // 4;
 

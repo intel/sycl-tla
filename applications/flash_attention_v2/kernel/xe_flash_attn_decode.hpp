@@ -315,12 +315,11 @@ public:
       CollectiveMainloop collective_mma;
 
       ElementAccumulator max_reg = ElementAccumulator{-INFINITY};
-      Tensor sum_reg = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
+      auto sum_reg = ElementAccumulator{0};
       Tensor out_reg = make_tensor<ElementAccumulator>(AccumShape{});
       clear(out_reg);
-      clear(sum_reg);
 
-      auto smem = syclcompat::local_mem<ElementAccumulator[((Int<size(AccumShape{}) / Vec + 1>{}) * Num_SGs * SubgroupSize)]>();
+      auto smem = syclcompat::local_mem<ElementAccumulator[((Int<size(AccumShape{}) + 1>{}) * Num_SGs * SubgroupSize)]>();
       Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * FragsM>{}));
 
       CUTLASS_PRAGMA_UNROLL
@@ -360,8 +359,8 @@ public:
         // required data for matrix K.
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < size<4>(pKgK); j++) {
-          is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, /* i + */ (split + 1) * QK_SG_N + kv_tile_idx, j))
-                      : prefetch(tiled_prefetch_k, pKgK(_, _, _, /* i +  */(split - kv_splits_cache + 1) * QK_SG_N + kv_tile_idx, j));
+          is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, (split + 1) * QK_SG_N + kv_tile_idx, j))
+                      : prefetch(tiled_prefetch_k, pKgK(_, _, _,(split - kv_splits_cache + 1) * QK_SG_N + kv_tile_idx, j));
         }
       }
 
@@ -383,16 +382,11 @@ public:
         if(kv_tile_idx == (required_sgs % ATOM_M) - 1) {
           int column_offset = seq_len_kv - seq_len_qo + seq_len_kv_cache;
           int col_idx = (kv_tile_idx + (kv_splits_new - 1) * ATOM_M) * QK_SG_N + thread_idx % SubgroupSize;
+          int row_idx = blk_q_coord * QK_SG_M; // Use Vec based on seq_len_qo
           CUTLASS_PRAGMA_UNROLL
           for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
-            CUTLASS_PRAGMA_UNROLL
-            for (int m = 0; m < FragsM; m++) { // 1
-              int row_idx = m * Vec + blk_q_coord * QK_SG_M; // Use Vec based on seq_len_qo
-              CUTLASS_PRAGMA_UNROLL
-              for (int row = 0; row < Vec; row++, row_idx++) { // Set this bound based on seq_len_qo
-                if (col_idx - column_offset > row_idx + seq_len_kv_cache)
-                  tSr(row, m, n) = -INFINITY;
-              }
+            if (col_idx - column_offset > row_idx + seq_len_kv_cache) {
+              tSr(0, 0, n) = -INFINITY;
             }
           }
         }
@@ -407,13 +401,13 @@ public:
       auto group = syclcompat::get_nd_item<1>().get_group();
       sycl::group_barrier(group);
 
-      Tensor shmem_out_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<(size(AccumShape{}) / Vec) * SubgroupSize * Num_SGs>{}));
+      Tensor shmem_out_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<(size(AccumShape{})) * SubgroupSize * Num_SGs>{}));
       // write output to SLM
-      int idx = (thread_idx % SubgroupSize) + (sub_group_id * out_reg.size() * SubgroupSize) / Vec;
+      int idx = (thread_idx % SubgroupSize) + (sub_group_id * out_reg.size() * SubgroupSize);
       // only the first row has actual data, rest of the rows are invalid.
       CUTLASS_PRAGMA_UNROLL
-      for(int i = 0; i < Int<size(AccumShape{}) / Vec>{}; i++) {
-        shmem_out_tensor(idx + i * SubgroupSize) = out_reg(i * Vec);
+      for(int i = 0; i < Int<size(AccumShape{})>{}; i++) {
+        shmem_out_tensor(idx + i * SubgroupSize) = out_reg(i);
       }
 
       auto epilogue_params = CollectiveEpilogue::template get_updated_copies<is_var_len>(params.epilogue, params.problem_shape, sequence_length_shape, batch_coord);
