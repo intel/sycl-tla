@@ -91,6 +91,10 @@ SYCL_DEVICE_BUILTIN(
         intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 
+SYCL_DEVICE_BUILTIN(  
+    cute::intel::uchar2 __builtin_IB_subgroup_block_read_flat_u8_m1k16v2(
+        intptr_t baseoffset, int width_minus_one, int height_minus_one,
+        int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     cute::intel::ushort2 __builtin_IB_subgroup_block_read_flat_u8_m1k32v2(
         intptr_t baseoffset, int width_minus_one, int height_minus_one,
@@ -362,8 +366,8 @@ struct XE_2D_U8x1x32_LD_N {
                                     T *dst) {
 #if defined(SYCL_INTEL_TARGET)
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
-    *reinterpret_cast<ushort *>(dst) =
-        __builtin_IB_subgroup_block_read_flat_u8_m1k32v1(
+    *reinterpret_cast<cute::intel::uchar2 *>(dst) =
+        __builtin_IB_subgroup_block_read_flat_u8_m1k16v2(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");

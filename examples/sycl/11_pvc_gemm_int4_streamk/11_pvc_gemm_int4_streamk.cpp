@@ -69,6 +69,7 @@
 #define MByte (1024 * 1024)
 
 using namespace cute;
+#define FLUSH_CACHE 1
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -77,6 +78,8 @@ enum GemmMode {
   ConvertAndScale,
   ConvertAndScaleWithZeroPoint
 };
+
+#define CACHE_CNT (2)
 
 using MmaType = _Float16;
 using QuantType = uint4_t;//_BitInt(4);
@@ -448,7 +451,13 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
 
+#if FLUSH_CACHE == 0
+    auto max_size = options.l3_cache * MByte * 8 / sizeof_bits_v<ElementB>;
+    auto b_cache_elements = max_size > K * N * L ? max_size : K * N * L;
+    block_B.reset(b_cache_elements * CACHE_CNT);
+#else
     block_B.reset(K * N * L);
+#endif
 
     block_A.reset(M * K * L);
     block_A_dq.reset(M * K * L);
@@ -462,6 +471,7 @@ struct ExampleRunner {
 
     initialize_mixed_dtype_block(block_A, block_A_dq, seed + 2023);
     initialize_mixed_dtype_block(block_B, block_B_dq, seed + 2022);
+
     initialize_block(block_C, seed + 2021);
 
     initialize_scale(block_scale, options);
@@ -543,10 +553,30 @@ struct ExampleRunner {
     std::cout << "Problem Size(mnk): " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
     printf("    --l=%d --iterations=%d --flush_cache=%d, --warmup=%d, --cache_cnt=%d, --l3_cache_size=%d\n", options.l, options.iterations, options.flush_cache, options.warmup, options.cache_cnt, l3_cache_size);
 
+    auto max_size = options.l3_cache * MByte * 8 / sizeof_bits_v<ElementB>;
+    auto b_cache_elements = max_size > options.k * options.n * options.l ? max_size : options.k * options.n * options.l;
+
     if (options.iterations > 0) {
       for (int i = 0; i < options.iterations; ++i) {
         if (options.flush_cache) {
+#if FLUSH_CACHE == 0
+          typename Gemm::GemmKernel::Arguments arguments1{
+            cutlass::gemm::GemmUniversalMode::kGemm,
+            problem_size,
+            {block_A.get(), stride_A, (const ElementB*)(((const char*)(block_B.get())) + (i % CACHE_CNT) * (b_cache_elements * sizeof_bits_v<ElementB> / 8)),
+            stride_B, block_scale.get(),
+            stride_S, options.g, block_zero.get()},
+            {{options.alpha, options.beta},
+            block_C.get(),
+            stride_C,
+            block_D.get(),
+            stride_D},
+            hw_info};
+          CUTLASS_CHECK(gemm_op.initialize(arguments1, workspace.get()));
+
+#else
           flush_cache(l3_cache_size);
+#endif
         }
 
         GPU_Clock timer;
@@ -595,7 +625,7 @@ void run_int4(Options const& options) {
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using ElementZero = MmaType;
+  using ElementZero = int8_t;
   using ElementScale = MmaType;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
@@ -688,7 +718,7 @@ int main(int argc, const char** argv)
   options.m = 32;
   options.n = 4096;
   options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4>(options);
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4>(options);
 
   options.m = 32;
   options.n = 14336;
@@ -703,7 +733,7 @@ int main(int argc, const char** argv)
   options.m = 48;
   options.n = 14336;
   options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 64, 128, 32, 1, 4>(options);
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4>(options);
 
   return 0;
 }

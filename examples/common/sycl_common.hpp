@@ -95,10 +95,11 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
 
   std::uniform_int_distribution<> dist(0, 7);
 
+  auto size = block_device_dq.size();
   if constexpr (cute::sizeof_bits_v<T1> >= 8) {
-    auto block_host = std::vector<T1>(block_device.size());
-    auto block_host_dq = std::vector<T2>(block_device.size());
-    for (int i = 0; i < block_host.size(); ++i) {
+    auto block_host = std::vector<T1>(size);
+    auto block_host_dq = std::vector<T2>(size);
+    for (int i = 0; i < size; ++i) {
       block_host[i] = static_cast<T1>(dist(rng));
       block_host_dq[i] = static_cast<T2>(block_host[i]);
     }
@@ -118,7 +119,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
 
     static constexpr auto elements_per_byte = cute::sizeof_bits_v<int8_t> / cute::sizeof_bits_v<T1>;
 
-    int loop_cnt = block_device.size() / array_size;
+    int loop_cnt = size / array_size;
     for (int i = 0; i < loop_cnt; i++) {
       cutlass::device_memory::copy_to_device(block_device.get() + (i * array_size) / elements_per_byte,
                                     raw_pointer_cast(block_host.begin()),
@@ -128,7 +129,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
                                     array_size);
     }
 
-    auto tail_size = block_device.size() % array_size;
+    auto tail_size = size % array_size;
     if (tail_size) {
       cutlass::device_memory::copy_to_device(block_device.get() + (loop_cnt * array_size) / elements_per_byte,
                                     raw_pointer_cast(block_host.begin()),

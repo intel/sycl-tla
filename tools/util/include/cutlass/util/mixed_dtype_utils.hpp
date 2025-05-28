@@ -117,8 +117,9 @@ CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
   cute::Tensor rmem_scale = cute::make_fragment_like(tScale_gScale(_, _, _, 0));
   cute::Tensor rmem_zero = cute::make_fragment_like(tZero_gZero(_, _, _, 0));
   cute::Tensor rmem_op_dq = cute::make_fragment_like(tOpDq_gOpDq(_, _, _, 0));
-  cute::Tensor rmem_op_scaled = cute::make_fragment_like<ElementScale>(rmem_op_dq);
-  cute::Tensor rmem_zero_buf = cute::make_fragment_like<ElementScale>(rmem_zero);
+  cute::Tensor rmem_op_scaled = cute::make_fragment_like<ElementZero>(rmem_op_dq);
+  cute::Tensor rmem_zero_buf = cute::make_fragment_like<ElementZero>(rmem_zero);
+  cute::Tensor rmem_op_scaled1 = cute::make_fragment_like<ElementScale>(rmem_op_dq);
 
   cute::Tensor pred_id = cute::make_identity_tensor(shape(operand_layout));
   auto pred_blk_tile = cute::local_tile(pred_id, blk_shape, blk_coord);
@@ -132,11 +133,12 @@ CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
       cute::copy(tOpQ_gOpQ(_, _, _, ii), rmem_op_q);
       cute::copy(tScale_gScale(_, _, _, ii), rmem_scale);
       cute::copy(tZero_gZero(_, _, _, ii), rmem_zero);
-      cute::transform(rmem_op_q, rmem_op_scaled, [] (const QuantizedElement& elt) { return ElementScale(elt); } );
-      cute::transform(rmem_zero, rmem_zero_buf, [] (const ElementZero& elt) { return ElementScale(elt); } );
-      cute::transform(rmem_op_scaled, rmem_zero_buf, rmem_op_scaled, cute::minus{});
-      cute::transform(rmem_op_scaled, rmem_scale, rmem_op_scaled, cute::multiplies{});
-      cute::transform(rmem_op_scaled, rmem_op_dq, [] (const ElementScale& elt) { return DequantizedElement(elt); } );
+
+      cute::transform(rmem_op_q, rmem_op_scaled, [] (const QuantizedElement& elt) { return ElementZero(elt); } );
+      cute::transform(rmem_op_scaled, rmem_zero, rmem_op_scaled, cute::minus{});
+      cute::transform(rmem_op_scaled, rmem_op_scaled1, [] (const ElementZero& elt) { return ElementScale(elt); } );
+      cute::transform(rmem_op_scaled1, rmem_scale, rmem_op_scaled1, cute::multiplies{});
+      cute::transform(rmem_op_scaled1, rmem_op_dq, [] (const ElementScale& elt) { return DequantizedElement(elt); } );
       cute::copy(rmem_op_dq, tOpDq_gOpDq(_, _, _, ii));
     }
   }

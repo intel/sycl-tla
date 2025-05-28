@@ -227,6 +227,7 @@ public:
   static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
 
+  // static_assert(std::is_same_v<ElementScale, _Float16> && std::is_same_v<ElementZero, int8_t>);
   static_assert(SG_N == 16 || SG_N == 32);
   using GmemTiledCopyScale = typename scale_zero_copy_traits<ElementScale, SG_N>::type;
   using GmemTiledCopyZero = typename scale_zero_copy_traits<ElementZero, SG_N>::type;
@@ -372,7 +373,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     static constexpr auto N = decltype(size<1>(in))::value;
     static constexpr auto K = decltype(size<2>(in))::value;
 
-    using format_type = uint32_t;
+    using format_type = ushort;
     static constexpr auto src_bits = sizeof_bits_v<SrcType>;
     static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
     static constexpr auto loop_cnt = decltype(size(out))::value / N;
