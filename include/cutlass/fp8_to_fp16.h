@@ -125,14 +125,16 @@ static inline void E5M2_to_FP16(cutlass::Array<uint16_t, N> const &xin, cutlass:
   CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < N; i += 4) {
     // Manually unroll since using CUTLASS_PRAGMA_UNROLL or #pragma unroll
-    // is not helping here with DPCPP nightly dated March 25.
-    // More recent DPCPP nightlies are currently not working with cutlass.
-    // If preprocessor directive for loop unrolling worked in this case,
-    // we could've determined unrolling factor at compile time, based on how many elements each work-item handled.
-    // An unrolling factor of 8 would be desirable since shl instruction can pipeline 9 inputs at a time,
-    // but the number of elements are usually divisible by 8, so perhaps 8 is sufficient.
-    // I chose an unrolling factor of 4 in this PR because it can work with a multiple of 8 FP8 elements.
-    // The subgroup tile to be converted in that case would have a multiple of 128 elements.
+    // is not working here with DPCPP nightly dated March 24.
+    // More recent DPCPP nightlies were not working with cutlass at the time this code was written.
+    // If preprocessor directive for loop unrolling worked, we could've determined the unrolling factor at compile time,
+    // based on how many elements each work-item handled.
+    // An unrolling factor of 8 would be desirable (although shl instruction can pipeline 9 inputs at a time,
+    // the inputs we usually handle are not a multiple of 9).
+    // but this code uses an unrolling factor of 4 so that it can work with a multiple of 8 FP8 elements.
+    // The subgroup tile to be converted in that case would have a multiple of 128 elements,
+    // so we would also be able to cover small subgroup-level tiles such as 8x16,
+    // which would not have been possible with an unrolling factor of 8.
     uint32_t tmp0 = static_cast<uint32_t>(xin[i]);
     uint32_t tmp1 = static_cast<uint32_t>(xin[i + 1]);
     uint32_t tmp2 = static_cast<uint32_t>(xin[i + 2]);
