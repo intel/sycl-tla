@@ -199,7 +199,7 @@ struct XE_2D_LD_Unpack {
   static constexpr auto stride_rank = rank(StrideOrTensor{});
   static_assert(stride_rank == 2 || stride_rank == 3);
 
-  // Assume LD_T/LD_N will be use column/row major matrices respectively
+  // Assume LD_T/LD_N will be used for column/row major matrices respectively
   static constexpr bool is_transpose_copy = detail::is_transpose_load<CopyOp>;
 
   // We need reverse some parameters becasue intel xe 2d copy intrinsic always assume the matrix use (M, N):(N, 1) - row major convention
