@@ -115,7 +115,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream &print_usage(std::ostream &out) const {
 
-    out << "PVC Flash Attention v2 Example\n\n"
+    out << "BMG Flash Attention v2 Example\n\n"
         << "Options:\n\n"
         << "  --help                      If specified, displays this usage statement\n\n"
         << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
