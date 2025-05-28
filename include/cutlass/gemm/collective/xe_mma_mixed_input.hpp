@@ -372,15 +372,15 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     static constexpr auto N = decltype(size<1>(in))::value;
     static constexpr auto K = decltype(size<2>(in))::value;
 
-    using format_type = ushort;
+    using format_type = uint32_t;
     static constexpr auto src_bits = sizeof_bits_v<SrcType>;
     static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
     static constexpr auto loop_cnt = decltype(size(out))::value / N;
     static_assert((scalar % N) == 0);
 
     // for tuning performance
-    static constexpr auto spilits = 8;
-    static constexpr auto vec_size = loop_cnt / spilits;
+    static constexpr auto vec_size = scalar;
+    static constexpr auto spilits = loop_cnt / vec_size;
 
     auto s_tensor = make_tensor((format_type*)(raw_pointer_cast(in.data())), Shape<Int<loop_cnt / scalar>, Int<N>>{});
     auto d_tensor = make_tensor(out.data(), Shape<Int<vec_size>, Int<spilits>, Int<N>>{});
