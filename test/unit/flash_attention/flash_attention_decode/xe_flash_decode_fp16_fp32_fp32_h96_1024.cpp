@@ -30,16 +30,16 @@
  **************************************************************************************************/
 
 /*! \file
-    \brief Tests for Xe flash attention decode bf16
+    \brief Tests for Xe flash attention decode fp16
 */
 
 #include "flash_decode_testbed_3x.hpp"
 
 namespace cutlass {
 
-using MMAOperationBF16 = XE_1x16x16_F32BF16BF16F32_TT;
+using MMAOperationFP16 = XE_1x16x16_F32F16F16F32_TT;
 
-#define EXECUTE_TEST_BF16(NAME, NAME_CAUSAL_VARLEN, DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, MMAOperation, CAUSAL, VARLEN, HEADSIZE, KVTILE, NUMSG) \
+#define EXECUTE_TEST_FP16(NAME, NAME_CAUSAL_VARLEN, DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, MMAOperation, CAUSAL, VARLEN, HEADSIZE, KVTILE, NUMSG) \
 TEST(NAME##HEADSIZE, NAME_CAUSAL_VARLEN) { \
   using Shape_h = test::flash_attention::Shape_h##HEADSIZE<KVTILE, NUMSG>; \
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, typename Shape_h::ShapeQK, typename Shape_h::ShapePV, \
@@ -47,17 +47,16 @@ TEST(NAME##HEADSIZE, NAME_CAUSAL_VARLEN) { \
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEADSIZE)); \
 }
 
-#define EXECUTE_TEST_HEAD_SIZE_BF16(NAME, CAUSAL, VARLEN) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 96, 512, 8) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 96, 1024, 16)
+#define EXECUTE_TEST_HEAD_SIZE_FP16(NAME, CAUSAL, VARLEN) \
+EXECUTE_TEST_FP16(XE_Flash_Attention_Decode_fp16_fp32_fp32_KVTile1024_h, NAME, half_t, float, float, MMAOperationFP16, CAUSAL, VARLEN, 96, 1024, 16)
 
 
-EXECUTE_TEST_HEAD_SIZE_BF16(causal, true, false)
-EXECUTE_TEST_HEAD_SIZE_BF16(noncausal, false, false)
-EXECUTE_TEST_HEAD_SIZE_BF16(varlen_causal, true, true)
-EXECUTE_TEST_HEAD_SIZE_BF16(varlen_noncausal, false, true)
+EXECUTE_TEST_HEAD_SIZE_FP16(causal, true, false)
+EXECUTE_TEST_HEAD_SIZE_FP16(noncausal, false, false)
+EXECUTE_TEST_HEAD_SIZE_FP16(varlen_causal, true, true)
+EXECUTE_TEST_HEAD_SIZE_FP16(varlen_noncausal, false, true)
 
-#undef EXECUTE_TEST_HEAD_SIZE_BF16
-#undef EXECUTE_TEST_BF16
+#undef EXECUTE_TEST_HEAD_SIZE_FP16
+#undef EXECUTE_TEST_FP16
 
 } // namespace cutlass

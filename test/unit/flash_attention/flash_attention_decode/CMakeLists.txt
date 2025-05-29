@@ -28,14 +28,22 @@
 
 cutlass_test_unit_add_executable(
   cutlass_test_unit_flash_attention_decode_xe
-  xe_flash_decode_bf16_fp32_fp32_64.cpp
-  xe_flash_decode_fp16_fp32_fp32_64.cpp
-  xe_flash_decode_bf16_fp32_fp32_96.cpp
-  xe_flash_decode_fp16_fp32_fp32_96.cpp
-  xe_flash_decode_bf16_fp32_fp32_128.cpp
-  xe_flash_decode_fp16_fp32_fp32_128.cpp
-  xe_flash_decode_bf16_fp32_fp32_192.cpp
-  xe_flash_decode_fp16_fp32_fp32_192.cpp
+  xe_flash_decode_bf16_fp32_fp32_h64_512.cpp
+  xe_flash_decode_bf16_fp32_fp32_h64_1024.cpp
+  xe_flash_decode_fp16_fp32_fp32_h64_512.cpp
+  xe_flash_decode_fp16_fp32_fp32_h64_1024.cpp
+  xe_flash_decode_bf16_fp32_fp32_h96_512.cpp
+  xe_flash_decode_bf16_fp32_fp32_h96_1024.cpp
+  xe_flash_decode_fp16_fp32_fp32_h96_512.cpp
+  xe_flash_decode_fp16_fp32_fp32_h96_1024.cpp
+  xe_flash_decode_bf16_fp32_fp32_h128_512.cpp
+  xe_flash_decode_bf16_fp32_fp32_h128_1024.cpp
+  xe_flash_decode_fp16_fp32_fp32_h128_512.cpp
+  xe_flash_decode_fp16_fp32_fp32_h128_1024.cpp
+  xe_flash_decode_bf16_fp32_fp32_h192_512.cpp
+  xe_flash_decode_bf16_fp32_fp32_h192_1024.cpp
+  xe_flash_decode_fp16_fp32_fp32_h192_512.cpp
+  xe_flash_decode_fp16_fp32_fp32_h192_1024.cpp
 )
 
 add_custom_target(

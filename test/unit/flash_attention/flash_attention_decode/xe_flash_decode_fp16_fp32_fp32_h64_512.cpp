@@ -1,5 +1,5 @@
 /***************************************************************************************************
-* Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,26 +29,34 @@
  *
  **************************************************************************************************/
 
-#pragma once
+/*! \file
+    \brief Tests for Xe flash attention decode fp16
+*/
 
-#include "benchmark_runner.hpp"
-#include "fmha_decode_configuration.hpp"
-#include "benchmarks_h64_512.hpp"
-#include "benchmarks_h64_1024.hpp"
-#include "benchmarks_h96_512.hpp"
-#include "benchmarks_h96_1024.hpp"
-#include "benchmarks_h128_512.hpp"
-#include "benchmarks_h128_1024.hpp"
-#include "benchmarks_h192_512.hpp"
-#include "benchmarks_h192_1024.hpp"
+#include "flash_decode_testbed_3x.hpp"
 
-static void register_flash_attention_decode_benchmarks() {
-  register_flash_attention_decode_benchmarks_h64_512();
-  register_flash_attention_decode_benchmarks_h96_512();
-  register_flash_attention_decode_benchmarks_h128_512();
-  register_flash_attention_decode_benchmarks_h192_512();
-  register_flash_attention_decode_benchmarks_h64_1024();
-  register_flash_attention_decode_benchmarks_h96_1024();
-  register_flash_attention_decode_benchmarks_h128_1024();
-  register_flash_attention_decode_benchmarks_h192_1024();
+namespace cutlass {
+
+using MMAOperationFP16 = XE_1x16x16_F32F16F16F32_TT;
+
+#define EXECUTE_TEST_FP16(NAME, NAME_CAUSAL_VARLEN, DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, MMAOperation, CAUSAL, VARLEN, HEADSIZE, KVTILE, NUMSG) \
+TEST(NAME##HEADSIZE, NAME_CAUSAL_VARLEN) { \
+  using Shape_h = test::flash_attention::Shape_h##HEADSIZE<KVTILE, NUMSG>; \
+  using Kernel = test::flash_attention::XE_Flash_Attention_Decode<DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, typename Shape_h::ShapeQK, typename Shape_h::ShapePV, \
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, CAUSAL, VARLEN>::Kernel; \
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEADSIZE)); \
 }
+
+#define EXECUTE_TEST_HEAD_SIZE_FP16(NAME, CAUSAL, VARLEN) \
+EXECUTE_TEST_FP16(XE_Flash_Attention_Decode_fp16_fp32_fp32_KVTile512_h, NAME, half_t, float, float, MMAOperationFP16, CAUSAL, VARLEN, 64, 512, 8)
+
+
+EXECUTE_TEST_HEAD_SIZE_FP16(causal, true, false)
+EXECUTE_TEST_HEAD_SIZE_FP16(noncausal, false, false)
+EXECUTE_TEST_HEAD_SIZE_FP16(varlen_causal, true, true)
+EXECUTE_TEST_HEAD_SIZE_FP16(varlen_noncausal, false, true)
+
+#undef EXECUTE_TEST_HEAD_SIZE_FP16
+#undef EXECUTE_TEST_FP16
+
+} // namespace cutlass
