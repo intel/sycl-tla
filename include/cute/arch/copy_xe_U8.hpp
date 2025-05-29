@@ -460,7 +460,7 @@ struct XE_2D_U8x32x4_LD_T {
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
-#if defined(SYCL_INTEL_TARGET)
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoadTranspose<1, 4, 32, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
@@ -478,7 +478,7 @@ struct XE_2D_U8x32x8_LD_T {
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
-#if defined(SYCL_INTEL_TARGET)
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoadTranspose<1, 8, 32, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
@@ -496,7 +496,7 @@ struct XE_2D_U8x16x32_LD_T {
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
-#if defined(SYCL_INTEL_TARGET)
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 1, "Expected T to have size 2");
     detail::XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else

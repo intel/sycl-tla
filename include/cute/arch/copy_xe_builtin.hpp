@@ -643,7 +643,7 @@ struct XeSubgroup2DBlockLoadTranspose<1, 4, 32, 1> {
     CUTE_HOST_DEVICE void
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate, T* dstPointer) {
-        *reinterpret_cast<intel::ulong4 *>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k4(
+        *reinterpret_cast<intel::ushort4 *>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k4(
            reinterpret_cast<long>(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
     }
 };
@@ -654,7 +654,7 @@ struct XeSubgroup2DBlockLoadTranspose<1, 8, 32, 1> {
     CUTE_HOST_DEVICE void
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate, T* dstPointer) {
-        *reinterpret_cast<intel::ulong4 *>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k8(
+        *reinterpret_cast<intel::ushort8 *>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k8(
            reinterpret_cast<long>(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
     }
 };
@@ -1362,7 +1362,7 @@ struct XeSubgroup2DBlockLoadTranspose<4, 8, 8, 1> {
     CUTE_HOST_DEVICE void
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate, T* dstPointer) {
-        *reinterpret_cast<intel::ulong4 *>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_transpose_u32_m8k8(
+        *reinterpret_cast<intel::ushort8 *>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_transpose_u32_m8k8(
            reinterpret_cast<long>(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
     }
 };
