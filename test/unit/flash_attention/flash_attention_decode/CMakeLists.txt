@@ -28,8 +28,14 @@
 
 cutlass_test_unit_add_executable(
   cutlass_test_unit_flash_attention_decode_xe
-  xe_flash_decode_bf16_fp32_fp32.cpp
-  xe_flash_decode_fp16_fp32_fp32.cpp
+  xe_flash_decode_bf16_fp32_fp32_64.cpp
+  xe_flash_decode_fp16_fp32_fp32_64.cpp
+  xe_flash_decode_bf16_fp32_fp32_96.cpp
+  xe_flash_decode_fp16_fp32_fp32_96.cpp
+  xe_flash_decode_bf16_fp32_fp32_128.cpp
+  xe_flash_decode_fp16_fp32_fp32_128.cpp
+  xe_flash_decode_bf16_fp32_fp32_192.cpp
+  xe_flash_decode_fp16_fp32_fp32_192.cpp
 )
 
 add_custom_target(

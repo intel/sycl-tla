@@ -48,14 +48,8 @@ TEST(NAME##HEADSIZE, NAME_CAUSAL_VARLEN) { \
 }
 
 #define EXECUTE_TEST_HEAD_SIZE_BF16(NAME, CAUSAL, VARLEN) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 64, 512, 8) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 64, 1024, 16) \
 EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 96, 512, 8) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 96, 1024, 16) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 128, 512, 8) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 128, 1024, 16) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 192, 512, 8) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 192, 1024, 16)
+EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile1024_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 96, 1024, 16)
 
 
 EXECUTE_TEST_HEAD_SIZE_BF16(causal, true, false)
