@@ -698,7 +698,7 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
   }
 };
 
-template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig {
+template <bool Causal, typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, int PipelineStages> struct FMHAConfig {
 
   template <bool isVarLen, bool PagedKV, class Scheduler>
   static int run(const Options &options) {
@@ -717,17 +717,15 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
     using ElementInputQ = bfloat16_t;     // <- data type of elements in input matrix A
     using ElementInputKV = bfloat16_t;    // <- data type of elements in input matrix B
     using ElementOutput = float;          // <- data type of elements in output matrix D
-        
-    constexpr int PipelineStages = 2;
-    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+            using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
     using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
-
-    using GmemTiledCopyQ = XE_2D_U16x16x32_LD_N;
+    using MMAOperation = XE_8x16x16_F32BF16BF16F32_TT;
+    using GmemTiledCopyQ = XE_2D_U16x8x32_LD_N;
     using GmemTiledCopyK = XE_2D_U16x16x16_LD_T; // _T designates a transposed block load operation
-    using GmemTiledCopyV = XE_2D_U16x32x32_LD_V;
+    using GmemTiledCopyV = XE_2D_U16x16x32_LD_V;
     using GmemTiledCopyStore = XE_2D_U32x8x16_ST_N;
     using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillCachedEpilogue<
-        EpilogueDispatchPolicy, TileShape, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
+        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
     using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
 
@@ -738,8 +736,8 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
 
     // Mainloop
     using CollectiveMainloop = cutlass::flash_attention::collective::FlashPrefillCachedMma<
-        GEMMDispatchPolicy, ProblemShapeType, TileShape, ElementInputQ, cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
-        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV, cutlass::gemm::TagToStrideB_t<LayoutV>, TiledMma,
+        GEMMDispatchPolicy, ProblemShapeType, ElementInputQ, cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV, cutlass::gemm::TagToStrideB_t<LayoutV>, MMAOperation, TileShapeQK, TileShapePV, SubgroupLayout,
         GmemTiledCopyQ, // Q
         GmemTiledCopyK, // K
         GmemTiledCopyV, // V,
@@ -756,23 +754,13 @@ template <bool Causal, typename TileShape, typename TiledMma> struct FMHAConfig 
   }
 
   static int run(const Options &options) {
-    const bool varlen = options.varlen;
-    const bool use_paged_kv = options.use_paged_kv;
-    const bool use_persistent = options.scheduler.compare("Persistent") == 0;
-
-    if (use_paged_kv) {
-      return use_persistent
-        ? run<false, true, cutlass::flash_attention::PersistentScheduler>(options)
-        : run<false, true, cutlass::flash_attention::IndividualScheduler>(options);
+    if (options.use_paged_kv) {
+        return run<false, true, cutlass::flash_attention::IndividualScheduler>(options);
+    }
+    if(options.varlen) {
+        return run<true, false, cutlass::flash_attention::IndividualScheduler>(options);
     } else {
-        if (varlen) {
-          return use_persistent
-            ? run<true, false, cutlass::flash_attention::PersistentScheduler>(options)
-            : run<true, false, cutlass::flash_attention::IndividualScheduler>(options);
-        }
-        return use_persistent
-          ? run<false, false, cutlass::flash_attention::PersistentScheduler>(options)
-          : run<false, false, cutlass::flash_attention::IndividualScheduler>(options);
+        return run<false, false, cutlass::flash_attention::IndividualScheduler>(options);
     }
   }
 };
