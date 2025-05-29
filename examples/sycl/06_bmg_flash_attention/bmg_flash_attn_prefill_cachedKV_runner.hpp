@@ -87,16 +87,6 @@ struct Options {
       varlen = true;
     }
 
-    if (cmd.check_cmd_line_flag("use_paged_kv")) {
-      use_paged_kv = true;
-
-      cmd.get_cmd_line_argument("page_size", page_size, 128);
-      if (seq_len_kv_cache % page_size != 0) {
-        std::cerr << "Invalid: seq_len_kv_cache must be divisible by page_size" << std::endl;
-        return;
-      }
-    }
-
     cmd.get_cmd_line_argument("scheduler", scheduler, std::string("Individual"));
 
     cmd.get_cmd_line_argument("batch", batch, 32);
@@ -108,6 +98,16 @@ struct Options {
     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+
+    if (cmd.check_cmd_line_flag("use_paged_kv")) {
+        use_paged_kv = true;
+
+        cmd.get_cmd_line_argument("page_size", page_size, 128);
+        if (seq_len_kv_cache % page_size != 0) {
+            std::cerr << "Invalid: seq_len_kv_cache must be divisible by page_size" << std::endl;
+            return;
+        }
+    }
 
     softmax_scale = 1 / sqrt(static_cast<float>(head_size_qk));
   }
@@ -525,25 +525,24 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
 
     if (options.use_paged_kv) {
         paged_kv_cache.page_size = options.page_size;
-        int num_pages_per_seq = ((seq_len_kv_cache + paged_kv_cache.page_size - 1) / paged_kv_cache.page_size);
-        int num_pages = num_pages_per_seq * batch;
+        int num_pages_per_seq = seq_len_kv_cache / paged_kv_cache.page_size;
         paged_kv_cache.num_pages_per_seq = num_pages_per_seq;
 
+        int num_pages = num_pages_per_seq * batch;
         paged_kv_cache.page_table.reset(batch * num_pages_per_seq);
-        std::vector<int> page_mapping(batch * num_pages_per_seq);
 
-        // initialize block table with random mapping
+        // initialize block table with random mapping for non-contiguous layout
+        std::vector<int> page_mapping(batch * num_pages_per_seq);
         for (int b = 0; b < batch; ++b) {
           std::vector<int> physical_pages(num_pages_per_seq);
           std::iota(physical_pages.begin(), physical_pages.end(), 0);
-          // shuffle physical pages for non-contiguous layout
+          // shuffle physical pages
           std::shuffle(physical_pages.begin(), physical_pages.end(), std::mt19937{ std::random_device{}() });
           for (int blk = 0; blk < num_pages_per_seq; ++blk) {
             int logical_idx = b * num_pages_per_seq + blk;
             page_mapping[logical_idx] = physical_pages[blk];
           }
         }
-
         syclcompat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
         syclcompat::wait();
     }
