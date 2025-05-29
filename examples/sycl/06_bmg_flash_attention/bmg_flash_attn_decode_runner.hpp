@@ -66,7 +66,7 @@ struct Options {
   float softmax_scale;
 
   Options()
-      : help(false), error(false), is_causal(false), varlen(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
+      : help(false), error(false), is_causal(false), varlen(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
         seq_len_kv(512), seq_len_kv_cache(0), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
 
   // Parses the command line
@@ -91,7 +91,7 @@ struct Options {
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
-    cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 16);
+    cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 1);
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, 512);
     cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
