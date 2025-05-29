@@ -191,6 +191,10 @@ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m4k32v1(
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m8k32v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u8_m32k32v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+
 // // 2D prefetch
 SYCL_DEVICE_OCL(void intel_sub_group_2d_block_prefetch_8b_1r32x2c(
     __global void* base_address, int width, int height, int pitch,
@@ -712,6 +716,16 @@ struct XeSubgroup2DBlockPrefetch<1, 32, 8, 1> {
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate) {
         __builtin_IB_subgroup_block_read_prefetch_u8_m8k32v1(
+            (intptr_t)srcBasePointer, memoryWidth, memoryHeight, memoryPitch, coordinate, CacheControl::kL1C_L3C);
+    }
+};
+
+template<>
+struct XeSubgroup2DBlockPrefetch<1, 32, 32, 1> {
+    CUTE_HOST_DEVICE void 
+    operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
+            cute::intel::coord_t coordinate) {
+        __builtin_IB_subgroup_block_read_prefetch_u8_m32k32v1(
             (intptr_t)srcBasePointer, memoryWidth, memoryHeight, memoryPitch, coordinate, CacheControl::kL1C_L3C);
     }
 };
