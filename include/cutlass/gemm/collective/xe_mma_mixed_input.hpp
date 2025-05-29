@@ -143,7 +143,7 @@ public:
                                                ElementB>;
 
   static_assert(!cute::is_same_v<ElementA, ElementB>, "Mixed precision GEMM requires different types for A and B!");
-  static_assert(std::is_same_v<LargerElementType, MmaType> || (std::is_same_v<LargerElementType, _Float16> && std::is_same_v<MmaType, half_t>),
+  static_assert(std::is_same_v<LargerElementType, MmaType> || (sizeof_bits_v<LargerElementType> == sizeof_bits_v<MmaType>),
                "MainloopIntelXeXMX16MixedPrecision has the restriction that mixed dtype always converts the "
                "narrower input type to the larger one and performs GEMM using the DPAS for the larger input type.");
 
