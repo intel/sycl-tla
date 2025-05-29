@@ -39,9 +39,9 @@ export IGC_DumpToCustomDir=${script_dir}/build/mm_dumps
 
 #export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only" 
 export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-export CMAKE_BUILD_TYPE=Release
-export IGC_VISAOptions="-perfmodel"
-export IGC_VectorAliasBBThreshold=100000000000
+#export CMAKE_BUILD_TYPE=Release
+#export IGC_VISAOptions="-perfmodel"
+#export IGC_VectorAliasBBThreshold=100000000000
 export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
 export OCL_ICD_VENDORS=$HOME
 

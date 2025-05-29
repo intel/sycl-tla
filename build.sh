@@ -46,10 +46,11 @@ output=intel_gpu_bmg_g21
 
 
 # ================= IGC options =================
-export IGC_VISAPreSchedCtrl=6
-export IGC_EnableVISANoSchedule=0
+#export IGC_VISAPreSchedCtrl=6
+#export IGC_EnableVISANoSchedule=0
 export IGC_ShaderDumpEnable=1
 export IGC_DumpToCustomDir=${script_dir}/build/mm_dumps
+export CUTLASS_SYCL_PROFILING_ENABLED=ON
 
 export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
 #export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
@@ -66,7 +67,7 @@ export OCL_ICD_VENDORS=$HOME
 #target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
 target=./examples/sycl/11_pvc_gemm_int4_streamk/11_pvc_gemm_int4_streamk
 
-cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
+cmake .. -G Ninja -DCUTLASS_SYCL_PROFILING_ENABLED=ON -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -DCOMPILER_VERSION -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only $1 $2 $3" \
 && ninja -v $target && \
