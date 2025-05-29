@@ -54,7 +54,6 @@ template <
 struct XeSplitK
 {
 public:
-  static constexpr int FragmentSize = 8;
   static constexpr auto Tile_M = get<0>(CtaTileShapeMNK{});
   static constexpr auto Tile_N = get<1>(CtaTileShapeMNK{});
   static constexpr auto Epi_M = get<0>(EpilogueTile{});
@@ -238,6 +237,7 @@ public:
   CUTLASS_DEVICE auto
   get_consumer_store_callbacks(ConsumerStoreArgs<Args...> const& args) {
     using MmaAtomShape = typename decltype(args.tiled_mma)::AtomShape_MNK;
+    constexpr int FragmentSize = get<0>(MmaAtomShape());
     static constexpr int FragsM = get<0>(EpilogueTile{}) / get<0>(MmaAtomShape()); // A frags per sub_group
     static constexpr int FragsN = get<1>(EpilogueTile{}) / get<1>(MmaAtomShape()); // B frags per sub_group
     Tensor res = make_tensor<ElementOutput>(Shape<Int<FragmentSize>, Int<FragsM>, Int<FragsN>>{});
