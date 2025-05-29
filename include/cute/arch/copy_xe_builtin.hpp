@@ -1333,7 +1333,7 @@ struct XeSubgroup2DBlockLoadTranspose<4, 4, 16, 1> {
 template<>
 struct XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1> {
     template<typename T>
-    CUTE_HOST_DEVICE void
+    CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate, T* dstPointer) {
         *reinterpret_cast<intel::uint8 *>(dstPointer) =  __builtin_IB_subgroup_block_read_flat_transpose_u32_k8(
