@@ -29,9 +29,9 @@
  *
  **************************************************************************************************/
 /***************************************
-* Mixed Precision PVC Gemm Example For int4_t (RowMajor A) x (ColumnMajor B)
+* Mixed Precision BMG Gemm Example For int4_t (RowMajor A) x (ColumnMajor B)
 *
-* This example demonstrates how to dispatch a mixed precision GEMM on PVC, with optional dequantization.
+* This example demonstrates how to dispatch a mixed precision GEMM on BMG, with optional dequantization.
 * The GemmMode enum describes the 3 modes of operation:
 *
 * Note: due to a bug in the IGC compiler, it's currently necessary to build this example with the following
@@ -117,7 +117,7 @@ struct Options {
     cmd.get_cmd_line_argument("warmup", warmup, 0);
     cmd.get_cmd_line_argument("flush_cache", flush_cache, 0);
     cmd.get_cmd_line_argument("cache_cnt", cache_cnt, 3);
-    cmd.get_cmd_line_argument("l3_cache", l3_cache, 192);
+    cmd.get_cmd_line_argument("l3_cache", l3_cache, 32);
     cmd.get_cmd_line_argument("splits", splits, 2);
     cmd.get_cmd_line_argument("splitk", splitk, true);
   }
@@ -125,7 +125,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "PVC int4_t StreamK GEMM Mixed Type Example\n\n"
+    out << "BMG int4_t StreamK GEMM Mixed Type Example\n\n"
         << "Options:\n\n"
         << "  --help                      If specified, displays this usage statement\n\n"
         << "  --dp                        If specified, uses Data Parallel decomposition\n"
@@ -507,7 +507,7 @@ return true;
 
     float total_time = 0.f;
     if (options.warmup >= options.iterations) {
-      return cutlass::Status::kErrorInternal;
+      return cutlass::Status::kSuccess;
     }
 
     double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
@@ -515,9 +515,8 @@ return true;
                   sizeof_bits_v<ElementB> * options.k * options.n / 8 +
                   sizeof_bits_v<ElementOutput> * options.m * options.n / 8) * 1e-9;
 
-    std::cout << "\nProblem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-    printf("--l=%d --iterations=%d --flush_cache=%d\n", options.l, options.iterations, options.flush_cache);
-    printf("--warmup=%d, --cache_cnt=%d, --l3_cache_size=%d\n\n", options.warmup, options.cache_cnt, l3_cache_size);
+    std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << ", splitk: " << options.splits << std::endl;
+    // printf("  --iterations=%d --flush_cache=%d, --warmup=%d, --l3_cache_size=%dMB\n", options.iterations, options.flush_cache, options.warmup, options.l3_cache);
 
     if (options.iterations > 0) {
       for (int i = 0; i < options.iterations; ++i) {
@@ -556,12 +555,12 @@ return true;
           total_time += ctime;
         }
   
-        printf("Cutlass GEMM Performance [%d]:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", i, tflops / ctime, hbm / ctime, ctime*1000);
+        // printf("Cutlass GEMM Performance [%d]:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", i, tflops / ctime, hbm / ctime, ctime*1000);
       }
 
       float cute_time = total_time / (options.iterations - options.warmup);
 
-      printf("Cutlass GEMM Performance average:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", tflops / cute_time, hbm / cute_time, cute_time*1000);
+      // printf("Cutlass GEMM Performance average:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", tflops / cute_time, hbm / cute_time, cute_time*1000);
     }
 
     return cutlass::Status::kSuccess;
