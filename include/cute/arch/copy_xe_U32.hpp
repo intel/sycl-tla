@@ -439,7 +439,7 @@ struct XE_2D_TF32x8x8_LD_T {
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
-#if defined(SYCL_INTEL_TARGET)
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 4, "Expected T to have size 4");
     detail::XeSubgroup2DBlockLoadTranspose<4, 8, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
