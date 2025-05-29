@@ -63,6 +63,9 @@ namespace flash_attention {
 
 using namespace cute;
 
+using MMAOperationBF16 = XE_1x16x16_F32BF16BF16F32_TT;
+using MMAOperationFP16 = XE_1x16x16_F32F16F16F32_TT;
+
 template <int KVTile, int NumSGs>
 struct Shape_h64 {
   using ShapeQK = Shape<_1, Int<KVTile>, _64>;

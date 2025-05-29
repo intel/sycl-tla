@@ -30,51 +30,8 @@
  **************************************************************************************************/
 
 #include "bmg_flash_attn_decode_runner.hpp"
-
-template <int KV_Tile, int NumSGs, bool Varlen>
-int run_decode(Options const& options) {
-  if (options.head_size_vo == 64) {
-
-    using ShapeQK = Shape<_1, Int<KV_Tile>, _64>;
-    using ShapePV = Shape<_1, _32, Int<KV_Tile>>;
-    using ShapeOutput = Shape<_1, _64, Int<KV_Tile>>;
-    using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>, Stride<_1, _1, _1>>;
-
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
-  } else if (options.head_size_vo == 96) {
-
-    using ShapeQK = Shape<_1, Int<KV_Tile>, _64>;
-    using ShapePV = Shape<_1, _32, Int<KV_Tile>>;
-    using ShapeOutput = Shape<_1, _96, Int<KV_Tile>>;
-    using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>, Stride<_1, _1, _1>>;
-
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
-  } else if (options.head_size_vo == 128) {
-
-    using ShapeQK = Shape<_1, Int<KV_Tile>, _64>;
-    using ShapePV = Shape<_1, _32, Int<KV_Tile>>;
-    using ShapeOutput = Shape<_1, _128, Int<KV_Tile>>;
-    using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>, Stride<_1, _1, _1>>;
-
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
-  } else if (options.head_size_vo == 192) {
-
-    using ShapeQK = Shape<_1, Int<KV_Tile>, _64>;
-    using ShapePV = Shape<_1, _32, Int<KV_Tile>>;
-    using ShapeOutput = Shape<_1, _192, Int<KV_Tile>>;
-    using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>, Stride<_1, _1, _1>>;
-
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
-  } else {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
-  }
-}
-
+#include "06_bmg_run_decode_kv512.cpp"
+#include "06_bmg_run_decode_kv1024.cpp"
 
 int main(int argc, const char **argv) {
   //
@@ -99,12 +56,12 @@ int main(int argc, const char **argv) {
   const bool kv_tile_block = (seq_len_kv_total % 1024) == 0;
 
   if(!kv_tile_block && !options.varlen) {
-    return run_decode<512, 8, false>(options);
+    return run_decode_512<false>(options);
   } else if(kv_tile_block && !options.varlen) {
-    return run_decode<1024, 16, false>(options);
+    return run_decode_1024<false>(options);
   } else if(!kv_tile_block && options.varlen) {
-    return run_decode<512, 8, true>(options);
+    return run_decode_512<true>(options);
   } else if(kv_tile_block && options.varlen) {
-    return run_decode<1024, 16, true>(options);
+    return run_decode_1024<true>(options);
   }
 }

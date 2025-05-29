@@ -37,26 +37,31 @@
 
 namespace cutlass {
 
-using MMAOperationBF16 = XE_1x16x16_F32BF16BF16F32_TT;
+using MMAOperationBF16 = test::flash_attention::MMAOperationBF16;
+using Shape_h = test::flash_attention::Shape_h128<512, 8>;
 
-#define EXECUTE_TEST_BF16(NAME, NAME_CAUSAL_VARLEN, DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, MMAOperation, CAUSAL, VARLEN, HEADSIZE, KVTILE, NUMSG) \
-TEST(NAME##HEADSIZE, NAME_CAUSAL_VARLEN) { \
-  using Shape_h = test::flash_attention::Shape_h##HEADSIZE<KVTILE, NUMSG>; \
-  using Kernel = test::flash_attention::XE_Flash_Attention_Decode<DTYPE_IN, DTYPE_ACCUM, DTYPE_OUT, typename Shape_h::ShapeQK, typename Shape_h::ShapePV, \
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, CAUSAL, VARLEN>::Kernel; \
-  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEADSIZE)); \
+TEST(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h128, causal) {
+  using Kernel = test::flash_attention::XE_Flash_Attention_Decode<bfloat16_t, float, float, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperationBF16, true, false>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(128));
 }
 
-#define EXECUTE_TEST_HEAD_SIZE_BF16(NAME, CAUSAL, VARLEN) \
-EXECUTE_TEST_BF16(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h, NAME, bfloat16_t, float, float, MMAOperationBF16, CAUSAL, VARLEN, 128, 512, 8)
+TEST(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h128, noncausal) {
+  using Kernel = test::flash_attention::XE_Flash_Attention_Decode<bfloat16_t, float, float, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperationBF16, false, false>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(128));
+}
 
+TEST(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h128, varlen_causal) {
+  using Kernel = test::flash_attention::XE_Flash_Attention_Decode<bfloat16_t, float, float, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperationBF16, true, true>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(128));
+}
 
-EXECUTE_TEST_HEAD_SIZE_BF16(causal, true, false)
-EXECUTE_TEST_HEAD_SIZE_BF16(noncausal, false, false)
-EXECUTE_TEST_HEAD_SIZE_BF16(varlen_causal, true, true)
-EXECUTE_TEST_HEAD_SIZE_BF16(varlen_noncausal, false, true)
-
-#undef EXECUTE_TEST_HEAD_SIZE_BF16
-#undef EXECUTE_TEST_BF16
+TEST(XE_Flash_Attention_Decode_bf16_fp32_fp32_KVTile512_h128, varlen_noncausal) {
+  using Kernel = test::flash_attention::XE_Flash_Attention_Decode<bfloat16_t, float, float, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperationBF16, false, true>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(128));
+}
 
 } // namespace cutlass
