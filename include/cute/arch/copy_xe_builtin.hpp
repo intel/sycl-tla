@@ -614,7 +614,7 @@ struct XeSubgroup2DBlockLoadTransform<1, 16, 32, 2> {
 template<>
 struct XeSubgroup2DBlockLoadTransform<1, 16, 32, 4> {
     template<typename T>
-    CUTE_HOST_DEVICE void
+    CUTE_HOST_DEVICE void 
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate, T* dstPointer) {
         *reinterpret_cast<intel::uint32 *>(dstPointer) =  __builtin_IB_subgroup_block_read_flat_transform_u8_k32v4(
