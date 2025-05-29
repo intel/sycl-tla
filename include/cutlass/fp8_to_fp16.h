@@ -167,6 +167,15 @@ static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin,
                                 cutlass::Array<uint16_t, N> &xout) {
   // Adapted from
   // https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
+  // Using something as simple as the following code surprisingly
+  // leads to poor performance.
+  // CUTLASS_PRAGMA_UNROLL
+  // for (int i = 0; i < num_elements; i++) {
+  //   reinterpret_cast<uint16_t*>(pDst)[i] =
+  //   (static_cast<uint16_t>((pSrc[i]))) << 8;
+  // }
+  // The root-cause is unknown, but private memory use is seen in that case.
+  // We're using a workaround that doesn't use private memory.  
   CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < N; i++) {
     xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
@@ -205,28 +214,21 @@ convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
 
   // TODO(Codeplay): Move conversion to NumericArrayConverter
   if constexpr (std::is_same_v<ElementA, cute::float_e5m2_t>) {
-    // Using something as simple as the following code surprisingly
-    // leads to poor performance.
-    // CUTLASS_PRAGMA_UNROLL
-    // for (int i = 0; i < num_elements; i++) {
-    //   reinterpret_cast<uint16_t*>(pDst)[i] =
-    //   (static_cast<uint16_t>((pSrc[i]))) << 8;
-    // }
-    // The root-cause is unknown, but private memory use is seen in that case.
-    // We're using a workaround that doesn't use private memory.
-    using src_dtype = std::conditional_t<num_elements >= 8, uint16_t, uint8_t>;
-    using dst_dtype = std::conditional_t<num_elements >= 8, uint32_t, uint16_t>;
+    // May convert two FP8 elements at a time
+    constexpr bool use_faster_conversion = num_elements >= 8;
+    using src_dtype = std::conditional_t<use_faster_conversion, uint16_t, uint8_t>;
+    using dst_dtype = std::conditional_t<use_faster_conversion, uint32_t, uint16_t>;
     using SrcArray =
-        std::conditional_t<num_elements >= 8,
+        std::conditional_t<use_faster_conversion,
                            cutlass::Array<src_dtype, num_elements / 2>,
                            cutlass::Array<src_dtype, num_elements>>;
     using DstArray =
-        std::conditional_t<num_elements >= 8,
+        std::conditional_t<use_faster_conversion,
                            cutlass::Array<dst_dtype, num_elements / 2>,
                            cutlass::Array<dst_dtype, num_elements>>;
     SrcArray const *pSrcArr = reinterpret_cast<SrcArray const *>(pSrc);
     DstArray *pDstArr = reinterpret_cast<DstArray *>(pDst);
-    if constexpr (num_elements >= 8) {
+    if constexpr (use_faster_conversion) {
       // convert 2 FP8 elements at a time
       E5M2_to_FP16<num_elements / 2>(*pSrcArr, *pDstArr);
     } else {
