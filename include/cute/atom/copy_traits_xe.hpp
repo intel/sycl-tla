@@ -641,7 +641,7 @@ struct Copy_Traits_<XE_2D_Packed_U8x32x32_LD_N, args_t...>
                            Stride< _0,Stride< _1,_128,_256>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16,Shape <_8,  _2, _32>>,
-                           Stride<_16,Stride< _1,_128,_256>>>;
+                           Stride<_8,Stride< _1,_128,_256>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
