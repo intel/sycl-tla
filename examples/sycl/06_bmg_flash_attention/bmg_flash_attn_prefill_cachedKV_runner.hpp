@@ -530,18 +530,20 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
         paged_kv_cache.num_pages_per_seq = num_pages_per_seq;
 
         paged_kv_cache.page_table.reset(batch * num_pages_per_seq);
-        // initialize block table with random mapping
         std::vector<int> page_mapping(batch * num_pages_per_seq);
-        std::vector<int> physical_pages(num_pages);
-        std::iota(physical_pages.begin(), physical_pages.end(), 0);
-        // shuffle physical pages for non-contiguous layout
-        std::shuffle(physical_pages.begin(), physical_pages.end(), std::mt19937{ std::random_device{}() });
+
+        // initialize block table with random mapping
         for (int b = 0; b < batch; ++b) {
-            for (int blk = 0; blk < num_pages_per_seq; ++blk) {
-                int logical_idx = b * num_pages_per_seq + blk;
-                page_mapping[logical_idx] = physical_pages[logical_idx];
-            }
+          std::vector<int> physical_pages(num_pages_per_seq);
+          std::iota(physical_pages.begin(), physical_pages.end(), 0);
+          // shuffle physical pages for non-contiguous layout
+          std::shuffle(physical_pages.begin(), physical_pages.end(), std::mt19937{ std::random_device{}() });
+          for (int blk = 0; blk < num_pages_per_seq; ++blk) {
+            int logical_idx = b * num_pages_per_seq + blk;
+            page_mapping[logical_idx] = physical_pages[blk];
+          }
         }
+
         syclcompat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
         syclcompat::wait();
     }
