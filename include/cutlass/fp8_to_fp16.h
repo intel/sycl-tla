@@ -32,6 +32,12 @@
  #pragma once
 
 #include <cutlass/half.h>
+#include <cutlass/detail/helper_macros.hpp>
+#include <cute/tensor_impl.hpp>
+#include <cute/pointer.hpp>
+#include <cute/underscore.hpp>
+#include <cute/layout.hpp>
+#include <cute/numeric/numeric_types.hpp>
 #include <cute/util/sycl_vec.hpp>
 
 using uchar16 = cute::intel::uchar16;
@@ -160,5 +166,87 @@ static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin, cutlass::
   CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < N; i++) {
     xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
+  }
+}
+
+template <typename ElementA,
+    class EngineIn,
+    class EngineOut,
+    class LayoutIn,
+    class LayoutOut,
+    class... Ts>
+CUTLASS_DEVICE
+void convert_FP8_to_FP16(
+        cute::Tensor<EngineIn, LayoutIn> const& in,
+        cute::Tensor<EngineOut, LayoutOut>& out) {
+
+  static_assert(cute::is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
+  static_assert(cute::is_rmem<EngineOut>::value, "Output tensor for A conversion must come from registers");
+  static_assert(cute::cosize_v<LayoutIn> == cute::cosize_v<LayoutOut>);
+  static_assert(cute::size_v<LayoutIn> == cute::cosize_v<LayoutIn>);
+  static_assert(cute::size_v<LayoutOut> == cute::cosize_v<LayoutOut>);
+
+  using SrcType = typename EngineIn::value_type;
+  using DstType = typename EngineOut::value_type;
+
+  static_assert(std::is_same_v<SrcType, uint8_t>, "Expected fp8 (E4M3) input as uint8_t");
+  static_assert(std::is_same_v<DstType, cute::half_t>, "Expected fp16 output as half_t");
+
+  auto const& src = in(cute::_, cute::_, cute::_);
+  auto const& dst = out(cute::_, cute::_, cute::_);
+
+  SrcType const* pSrc = src.data();
+  DstType* pDst = dst.data();
+
+  constexpr int num_elements = decltype(size(src))::value;
+
+  // TODO(Codeplay): Move conversion to NumericArrayConverter
+  if constexpr (std::is_same_v<ElementA, cute::float_e5m2_t>) {
+    // Using something as simple as the following code surprisingly
+    // leads to poor performance.
+    // CUTLASS_PRAGMA_UNROLL
+    // for (int i = 0; i < num_elements; i++) {
+    //   reinterpret_cast<uint16_t*>(pDst)[i] = (static_cast<uint16_t>((pSrc[i]))) << 8;
+    // }
+    // The root-cause is unknown, but private memory use is seen in that case.
+    // We're using a workaround that doesn't use private memory.
+    using src_dtype = std::conditional_t<num_elements >= 8,
+                      uint16_t,
+                      uint8_t>;
+    using dst_dtype = std::conditional_t<num_elements >= 8,
+                      uint32_t,
+                      uint16_t>;
+    using SrcArray = std::conditional_t<num_elements >= 8,
+                     cutlass::Array<src_dtype, num_elements / 2>,
+                     cutlass::Array<src_dtype, num_elements>>;
+    using DstArray = std::conditional_t<num_elements >= 8,
+                     cutlass::Array<dst_dtype, num_elements / 2>,
+                     cutlass::Array<dst_dtype, num_elements>>;
+    SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc);
+    DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst);
+    if constexpr (num_elements >= 8) {
+      // convert 2 FP8 elements at a time
+      E5M2_to_FP16<num_elements / 2>(*pSrcArr, *pDstArr);
+    } else {
+      E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
+    }
+  } else {
+    // E4M3 -> FP16 conversion
+    constexpr int chunk_size = 16;
+    constexpr int iters = num_elements / chunk_size;
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < iters; ++i) {
+      cute::intel::uchar16 src_vec;
+      CUTLASS_PRAGMA_UNROLL
+      for (int j = 0; j < chunk_size; ++j) {
+        src_vec[j] = pSrc[i * chunk_size + j];
+      }
+      cute::intel::ushort16 dst_vec;
+      dst_vec = E4M3_to_FP16_chunk16(src_vec);
+      CUTLASS_PRAGMA_UNROLL
+      for (int j = 0; j < chunk_size; ++j) {
+        reinterpret_cast<uint16_t*>(pDst)[i * chunk_size + j] = dst_vec[j];
+      }
+    }
   }
 }
