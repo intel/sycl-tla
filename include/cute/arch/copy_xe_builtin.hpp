@@ -614,11 +614,33 @@ struct XeSubgroup2DBlockLoadTransform<1, 16, 32, 2> {
 template<>
 struct XeSubgroup2DBlockLoadTransform<1, 16, 32, 4> {
     template<typename T>
-    CUTE_HOST_DEVICE void 
+    CUTE_HOST_DEVICE void
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate, T* dstPointer) {
         *reinterpret_cast<intel::uint32 *>(dstPointer) =  __builtin_IB_subgroup_block_read_flat_transform_u8_k32v4(
            (intptr_t)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+    }
+};
+
+template<>
+struct XeSubgroup2DBlockLoadTranspose<1, 4, 32, 1> {
+    template<typename T>
+    CUTE_HOST_DEVICE void
+    operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
+            cute::intel::coord_t coordinate, T* dstPointer) {
+        *reinterpret_cast<intel::ulong4 *>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k4(
+           reinterpret_cast<long>(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+    }
+};
+
+template<>
+struct XeSubgroup2DBlockLoadTranspose<1, 8, 32, 1> {
+    template<typename T>
+    CUTE_HOST_DEVICE void
+    operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
+            cute::intel::coord_t coordinate, T* dstPointer) {
+        *reinterpret_cast<intel::ulong4 *>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k8(
+           reinterpret_cast<long>(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
     }
 };
 
@@ -1311,10 +1333,21 @@ struct XeSubgroup2DBlockLoadTranspose<4, 4, 16, 1> {
 template<>
 struct XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1> {
     template<typename T>
-    CUTE_HOST_DEVICE void 
+    CUTE_HOST_DEVICE void
     operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
             cute::intel::coord_t coordinate, T* dstPointer) {
         *reinterpret_cast<intel::uint8 *>(dstPointer) =  __builtin_IB_subgroup_block_read_flat_transpose_u32_k8(
+           reinterpret_cast<long>(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+    }
+};
+
+template<>
+struct XeSubgroup2DBlockLoadTranspose<4, 8, 8, 1> {
+    template<typename T>
+    CUTE_HOST_DEVICE void
+    operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
+            cute::intel::coord_t coordinate, T* dstPointer) {
+        *reinterpret_cast<intel::ulong4 *>(dstPointer) =  __builtin_IB_subgroup_block_read_flat_transpose_u32_m8k8(
            reinterpret_cast<long>(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
     }
 };
