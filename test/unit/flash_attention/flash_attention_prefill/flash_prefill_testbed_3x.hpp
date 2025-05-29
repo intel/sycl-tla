@@ -39,9 +39,9 @@
 #include "flash_attention_v2/collective/fmha_fusion.hpp"
 #include "flash_attention_v2/kernel/tile_scheduler.hpp"
 #include "cutlass/util/packed_stride.hpp"
-#include "flash_attention_v2/kernel/xe_flash_attn_gemm.hpp"
-#include "flash_attention_v2/collective/xe_flash_attn_epilogue.hpp"
-#include "flash_attention_v2/collective/xe_flash_attn_softmax_epilogue.hpp"
+#include "flash_attention_v2/kernel/xe_flash_attn_prefill.hpp"
+#include "flash_attention_v2/collective/xe_flash_attn_prefill_epilogue.hpp"
+#include "flash_attention_v2/collective/xe_flash_attn_prefill_softmax_epilogue.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
 
@@ -61,6 +61,54 @@
 namespace test {
 namespace flash_attention {
 
+  template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
+         typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
+         typename MMAOperation, bool HasCausalMask, bool isVarLen, int PipelineStages>
+struct XE_Flash_Attention_Prefill {
+  using LayoutQ = cutlass::layout::RowMajor;
+  using LayoutK = cutlass::layout::ColumnMajor;
+  using LayoutV = cutlass::layout::RowMajor;
+  using LayoutO = cutlass::layout::RowMajor;
+
+  using ElementAccumulator = ElementAccumulatorType;
+  using ElementComputeEpilogue = ElementOutputType;
+  using ElementInputQ = ElementInputType;
+  using ElementInputKV = ElementInputType;
+  using ElementOutput = ElementOutputType;
+
+  using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int>;
+  using ProblemShapeVarlen = cute::tuple<int, int, int, cutlass::fmha::collective::VariableLength,
+                                         cutlass::fmha::collective::VariableLength, int, int>;
+  using ProblemShapeType = std::conditional_t<isVarLen, ProblemShapeVarlen, ProblemShapeRegular>;
+
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+
+  using GmemTiledCopyQ = cute::XE_2D_U16x8x32_LD_N;
+  using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T; // _T designates a transposed block load operation
+  using GmemTiledCopyV = cute::XE_2D_U16x16x32_LD_V;
+  using GmemTiledCopyStore = cute::XE_2D_U32x8x16_ST_N;
+  using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillEpilogue<
+        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
+        GmemTiledCopyStore>;
+  using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<
+        HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;
+
+  // Mainloop
+  using CollectiveMainloop = cutlass::flash_attention::collective::FlashPrefillMma<
+        GEMMDispatchPolicy, ProblemShapeType, ElementInputQ,
+        cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutV>,
+        MMAOperation, TileShapeQK, TileShapePV, SubgroupLayout,
+        GmemTiledCopyQ, // Q
+        GmemTiledCopyK, // K
+        GmemTiledCopyV, // V,
+        HasCausalMask>;
+
+  using Kernel = cutlass::flash_attention::kernel::FMHAPrefill<ProblemShapeType, CollectiveMainloop,
+                                                      CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
+};
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
@@ -205,6 +253,11 @@ struct TestbedImpl {
     std::normal_distribution<double> dist_q(cute::get<3>(problem_size), cute::get<3>(problem_size) / 2);
     std::normal_distribution<double> dist_kv(cute::get<4>(problem_size), cute::get<4>(problem_size) / 2);
 
+    // Use Cacheline Size to calculate alignment
+    constexpr int cacheline_bytes = 64;
+    constexpr int AlignmentQ = cacheline_bytes / sizeof(ElementQ);    // Alignment of Q matrix in units of elements
+    constexpr int AlignmentKV = cacheline_bytes / sizeof(ElementK);   // Alignment of Kand V matrix in units of elements
+
     auto generate_positive_int = [](auto& dist, auto& gen) {
       int result = 0;
       do {
@@ -222,8 +275,8 @@ struct TestbedImpl {
     int max_seqlen_kv = 0;
 
     for (int i = 0; i < num_batches; i++) {
-      int seqlen_q = VarlenSame ? cute::get<3>(problem_size) : generate_positive_int(dist_q, rng);
-      int seqlen_kv = VarlenSame ? cute::get<4>(problem_size) : generate_positive_int(dist_kv, rng);
+      int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
+      int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
 
       total_seqlen_q += seqlen_q;
       total_seqlen_kv += seqlen_kv;
