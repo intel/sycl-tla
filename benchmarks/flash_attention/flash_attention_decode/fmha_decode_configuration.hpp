@@ -105,5 +105,53 @@ struct FMHADecodeConfig {
                                                                     CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
 };
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+template <int KVTile, int NumSGs>
+struct Shape_h64 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _64, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template <int KVTile, int NumSGs>
+struct Shape_h96 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _96, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template <int KVTile, int NumSGs>
+struct Shape_h128 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _128, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template <int KVTile, int NumSGs>
+struct Shape_h192 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _192, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template<class QKVType, bool Causal, bool VarLen, class TileShapeConfig>
+struct FMHADecodeConfigGen {
+
+using GmemTiledCopyQ = cute::XE_2D_U16x1x16_LD_N;
+using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
+using GmemTiledCopyV = cute::XE_2D_U16x32x32_LD_V;
+using GmemTiledCopyO = cute::XE_2D_U32x1x16_ST_N;
+
+using type = cutlass::flash_attention::FMHADecodeConfig<
+      QKVType, float, float, GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV,
+      GmemTiledCopyO, typename TileShapeConfig::ShapeQK, typename TileShapeConfig::ShapePV,
+      typename TileShapeConfig::ShapeOutput, typename TileShapeConfig::SubgroupLayout,
+      Causal, VarLen>;
+};
+
 } // namespace flash_attention
 } // namespace cutlass
