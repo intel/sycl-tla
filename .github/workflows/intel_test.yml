@@ -97,7 +97,7 @@ jobs:
       - name: Unit test
         shell: bash
         run: |
-          cmake --build . --target test_unit -j $(( ($(nproc) + 1) / 2 ))
+          cmake --build . --target test_unit -j $(( ($(nproc) + 1) / 8 ))
       - name: Examples
         shell: bash
         run: |
