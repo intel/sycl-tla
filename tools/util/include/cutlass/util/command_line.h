@@ -73,6 +73,9 @@ struct CommandLine {
     for (int i = 1; i < argc; i++) {
       string arg = argv[i];
 
+      if(arg[0] == '#'){
+        break;
+      }
       if ((arg[0] != '-') || (arg[1] != '-')) {
         args.push_back(arg);
         args_used.push_back(false);
