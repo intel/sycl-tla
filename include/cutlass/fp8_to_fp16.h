@@ -209,7 +209,7 @@ convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
 
   // TODO(Codeplay): Move conversion to NumericArrayConverter
   if constexpr (std::is_same_v<ElementA, cute::float_e5m2_t>) {
-    // May convert two FP8 elements at a time
+    // May convert four FP8 elements at a time
     constexpr bool use_faster_conversion = num_elements >= 8;
     using src_dtype =
         std::conditional_t<use_faster_conversion, uint32_t, uint8_t>;
