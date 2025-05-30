@@ -377,7 +377,7 @@ struct ExampleRunner {
         (options.m * options.k * sizeof(ElementA) + options.k * options.n * sizeof(ElementB) +
          options.m * options.n * sizeof(ElementOutput)) *
         1e-9;
-      double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
+      double tflops = 2.0 * options.m * options.n * options.k * options.l * 1e-12;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
       printf("Cutlass GEMM Performance:     [%4.3f]GB/s,   [%4.3f]TF/s, [%6.4f]ms\n", io / cute_time, tflops/cute_time,  cute_time*1000);
     }
