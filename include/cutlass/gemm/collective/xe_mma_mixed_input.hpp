@@ -386,7 +386,6 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     auto s_tensor = make_tensor((format_type*)(raw_pointer_cast(in.data())), Shape<Int<loop_cnt / scalar>, Int<N>>{});
     auto d_tensor = make_tensor(out.data(), Shape<Int<vec_size>, Int<spilits>, Int<N>>{});
 
-#ifdef DATA_CONVERT
     CUTLASS_PRAGMA_UNROLL
     for (int j = 0; j < N; j++) {
       const auto ts = tCrS_input(j);
@@ -406,16 +405,20 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < vec_size; i++) {
+#ifdef DATA_CONVERT
           auto data = (src1 >> (src_bits * i)) & 0xf;
+#else
+          auto data = i;
+#endif
+
 #ifdef QUANTIZATION
           dst[i]  = (static_cast<decltype(tz)>(data) - tz) * ts;
 #else
-          dst[i] = static_cast<_Float16>(data);
+          dst[i] = static_cast<DstType>(data);
 #endif
         }
       }
     }
-#endif
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
