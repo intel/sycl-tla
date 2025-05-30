@@ -337,8 +337,8 @@ public:
         // required data for matrix V.
         CUTLASS_PRAGMA_UNROLL
         for(int v = 0; v < VSlicer; v++) {
-          is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV(_, _, _, v, split * QK_SG_N + kv_tile_idx))
-                      : prefetch(tiled_prefetch_v, pVgV(_, _, _, v, (split - kv_splits_cache) * QK_SG_N + kv_tile_idx));
+          is_KV_cache ? prefetch(tiled_prefetch_v_cache, pVgV(_, _, _, v, split * ATOM_M + kv_tile_idx))
+                      : prefetch(tiled_prefetch_v, pVgV(_, _, _, v, (split - kv_splits_cache) * ATOM_M + kv_tile_idx));
         }
 
         CollectiveSoftmaxEpilogue softmax(params.softmax);
@@ -359,8 +359,8 @@ public:
         // required data for matrix K.
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < size<4>(pKgK); j++) {
-          is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, (split + 1) * QK_SG_N + kv_tile_idx, j))
-                      : prefetch(tiled_prefetch_k, pKgK(_, _, _,(split - kv_splits_cache + 1) * QK_SG_N + kv_tile_idx, j));
+          is_KV_cache ? prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, (split + 1) * ATOM_M + kv_tile_idx, j))
+                      : prefetch(tiled_prefetch_k, pKgK(_, _, _,(split - kv_splits_cache + 1) * ATOM_M + kv_tile_idx, j));
         }
       }
 
@@ -375,7 +375,7 @@ public:
         // required data for matrix V.
         CUTLASS_PRAGMA_UNROLL
         for(int v = 0; v < VSlicer; v++) {
-          prefetch(tiled_prefetch_v, pVgV(_, _, _, v, (kv_splits_new - 1) * QK_SG_N + kv_tile_idx));
+          prefetch(tiled_prefetch_v, pVgV(_, _, _, v, (kv_splits_new - 1) * ATOM_M + kv_tile_idx));
         }
 
         const int required_sgs = ceil_div(seq_len_kv, QK_SG_N);
