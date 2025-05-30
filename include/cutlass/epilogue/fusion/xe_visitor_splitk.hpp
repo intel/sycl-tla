@@ -83,8 +83,6 @@ public:
 
   struct Params {
     XE_Copy_output xe_store_output;
-    ElementOutput *ptr_output1;
-    ElementOutput *ptr_output2;
     XE_Copy_output xe_store_output1;
     XE_Copy_output xe_store_output2;
     size_t NUM_HEAD;
@@ -120,7 +118,7 @@ public:
         make_layout(make_shape(get<0>(typename XE_Copy_output::BlockShape{}),
                                get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelXeXMX16::SubgroupSize>{})));
 
-    return {output, args.ptr_output1, args.ptr_output2, output1, output2, NUM_HEAD, NOPE_DIM, ROPE_DIM};
+    return {output, output1, output2, NUM_HEAD, NOPE_DIM, ROPE_DIM};
   }
 
   template <class ProblemShape>

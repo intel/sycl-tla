@@ -45,46 +45,12 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "cutlass/util/reference/device/tensor_relu.h"
-#include "cutlass/tensor_view.h"
-#include "cutlass/coord.h"
 
 #include "sycl_common.hpp"
 #include "helper.h"
 
 using namespace cute;
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-template<typename T>
-inline
-bool isclose(T a, T b, float atol, float rtol) {
-    return std::abs((float)a - (float)b) <= atol + rtol * std::abs((float)b);
-}
-
-template<typename T>
-inline
-void verify_acc(T expect, T val, const float atol, const float rtol, int &err_cnt) {
-}
-
-template<typename T>
-inline
-void random_fill(T *src, int seed, size_t N, float max, float min) {
-    if constexpr(std::is_same_v<T, float> || std::is_same_v<T, bfloat16_t> || std::is_same_v<T, half_t>) {
-        std::random_device rd;
-        std::mt19937 gen(seed);
-        std::uniform_real_distribution<float> dis(min, max);
-        T *buff =
-            (T *)std::malloc(N * sizeof(T));
-
-        for (size_t i = 0; i < N; ++i) {
-            buff[i] = (T)(dis(gen));
-        }
-        syclcompat::memcpy(src, buff, N * sizeof(T));
-        syclcompat::wait();
-        std::free(buff);
-    } else {
-        assert(0 & "Not supported dtype");
-    }
-}
 
 // Command line options parsing
 struct Options {
@@ -197,6 +163,21 @@ struct ExampleRunner {
   // Methods
   //
 
+  template <typename Element>
+  static void print_error(int b, int i, int j, int k, Element expect, Element val) {
+    std::cout << "(" << b << ", " << i << ", " << j << ", " << k
+        << "): " << "host: " << expect
+        << "   and device: " << val << std::endl;
+  }
+
+  template <typename Element>
+  static void print_error(int b, int i, int j, Element expect, Element val) {
+    std::cout << "(" << b << ", " << i << ", " << j
+              << "): " << "host: " << expect << "   and device: " << val
+              << std::endl;
+  }
+
+
   bool verify(const ProblemShapeType& problem_size, const ProblemShapeType &splitk_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
     auto [NUM_HEAD, NOPE_DIM, ROPE_DIM, _] = splitk_size;
@@ -224,116 +205,93 @@ struct ExampleRunner {
         );
 
     syclcompat::wait();
+
+    auto D_shape = make_shape(M, N, L);
+    auto D1_shape = make_shape(M, NUM_HEAD, NOPE_DIM, L);
+    auto D2_shape = make_shape(M, NUM_HEAD, ROPE_DIM, L);
+
+    auto D = std::vector<ElementOutput>(size(D_shape));
     // 256x128x64
-    ElementOutput *ptr_ref_D1 =
-        (ElementOutput *)std::malloc(M * NUM_HEAD * NOPE_DIM * L * sizeof(ElementOutput));
+    auto D1 = std::vector<ElementOutput>(size(D1_shape));
     // 256x128x128
-    ElementOutput *ptr_ref_D2 =
-        (ElementOutput *)std::malloc(M * NUM_HEAD * ROPE_DIM * L * sizeof(ElementOutput));
-    ElementOutput *ptr_ref_D =
-        (ElementOutput *)std::malloc(M * N * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr_ref_D, block_ref_D.get(),
-                       M * N * L * sizeof(ElementOutput));
+    auto D2 = std::vector<ElementOutput>(size(D2_shape));
+    syclcompat::memcpy<ElementOutput>(D.data(), block_ref_D.get(), size(D_shape));
     syclcompat::wait();
+
     for (int l = 0; l < L; l++) {
       for (int i = 0; i < M; i++) {
         for (int j = 0; j < NUM_HEAD; j++) {
-            for (int k = 0; k < NOPE_DIM + ROPE_DIM; ++k) {
-                if (k < NOPE_DIM) {
-                    ptr_ref_D1[l * M * NUM_HEAD * NOPE_DIM + i * NUM_HEAD * NOPE_DIM + j * NOPE_DIM + k] =
-                        ptr_ref_D[l * M * N + i * N + j * (NOPE_DIM + ROPE_DIM) + k];
-                } else {
-                    ptr_ref_D2[l * M * NUM_HEAD * ROPE_DIM + i * NUM_HEAD * ROPE_DIM + j * ROPE_DIM + k - NOPE_DIM] =
-                        ptr_ref_D[l * M * N + i * N + j * (NOPE_DIM + ROPE_DIM) + k];
-                }
+          for (int k = 0; k < NOPE_DIM + ROPE_DIM; ++k) {
+            if (k < NOPE_DIM) {
+              D1[l * M * NUM_HEAD * NOPE_DIM + i * NUM_HEAD * NOPE_DIM + j * NOPE_DIM + k] =
+                  D[l * M * N + i * N + j * (NOPE_DIM + ROPE_DIM) + k];
+            } else {
+              D2[l * M * NUM_HEAD * ROPE_DIM + i * NUM_HEAD * ROPE_DIM + j * ROPE_DIM + k - NOPE_DIM] =
+                  D[l * M * N + i * N + j * (NOPE_DIM + ROPE_DIM) + k];
             }
+          }
         }
       }
     }
 
-    ElementOutput *ptr_test_D =
-        (ElementOutput *)std::malloc((size_t)M * N * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr_test_D, block_D.get(),
-                       (size_t)M * N * L * sizeof(ElementOutput));
+    auto test_D = std::vector<ElementOutput>(size(D_shape));
+    syclcompat::memcpy<ElementOutput>(test_D.data(), block_D.get(), size(D_shape));
 
     // 256x128x64
-    ElementOutput *ptr_test_D1 =
-        (ElementOutput *)std::malloc(M * NUM_HEAD * NOPE_DIM * L * sizeof(ElementOutput));
+    auto test_D1 = std::vector<ElementOutput>(size(D1_shape));
     // 256x128x128
-    ElementOutput *ptr_test_D2 =
-        (ElementOutput *)std::malloc(M * NUM_HEAD * ROPE_DIM * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr_test_D1, block_D1.get(),
-                       M * NUM_HEAD * NOPE_DIM * L * sizeof(ElementOutput));
-    syclcompat::memcpy(ptr_test_D2, block_D2.get(),
-                       M * NUM_HEAD * ROPE_DIM * L * sizeof(ElementOutput));
-    syclcompat::wait();
-
-
+    auto test_D2 = std::vector<ElementOutput>(size(D2_shape));
+    syclcompat::memcpy<ElementOutput>(test_D1.data(), block_D1.get(), size(D1_shape));
+    syclcompat::memcpy<ElementOutput>(test_D2.data(), block_D2.get(), size(D2_shape));
     syclcompat::wait();
 
     uint32_t err_cnt = 0;
     constexpr float atol = 1e-4;
     constexpr float rtol = 1e-4;
 
-    printf("CHECK d1:\n");
     // check d1
     for (int b = 0; b < L; b++) {
       for (int i = 0; i < M; i++) {
         for (int j = 0; j < NUM_HEAD; j++) {
-            for (int k = 0; k < NOPE_DIM; ++k) {
-                int idx = b * M * NUM_HEAD * NOPE_DIM + i * NUM_HEAD * NOPE_DIM + j * NOPE_DIM + k;
-                auto expect = ptr_ref_D1[idx];
-                auto val = ptr_test_D1[idx];
-                if (not (std::isinf(val) || std::isnan(val))) {
-                    if (not isclose(val, expect, atol, rtol)) {
-                        std::cout << "(" << b << ", " << i << ", " << j << ", " << k
-                                  << "): " << "host: " << expect
-                                  << "   and device: " << val << std::endl;
-                        err_cnt++;
-                    }
-                } else {
-                    std::cout << "(" << b << ", " << i << ", " << j
-                              << "): " << "host: " << expect << "   and device: " << val
-                              << std::endl;
-                    err_cnt++;
-                }
+          for (int k = 0; k < NOPE_DIM; ++k) {
+            int idx = b * M * NUM_HEAD * NOPE_DIM + i * NUM_HEAD * NOPE_DIM + j * NOPE_DIM + k;
+            auto expect = D1[idx];
+            auto val = test_D1[idx];
+            if (not (std::isinf(val) || std::isnan(val))) {
+              if (not is_close(val, expect, atol, rtol)) {
+                print_error(b, i, j, k, expect, val);
+                err_cnt++;
+              }
+            } else {
+              print_error(b, i, j, expect, val);
+              err_cnt++;
             }
+          }
         }
       }
     }
-    printf("CHECK d2:\n");
     // check d2
     for (int b = 0; b < L; b++) {
       for (int i = 0; i < M; i++) {
         for (int j = 0; j < NUM_HEAD; j++) {
-            for (int k = 0; k < ROPE_DIM; ++k) {
-                int idx = b * M * NUM_HEAD * ROPE_DIM + i * NUM_HEAD * ROPE_DIM + j * ROPE_DIM + k;
-                auto expect = ptr_ref_D2[idx];
-                auto val = ptr_test_D2[idx];
-                if (not (std::isinf(val) || std::isnan(val))) {
-                    if (not isclose(val, expect, atol, rtol)) {
-                        std::cout << "(" << b << ", " << i << ", " << j << ", " << k
-                                  << "): " << "host: " << expect
-                                  << "   and device: " << val << std::endl;
-                        err_cnt++;
-                    }
-                } else {
-                    std::cout << "(" << b << ", " << i << ", " << j
-                              << "): " << "host: " << expect << "   and device: " << val
-                              << std::endl;
-                    err_cnt++;
-                }
+          for (int k = 0; k < ROPE_DIM; ++k) {
+            int idx = b * M * NUM_HEAD * ROPE_DIM + i * NUM_HEAD * ROPE_DIM + j * ROPE_DIM + k;
+            auto expect = D2[idx];
+            auto val = test_D2[idx];
+            if (not (std::isinf(val) || std::isnan(val))) {
+              if (not is_close(val, expect, atol, rtol)) {
+                print_error(b, i, j, k, expect, val);
+                err_cnt++;
+              }
+            } else {
+              print_error(b, i, j, expect, val);
+              err_cnt++;
             }
+          }
         }
       }
     }
 
-    std::free(ptr_test_D);
-    std::free(ptr_test_D1);
-    std::free(ptr_test_D2);
-    std::free(ptr_ref_D);
-    std::free(ptr_ref_D1);
-    std::free(ptr_ref_D2);
     std::cout << "err count: " << err_cnt
               << ", pass rate: " << 100 - (100 * err_cnt / (M * N * L)) << "%"
               << std::endl;
@@ -413,13 +371,12 @@ struct ExampleRunner {
       for (int i = 0; i < options.iterations; ++i) {
         gemm_op.run();
       }
-      syclcompat::wait();
-    double io =
+      float cute_time = timer.seconds() / options.iterations;
+      double io =
         options.l *
         (options.m * options.k * sizeof(ElementA) + options.k * options.n * sizeof(ElementB) +
          options.m * options.n * sizeof(ElementOutput)) *
         1e-9;
-      float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
       printf("Cutlass GEMM Performance:     [%4.3f]GB/s,   [%4.3f]TF/s, [%6.4f]ms\n", io / cute_time, tflops/cute_time,  cute_time*1000);
