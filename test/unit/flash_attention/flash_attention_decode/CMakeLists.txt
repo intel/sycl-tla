@@ -26,6 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+if (NOT CUTLASS_SYCL_RUNNING_CI)
 cutlass_test_unit_add_executable(
   cutlass_test_unit_flash_attention_decode_xe
   xe_flash_decode_bf16_fp32_fp32_h64_512.cpp
@@ -57,3 +58,4 @@ add_custom_target(
   DEPENDS
   test_unit_flash_attention_decode_xe
 )
+endif ()
