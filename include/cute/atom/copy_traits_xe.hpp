@@ -422,6 +422,7 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
   using TotalMmaAtomItersRegs = decltype(select<1,2>(TLShape{}));
 
   using CopyValsShapeRegs = decltype(shape_div(BlockShapeRegs{}, ThreadLayoutRegs{}));
+  // This case would need to rearrange data in registers between copy and mma calls
   static_assert(get<0>(CopyValsShapeRegs{}) >= get<0>(MmaValsShapeRegs2d{}) || 
                   get<1>(CopyValsShapeRegs{}) <= get<1>(MmaValsShapeRegs2d{}), 
                 "It is not possible to have MMA atom be bigger than copy atom in one dimension and smaller in other dimension!");
@@ -903,8 +904,8 @@ struct Copy_Traits_<XE_2D_U16x2x16_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x2x16_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_16>,
-                           Stride< _0, _1>>;
+  using SrcLayout = Layout<Shape <_16,Shape <_16,  _2>>,
+                           Stride<_0,Stride< _1,_256>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16,Shape <_16,  _2>>,
                            Stride<_16,Stride< _1,_256>>>;
