@@ -133,6 +133,7 @@ template <class FMHAPrefillConfiguration> struct BenchmarkRunnerFMHA {
   using ProblemShapeType = typename GemmKernel::ProblemShape;
   static constexpr bool Causal = FMHAPrefillConfiguration::Causal;
   static constexpr bool isVarLen = FMHAPrefillConfiguration::VarLen;
+  static constexpr bool isPagdKV = FMHAPrefillConfiguration::PagdKV;
 
   int32_t count;
 
