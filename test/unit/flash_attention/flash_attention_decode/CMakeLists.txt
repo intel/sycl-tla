@@ -46,10 +46,6 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_fp16_fp32_fp32_h192_1024.cpp
 )
 
-target_link_options( cutlass_test_unit_flash_attention_decode_xe PRIVATE -Xs 
-                    "-options \"-ze-opt-large-register-file -gline-tables-only\" 
-                    -options \"-igc_opts 'ExtraOCLOptions=\"-cl-intel-256-GRF-per-thread\"','VectorAliasBBThreshold=100000000000'\"" )
-
 add_custom_target(
   cutlass_test_unit_flash_attention_decode
   DEPENDS
