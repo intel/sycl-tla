@@ -29,22 +29,41 @@
 set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
 
 add_subdirectory(flash_attention_prefill)
-add_subdirectory(flash_attention_decode)
 add_subdirectory(flash_attention_prefill_cachedkv)
 
+if (CUTLASS_SYCL_RUNNING_CI)
+  add_subdirectory(flash_attention_decode)
 
-add_custom_target(
-  cutlass_test_unit_flash_attention
-  DEPENDS
-  cutlass_test_unit_flash_attention_prefill
-  cutlass_test_unit_flash_attention_decode
-  cutlass_test_unit_flash_attention_prefill_cachedkv
-)
+  add_custom_target(
+    cutlass_test_unit_flash_attention
+    DEPENDS
+    cutlass_test_unit_flash_attention_prefill
+    cutlass_test_unit_flash_attention_prefill_cachedkv
+  )
 
-add_custom_target(
-  test_unit_flash_attention
-  DEPENDS
-  test_unit_flash_attention_prefill
-  test_unit_flash_attention_decode
-  test_unit_flash_attention_prefill_cachedkv
-)
+  add_custom_target(
+    test_unit_flash_attention
+    DEPENDS
+    test_unit_flash_attention_prefill
+    test_unit_flash_attention_prefill_cachedkv
+  )
+else ()
+  add_subdirectory(flash_attention_decode)
+
+  add_custom_target(
+    cutlass_test_unit_flash_attention
+    DEPENDS
+    cutlass_test_unit_flash_attention_prefill
+    cutlass_test_unit_flash_attention_decode
+    cutlass_test_unit_flash_attention_prefill_cachedkv
+  )
+
+  add_custom_target(
+    test_unit_flash_attention
+    DEPENDS
+    test_unit_flash_attention_prefill
+    test_unit_flash_attention_decode
+    test_unit_flash_attention_prefill_cachedkv
+  )
+endif ()
+

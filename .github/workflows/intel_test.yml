@@ -97,7 +97,7 @@ jobs:
       - name: Unit test
         shell: bash
         run: |
-          cmake --build . --target test_unit -j 1
+          cmake --build . --target test_unit -j
       - name: Examples
         shell: bash
         run: |
