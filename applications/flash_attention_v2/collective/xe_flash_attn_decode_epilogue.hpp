@@ -183,7 +183,7 @@ public:
 
     sycl::group_barrier(group);
 
-    Tensor out_reg = make_tensor<ElementOutput>(make_shape(Int<1>{}, Int<1>{}, Int<FragsN>{}));
+    Tensor out_reg = make_tensor<ElementOutput>(make_shape(Int<Vec>{}, Int<FragsM>{}, Int<FragsN>{}));
 
     // only ATOM_N subgroups are needed to do reduction across the whole workgroup
     // using SLM, and write the final output to Global Memory.
