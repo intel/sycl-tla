@@ -29,7 +29,7 @@
  *
  **************************************************************************************************/
 
-template <bool Varlen>
+template <bool PagedKV, bool Varlen>
 int run_decode_1024(Options const& options) {
   if (options.head_size_vo == 64) {
 
@@ -38,8 +38,8 @@ int run_decode_1024(Options const& options) {
     using ShapeOutput = Shape<_1, _64, _1024>;
     using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
 
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
+    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
+                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
   } else if (options.head_size_vo == 96) {
 
     using ShapeQK = Shape<_1, _1024, _64>;
@@ -47,8 +47,8 @@ int run_decode_1024(Options const& options) {
     using ShapeOutput = Shape<_1, _96, _1024>;
     using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
 
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
+    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
+                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
   } else if (options.head_size_vo == 128) {
 
     using ShapeQK = Shape<_1, _1024, _64>;
@@ -56,8 +56,8 @@ int run_decode_1024(Options const& options) {
     using ShapeOutput = Shape<_1, _128, _1024>;
     using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
 
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
+    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
+                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
   } else if (options.head_size_vo == 192) {
 
     using ShapeQK = Shape<_1, _1024, _64>;
@@ -65,8 +65,8 @@ int run_decode_1024(Options const& options) {
     using ShapeOutput = Shape<_1, _192, _1024>;
     using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
 
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
+    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
+                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
   } else {
     std::cerr << "Aborting execution." << std::endl;
     return -1;

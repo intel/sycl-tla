@@ -55,13 +55,25 @@ int main(int argc, const char **argv) {
   const int seq_len_kv_total = options.seq_len_kv + options.seq_len_kv_cache;
   const bool kv_tile_block = (seq_len_kv_total % 1024) == 0;
 
-  if(!kv_tile_block && !options.varlen) {
-    return run_decode_512<false>(options);
-  } else if(kv_tile_block && !options.varlen) {
-    return run_decode_1024<false>(options);
-  } else if(!kv_tile_block && options.varlen) {
-    return run_decode_512<true>(options);
-  } else if(kv_tile_block && options.varlen) {
-    return run_decode_1024<true>(options);
+  if(options.use_paged_kv) {
+    if(!kv_tile_block && !options.varlen) {
+      return run_decode_512<true, false>(options);
+    } else if(kv_tile_block && !options.varlen) {
+      return run_decode_1024<true, false>(options);
+    } else if(!kv_tile_block && options.varlen) {
+      return run_decode_512<true, true>(options);
+    } else if(kv_tile_block && options.varlen) {
+      return run_decode_1024<true, true>(options);
+    }
+  } else {
+    if(!kv_tile_block && !options.varlen) {
+      return run_decode_512<false, false>(options);
+    } else if(kv_tile_block && !options.varlen) {
+      return run_decode_1024<false, false>(options);
+    } else if(!kv_tile_block && options.varlen) {
+      return run_decode_512<false, true>(options);
+    } else if(kv_tile_block && options.varlen) {
+      return run_decode_1024<false, true>(options);
+    }
   }
 }
