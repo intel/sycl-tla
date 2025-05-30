@@ -351,7 +351,7 @@ public:
             // get physical page idx from page table
             cached_nblock = params.mainloop.ptr_page_table[
                   batch_coord * params.mainloop.num_pages_per_seq +     // page table for this batch
-                  (nblock * QK_BLK_N / params.mainloop.page_size)       // nblock (tile idx) to logical page idx
+                  nblock * QK_BLK_N / params.mainloop.page_size       // nblock (tile idx) to logical page idx
                   ] * tiles_per_page +                                  // base block idx of physical page
                   (nblock % tiles_per_page);                            // offset within page
           }
