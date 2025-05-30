@@ -65,9 +65,9 @@ public:
   using Trait_Output = Copy_Traits<CopyOpR2G>;
   using XE_Copy_output = decltype(make_tiled_copy(Copy_Atom<Trait_Output, ElementOutput>{}
                                              .with(static_cast<ElementOutput const*>(nullptr),int32_t(0), int32_t(0)),
-                                             Layout<Shape<_1, Int<IntelPVCEpilogue::SubgroupSize>>>{},
+                                             Layout<Shape<_1, Int<IntelXeXMX16::SubgroupSize>>>{},
                                              make_layout(make_shape(get<0>(typename Trait_Output::BlockShape{}),
-                                                                    get<1>(typename Trait_Output::BlockShape{}) / Int<IntelPVCEpilogue::SubgroupSize>{}))));
+                                                                    get<1>(typename Trait_Output::BlockShape{}) / Int<IntelXeXMX16::SubgroupSize>{}))));
 
   struct SharedStorage { };
 
@@ -99,9 +99,9 @@ public:
     auto [M, N, K, L] = problem_shape_MNKL;
     XE_Copy_output output = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpR2G>, ElementOutput>{}.with(
                             args.ptr_output, M, N),
-                            Layout<Shape<_1, Int<IntelPVCEpilogue::SubgroupSize>>>{},
+                            Layout<Shape<_1, Int<IntelXeXMX16::SubgroupSize>>>{},
                             make_layout(make_shape(get<0>(typename XE_Copy_output::BlockShape{}),
-                                                   get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelPVCEpilogue::SubgroupSize>{})));
+                                                   get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelXeXMX16::SubgroupSize>{})));
     auto NUM_HEAD = args.NUM_HEAD;
     auto NOPE_DIM = args.NOPE_DIM;
     auto ROPE_DIM = args.ROPE_DIM;
@@ -109,16 +109,16 @@ public:
     XE_Copy_output output1 = make_tiled_copy(
         Copy_Atom<Copy_Traits<CopyOpR2G>, ElementOutput>{}.with(
             args.ptr_output1, M, NUM_HEAD *NOPE_DIM),
-        Layout<Shape<_1, Int<IntelPVCEpilogue::SubgroupSize>>>{},
+        Layout<Shape<_1, Int<IntelXeXMX16::SubgroupSize>>>{},
         make_layout(make_shape(get<0>(typename XE_Copy_output::BlockShape{}),
-                               get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelPVCEpilogue::SubgroupSize>{})));
+                               get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelXeXMX16::SubgroupSize>{})));
 
     XE_Copy_output output2 = make_tiled_copy(
         Copy_Atom<Copy_Traits<CopyOpR2G>, ElementOutput>{}.with(
             args.ptr_output2, M, NUM_HEAD *ROPE_DIM),
-        Layout<Shape<_1, Int<IntelPVCEpilogue::SubgroupSize>>>{},
+        Layout<Shape<_1, Int<IntelXeXMX16::SubgroupSize>>>{},
         make_layout(make_shape(get<0>(typename XE_Copy_output::BlockShape{}),
-                               get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelPVCEpilogue::SubgroupSize>{})));
+                               get<1>(typename XE_Copy_output::BlockShape{}) / Int<IntelXeXMX16::SubgroupSize>{})));
 
     return {output, args.ptr_output1, args.ptr_output2, output1, output2, NUM_HEAD, NOPE_DIM, ROPE_DIM};
   }
@@ -209,7 +209,7 @@ public:
 
       Tensor res =
           make_tensor(static_cast<decltype(res_tensor) &&>(res_tensor).data(),
-                      make_shape(Int<vec_size>{}, Int<vec_folds>{}, Int<Epi_N / IntelPVCEpilogue::SubgroupSize>{}));
+                      make_shape(Int<vec_size>{}, Int<vec_folds>{}, Int<Epi_N / IntelXeXMX16::SubgroupSize>{}));
       auto n_coord = get<1>(coord[0]);
       auto NOPE_DIM = params.NOPE_DIM;
       auto ROPE_DIM = params.ROPE_DIM;
@@ -244,7 +244,7 @@ public:
 
     auto [sg_m_coord, sg_n_coord, k_coord, l_offset] = args.tile_coord_mnkl;
     auto [M, N, K, L] = args.problem_shape_mnkl;
-    Tensor mAux_mnl = cute::get_pvc_tensor(make_shape(M,N,L));
+    Tensor mAux_mnl = cute::get_xe_tensor(make_shape(M,N,L));
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux = local_tile(mAux_mnl, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord,l_offset));
     Tensor tCgAux = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux);
@@ -259,12 +259,12 @@ public:
     auto num_head = N / inner_dim_sg;
     unsigned long sg_n_coord_1 = sg_n_coord_d0 * nope_dim_sg + sg_n_coord_d1;
     unsigned long sg_n_coord_2 = sg_n_coord_d0 * rope_dim_sg + sg_n_coord_d1 - nope_dim_sg;
-    Tensor mAux_mnl1 = cute::get_pvc_tensor(make_shape(M,num_head * nope_dim,L));
+    Tensor mAux_mnl1 = cute::get_xe_tensor(make_shape(M,num_head * nope_dim,L));
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux1 = local_tile(mAux_mnl1, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord_1,l_offset));
     Tensor tCgAux1 = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux1);
 
-    Tensor mAux_mnl2 = cute::get_pvc_tensor(make_shape(M,num_head * rope_dim,L));
+    Tensor mAux_mnl2 = cute::get_xe_tensor(make_shape(M,num_head * rope_dim,L));
     // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
     Tensor gAux2 = local_tile(mAux_mnl2, select<0,1>(EpilogueTile{}), make_coord(sg_m_coord,sg_n_coord_2,l_offset));
     Tensor tCgAux2 = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux2);

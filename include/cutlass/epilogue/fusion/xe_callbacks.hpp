@@ -199,7 +199,7 @@ template <
   class EpilogueTile
 >
 struct FusionCallbacks<
-    epilogue::IntelPVCEpilogue,
+    epilogue::IntelXeXMX16,
     fusion::LinCombSplitK<ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle>,
     CtaTileShapeMNK,
     EpilogueTile
