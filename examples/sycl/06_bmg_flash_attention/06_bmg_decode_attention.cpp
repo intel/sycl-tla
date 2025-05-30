@@ -30,8 +30,8 @@
  **************************************************************************************************/
 
 #include "bmg_flash_attn_decode_runner.hpp"
-#include "06_bmg_run_decode_kv512.cpp"
-#include "06_bmg_run_decode_kv1024.cpp"
+#include "06_bmg_run_decode_kv512.hpp"
+#include "06_bmg_run_decode_kv1024.hpp"
 
 int main(int argc, const char **argv) {
   //

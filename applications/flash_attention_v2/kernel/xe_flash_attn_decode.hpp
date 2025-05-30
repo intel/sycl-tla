@@ -271,8 +271,8 @@ public:
       auto gV_prefetch = local_tile(mV_nk, SubgroupTileShapePV{}, make_coord(_, _, _), Step<X, _1, _1>{});
 
       // Determine how many tiles are supposed to be processed using this subgroup
-      const int kv_splits_new = ceil_div(seq_len_kv, get<1>(TileShapeQK{}));
-      const int kv_splits_cache = ceil_div(seq_len_kv_cache, get<1>(TileShapeQK{}));
+      const int kv_splits_new = ceil_div(seq_len_kv, QK_BLK_N);
+      const int kv_splits_cache = ceil_div(seq_len_kv_cache, QK_BLK_N);
       const int kv_splits = kv_splits_new + kv_splits_cache;
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, sequence_length_shape, batch_coord);
@@ -307,8 +307,8 @@ public:
       // required data for matrix K.
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < size<4>(pKgK); j++) {
-        (seq_len_kv_cache == 0) ? prefetch(tiled_prefetch_k, pKgK(_, _, _, kv_tile_idx, j))
-                                : prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, kv_tile_idx, j));
+        seq_len_kv_cache == 0 ? prefetch(tiled_prefetch_k, pKgK(_, _, _, kv_tile_idx, j))
+                              : prefetch(tiled_prefetch_k_cache, pKgK(_, _, _, kv_tile_idx, j));
       }
 
       // Perform the collective scoped MMA
