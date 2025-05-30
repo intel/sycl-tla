@@ -122,14 +122,11 @@ static inline ushort16 E4M3_to_FP16_chunk16(uchar16 xin) {
 }
 
 template <int N>
-static inline void E5M2_to_FP16(cutlass::Array<uint16_t, N> const &xin,
-                                cutlass::Array<uint32_t, N> &xout) {
-  // Adapted from
-  // https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43,
-  // except that since 32-bit registers & int32 ALUs are used, convert 2 FP8
-  // elements at a time.
+static inline void E5M2_to_FP16(cutlass::Array<uint32_t, N / 4> const &xin,
+                                cutlass::Array<uint32_t, N / 2> &xout) {
+  // Since 32-bit registers & int32 ALUs are used, convert 4 FP8 elements at a time.
   CUTLASS_PRAGMA_UNROLL
-  for (int i = 0; i < N; i += 4) {
+  for (int i = 0, j = 0; i < N / 2; i += 4, j += 2) {
     // Manually unroll since using CUTLASS_PRAGMA_UNROLL or #pragma unroll
     // is not working here with DPCPP nightly dated March 24.
     // More recent DPCPP nightlies were not working with cutlass at the time
@@ -143,22 +140,20 @@ static inline void E5M2_to_FP16(cutlass::Array<uint16_t, N> const &xin,
     // converted in that case would have a multiple of 128 elements, so we would
     // also be able to cover small subgroup-level tiles such as 8x16, which
     // would not have been possible with an unrolling factor of 8.
-    uint32_t tmp0 = static_cast<uint32_t>(xin[i]);
-    uint32_t tmp1 = static_cast<uint32_t>(xin[i + 1]);
-    uint32_t tmp2 = static_cast<uint32_t>(xin[i + 2]);
-    uint32_t tmp3 = static_cast<uint32_t>(xin[i + 3]);
-    uint32_t lo0 = (tmp0 & 0x000000FF) << 8;
-    uint32_t lo1 = (tmp1 & 0x000000FF) << 8;
-    uint32_t lo2 = (tmp2 & 0x000000FF) << 8;
-    uint32_t lo3 = (tmp3 & 0x000000FF) << 8;
-    uint32_t hi0 = (tmp0 & 0x0000FF00) << 16;
-    uint32_t hi1 = (tmp1 & 0x0000FF00) << 16;
-    uint32_t hi2 = (tmp2 & 0x0000FF00) << 16;
-    uint32_t hi3 = (tmp3 & 0x0000FF00) << 16;
-    xout[i] = hi0 | lo0;
-    xout[i + 1] = hi1 | lo1;
-    xout[i + 2] = hi2 | lo2;
-    xout[i + 3] = hi3 | lo3;
+    uint32_t tmp0 = xin[j];
+    uint32_t tmp1 = xin[j + 1];
+    uint32_t first = (tmp0 & 0x000000FF) << 8;
+    uint32_t second = (tmp0 & 0x0000FF00) << 16;
+    uint32_t third = (tmp0 & 0x00FF0000) >> 8;
+    uint32_t fourth = (tmp0 & 0xFF000000);
+    uint32_t fifth = (tmp1 & 0x000000FF) << 8;
+    uint32_t sixth = (tmp1 & 0x0000FF00) << 16;
+    uint32_t seventh = (tmp1 & 0x00FF0000) >> 8;
+    uint32_t eighth = (tmp1 & 0xFF000000);
+    xout[i] = first | second;
+    xout[i + 1] = third | fourth;
+    xout[i + 2] = fifth | sixth;
+    xout[i + 3] = seventh | eighth;
   }
 }
 
@@ -175,7 +170,7 @@ static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin,
   //   (static_cast<uint16_t>((pSrc[i]))) << 8;
   // }
   // The root-cause is unknown, but private memory use is seen in that case.
-  // We're using a workaround that doesn't use private memory.  
+  // We're using a workaround that doesn't use private memory.
   CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < N; i++) {
     xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
@@ -216,11 +211,13 @@ convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
   if constexpr (std::is_same_v<ElementA, cute::float_e5m2_t>) {
     // May convert two FP8 elements at a time
     constexpr bool use_faster_conversion = num_elements >= 8;
-    using src_dtype = std::conditional_t<use_faster_conversion, uint16_t, uint8_t>;
-    using dst_dtype = std::conditional_t<use_faster_conversion, uint32_t, uint16_t>;
+    using src_dtype =
+        std::conditional_t<use_faster_conversion, uint32_t, uint8_t>;
+    using dst_dtype =
+        std::conditional_t<use_faster_conversion, uint32_t, uint16_t>;
     using SrcArray =
         std::conditional_t<use_faster_conversion,
-                           cutlass::Array<src_dtype, num_elements / 2>,
+                           cutlass::Array<src_dtype, num_elements / 4>,
                            cutlass::Array<src_dtype, num_elements>>;
     using DstArray =
         std::conditional_t<use_faster_conversion,
@@ -229,8 +226,8 @@ convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
     SrcArray const *pSrcArr = reinterpret_cast<SrcArray const *>(pSrc);
     DstArray *pDstArr = reinterpret_cast<DstArray *>(pDst);
     if constexpr (use_faster_conversion) {
-      // convert 2 FP8 elements at a time
-      E5M2_to_FP16<num_elements / 2>(*pSrcArr, *pDstArr);
+      // convert 4 FP8 elements at a time
+      E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
     } else {
       E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
     }
