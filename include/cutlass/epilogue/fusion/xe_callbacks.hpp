@@ -296,10 +296,8 @@ struct FusionCallbacks<
     ElementScalar const* beta_ptr = nullptr;
     ElementOutput* output_ptr = nullptr;
 
-    using StrideWeight = Stride<_1, _0, int64_t>;
     ElementWeight const* weight_ptr = nullptr;
     float eps = 1e-5;
-    StrideWeight dWeight = {};
 
     operator typename Impl::Arguments() const {
       return

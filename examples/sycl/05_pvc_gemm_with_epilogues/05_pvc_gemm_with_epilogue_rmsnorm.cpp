@@ -167,7 +167,7 @@ struct ExampleRunner {
   // Methods
   //
 
-  bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
+  bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta, ElementCompute eps) {
     auto [M, N, K, L] = problem_size;
 
     cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
@@ -317,7 +317,7 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
+    bool passed = verify(problem_size, options.alpha, options.beta, options.eps);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
     if (!passed) return cutlass::Status::kErrorInternal;
 

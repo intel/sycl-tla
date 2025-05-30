@@ -210,17 +210,13 @@ public:
                 }
             }
             int gx = syclcompat::global_id::x() % 256;
-            int gy = syclcompat::global_id::y();
             auto gid = gx / 16 * 32 + gx % 16;
-            if (cute::thread0()) {
-                printf("threadx %d blockx %d blockdimx %d\n", ThreadIdxX(), BlockIdxX(), BlockDimX());
-            }
+            const float rev_dim = 1 / (float)params.inner_dim;
             CUTLASS_PRAGMA_UNROLL
             for (int loop = 0; loop < vec_folds; loop++) {
                 auto loop_t = res(_, loop, _);
                 auto pow2_t = pow2_buff(_, loop, _);
                 Tensor group_sum = make_tensor<float>(make_shape(Int<vec_size>{}));
-                float rev_dim = 1 / (float)params.inner_dim;
                 group_reduce_sum<Sg_N>(stensor, pow2_t, group_sum);
                 Tensor rms = make_tensor<float>(make_shape(Int<vec_size>{}));
                 CUTLASS_PRAGMA_UNROLL
