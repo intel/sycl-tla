@@ -215,7 +215,6 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
 
-      // TODO: register pressure
       convert_FP8_to_FP16<ElementA>(tCrA, tCrA_fp16);
       convert_FP8_to_FP16<ElementA>(tCrB, tCrB_fp16);
 

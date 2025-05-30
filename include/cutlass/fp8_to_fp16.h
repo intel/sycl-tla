@@ -40,13 +40,13 @@
 #include <cutlass/detail/helper_macros.hpp>
 #include <cutlass/half.h>
 
-using uchar16 = cute::intel::uchar16;
-using ushort16 = cute::intel::ushort16;
+using uchar8 = cute::intel::uchar8;
+using ushort8 = cute::intel::ushort8;
 
-static inline ushort16 convert_ushort16(uchar16 x) {
-  ushort16 result;
-#pragma unroll
-  for (int i = 0; i < 16; ++i) {
+static inline ushort8 convert_ushort8(uchar8 x) {
+  ushort8 result;
+#pragma unroll 8
+  for (int i = 0; i < 8; ++i) {
     result[i] = static_cast<uint16_t>(x[i]);
   }
   return result;
@@ -92,30 +92,30 @@ static inline unsigned short E4M3_to_FP16(unsigned char xin) {
   return (unsigned short)x16.i;
 }
 
-static inline ushort16 E4M3_to_FP16_chunk16(uchar16 xin) {
-  uchar16 xa = xin & 0x7F;
-  uchar16 sgn_x = xin ^ xa;
+static inline ushort8 E4M3_to_FP16_chunk8(uchar8 xin) {
+  uchar8 xa = xin & 0x7F;
+  uchar8 sgn_x = xin ^ xa;
 
-  uchar16 zero_mask;
-#pragma unroll
-  for (int i = 0; i < 16; ++i) {
+  uchar8 zero_mask;
+#pragma unroll 8
+  for (int i = 0; i < 8; ++i) {
     zero_mask[i] = (xa[i] == 0) ? 1 : 0;
   }
-  uchar16 nan_mask = (0x7E - xa) & 0x80;
-  uchar16 den_mask = ((xa - 8) >> 7) & 0x01;
+  uchar8 nan_mask = (0x7E - xa) & 0x80;
+  uchar8 den_mask = ((xa - 8) >> 7) & 0x01;
 
   xa += (nan_mask >> 1);
   xa |= (den_mask & 8);
   den_mask &= 0x48;
   xa += 0x40 & ~(zero_mask * 0x40);
 
-  ushort16 x16 = convert_ushort16(xa) << 7;
-  ushort16 den_corr = convert_ushort16(den_mask & ~zero_mask) << 7;
+  ushort8 x16 = convert_ushort8(xa) << 7;
+  ushort8 den_corr = convert_ushort8(den_mask & ~zero_mask) << 7;
 
-  ushort16 result = x16 - den_corr;
-  result &= ~(convert_ushort16(zero_mask) << 7);
+  ushort8 result = x16 - den_corr;
+  result &= ~(convert_ushort8(zero_mask) << 7);
 
-  ushort16 sign_ext = convert_ushort16(sgn_x) << 8;
+  ushort8 sign_ext = convert_ushort8(sgn_x) << 8;
   result ^= sign_ext;
 
   return result;
@@ -124,36 +124,18 @@ static inline ushort16 E4M3_to_FP16_chunk16(uchar16 xin) {
 template <int N>
 static inline void E5M2_to_FP16(cutlass::Array<uint32_t, N / 4> const &xin,
                                 cutlass::Array<uint32_t, N / 2> &xout) {
-  // Since 32-bit registers & int32 ALUs are used, convert 4 FP8 elements at a time.
-  CUTLASS_PRAGMA_UNROLL
-  for (int i = 0, j = 0; i < N / 2; i += 4, j += 2) {
-    // Manually unroll since using CUTLASS_PRAGMA_UNROLL or #pragma unroll
-    // is not working here with DPCPP nightly dated March 24.
-    // More recent DPCPP nightlies were not working with cutlass at the time
-    // this code was written. If preprocessor directive for loop unrolling
-    // worked, we could've determined the unrolling factor at compile time,
-    // based on how many elements each work-item handled.
-    // An unrolling factor of 8 would be desirable (although shl instruction can
-    // pipeline 9 inputs at a time, the inputs we usually handle are not a
-    // multiple of 9). but this code uses an unrolling factor of 4 so that it
-    // can work with a multiple of 8 FP8 elements. The subgroup tile to be
-    // converted in that case would have a multiple of 128 elements, so we would
-    // also be able to cover small subgroup-level tiles such as 8x16, which
-    // would not have been possible with an unrolling factor of 8.
+// Since 32-bit registers & int32 ALUs are used, convert 4 FP8 elements at a
+// time. When unroll factor is not specified, full unrolling doesn't occur
+#pragma unroll N / 2
+  for (int i = 0, j = 0; i < N / 2; i += 2, j += 1) {
+    // 3 shifts, 4 "and" & 2 "or" instructions for each set of 4 FP8 elements.
     uint32_t tmp0 = xin[j];
-    uint32_t tmp1 = xin[j + 1];
     uint32_t first = (tmp0 & 0x000000FF) << 8;
     uint32_t second = (tmp0 & 0x0000FF00) << 16;
     uint32_t third = (tmp0 & 0x00FF0000) >> 8;
     uint32_t fourth = (tmp0 & 0xFF000000);
-    uint32_t fifth = (tmp1 & 0x000000FF) << 8;
-    uint32_t sixth = (tmp1 & 0x0000FF00) << 16;
-    uint32_t seventh = (tmp1 & 0x00FF0000) >> 8;
-    uint32_t eighth = (tmp1 & 0xFF000000);
     xout[i] = first | second;
     xout[i + 1] = third | fourth;
-    xout[i + 2] = fifth | sixth;
-    xout[i + 3] = seventh | eighth;
   }
 }
 
@@ -171,7 +153,7 @@ static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin,
   // }
   // The root-cause is unknown, but private memory use is seen in that case.
   // We're using a workaround that doesn't use private memory.
-  CUTLASS_PRAGMA_UNROLL
+#pragma unroll N
   for (int i = 0; i < N; i++) {
     xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
   }
@@ -199,30 +181,23 @@ convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
   static_assert(std::is_same_v<DstType, cute::half_t>,
                 "Expected fp16 output as half_t");
 
-  auto const &src = in(cute::_, cute::_, cute::_);
-  auto const &dst = out(cute::_, cute::_, cute::_);
+  SrcType const *pSrc = reinterpret_cast<SrcType const *>(in.data());
+  DstType *pDst = reinterpret_cast<DstType *>(out.data());
 
-  SrcType const *pSrc = src.data();
-  DstType *pDst = dst.data();
-
-  constexpr int num_elements = decltype(size(src))::value;
+  constexpr int num_elements = decltype(size(in))::value;
 
   // TODO(Codeplay): Move conversion to NumericArrayConverter
   if constexpr (std::is_same_v<ElementA, cute::float_e5m2_t>) {
     // May convert four FP8 elements at a time
-    constexpr bool use_faster_conversion = num_elements >= 8;
-    using src_dtype =
-        std::conditional_t<use_faster_conversion, uint32_t, uint8_t>;
-    using dst_dtype =
-        std::conditional_t<use_faster_conversion, uint32_t, uint16_t>;
+    constexpr bool use_faster_conversion = num_elements % 4 == 0;
     using SrcArray =
         std::conditional_t<use_faster_conversion,
-                           cutlass::Array<src_dtype, num_elements / 4>,
-                           cutlass::Array<src_dtype, num_elements>>;
+                           cutlass::Array<uint32_t, num_elements / 4>,
+                           cutlass::Array<uint8_t, num_elements>>;
     using DstArray =
         std::conditional_t<use_faster_conversion,
-                           cutlass::Array<dst_dtype, num_elements / 2>,
-                           cutlass::Array<dst_dtype, num_elements>>;
+                           cutlass::Array<uint32_t, num_elements / 2>,
+                           cutlass::Array<uint16_t, num_elements>>;
     SrcArray const *pSrcArr = reinterpret_cast<SrcArray const *>(pSrc);
     DstArray *pDstArr = reinterpret_cast<DstArray *>(pDst);
     if constexpr (use_faster_conversion) {
@@ -233,18 +208,21 @@ convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
     }
   } else {
     // E4M3 -> FP16 conversion
-    constexpr int chunk_size = 16;
+    constexpr int chunk_size = 8;
     constexpr int iters = num_elements / chunk_size;
+    static_assert(num_elements % chunk_size == 0,
+                  "Currently, E4M3 -> FP16 conversion is only supported when "
+                  "each thread converts a multiple of 8 elements");
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < iters; ++i) {
-      cute::intel::uchar16 src_vec;
-      CUTLASS_PRAGMA_UNROLL
+      cute::intel::uchar8 src_vec;
+      #pragma unroll chunk_size
       for (int j = 0; j < chunk_size; ++j) {
         src_vec[j] = pSrc[i * chunk_size + j];
       }
-      cute::intel::ushort16 dst_vec;
-      dst_vec = E4M3_to_FP16_chunk16(src_vec);
-      CUTLASS_PRAGMA_UNROLL
+      cute::intel::ushort8 dst_vec;
+      dst_vec = E4M3_to_FP16_chunk8(src_vec);
+      #pragma unroll chunk_size
       for (int j = 0; j < chunk_size; ++j) {
         reinterpret_cast<uint16_t *>(pDst)[i * chunk_size + j] = dst_vec[j];
       }
