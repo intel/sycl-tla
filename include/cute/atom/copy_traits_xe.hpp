@@ -221,7 +221,7 @@ struct XE_2D_LD_Unpack {
 
   // Construct prefetch from equivalent copy
   template<class CopyOp2>
-  XE_2D_LD_Unpack(XE_2D_LD_Unpack<CopyOp2, StrideIndicator> const& copy_op) : 
+  XE_2D_LD_Unpack(XE_2D_LD_Unpack<CopyOp2, StrideOrTensor> const& copy_op) : 
     base_ptr(copy_op.base_ptr), width(copy_op.width), height(copy_op.height),
     pitch(copy_op.pitch), stride_l(copy_op.stride_l) {
       static_assert(std::is_same_v<CopyOp, typename CopyOp2::PREFETCH>, 
