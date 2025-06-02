@@ -299,16 +299,25 @@ public:
 
       int kv_tile_idx = sub_group_id / ATOM_N;
       int kv_cache_tile_idx = kv_tile_idx;
-      int tiles_per_page = ceil_div(params.mainloop.page_size, QK_SG_N);
+      int tiles_per_page = ceil_div(mainloop_params.page_size, QK_SG_N);
 
       if constexpr (PagedKV) {
         if (seq_len_kv_cache != 0) {
           // get physical page idx from page table
-          kv_cache_tile_idx = params.mainloop.ptr_page_table[
-                batch_coord * params.mainloop.num_pages_per_seq +     // page table for this batch
-                ((kv_tile_idx * QK_SG_N) / params.mainloop.page_size)       // tile idx to logical page idx
-                ] * tiles_per_page +                                  // base block idx of physical page
-                (kv_tile_idx % tiles_per_page);                            // offset within page
+          int curr_batch_pages = is_var_len ? mainloop_params.num_pages_per_seq[batch_coord + 1] - mainloop_params.num_pages_per_seq[batch_coord]
+                                            : ceil_div(seq_len_kv_cache, mainloop_params.page_size);
+          int curr_page_logical_idx = (kv_tile_idx * QK_SG_N) / mainloop_params.page_size;
+          int batch_offset = is_var_len ? mainloop_params.num_pages_per_seq[batch_coord] : batch_coord * curr_batch_pages;
+          bool valid_page = curr_page_logical_idx < curr_batch_pages;
+          if (valid_page) {
+            kv_cache_tile_idx = mainloop_params.ptr_page_table[
+                  batch_offset +                     // page table for this batch
+                  curr_page_logical_idx              // tile idx to logical page idx
+                  ] * tiles_per_page +               // base block idx of physical page
+                  (kv_tile_idx % tiles_per_page);    // offset within page
+          } else {
+            kv_cache_tile_idx = curr_batch_pages * tiles_per_page; // push idx out of bounds to respect the boundary between batches
+          }
         }
       }
 
@@ -362,12 +371,21 @@ public:
         int kv_cache_next_tile_idx = kv_cache_tile_idx;
         if constexpr (PagedKV) {
           if (is_next_KV_cache) {
+            int curr_batch_pages = is_var_len ? mainloop_params.num_pages_per_seq[batch_coord + 1] - mainloop_params.num_pages_per_seq[batch_coord]
+                                              : ceil_div(seq_len_kv_cache, mainloop_params.page_size);
+            int curr_page_logical_idx = ((split + 1) * QK_BLK_N + kv_tile_idx * QK_SG_N) / mainloop_params.page_size;
+            int batch_offset = is_var_len ? mainloop_params.num_pages_per_seq[batch_coord] : batch_coord * curr_batch_pages;
+            bool valid_page = curr_page_logical_idx < curr_batch_pages;
             // get physical page idx from page table
-            kv_cache_next_tile_idx = params.mainloop.ptr_page_table[
-                  batch_coord * params.mainloop.num_pages_per_seq +     // page table for this batch
-                  (((split + 1) * QK_BLK_N + kv_tile_idx * QK_SG_N) / params.mainloop.page_size)       // tile idx to logical page idx
-                  ] * tiles_per_page +                                  // base block idx of physical page
-                  (kv_tile_idx % tiles_per_page);                            // offset within page
+            if (valid_page) {
+              kv_cache_next_tile_idx = mainloop_params.ptr_page_table[
+                    batch_offset +                      // page table for this batch
+                    curr_page_logical_idx               // tile idx to logical page idx
+                    ] * tiles_per_page +                // base block idx of physical page
+                    (kv_tile_idx % tiles_per_page);     // offset within page
+            } else {
+              kv_cache_next_tile_idx = curr_batch_pages * tiles_per_page; // push idx out of bounds to respect the boundary between batches
+            }
           }
         }
 

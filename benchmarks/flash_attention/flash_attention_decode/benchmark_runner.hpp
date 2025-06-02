@@ -176,7 +176,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
   struct PagedKVParams {
       cutlass::DeviceAllocation<int> page_table;
       int page_size = 0;
-      int num_pages_per_seq = 0;
+      cutlass::DeviceAllocation<int> num_pages_per_seq;
   };
   PagedKVParams paged_kv_cache;
 
@@ -508,25 +508,32 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
 
     if (PagedKV) {
       paged_kv_cache.page_size = options.page_size;
-      int num_pages_per_seq = ceil_div(seq_len_kv_cache, paged_kv_cache.page_size);
-      paged_kv_cache.num_pages_per_seq = num_pages_per_seq;
-
-      int num_pages = num_pages_per_seq * batch;
+      std::vector<int> num_pages_per_seq{0};
+      int num_pages = 0;
+      for(int b = 0; b < get<0>(problem_shape); b++) {
+        int seq_len_cache = isVarLen ? cumulative_seqlen_kv_cache[b + 1] - cumulative_seqlen_kv_cache[b] : seq_len_kv_cache;
+        int pages_per_seq = ceil_div(seq_len_cache, paged_kv_cache.page_size);
+        num_pages_per_seq.push_back(num_pages_per_seq.back() + pages_per_seq);
+        num_pages += pages_per_seq;
+      }
       paged_kv_cache.page_table.reset(num_pages);
 
       // initialize block table with random mapping for non-contiguous layout
       std::vector<int> page_mapping(num_pages);
-      for (int b = 0; b < batch; ++b) {
-        std::vector<int> physical_pages(num_pages_per_seq);
+      for (int b = 0; b < get<0>(problem_shape); ++b) {
+        std::vector<int> physical_pages(num_pages_per_seq[b + 1] - num_pages_per_seq[b]);
         std::iota(physical_pages.begin(), physical_pages.end(), 0);
         // shuffle physical pages
         std::shuffle(physical_pages.begin(), physical_pages.end(), std::mt19937{ std::random_device{}() });
-        for (int blk = 0; blk < num_pages_per_seq; ++blk) {
-          int logical_idx = b * num_pages_per_seq + blk;
+        for (int blk = 0; blk < physical_pages.size(); ++blk) {
+          int logical_idx = num_pages_per_seq[b] + blk;
           page_mapping[logical_idx] = physical_pages[blk];
         }
       }
       syclcompat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
+
+      paged_kv_cache.num_pages_per_seq.reset(num_pages_per_seq.size());
+      syclcompat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
       syclcompat::wait();
     }
 
@@ -627,7 +634,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
         block_V_cache[0].get(), stride_V_cache,
         PagedKV ? paged_kv_cache.page_table.get() : nullptr,
         PagedKV ? paged_kv_cache.page_size : 0,
-        PagedKV ? paged_kv_cache.num_pages_per_seq : 0},
+        PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
         {options.softmax_scale},
         {block_O.get(), stride_O},
         hw_info};
@@ -709,7 +716,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
         block_V_cache[input_num].get(), stride_V_cache,
         PagedKV ? paged_kv_cache.page_table.get() : nullptr,
         PagedKV ? paged_kv_cache.page_size : 0,
-        PagedKV ? paged_kv_cache.num_pages_per_seq : 0},
+        PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
         {options.softmax_scale},
         {block_O.get(), stride_O},
         hw_info};

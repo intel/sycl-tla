@@ -170,7 +170,7 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     // Paged KV Cache
     int const* ptr_page_table;
     int page_size;
-    int num_pages_per_seq;
+    int const* num_pages_per_seq;
   };
 
   struct Params {
@@ -182,7 +182,7 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     // Paged KV Cache
     int const* ptr_page_table;
     int page_size;
-    int num_pages_per_seq;
+    int const* num_pages_per_seq;
   };
 
   //
