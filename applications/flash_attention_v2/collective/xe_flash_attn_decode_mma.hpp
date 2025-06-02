@@ -305,7 +305,6 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     Tensor tCgV = thread_mma.partition_B(gV_);
     Tensor tCrV = make_tensor<ElementV>(make_fragment_layout(gmem_tiled_copy_v, take<0, 3>(tCgV.shape())));
 
-    // Partition the copying of A and B tiles across the threads
     auto gmem_thr_copy_V = gmem_tiled_copy_v.get_slice(thread_idx);
     Tensor tVrV = gmem_thr_copy_V.retile_D(tCrV);
     Tensor tVgV = gmem_thr_copy_V.retile_S(tCgV);
