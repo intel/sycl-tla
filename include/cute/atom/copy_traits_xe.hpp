@@ -110,12 +110,9 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
   // A shape<32,1> / trans or B shape<4,8>
   constexpr int sgs_contig = cute::gcd(Num_SGs, nums_blocks_contig);
   constexpr int sgs_non_contig = Num_SGs / sgs_contig;
-  
-  constexpr int iters_contig = nums_blocks_contig / sgs_contig;
 
   constexpr auto block_non_contig_size = tile_non_contig_size / sgs_non_contig;
   constexpr int nums_blocks_non_contig = ceil_div(tile_non_contig_size, block_non_contig_size);
-  constexpr int iters_non_contig = nums_blocks_non_contig / sgs_non_contig;
 
   using PrefetchTilingLayout = std::conditional_t<is_need_reversed,
            Layout<Shape<Shape<Int<SubgroupSize >, Int<sgs_contig>>, Int<sgs_non_contig>>,
