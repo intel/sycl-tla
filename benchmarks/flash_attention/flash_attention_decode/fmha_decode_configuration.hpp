@@ -49,7 +49,7 @@ template <typename DispatchPolicy> struct MMAOP <DispatchPolicy, half_t, float> 
 template <typename ElementInputType_, typename ElementAccumulatorType_, typename ElementOutputType_,
           typename GmemTiledCopyQ_, typename GmemTiledCopyK_, typename GmemTiledCopyV_, typename GmemTiledCopyO_, 
           typename TileShapeQK_, typename TileShapePV_, typename TileShapeOutput_, typename SubgroupLayout_,
-          bool Causal_, bool VarLen_>
+          bool Causal_, bool VarLen_, bool PagedKV_>
 struct FMHADecodeConfig {
 
   using ElementO = ElementOutputType_;     // <- data type of output
@@ -70,6 +70,7 @@ struct FMHADecodeConfig {
 
   static constexpr bool Causal = Causal_;
   static constexpr bool VarLen = VarLen_;
+  static constexpr bool PagedKV = PagedKV_;
   
   static constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
@@ -99,7 +100,7 @@ struct FMHADecodeConfig {
       GmemTiledCopyQ, // Q
       GmemTiledCopyK, // K
       GmemTiledCopyV, // V,
-      Causal>;
+      Causal, PagedKV>;
 
   using FMHADecodeKernel = cutlass::flash_attention::kernel::FMHADecode<ProblemShapeType, CollectiveMainloop,
                                                                     CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
@@ -138,7 +139,7 @@ struct Shape_h192 {
   using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
 };
 
-template<class QKVType, bool Causal, bool VarLen, class TileShapeConfig>
+template<class QKVType, bool Causal, bool VarLen, class TileShapeConfig, bool PagedKV>
 struct FMHADecodeConfigGen {
 
 using GmemTiledCopyQ = cute::XE_2D_U16x1x16_LD_N;
@@ -150,7 +151,7 @@ using type = cutlass::flash_attention::FMHADecodeConfig<
       QKVType, float, float, GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV,
       GmemTiledCopyO, typename TileShapeConfig::ShapeQK, typename TileShapeConfig::ShapePV,
       typename TileShapeConfig::ShapeOutput, typename TileShapeConfig::SubgroupLayout,
-      Causal, VarLen>;
+      Causal, VarLen, PagedKV>;
 };
 
 } // namespace flash_attention

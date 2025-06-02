@@ -262,8 +262,8 @@ public:
       Tensor mV_nkl = cute::get_xe_tensor(make_shape(head_size_vo, cute::max(seq_len_kv, seq_len_kv_cache), (is_var_len ? 1 : batch) * num_heads_kv));   //(n,k,l)
 
       Tensor mQ_mk = mQ_mkl(_, _, blk_l_coord);                                                    // (m,k)
-      Tensor mK_nk = mK_nkl(_, _, blk_l_coord / group_heads_q);                                                    // (n,k)
-      Tensor mV_nk = mV_nkl(_, _, blk_l_coord / group_heads_q);                                                    // (n,k)
+      Tensor mK_nk = mK_nkl(_, _, blk_l_coord / group_heads_q);                                    // (n,k)
+      Tensor mV_nk = mV_nkl(_, _, blk_l_coord / group_heads_q);                                    // (n,k)
 
       auto gQ = local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_q_coord, _, _), Step<_1,  X, _1>{});
       auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _, _), Step<X, _1, _1>{});
@@ -358,10 +358,10 @@ public:
                       : prefetch(tiled_prefetch_v, pVgV(_, _, _, v, curr_kv_tile_idx));
         }
 
-        bool is_new_KV_cache = (split + 1) < kv_splits_cache;
-        bool kv_cache_next_tile_idx = kv_cache_tile_idx;
+        bool is_next_KV_cache = (split + 1) < kv_splits_cache;
+        int kv_cache_next_tile_idx = kv_cache_tile_idx;
         if constexpr (PagedKV) {
-          if (is_new_KV_cache) {
+          if (is_next_KV_cache) {
             // get physical page idx from page table
             kv_cache_next_tile_idx = params.mainloop.ptr_page_table[
                   batch_coord * params.mainloop.num_pages_per_seq +     // page table for this batch
@@ -382,7 +382,7 @@ public:
           prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
         }
 
-        is_KV_cache = is_new_KV_cache;
+        is_KV_cache = is_next_KV_cache;
         kv_cache_tile_idx = kv_cache_next_tile_idx;
         // The headsize for both cached and non-cached version is the same.
         // each sub-group gets a different base offset for prefetch to load it's own
