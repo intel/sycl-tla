@@ -112,7 +112,6 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
   constexpr int sgs_non_contig = Num_SGs / sgs_contig;
 
   constexpr auto block_non_contig_size = tile_non_contig_size / sgs_non_contig;
-  constexpr int nums_blocks_non_contig = ceil_div(tile_non_contig_size, block_non_contig_size);
 
   using PrefetchTilingLayout = std::conditional_t<is_tensor_M_major,
            Layout<Shape<Shape<Int<SubgroupSize >, Int<sgs_contig>>, Int<sgs_non_contig>>,
