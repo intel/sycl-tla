@@ -29,7 +29,9 @@
  *
  **************************************************************************************************/
 
-#pragma once
+
+#include "benchmark_runner.hpp"
+#include "fmha_decode_configuration.hpp"
 
 using namespace cutlass::flash_attention;
 

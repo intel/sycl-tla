@@ -31,25 +31,23 @@
 
 #pragma once
 
-#include "benchmark_runner.hpp"
-#include "fmha_decode_configuration.hpp"
-#include "benchmarks_h64_512_paged.hpp"
-#include "benchmarks_h64_1024_paged.hpp"
-#include "benchmarks_h96_512_paged.hpp"
-#include "benchmarks_h96_1024_paged.hpp"
-#include "benchmarks_h128_512_paged.hpp"
-#include "benchmarks_h128_1024_paged.hpp"
-#include "benchmarks_h192_512_paged.hpp"
-#include "benchmarks_h192_1024_paged.hpp"
+#include <benchmarks_h64_512_paged.cpp>
+#include <benchmarks_h64_1024_paged.cpp>
+#include <benchmarks_h96_512_paged.cpp>
+#include <benchmarks_h96_1024_paged.cpp>
+#include <benchmarks_h128_512_paged.cpp>
+#include <benchmarks_h128_1024_paged.cpp>
+#include <benchmarks_h192_512_paged.cpp>
+#include <benchmarks_h192_1024_paged.cpp>
 
-#include "benchmarks_h64_512_nonpaged.hpp"
-#include "benchmarks_h64_1024_nonpaged.hpp"
-#include "benchmarks_h96_512_nonpaged.hpp"
-#include "benchmarks_h96_1024_nonpaged.hpp"
-#include "benchmarks_h128_512_nonpaged.hpp"
-#include "benchmarks_h128_1024_nonpaged.hpp"
-#include "benchmarks_h192_512_nonpaged.hpp"
-#include "benchmarks_h192_1024_nonpaged.hpp"
+#include <benchmarks_h64_512_nonpaged.cpp>
+#include <benchmarks_h64_1024_nonpaged.cpp>
+#include <benchmarks_h96_512_nonpaged.cpp>
+#include <benchmarks_h96_1024_nonpaged.cpp>
+#include <benchmarks_h128_512_nonpaged.cpp>
+#include <benchmarks_h128_1024_nonpaged.cpp>
+#include <benchmarks_h192_512_nonpaged.cpp>
+#include <benchmarks_h192_1024_nonpaged.cpp>
 
 static void register_flash_attention_decode_benchmarks() {
   register_flash_attention_decode_benchmarks_paged_h64_512();
