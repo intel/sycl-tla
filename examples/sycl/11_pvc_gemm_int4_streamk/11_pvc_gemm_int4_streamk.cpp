@@ -69,7 +69,7 @@
 #define MByte (1024 * 1024)
 
 using namespace cute;
-#define FLUSH_CACHE 1
+#define FLUSH_CACHE 2
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -451,7 +451,7 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
 
-#if FLUSH_CACHE == 0
+#if FLUSH_CACHE == 1
     auto max_size = options.l3_cache * MByte * 8 / sizeof_bits_v<ElementB>;
     auto b_cache_elements = max_size > K * N * L ? max_size : K * N * L;
     block_B.reset(b_cache_elements * CACHE_CNT);
@@ -559,7 +559,8 @@ struct ExampleRunner {
     if (options.iterations > 0) {
       for (int i = 0; i < options.iterations; ++i) {
         if (options.flush_cache) {
-#if FLUSH_CACHE == 0
+#if FLUSH_CACHE == 1
+
           typename Gemm::GemmKernel::Arguments arguments1{
             cutlass::gemm::GemmUniversalMode::kGemm,
             problem_size,
@@ -574,7 +575,7 @@ struct ExampleRunner {
             hw_info};
           CUTLASS_CHECK(gemm_op.initialize(arguments1, workspace.get()));
 
-#else
+#elif FLUSH_CACHE == 2
           flush_cache(l3_cache_size);
 #endif
         }
