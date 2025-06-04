@@ -29,7 +29,6 @@
 set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
 
 # Pass these configuration files for the CI
-set(CONFIG_FILE_KV_CACHE --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_decode_kvcache.in)
 set(CONFIG_FILE_NO_KV_CACHE --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_decode_nokvcache.in)
 
 cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_decode
@@ -75,7 +74,7 @@ endforeach()
 cutlass_benchmark_add_executable(
     cutlass_benchmarks_flash_attention_decode_xe
     main.cpp
-    TEST_COMMAND_OPTIONS CONFIG_FILE_NO_KV_CACHE CONFIG_FILE_KV_CACHE
+    TEST_COMMAND_OPTIONS CONFIG_FILE_NO_KV_CACHE
     LIBRARIES decode_h64 decode_h96 decode_h128 decode_h192
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}
     SUITE cutlass_benchmarks_flash_attention_decode
