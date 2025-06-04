@@ -92,16 +92,18 @@ jobs:
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
-            -DCUTLASS_SYCL_RUNNING_CI=ON
+            -DCUTLASS_SYCL_RUNNING_CI=ON \
+            -DCMAKE_JOB_POOL_LINK=2
+          cmake --build .
       - name: Unit test
         shell: bash
         run: |
-          cmake --build . --target test_unit -j
+          cmake --build . --target test_unit
       - name: Examples
         shell: bash
         run: |
-          cmake --build . --target test_examples -j 1
+          cmake --build . --target test_examples
       - name: Benchmarks
         shell: bash
         run: |
-          cmake --build . --target cutlass_benchmarks
+          cmake --build . --target benchmarks
