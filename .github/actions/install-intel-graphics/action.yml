@@ -34,6 +34,6 @@ runs:
       run: |
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
-          sudo apt-get install -y libze-intel-gpu1 libze1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc
-          sudo apt-get install -y libze-dev intel-ocloc
+          sudo apt-get install -y libze-intel-gpu1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc \
+            libze-dev intel-ocloc
         fi
