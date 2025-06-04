@@ -45,7 +45,7 @@ using ushort8 = cute::intel::ushort8;
 
 static inline ushort8 convert_ushort8(uchar8 x) {
   ushort8 result;
-#pragma unroll 8
+  CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < 8; ++i) {
     result[i] = static_cast<uint16_t>(x[i]);
   }
@@ -97,7 +97,7 @@ static inline ushort8 E4M3_to_FP16_chunk8(uchar8 xin) {
   uchar8 sgn_x = xin ^ xa;
 
   uchar8 zero_mask;
-#pragma unroll 8
+  CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < 8; ++i) {
     zero_mask[i] = (xa[i] == 0) ? 1 : 0;
   }
@@ -124,9 +124,9 @@ static inline ushort8 E4M3_to_FP16_chunk8(uchar8 xin) {
 template <int N>
 static inline void E5M2_to_FP16(cutlass::Array<uint32_t, N / 4> const &xin,
                                 cutlass::Array<uint32_t, N / 2> &xout) {
-// Since 32-bit registers & int32 ALUs are used, convert 4 FP8 elements at a
-// time. When unroll factor is not specified, full unrolling doesn't occur
-#pragma unroll N / 2
+// Since 32-bit registers & int32 ALUs are used, convert 4 FP8 elements
+// in one iteration.
+  CUTLASS_PRAGMA_UNROLL
   for (int i = 0, j = 0; i < N / 2; i += 2, j += 1) {
     // 3 shifts, 4 "and" & 2 "or" instructions for each set of 4 FP8 elements.
     uint32_t tmp0 = xin[j];
@@ -153,7 +153,7 @@ static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin,
   // }
   // The root-cause is unknown, but private memory use is seen in that case.
   // We're using a workaround that doesn't use private memory.
-#pragma unroll N
+  CUTLASS_PRAGMA_UNROLL
   for (int i = 0; i < N; i++) {
     xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
   }
@@ -216,13 +216,13 @@ convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < iters; ++i) {
       cute::intel::uchar8 src_vec;
-      #pragma unroll chunk_size
+      CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < chunk_size; ++j) {
         src_vec[j] = pSrc[i * chunk_size + j];
       }
       cute::intel::ushort8 dst_vec;
       dst_vec = E4M3_to_FP16_chunk8(src_vec);
-      #pragma unroll chunk_size
+      CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < chunk_size; ++j) {
         reinterpret_cast<uint16_t *>(pDst)[i * chunk_size + j] = dst_vec[j];
       }
