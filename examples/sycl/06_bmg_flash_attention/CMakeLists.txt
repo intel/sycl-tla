@@ -34,9 +34,13 @@ cutlass_example_add_executable(
   06_bmg_prefill_attention.cpp
 )
 
+set(TEST_PAGED "--use_paged_kv --page_size=128")
+
 cutlass_example_add_executable(
   06_bmg_decode_attention
   06_bmg_decode_attention.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_PAGED
 )
 
 set(TEST_NO_PAGED "")
