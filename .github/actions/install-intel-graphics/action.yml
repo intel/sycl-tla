@@ -36,4 +36,6 @@ runs:
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           sudo apt-get install -y libze-intel-gpu1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc \
             libze-dev intel-ocloc
+        else
+          exit 1
         fi
