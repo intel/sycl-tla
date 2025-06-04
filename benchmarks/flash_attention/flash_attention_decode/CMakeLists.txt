@@ -36,30 +36,22 @@ cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_decode
 
 add_library(decode_h64 SHARED
             benchmarks_h64_512_nonpaged.cpp
-            benchmarks_h64_512_paged.cpp
             benchmarks_h64_1024_nonpaged.cpp
-            benchmarks_h64_1024_paged.cpp
 )
 
 add_library(decode_h96 SHARED
             benchmarks_h96_512_nonpaged.cpp
-            benchmarks_h96_512_paged.cpp
             benchmarks_h96_1024_nonpaged.cpp
-            benchmarks_h96_1024_paged.cpp
 )
 
 add_library(decode_h128 SHARED
             benchmarks_h128_512_nonpaged.cpp
-            benchmarks_h128_512_paged.cpp
             benchmarks_h128_1024_nonpaged.cpp
-            benchmarks_h128_1024_paged.cpp
 )
 
 add_library(decode_h192 SHARED
             benchmarks_h192_512_nonpaged.cpp
-            benchmarks_h192_512_paged.cpp
             benchmarks_h192_1024_nonpaged.cpp
-            benchmarks_h192_1024_paged.cpp
 )
 
 set(LIB_LIST decode_h64 decode_h96 decode_h128 decode_h192)

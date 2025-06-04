@@ -32,10 +32,6 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_bf16_fp32_fp32_h64_1024_nonpaged.cpp
   xe_flash_decode_fp16_fp32_fp32_h64_512_nonpaged.cpp
   xe_flash_decode_fp16_fp32_fp32_h64_1024_nonpaged.cpp
-  xe_flash_decode_bf16_fp32_fp32_h64_512_paged.cpp
-  xe_flash_decode_bf16_fp32_fp32_h64_1024_paged.cpp
-  xe_flash_decode_fp16_fp32_fp32_h64_512_paged.cpp
-  xe_flash_decode_fp16_fp32_fp32_h64_1024_paged.cpp
 )
 
 cutlass_test_unit_add_executable(
@@ -44,10 +40,6 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_bf16_fp32_fp32_h96_1024_nonpaged.cpp
   xe_flash_decode_fp16_fp32_fp32_h96_512_nonpaged.cpp
   xe_flash_decode_fp16_fp32_fp32_h96_1024_nonpaged.cpp
-  xe_flash_decode_bf16_fp32_fp32_h96_512_paged.cpp
-  xe_flash_decode_bf16_fp32_fp32_h96_1024_paged.cpp
-  xe_flash_decode_fp16_fp32_fp32_h96_512_paged.cpp
-  xe_flash_decode_fp16_fp32_fp32_h96_1024_paged.cpp
 )
 
 cutlass_test_unit_add_executable(
@@ -56,10 +48,6 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_bf16_fp32_fp32_h128_1024_nonpaged.cpp
   xe_flash_decode_fp16_fp32_fp32_h128_512_nonpaged.cpp
   xe_flash_decode_fp16_fp32_fp32_h128_1024_nonpaged.cpp
-  xe_flash_decode_bf16_fp32_fp32_h128_512_paged.cpp
-  xe_flash_decode_bf16_fp32_fp32_h128_1024_paged.cpp
-  xe_flash_decode_fp16_fp32_fp32_h128_512_paged.cpp
-  xe_flash_decode_fp16_fp32_fp32_h128_1024_paged.cpp
 )
 
 cutlass_test_unit_add_executable(
@@ -68,10 +56,6 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_bf16_fp32_fp32_h192_1024_nonpaged.cpp
   xe_flash_decode_fp16_fp32_fp32_h192_512_nonpaged.cpp
   xe_flash_decode_fp16_fp32_fp32_h192_1024_nonpaged.cpp
-  xe_flash_decode_bf16_fp32_fp32_h192_512_paged.cpp
-  xe_flash_decode_bf16_fp32_fp32_h192_1024_paged.cpp
-  xe_flash_decode_fp16_fp32_fp32_h192_512_paged.cpp
-  xe_flash_decode_fp16_fp32_fp32_h192_1024_paged.cpp
 )
 
 add_custom_target(

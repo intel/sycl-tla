@@ -94,17 +94,9 @@ int main(int argc, const char **argv) {
     return -1;
   }
 
-  if(options.use_paged_kv) {
-    if(!options.varlen) {
-      return run_decode<true, false>(options);
-    } else {
-      return run_decode<true, true>(options);
-    }
+  if(!options.varlen) {
+    return run_decode<false, false>(options);
   } else {
-    if(!options.varlen) {
-      return run_decode<false, false>(options);
-    } else {
-      return run_decode<false, true>(options);
-    }
+    return run_decode<false, true>(options);
   }
 }

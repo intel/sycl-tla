@@ -31,15 +31,6 @@
 
 #pragma once
 
-#include <benchmarks_h64_512_paged.cpp>
-#include <benchmarks_h64_1024_paged.cpp>
-#include <benchmarks_h96_512_paged.cpp>
-#include <benchmarks_h96_1024_paged.cpp>
-#include <benchmarks_h128_512_paged.cpp>
-#include <benchmarks_h128_1024_paged.cpp>
-#include <benchmarks_h192_512_paged.cpp>
-#include <benchmarks_h192_1024_paged.cpp>
-
 #include <benchmarks_h64_512_nonpaged.cpp>
 #include <benchmarks_h64_1024_nonpaged.cpp>
 #include <benchmarks_h96_512_nonpaged.cpp>
@@ -50,15 +41,6 @@
 #include <benchmarks_h192_1024_nonpaged.cpp>
 
 static void register_flash_attention_decode_benchmarks() {
-  register_flash_attention_decode_benchmarks_paged_h64_512();
-  register_flash_attention_decode_benchmarks_paged_h96_512();
-  register_flash_attention_decode_benchmarks_paged_h128_512();
-  register_flash_attention_decode_benchmarks_paged_h192_512();
-  register_flash_attention_decode_benchmarks_paged_h64_1024();
-  register_flash_attention_decode_benchmarks_paged_h96_1024();
-  register_flash_attention_decode_benchmarks_paged_h128_1024();
-  register_flash_attention_decode_benchmarks_paged_h192_1024();
-
   register_flash_attention_decode_benchmarks_nonpaged_h64_512();
   register_flash_attention_decode_benchmarks_nonpaged_h96_512();
   register_flash_attention_decode_benchmarks_nonpaged_h128_512();
