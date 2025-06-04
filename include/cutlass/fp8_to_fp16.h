@@ -189,18 +189,18 @@ convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
   // TODO(Codeplay): Move conversion to NumericArrayConverter
   if constexpr (std::is_same_v<ElementA, cute::float_e5m2_t>) {
     // May convert four FP8 elements at a time
-    constexpr bool use_faster_conversion = num_elements % 4 == 0;
+    constexpr bool use_uint32_container = num_elements % 4 == 0;
     using SrcArray =
-        std::conditional_t<use_faster_conversion,
+        std::conditional_t<use_uint32_container,
                            cutlass::Array<uint32_t, num_elements / 4>,
                            cutlass::Array<uint8_t, num_elements>>;
     using DstArray =
-        std::conditional_t<use_faster_conversion,
+        std::conditional_t<use_uint32_container,
                            cutlass::Array<uint32_t, num_elements / 2>,
                            cutlass::Array<uint16_t, num_elements>>;
     SrcArray const *pSrcArr = reinterpret_cast<SrcArray const *>(pSrc);
     DstArray *pDstArr = reinterpret_cast<DstArray *>(pDst);
-    if constexpr (use_faster_conversion) {
+    if constexpr (use_uint32_container) {
       // convert 4 FP8 elements at a time
       E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
     } else {
