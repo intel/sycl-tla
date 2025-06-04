@@ -27,15 +27,17 @@ runs:
             libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev
         fi
         sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
-          intel-opencl-icd clinfo intel-gsc intel-ocloc hwinfo clinfo
+          intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc hwinfo clinfo g++
+        dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
     - name: Install Intel graphics drivers
       if: inputs.IGC == 'STAGING'
       shell: bash
       run: |
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
-          sudo apt-get install -y libze-intel-gpu1 intel-metrics-discovery intel-opencl-icd clinfo intel-gsc \
-            libze-dev intel-ocloc
+          sudo apt-get install -y libze-intel-gpu1 intel-metrics-discovery intel-opencl-icd ocl-icd-opencl-dev \ 
+            clinfo intel-gsc libze-dev intel-ocloc g++
+          dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         else
           exit 1
         fi
