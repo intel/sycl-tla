@@ -33,22 +33,40 @@
 
 #include "benchmark_runner.hpp"
 #include "fmha_decode_configuration.hpp"
-#include "benchmarks_h64_512.hpp"
-#include "benchmarks_h64_1024.hpp"
-#include "benchmarks_h96_512.hpp"
-#include "benchmarks_h96_1024.hpp"
-#include "benchmarks_h128_512.hpp"
-#include "benchmarks_h128_1024.hpp"
-#include "benchmarks_h192_512.hpp"
-#include "benchmarks_h192_1024.hpp"
+#include "benchmarks_h64_fp32_fp32_512.hpp"
+#include "benchmarks_h64_fp32_fp32_1024.hpp"
+#include "benchmarks_h96_fp32_fp32_512.hpp"
+#include "benchmarks_h96_fp32_fp32_1024.hpp"
+#include "benchmarks_h128_fp32_fp32_512.hpp"
+#include "benchmarks_h128_fp32_fp32_1024.hpp"
+#include "benchmarks_h192_fp32_fp32_512.hpp"
+#include "benchmarks_h192_fp32_fp32_1024.hpp"
+
+#include "benchmarks_h64_fp32_u16_512.hpp"
+#include "benchmarks_h64_fp32_u16_1024.hpp"
+#include "benchmarks_h96_fp32_u16_512.hpp"
+#include "benchmarks_h96_fp32_u16_1024.hpp"
+#include "benchmarks_h128_fp32_u16_512.hpp"
+#include "benchmarks_h128_fp32_u16_1024.hpp"
+#include "benchmarks_h192_fp32_u16_512.hpp"
+#include "benchmarks_h192_fp32_u16_1024.hpp"
 
 static void register_flash_attention_decode_benchmarks() {
-  register_flash_attention_decode_benchmarks_h64_512();
-  register_flash_attention_decode_benchmarks_h96_512();
-  register_flash_attention_decode_benchmarks_h128_512();
-  register_flash_attention_decode_benchmarks_h192_512();
-  register_flash_attention_decode_benchmarks_h64_1024();
-  register_flash_attention_decode_benchmarks_h96_1024();
-  register_flash_attention_decode_benchmarks_h128_1024();
-  register_flash_attention_decode_benchmarks_h192_1024();
+  register_flash_attention_decode_benchmarks_h64_fp32_fp32_512();
+  register_flash_attention_decode_benchmarks_h96_fp32_fp32_512();
+  register_flash_attention_decode_benchmarks_h128_fp32_fp32_512();
+  register_flash_attention_decode_benchmarks_h192_fp32_fp32_512();
+  register_flash_attention_decode_benchmarks_h64_fp32_fp32_1024();
+  register_flash_attention_decode_benchmarks_h96_fp32_fp32_1024();
+  register_flash_attention_decode_benchmarks_h128_fp32_fp32_1024();
+  register_flash_attention_decode_benchmarks_h192_fp32_fp32_1024();
+
+  register_flash_attention_decode_benchmarks_h64_fp32_u16_512();
+  register_flash_attention_decode_benchmarks_h96_fp32_u16_512();
+  register_flash_attention_decode_benchmarks_h128_fp32_u16_512();
+  register_flash_attention_decode_benchmarks_h192_fp32_u16_512();
+  register_flash_attention_decode_benchmarks_h64_fp32_u16_1024();
+  register_flash_attention_decode_benchmarks_h96_fp32_u16_1024();
+  register_flash_attention_decode_benchmarks_h128_fp32_u16_1024();
+  register_flash_attention_decode_benchmarks_h192_fp32_u16_1024();
 }

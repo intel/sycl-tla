@@ -32,6 +32,10 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_bf16_fp32_fp32_h64_1024.cpp
   xe_flash_decode_fp16_fp32_fp32_h64_512.cpp
   xe_flash_decode_fp16_fp32_fp32_h64_1024.cpp
+  xe_flash_decode_bf16_fp32_bf16_h64_512.cpp
+  xe_flash_decode_bf16_fp32_bf16_h64_1024.cpp
+  xe_flash_decode_fp16_fp32_fp16_h64_512.cpp
+  xe_flash_decode_fp16_fp32_fp16_h64_1024.cpp
 )
 
 cutlass_test_unit_add_executable(
@@ -40,6 +44,10 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_bf16_fp32_fp32_h96_1024.cpp
   xe_flash_decode_fp16_fp32_fp32_h96_512.cpp
   xe_flash_decode_fp16_fp32_fp32_h96_1024.cpp
+  xe_flash_decode_bf16_fp32_bf16_h96_512.cpp
+  xe_flash_decode_bf16_fp32_bf16_h96_1024.cpp
+  xe_flash_decode_fp16_fp32_fp16_h96_512.cpp
+  xe_flash_decode_fp16_fp32_fp16_h96_1024.cpp
 )
 
 cutlass_test_unit_add_executable(
@@ -48,6 +56,10 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_bf16_fp32_fp32_h128_1024.cpp
   xe_flash_decode_fp16_fp32_fp32_h128_512.cpp
   xe_flash_decode_fp16_fp32_fp32_h128_1024.cpp
+  xe_flash_decode_bf16_fp32_bf16_h128_512.cpp
+  xe_flash_decode_bf16_fp32_bf16_h128_1024.cpp
+  xe_flash_decode_fp16_fp32_fp16_h128_512.cpp
+  xe_flash_decode_fp16_fp32_fp16_h128_1024.cpp
 )
 
 cutlass_test_unit_add_executable(
@@ -56,6 +68,10 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_bf16_fp32_fp32_h192_1024.cpp
   xe_flash_decode_fp16_fp32_fp32_h192_512.cpp
   xe_flash_decode_fp16_fp32_fp32_h192_1024.cpp
+  xe_flash_decode_bf16_fp32_bf16_h192_512.cpp
+  xe_flash_decode_bf16_fp32_bf16_h192_1024.cpp
+  xe_flash_decode_fp16_fp32_fp16_h192_512.cpp
+  xe_flash_decode_fp16_fp32_fp16_h192_1024.cpp
 )
 
 add_custom_target(
