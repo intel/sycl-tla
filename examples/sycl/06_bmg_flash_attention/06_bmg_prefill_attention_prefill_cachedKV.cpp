@@ -75,17 +75,25 @@ int main(int argc, const char **argv) {
   // Define the work-group tile shape depending on the head-size of the second matmul
   // Shape<_SequenceLenthOutputBLOCK, _HeadSizeout(NV), SequenceLengthKVBLOCK_KN/KV, HeadSizeQKBLOCK_KQK, HEADSIZEOutSlicerBlock>
  //
- if (options.head_size_vo == 64) {
+#if defined(HDIM64)
+  if (options.head_size_vo != 64) {
+    std::cerr << "head_size_vo must be 64, but got " << options.head_size_vo << std::endl;
+    return -1;
+  }
   constexpr int PipelineStages = 2;
   using ShapeQK = Shape<_128, _64, _64>;
   using ShapePV = Shape<_128, _32, _64>;
   using ShapeOutPut = Shape<_128, _64, _64>;
-  using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
-  
+  using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
+
   // Define whether or not to apply causal masking to the first matmul
   return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options)
                            : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options);
-} else if (options.head_size_vo == 96) {
+#elif defined(HDIM96)
+  if (options.head_size_vo != 96) {
+    std::cerr << "head_size_vo must be 96, but got " << options.head_size_vo << std::endl;
+    return -1;
+  }
   constexpr int PipelineStages = 2;
   using ShapeQK = Shape<_128, _64, _32>;
   using ShapePV = Shape<_128, _32, _64>;
@@ -94,8 +102,11 @@ int main(int argc, const char **argv) {
 
   return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options)
                            : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options);
-
-} else  if (options.head_size_vo == 128) {
+#elif defined(HDIM128)
+  if (options.head_size_vo != 128) {
+    std::cerr << "head_size_vo must be 128, but got " << options.head_size_vo << std::endl;
+    return -1;
+  }
   constexpr int PipelineStages = 2;
   using ShapeQK = Shape<_128, _64, _64>;
   using ShapePV = Shape<_128, _32, _64>;
@@ -104,7 +115,11 @@ int main(int argc, const char **argv) {
 
   return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options)
                            : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options);
-}  else if (options.head_size_vo == 192) {
+#elif defined(HDIM192)
+  if (options.head_size_vo != 192) {
+    std::cerr << "head_size_vo must be 192, but got " << options.head_size_vo << std::endl;
+    return -1;
+  }
   constexpr int PipelineStages = 2;
   using ShapeQK = Shape<_256, _64, _64>;
   using ShapePV = Shape<_256, _32, _64>;
@@ -113,8 +128,9 @@ int main(int argc, const char **argv) {
 
   return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options)
                            : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options);
-} else {
-  std::cerr << "Aborting execution." << std::endl;
+#else
+  std::cerr << "Invalid head_size_vo: " << options.head_size_vo
+            << ". Supported values are 64, 96, 128, or 192." << std::endl;
   return -1;
-}
+#endif
 }

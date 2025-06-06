@@ -42,10 +42,15 @@ cutlass_example_add_executable(
 set(TEST_NO_PAGED "")
 set(TEST_PAGED "--use_paged_kv")
 
-cutlass_example_add_executable(
-  06_bmg_prefill_attention_cachedKV
-  06_bmg_prefill_attention_prefill_cachedKV.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_NO_PAGED
-  TEST_PAGED
-)
+foreach(HEAD hdim64 hdim96 hdim128 hdim192)
+  string(TOUPPER "${HEAD}" HEAD_MACRO)
+
+  cutlass_example_add_executable(
+    06_bmg_prefill_attention_cachedKV_${HEAD}
+    06_bmg_prefill_attention_prefill_cachedKV.cpp
+    TEST_COMMAND_OPTIONS
+    TEST_NO_PAGED
+    TEST_PAGED
+  )
+  target_compile_definitions(06_bmg_prefill_attention_cachedKV_${HEAD} PRIVATE ${HEAD_MACRO})
+endforeach()
