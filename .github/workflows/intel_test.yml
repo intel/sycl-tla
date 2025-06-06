@@ -96,11 +96,11 @@ jobs:
       - name: Unit test
         shell: bash
         run: |
-          cmake --build . --target test_unit -j
+          cmake --build . --target test_unit
       - name: Examples
         shell: bash
         run: |
-          cmake --build . --target test_examples -j 1
+          cmake --build . --target test_examples
       - name: Benchmarks
         shell: bash
         run: |
