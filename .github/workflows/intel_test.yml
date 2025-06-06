@@ -101,7 +101,7 @@ jobs:
       - name: Examples
         shell: bash
         run: |
-          cmake --build . --target test_examples
+          cmake --build . --target test_examples -j 1
       - name: Benchmarks
         shell: bash
         run: |
