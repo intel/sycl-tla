@@ -37,7 +37,7 @@
 namespace cute
 {
 // currently no XE_2D_LD_T builtin supports non-default InstSizeBits
-template<int TSizeBits, int Width, int Height, int InstSizeBits = 32>
+template<int TSizeBits, int Height, int Width, int InstSizeBits = 32>
 struct XE_2D_LD_T {
   static_assert(TSizeBits == 4 || TSizeBits == 8 || TSizeBits == 16 || TSizeBits == 32 || TSizeBits == 64, 
       "Expected TSizeBits to be a power of 2, less then or equal 64");
@@ -53,7 +53,7 @@ struct XE_2D_LD_T {
   static constexpr int NBlocks = Height / BlockHeight;
 
   // shape of the block in global memory 
-  using BlockShape = Shape<Int<Width>, Int<Height>>;
+  using BlockShape = Shape<Int<Height>, Int<Width>>;
   static constexpr bool is_transpose = true;
   
   template<typename T>
@@ -69,4 +69,21 @@ struct XE_2D_LD_T {
   }
 };
 
+// deprecated aliases
+/*
+//using XE_2D_U64x8x1_LD_T = XE_2D_LD_T<64,8,1>;
+//using XE_2D_U64x8x2_LD_T = XE_2D_LD_T<64,8,2>;
+//using XE_2D_U64x8x4_LD_T = XE_2D_LD_T<64,8,4>;
+
+using XE_2D_U16x16x8_LD_T = XE_2D_LD_T<16,16,8>;
+
+using XE_2D_U32x16x2_LD_T = XE_2D_LD_T<32,16,2>;
+using XE_2D_U32x16x4_LD_T = XE_2D_LD_T<32,16,4>;
+using XE_2D_U32x16x8_LD_T = XE_2D_LD_T<32,16,8>;
+
+using XE_2D_U16x16x16_LD_T = XE_2D_LD_T<16,16,16>;
+
+using XE_2D_U4x32x16_LD_T = XE_2D_LD_T<4,32,16>;
+using XE_2D_U4x16x16_LD_T = XE_2D_LD_T<4,16,16>;
+*/
 } // end namespace cute

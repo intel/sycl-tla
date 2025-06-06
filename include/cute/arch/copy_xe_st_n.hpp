@@ -36,7 +36,7 @@
 
 namespace cute
 {
-template<int TSizeBits, int Width, int Height, int InstSizeBits = TSizeBits>
+template<int TSizeBits, int Height, int Width, int InstSizeBits = TSizeBits>
 struct XE_2D_ST_N {
   static_assert(TSizeBits == 4 || TSizeBits == 8 || TSizeBits == 16 || TSizeBits == 32 || TSizeBits == 64, 
       "Expected TSizeBits to be a power of 2, less then or equal 64");
@@ -52,7 +52,7 @@ struct XE_2D_ST_N {
   static constexpr int NBlocks = Width / BlockWidth;
 
   // shape of the block in global memory
-  using BlockShape = Shape<Int<Width>, Int<Height>>;
+  using BlockShape = Shape<Int<Height>, Int<Width>>;
   
   template<typename T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -66,5 +66,24 @@ struct XE_2D_ST_N {
 #endif
   }
 };
+
+// deprecated aliases
+/*using XE_2D_U8x2x32_ST_N = XE_2D_ST_N<8,2,32>;
+
+using XE_2D_U8x1x16_ST_N = XE_2D_ST_N<8,1,16>;
+using XE_2D_U8x2x16_ST_N = XE_2D_ST_N<8,2,16>;
+using XE_2D_U8x4x16_ST_N = XE_2D_ST_N<8,4,16>;
+using XE_2D_U8x8x16_ST_N = XE_2D_ST_N<8,8,16>;
+using XE_2D_U8x8x32_ST_N = XE_2D_ST_N<8,8,32>;
+
+using XE_2D_U16x1x16_ST_N = XE_2D_ST_N<16,1,16>;
+using XE_2D_U16x2x16_ST_N = XE_2D_ST_N<16,2,16>;
+using XE_2D_U16x4x16_ST_N = XE_2D_ST_N<16,4,16>;
+using XE_2D_U16x8x16_ST_N = XE_2D_ST_N<16,8,16>;
+
+using XE_2D_U32x1x16_ST_N = XE_2D_ST_N<32,1,16>;
+using XE_2D_U32x2x16_ST_N = XE_2D_ST_N<32,2,16>;
+using XE_2D_U32x4x16_ST_N = XE_2D_ST_N<32,4,16>;
+using XE_2D_U32x8x16_ST_N = XE_2D_ST_N<32,8,16>;*/
 
 } // end namespace cute

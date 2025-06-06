@@ -36,7 +36,38 @@
 
 namespace cute
 {
-template<int TSizeBits, int Width, int Height, int InstSizeBits = TSizeBits>
+
+template<int TSizeBits, int Height, int Width, int InstSizeBits = TSizeBits>
+struct XE_2D_LD_N_PREFETCH {
+  static_assert(TSizeBits == 4 || TSizeBits == 8 || TSizeBits == 16 || TSizeBits == 32 || TSizeBits == 64, 
+      "Expected TSizeBits to be a power of 2, less then or equal 64");
+  static_assert(Height == 1 || Height == 2 || Height == 4 || Height == 8 || Height == 16 || Height == 32, 
+      "Expected Height to be a power of 2, less then or equal 32");
+
+  static_assert(InstSizeBits % 8 == 0, "Expected InstSizeBits to be a multiple of 8.");
+  static constexpr int InstSizeBytes = InstSizeBits / 8; //TODO U4 shuffle
+  static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
+  static constexpr int VecSize = InstSizeBits / TSizeBits;
+  static constexpr int BlockWidth = 16 * VecSize; //TODO SG size?
+  static_assert(Width % BlockWidth == 0, "Expected Width to be a multiple of 16 * InstSizeBits / TSizeBits.");
+  static constexpr int NBlocks = Width / BlockWidth;
+
+  // shape of the block in global memory 
+  using BlockShape = Shape<Int<Height>, Int<Width>>;
+  
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch,
+                                    intel::coord_t coord) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+  detail::XeSubgroup2DBlockPrefetch<InstSizeBytes, BlockWidth, Height, NBlocks>{}(baseoffset, width, height, pitch, coord);
+#else
+    CUTE_INVALID_CONTROL_PATH(
+        "Trying to use block prefetch on non-Xe hardware");
+#endif
+  }
+};
+
+template<int TSizeBits, int Height, int Width, int InstSizeBits = TSizeBits>
 struct XE_2D_LD_N {
   static_assert(TSizeBits == 4 || TSizeBits == 8 || TSizeBits == 16 || TSizeBits == 32 || TSizeBits == 64, 
       "Expected TSizeBits to be a power of 2, less then or equal 64");
@@ -52,7 +83,7 @@ struct XE_2D_LD_N {
   static constexpr int NBlocks = Width / BlockWidth;
 
   // shape of the block in global memory 
-  using BlockShape = Shape<Int<Width>, Int<Height>>;
+  using BlockShape = Shape<Int<Height>, Int<Width>>;
 
   template<typename T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -66,19 +97,72 @@ struct XE_2D_LD_N {
 #endif
   }
 
-  struct PREFETCH {
-    using BlockShape = BlockShape;
-    CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                      int height, int pitch,
-                                      intel::coord_t coord) {
-#if defined(CUTE_ARCH_COPY_XE_ENABLED)
-    detail::XeSubgroup2DBlockPrefetch<InstSizeBytes, BlockWidth, Height, NBlocks>{}(baseoffset, width, height, pitch, coord);
-#else
-      CUTE_INVALID_CONTROL_PATH(
-          "Trying to use block prefetch on non-Xe hardware");
-#endif
-    }
-  };
+  using PREFETCH = XE_2D_LD_N_PREFETCH<TSizeBits, Height, Width, InstSizeBits>;
+
 };
 
+template<int TSizeBits, int Height, int Width, int InstSizeBits = TSizeBits>
+CUTE_HOST_DEVICE void print(cute::XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits> const&){
+  print("XE_2D_LD_N<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(", "); print(InstSizeBits); print(">");
+}
+
+// deprecated aliases
+/*using XE_2D_U8x1x32_LD_N = XE_2D_LD_N<8,1,32>;
+using XE_2D_U8x2x32_LD_N = XE_2D_LD_N<8,2,32>;
+using XE_2D_U8x4x32_LD_N = XE_2D_LD_N<8,4,32>;
+using XE_2D_U8x8x32_LD_N = XE_2D_LD_N<8,8,32>;
+
+using XE_2D_U8x1x64_LD_N = XE_2D_LD_N<8,1,64>;
+using XE_2D_U8x2x64_LD_N = XE_2D_LD_N<8,2,64>;
+using XE_2D_U8x4x64_LD_N = XE_2D_LD_N<8,4,64>;
+using XE_2D_U8x8x64_LD_N = XE_2D_LD_N<8,8,64>;
+
+using XE_2D_U8x16x32_LD_N = XE_2D_LD_N<8,16,32>;
+using XE_2D_U8x32x32_LD_N = XE_2D_LD_N<8,32,32>;
+
+using XE_2D_U8x16x64_LD_N = XE_2D_LD_N<8,16,64>;
+using XE_2D_U8x32x64_LD_N = XE_2D_LD_N<8,32,64>;
+
+using XE_2D_U16x1x16_LD_N = XE_2D_LD_N<16,1,16>;
+using XE_2D_U16x2x16_LD_N = XE_2D_LD_N<16,2,16>;
+using XE_2D_U16x4x16_LD_N = XE_2D_LD_N<16,4,16>;
+using XE_2D_U16x8x16_LD_N = XE_2D_LD_N<16,8,16>;
+
+using XE_2D_U16x1x32_LD_N = XE_2D_LD_N<16,1,32>;
+using XE_2D_U16x2x32_LD_N = XE_2D_LD_N<16,2,32>;
+using XE_2D_U16x4x32_LD_N = XE_2D_LD_N<16,4,32>;
+using XE_2D_U16x8x32_LD_N = XE_2D_LD_N<16,8,32>;
+using XE_2D_U16x16x32_LD_N = XE_2D_LD_N<16,11,32>;
+
+//using XE_2D_TF32x1x8_LD_N = XE_2D_LD_N<32,1,8>; //TODO  < sg???
+//using XE_2D_TF32x2x8_LD_N = XE_2D_LD_N<32,2,8>;
+//using XE_2D_TF32x4x8_LD_N = XE_2D_LD_N<32,4,8>;
+//using XE_2D_TF32x8x8_LD_N = XE_2D_LD_N<32,8,8>;
+
+using XE_2D_U32x1x16_LD_N = XE_2D_LD_N<32,1,16>;
+using XE_2D_U32x2x16_LD_N = XE_2D_LD_N<32,2,16>;
+using XE_2D_U32x4x16_LD_N = XE_2D_LD_N<32,4,16>;
+using XE_2D_U32x8x16_LD_N = XE_2D_LD_N<32,8,16>;
+
+using XE_2D_U16x16x16_LD_N = XE_2D_LD_N<16,16,16>;
+using XE_2D_U16x32x16_LD_N = XE_2D_LD_N<16,32,16>;
+using XE_2D_U16x32x32_LD_N = XE_2D_LD_N<16,32,32>;
+
+//using XE_2D_TF32x16x8_LD_N = XE_2D_LD_N<32,16,8>;
+//using XE_2D_TF32x32x8_LD_N = XE_2D_LD_N<32,32,8>;
+
+using XE_2D_TF32x1x16_LD_N = XE_2D_LD_N<32,1,16>;
+using XE_2D_TF32x2x16_LD_N = XE_2D_LD_N<32,2,16>;
+using XE_2D_TF32x4x16_LD_N = XE_2D_LD_N<32,4,16>;
+using XE_2D_TF32x8x16_LD_N = XE_2D_LD_N<32,8,16>;
+
+using XE_2D_U32x16x16_LD_N = XE_2D_LD_N<32,16,16>;
+using XE_2D_U32x32x16_LD_N = XE_2D_LD_N<32,32,16>;
+
+using XE_2D_TF32x16x16_LD_N = XE_2D_LD_N<32,16,16>;
+using XE_2D_TF32x32x16_LD_N = XE_2D_LD_N<32,32,16>;
+
+//using XE_2D_U4x32x64_LD_N = XE_2D_LD_N<4,1,32>; //TODO shuffle
+//using XE_2D_U4x16x64_LD_N = XE_2D_LD_N<4,1,32>; //TODO shuffle
+*/
 } // end namespace cute
