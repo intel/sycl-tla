@@ -40,6 +40,11 @@
 #include <cute/arch/copy_xe_spirv.hpp>
 #endif
 
+#include <cute/arch/copy_xe_st_n.hpp>
+#include <cute/arch/copy_xe_ld_n.hpp>
+#include <cute/arch/copy_xe_ld_v.hpp>
+#include <cute/arch/copy_xe_ld_t.hpp>
+
 #include <cute/arch/copy_xe_U4.hpp>
 #include <cute/arch/copy_xe_U8.hpp>
 #include <cute/arch/copy_xe_U16.hpp>

@@ -2297,6 +2297,111 @@ COPY_TRAIT_ST_DEF(XE_2D_U32x2x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x4x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x8x16_ST_N)
 
+template <int TSizeBits, int Width, int Height, class... args_t>
+struct Copy_Traits<XE_2D_ST_N<TSizeBits, Width, Height>, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_ST_N<TSizeBits, Width, Height>, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (dst-thr,dst-val) to bit
+  using SrcLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
+                                                                  Int<XE_2D_ST_N<TSizeBits, Width, Height>::VecSize>, 
+                                                                  Int<Height>, 
+                                                                  Int<XE_2D_ST_N<TSizeBits, Width, Height>::NBlocks>>>{},
+                                                 Step<_2, Step<_0, _1, _3, _4>>{}));
+  // Map from (src-thr,src-val) to bit
+  using DstLayout = Layout<Shape <_16, decltype(get<1>(SrcLayout{}).shape())>,
+                           Stride<_0,  decltype(get<1>(SrcLayout{}).stride())>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = SrcLayout;
+
+  template <class... ArgTs>
+  Copy_Traits(ArgTs... args)
+      : XE_2D_LD_Unpack<XE_2D_ST_N<TSizeBits, Width, Height>, args_t...>(args...) {}
+};
+
+template <int TSizeBits, int Width, int Height, class... args_t>
+struct Copy_Traits<XE_2D_LD_N<TSizeBits, Width, Height>, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Width, Height>, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
+                                                                  Int<XE_2D_LD_N<TSizeBits, Width, Height>::VecSize>, 
+                                                                  Int<Height>, 
+                                                                  Int<XE_2D_LD_N<TSizeBits, Width, Height>::NBlocks>>>{},
+                                                 Step<_2, Step<_0, _1, _3, _4>>{}));
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16, decltype(get<1>(DstLayout{}).shape())>,
+                           Stride<_0,  decltype(get<1>(DstLayout{}).stride())>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgTs>
+  Copy_Traits(ArgTs... args)
+      : XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Width, Height>, args_t...>(args...) {}
+};
+
+/*template <int TSizeBits, int Width, int Height, class... args_t>
+struct Copy_Traits<typename XE_2D_LD_N<TSizeBits, Width, Height>::PREFETCH, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Width, Height>, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
+                                                                  Int<XE_2D_LD_N<TSizeBits, Width, Height>::VecSize>, 
+                                                                  Int<Height>, 
+                                                                  Int<XE_2D_LD_N<TSizeBits, Width, Height>::NBlocks>>>{},
+                                                 Step<_2, Step<_0, _1, _3, _4>>{}));
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16, decltype(get<1>(DstLayout{}).shape())>,
+                           Stride<_0,  decltype(get<1>(DstLayout{}).stride())>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgTs>
+  Copy_Traits(ArgTs... args)
+      : XE_2D_LD_Unpack<typename XE_2D_LD_N<TSizeBits, Width, Height>::PREFETCH, args_t...>(args...) {}
+};*/
+
+template <int TSizeBits, int Width, int Height, class... args_t>
+struct Copy_Traits<XE_2D_LD_V<TSizeBits, Width, Height>, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_LD_V<TSizeBits, Width, Height>, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
+                                                                  Int<XE_2D_LD_V<TSizeBits, Width, Height>::VecSize>, 
+                                                                  Int<Height>, 
+                                                                  Int<XE_2D_LD_V<TSizeBits, Width, Height>::NBlocks>>>{},
+                                                 Step<_2, Step<_0, _1, _3, _4>>{}));
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16, decltype(get<1>(DstLayout{}).shape())>,
+                           Stride<_0,  decltype(get<1>(DstLayout{}).stride())>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgTs>
+  Copy_Traits(ArgTs... args)
+      : XE_2D_LD_Unpack<XE_2D_LD_V<TSizeBits, Width, Height>, args_t...>(args...) {}
+};
+
+template <int TSizeBits, int Width, int Height, class... args_t>
+struct Copy_Traits<XE_2D_LD_T<TSizeBits, Width, Height>, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_LD_T<TSizeBits, Width, Height>, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
+                                                                  Int<XE_2D_LD_T<TSizeBits, Width, Height>::VecSize>, 
+                                                                  Int<Height>, 
+                                                                  Int<XE_2D_LD_T<TSizeBits, Width, Height>::NBlocks>>>{},
+                                                 Step<_4, Step<_0, _1, _2, _3>>{}));
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16, decltype(get<1>(DstLayout{}).shape())>,
+                           Stride<_0,  decltype(get<1>(DstLayout{}).stride())>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgTs>
+  Copy_Traits(ArgTs... args)
+      : XE_2D_LD_Unpack<XE_2D_LD_T<TSizeBits, Width, Height>, args_t...>(args...) {}
+};
+
 // Generate the Xe coordinate tensor
 template <class GShape>
 CUTE_HOST_DEVICE constexpr
