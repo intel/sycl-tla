@@ -52,46 +52,6 @@ static inline ushort8 convert_ushort8(uchar8 x) {
   return result;
 }
 
-static inline unsigned short E4M3_to_FP16(unsigned char xin) {
-  unsigned char xa, sgn_x, nan_mask, den_mask;
-
-  union {
-    signed short i;
-    _Float16 f;
-  } x16, den_corr;
-
-  xa = xin & 0x7f;
-  sgn_x = xin ^ xa;
-
-  // mask for NaN input
-  nan_mask = (0x7e - xa) & 0x80;
-  // mask for denormal / zero input
-  den_mask = (((signed char)(xa - 8)) >> 7);
-
-  // apply Nan correction
-  xa += (nan_mask >> 1);
-  // first denormal correction
-  xa |= (den_mask & 8);
-  den_mask &= 0x48;
-  // exponent bias correction
-  xa += 0x40;
-
-  // zero-extend to 16 bits
-  x16.i = xa;
-  den_corr.i = den_mask;
-  // FP16 format
-  x16.i <<= 7;
-  den_corr.i <<= 7;
-
-  // apply correction for denormals/zero
-  x16.f -= den_corr.f;
-
-  // finally, apply the sign
-  x16.i ^= (((signed short)sgn_x) << 8);
-
-  return (unsigned short)x16.i;
-}
-
 static inline ushort8 E4M3_to_FP16_chunk8(uchar8 xin) {
   uchar8 xa = xin & 0x7F;
   uchar8 sgn_x = xin ^ xa;
