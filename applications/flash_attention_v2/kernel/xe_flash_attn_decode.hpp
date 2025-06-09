@@ -306,15 +306,15 @@ public:
           // get physical page idx from page table
           int curr_batch_pages = is_var_len ? mainloop_params.num_pages_per_seq[batch_coord + 1] - mainloop_params.num_pages_per_seq[batch_coord]
                                             : ceil_div(seq_len_kv_cache, mainloop_params.page_size);
-          int curr_page_logical_idx = (kv_tile_idx * QK_SG_N) / mainloop_params.page_size;
+          int curr_page_logical_idx = kv_tile_idx * QK_SG_N / mainloop_params.page_size;
           int batch_offset = is_var_len ? mainloop_params.num_pages_per_seq[batch_coord] : batch_coord * curr_batch_pages;
           bool valid_page = curr_page_logical_idx < curr_batch_pages;
           if (valid_page) {
             kv_cache_tile_idx = mainloop_params.ptr_page_table[
-                  batch_offset +                     // page table for this batch
-                  curr_page_logical_idx              // tile idx to logical page idx
+                      batch_offset +                     // page table for this batch
+                      curr_page_logical_idx              // tile idx to logical page idx
                   ] * tiles_per_page +               // base block idx of physical page
-                  (kv_tile_idx % tiles_per_page);    // offset within page
+                  kv_tile_idx % tiles_per_page;    // offset within page
           } else {
             kv_cache_tile_idx = curr_batch_pages * tiles_per_page; // push idx out of bounds to respect the boundary between batches
           }
@@ -357,7 +357,7 @@ public:
         clear(tSr);
 
         // Perform GEMM S = Q*K
-        collective_mma.mmaQK(tSr, gQ, gK, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, is_KV_cache, curr_kv_tile_idx);
+        collective_mma.mmaQK(tSr, gQ, gK(_, _, curr_kv_tile_idx / ATOM_M, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, is_KV_cache, curr_kv_tile_idx % ATOM_M);
 
         // each sub-group gets a different base offset for prefetch to load it's own
         // required data for matrix V.
@@ -367,7 +367,7 @@ public:
                       : prefetch(tiled_prefetch_v, pVgV(_, _, _, v, curr_kv_tile_idx));
         }
 
-        bool is_next_KV_cache = (split + 1) < kv_splits_cache;
+        bool is_next_KV_cache = split + 1 < kv_splits_cache;
         int kv_cache_next_tile_idx = kv_cache_tile_idx;
         if constexpr (PagedKV) {
           if (is_next_KV_cache) {
@@ -379,10 +379,10 @@ public:
             // get physical page idx from page table
             if (valid_page) {
               kv_cache_next_tile_idx = mainloop_params.ptr_page_table[
-                    batch_offset +                      // page table for this batch
-                    curr_page_logical_idx               // tile idx to logical page idx
+                        batch_offset +                      // page table for this batch
+                        curr_page_logical_idx               // tile idx to logical page idx
                     ] * tiles_per_page +                // base block idx of physical page
-                    (kv_tile_idx % tiles_per_page);     // offset within page
+                    kv_tile_idx % tiles_per_page;     // offset within page
             } else {
               kv_cache_next_tile_idx = curr_batch_pages * tiles_per_page; // push idx out of bounds to respect the boundary between batches
             }
@@ -418,7 +418,7 @@ public:
 
         int curr_kv_tile_idx = (kv_splits_new - 1) * ATOM_M + kv_tile_idx;
         // Perform GEMM S = Q*K
-        collective_mma.mmaQK(tSr, gQ, gK, tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, false, curr_kv_tile_idx);
+        collective_mma.mmaQK(tSr, gQ, gK(_, _, kv_splits_new - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, false, kv_tile_idx);
 
         // each sub-group gets a different base offset for prefetch to load it's own
         // required data for matrix V.

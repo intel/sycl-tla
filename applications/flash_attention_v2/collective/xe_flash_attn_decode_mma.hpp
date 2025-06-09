@@ -228,16 +228,12 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     // For Paged Attention, K matrix tile_id = page_table[subgroup_id] (cache, new keys follow normal attention)
     // Since the K matrix tile_id can be any tile out of the possible tiles, we need to manually tile the K matrix
     // across subgroups to accomodate Paged Attention. Thus, we call get_slice with 0 as the thread_id for all subgroups.
-    auto thread_mma_k = tiled_mma.get_slice(0);
+    auto thread_mma_k = tiled_mma.get_slice(kv_tile_idx * SubgroupSize);
     auto thread_mma_q = tiled_mma.get_slice(0);
-
-    auto gK_tile = local_tile(gK, select<1, 2>(SubgroupTileShapeQK{}), make_coord(_, _));
-    // gK_tile = (QK_SG_N, QK_SG_K, tile_sg_mul_n, tile_sg_mul_k, tile_wg_mul_n, tile_wg_mul_k)
-    auto gK_ = gK_tile(_, _, kv_tile_idx % ATOM_M, 0, kv_tile_idx / ATOM_M, _);
 
     // Partition
     Tensor tCgQ = thread_mma_q.partition_A(gQ);
-    Tensor tCgK = thread_mma_k.partition_B(gK_);
+    Tensor tCgK = thread_mma_k.partition_B(gK);
 
     // Create fragments
     Tensor tCrQ = make_tensor<ElementQ>(make_fragment_layout(params.gmem_tiled_copy_q, take<0,3>(tCgQ.shape())));
@@ -263,7 +259,6 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
 
     print("=====================  K :\n");
     PRINT(gK);
-    PRINT(gK_);
     PRINT(tCrK);
     PRINT(tCgK);
     PRINT(tKrK);
