@@ -95,17 +95,7 @@ struct Options {
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 512);
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
     cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 512);
-#if defined(HDIM64)
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 64);
-#elif defined(HDIM96)
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 96);
-#elif defined(HDIM128)
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
-#elif defined(HDIM192)
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 192);
-#else
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
-#endif
+    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
 
