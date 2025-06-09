@@ -139,26 +139,6 @@ static inline void E5M2_to_FP16(cutlass::Array<uint32_t, N / 4> const &xin,
   }
 }
 
-template <int N>
-static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin,
-                                cutlass::Array<uint16_t, N> &xout) {
-  // Adapted from
-  // https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
-  // Using something as simple as the following code surprisingly
-  // leads to poor performance.
-  // CUTLASS_PRAGMA_UNROLL
-  // for (int i = 0; i < num_elements; i++) {
-  //   reinterpret_cast<uint16_t*>(pDst)[i] =
-  //   (static_cast<uint16_t>((pSrc[i]))) << 8;
-  // }
-  // The root-cause is unknown, but private memory use is seen in that case.
-  // We're using a workaround that doesn't use private memory.
-  CUTLASS_PRAGMA_UNROLL
-  for (int i = 0; i < N; i++) {
-    xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
-  }
-}
-
 template <typename ElementA, class EngineIn, class EngineOut, class LayoutIn,
           class LayoutOut, class... Ts>
 CUTLASS_DEVICE void
@@ -188,31 +168,22 @@ convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
 
   // TODO(Codeplay): Move conversion to NumericArrayConverter
   if constexpr (std::is_same_v<ElementA, cute::float_e5m2_t>) {
-    // May convert four FP8 elements at a time
-    constexpr bool use_uint32_container = num_elements % 4 == 0;
-    using SrcArray =
-        std::conditional_t<use_uint32_container,
-                           cutlass::Array<uint32_t, num_elements / 4>,
-                           cutlass::Array<uint8_t, num_elements>>;
-    using DstArray =
-        std::conditional_t<use_uint32_container,
-                           cutlass::Array<uint32_t, num_elements / 2>,
-                           cutlass::Array<uint16_t, num_elements>>;
+    static_assert(num_elements % 4 == 0,
+                  "Currently, E5M2 -> FP16 conversion is only supported when "
+                  "each work-item converts a multiple of 4 elements");
+    using SrcArray = cutlass::Array<uint32_t, num_elements / 4>;
+    using DstArray = cutlass::Array<uint32_t, num_elements / 2>;
     SrcArray const *pSrcArr = reinterpret_cast<SrcArray const *>(pSrc);
     DstArray *pDstArr = reinterpret_cast<DstArray *>(pDst);
-    if constexpr (use_uint32_container) {
-      // convert 4 FP8 elements at a time
-      E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
-    } else {
-      E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
-    }
+    // convert 4 FP8 elements at a time
+    E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
   } else {
     // E4M3 -> FP16 conversion
     constexpr int chunk_size = 8;
     constexpr int iters = num_elements / chunk_size;
     static_assert(num_elements % chunk_size == 0,
                   "Currently, E4M3 -> FP16 conversion is only supported when "
-                  "each thread converts a multiple of 8 elements");
+                  "each work-item converts a multiple of 8 elements");
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < iters; ++i) {
       cute::intel::uchar8 src_vec;
