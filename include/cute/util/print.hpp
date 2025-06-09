@@ -251,7 +251,7 @@ pretty_print(float v) {
 #if (SYCL_INTEL_TARGET)
   printf("%*.2f", v);
 #else 
-  printf("%*.e", 10, v);
+  printf("%*.2e", 10, v);
 #endif  // SYCL_INTEL_TARGET
 }
 
