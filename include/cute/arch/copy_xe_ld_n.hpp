@@ -107,7 +107,7 @@ CUTE_HOST_DEVICE void print(cute::XE_2D_LD_N<TSizeBits, Height, Width, InstSizeB
 }
 
 // deprecated aliases
-/*using XE_2D_U8x1x32_LD_N = XE_2D_LD_N<8,1,32>;
+using XE_2D_U8x1x32_LD_N = XE_2D_LD_N<8,1,32>;
 using XE_2D_U8x2x32_LD_N = XE_2D_LD_N<8,2,32>;
 using XE_2D_U8x4x32_LD_N = XE_2D_LD_N<8,4,32>;
 using XE_2D_U8x8x32_LD_N = XE_2D_LD_N<8,8,32>;
@@ -132,7 +132,7 @@ using XE_2D_U16x1x32_LD_N = XE_2D_LD_N<16,1,32>;
 using XE_2D_U16x2x32_LD_N = XE_2D_LD_N<16,2,32>;
 using XE_2D_U16x4x32_LD_N = XE_2D_LD_N<16,4,32>;
 using XE_2D_U16x8x32_LD_N = XE_2D_LD_N<16,8,32>;
-using XE_2D_U16x16x32_LD_N = XE_2D_LD_N<16,11,32>;
+using XE_2D_U16x16x32_LD_N = XE_2D_LD_N<16,16,32>;
 
 //using XE_2D_TF32x1x8_LD_N = XE_2D_LD_N<32,1,8>; //TODO  < sg???
 //using XE_2D_TF32x2x8_LD_N = XE_2D_LD_N<32,2,8>;
@@ -164,5 +164,5 @@ using XE_2D_TF32x32x16_LD_N = XE_2D_LD_N<32,32,16>;
 
 //using XE_2D_U4x32x64_LD_N = XE_2D_LD_N<4,1,32>; //TODO shuffle
 //using XE_2D_U4x16x64_LD_N = XE_2D_LD_N<4,1,32>; //TODO shuffle
-*/
+
 } // end namespace cute

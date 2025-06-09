@@ -68,8 +68,13 @@ struct XE_2D_LD_V {
   }
 };
 
+template<int TSizeBits, int Height, int Width, int InstSizeBits = TSizeBits>
+CUTE_HOST_DEVICE void print(cute::XE_2D_LD_V<TSizeBits, Height, Width, InstSizeBits> const&){
+  print("XE_2D_LD_V<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(", "); print(InstSizeBits); print(">");
+}
+
 // deprecated aliases
-/*using XE_2D_U8x32x16_LD_V = XE_2D_LD_V<8,32,16>;
+using XE_2D_U8x32x16_LD_V = XE_2D_LD_V<8,32,16>;
 using XE_2D_U8x32x32_LD_V = XE_2D_LD_V<8,32,32>;
 using XE_2D_U8x32x64_LD_V = XE_2D_LD_V<8,32,64>;
 
@@ -77,5 +82,5 @@ using XE_2D_U16x16x16_LD_V = XE_2D_LD_V<16,16,16>;
 using XE_2D_U16x32x16_LD_V = XE_2D_LD_V<16,32,16>;
 using XE_2D_U16x32x32_LD_V = XE_2D_LD_V<16,32,32>;
 using XE_2D_U16x16x32_LD_V = XE_2D_LD_V<16,16,32>;
-*/
+
 } // end namespace cute

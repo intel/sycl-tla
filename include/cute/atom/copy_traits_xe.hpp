@@ -419,7 +419,7 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
 };
 
 // clang-format off
-
+/*
 template <typename CopyOp, typename... Args>
 struct Copy_Traits_{
   static_assert(cute::dependent_false<CopyOp>, "Copy_Traits_ not defined for this CopyOp");
@@ -2275,10 +2275,10 @@ COPY_TRAIT_ST_DEF(XE_2D_U32x1x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x2x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x4x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x8x16_ST_N)
-
+*/
 template <int TSizeBits, int Height, int Width, class... args_t>
 struct Copy_Traits<XE_2D_ST_N<TSizeBits, Height, Width>, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_ST_N<TSizeBits, Height, Width>, args_t...> {
+    : XE_2D_ST_Unpack<XE_2D_ST_N<TSizeBits, Height, Width>, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (dst-thr,dst-val) to bit
   using SrcLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
@@ -2294,7 +2294,7 @@ struct Copy_Traits<XE_2D_ST_N<TSizeBits, Height, Width>, args_t...>
 
   template <class... ArgTs>
   Copy_Traits(ArgTs... args)
-      : XE_2D_LD_Unpack<XE_2D_ST_N<TSizeBits, Height, Width>, args_t...>(args...) {}
+      : XE_2D_ST_Unpack<XE_2D_ST_N<TSizeBits, Height, Width>, args_t...>(args...) {}
 };
 
 template <int TSizeBits, int Height, int Width, class... args_t>

@@ -67,8 +67,13 @@ struct XE_2D_ST_N {
   }
 };
 
+template<int TSizeBits, int Height, int Width, int InstSizeBits = TSizeBits>
+CUTE_HOST_DEVICE void print(cute::XE_2D_ST_N<TSizeBits, Height, Width, InstSizeBits> const&){
+  print("XE_2D_ST_N<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(", "); print(InstSizeBits); print(">");
+}
+
 // deprecated aliases
-/*using XE_2D_U8x2x32_ST_N = XE_2D_ST_N<8,2,32>;
+using XE_2D_U8x2x32_ST_N = XE_2D_ST_N<8,2,32>;
 
 using XE_2D_U8x1x16_ST_N = XE_2D_ST_N<8,1,16>;
 using XE_2D_U8x2x16_ST_N = XE_2D_ST_N<8,2,16>;
@@ -84,6 +89,6 @@ using XE_2D_U16x8x16_ST_N = XE_2D_ST_N<16,8,16>;
 using XE_2D_U32x1x16_ST_N = XE_2D_ST_N<32,1,16>;
 using XE_2D_U32x2x16_ST_N = XE_2D_ST_N<32,2,16>;
 using XE_2D_U32x4x16_ST_N = XE_2D_ST_N<32,4,16>;
-using XE_2D_U32x8x16_ST_N = XE_2D_ST_N<32,8,16>;*/
+using XE_2D_U32x8x16_ST_N = XE_2D_ST_N<32,8,16>;
 
 } // end namespace cute

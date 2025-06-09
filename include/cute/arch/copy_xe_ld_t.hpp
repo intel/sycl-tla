@@ -36,21 +36,30 @@
 
 namespace cute
 {
-// currently no XE_2D_LD_T builtin supports non-default InstSizeBits
-template<int TSizeBits, int Height, int Width, int InstSizeBits = 32>
+template<int TSizeBits, int Height, int Width>
 struct XE_2D_LD_T {
   static_assert(TSizeBits == 4 || TSizeBits == 8 || TSizeBits == 16 || TSizeBits == 32 || TSizeBits == 64, 
       "Expected TSizeBits to be a power of 2, less then or equal 64");
   static_assert(Width == 1 || Width == 2 || Width == 4 || Width == 8 || Width == 16 || Width == 32, 
       "Expected Width to be a power of 2, less then or equal 32");
 
-  static_assert(InstSizeBits % 8 == 0, "Expected InstSizeBits to be a multiple of 8.");
-  static constexpr int InstSizeBytes = InstSizeBits / 8;
-  static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
-  static constexpr int VecSize = InstSizeBits / TSizeBits;
+  //static_assert(InstSizeBits % 8 == 0, "Expected InstSizeBits to be a multiple of 8.");
+  //static constexpr int InstSizeBytes = InstSizeBits / 8;
+  //static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
+  static constexpr int TSizeBytes = TSizeBits / 8;
+  static constexpr int VecSize = 1;//InstSizeBits / TSizeBits;
   static constexpr int BlockHeight = 16 * VecSize; //TODO SG size?
   static_assert(Height % BlockHeight == 0, "Expected Height to be a multiple of 16 * InstSizeBits / TSizeBits.");
   static constexpr int NBlocks = Height / BlockHeight;
+
+  /*static constexpr int VecSize = 1;
+  static constexpr int BlockHeight = 16 * VecSize; //TODO SG size?
+  static_assert(Height % BlockHeight == 0, "Expected Height to be a multiple of 16.");
+  static constexpr int NBlocks = Height / BlockHeight;
+  // currently no XE_2D_LD_T builtin supports non-32 InstSizeBits
+  static constexpr int InstSizeBits = 32;
+  static constexpr int InstSizeBytes = InstSizeBits / 8;
+  static constexpr int InstWidth = Width * TSizeBits / InstSizeBits;*/
 
   // shape of the block in global memory 
   using BlockShape = Shape<Int<Height>, Int<Width>>;
@@ -60,17 +69,29 @@ struct XE_2D_LD_T {
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
+    //print("XE_2D_LD_T<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(">\n");
+    //print("Calling XeSubgroup2DBlockLoadTranspose<"); print(TSizeBytes); print(", "); print(Width); print(", "); print(BlockHeight); print(", "); print(NBlocks); print(">\n");
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof_bits_v<T> == TSizeBits, "Expected T to have size equal to TSizeBits.");
-    detail::XeSubgroup2DBlockLoadTranspose<InstSizeBytes, Width, BlockHeight, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
+    //detail::XeSubgroup2DBlockLoadTranspose<InstSizeBytes, InstWidth, BlockHeight, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
+    detail::XeSubgroup2DBlockLoadTranspose<TSizeBytes, Width, BlockHeight, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
 };
 
+template<int TSizeBits, int Height, int Width>
+CUTE_HOST_DEVICE void print(cute::XE_2D_LD_T<TSizeBits, Height, Width> const&){
+  print("XE_2D_LD_T<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(">\n");
+  print("Call XeSubgroup2DBlockLoadTranspose<"); print(cute::XE_2D_LD_T<TSizeBits, Height, Width>::TSizeBytes); print(", "); 
+                                                 print(Width); print(", "); 
+                                                 print(cute::XE_2D_LD_T<TSizeBits, Height, Width>::BlockHeight); print(", "); 
+                                                 print(cute::XE_2D_LD_T<TSizeBits, Height, Width>::NBlocks); print(">\n");
+}
+
 // deprecated aliases
-/*
+
 //using XE_2D_U64x8x1_LD_T = XE_2D_LD_T<64,8,1>;
 //using XE_2D_U64x8x2_LD_T = XE_2D_LD_T<64,8,2>;
 //using XE_2D_U64x8x4_LD_T = XE_2D_LD_T<64,8,4>;
@@ -85,5 +106,5 @@ using XE_2D_U16x16x16_LD_T = XE_2D_LD_T<16,16,16>;
 
 using XE_2D_U4x32x16_LD_T = XE_2D_LD_T<4,32,16>;
 using XE_2D_U4x16x16_LD_T = XE_2D_LD_T<4,16,16>;
-*/
+
 } // end namespace cute
