@@ -70,11 +70,11 @@ struct XE_2D_LD_T {
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
-    if(thread0()){
+    /*if(thread0()){
         print("XE_2D_LD_T<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(">\n");
         print("Calling XeSubgroup2DBlockLoadTranspose<"); print(TSizeBytes); print(", "); print(Width); print(", "); print(BlockHeight); print(", "); print(NBlocks); print(">("); 
         print(baseoffset); print(", "); print(width); print(", "); print(height); print(", "); print(pitch); print(", ("); print(coord[0]); print(", "); print(coord[1]); print("), "); print(dst); print("\n"); 
-    }
+    }*/
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof_bits_v<T> == TSizeBits, "Expected T to have size equal to TSizeBits.");
     //detail::XeSubgroup2DBlockLoadTranspose<InstSizeBytes, InstWidth, BlockHeight, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
