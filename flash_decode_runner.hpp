@@ -51,6 +51,7 @@
 #include "cutlass/util/reference/device/tensor_compare.h"
 
 #include "cutlass/../../examples/common/sycl_common.hpp"
+#include "cutlass/../../fmha_decode_configuration.hpp"
 
 using namespace cute;
 
