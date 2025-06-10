@@ -32,7 +32,7 @@
 #pragma once
 
 #include "benchmark_runner.hpp"
-#include "fmha_decode_configuration.hpp"
+#include "cutlass/../../fmha_decode_configuration.hpp"
 #include "benchmarks_h64_512.hpp"
 #include "benchmarks_h64_1024.hpp"
 #include "benchmarks_h96_512.hpp"

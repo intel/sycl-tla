@@ -69,7 +69,7 @@ int main(int argc, const char** argv) {
   std::string line;
   while (std::getline(file, line)) {
     if (!line.empty() && line.find("#") != 0) {
-      register_benchmarks<cutlass::benchmark::FMHADecodeOptions>(line);
+      register_benchmarks<cutlass::flash_attention::FMHADecodeOptions>(line);
     }
   }
   file.close();
