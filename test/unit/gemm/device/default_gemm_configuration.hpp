@@ -1100,19 +1100,19 @@ struct DefaultGemmConfigurationToCutlass3Types<
     epilogue::thread::LinearCombination<double, 1, double, double>,
     cutlass::gemm::EpilogueDefault>;
 
-  /*
-    using EpilogueOutputOp = epilogue::collective::Epilogue<
-        epilogue::thread::LinearCombination<double, 1, double, double>,
-        Layout<Shape <_64,_32>,
-               Stride< _1,_64>>,                                           // SMEM layout
-        Copy_Atom<UniversalCopy<double>,double>,                           // R2S with tiled_mma layout
-        decltype(make_tiled_copy(Copy_Atom<UniversalCopy<double>,double>{},// S2R
-                                 Layout<Shape <_16,_16>,
-                                        Stride< _1,_16>>{},                // Thread layout
-                                 Layout<Shape<_2,_1>>{})),                 // Value layout
-        Copy_Atom<UniversalCopy<double>,double>                            // R2G with S2R_dst layout
-        >;
-  */
+/*
+  using EpilogueOutputOp = epilogue::collective::Epilogue<
+      epilogue::thread::LinearCombination<double, 1, double, double>,
+      Layout<Shape <_64,_32>,
+             Stride< _1,_64>>,                                           // SMEM layout
+      Copy_Atom<UniversalCopy<double>,double>,                           // R2S with tiled_mma layout
+      decltype(make_tiled_copy(Copy_Atom<UniversalCopy<double>,double>{},// S2R
+                               Layout<Shape <_16,_16>,
+                                      Stride< _1,_16>>{},                // Thread layout
+                               Layout<Shape<_2,_1>>{})),                 // Value layout
+      Copy_Atom<UniversalCopy<double>,double>                            // R2G with S2R_dst layout
+      >;
+*/
 };
 
 ///////////////////////////////////////////////////////////////////////////////
