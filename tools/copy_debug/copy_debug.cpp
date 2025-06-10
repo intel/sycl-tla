@@ -77,11 +77,12 @@ void copy_kernel(TensorS S) {
   if(thread(0)){
     print("tiled_copy_load: "); print(tiled_copy_load); print("\n");
     print("BlockShape: "); print(typename traits_load::BlockShape{}); print("\n");
+    print("DstLayout: "); print(typename traits_load::DstLayout{}); print("\n");
     print("fragment_copy_view: "); print(fragment_copy_view); print("\n");
     print("thread_s: "); print(thread_s); print("\n");
   }
   
-  //copy(tiled_copy_load, thread_s, fragment_copy_view);
+  copy(tiled_copy_load, thread_s, fragment_copy_view);
   
   for(int i=0;i<SUBGROUP_SIZE;i++){
     if(thread(i)){
@@ -117,7 +118,7 @@ void copy(int global_M, int global_N) {
   int tensor_size = size(tensor_shape);
   cutlass::DeviceAllocation<dtype> src(tensor_size);
 
-  Tensor tensor_S = make_tensor(make_gmem_ptr(src.get()), make_layout(tensor_shape, LayoutLeft{}));
+  Tensor tensor_S = make_tensor(make_gmem_ptr(src.get()), make_layout(tensor_shape, LayoutRight{}));
 
   auto gridDim = syclcompat::dim3(1);
   auto blockDim = syclcompat::dim3(SUBGROUP_SIZE);
@@ -133,7 +134,7 @@ int main(){
   // for 16b copies use integers as floating point types could lose precision for bigger indices
   // for 8b copies you have to work with overflow
   //copy<XE_2D_U16x32x32_LD_V, int16_t>(256, 256);
-  copy<XE_2D_U16x8x32_LD_N, int16_t>(32, 32);
-  copy<XE_2D_LD_N<16,8,32>, int16_t>(32, 32);
+  copy<XE_2D_U16x16x8_LD_T, int16_t>(16, 16);
+  //copy<XE_2D_LD_N<16,8,32>, int16_t>(32, 32);
   return 0;
 }

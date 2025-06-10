@@ -1415,9 +1415,13 @@ template<int BlockHeight>
 struct XeSubgroup2DBlockPrefetch<1, 16, BlockHeight, 2> : public XeSubgroup2DBlockPrefetch<1, 32, BlockHeight, 1> {};
 template<int BlockHeight>
 struct XeSubgroup2DBlockPrefetch<1, 16, BlockHeight, 4> : public XeSubgroup2DBlockPrefetch<1, 32, BlockHeight, 2> {};
-template<int BlockWidth, int BlockHeight, int BlockCount>
+/*template<int BlockWidth, int BlockHeight, int BlockCount>
 struct XeSubgroup2DBlockLoadTranspose<1, BlockWidth, BlockHeight, BlockCount> : public XeSubgroup2DBlockLoadTranspose<4, BlockWidth/4, BlockHeight, BlockCount> {};
 template<int BlockWidth, int BlockHeight, int BlockCount>
-struct XeSubgroup2DBlockLoadTranspose<2, BlockWidth, BlockHeight, BlockCount> : public XeSubgroup2DBlockLoadTranspose<4, BlockWidth/2, BlockHeight, BlockCount> {};
+struct XeSubgroup2DBlockLoadTranspose<2, BlockWidth, BlockHeight, BlockCount> : public XeSubgroup2DBlockLoadTranspose<4, BlockWidth/2, BlockHeight, BlockCount> {};*/
+template<int BlockCount>
+struct XeSubgroup2DBlockLoadTranspose<2, 16, 16, BlockCount> : public XeSubgroup2DBlockLoadTranspose<4, 8, 16, BlockCount> {};
+template<int BlockCount>
+struct XeSubgroup2DBlockLoadTranspose<2, 8, 16, BlockCount> : public XeSubgroup2DBlockLoadTranspose<4, 4, 16, BlockCount> {};
 
 } // namespace cute::detail

@@ -419,12 +419,12 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
 };
 
 // clang-format off
-/*
+
 template <typename CopyOp, typename... Args>
 struct Copy_Traits_{
   static_assert(cute::dependent_false<CopyOp>, "Copy_Traits_ not defined for this CopyOp");
 };
-
+/*
 template <class... args_t>
 struct Copy_Traits_<XE_2D_U8x1x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U8x1x32_LD_N, args_t...> {
@@ -1649,10 +1649,10 @@ struct Copy_Traits_<XE_2D_U16x16x8_LD_T, args_t...>
   Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U16x16x8_LD_T, args_t...>(args...) {}
 };
-
+*/
 template <class... args_t>
-struct Copy_Traits_<XE_2D_U16x16x16_LD_T, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_T, args_t...> {
+struct Copy_Traits_<XE_2D_U16x16x16_LD_T_, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_T_, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   // TODO(joe): Not convinced that changing from <_16, _256> should be required here
@@ -1667,9 +1667,9 @@ struct Copy_Traits_<XE_2D_U16x16x16_LD_T, args_t...>
 
   template <class... ArgT>
   Copy_Traits_(ArgT... args)
-      : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_T, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_T_, args_t...>(args...) {}
 };
-
+/*
 // template<class... args_t>
 // struct Copy_Traits<XE_2D_U32x16x1_LD_T, args_t...>
 //     : XE_2D_LD_Unpack<XE_2D_U32x16x1_LD_T, args_t...> {
@@ -2142,7 +2142,7 @@ struct Copy_Traits<XE_1D_STORE_GLOBAL<S, D>> {
     // Reference map from (thr,val) to bit
     using RefLayout = SrcLayout;
 };
-
+*/
 // This is the Copy_Traits for Xe 2D Block copies, which inherits from `Copy_Traits_` and handles
 // transposing the traits depending on the layout of the tensor in memory (MN vs. K-major).
 // Since we can't SFINAE this (Copy_Traits has no Enable = void template param), we are
@@ -2181,7 +2181,7 @@ struct Copy_Traits<COPY_OP, args_t...> : Copy_Traits_<COPY_OP, args_t...>{ \
   Copy_Traits(ArgTs... args) \
       : Copy_Traits_<CopyOp, args_t...>(args...) {} \
 };
-
+/*
 COPY_TRAIT_LD_DEF(XE_2D_U8x1x32_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x2x32_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x4x32_LD_N)
@@ -2235,9 +2235,9 @@ COPY_TRAIT_LD_DEF(XE_2D_U32x32x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_V)
 COPY_TRAIT_LD_DEF(XE_2D_U16x32x16_LD_V)
 COPY_TRAIT_LD_DEF(XE_2D_U16x32x32_LD_V)
-COPY_TRAIT_LD_DEF(XE_2D_U16x16x32_LD_V)
-COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_T)
-COPY_TRAIT_LD_DEF(XE_2D_TF32x16x16_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x32_LD_V)*/
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_T_)
+/*COPY_TRAIT_LD_DEF(XE_2D_TF32x16x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_TF32x32x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U4x32x64_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U4x16x64_LD_N)
@@ -2380,13 +2380,18 @@ struct Copy_Traits<XE_2D_LD_V<TSizeBits, Height, Width>, args_t...>
 template <int TSizeBits, int Height, int Width, class... args_t>
 struct Copy_Traits<XE_2D_LD_T<TSizeBits, Height, Width>, args_t...>
     : XE_2D_LD_Unpack<XE_2D_LD_T<TSizeBits, Height, Width>, args_t...> {
+  using Base = XE_2D_LD_Unpack<XE_2D_LD_T<TSizeBits, Height, Width>, args_t...>;
+  using Base::is_matrix_B;
   using ThrID = Layout<_16>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
-                                                                  Int<XE_2D_LD_T<TSizeBits, Height, Width>::VecSize>, 
-                                                                  Int<Height>, 
+                                                                  //Int<XE_2D_LD_T<TSizeBits, Height, Width>::VecSize>, 
+                                                                  Int<Width>, 
                                                                   Int<XE_2D_LD_T<TSizeBits, Height, Width>::NBlocks>>>{},
-                                                 Step<_4, Step<_0, _1, _2, _3>>{}));
+                                                  std::conditional_t<is_matrix_B, 
+                                                                     Step<_1, Step<_0, _2, _3>>, 
+                                                                     Step<_2, Step<_0, _1, _3>>
+                                                                     >{}));
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16, decltype(get<1>(DstLayout{}).shape())>,
                            Stride<_0,  decltype(get<1>(DstLayout{}).stride())>>;

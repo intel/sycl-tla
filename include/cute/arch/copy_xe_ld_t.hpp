@@ -63,18 +63,23 @@ struct XE_2D_LD_T {
 
   // shape of the block in global memory 
   using BlockShape = Shape<Int<Height>, Int<Width>>;
+  using inst_dtype = uint32_t;
   static constexpr bool is_transpose = true;
   
   template<typename T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
                                     T *dst) {
-    //print("XE_2D_LD_T<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(">\n");
-    //print("Calling XeSubgroup2DBlockLoadTranspose<"); print(TSizeBytes); print(", "); print(Width); print(", "); print(BlockHeight); print(", "); print(NBlocks); print(">\n");
+    if(thread0()){
+        print("XE_2D_LD_T<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(">\n");
+        print("Calling XeSubgroup2DBlockLoadTranspose<"); print(TSizeBytes); print(", "); print(Width); print(", "); print(BlockHeight); print(", "); print(NBlocks); print(">("); 
+        print(baseoffset); print(", "); print(width); print(", "); print(height); print(", "); print(pitch); print(", ("); print(coord[0]); print(", "); print(coord[1]); print("), "); print(dst); print("\n"); 
+    }
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof_bits_v<T> == TSizeBits, "Expected T to have size equal to TSizeBits.");
     //detail::XeSubgroup2DBlockLoadTranspose<InstSizeBytes, InstWidth, BlockHeight, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
     detail::XeSubgroup2DBlockLoadTranspose<TSizeBytes, Width, BlockHeight, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
+    //detail::XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
@@ -103,6 +108,35 @@ using XE_2D_U32x16x4_LD_T = XE_2D_LD_T<32,16,4>;
 using XE_2D_U32x16x8_LD_T = XE_2D_LD_T<32,16,8>;
 
 using XE_2D_U16x16x16_LD_T = XE_2D_LD_T<16,16,16>;
+
+struct XE_2D_U16x16x16_LD_T_ {
+  using BlockShape = Shape<_16, _16>;
+  using inst_dtype = uint32_t;
+
+  static constexpr bool is_transpose = true;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+    if(thread0()){
+        print("XE_2D_U16x16x16_LD_T_\n");
+        print("Calling XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1>("); 
+        print(baseoffset); print(", "); print(width); print(", "); print(height); print(", "); print(pitch); print(", ("); print(coord[0]); print(", "); print(coord[1]); print("), "); print(dst); print("\n"); 
+    }
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 2, "Expected T to have size 2");
+    detail::XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+CUTE_HOST_DEVICE void print(XE_2D_U16x16x16_LD_T_ const&){
+  print("XE_2D_U16x16x16_LD_T_\n");
+  print("Call XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1>\n");
+}
 
 using XE_2D_U4x32x16_LD_T = XE_2D_LD_T<4,32,16>;
 using XE_2D_U4x16x16_LD_T = XE_2D_LD_T<4,16,16>;
