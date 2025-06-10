@@ -190,7 +190,7 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);
 
-//#if CUTLASS_ENABLE_DEBUG_PRINTS
+#if CUTLASS_ENABLE_DEBUG_PRINTS
 #define PRINT(x) print(#x ": "); print(x); print("\n");
     if (cute::thread(0, 0)) {
       print("======================= A: \n");
@@ -229,7 +229,7 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
       PRINT(GmemTiledCopyB{});
       }
 #undef PRINT
-//#endif
+#endif
 
     //
     // Mainloop
