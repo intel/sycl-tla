@@ -200,7 +200,7 @@ struct ExampleRunner {
           block_A_fp16.get(),
           block_A.size()
       );
-      convert_fp8_to_fp16<ElementA, half_t>(
+      convert_fp8_to_fp16<ElementB, half_t>(
           block_B.get(),
           block_B_fp16.get(),
           block_B.size()
@@ -357,7 +357,7 @@ int launcher(Options& options)
       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
