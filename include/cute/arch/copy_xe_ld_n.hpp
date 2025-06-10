@@ -107,21 +107,21 @@ CUTE_HOST_DEVICE void print(cute::XE_2D_LD_N<TSizeBits, Height, Width, InstSizeB
 }
 
 // deprecated aliases
-using XE_2D_U8x1x32_LD_N = XE_2D_LD_N<8,1,32>;
-using XE_2D_U8x2x32_LD_N = XE_2D_LD_N<8,2,32>;
-using XE_2D_U8x4x32_LD_N = XE_2D_LD_N<8,4,32>;
-using XE_2D_U8x8x32_LD_N = XE_2D_LD_N<8,8,32>;
+using XE_2D_Packed_U8x1x32_LD_N = XE_2D_LD_N<8,1,32>;
+using XE_2D_Packed_U8x2x32_LD_N = XE_2D_LD_N<8,2,32>;
+using XE_2D_Packed_U8x4x32_LD_N = XE_2D_LD_N<8,4,32>;
+using XE_2D_Packed_U8x8x32_LD_N = XE_2D_LD_N<8,8,32>;
 
-using XE_2D_U8x1x64_LD_N = XE_2D_LD_N<8,1,64>;
-using XE_2D_U8x2x64_LD_N = XE_2D_LD_N<8,2,64>;
-using XE_2D_U8x4x64_LD_N = XE_2D_LD_N<8,4,64>;
-using XE_2D_U8x8x64_LD_N = XE_2D_LD_N<8,8,64>;
+using XE_2D_Packed_U8x1x64_LD_N = XE_2D_LD_N<8,1,64>;
+using XE_2D_Packed_U8x2x64_LD_N = XE_2D_LD_N<8,2,64>;
+using XE_2D_Packed_U8x4x64_LD_N = XE_2D_LD_N<8,4,64>;
+using XE_2D_Packed_U8x8x64_LD_N = XE_2D_LD_N<8,8,64>;
 
-using XE_2D_U8x16x32_LD_N = XE_2D_LD_N<8,16,32>;
-using XE_2D_U8x32x32_LD_N = XE_2D_LD_N<8,32,32>;
+using XE_2D_Packed_U8x16x32_LD_N = XE_2D_LD_N<8,16,32>;
+using XE_2D_Packed_U8x32x32_LD_N = XE_2D_LD_N<8,32,32>;
 
-using XE_2D_U8x16x64_LD_N = XE_2D_LD_N<8,16,64>;
-using XE_2D_U8x32x64_LD_N = XE_2D_LD_N<8,32,64>;
+using XE_2D_Packed_U8x16x64_LD_N = XE_2D_LD_N<8,16,64>;
+using XE_2D_Packed_U8x32x64_LD_N = XE_2D_LD_N<8,32,64>;
 
 using XE_2D_U16x1x16_LD_N = XE_2D_LD_N<16,1,16>;
 using XE_2D_U16x2x16_LD_N = XE_2D_LD_N<16,2,16>;

@@ -101,6 +101,10 @@ CUTE_HOST_DEVICE void print(cute::XE_2D_LD_T<TSizeBits, Height, Width> const&){
 //using XE_2D_U64x8x2_LD_T = XE_2D_LD_T<64,8,2>;
 //using XE_2D_U64x8x4_LD_T = XE_2D_LD_T<64,8,4>;
 
+using XE_2D_U8x16x32_LD_T = XE_2D_LD_T<8,16,32>;
+using XE_2D_U8x16x16_LD_T = XE_2D_LD_T<8,16,16>;
+using XE_2D_U8x16x8_LD_T = XE_2D_LD_T<8,16,8>;
+
 using XE_2D_U16x16x8_LD_T = XE_2D_LD_T<16,16,8>;
 
 using XE_2D_U32x16x2_LD_T = XE_2D_LD_T<32,16,2>;

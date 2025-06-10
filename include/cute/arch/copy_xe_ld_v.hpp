@@ -83,4 +83,7 @@ using XE_2D_U16x32x16_LD_V = XE_2D_LD_V<16,32,16>;
 using XE_2D_U16x32x32_LD_V = XE_2D_LD_V<16,32,32>;
 using XE_2D_U16x16x32_LD_V = XE_2D_LD_V<16,16,32>;
 
+// performance workaround
+using XE_2D_U8x32x32_LD_N = XE_2D_LD_V<8,32,32>;
+
 } // end namespace cute
