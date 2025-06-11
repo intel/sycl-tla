@@ -1828,7 +1828,7 @@ struct NumericArrayConverter<cutlass::half_t, cutlass::float_e5m2_t, 4, Round> {
   CUTLASS_DEVICE
   static result_type convert(source_type const & source) {
     result_type out;
-    uint32_t& reg = reinterpret_cast<uint32_t&>(out);
+    auto  reg = cute::recast<cutlass::Array<uint32_t, 2>>(out);
     uint32_t const& src_packed = reinterpret_cast<uint32_t const&>(source);
 
     uint32_t first = (src_packed & 0x000000FF) << 8;
@@ -1836,8 +1836,7 @@ struct NumericArrayConverter<cutlass::half_t, cutlass::float_e5m2_t, 4, Round> {
     uint32_t third = (src_packed & 0x00FF0000) >> 8;
     uint32_t fourth = (src_packed & 0xFF000000);
 
-    reg = first | second;
-    (&reg)[1] = third | fourth;
+   reg ={first | second, third | fourth};
 
     return out;
   }
