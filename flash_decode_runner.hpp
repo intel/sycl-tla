@@ -62,6 +62,7 @@ namespace flash_attention {
 // Command line options parsing
 struct FMHADecodeOptions {
 
+  bool help;
   bool error;
 
   int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo, iterations;
@@ -73,8 +74,11 @@ struct FMHADecodeOptions {
         seq_len_kv(512), seq_len_kv_cache(0), head_size_vo(128), iterations(100), softmax_scale(1.f), bm_name("Flash Attention v2 Decode") {}
 
   // Parses the command line
-  void parse(int argc, char const **args) {
-    cutlass::CommandLine cmd(argc, args);
+  void parse(cutlass::CommandLine& cmd, int argc, char const **args) {
+    if (cmd.check_cmd_line_flag("help")) {
+      help = true;
+      return;
+    }
 
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
@@ -88,6 +92,12 @@ struct FMHADecodeOptions {
     cmd.get_cmd_line_argument("bm_name", bm_name, std::string("Flash Attention v2"));
 
     softmax_scale = 1 / std::sqrt(static_cast<float>(head_size_qk));
+  }
+
+  // Parses the command line
+  void parse(int argc, char const **args) {
+    cutlass::CommandLine cmd(argc, args);
+    parse(cmd, argc, args);
   }
 
   std::string benchmark_name() const {
@@ -104,6 +114,28 @@ struct FMHADecodeOptions {
     full_name << test_name_suffix;
 
     return full_name.str();
+  }
+
+  /// Prints the usage statement.
+  std::ostream &print_usage(std::ostream &out) const {
+
+    out << "BMG Flash Attention v2 Example\n\n"
+        << "Options:\n\n"
+        << "  --help                      If specified, displays this usage statement\n\n"
+        << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
+        << "  --varlen                    Enable variable sequence length\n"
+        << "  --scheduler                 Only Individual Scheduler supported\n"
+        << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
+        << "  --num_heads_q=<int>         Sets the Number of Attention Heads for Key-Value pair the Multi-Head Self Attention module\n"
+        << "  --num_heads_kv=<int>        Sets the Number of Attention Heads for Query input in the Multi-Head Self Attention module\n"
+        << "  --seq_len_qo=<int>          Sets the Sequence length of the Query input in Multi-Head Self Attention module\n"
+        << "  --seq_len_kv=<int>          Sets the Sequence length of the Key-Value pair in Multi-Head Self Attention module\n"
+        << "  --seq_len_kv_cache=<int>    Sets the Sequence length of the Key-Value Cache pair in Multi-Head Self Attention module\n"
+        << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
+        << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
+        << "  --iterations=<int>          Iterations\n\n";
+
+    return out;
   }
 };
 
