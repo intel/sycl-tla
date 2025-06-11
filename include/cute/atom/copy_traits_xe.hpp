@@ -2278,6 +2278,7 @@ struct Copy_Traits_<XE_2D_U32x8x16_ST_N, args_t...>
   Copy_Traits_(ArgTs... args)
       : XE_2D_ST_Unpack<XE_2D_U32x8x16_ST_N, args_t...>(args...) {}
 };
+*/
 
 template<class S, class D>
 struct Copy_Traits<XE_ATOMIC<S, D>> {
@@ -2344,7 +2345,7 @@ struct Copy_Traits<XE_1D_STORE_GLOBAL<S, D>> {
     // Reference map from (thr,val) to bit
     using RefLayout = SrcLayout;
 };
-*/
+
 // This is the Copy_Traits for Xe 2D Block copies, which inherits from `Copy_Traits_` and handles
 // transposing the traits depending on the layout of the tensor in memory (MN vs. K-major).
 // Since we can't SFINAE this (Copy_Traits has no Enable = void template param), we are
