@@ -484,8 +484,6 @@ struct ExampleRunner {
     auto layout_scale = make_layout(shape_scale_zero, stride_S);
     auto layout_zero = make_layout(shape_scale_zero, stride_Z);
 
-#ifdef QUANTIZATION
-
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
     if constexpr (AIsNarrower) {
@@ -497,7 +495,6 @@ struct ExampleRunner {
                         block_scale.get(), block_zero.get(), layout_scale, layout_zero,
                         options.g);
     }
-#endif
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -710,25 +707,7 @@ int main(int argc, const char** argv)
     return -1;
   }
 
-  // options.m = 32;
-  // options.n = 4096;
-  // options.k = 4096;
   run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4>(options);
-
-  // options.m = 32;
-  // options.n = 14336;
-  // options.k = 4096;
-  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 128, 32, 1, 4>(options);
-
-  // options.m = 48;
-  // options.n = 4096;
-  // options.k = 4096;
-  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4>(options);
-
-  // options.m = 48;
-  // options.n = 14336;
-  // options.k = 4096;
-  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4>(options);
 
   return 0;
 }
