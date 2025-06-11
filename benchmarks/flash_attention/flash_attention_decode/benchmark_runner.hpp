@@ -31,7 +31,7 @@
 #pragma once
 
 #include "cutlass/../../benchmarks/common.hpp"
-#include "cutlass/../../flash_decode_runner.hpp"
+#include "flash_attention_v2/flash_decode_runner.hpp"
 
 using namespace cute;
 using namespace cutlass::flash_attention;

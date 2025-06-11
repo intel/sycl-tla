@@ -30,7 +30,7 @@
  **************************************************************************************************/
 #pragma once
 
-#include "cutlass/../../flash_decode_runner.hpp"
+#include "flash_attention_v2/flash_decode_runner.hpp"
 #include "helper.h"
 #include "sycl_common.hpp"
 

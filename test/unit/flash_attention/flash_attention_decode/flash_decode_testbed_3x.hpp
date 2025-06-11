@@ -34,7 +34,7 @@
 
 #pragma once
 
-#include "cutlass/../../flash_decode_runner.hpp"
+#include "flash_attention_v2/flash_decode_runner.hpp"
 
 #include "../gemm/device/testbed_utils.h"
 #include "../common/cutlass_unit_test.h"
