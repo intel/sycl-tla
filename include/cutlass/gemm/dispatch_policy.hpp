@@ -1043,6 +1043,11 @@ struct MainloopIntelXeXMX16MixedPrecision : MainloopIntelXeXMX16<Stages_> {
 template<int Stages_, class KernelSchedule = KernelXe>
 struct MainloopIntelW8A8 : MainloopIntelXeXMX16<Stages_, KernelSchedule> {
 };
+
+template<int Stages_, class KernelSchedule = KernelXe>
+struct MainloopIntelScaledMMW8A8 : MainloopIntelXeXMX16<Stages_, KernelSchedule> {
+};
+
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)

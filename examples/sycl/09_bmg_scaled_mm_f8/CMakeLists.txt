@@ -1,4 +1,4 @@
-# Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -27,19 +27,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-if(SYCL_INTEL_TARGET)
-  add_subdirectory(00_bmg_gemm)
-  add_subdirectory(01_bmg_gemm_with_collective_builder)
-  add_subdirectory(02_bmg_gemm_mixed_dtype)
-  add_subdirectory(03_bmg_gemm_streamk)
-  add_subdirectory(04_bmg_grouped_gemm)
-  add_subdirectory(05_bmg_gemm_with_epilogues)
-  add_subdirectory(06_bmg_flash_attention)
-  add_subdirectory(07_bmg_dual_gemm)
-  add_subdirectory(08_bmg_gemm_f8)
-  add_subdirectory(09_bmg_scaled_mm_f8)
-endif()
+set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
+set(CUTLASS_EXAMPLES_DIR ${CMAKE_SOURCE_DIR}/examples)
 
-if (CUTLASS_ENABLE_SYCL)
-  add_subdirectory(generics)
-endif()
+cutlass_example_add_executable(
+  09_bmg_scaled_mm_f8
+  09_bmg_scaled_mm_f8.cpp
+)
