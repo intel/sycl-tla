@@ -295,8 +295,7 @@ struct FlashPrefillMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, El
     constexpr bool is_v_fp8  =is_same_v<ElementV, cute::float_e5m2_t> || is_same_v<ElementV, cute::float_e4m3_t>;
     using TCrV_Type = cute::conditional_t<is_v_fp8, uint8_t, ElementV>;
     Tensor tCrV = make_tensor<TCrV_Type>(make_fragment_layout(params.gmem_tiled_copy_v, take<0,3>(tCgV.shape())));
-    using UpCastTypeV = cute::conditional_t<is_same_v<ElementV, cute::float_e5m2_t> || is_same_v<ElementV, cute::float_e4m3_t>,
-                                            half_t, ElementV>;
+    using UpCastTypeV = cute::conditional_t<is_v_fp8, half_t, ElementV>;
      
 
     // Partition the copying of A and B tiles across the threads
