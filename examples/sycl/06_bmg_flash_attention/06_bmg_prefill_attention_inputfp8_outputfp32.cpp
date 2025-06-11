@@ -73,7 +73,7 @@ int main(int argc, const char **argv) {
   }
   
     using ElementInputQ = cutlass::float_e5m2_t;     // <- data type of elements in input matrix A
-    using ElementInputKV =cutlass::float_e5m2_t;    // <- data type of elements in input matrix B
+    using ElementInputKV = cutlass::float_e5m2_t;    // <- data type of elements in input matrix B
     using MMAOperation = XE_8x16x16_F32F16F16F32_TT;
     using GmemTiledCopyQ = XE_2D_U8x8x32_LD_N;
     using GmemTiledCopyK = XE_2D_U8x16x16_LD_T; // _T designates a transposed block load operation
