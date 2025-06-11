@@ -48,7 +48,7 @@ struct XE_2D_LD_T {
   //static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
   static constexpr int TSizeBytes = TSizeBits / 8;
   static constexpr int VecSize = 1;//InstSizeBits / TSizeBits;
-  static constexpr int BlockHeight = 16 * VecSize; //TODO SG size?
+  static constexpr int BlockHeight = 16 * VecSize;
   static_assert(Height % BlockHeight == 0, "Expected Height to be a multiple of 16 * InstSizeBits / TSizeBits.");
   static constexpr int NBlocks = Height / BlockHeight;
 

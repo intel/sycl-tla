@@ -45,10 +45,10 @@ struct XE_2D_LD_N_PREFETCH {
       "Expected Height to be a power of 2, less then or equal 32");
 
   static_assert(InstSizeBits % 8 == 0, "Expected InstSizeBits to be a multiple of 8.");
-  static constexpr int InstSizeBytes = InstSizeBits / 8; //TODO U4 shuffle
+  static constexpr int InstSizeBytes = InstSizeBits / 8;
   static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
   static constexpr int VecSize = InstSizeBits / TSizeBits;
-  static constexpr int BlockWidth = 16 * VecSize; //TODO SG size?
+  static constexpr int BlockWidth = 16 * VecSize;
   static_assert(Width % BlockWidth == 0, "Expected Width to be a multiple of 16 * InstSizeBits / TSizeBits.");
   static constexpr int NBlocks = Width / BlockWidth;
 
@@ -75,10 +75,10 @@ struct XE_2D_LD_N {
       "Expected Height to be a power of 2, less then or equal 32");
 
   static_assert(InstSizeBits % 8 == 0, "Expected InstSizeBits to be a multiple of 8.");
-  static constexpr int InstSizeBytes = InstSizeBits / 8; //TODO U4 shuffle
+  static constexpr int InstSizeBytes = InstSizeBits / 8;
   static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
   static constexpr int VecSize = InstSizeBits / TSizeBits;
-  static constexpr int BlockWidth = 16 * VecSize; //TODO SG size?
+  static constexpr int BlockWidth = 16 * VecSize;
   static_assert(Width % BlockWidth == 0, "Expected Width to be a multiple of 16 * InstSizeBits / TSizeBits.");
   static constexpr int NBlocks = Width / BlockWidth;
 
@@ -100,6 +100,114 @@ struct XE_2D_LD_N {
   using PREFETCH = XE_2D_LD_N_PREFETCH<TSizeBits, Height, Width, InstSizeBits>;
 
 };
+
+template<int Height, int Width>
+struct XE_2D_LD_N<4, Height, Width, 4> {
+  static_assert(Height == 1 || Height == 2 || Height == 4 || Height == 8 || Height == 16 || Height == 32, 
+      "Expected Height to be a power of 2, less then or equal 32");
+  static constexpr int VecSize = 1;
+  static constexpr int BlockWidth = 16;
+  static constexpr int InstWidth = Width / 2;
+  //TODO(Codeplay): Do we need to add support for multiple blocks?
+  static_assert(Width == 64, "Expected Width to be 64. Other cases are currently not supported.");
+  // shape of the block in global memory 
+  using BlockShape = Shape<Int<Height>, Int<Width>>;
+  using inst_dtype = int8_t;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    detail::XeSubgroup2DBlockLoad<1, InstWidth, Height, 1>{}(baseoffset, width, height, pitch, coord, dst);
+
+   // ================= shuffle begin =================
+   // FIXME: the performance of shuffle algorithm here is too bad, we are working with
+   // compiler/IGC team to optimize it.
+
+    static constexpr auto subgroup_size = 16;
+    static constexpr auto copy_W = Width / subgroup_size;
+    static constexpr auto copy_H = Height;
+
+    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto id = int(ThreadIdxX()) % subgroup_size;
+
+    cute::subbyte_iterator<int4_t> dst_iter(dst);
+    cute::array_subbyte<int4_t, copy_W * copy_H> dst_tmp{};
+
+    #pragma unroll
+    for (int cw = 0; cw < copy_W; cw++) {
+      auto remote_id = (id + cw * subgroup_size) / copy_W;
+
+      // TODO: select 'ushort32' will cause compiling error, use 'ushort16' instead, why?
+      intel::ushort16 remote_dst[2];
+      remote_dst[0] = sycl::select_from_group(sg, *(reinterpret_cast<intel::ushort16 *>(dst)), remote_id);
+      remote_dst[1] = sycl::select_from_group(sg, *((reinterpret_cast<intel::ushort16 *>(dst)) + 1), remote_id);
+
+      cute::subbyte_iterator<int4_t> remote_dst_iter(remote_dst);
+
+      #pragma unroll
+      for (int row = 0; row < copy_H; row++) {
+        dst_tmp[row + cw * copy_H] = remote_dst_iter[row * copy_W + id % copy_W].get();
+      }
+    }
+
+   *reinterpret_cast<intel::ushort32 *>(cute::raw_pointer_cast(dst_iter)) = *reinterpret_cast<intel::ushort32 *>(cute::raw_pointer_cast(dst_tmp.begin()));
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+/*struct XE_2D_U4x16x64_LD_N {
+  using BlockShape = Shape<_16, _64>;
+  using inst_dtype = int8_t;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    detail::XeSubgroup2DBlockLoad<1, 32, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
+
+   // ================= shuffle begin =================
+   // FIXME: the performance of shuffle algorithm here is too bad, we are working with
+   // compiler/IGC team to optimize it.
+
+    static constexpr auto subgroup_size = 16;
+    static constexpr auto copy_W = decltype(size<1>(BlockShape{}))::value / subgroup_size;
+    static constexpr auto copy_H = decltype(size<0>(BlockShape{}))::value;
+
+    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto id = int(ThreadIdxX()) % subgroup_size;
+
+    cute::subbyte_iterator<int4_t> dst_iter(dst);
+    cute::array_subbyte<int4_t, copy_W * copy_H> dst_tmp{};
+
+    #pragma unroll
+    for (int cw = 0; cw < copy_W; cw++) {
+      auto remote_id = (id + cw * subgroup_size) / copy_W;
+
+      intel::ushort16 remote_dst;
+      remote_dst = sycl::select_from_group(sg, *(reinterpret_cast<intel::ushort16 *>(dst)), remote_id);
+
+      cute::subbyte_iterator<int4_t> remote_dst_iter(&remote_dst);
+
+
+      #pragma unroll
+      for (int row = 0; row < copy_H; row++) {
+        dst_tmp[row + cw * copy_H] = remote_dst_iter[row * copy_W + id % copy_W].get();
+      }
+    }
+
+   *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_iter)) = *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_tmp.begin()));
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};*/
 
 template<int TSizeBits, int Height, int Width, int InstSizeBits = TSizeBits>
 CUTE_HOST_DEVICE void print(cute::XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits> const&){
@@ -162,7 +270,7 @@ using XE_2D_U32x32x16_LD_N = XE_2D_LD_N<32,32,16>;
 using XE_2D_TF32x16x16_LD_N = XE_2D_LD_N<32,16,16>;
 using XE_2D_TF32x32x16_LD_N = XE_2D_LD_N<32,32,16>;
 
-//using XE_2D_U4x32x64_LD_N = XE_2D_LD_N<4,1,32>; //TODO shuffle
-//using XE_2D_U4x16x64_LD_N = XE_2D_LD_N<4,1,32>; //TODO shuffle
+using XE_2D_U4x32x64_LD_N = XE_2D_LD_N<4,32,64>;
+using XE_2D_U4x16x64_LD_N = XE_2D_LD_N<4,16,64>;
 
 } // end namespace cute

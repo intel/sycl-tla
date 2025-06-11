@@ -48,7 +48,7 @@ struct XE_2D_LD_V {
   static constexpr int InstSizeBytes = InstSizeBits / 8;
   static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
   static constexpr int VecSize = InstSizeBits / TSizeBits;
-  static constexpr int BlockWidth = 16 * VecSize; //TODO SG size?
+  static constexpr int BlockWidth = 16 * VecSize;
   static_assert(Width % BlockWidth == 0, "Expected Width to be a multiple of 16 * InstSizeBits / TSizeBits.");
   static constexpr int NBlocks = Width / BlockWidth;
 

@@ -44,10 +44,10 @@ struct XE_2D_ST_N {
       "Expected Height to be a power of 2, less then or equal 32");
 
   static_assert(InstSizeBits % 8 == 0, "Expected InstSizeBits to be a multiple of 8.");
-  static constexpr int InstSizeBytes = InstSizeBits / 8; //TODO U4 shuffle
+  static constexpr int InstSizeBytes = InstSizeBits / 8;
   static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
   static constexpr int VecSize = InstSizeBits / TSizeBits;
-  static constexpr int BlockWidth = 16 * VecSize; //TODO SG size?
+  static constexpr int BlockWidth = 16 * VecSize;
   static_assert(Width % BlockWidth == 0, "Expected Width to be a multiple of 16 * InstSizeBits / TSizeBits.");
   static constexpr int NBlocks = Width / BlockWidth;
 
