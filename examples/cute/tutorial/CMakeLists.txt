@@ -68,6 +68,11 @@ else()
     tiled_copy_sycl.cpp
   )
 
+  cutlass_example_add_executable(
+    cute_tutorial_bmg
+    sgemm_bmg.cpp
+  )
+
   if (SYCL_NVIDIA_TARGET)
     cutlass_example_add_executable(
       cute_tutorial_sgemm_sm70
