@@ -224,12 +224,14 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     auto thr_copy_K = gmem_tiled_copy_k.get_slice(thread_idx);
     // Instantiate the MMA object
     TiledMmaQK tiled_mma;
+    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto first_thread_in_sg_idx = sg.get_group_id()[0] * DispatchPolicy::SubgroupSize;
     // For Normal Attention, K matrix tile_id = subgroup_id (cache and new both)
     // For Paged Attention, K matrix tile_id = page_table[subgroup_id] (cache, new keys follow normal attention)
     // Since the K matrix tile_id can be any tile out of the possible tiles, we need to manually tile the K matrix
     // across subgroups to accomodate Paged Attention. Thus, we call get_slice with 0 as the thread_id for all subgroups.
     auto thread_mma_k = tiled_mma.get_slice(kv_tile_idx * SubgroupSize);
-    auto thread_mma_q = tiled_mma.get_slice(0);
+    auto thread_mma_q = tiled_mma.get_slice(first_thread_in_sg_idx);
 
     // Partition
     Tensor tCgQ = thread_mma_q.partition_A(gQ);
