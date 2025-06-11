@@ -42,15 +42,12 @@ bool initialize_block(Element* block, std::size_t size, uint64_t seed=2023) {
   Element scope_max, scope_min;
   int bits_input = cutlass::sizeof_bits<Element>::value;
 
-  if (bits_input == 1) {
-   scope_max = Element(2);
-   scope_min = Element(0);
-  } else if (bits_input <= 8) {
-    scope_max = Element(2);
-    scope_min = Element(-2);
+  if (cute::is_signed<Element>::value) {
+    scope_max = Element((2 ^ bits_input) / 2  - 1);
+    scope_min = Element(-((2 ^ bits_input) / 2));
   } else {
-    scope_max = Element(8);
-    scope_min = Element(-8);
+    scope_max = Element((2 ^ bits_input) - 1);
+    scope_min = Element(0);
   }
 
   cutlass::reference::device::BlockFillRandomUniform(
@@ -77,16 +74,15 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
   rng.seed(seed);
 
   int bits_input = cute::sizeof_bits_v<T1>;
+
   T1 scope_max, scope_min;
-  if (bits_input == 1) {
-   scope_max = T1(2);
-   scope_min = T1(0);
-  } else if (bits_input <= 8) {
-    scope_max = T1(2);
-    scope_min = T1(-2);
+
+  if (cute::is_signed<T1>::value) {
+    scope_max = T1((2 ^ bits_input) / 2  - 1);
+    scope_min = T1(-((2 ^ bits_input) / 2));
   } else {
-    scope_max = T1(8);
-    scope_min = T1(-8);
+    scope_max = T1((2 ^ bits_input) - 1);
+    scope_min = T1(0);
   }
 
   std::uniform_int_distribution<> dist(scope_min, scope_max);

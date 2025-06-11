@@ -43,7 +43,39 @@
 
 namespace cutlass::gemm::collective {
 using namespace cute;
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <class datatype, size_t N, class = void>
+struct scale_zero_copy_traits {
+  static_assert(dependent_false<datatype> && "Invalid scale/zero point datatype"); \
+};
+
+// 4 bits
+template<class datatype, size_t N>
+struct scale_zero_copy_traits<datatype, N, std::enable_if_t<sizeof_bits_v<datatype> == 4>> {
+  using type = XE_2D_U4x8x16_LD_T;
+};
+
+// 8 bits
+template<class datatype>
+struct scale_zero_copy_traits<datatype, 16, std::enable_if_t<sizeof_bits_v<datatype> == 8>> {
+  using type = XE_2D_U8x1x16_LD_N;
+};
+template<class datatype>
+struct scale_zero_copy_traits<datatype, 32, std::enable_if_t<sizeof_bits_v<datatype> == 8>> {
+  using type = XE_2D_U8x1x16xV2_LD_N;
+};
+
+// 16 bits
+template<class datatype>
+struct scale_zero_copy_traits<datatype, 16, std::enable_if_t<sizeof_bits_v<datatype> == 16>> {
+  using type = XE_2D_U16x1x16_LD_N;
+};
+template<class datatype>
+struct scale_zero_copy_traits<datatype, 32, std::enable_if_t<sizeof_bits_v<datatype> == 16>> {
+  using type = XE_2D_U16x1x32_LD_N;
+};
 
 template <
   int Stages,
@@ -109,9 +141,10 @@ public:
   using ElementZero = cute::conditional_t<IsATransformed, ZeroA, ZeroB>;
   using ElementMMA = cute::conditional_t<IsATransformed, ElementB, ElementA>;
   using ElementQuant = cute::conditional_t<IsATransformed, ElementA, ElementB>;
+  using StrideScale = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<3, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<3, ElementBOptionalTuple>>;
+  using StrideZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<4, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<4, ElementBOptionalTuple>>;;
 
   static_assert(cute::is_same_v<ElementMMA, ElementScale> || cute::is_same_v<ElementScale, void>, "Quantization scale type must match MMA type.");
-  static_assert(cute::is_same_v<ElementMMA, ElementZero> || cute::is_same_v<ElementZero, void>, "Quantization zero point must match MMA type.");
 
   // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
   using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, ElementMMA, ElementScale>;
@@ -120,14 +153,11 @@ public:
   using StrideA = StrideA_;
   using StrideB = StrideB_;
 
-  // These are always MN major, and we use the same for Scale and Zero
-  using StrideScale = cute::Stride<_1, int64_t, int64_t>;
   using TiledMma = TiledMma_;
   using ElementAccumulator = typename TiledMma::ValTypeC;
 
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
-  using GmemTiledCopyScale = XE_2D_U16x1x32_LD_N;  // TODO(Codeplay): generalize
 
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;
@@ -142,10 +172,6 @@ public:
                                                ElementB>;
 
   static_assert(!cute::is_same_v<ElementA, ElementB>, "Mixed precision GEMM requires different types for A and B!");
-  static_assert(std::is_same_v<LargerElementType, MmaType>,
-               "MainloopIntelXeXMX16MixedPrecision has the restriction that mixed dtype always converts the "
-               "narrower input type to the larger one and performs GEMM using the DPAS for the larger input type.");
-
   static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
   static_assert(std::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
   
@@ -168,8 +194,6 @@ private:
   static constexpr bool ModeHasScales = KernelConversionMode == ConversionMode::ConvertAndScale ||
                                         KernelConversionMode == ConversionMode::ConvertAndScaleWithZero;
 
-  static_assert(!(sizeof_bits_v<ElementQuant> < 8 && ModeHasScales), "Dequantization with sub-byte quant type not yet supported in Xe mixed precision Gemm");
-
 public:
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -188,6 +212,9 @@ public:
   static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
   
+  using GmemTiledCopyScale = typename scale_zero_copy_traits<ElementScale, SG_N>::type;
+  using GmemTiledCopyZero = typename scale_zero_copy_traits<ElementZero, SG_N>::type;
+
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
@@ -208,8 +235,12 @@ public:
   using atom_load_scale = Copy_Atom<traits_load_scale, NonVoidElementScale>;
   using val_layout_load_scale = decltype(make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Scale = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
-  using Copy_Zero = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
   
+  using traits_load_zero = Copy_Traits<GmemTiledCopyZero, StrideZero>;
+  using atom_load_zero = Copy_Atom<traits_load_zero, NonVoidElementZero>;
+  using val_layout_load_zero = decltype(make_layout(shape_div(typename traits_load_zero::BlockShape{}, CopyThreadShapeRev{}))); 
+  using Copy_Zero = decltype(make_tiled_copy(atom_load_zero{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero{}));
+
   // Host side kernel arguments
   struct Arguments {
     ElementA const* ptr_A;
@@ -218,6 +249,7 @@ public:
     StrideB dB;
     ElementScale const* ptr_S = nullptr;
     StrideScale dS{};
+    StrideZero dZ{};
     int group_size = 1;
     ElementZero const* ptr_Z = nullptr;
   };
@@ -267,7 +299,7 @@ public:
     }
     auto mZero =
         make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
-                    make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
+                    make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dZ));
     Copy_Zero tiled_copy_zero{Copy_Zero{}.with(mZero)};
 
     return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, tiled_copy_zero, args.group_size};
@@ -283,6 +315,101 @@ public:
     }
   };
 
+  template <class EngineIn,
+            class EngineOut, 
+            class EngineScales, 
+            class EngineZeros, 
+            class LayoutIn,
+            class LayoutOut,
+            class LayoutScales,
+            class LayoutZeros,
+            class... Ts>
+  CUTLASS_DEVICE typename std::enable_if_t<sizeof_bits_v<typename EngineIn::value_type> == 4>
+  transform_quant(
+    Tensor<EngineIn, LayoutIn> const& in,
+    Tensor<EngineOut, LayoutOut>& out,
+    Tensor<EngineScales, LayoutScales>& tCrS_input,
+    Tensor<EngineZeros, LayoutZeros> & tCrZ_input
+  ) {
+    static_assert(ModeHasScales && !IsATransformed);
+    static_assert(is_rmem<EngineIn>::value, "Input tensor for conversion must come from registers");
+    static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
+    static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
+    static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineScales::value_type>);
+
+    using SrcType = typename EngineIn::value_type;
+    using DstType = typename EngineOut::value_type;
+    using ZeroType = typename EngineZeros::value_type;
+    using ScaleType = typename EngineScales::value_type;
+
+    static constexpr auto DPAS = decltype(size<0>(in))::value;
+    static constexpr auto N = decltype(size<1>(in))::value;
+    static constexpr auto K = decltype(size<2>(in))::value;
+
+    using format_type = ushort;
+    static constexpr auto src_bits = sizeof_bits_v<SrcType>;
+    static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
+    static constexpr auto loop_cnt = decltype(size(out))::value / N;
+    static_assert((scalar % N) == 0);
+
+    // for tuning performance
+    static constexpr auto vec_size = scalar;
+    static constexpr auto spilits = loop_cnt / vec_size;
+    static_assert(vec_size <= scalar);
+
+    // reshape tensors for easy access
+    auto s_tensor = make_tensor((format_type*)(raw_pointer_cast(in.data())), Shape<Int<loop_cnt / scalar>, Int<N>>{});
+    auto d_tensor = make_tensor(out.data(), Shape<Int<vec_size>, Int<spilits>, Int<N>>{});
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int n = 0; n < N; n++) {
+      const auto ts = tCrS_input(n);
+      const auto tz = [&](){
+        if constexpr (sizeof_bits_v<ZeroType> >= 8) {
+          return tCrZ_input(n);
+        } else {
+          return tCrZ_input(n).get();
+        }
+      }();
+
+      auto& src = *(cute::intel::vector_t<format_type, loop_cnt / scalar>*)(s_tensor(_, n).data());
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int s = 0; s < spilits; s++) {
+        auto idx =  vec_size * s / scalar;
+        auto format_data = src[idx];
+
+        auto& dst = *(cute::intel::vector_t<DstType, vec_size>*)(d_tensor(_, s, n).data());
+
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < vec_size; i++) {
+          auto data = [&](){
+            static_assert(!is_signed<SrcType>::value && !IsATransformed);
+              if constexpr (is_signed<SrcType>::value) {
+                return static_cast<SrcType>((format_data >> (src_bits * i)) & 0xf);
+              } else {
+                return (format_data >> (src_bits * i)) & 0xf;
+              }
+            }();
+
+          if constexpr (ModeHasScales) {
+            if constexpr (IsATransformed) {
+              static_assert(dependent_false<LayoutIn> && "ATransform not support now");
+            } else {
+              int8_t minus = data;
+              if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero) {
+                minus = minus - (int8_t)tz;
+              }
+              dst[i] = (static_cast<ScaleType>(minus)) * ts;
+            }
+          } else {
+            dst[i] = data;
+          }
+        }
+      }
+    }
+  }
+
   /// Utilities to transform A.
   template <class EngineIn,
             class EngineOut, 
@@ -293,8 +420,8 @@ public:
             class LayoutScales,
             class LayoutZeros,
             class... Ts>
-  CUTLASS_DEVICE
-  void transform_quant(
+  CUTLASS_DEVICE typename std::enable_if_t<sizeof_bits_v<typename EngineIn::value_type> >= 8>
+  transform_quant(
     Tensor<EngineIn, LayoutIn> const& tCrA_load, 
     Tensor<EngineOut, LayoutOut>& tCrA_mma,
     Tensor<EngineScales, LayoutScales>& tCrS_input,
@@ -305,12 +432,12 @@ public:
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
     static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineScales::value_type>);
-    static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineZeros::value_type>);
     static_assert(std::is_same_v<LayoutScales, LayoutZeros>);
 
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
+<<<<<<< HEAD
     if constexpr (sizeof_bits_v<SrcType> < 8) {
       // TODO (Codeplay): Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
       // hardcode here for functionality test, will remove this branch in the future.
@@ -343,6 +470,26 @@ public:
           *pDstArr = Converter::convert(*pSrcArr);
         }
       }
+=======
+    auto const& src = tCrA_load(_, _, _);
+    auto const& dst = tCrA_mma(_, _, _);
+    auto pSrc = const_cast<SrcType*>(raw_pointer_cast(src.data()));
+    auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
+    constexpr int num_elements = decltype(size(src))::value;
+
+  // TODO(Codeplay): (perf) consider replacing `pack` with `num_elements` here - See xe_flash_attn_mma.hpp
+    constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
+    using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
+    using SrcArray = cutlass::Array<SrcType, pack>;
+    using DstArray = cutlass::Array<DstType, pack>;
+    constexpr int iters = num_elements / pack;
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < iters; ++i) {
+      SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
+      DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
+      *pDstArr = Converter::convert(*pSrcArr);
+>>>>>>> 46346401 (support different scale/zero data type for mixed input mma)
     }
 
     if constexpr (ModeHasScales) {
@@ -372,10 +519,10 @@ public:
         for (int i = 0; i < 4; ++i) {
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < 32; ++j) {
-            tCrA_mma(_, i, _)[j] *= tCrS_input(i);
             if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              tCrA_mma(_, i, _)[j] += tCrZ_input(i);
+              tCrA_mma(_, i, _)[j] -= tCrZ_input(i);
             }
+            tCrA_mma(_, i, _)[j] *= tCrS_input(i);
           }
         }
       }
@@ -427,11 +574,19 @@ public:
 
     // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
     // layout else we need mode N_iter from fragment_B layout.
+    static constexpr auto scale_traits_size = decltype(size(typename GmemTiledCopyScale::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto scale_traits_num = SG_N / size<1>(typename GmemTiledCopyScale::BlockShape{});
     using FragScaleLayout = std::conditional_t<IsATransformed,
                                                Layout<Shape<_2, _1, _1>>,
-                                               Layout<Shape<_2, _2, _1>>>;
+                                               Layout<Shape<Int<scale_traits_size>, Int<scale_traits_num>, _1>>>;
     Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(FragScaleLayout{});
-    Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragScaleLayout{});
+
+    static constexpr auto zero_traits_size = decltype(size(typename GmemTiledCopyZero::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto zero_traits_num = SG_N / size<1>(typename GmemTiledCopyZero::BlockShape{});
+    using FragZeroLayout = std::conditional_t<IsATransformed,
+                                               Layout<Shape<_2, _1, _1>>,
+                                               Layout<Shape<Int<zero_traits_size>, Int<zero_traits_num>, _1>>>;
+    Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragZeroLayout{});
 
     // narrow input fragment
     Tensor quant_frag = make_tensor<ElementQuant>(
@@ -483,8 +638,20 @@ public:
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }else{
         return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
+                           make_layout(make_shape(Int<scale_traits_size>{}, Int<scale_traits_num>{}, _1{}, k_tile_count),
+                                       make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyScale::BlockShape{}), _0{}, E<1>{} * _1{})));
+      }
+    }();
+
+    Tensor copy_iter_z = [&](){
+      if constexpr(IsATransformed){
+        return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
                            make_layout(make_shape(_2{}, _2{}, _1{}, k_tile_count), 
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+      }else{
+        return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
+                           make_layout(make_shape(Int<zero_traits_size>{}, Int<zero_traits_num>{}, _1{}, k_tile_count),
+                                       make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyZero::BlockShape{}), _0{}, E<1>{} * _1{})));
       }
     }();
 
@@ -521,7 +688,8 @@ public:
   #endif
 
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
-    int prefetch_k = 0;
+    constexpr int barrier_scope = 2;
+    int prefetch_k = k_start_idx;
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
@@ -531,16 +699,24 @@ public:
 
     const int k_reload_factor = mainloop.group_size / BLK_K; 
 
-    for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
+    CUTLASS_PRAGMA_UNROLL
+    for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
+      barrier_arrive(barrier_scope);
+
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
-      copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
+      copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), frag_copy_A);
+      copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), frag_copy_B);
 
       if constexpr(ModeHasScales){
-        copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
+        copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrS);
       }
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-        copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
+        copy(mainloop.tiled_copy_zero, copy_iter_z(_, _, _, k_tile / k_reload_factor), copy_tCrZ);
+      }
+
+      if(prefetch_k < k_tile_count) {
+        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
+        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
       if constexpr (IsATransformed) {
         transform_quant(quant_frag, mma_A, fragment_scale_input,
@@ -556,6 +732,7 @@ public:
       }
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
+      barrier_wait(barrier_scope);
     }
   }
 };
