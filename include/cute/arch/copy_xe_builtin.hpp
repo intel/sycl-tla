@@ -66,7 +66,12 @@ namespace cute::detail
 {
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
 struct XeSubgroup2DBlockPrefetch {
-  static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
+    static constexpr bool is_unimplemented = true;
+    template<typename T>
+    CUTE_HOST_DEVICE void 
+    operator()(const void*, int, int, int, cute::intel::coord_t, T*) {
+        static_assert(dependent_false<>, "Unsupported 2D Block Load Configuration.");
+    }
 };
 template<int ElementSize, int BlockWidth, int BlockHeight, int BlockCount>
 struct XeSubgroup2DBlockLoad {
@@ -1421,6 +1426,10 @@ struct XeSubgroup2DBlockLoadTranspose<8, 4, 8, 1> {
 };
 
 // use the equivalent loads we have implemented
+template<int BlockHeight>
+struct XeSubgroup2DBlockStore<1, 16, BlockHeight, 2> : public XeSubgroup2DBlockStore<2, 16, BlockHeight, 1> {};
+//template<int BlockHeight>
+//struct XeSubgroup2DBlockStore<1, 16, BlockHeight, 4> : public XeSubgroup2DBlockStore<1, 32, BlockHeight, 2> {};
 template<int BlockHeight>
 struct XeSubgroup2DBlockLoad<1, 16, BlockHeight, 2> : public XeSubgroup2DBlockLoad<1, 32, BlockHeight, 1> {};
 template<int BlockHeight>

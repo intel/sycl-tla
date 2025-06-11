@@ -2504,18 +2504,18 @@ struct Copy_Traits<XE_2D_ST_N<TSizeBits, Height, Width>, args_t...>
       : XE_2D_ST_Unpack<XE_2D_ST_N<TSizeBits, Height, Width>, args_t...>(args...) {}
 };
 
-template <int TSizeBits, int Height, int Width, class... args_t>
-struct Copy_Traits<XE_2D_LD_N<TSizeBits, Height, Width>, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Height, Width>, args_t...> {
-  using Base = XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Height, Width>, args_t...>;
+template <int TSizeBits, int Height, int Width, int InstSizeBits, class... args_t>
+struct Copy_Traits<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>, args_t...> {
+  using Base = XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>, args_t...>;
   using Base::is_matrix_B;
 
   using ThrID = Layout<_16>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
-                                                                   Int<XE_2D_LD_N<TSizeBits, Height, Width>::VecSize>, 
+                                                                   Int<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>::VecSize>, 
                                                                    Int<Height>, 
-                                                                   Int<XE_2D_LD_N<TSizeBits, Height, Width>::NBlocks>
+                                                                   Int<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>::NBlocks>
                                                   >>{}, std::conditional_t<is_matrix_B, 
                                                                            Step<_3, Step<_0, _1, _2, _4>>, 
                                                                            Step<_2, Step<_0, _1, _3, _4>>>{}));
@@ -2531,7 +2531,7 @@ struct Copy_Traits<XE_2D_LD_N<TSizeBits, Height, Width>, args_t...>
 
   template <class... ArgTs>
   Copy_Traits(ArgTs... args)
-      : XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Height, Width>, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>, args_t...>(args...) {}
 };
 
 template <int TSizeBits, int Height, int Width, class... args_t>

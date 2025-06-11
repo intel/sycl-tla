@@ -54,10 +54,15 @@ struct XE_2D_LD_N_PREFETCH {
 
   // shape of the block in global memory 
   using BlockShape = Shape<Int<Height>, Int<Width>>;
-  
+
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch,
                                     intel::coord_t coord) {
+  /*if(thread0()){
+    
+    print("XE_2D_LD_N<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(", "); print(InstSizeBits); print(">\n");
+    print("XeSubgroup2DBlockPrefetch<"); print(InstSizeBytes); print(", "); print(BlockWidth); print(", "); print(Height); print(", "); print(NBlocks); print(">\n");
+  }*/
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
   detail::XeSubgroup2DBlockPrefetch<InstSizeBytes, BlockWidth, Height, NBlocks>{}(baseoffset, width, height, pitch, coord);
 #else
@@ -78,7 +83,8 @@ struct XE_2D_LD_N {
   static constexpr int InstSizeBytes = InstSizeBits / 8;
   static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
   static constexpr int VecSize = InstSizeBits / TSizeBits;
-  static constexpr int BlockWidth = 16 * VecSize;
+  static constexpr int InstBlockWidth = 16;
+  static constexpr int BlockWidth = InstBlockWidth * VecSize;
   static_assert(Width % BlockWidth == 0, "Expected Width to be a multiple of 16 * InstSizeBits / TSizeBits.");
   static constexpr int NBlocks = Width / BlockWidth;
 
@@ -91,7 +97,7 @@ struct XE_2D_LD_N {
                                     T *dst) {
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof_bits_v<T> == TSizeBits, "Expected T to have size equal to TSizeBits.");
-    detail::XeSubgroup2DBlockLoad<InstSizeBytes, BlockWidth, Height, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
+    detail::XeSubgroup2DBlockLoad<InstSizeBytes, InstBlockWidth, Height, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
@@ -158,56 +164,20 @@ struct XE_2D_LD_N<4, Height, Width, 4> {
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
   }
+  using PREFETCH = XE_2D_LD_N_PREFETCH<4, Height, InstWidth, 4>;
 };
 
-/*struct XE_2D_U4x16x64_LD_N {
-  using BlockShape = Shape<_16, _64>;
-  using inst_dtype = int8_t;
-
-  template <class T>
-  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
-                                    int height, int pitch, intel::coord_t coord,
-                                    T *dst) {
+namespace detail{
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
-    static_assert(sizeof(T) == 1, "Expected T to have size 1");
-    detail::XeSubgroup2DBlockLoad<1, 32, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
-
-   // ================= shuffle begin =================
-   // FIXME: the performance of shuffle algorithm here is too bad, we are working with
-   // compiler/IGC team to optimize it.
-
-    static constexpr auto subgroup_size = 16;
-    static constexpr auto copy_W = decltype(size<1>(BlockShape{}))::value / subgroup_size;
-    static constexpr auto copy_H = decltype(size<0>(BlockShape{}))::value;
-
-    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
-    auto id = int(ThreadIdxX()) % subgroup_size;
-
-    cute::subbyte_iterator<int4_t> dst_iter(dst);
-    cute::array_subbyte<int4_t, copy_W * copy_H> dst_tmp{};
-
-    #pragma unroll
-    for (int cw = 0; cw < copy_W; cw++) {
-      auto remote_id = (id + cw * subgroup_size) / copy_W;
-
-      intel::ushort16 remote_dst;
-      remote_dst = sycl::select_from_group(sg, *(reinterpret_cast<intel::ushort16 *>(dst)), remote_id);
-
-      cute::subbyte_iterator<int4_t> remote_dst_iter(&remote_dst);
-
-
-      #pragma unroll
-      for (int row = 0; row < copy_H; row++) {
-        dst_tmp[row + cw * copy_H] = remote_dst_iter[row * copy_W + id % copy_W].get();
-      }
-    }
-
-   *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_iter)) = *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_tmp.begin()));
-#else
-    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+template<int TSizeBits, int Height, int Width, int InstSizeBits>
+constexpr bool has_prefetch<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>, 
+                            void_t<Int<cute::detail::XeSubgroup2DBlockPrefetch<
+                                XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>::InstSizeBytes, 
+                                XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>::BlockWidth, 
+                                Height, 
+                                XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>::NBlocks>::is_unimplemented>>> = false;
 #endif
-  }
-};*/
+}
 
 template<int TSizeBits, int Height, int Width, int InstSizeBits = TSizeBits>
 CUTE_HOST_DEVICE void print(cute::XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits> const&){
@@ -215,21 +185,21 @@ CUTE_HOST_DEVICE void print(cute::XE_2D_LD_N<TSizeBits, Height, Width, InstSizeB
 }
 
 // deprecated aliases
-using XE_2D_Packed_U8x1x32_LD_N = XE_2D_LD_N<8,1,32>;
-using XE_2D_Packed_U8x2x32_LD_N = XE_2D_LD_N<8,2,32>;
-using XE_2D_Packed_U8x4x32_LD_N = XE_2D_LD_N<8,4,32>;
-using XE_2D_Packed_U8x8x32_LD_N = XE_2D_LD_N<8,8,32>;
+using XE_2D_Packed_U8x1x32_LD_N = XE_2D_LD_N<8,1,32,16>;
+using XE_2D_Packed_U8x2x32_LD_N = XE_2D_LD_N<8,2,32,16>;
+using XE_2D_Packed_U8x4x32_LD_N = XE_2D_LD_N<8,4,32,16>;
+using XE_2D_Packed_U8x8x32_LD_N = XE_2D_LD_N<8,8,32,16>;
 
-using XE_2D_Packed_U8x1x64_LD_N = XE_2D_LD_N<8,1,64>;
-using XE_2D_Packed_U8x2x64_LD_N = XE_2D_LD_N<8,2,64>;
-using XE_2D_Packed_U8x4x64_LD_N = XE_2D_LD_N<8,4,64>;
-using XE_2D_Packed_U8x8x64_LD_N = XE_2D_LD_N<8,8,64>;
+using XE_2D_Packed_U8x1x64_LD_N = XE_2D_LD_N<8,1,64,16>;
+using XE_2D_Packed_U8x2x64_LD_N = XE_2D_LD_N<8,2,64,16>;
+using XE_2D_Packed_U8x4x64_LD_N = XE_2D_LD_N<8,4,64,16>;
+using XE_2D_Packed_U8x8x64_LD_N = XE_2D_LD_N<8,8,64,16>;
 
-using XE_2D_Packed_U8x16x32_LD_N = XE_2D_LD_N<8,16,32>;
-using XE_2D_Packed_U8x32x32_LD_N = XE_2D_LD_N<8,32,32>;
+using XE_2D_Packed_U8x16x32_LD_N = XE_2D_LD_N<8,16,32,16>;
+using XE_2D_Packed_U8x32x32_LD_N = XE_2D_LD_N<8,32,32,16>;
 
-using XE_2D_Packed_U8x16x64_LD_N = XE_2D_LD_N<8,16,64>;
-using XE_2D_Packed_U8x32x64_LD_N = XE_2D_LD_N<8,32,64>;
+using XE_2D_Packed_U8x16x64_LD_N = XE_2D_LD_N<8,16,64,16>;
+using XE_2D_Packed_U8x32x64_LD_N = XE_2D_LD_N<8,32,64,16>;
 
 using XE_2D_U16x1x16_LD_N = XE_2D_LD_N<16,1,16>;
 using XE_2D_U16x2x16_LD_N = XE_2D_LD_N<16,2,16>;
