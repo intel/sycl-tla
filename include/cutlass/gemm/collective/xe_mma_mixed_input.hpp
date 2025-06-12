@@ -373,14 +373,14 @@ public:
         }
       }();
 
-      auto& src = *(cute::intel::vector_t<format_type, loop_cnt / scalar>*)(s_tensor(_, n).data());
+      auto& src = *(cute::array<format_type, loop_cnt / scalar>*)(s_tensor(_, n).data());
 
       CUTLASS_PRAGMA_UNROLL
       for (int s = 0; s < spilits; s++) {
         auto idx =  vec_size * s / scalar;
         auto format_data = src[idx];
 
-        auto& dst = *(cute::intel::vector_t<DstType, vec_size>*)(d_tensor(_, s, n).data());
+        auto& dst = *(cute::array<DstType, vec_size>*)(d_tensor(_, s, n).data());
 
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < vec_size; i++) {
