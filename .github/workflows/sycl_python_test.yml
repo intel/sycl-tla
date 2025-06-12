@@ -40,7 +40,7 @@ jobs:
         uses: ./.github/actions/install-dpcpp
         with:
           # DPCPP_RELEASE: ${{ matrix.compiler }}
-          DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
+          DPCPP_VERSION: nightly-2025-06-10
           DPCPP_PATH: ~/dpcpp
       - name: Setup virtual environment
         shell: bash
@@ -73,4 +73,5 @@ jobs:
           pip install -e .
           export CUTLASS_USE_SYCL=1
           export SYCL_UR_TRACE=2
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           python test/python/cutlass/gemm/run_all_tests.py
