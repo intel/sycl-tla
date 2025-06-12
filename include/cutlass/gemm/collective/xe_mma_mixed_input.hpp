@@ -46,34 +46,39 @@ using namespace cute;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class datatype, size_t N, class = void>
+template <class datatype, size_t N, class Stride = cute::Stride<_1, int64_t, int64_t>, class = void>
 struct scale_zero_copy_traits {
-  using type = XE_2D_U16x1x32_LD_N;
+  static_assert(cute::dependent_false<cute::tuple<datatype, Int<N>, Stride>>, "scale_zero_copy_traits not defined");
 };
 
 // 4 bits
-template<class datatype, size_t N>
-struct scale_zero_copy_traits<datatype, N, std::enable_if_t<sizeof_bits_v<datatype> == 4>> {
+template<class datatype, size_t N, class stride>
+struct scale_zero_copy_traits<datatype, N, stride,
+          std::enable_if_t<sizeof_bits_v<datatype> == 4 && !cute::detail::is_stride_leftmost<stride>>> {
   using type = XE_2D_U4x8x16_LD_T;
 };
 
 // 8 bits
-template<class datatype>
-struct scale_zero_copy_traits<datatype, 16, std::enable_if_t<sizeof_bits_v<datatype> == 8>> {
+template<class datatype, class stride>
+struct scale_zero_copy_traits<datatype, 16, stride,
+          std::enable_if_t<sizeof_bits_v<datatype> == 8 && cute::detail::is_stride_leftmost<stride>>> {
   using type = XE_2D_U8x1x16_LD_N;
 };
-template<class datatype>
-struct scale_zero_copy_traits<datatype, 32, std::enable_if_t<sizeof_bits_v<datatype> == 8>> {
+template<class datatype, size_t N, class stride>
+struct scale_zero_copy_traits<datatype, N, stride,
+          std::enable_if_t<sizeof_bits_v<datatype> == 8 && N >= 32 && cute::detail::is_stride_leftmost<stride>>> {
   using type = XE_2D_U8x1x32_LD_N;
 };
 
 // 16 bits
-template<class datatype>
-struct scale_zero_copy_traits<datatype, 16, std::enable_if_t<sizeof_bits_v<datatype> == 16>> {
+template<class datatype, class stride>
+struct scale_zero_copy_traits<datatype, 16, stride,
+          std::enable_if_t<sizeof_bits_v<datatype> == 16 && cute::detail::is_stride_leftmost<stride>>> {
   using type = XE_2D_U16x1x16_LD_N;
 };
-template<class datatype>
-struct scale_zero_copy_traits<datatype, 32, std::enable_if_t<sizeof_bits_v<datatype> == 16>> {
+template<class datatype, size_t N, class stride>
+struct scale_zero_copy_traits<datatype, N, stride,
+          std::enable_if_t<sizeof_bits_v<datatype> == 16 && N >= 32 && cute::detail::is_stride_leftmost<stride>>> {
   using type = XE_2D_U16x1x32_LD_N;
 };
 
@@ -211,8 +216,8 @@ public:
   static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
   
-  using GmemTiledCopyScale = typename scale_zero_copy_traits<ElementScale, SG_N>::type;
-  using GmemTiledCopyZero = typename scale_zero_copy_traits<ElementZero, SG_N>::type;
+  using GmemTiledCopyScale = typename scale_zero_copy_traits<ElementScale, SG_N, StrideScale>::type;
+  using GmemTiledCopyZero = typename scale_zero_copy_traits<ElementZero, SG_N, StrideZero>::type;
 
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
@@ -328,9 +333,11 @@ public:
     Tensor<EngineIn, LayoutIn> const& in,
     Tensor<EngineOut, LayoutOut>& out,
     Tensor<EngineScales, LayoutScales>& tCrS_input,
-    Tensor<EngineZeros, LayoutZeros> & tCrZ_input
+    Tensor<EngineZeros, LayoutZeros>& tCrZ_input
   ) {
+    // TODO: add assert here because such cases not support for int4 now
     static_assert(ModeHasScales && !IsATransformed);
+
     static_assert(is_rmem<EngineIn>::value, "Input tensor for conversion must come from registers");
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
@@ -353,12 +360,12 @@ public:
 
     // for tuning performance
     static constexpr auto vec_size = scalar;
-    static constexpr auto spilits = loop_cnt / vec_size;
+    static constexpr auto splits = loop_cnt / vec_size;
     static_assert(vec_size <= scalar);
 
     // reshape tensors for easy access
     auto s_tensor = make_tensor((format_type*)(raw_pointer_cast(in.data())), Shape<Int<loop_cnt / scalar>, Int<N>>{});
-    auto d_tensor = make_tensor(out.data(), Shape<Int<vec_size>, Int<spilits>, Int<N>>{});
+    auto d_tensor = make_tensor(out.data(), Shape<Int<vec_size>, Int<splits>, Int<N>>{});
 
     CUTLASS_PRAGMA_UNROLL
     for (int n = 0; n < N; n++) {
@@ -374,7 +381,7 @@ public:
       auto& src = *(cute::array<format_type, loop_cnt / scalar>*)(s_tensor(_, n).data());
 
       CUTLASS_PRAGMA_UNROLL
-      for (int s = 0; s < spilits; s++) {
+      for (int s = 0; s < splits; s++) {
         auto idx =  vec_size * s / scalar;
         auto format_data = src[idx];
 
@@ -721,8 +728,11 @@ public:
         transform_quant(quant_frag, mma_A, fragment_scale_input,
                         fragment_zero_input);
       } else {
-        transform_quant(quant_frag, mma_B, fragment_scale_input,
-                        fragment_zero_input);
+        if constexpr (sizeof_bits_v<ElementZero> < 8) {
+          transform_quant(quant_frag, mma_B, fragment_scale_input, fragment_zero_input((k_tile / k_reload_factor) % zero_traits_size, _, 0));
+        } else {
+          transform_quant(quant_frag, mma_B, fragment_scale_input, fragment_zero_input);
+        }
       }
 
       if(prefetch_k < k_tile_count) {

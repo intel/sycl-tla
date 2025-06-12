@@ -328,16 +328,7 @@ struct ExampleRunner {
       block.copy_from_host(stage.data());
     } 
     else {
-#if 1//INT4_DEBUG
-      std::vector<Element> stage(block.size(), Element(1.0f));
-      for (int i =0; i < 1; i++) {
-        for (int j =0; j < 4096; j++) {
-          stage[i * 4096 +j] = (Element)((j + 2) % 7);
-        }
-      }
-      block.copy_from_host(stage.data());
-#else
-      float elt_max_f = float(7/*cutlass::platform::numeric_limits<ElementQuant>::max()*/);
+      float elt_max_f = float(cutlass::platform::numeric_limits<ElementQuant>::max());
       const float max_dequant_val = 4.f;
       const float min_dequant_val = 0.5f;
 
@@ -346,7 +337,6 @@ struct ExampleRunner {
 
       cutlass::reference::device::BlockFillRandomUniform(
         block.get(), block.size(), seed, Element(scope_max), Element(scope_min));
-#endif
     }
     return true;
   }
@@ -357,8 +347,6 @@ struct ExampleRunner {
     Options const& options) {
     
     if (options.mode == GemmMode::ConvertAndScaleWithZeroPoint) {
-      // initialize_subbyte_block(block, seed + 2025);
-
       cutlass::reference::device::BlockFillRandomUniform(
         block.get(), block.size(), seed, Element(2.0f), Element(-2.0f));
     } else {
@@ -459,10 +447,9 @@ struct ExampleRunner {
 
     // Verify that the result is correct
     bool passed = verify(options);
-
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    // if(!passed) return cutlass::Status::kErrorInternal;
+    if(!passed) return cutlass::Status::kErrorInternal;
 
     float total_time = 0.f;
 
