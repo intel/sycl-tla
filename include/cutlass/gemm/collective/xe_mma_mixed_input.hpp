@@ -48,7 +48,7 @@ using namespace cute;
 
 template <class datatype, size_t N, class = void>
 struct scale_zero_copy_traits {
-  static_assert(dependent_false<datatype> && "Invalid scale/zero point datatype"); \
+  using type = XE_2D_U16x1x32_LD_N;
 };
 
 // 4 bits
@@ -64,7 +64,7 @@ struct scale_zero_copy_traits<datatype, 16, std::enable_if_t<sizeof_bits_v<datat
 };
 template<class datatype>
 struct scale_zero_copy_traits<datatype, 32, std::enable_if_t<sizeof_bits_v<datatype> == 8>> {
-  using type = XE_2D_U8x1x16xV2_LD_N;
+  using type = XE_2D_U8x1x32_LD_N;
 };
 
 // 16 bits
@@ -141,6 +141,7 @@ public:
   using ElementZero = cute::conditional_t<IsATransformed, ZeroA, ZeroB>;
   using ElementMMA = cute::conditional_t<IsATransformed, ElementB, ElementA>;
   using ElementQuant = cute::conditional_t<IsATransformed, ElementA, ElementB>;
+
   using StrideScale = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<3, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<3, ElementBOptionalTuple>>;
   using StrideZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<4, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<4, ElementBOptionalTuple>>;;
 
@@ -646,7 +647,7 @@ public:
     Tensor copy_iter_z = [&](){
       if constexpr(IsATransformed){
         return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
-                           make_layout(make_shape(_2{}, _2{}, _1{}, k_tile_count), 
+                           make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count),
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }else{
         return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),

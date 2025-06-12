@@ -95,7 +95,7 @@ struct XE_2D_Packed_U8x1x32_LD_N {
   };
 };
 
-struct XE_2D_U8x1x16xV2_LD_N {
+struct XE_2D_U8x1x32_LD_N {
   using BlockShape = Shape<_1, _32>;
   using inst_dtype = int8_t;
 

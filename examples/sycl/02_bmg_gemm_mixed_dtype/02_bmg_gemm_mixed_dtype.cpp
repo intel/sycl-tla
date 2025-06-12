@@ -235,6 +235,7 @@ struct ExampleRunner {
   StrideC stride_C;
   StrideD stride_D;
   StrideScale stride_S;
+  StrideZero stride_Z;
 
   uint64_t seed = 0;
 
@@ -390,6 +391,7 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, shape_CD);
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
+    stride_Z = cutlass::make_cute_packed_stride(StrideZero{}, shape_scale_zero);
 
     block_A.reset(static_cast<std::size_t>(M) * K * L);
     block_A_dq.reset(static_cast<std::size_t>(M) * K * L);
@@ -415,12 +417,12 @@ struct ExampleRunner {
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
     if constexpr (AIsNarrower) {
-      dequantize(block_A_dq.get(), block_A.get(), layout_A,
-                        block_scale.get(), block_zero.get(), layout_scale_zero,
+      cutlass::dequantize(block_A_dq.get(), block_A.get(), layout_A,
+                        block_scale.get(), block_zero.get(), layout_scale_zero, layout_scale_zero,
                         options.g);
     } else {
-      dequantize(block_B_dq.get(), block_B.get(), layout_B,
-                        block_scale.get(), block_zero.get(), layout_scale_zero,
+      cutlass::dequantize(block_B_dq.get(), block_B.get(), layout_B,
+                        block_scale.get(), block_zero.get(), layout_scale_zero, layout_scale_zero,
                         options.g);
     }
   }
@@ -434,7 +436,7 @@ struct ExampleRunner {
         cutlass::gemm::GemmUniversalMode::kGemm,
         problem_size,
         {block_A.get(), stride_A, block_B.get(), stride_B, block_scale.get(),
-         stride_S, options.g, block_zero.get()},
+         stride_S, stride_Z, options.g, block_zero.get()},
         {{options.alpha, options.beta},
          block_C.get(),
          stride_C,
@@ -533,6 +535,8 @@ int main(int argc, const char** argv)
 
   using ElementZero = MmaType;
   using ElementScale = MmaType;
+  using StrideScale = cute::Stride<_1, int64_t, int64_t>;
+  using StrideZero = StrideScale;
 
   using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;  // U8  (1-byte) block copy for A (narrower type)
   using GmemTiledCopyB = XE_2D_U16x32x32_LD_V; // U16 (2-byte) block copy for B (wider type)
@@ -586,19 +590,19 @@ int main(int argc, const char** argv)
 
   // A-narrow Mainloop & GemmUniversalAdapter
   using MainloopAConvertOnly =
-      MixedBuilderQuantA::CollectiveMma<cute::tuple<ElementInputA>,
+      MixedBuilderQuantA::CollectiveMma<cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>,
                                         ElementInputB>;
   using GemmAConvertOnly =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertOnly>;
 
   using MainloopAConvertAndScale = MixedBuilderQuantA::CollectiveMma<
-      cute::tuple<ElementInputA, ElementScale>, ElementInputB>;
+      cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>, ElementInputB>;
   using GemmAConvertAndScale =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertAndScale>;
 
   using MainloopAConvertAndScaleWithZeroPoint =
       MixedBuilderQuantA::CollectiveMma<
-          cute::tuple<ElementInputA, ElementScale, ElementZero>, ElementInputB>;
+          cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>, ElementInputB>;
   using GemmAConvertAndScaleWithZeroPoint =
       GemmAdapterBuilder::GemmUniversalAdapter<
           MainloopAConvertAndScaleWithZeroPoint>;
@@ -606,18 +610,18 @@ int main(int argc, const char** argv)
   // B-narrow Mainloop & GemmUniversalAdapter
   using MainloopBConvertOnly =
       MixedBuilderQuantB::CollectiveMma<ElementInputB,
-                                        cute::tuple<ElementInputA>>;
+                                        cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>>;
   using GemmBConvertOnly =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertOnly>;
 
   using MainloopBConvertAndScale = MixedBuilderQuantB::CollectiveMma<
-      ElementInputB, cute::tuple<ElementInputA, ElementScale>>;
+      ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>>;
   using GemmBConvertAndScale =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertAndScale>;
 
   using MainloopBConvertAndScaleWithZeroPoint =
       MixedBuilderQuantB::CollectiveMma<
-          ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero>>;
+          ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>>;
   using GemmBConvertAndScaleWithZeroPoint =
       GemmAdapterBuilder::GemmUniversalAdapter<
           MainloopBConvertAndScaleWithZeroPoint>;

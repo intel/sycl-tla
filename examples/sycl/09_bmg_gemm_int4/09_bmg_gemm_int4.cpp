@@ -29,9 +29,9 @@
  *
  **************************************************************************************************/
 /***************************************
-* Mixed Precision PVC Gemm Example
+* Mixed Precision BMG Gemm Example
 *
-* This example demonstrates how to dispatch a mixed precision GEMM on PVC, with optional dequantization.
+* This example demonstrates how to dispatch a mixed precision GEMM on BMG, with optional dequantization.
 * The GemmMode enum describes the 3 modes of operation:
 *
 * - ConvertOnly: Narrower type is simply converted to the wider type before MMA
@@ -81,8 +81,8 @@ enum GemmMode {
 
 #define CACHE_CNT (2)
 
-using MmaType = _Float16;
-using QuantType = uint4_t;//_BitInt(4);
+using MmaType = cutlass::half_t;
+using QuantType = uint4_t;
 
 // Command line options parsing
 struct Options {
@@ -138,7 +138,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "PVC GEMM Mixed Type Example\n\n"
+    out << "BMG GEMM Mixed Type Example\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
@@ -247,31 +247,6 @@ struct ExampleRunner {
   //
   // Methods
   //
-
-  template <class T> static void fill_matrix( std::vector<T> &M) {
-    std::random_device dev;
-    std::mt19937 rng(dev());
-
-    T start, end;
-
-    if constexpr (std::is_same_v<T, tfloat32_t> || std::is_same_v<T, half_t>
-                   || std::is_same_v<T, bfloat16_t> || std::is_same_v<T, float>) {
-      start = (T)0.0;
-      end = (T)1.0;
-    } else if constexpr (std::is_same_v<T, int8_t>) {
-      start = (T)(-5);
-      end = (T)5;
-    } else if constexpr (std::is_same_v<T, uint8_t>) {
-      start = (T)0;
-      end = (T)5;
-    } else {
-      CUTE_STATIC_ASSERT(false, "you must set coreect start/end value to initialize data");
-    }
-
-    std::uniform_real_distribution<float> dist((T)start, (T)end);
-    for (int i = 0; i < M.size(); i++)
-      M[i] = static_cast<T>(dist(rng));
-  }
 
   void flush_cache(int l3_cache_size) {
     std::vector<uint8_t> host_cache;
