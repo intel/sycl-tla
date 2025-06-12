@@ -117,11 +117,6 @@ private:
     ConvertAndScaleWithZero
   };
 
-  using ScaleA = detail::deduce_mixed_width_dtype_t<1, ElementAOptionalTuple>;
-  using ScaleB = detail::deduce_mixed_width_dtype_t<1, ElementBOptionalTuple>;
-  using ZeroA = detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>;
-  using ZeroB = detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>;
-
 public:
   //
   // Type Aliases
@@ -136,11 +131,14 @@ public:
 
   using ElementA = detail::deduce_mixed_width_dtype_t<0, ElementAOptionalTuple>;
   using ElementB = detail::deduce_mixed_width_dtype_t<0, ElementBOptionalTuple>;
+
   static constexpr bool IsATransformed = cute::is_tuple<ElementAOptionalTuple>::value;
-  using ElementScale = cute::conditional_t<IsATransformed, ScaleA, ScaleB>;
-  using ElementZero = cute::conditional_t<IsATransformed, ZeroA, ZeroB>;
+
   using ElementMMA = cute::conditional_t<IsATransformed, ElementB, ElementA>;
   using ElementQuant = cute::conditional_t<IsATransformed, ElementA, ElementB>;
+
+  using ElementScale = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<1, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<1, ElementBOptionalTuple>>;
+  using ElementZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>>;;
 
   using StrideScale = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<3, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<3, ElementBOptionalTuple>>;
   using StrideZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<4, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<4, ElementBOptionalTuple>>;;

@@ -66,10 +66,7 @@
 #include "helper.h"
 #include "cutlass/util/mixed_dtype_utils.hpp"
 
-#define MByte (1024 * 1024)
-
 using namespace cute;
-#define FLUSH_CACHE 0
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -78,8 +75,6 @@ enum GemmMode {
   ConvertAndScale,
   ConvertAndScaleWithZeroPoint
 };
-
-#define CACHE_CNT (2)
 
 using MmaType = cutlass::half_t;
 using QuantType = uint4_t;
@@ -93,16 +88,15 @@ struct Options {
   bool a_narrower;
   int mode;
   int m, n, k, l, iterations;
-  int g, warmup;
+  int g;
   float alpha, beta;
-  int flush_cache, cache_cnt, l3_cache;
 
   Options():
     help(false),
     error(false),
     m(5120), n(4096), k(4096), l(1), iterations(20),
     g(128), mode(2), a_narrower(false),
-    alpha(1.f), beta(0.f), warmup(0), flush_cache(0), cache_cnt(3)
+    alpha(1.f), beta(0.f)
   { }
 
   // Parses the command line
@@ -123,16 +117,9 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
-    cmd.get_cmd_line_argument("warmup", warmup, 10);
-    cmd.get_cmd_line_argument("flush_cache", flush_cache, 1);
-    cmd.get_cmd_line_argument("cache_cnt", cache_cnt, 3);
-    cmd.get_cmd_line_argument("l3_cache", l3_cache, 20);
-
-    a_narrower = false;
-
-    // if (cmd.check_cmd_line_flag("a_narrower")) {
-    //   a_narrower = true;
-    // }
+    if (cmd.check_cmd_line_flag("a_narrower")) {
+      a_narrower = true;
+    }
   }
 
   /// Prints the usage statement.
@@ -247,34 +234,6 @@ struct ExampleRunner {
   //
   // Methods
   //
-
-  void flush_cache(int l3_cache_size) {
-    std::vector<uint8_t> host_cache;
-    cutlass::DeviceAllocation<uint8_t> dev_cache_block;
-    dev_cache_block.reset(l3_cache_size + 64);
-    host_cache = std::vector<uint8_t>((size_t)dev_cache_block.size());
-    // fill_matrix(host_cache);
-    syclcompat::memcpy(dev_cache_block.get(), host_cache.data(),
-                       dev_cache_block.size());
-    syclcompat::wait();
-
-    auto q = syclcompat::get_default_queue();
-
-    using cache_dtype = uint32_t;
-    cache_dtype* mem_to = (cache_dtype*)dev_cache_block.get();
-    cache_dtype* mem_from = (cache_dtype*)(dev_cache_block.get() + sizeof(cache_dtype));
-
-#ifdef COMPILER_VERSION
-    q.parallel_for(sycl::nd_range<1>(l3_cache_size / sizeof(cache_dtype), 1024), [=](auto idx) {
-#else
-    q.parallel_for(sycl::nd_range<1>(l3_cache_size / sizeof(cache_dtype) / 1024, 1024), [=](auto idx) {
-#endif
-      int i = idx.get_global_id();
-      *mem_to += mem_from[i];
-    });
-
-    q.wait();
-  }
 
   bool verify(const Options &options) {
       
@@ -428,23 +387,15 @@ struct ExampleRunner {
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
     stride_Z = cutlass::make_cute_packed_stride(StrideZero{}, shape_scale_zero);
 
-#if FLUSH_CACHE == 1
-    auto max_size = options.l3_cache * MByte * 8 / sizeof_bits_v<ElementB>;
-    auto b_cache_elements = max_size > K * N * L ? max_size : K * N * L;
-    block_B.reset(b_cache_elements * CACHE_CNT);
-#else
-    block_B.reset(K * N * L);
-#endif
-
-    block_A.reset(M * K * L);
-    block_A_dq.reset(M * K * L);
-
-    block_B_dq.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
-    block_scale.reset(scale_k * L * dq_mn_size);
-    block_zero.reset(scale_k * L * dq_mn_size);
+    block_A.reset(static_cast<std::size_t>(M) * K * L);
+    block_A_dq.reset(static_cast<std::size_t>(M) * K * L);
+    block_B.reset(static_cast<std::size_t>(K) * N * L);
+    block_B_dq.reset(static_cast<std::size_t>(K) * N * L);
+    block_C.reset(static_cast<std::size_t>(M) * N * L);
+    block_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_scale.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
+    block_zero.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
 
     initialize_mixed_dtype_block(block_A, block_A_dq, seed + 2022);
     initialize_mixed_dtype_block(block_B, block_B_dq, seed + 2023);
@@ -473,8 +424,6 @@ struct ExampleRunner {
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
-    auto l3_cache_size = options.l3_cache * MByte;
-
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
     initialize(options);
@@ -516,61 +465,23 @@ struct ExampleRunner {
     // if(!passed) return cutlass::Status::kErrorInternal;
 
     float total_time = 0.f;
-    if (options.warmup >= options.iterations) {
-      return cutlass::Status::kSuccess;
-    }
 
     double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
-    double hbm = (sizeof_bits_v<ElementA> * options.m * options.k / 8 +
-                  sizeof_bits_v<ElementB> * options.k * options.n / 8 +
-                  sizeof_bits_v<ElementOutput> * options.m * options.n / 8) * 1e-9;
 
     std::cout << "Problem Size(mnk): " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-    printf("    --l=%d --iterations=%d --flush_cache=%d, --warmup=%d, --cache_cnt=%d, --l3_cache_size=%d\n", options.l, options.iterations, options.flush_cache, options.warmup, options.cache_cnt, l3_cache_size);
-
-    auto max_size = options.l3_cache * MByte * 8 / sizeof_bits_v<ElementB>;
-    auto b_cache_elements = max_size > options.k * options.n * options.l ? max_size : options.k * options.n * options.l;
 
     if (options.iterations > 0) {
+      GPU_Clock timer;
+      timer.start();
       for (int i = 0; i < options.iterations; ++i) {
-        if (options.flush_cache) {
-#if FLUSH_CACHE == 1
-
-          typename Gemm::GemmKernel::Arguments arguments1{
-            cutlass::gemm::GemmUniversalMode::kGemm,
-            problem_size,
-            {block_A.get(), stride_A, (const ElementB*)(((const char*)(block_B.get())) + (i % CACHE_CNT) * (b_cache_elements * sizeof_bits_v<ElementB> / 8)),
-            stride_B, block_scale.get(),
-            stride_S, stride_Z, options.g, block_zero.get()},
-            {{options.alpha, options.beta},
-            block_C.get(),
-            stride_C,
-            block_D.get(),
-            stride_D},
-            hw_info};
-          CUTLASS_CHECK(gemm_op.initialize(arguments1, workspace.get()));
-
-#elif FLUSH_CACHE == 2
-          flush_cache(l3_cache_size);
-#endif
-        }
-
-        GPU_Clock timer;
-        timer.start();
         gemm_op.run();
-        // syclcompat::wait();
-        auto ctime = timer.seconds();
-
-        if (i >= options.warmup) {
-          total_time += ctime;
-        }
-  
-        // printf("Cutlass GEMM Performance [%d]:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", i, tflops / ctime, hbm / ctime, ctime*1000);
       }
+      syclcompat::wait();
 
-      float cute_time = total_time / (options.iterations - options.warmup);
-
-      printf("Cutlass GEMM Performance average:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n\n\n", tflops / cute_time, hbm / cute_time, cute_time*1000);
+      float cute_time = timer.seconds() / options.iterations;
+      double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
+      std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
     }
 
     return cutlass::Status::kSuccess;
