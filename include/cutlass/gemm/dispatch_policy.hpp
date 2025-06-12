@@ -1041,7 +1041,7 @@ struct MainloopIntelXeXMX16MixedPrecision : MainloopIntelXeXMX16<Stages_> {
 };
 
 template<int Stages_, class KernelSchedule = KernelXe>
-struct MainloopIntelW8 : MainloopIntelXeXMX16<Stages_, KernelSchedule> {
+struct MainloopIntelW8A8 : MainloopIntelXeXMX16<Stages_, KernelSchedule> {
 };
 #endif
 

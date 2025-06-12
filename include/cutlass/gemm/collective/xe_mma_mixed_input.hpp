@@ -32,6 +32,7 @@
 
 #include "cutlass/cutlass.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
+#include "cutlass/fp8_to_fp16.h"
 
 #include "cute/algorithm/functional.hpp"
 #include "cute/atom/mma_atom.hpp"
@@ -318,6 +319,9 @@ public:
         tCrA_mma[i] = static_cast<DstType>(tCrA_load[i].get());
       }
     } else {
+      if constexpr(cute::is_any_of_v<ElementA,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t> && cute::is_any_of_v<ElementB,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t>) {
+        convert_FP8_to_FP16<ElementQuant>(make_tensor(reinterpret_cast<const uint8_t*>(tCrA_load.data()), tCrA_load.layout()), tCrA_mma);
+      } else {
       auto const& src = tCrA_load(_, _, _);
       auto const& dst = tCrA_mma(_, _, _);
       auto pSrc = const_cast<SrcType*>(raw_pointer_cast(src.data()));
@@ -337,6 +341,7 @@ public:
         DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
         *pDstArr = Converter::convert(*pSrcArr);
       }
+    }
     }
 
     if constexpr (ModeHasScales) {
