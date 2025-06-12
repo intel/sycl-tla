@@ -215,7 +215,7 @@ struct ExampleRunner {
   using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
   // Scale and Zero share a stride since the layout and shapes must be the same.
   using StrideScale = typename CollectiveMainloop::StrideScale;
-  using StrideZero = StrideScale; 
+  using StrideZero = typename CollectiveMainloop::StrideZero; 
 
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;

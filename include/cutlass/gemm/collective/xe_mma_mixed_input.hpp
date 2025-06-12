@@ -501,13 +501,13 @@ public:
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < 2; ++j) {
             auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
-            tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
-            tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
             if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
               auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
-              tCrA_mma(_, _, 0)[j * 16 + i] += zero;
-              tCrA_mma(_, _, 1)[j * 16 + i] += zero;
+              tCrA_mma(_, _, 0)[j * 16 + i] -= zero;
+              tCrA_mma(_, _, 1)[j * 16 + i] -= zero;
             }
+            tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
+            tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
           }
         }
       } else {
