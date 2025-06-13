@@ -2509,6 +2509,7 @@ struct Copy_Traits<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>, args_t...
     : XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>, args_t...> {
   using Base = XE_2D_LD_Unpack<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>, args_t...>;
   using Base::is_matrix_B;
+  using BlockShape = std::conditional_t<is_matrix_B, decltype(cute::reverse(typename Base::BlockShape{})), typename Base::BlockShape>;
 
   using ThrID = Layout<_16>;
   // Map from (dst-thr,dst-val) to bit
@@ -2523,7 +2524,6 @@ struct Copy_Traits<XE_2D_LD_N<TSizeBits, Height, Width, InstSizeBits>, args_t...
   using SrcLayout = Layout<Shape <_16, decltype(get<1>(DstLayout{}).shape())>,
                            Stride<_0,  decltype(get<1>(DstLayout{}).stride())>>;
 
-  using BlockShape = std::conditional_t<is_matrix_B, decltype(cute::reverse(typename Base::BlockShape{})), typename Base::BlockShape>;
   //using SrcLayout = decltype(detail::get_logical_layout<is_matrix_B>(SrcLayout_{}, typename Base::BlockShape{}));
   //using DstLayout = decltype(detail::get_logical_layout<is_matrix_B>(DstLayout_{}, typename Base::BlockShape{}));
   // Reference map from (thr,val) to bit
@@ -2539,6 +2539,7 @@ struct Copy_Traits<XE_2D_LD_N_PREFETCH<TSizeBits, Height, Width>, args_t...>
     : XE_2D_LD_Unpack<XE_2D_LD_N_PREFETCH<TSizeBits, Height, Width>, args_t...> {
   using Base = XE_2D_LD_Unpack<XE_2D_LD_N_PREFETCH<TSizeBits, Height, Width>, args_t...>;
   using Base::is_matrix_B;
+  using BlockShape = std::conditional_t<is_matrix_B, decltype(cute::reverse(typename Base::BlockShape{})), typename Base::BlockShape>;
 
   using ThrID = Layout<_16>;
   // Map from (dst-thr,dst-val) to bit
@@ -2552,7 +2553,6 @@ struct Copy_Traits<XE_2D_LD_N_PREFETCH<TSizeBits, Height, Width>, args_t...>
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16, decltype(get<1>(DstLayout{}).shape())>,
                            Stride<_0,  decltype(get<1>(DstLayout{}).stride())>>;
-  using BlockShape = std::conditional_t<is_matrix_B, decltype(cute::reverse(typename Base::BlockShape{})), typename Base::BlockShape>;
   //using SrcLayout = decltype(detail::get_logical_layout<is_matrix_B>(SrcLayout_{}, typename Base::BlockShape{}));
   //using DstLayout = decltype(detail::get_logical_layout<is_matrix_B>(DstLayout_{}, typename Base::BlockShape{}));
   // Reference map from (thr,val) to bit
@@ -2566,6 +2566,10 @@ struct Copy_Traits<XE_2D_LD_N_PREFETCH<TSizeBits, Height, Width>, args_t...>
 template <int TSizeBits, int Height, int Width, class... args_t>
 struct Copy_Traits<XE_2D_LD_V<TSizeBits, Height, Width>, args_t...>
     : XE_2D_LD_Unpack<XE_2D_LD_V<TSizeBits, Height, Width>, args_t...> {
+  using Base = XE_2D_LD_Unpack<XE_2D_LD_V<TSizeBits, Height, Width>, args_t...>;
+  using Base::is_matrix_B;
+  using BlockShape = std::conditional_t<is_matrix_B, decltype(cute::reverse(typename Base::BlockShape{})), typename Base::BlockShape>;
+
   using ThrID = Layout<_16>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
@@ -2589,6 +2593,8 @@ struct Copy_Traits<XE_2D_LD_T<TSizeBits, Height, Width>, args_t...>
     : XE_2D_LD_Unpack<XE_2D_LD_T<TSizeBits, Height, Width>, args_t...> {
   using Base = XE_2D_LD_Unpack<XE_2D_LD_T<TSizeBits, Height, Width>, args_t...>;
   using Base::is_matrix_B;
+  using BlockShape = std::conditional_t<is_matrix_B, decltype(cute::reverse(typename Base::BlockShape{})), typename Base::BlockShape>;
+  
   using ThrID = Layout<_16>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
