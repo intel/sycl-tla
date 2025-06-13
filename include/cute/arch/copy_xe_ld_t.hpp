@@ -46,11 +46,17 @@ struct XE_2D_LD_T {
   //static_assert(InstSizeBits % 8 == 0, "Expected InstSizeBits to be a multiple of 8.");
   //static constexpr int InstSizeBytes = InstSizeBits / 8;
   //static_assert(InstSizeBits % TSizeBits == 0, "Expected InstSizeBits to be a multiple of TSizeBits.");
-  static constexpr int TSizeBytes = TSizeBits / 8;
-  static constexpr int VecSize = 1;//InstSizeBits / TSizeBits;
-  static constexpr int BlockHeight = 16 * VecSize;
-  static_assert(Height % BlockHeight == 0, "Expected Height to be a multiple of 16 * InstSizeBits / TSizeBits.");
+
+  //static constexpr int TSizeBytes = TSizeBits / 8;
+  static constexpr int InstSizeBits = 32;
+  static constexpr int InstSizeBytes = InstSizeBits / 8;
+  static constexpr int VecSize = InstSizeBits / TSizeBits;
+  static constexpr int BlockHeight = 16;
+  static constexpr int InstBlockWidth = Width / VecSize;
+  //static constexpr int BlockHeight = InstBlockHeight * VecSize;
+  //static_assert(Height % BlockHeight == 0, "Expected Height to be a multiple of 16 * InstSizeBits / TSizeBits.");
   static constexpr int NBlocks = Height / BlockHeight;
+
 
   /*static constexpr int VecSize = 1;
   static constexpr int BlockHeight = 16 * VecSize; //TODO SG size?
@@ -72,13 +78,13 @@ struct XE_2D_LD_T {
                                     T *dst) {
     /*if(thread0()){
         print("XE_2D_LD_T<"); print(TSizeBits); print(", "); print(Height); print(", "); print(Width); print(">\n");
-        print("Calling XeSubgroup2DBlockLoadTranspose<"); print(TSizeBytes); print(", "); print(Width); print(", "); print(BlockHeight); print(", "); print(NBlocks); print(">("); 
+        print("Calling XeSubgroup2DBlockLoadTranspose<"); print(InstSizeBytes); print(", "); print(InstBlockWidth); print(", "); print(BlockHeight); print(", "); print(NBlocks); print(">("); 
         print(baseoffset); print(", "); print(width); print(", "); print(height); print(", "); print(pitch); print(", ("); print(coord[0]); print(", "); print(coord[1]); print("), "); print(dst); print("\n"); 
     }*/
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof_bits_v<T> == TSizeBits, "Expected T to have size equal to TSizeBits.");
     //detail::XeSubgroup2DBlockLoadTranspose<InstSizeBytes, InstWidth, BlockHeight, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
-    detail::XeSubgroup2DBlockLoadTranspose<TSizeBytes, Width, BlockHeight, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
+    detail::XeSubgroup2DBlockLoadTranspose<InstSizeBytes, InstBlockWidth, BlockHeight, NBlocks>{}(baseoffset, width, height, pitch, coord, dst);
     //detail::XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");

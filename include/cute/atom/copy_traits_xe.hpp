@@ -2598,12 +2598,12 @@ struct Copy_Traits<XE_2D_LD_T<TSizeBits, Height, Width>, args_t...>
   using ThrID = Layout<_16>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = decltype(make_ordered_layout(Shape<_16, Shape<Int<TSizeBits>, 
-                                                                  //Int<XE_2D_LD_T<TSizeBits, Height, Width>::VecSize>, 
+                                                                  _1,//Int<XE_2D_LD_T<TSizeBits, Height, Width>::VecSize>, 
                                                                   Int<Width>, 
                                                                   Int<XE_2D_LD_T<TSizeBits, Height, Width>::NBlocks>>>{},
                                                   std::conditional_t<is_matrix_B, 
-                                                                     Step<_1, Step<_0, _2, _3>>, 
-                                                                     Step<_2, Step<_0, _1, _3>>
+                                                                     Step<_2, Step<_0, _1, _3, _4>>, 
+                                                                     Step<_3, Step<_0, _1, _2, _4>>
                                                                      >{}));
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16, decltype(get<1>(DstLayout{}).shape())>,
