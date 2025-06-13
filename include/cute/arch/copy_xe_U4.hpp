@@ -36,7 +36,7 @@
 
 namespace cute
 {
-struct XE_2D_U4x8x16_LD_T {
+struct XE_2D_U4x16x8_LD_T {
   using BlockShape = Shape<_8, _16>;
   using inst_dtype = uint32_t;
   static constexpr bool is_transpose = true;

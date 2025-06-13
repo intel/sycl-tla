@@ -55,7 +55,7 @@ struct scale_zero_copy_traits {
 template<class datatype, size_t N, class stride>
 struct scale_zero_copy_traits<datatype, N, stride,
           std::enable_if_t<sizeof_bits_v<datatype> == 4 && !cute::detail::is_stride_leftmost<stride>>> {
-  using type = XE_2D_U4x8x16_LD_T;
+  using type = XE_2D_U4x16x8_LD_T;
 };
 
 // 8 bits
@@ -333,7 +333,7 @@ public:
     Tensor<EngineIn, LayoutIn> const& in,
     Tensor<EngineOut, LayoutOut>& out,
     Tensor<EngineScales, LayoutScales>& tCrS_input,
-    Tensor<EngineZeros, LayoutZeros>& tCrZ_input
+    Tensor<EngineZeros, LayoutZeros> tCrZ_input
   ) {
     // TODO: add assert here because such cases not support for int4 now
     static_assert(ModeHasScales && !IsATransformed);

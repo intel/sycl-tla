@@ -722,8 +722,8 @@ struct Copy_Traits_<XE_2D_U4x16x64_LD_N, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits_<XE_2D_U4x8x16_LD_T, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U4x8x16_LD_T, args_t...> {
+struct Copy_Traits_<XE_2D_U4x16x8_LD_T, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U4x16x8_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,Shape <_4, _8>>,
@@ -736,7 +736,7 @@ struct Copy_Traits_<XE_2D_U4x8x16_LD_T, args_t...>
 
   template <class... ArgT>
   Copy_Traits_(ArgT... args)
-      : XE_2D_LD_Unpack<XE_2D_U4x8x16_LD_T, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U4x16x8_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
@@ -2553,7 +2553,7 @@ COPY_TRAIT_LD_DEF(XE_2D_TF32x32x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U4x32x64_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U4x16x64_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U4x32x16_LD_T)
-COPY_TRAIT_LD_DEF(XE_2D_U4x8x16_LD_T)
+COPY_TRAIT_LD_DEF(XE_2D_U4x16x8_LD_T)
 COPY_TRAIT_LD_DEF(XE_2D_U4x16x16_LD_T)
 COPY_TRAIT_LD_DEF(XE_2D_Packed_U8x1x64_LD_N::PREFETCH)
 COPY_TRAIT_LD_DEF(XE_2D_Packed_U8x2x64_LD_N::PREFETCH)
