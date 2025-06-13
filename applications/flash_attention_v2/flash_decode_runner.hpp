@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -635,7 +635,7 @@ struct FlashDecodeRunner {
     return arguments;
   }
 
-  static void run(typename FMHADecodeKernel::Params params) {
+  CUTLASS_HOST_DEVICE static void run(typename FMHADecodeKernel::Params params) {
     dim3 const block = FMHADecodeKernel::get_block_shape();
     dim3 const grid = FMHADecodeKernel::get_grid_shape(params);
 
@@ -672,14 +672,14 @@ struct FlashDecodeRunner {
     auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
     auto discard_seq_coord = options.seq_len_qo - offset;
     auto full_tile_offset = options.seq_len_kv - offset;
-    auto effective_seq_len_kv = Causal ? full_tile_offset + ((offset + 1) / 2.0): options.seq_len_kv;
+    auto effective_seq_len_kv = options.seq_len_kv_cache + (Causal ? full_tile_offset + ((offset + 1) / 2.0): options.seq_len_kv);
     auto effective_seq_len_qo = Causal ? options.seq_len_qo - discard_seq_coord  : options.seq_len_qo;
-   
+
     flops_qk = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * effective_seq_len_kv * options.head_size_qk;
     flops_pv = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
 
     gbps_qk =  options.batch * (sizeof(ElementQ) * options.num_heads_q * effective_seq_len_qo * options.head_size_qk + 
-                      sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);    
+                      sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);
     gbps_pv = sizeof(ElementV) * options.batch * options.num_heads_kv * effective_seq_len_kv * options.head_size_vo +
                      sizeof(ElementOutput) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
   }
