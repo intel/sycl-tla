@@ -103,6 +103,11 @@ struct choose_prefetch_for_type<4, 2> {
 };
 
 template <>
+struct choose_prefetch_for_type<4, 4> {
+  using Prefetch = XE_2D_U16x4x32_LD_N;
+};
+
+template <>
 struct choose_prefetch_for_type<4, 8> {
   using Prefetch = XE_2D_U16x8x32_LD_N;
 };

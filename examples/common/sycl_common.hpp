@@ -39,8 +39,8 @@
 template <class Element>
 bool initialize_block(Element* block, std::size_t size, uint64_t seed=2023) {
 
-  Element scope_max = Element(1 << cute::ceil_div(std::numeric_limits<Element>::digits(), 4));
-  Element scope_min = cute::is_signed<Element>::value ? -scope_max : 0;
+  Element scope_max = Element(1 << cute::ceil_div(std::numeric_limits<Element>::digits, 4));
+  Element scope_min = cute::is_signed<Element>::value ? Element(-scope_max) : Element(0);
 
   cutlass::reference::device::BlockFillRandomUniform(
        block, size, seed, scope_max, scope_min, 0);
@@ -65,8 +65,8 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
   std::ranlux24_base rng(std::random_device{}());
   rng.seed(seed);
 
-  T1 scope_max = std::numeric_limits<T1>::max();
-  T1 scope_min = std::numeric_limits<T1>::lowest();
+  T1 scope_max = T1(1 << cute::ceil_div(std::numeric_limits<T1>::digits, 4));
+  T1 scope_min = cute::is_signed<T1>::value ? T1(-scope_max) : T1(0);
 
   std::uniform_int_distribution<> dist(scope_min, scope_max);
 

@@ -143,16 +143,17 @@ public:
   using ElementQuant = cute::conditional_t<IsATransformed, ElementA, ElementB>;
 
   using ElementScale = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<1, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<1, ElementBOptionalTuple>>;
-  using ElementZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>>;;
+  using ElementZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>>;
 
   using StrideScale = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<3, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<3, ElementBOptionalTuple>>;
-  using StrideZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<4, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<4, ElementBOptionalTuple>>;;
-
-  static_assert(cute::is_same_v<ElementMMA, ElementScale> || cute::is_same_v<ElementScale, void>, "Quantization scale type must match MMA type.");
+  using StrideZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<4, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<4, ElementBOptionalTuple>>;
 
   // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
   using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, ElementMMA, ElementScale>;
   using NonVoidElementZero = cute::conditional_t<cute::is_void_v<ElementZero>, ElementMMA, ElementZero>;
+
+  using NonVoidStrideScale = cute::conditional_t<cute::is_same_v<StrideScale, void>, cute::Stride<_1, int64_t, int64_t>, StrideScale>;
+  using NonVoidStrideZero = cute::conditional_t<cute::is_same_v<StrideZero, void>, cute::Stride<_1, int64_t, int64_t>, StrideZero>;
 
   using StrideA = StrideA_;
   using StrideB = StrideB_;
@@ -197,7 +198,7 @@ private:
   static constexpr ConversionMode KernelConversionMode = get_conversion_mode();
   static constexpr bool ModeHasScales = KernelConversionMode == ConversionMode::ConvertAndScale ||
                                         KernelConversionMode == ConversionMode::ConvertAndScaleWithZero;
-
+  static constexpr bool ModeHasScalesZero = KernelConversionMode == ConversionMode::ConvertAndScaleWithZero;
 public:
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -216,8 +217,8 @@ public:
   static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
   
-  using GmemTiledCopyScale = typename scale_zero_copy_traits<ElementScale, SG_N, StrideScale>::type;
-  using GmemTiledCopyZero = typename scale_zero_copy_traits<ElementZero, SG_N, StrideZero>::type;
+  using GmemTiledCopyScale = typename scale_zero_copy_traits<NonVoidElementScale, SG_N, NonVoidStrideScale>::type;
+  using GmemTiledCopyZero = typename scale_zero_copy_traits<NonVoidElementZero, SG_N, NonVoidStrideZero>::type;
 
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
@@ -235,12 +236,12 @@ public:
   using val_layout_load_B = decltype(make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
   using Copy_B = decltype(make_tiled_copy(atom_load_B{}, Layout<CopyThreadShape>{}, val_layout_load_B{}));
 
-  using traits_load_scale = Copy_Traits<GmemTiledCopyScale, StrideScale>;
+  using traits_load_scale = Copy_Traits<GmemTiledCopyScale, NonVoidStrideScale>;
   using atom_load_scale = Copy_Atom<traits_load_scale, NonVoidElementScale>;
   using val_layout_load_scale = decltype(make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Scale = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
   
-  using traits_load_zero = Copy_Traits<GmemTiledCopyZero, StrideZero>;
+  using traits_load_zero = Copy_Traits<GmemTiledCopyZero, NonVoidStrideZero>;
   using atom_load_zero = Copy_Atom<traits_load_zero, NonVoidElementZero>;
   using val_layout_load_zero = decltype(make_layout(shape_div(typename traits_load_zero::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Zero = decltype(make_tiled_copy(atom_load_zero{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero{}));
@@ -251,11 +252,11 @@ public:
     StrideA dA;
     ElementB const* ptr_B;
     StrideB dB;
-    ElementScale const* ptr_S = nullptr;
-    StrideScale dS{};
-    StrideZero dZ{};
+    NonVoidElementScale const* ptr_S = nullptr;
+    NonVoidStrideScale dS{};
+    NonVoidStrideZero dZ{};
     int group_size = 1;
-    ElementZero const* ptr_Z = nullptr;
+    NonVoidElementZero const* ptr_Z = nullptr;
   };
 
   struct Params {
@@ -336,7 +337,7 @@ public:
     Tensor<EngineZeros, LayoutZeros> tCrZ_input
   ) {
     // TODO: add assert here because such cases not support for int4 now
-    static_assert(ModeHasScales && !IsATransformed);
+    static_assert(!IsATransformed);
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for conversion must come from registers");
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
@@ -390,13 +391,12 @@ public:
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < vec_size; i++) {
           auto data = [&](){
-            static_assert(!is_signed<SrcType>::value && !IsATransformed);
-              if constexpr (is_signed<SrcType>::value) {
-                return static_cast<SrcType>((format_data >> (src_bits * i)) & 0xf);
-              } else {
-                return (format_data >> (src_bits * i)) & 0xf;
-              }
-            }();
+            if constexpr (cutlass::platform::numeric_limits<SrcType>::is_signed) {
+              return static_cast<SrcType>((format_data >> (src_bits * i)) & 0xf);
+            } else {
+              return (format_data >> (src_bits * i)) & 0xf;
+            }
+          }();
 
           if constexpr (ModeHasScales) {
             if constexpr (IsATransformed) {
@@ -409,7 +409,7 @@ public:
               dst[i] = (static_cast<ScaleType>(minus)) * ts;
             }
           } else {
-            dst[i] = data;
+            dst[i] = static_cast<DstType>(data);
           }
         }
       }
@@ -728,7 +728,7 @@ public:
         transform_quant(quant_frag, mma_A, fragment_scale_input,
                         fragment_zero_input);
       } else {
-        if constexpr (sizeof_bits_v<ElementZero> < 8) {
+        if constexpr (ModeHasScalesZero && sizeof_bits_v<NonVoidElementZero> < 8) {
           transform_quant(quant_frag, mma_B, fragment_scale_input, fragment_zero_input((k_tile / k_reload_factor) % zero_traits_size, _, 0));
         } else {
           transform_quant(quant_frag, mma_B, fragment_scale_input, fragment_zero_input);
