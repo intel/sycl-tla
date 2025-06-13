@@ -70,7 +70,7 @@ jobs:
         uses: ./.github/actions/install-dpcpp
         with:
           DPCPP_RELEASE: ${{ matrix.compiler }}
-          DPCPP_VERSION: nightly-2025-06-10
+          DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
           GPU: ${{ matrix.gpu }}
           IGC: ${{ matrix.intel_graphics }}
       - name: Setup virtual environment
@@ -93,10 +93,11 @@ jobs:
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
             -DCUTLASS_SYCL_RUNNING_CI=ON
+          cmake --build .
       - name: Unit test
         shell: bash
         run: |
-          cmake --build . --target test_unit -j
+          cmake --build . --target test_unit
       - name: Examples
         shell: bash
         run: |
