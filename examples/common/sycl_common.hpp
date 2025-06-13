@@ -39,8 +39,8 @@
 template <class Element>
 bool initialize_block(Element* block, std::size_t size, uint64_t seed=2023) {
 
-  Element scope_max = std::numeric_limits<Element>::max();
-  Element scope_min = std::numeric_limits<Element>::lowest();
+  Element scope_max = Element(1 << cute::ceil_div(std::numeric_limits<Element>::digits(), 4));
+  Element scope_min = cute::is_signed<Element>::value ? -scope_max : 0;
 
   cutlass::reference::device::BlockFillRandomUniform(
        block, size, seed, scope_max, scope_min, 0);
