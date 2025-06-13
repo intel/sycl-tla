@@ -498,8 +498,8 @@ template <class CopyOp, class StrideOrTensor = cute::Stride<int64_t, cute::Int<1
 template <class TiledCopy, class TLShape>
 CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
                                                      TLShape &&fragment_top_level_shape) {
-  // Shapes are be reversed for col major case between registers and global memory, 
-  // so all variables contain in their name whether thy refer to the shape in registers or in global memory
+  // Shapes are reversed for col major case between registers and global memory, 
+  // so all variables contain in their name whether they refer to the shape in registers or in global memory
 
   // TODO(Codeplay): reverse values in 2d (U8) MMA atoms instead
   constexpr auto mma_atom_regs_shape = cute::reverse(get<0>(TLShape{}));
@@ -518,7 +518,7 @@ CUTE_HOST_DEVICE constexpr auto make_fragment_layout(TiledCopy &tiled_copy,
   // This case would need to rearrange data in registers between copy and mma calls
   static_assert(get<0>(CopyValsShapeRegs{}) >= get<0>(MmaValsShapeRegs2d{}) || 
                   get<1>(CopyValsShapeRegs{}) <= get<1>(MmaValsShapeRegs2d{}), 
-                "It is not possible to have MMA atom be bigger than copy atom in one dimension and smaller in other dimension!");
+                "It is not currently supported to have MMA atom be bigger than copy atom in one dimension and smaller in other dimension!");
   using MmaItersInCopyRegs = decltype(ceil_div(CopyValsShapeRegs{}, MmaValsShapeRegs2d{}));
   using CopyItersRegs = decltype(shape_div(TotalMmaAtomItersRegs{}, MmaItersInCopyRegs{}));
 
