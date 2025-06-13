@@ -403,6 +403,9 @@ struct XE_2D_LD_Unpack {
     constexpr int dtype_size = dtype_size_bits / 8;
     using dtype_proxy = sycl::vec<char, dtype_size>;
 
+    // This asserts checks for the most common usecase - using prefetch atom with the same type as the data
+    // However prefetch atoms can also be used for other datatypes, such as U8 prefetch for U4 data, which need a special case in the assert below
+    // If we have more such cases we could remove the assert altogether
     static_assert(size(SLayout{}) * dtype_size_bits == size<1>(typename Traits_LD_t::SrcLayout{}) ||
                   // Prefetching U4 using U8 prefetch, we can not distinguish this case without actual type
                   dtype_size_bits == 8 && size(SLayout{}) * 4 == size<1>(typename Traits_LD_t::SrcLayout{}), 
@@ -416,6 +419,10 @@ struct XE_2D_LD_Unpack {
     int y = is_tensor_M_major ? n : m;
 
     constexpr auto inst_size_bits = detail::size_of_inst_bits<CopyOp, dtype_proxy>;
+    // The assert checks that assert is implemented using prefetch instruction with matching datatype size
+    // Currently this is the case for all prefetch atoms, but we might need to remove the assert to add
+    // any prefetch atom with size of datatype different from the underlying instruction.
+    static_assert(inst_size_bits == dtype_size_bits, "Instruction size does not match prefetch size.");
 
     CopyOp::PREFETCH::copy(base_addr + l * traits.stride_l * dtype_size,
                            (traits.width * dtype_size_bits) / sizeof_bits_v<int8_t>, traits.height,
