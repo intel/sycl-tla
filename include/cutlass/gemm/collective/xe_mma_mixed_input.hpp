@@ -402,9 +402,10 @@ public:
             if constexpr (IsATransformed) {
               static_assert(dependent_false<LayoutIn> && "ATransform not support now");
             } else {
-              int8_t minus = data;
+              using ret_type = cute::conditional_t<sizeof_bits_v<ZeroType> >= 8, ZeroType, int8_t>;
+              ret_type minus(0);
               if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero) {
-                minus = minus - (int8_t)tz;
+                minus = static_cast<ret_type>(data) - static_cast<ret_type>(tz);
               }
               dst[i] = (static_cast<ScaleType>(minus)) * ts;
             }
@@ -518,17 +519,16 @@ public:
           }
         }
       } else {
-        // 16 x 4 x 2 values for B
-        // 16 x 2 of these are same K
-        // 4 different scale/zero values per thread, no exchange needed
+        static constexpr auto N = decltype(size<1>(tCrA_load))::value;
+
         CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < 4; ++i) {
+        for (int n = 0; n < N; ++n) {
           CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < 32; ++j) {
+          for (int i = 0; i < decltype(size(tCrA_load))::value / N; ++i) {
             if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              tCrA_mma(_, i, _)[j] -= tCrZ_input(i);
+              tCrA_mma(_, n, _)[i] -= tCrZ_input(n);
             }
-            tCrA_mma(_, i, _)[j] *= tCrS_input(i);
+            tCrA_mma(_, n, _)[i] *= tCrS_input(n);
           }
         }
       }
@@ -724,6 +724,7 @@ public:
         prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
+
       if constexpr (IsATransformed) {
         transform_quant(quant_frag, mma_A, fragment_scale_input,
                         fragment_zero_input);
@@ -733,11 +734,6 @@ public:
         } else {
           transform_quant(quant_frag, mma_B, fragment_scale_input, fragment_zero_input);
         }
-      }
-
-      if(prefetch_k < k_tile_count) {
-        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
