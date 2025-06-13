@@ -31,48 +31,46 @@
 
 #include "bmg_flash_attn_decode_runner.hpp"
 
-template <bool PagedKV, bool Varlen>
+template <int KVTile, int NumSG, bool PagedKV, bool Varlen>
 int run_decode(Options const& options) {
-  if (options.head_size_vo == 64) {
 
-    using ShapeQK = Shape<_1, _512, _64>;
-    using ShapePV = Shape<_1, _32, _512>;
-    using ShapeOutput = Shape<_1, _64, _512>;
-    using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
-
-    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
-  } else if (options.head_size_vo == 96) {
-
-    using ShapeQK = Shape<_1, _512, _64>;
-    using ShapePV = Shape<_1, _32, _512>;
-    using ShapeOutput = Shape<_1, _96, _512>;
-    using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
-
-    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
-  } else if (options.head_size_vo == 128) {
-
-    using ShapeQK = Shape<_1, _512, _64>;
-    using ShapePV = Shape<_1, _32, _512>;
-    using ShapeOutput = Shape<_1, _128, _512>;
-    using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
-
-    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
-  } else if (options.head_size_vo == 192) {
-
-    using ShapeQK = Shape<_1, _512, _64>;
-    using ShapePV = Shape<_1, _32, _512>;
-    using ShapeOutput = Shape<_1, _192, _512>;
-    using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
-
-    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
-  } else {
-    std::cerr << "Aborting execution." << std::endl;
+#if !defined(HEAD_DIM)
+  std::cerr << "HEAD_DIM must be defined" << std::endl;
+  return -1;
+#endif
+  if (options.head_size_vo != HEAD_DIM) {
+    std::cerr << "head_size_vo must be " << HEAD_DIM << ", but got " << options.head_size_vo << std::endl;
     return -1;
   }
+
+#if HEAD_DIM == 64
+    using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+    using ShapePV = Shape<_1, _32, Int<KVTile>>;
+    using ShapeOutput = Shape<_1, _64, Int<KVTile>>;
+    using SubgroupLayout = Layout<Shape<Int<NumSG>, _1, _1>, Stride<_1, _1, _1>>;
+
+#elif HEAD_DIM == 96
+    using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+    using ShapePV = Shape<_1, _32, Int<KVTile>>;
+    using ShapeOutput = Shape<_1, _96, Int<KVTile>>;
+    using SubgroupLayout = Layout<Shape<Int<NumSG>, _1, _1>, Stride<_1, _1, _1>>;
+
+#elif HEAD_DIM == 128
+    using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+    using ShapePV = Shape<_1, _32, Int<KVTile>>;
+    using ShapeOutput = Shape<_1, _128, Int<KVTile>>;
+    using SubgroupLayout = Layout<Shape<Int<NumSG>, _1, _1>, Stride<_1, _1, _1>>;
+
+#elif HEAD_DIM == 192
+    using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+    using ShapePV = Shape<_1, _32, Int<KVTile>>;
+    using ShapeOutput = Shape<_1, _192, Int<KVTile>>;
+    using SubgroupLayout = Layout<Shape<Int<NumSG>, _1, _1>, Stride<_1, _1, _1>>;
+
+#endif
+
+    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
+                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
 }
 
 int main(int argc, const char **argv) {
@@ -94,9 +92,13 @@ int main(int argc, const char **argv) {
     return -1;
   }
 
-  if(!options.varlen) {
-    return run_decode<false, false>(options);
-  } else {
-    return run_decode<false, true>(options);
+  if(options.varlen && !options.use_paged_kv) {
+    return run_decode<512, 8, false, true>(options);
+  } else if(options.varlen && options.use_paged_kv) {
+    return run_decode<512, 8, true, true>(options);
+  } else if(!options.varlen && !options.use_paged_kv) {
+    return run_decode<512, 8, false, false>(options);
+  } else if(!options.varlen && options.use_paged_kv) {
+    return run_decode<512, 8, true, false>(options);
   }
 }
