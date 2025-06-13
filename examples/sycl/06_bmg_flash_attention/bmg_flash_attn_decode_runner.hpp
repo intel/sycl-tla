@@ -707,7 +707,8 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q << "\tNumHeads_kv: " << options.num_heads_kv << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tSeq Length KV Cache: " << options.seq_len_kv_cache << "\tHead Size QK: " << options.head_size_qk
                 << "\tHead Size VO: " << options.head_size_vo << "\tCausal Mask: " << (options.is_causal ? "true" : "false")
-                << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false") << "\t Scheduler: " << options.scheduler;
+                << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false") << "\t Scheduler: " << options.scheduler
+                << "\t Paged KV cache: " << (options.use_paged_kv ? "true" : "false");
       printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
     }
 
