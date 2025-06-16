@@ -28,6 +28,8 @@
 
 include(FetchContent)
 
+block()
+set(CMAKE_COMPILE_WARNING_AS_ERROR FALSE) # Ignore warnings in GoogleTest's code
 set(GOOGLETEST_DIR "" CACHE STRING "Location of local GoogleTest repo to build against")
 
 if(GOOGLETEST_DIR)
@@ -50,3 +52,4 @@ if(NOT googletest_POPULATED)
   endif()
   add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
+endblock()
