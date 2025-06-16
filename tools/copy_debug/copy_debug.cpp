@@ -58,10 +58,10 @@ void copy_kernel(TensorS S) {
   using traits_load = Copy_Traits<CopyInstruction, decltype(S)>;
   using Atom_load = Copy_Atom<traits_load, Element>;
   constexpr int vector_size = size<1,0>(typename traits_load::SrcLayout{}) / sizeof_bits_v<Element>;
-  using VectorShape = std::conditional_t<traits_load::is_need_reversed,
+  using VectorShape = std::conditional_t<traits_load::is_tensor_M_major,
                                          Shape<Int<vector_size>, _1>,
                                          Shape<_1, Int<vector_size>>>;
-  using CopyThreadShape = std::conditional_t<traits_load::is_need_reversed,
+  using CopyThreadShape = std::conditional_t<traits_load::is_tensor_M_major,
                                              Shape<Int<SUBGROUP_SIZE>, _1>,
                                              Shape<_1, Int<SUBGROUP_SIZE>>>;
   using ScalarBlockShape = Shape<Int<get<0>(typename traits_load::BlockShape{}) * get<0>(VectorShape{})>, 
@@ -124,7 +124,7 @@ void copy(int global_M, int global_N) {
   int tensor_size = size(tensor_shape);
   cutlass::DeviceAllocation<dtype> src(tensor_size);
 
-  Tensor tensor_S = make_tensor(make_gmem_ptr(src.get()), make_layout(tensor_shape, LayoutLeft{}));
+  Tensor tensor_S = make_tensor(make_gmem_ptr(src.get()), make_layout(tensor_shape, LayoutRight{}));
 
   auto gridDim = syclcompat::dim3(1);
   auto blockDim = syclcompat::dim3(SUBGROUP_SIZE);
@@ -140,7 +140,7 @@ int main(){
   // for 16b copies use integers as floating point types could lose precision for bigger indices
   // for 8b copies you have to work with overflow
   // TODO(Codeplay): for 4b types the initialization does not correctly access subbyte types and only initializes every other elemeent
-  copy<XE_2D_U8x8x32_LD_N, uint8_t>(64, 64);
-  copy<XE_2D_U8x8x32_LD_N, uint4_t>(64, 64);
+  copy<XE_2D_Packed_U8x8x32_LD_N, uint8_t>(64, 64);
+  copy<XE_2D_Packed_U8x8x32_LD_N, uint4_t>(64, 64);
   return 0;
 }
