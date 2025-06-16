@@ -380,7 +380,7 @@ struct XE_2D_LD_Unpack {
 
     constexpr auto inst_size_bits = detail::size_of_inst_bits<CopyOp, dtype>;
 
-    CopyOp::copy(base_addr + static_cast<size_t>(l) * traits.stride_l,
+    CopyOp::copy(((uint8_t*)base_addr) + static_cast<size_t>(l) * traits.stride_l * sizeof_bits_v<dtype> / 8,
                  (traits.width * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>, traits.height,
                  (traits.pitch * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>,
                  intel::coord_t{(int)(x * sizeof_bits_v<dtype> / inst_size_bits), y},
@@ -406,7 +406,7 @@ struct XE_2D_LD_Unpack {
 
     constexpr auto inst_size_bits = detail::size_of_inst_bits<CopyOp, dtype>;
 
-    CopyOp::PREFETCH::copy(base_addr + l * atom.stride_l,
+    CopyOp::PREFETCH::copy(((uint8_t*)(base_addr)) + static_cast<size_t>(l) * atom.stride_l * sizeof_bits_v<dtype> / 8,
                            (atom.width * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>, atom.height,
                            (atom.pitch * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>,
                            intel::coord_t{(int)(x * sizeof_bits_v<dtype> / inst_size_bits), y});
@@ -482,7 +482,7 @@ template <class CopyOp, class StrideOrTensor = cute::Stride<int64_t, cute::Int<1
     
     auto [m, n, l] = dst.data().coord_;
 
-    CopyOp::copy(base_addr + static_cast<size_t>(l) * traits.stride_l,
+    CopyOp::copy(((uint8_t*)(base_addr)) + static_cast<size_t>(l) * traits.stride_l * sizeof_bits_v<dtype> / 8,
                  traits.width * sizeof(dtype), traits.height,
                  traits.pitch * sizeof(dtype),
                  intel::coord_t{(int)n, (int)m}, &*src.data());
