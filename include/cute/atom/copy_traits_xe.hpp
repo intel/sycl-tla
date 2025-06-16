@@ -2472,6 +2472,69 @@ COPY_TRAIT_ST_DEF(XE_2D_U32x2x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x4x16_ST_N)
 COPY_TRAIT_ST_DEF(XE_2D_U32x8x16_ST_N)
 
+// template <int BlockHeight, int BlockWidth>
+
+template <int BlockHeight, int BlockWidth, class... args_t>
+struct Copy_Traits<XE_2D_Universal_LD_N<BlockHeight, BlockWidth>, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_Universal_LD_N<BlockHeight, BlockWidth>, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16, Shape<_16,  Int<BlockWidth / 16>, Int<BlockHeight>>>,
+                           Stride<_0, Stride< _1,_256, Int<16 * BlockHeight>>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16, Shape <_16, Int<BlockWidth / 16>, Int<BlockHeight>>>,
+                           Stride<_16, Stride< _1,_256, Int<16 * BlockHeight>>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgT>
+  Copy_Traits(ArgT... args)
+      : XE_2D_LD_Unpack<XE_2D_Universal_LD_N<BlockHeight, BlockWidth>, args_t...>(args...) {}
+};
+
+template <int BlockHeight, int BlockWidth, class... args_t>
+struct Copy_Traits<XE_2D_Universal_LD_V<BlockHeight, BlockWidth>, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_Universal_LD_V<BlockHeight, BlockWidth>, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16, Shape<_16,  Int<BlockWidth / 16>, Int<BlockHeight>>>,
+                           Stride<_0, Stride< _1,_256, Int<16 * BlockHeight>>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <_16, Shape <_16, Int<BlockWidth / 16>, Int<BlockHeight>>>,
+                           Stride<_16, Stride< _1,_256, Int<16 * BlockHeight>>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgT>
+  Copy_Traits(ArgT... args)
+      : XE_2D_LD_Unpack<XE_2D_Universal_LD_V<BlockHeight, BlockWidth>, args_t...>(args...) {}
+};
+
+template <int BlockHeight, int BlockWidth, class... args_t>
+struct Copy_Traits<XE_2D_Universal_LD_T<BlockHeight, BlockWidth>, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_Universal_LD_T<BlockHeight, BlockWidth>, args_t...> {
+  using ThrID = Layout<_16>;
+
+  using BlockShape_ = Shape<Int<BlockWidth>, Int<BlockHeight>>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout_ = Layout<Shape <_16, Shape <Int<BlockHeight>, Int<BlockWidth>>>,
+                           Stride< _0, Stride< _1, Int<BlockHeight>>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout_ = Layout<Shape < _16,Shape <Int<BlockHeight>, Int<BlockWidth>>>,
+                           Stride<_128,Stride< _1,Int<BlockHeight>>>>;
+
+  using XE_2D_LD_Unpack<XE_2D_Universal_LD_T<BlockHeight, BlockWidth>, args_t...>::is_matrix_B;
+  using BlockShape = std::conditional_t<is_matrix_B, decltype(cute::reverse(BlockShape_{})), BlockShape_>;
+  using SrcLayout = decltype(detail::get_logical_layout<is_matrix_B>(SrcLayout_{}, BlockShape_{}));
+  using DstLayout = decltype(detail::get_logical_layout<is_matrix_B>(DstLayout_{}, BlockShape_{}));
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgT>
+  Copy_Traits(ArgT... args)
+      : XE_2D_LD_Unpack<XE_2D_Universal_LD_T<BlockHeight, BlockWidth>, args_t...>(args...) {}
+};
+
 // Generate the Xe coordinate tensor
 template <class GShape>
 CUTE_HOST_DEVICE constexpr

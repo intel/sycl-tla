@@ -198,4 +198,107 @@ struct XE_1D_STORE_GLOBAL {
     #endif
   }
 };
+
+template <int BlockHeight, int BlockWidth>
+struct XE_2D_Universal_LD_N {
+  using BlockShape = Shape<Int<BlockHeight>, Int<BlockWidth>>;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *base_offset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    const int sg_id = sg.get_local_id()[0];
+
+    CUTE_UNROLL
+    for (int y = 0; y < BlockHeight; ++y) {
+      int global_height_idx = coord.y + y;
+      const char* current_height_ptr = static_cast<const char*>(base_offset) + (global_height_idx * pitch);;
+
+      CUTE_UNROLL
+      for (int x = 0; x < BlockWidth / 16; ++x) {
+        int source_width_idx = sg_id + (x * 16);
+        int global_width_idx = coord.x + source_width_idx;
+
+        T value;
+        if (global_height_idx < height  && global_width_idx * sizeof(T) < width) {
+          const T* source_element_ptr = reinterpret_cast<const T*>(
+              current_height_ptr + (global_width_idx * sizeof(T))
+          );
+          value = *source_element_ptr;
+        } else {
+          value = static_cast<T>(0);
+        }
+        dst[(x * BlockHeight) + y] = value;
+      }
+    }
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+
+  struct PREFETCH {
+    CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                      int height, int pitch,
+                                      intel::coord_t coord) {
+    }
+  };
+};
+
+template <int BlockHeight, int BlockWidth>
+struct XE_2D_Universal_LD_V : XE_2D_Universal_LD_N<BlockHeight, BlockWidth> {
+  using BlockShape = Shape<Int<BlockWidth>, Int<BlockHeight>>;
+};
+
+template <int BlockHeight, int BlockWidth>
+struct XE_2D_Universal_LD_T {
+  using BlockShape = Shape<Int<BlockWidth>, Int<BlockHeight>>;
+  static constexpr bool is_transpose = true;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *base_offset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    const int sg_id = sg.get_local_id()[0];
+
+    CUTE_UNROLL
+    for (int y = 0; y < BlockHeight / 16; ++y) {
+      int global_height_idx = coord.y + sg_id + (y * 16);
+
+      const char* current_height_ptr =
+          static_cast<const char*>(base_offset) + global_height_idx * pitch ;
+
+      CUTE_UNROLL
+      for (int x = 0; x < BlockWidth; ++x) {
+        int global_width_idx = coord.x + x;
+
+        T value;
+        if (global_width_idx * sizeof(T) < width && global_height_idx < height) {
+          const T* source_element_ptr = reinterpret_cast<const T*>(
+              current_height_ptr + (global_width_idx * sizeof(T))
+          );
+          value = *source_element_ptr;
+        } else {
+          value = static_cast<T>(0);
+        }
+
+        dst[(y * BlockWidth) + x] = value;
+      }
+    }
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+
+  struct PREFETCH {
+    CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                      int height, int pitch,
+                                      intel::coord_t coord) {
+    }
+  };
+};
+
 } // end namespace cute
