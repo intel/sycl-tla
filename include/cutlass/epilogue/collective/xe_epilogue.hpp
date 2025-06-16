@@ -281,9 +281,6 @@ public:
 
     static constexpr int FragmentSize = (get<0>(MmaAtomShape()) * get<1>(MmaAtomShape())) / SubgroupSize;
 
-    using Converter = cutlass::NumericArrayConverter<ElementD, ElementOutput, FragmentSize, cutlass::FloatRoundStyle::round_to_nearest>;
-    using SrcArray = cutlass::Array<ElementOutput, FragmentSize>;
-    using DstArray = cutlass::Array<ElementD, FragmentSize>;
     // Indexing variables
     auto [M, N, K, L] = problem_shape_mnkl;
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord_mnkl;
