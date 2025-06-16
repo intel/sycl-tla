@@ -8,7 +8,10 @@ These operations are designed to efficiently load and store 2D blocks of data be
 
 ## Related links
 
-* [ Intel SPIR-V extension for 2D Block load ](https://github.khronos.org/SPIRV-Registry/extensions/INTEL/SPV_INTEL_2d_block_io.html )
+* [ Intel SPIR-V extension for 2D Block load ](https://github.khronos.org/SPIRV-Registry/extensions/INTEL/SPV_INTEL_2d_block_io.html)
+* [ VNNI format ](https://github.com/intel/llvm/blob/sycl/sycl/doc/extensions/experimental/sycl_ext_matrix/sycl_ext_intel_matrix.asciidoc#packed-layout-format )
+
+
 
 ---
 
@@ -27,9 +30,12 @@ Where:
 | `XE_2D`              | Indicates 2D copy for Intel XE                                            |
 | `Packed_` (optional) | Indicates packed copy (only for `U8` and `U4` MMA operations)             |
 | `<DataType>`         | Data type to load/store into registers: `U4`, `U8`, `U16`, `U32`          |
-| `<Rows>x<Cols>`      | Dimensions of the 2D block in elements                                    |
+| `<BlockHeight>x<BlockWidth>`      | Dimensions of the 2D block in elements                                    |
 | `LD` / `ST`          | `LD` = Load from global memory; `ST` = Store to global memory             |
 | `N`, `T`, `V`        | Memory layout: `N` (row-major), `T` (column-major), `V` (VNNI, row-major) |
+
+Note: DataType does not represent the actual type of the data being loaded, but rather the width of the data type.
+For example, when loading an array of FP8 values a U8 copy operation should be used. 
 
 ---
 
@@ -40,7 +46,7 @@ and these **work-items** cooperate to move a 2D block of data.
 
 ### Data Distribution (Unpacked Copies)
 
-For a load like `XE_2D_U16x32x16_LD_N`, the 32x16 matrix is split such that:
+For a load like `XE_2D_U16x32x16_LD_N`, the 32 rows by 16 columns block of elements is split such that:
 
 - Each **work-item gets one column** with **32 elements**
 
@@ -52,8 +58,8 @@ For a load like `XE_2D_U16x32x16_LD_N`, the 32x16 matrix is split such that:
 | ...       | ...            |
 | 15        | Column 15      |
 
-If we increase the block size in the column dimension, for example using a `XE_2D_U16x32x32_LD_N` copy,
-it will load a 32×32 block such that:
+If we increase BlockWidth, for example using a `XE_2D_U16x32x32_LD_N` copy,
+it will load a 32 rows by 32 columns block of elements such that:
 
 - Each **work-item gets two columns**, each with **32 elements**
 - The columns are **16 apart**
@@ -78,10 +84,10 @@ the data for the A matrix must be packed before being consumed by the MMA instru
 a packed load operation must be used.
 
 ```c++
-XE_2D_Packed_<DataType>x<row>x<col>_<LD|ST>_<N|T>
+XE_2D_Packed_<DataType>x<BlockHeight>x<BlockWidth>_<LD|ST>_<N|T>
 ```
-Example for `XE_2D_Packed_U8x32x32_LD_N`, where each **work-item gets two adjacent columns**,
-each with **32 elements**
+Example for `XE_2D_Packed_U8x32x32_LD_N` which loads a 32 rows by 32 columns block of elements, 
+each **work-item gets two adjacent columns**, each containing **32 elements**
 
 | Work-item | Columns Loaded |
 |-----------|----------------|
@@ -93,9 +99,9 @@ each with **32 elements**
 
 ---
 
-Note: The number of adjacent columns assigned to each work-item is based on the number of columns 
+Note: The number of adjacent columns assigned to each work-item is based on the BlockWidth value 
 in the 2D block copy operation divided by the number of work-items (16). In this case, each work-item 
-loads 2 columns because the block has 32 columns. If the copy operation has 64 columns, then each 
+loads 2 columns because BlockWidth is 32 columns. If the copy operation has 64 columns, then each 
 work-item will load 4 adjacent columns.
 
 ## Supported Layout Modes
