@@ -16,7 +16,7 @@ inputs:
     description: "Install for PVC or BMG gpu"
     type: string
   IGC:
-    description: "Use ROLLING of STAGING release"
+    description: "Use ROLLING or STAGING release"
     type: string
 
 runs:
@@ -26,6 +26,8 @@ runs:
       if: inputs.DPCPP_RELEASE == 'NIGHTLY'
       shell: bash
       run: |
+        shopt -s expand_aliases
+        which sudo || alias sudo=""
         export DPCPP_PATH=${{ inputs.DPCPP_PATH }}
         mkdir -p $DPCPP_PATH
         pushd $DPCPP_PATH
@@ -54,6 +56,8 @@ runs:
       if: inputs.DPCPP_RELEASE == 'RELEASE'
       shell: bash
       run: |
+        shopt -s expand_aliases
+        which sudo || alias sudo=""
         wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
         rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
