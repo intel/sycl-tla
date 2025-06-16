@@ -705,7 +705,6 @@ public:
 
     const int k_reload_factor = mainloop.group_size / BLK_K; 
 
-    CUTLASS_PRAGMA_UNROLL
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
 

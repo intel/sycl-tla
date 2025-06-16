@@ -47,8 +47,8 @@ cutlass_example_add_executable(
   TEST_COMMAND_OPTIONS
   # TODO: have bugs for below command, will fix later
   #TEST_BATCHES
-  #TEST_MODE_1
-  #TEST_MODE_0
+  TEST_MODE_1
+  TEST_MODE_0
   #TEST_A_NARROW
 )
 
