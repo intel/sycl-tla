@@ -15,6 +15,8 @@ runs:
       if: inputs.IGC == 'ROLLING'
       shell: bash
       run: |
+        shopt -s expand_aliases
+        which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
           sudo add-apt-repository ppa:kobuk-team/intel-graphics
         else
@@ -33,6 +35,8 @@ runs:
       if: inputs.IGC == 'STAGING'
       shell: bash
       run: |
+        shopt -s expand_aliases
+        which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           sudo apt-get install -y libze-intel-gpu1 intel-metrics-discovery intel-opencl-icd ocl-icd-opencl-dev \ 
