@@ -35,11 +35,11 @@
 
 using namespace cutlass::flash_attention;
 
-using FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, float, float, true, false, Shape_h64<512, 8>, false>::type;
-using FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, float, float, true, true, Shape_h64<512, 8>, false>::type;
+using FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_Causal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, float, float, true, false, Shape_h64<512, 8>, false>::type;
+using FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_Causal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, float, float, true, true, Shape_h64<512, 8>, false>::type;
 
-using FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, float, float, false, false, Shape_h64<512, 8>, false>::type;
-using FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, float, float, false, true, Shape_h64<512, 8>, false>::type;
+using FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_NonCausal_FixedLen = FMHADecodeConfigGen<cutlass::bfloat16_t, float, float, false, false, Shape_h64<512, 8>, false>::type;
+using FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::bfloat16_t, float, float, false, true, Shape_h64<512, 8>, false>::type;
 
 using FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_Causal_FixedLen = FMHADecodeConfigGen<cutlass::half_t, float, float, true, false, Shape_h64<512, 8>, false>::type;
 using FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_Causal_VarLen = FMHADecodeConfigGen<cutlass::half_t, float, float, true, true, Shape_h64<512, 8>, false>::type;
@@ -48,25 +48,25 @@ using FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_FixedLen = FMH
 using FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_VarLen = FMHADecodeConfigGen<cutlass::half_t, float, float, false, true, Shape_h64<512, 8>, false>::type;
 
 
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_Causal_FixedLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_NonCausal_FixedLen);
 CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_Causal_FixedLen);
 CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_FixedLen);
 
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_Causal_VarLen);
-CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_Causal_VarLen);
+CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_NonCausal_VarLen);
 CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_Causal_VarLen);
 CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_VarLen);
 
 
 static void register_flash_attention_decode_benchmarks_nonpaged_h64_fp32_fp32_512() {
-  CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_Causal_FixedLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_Causal_FixedLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_NonCausal_FixedLen);
   CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_Causal_FixedLen);
   CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_FixedLen);
 
-  CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_Causal_VarLen);
-  CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_Causal_VarLen);
+  CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeBF16BF16FP32FP32_RCR_NonPaged_KVTile512_h64_NonCausal_VarLen);
   CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_Causal_VarLen);
   CUTLASS_FMHA_DECODE_BENCHMARK(FMHADecodeFP16FP16FP32_RCR_NonPaged_KVTile512_h64_NonCausal_VarLen);
 }
