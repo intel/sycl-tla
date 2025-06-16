@@ -62,6 +62,7 @@ foreach(INPUT_TYPE bfloat16_t half_t)
         endif()
         set(out_exe "${input_name_out}_h${HEAD_DIM}_${KV_TILE}_xe")
         set(TEST_NAME "${test_name_input_out}_h${HEAD_DIM}_KVTile${KV_TILE}")
+        set(SHAPE_H "Shape_h${HEAD_DIM}")
         cutlass_test_unit_add_executable(
           ${out_exe} xe_flash_decode.cpp
         )
@@ -72,6 +73,7 @@ foreach(INPUT_TYPE bfloat16_t half_t)
                                     HEAD_DIM=${HEAD_DIM}
                                     KV_TILE=${KV_TILE}
                                     NUM_SG=${NUM_SG}
+                                    SHAPE_H=${SHAPE_H}
                                     MMAOP=${MMAOP}
                                     TILEDCOPYSTORE=${TILEDCOPYSTORE})
       endforeach()
