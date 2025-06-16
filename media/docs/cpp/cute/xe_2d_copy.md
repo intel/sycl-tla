@@ -6,6 +6,9 @@ This document describes the **2D copy operations** introduced in CUTLASS for the
 These operations are designed to efficiently load and store 2D blocks of data between
 **global memory** and **registers**. 
 
+## Related links
+
+* [ Intel SPIR-V extension for 2D Block load ](https://github.khronos.org/SPIRV-Registry/extensions/INTEL/SPV_INTEL_2d_block_io.html )
 
 ---
 
