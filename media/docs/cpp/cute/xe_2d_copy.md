@@ -8,10 +8,11 @@ These operations are designed to efficiently load and store 2D blocks of data be
 
 ## Related links
 
-* [ Intel SPIR-V extension for 2D Block load ](https://github.khronos.org/SPIRV-Registry/extensions/INTEL/SPV_INTEL_2d_block_io.html)
-* [ VNNI format ](https://github.com/intel/llvm/blob/sycl/sycl/doc/extensions/experimental/sycl_ext_matrix/sycl_ext_intel_matrix.asciidoc#packed-layout-format )
+* [ Intel SPIR-V extension for 2D Block load ][spirv-format]
+* [ VNNI format ][vnni-format-link]
 
-
+[spirv-format]: https://github.khronos.org/SPIRV-Registry/extensions/INTEL/SPV_INTEL_2d_block_io.html
+[vnni-format-link]: https://github.com/intel/llvm/blob/sycl/sycl/doc/extensions/experimental/sycl_ext_matrix/sycl_ext_intel_matrix.asciidoc#packed-layout-format
 
 ---
 
@@ -32,7 +33,7 @@ Where:
 | `<DataType>`         | Data type to load/store into registers: `U4`, `U8`, `U16`, `U32`          |
 | `<BlockHeight>x<BlockWidth>`      | Dimensions of the 2D block in elements                                    |
 | `LD` / `ST`          | `LD` = Load from global memory; `ST` = Store to global memory             |
-| `N`, `T`, `V`        | Memory layout: `N` (row-major), `T` (column-major), `V` (VNNI, row-major) |
+| `N`, `T`, `V`        | Memory layout: `N` (row-major), `T` (column-major), `V` ([VNNI][vnni-format-link], row-major) |
 
 Note: DataType does not represent the actual type of the data being loaded, but rather the width of the data type.
 For example, when loading an array of FP8 values a U8 copy operation should be used. 
@@ -75,19 +76,20 @@ it will load a 32 rows by 32 columns block of elements such that:
 The same applies to the LD_V and LD_T operations.
 
 > ⚠️ VNNI combines elements from multiple rows of a single column, packing them into 32-bit values.
-It does not transform or modify the actual data, it only changes the packing format. 
+It does not transform or modify the actual data, it only changes the storage format. 
 
 ### Data Distribution (Packed Copies)
 
 When using MMA operations with **U8** or **U4** data types, such as `XE_8x16x32_S32S8S8S32_TT`, 
-the data for the A matrix must be packed before being consumed by the MMA instructions. In these cases, 
+the data for the A matrix must be packed (packed here meaning each workitem having data for 
+multiple consecutive columns) before being consumed by the MMA instructions. In these cases, 
 a packed load operation must be used.
 
 ```c++
 XE_2D_Packed_<DataType>x<BlockHeight>x<BlockWidth>_<LD|ST>_<N|T>
 ```
-Example for `XE_2D_Packed_U8x32x32_LD_N` which loads a 32 rows by 32 columns block of elements, 
-each **work-item gets two adjacent columns**, each containing **32 elements**
+Example for `XE_2D_Packed_U8x8x32_LD_N` which loads a 8 rows by 32 columns block of elements, 
+each **work-item gets two adjacent columns**, each containing **8 elements**
 
 | Work-item | Columns Loaded |
 |-----------|----------------|
@@ -97,12 +99,21 @@ each **work-item gets two adjacent columns**, each containing **32 elements**
 | ...       | ...            |
 | 15        | Column 30, 31  |
 
----
+If we increase BlockWidth, for example using a `XE_2D_Packed_U8x8x64_LD_N` copy,
+it will load a 8 rows by 32 columns block of elements such that:
 
-Note: The number of adjacent columns assigned to each work-item is based on the BlockWidth value 
-in the 2D block copy operation divided by the number of work-items (16). In this case, each work-item 
-loads 2 columns because BlockWidth is 32 columns. If the copy operation has 64 columns, then each 
-work-item will load 4 adjacent columns.
+- Each **work-item gets two groups of two adjacent columns**, each column with **8 elements**
+- The group of two columns are **32 apart**
+
+#### Example:
+| Work-item | Columns Loaded                  |
+|-----------|---------------------------------|
+| 0         | Column 0, 1 and Column 32, 33   |
+| 1         | Column 2, 3 and Column 34, 35   |
+| ...       | ...                             |
+| 15        | Column 30, 31 and Column 62, 63 |
+
+---
 
 ## Supported Layout Modes
 
