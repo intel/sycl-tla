@@ -100,7 +100,7 @@ each **work-item gets two adjacent columns**, each containing **8 elements**
 | 15        | Column 30, 31  |
 
 If we increase BlockWidth, for example using a `XE_2D_Packed_U8x8x64_LD_N` copy,
-it will load a 8 rows by 32 columns block of elements such that:
+it will load an 8 rows by 32 columns block of elements such that:
 
 - Each **work-item gets two groups of two adjacent columns**, each column with **8 elements**
 - The group of two columns are **32 apart**
