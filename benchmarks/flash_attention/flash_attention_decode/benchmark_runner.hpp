@@ -81,7 +81,7 @@ struct FMHADecodeOptions {
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
     cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
     cmd.get_cmd_line_argument("page_size", page_size, 128);
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
+    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
     cmd.get_cmd_line_argument("bm_name", bm_name, std::string("Flash Attention v2"));
@@ -787,14 +787,3 @@ private:
 };
 
 }
-
-#define CUTLASS_FMHA_DECODE_BENCHMARK(F) cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::FMHADecodeOptions>::Register(#F, &F##_func)
-
-#define CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(F)                          \
-  static void F##_func(                                           \
-      ::benchmark::State& state,                                  \
-      cutlass::benchmark::FMHADecodeOptions const& options,                 \
-      cutlass::KernelHardwareInfo const& hw_info) {               \
-    auto bench = cutlass::benchmark::BenchmarkRunnerFMHADecode<F>();    \
-    bench.run(state, options, hw_info);                           \
-  }
