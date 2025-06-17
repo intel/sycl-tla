@@ -251,7 +251,7 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
   using PrefetchOp = typename choose_prefetch_for_type<dtype_size_bits, block_non_contig_size>::Prefetch;
   using PrefetchTraits = Copy_Traits<PrefetchOp, decltype(tensor.stride())>;
   using PrefetchAtom = Copy_Atom<PrefetchTraits, dtype>;
-  using Scalar = Int<cute::max(1, detail::size_of_inst_bits<typename PrefetchTraits::CopyOp, int8_t> / dtype_size_bits)>;
+  using Scalar = Int<cute::max(1, detail::size_of_inst_bits<PrefetchOp, int8_t> / dtype_size_bits)>;
   using ScalarLayout = std::conditional_t<is_tensor_M_major, Layout<Shape<Scalar, _1>>,
     Layout<Shape<_1, Scalar>>>;
   using ScalarPrefetchShape =  decltype(product_each(raked_product(ScalarLayout{},
