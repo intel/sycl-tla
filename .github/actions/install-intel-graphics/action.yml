@@ -19,6 +19,7 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
           sudo add-apt-repository ppa:kobuk-team/intel-graphics
+          sudo apt update
         else
           sudo apt update
           sudo apt install -y \
@@ -39,6 +40,7 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
+          sudo apt update
           sudo apt-get install -y libze-intel-gpu1 intel-metrics-discovery intel-opencl-icd ocl-icd-opencl-dev \ 
             clinfo intel-gsc libze-dev intel-ocloc g++
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
