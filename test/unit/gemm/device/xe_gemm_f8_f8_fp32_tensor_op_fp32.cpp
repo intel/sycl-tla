@@ -48,10 +48,10 @@ template <typename LayoutA, typename LayoutB>
 struct XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32 {
   using Config = gemm::device::DefaultGemmConfigurationToCutlass3Types<
     arch::OpClassTensorOp, arch::IntelXe,
-    int8_t, LayoutA,
-    int8_t, LayoutB,
-    int32_t, layout::RowMajor,
-    int32_t>;
+    float_e5m2_t, LayoutA,
+    float_e5m2_t, LayoutB,
+    float, layout::RowMajor,
+    float>;
 
   using GemmKernel = gemm::kernel::GemmUniversal<
     cute::Shape<int, int, int, int>,
@@ -69,25 +69,25 @@ TEST(XE_Device_Gemm_f8t_f8t_fp32_tensor_op_fp32, 256x256x32) {
 }
 
 
-// TEST(XE_Device_Gemm_f8n_f8t_fp32t_tensor_op_fp32, 256x256x32) {
-//   using LayoutA = layout::ColumnMajor;
-//   using LayoutB = layout::RowMajor;
-//   using Gemm = XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
-//   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
-// }
+TEST(XE_Device_Gemm_f8n_f8t_fp32t_tensor_op_fp32, 256x256x32) {
+  using LayoutA = layout::ColumnMajor;
+  using LayoutB = layout::RowMajor;
+  using Gemm = XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 16));
+}
 
 TEST(XE_Device_Gemm_f8t_f8n_fp32t_tensor_op_fp32, 256x256x32) {
   using LayoutA = layout::RowMajor;
   using LayoutB = layout::ColumnMajor;
   using Gemm = XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 16));
 }
 
-// TEST(XE_Device_Gemm_f8n_f8n_fp32t_tensor_op_fp32, 256x256x32) {
-//   using LayoutA = layout::ColumnMajor;
-//   using LayoutB = layout::ColumnMajor;
-//   using Gemm = XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
-//   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
-// }
+TEST(XE_Device_Gemm_f8n_f8n_fp32t_tensor_op_fp32, 256x256x32) {
+  using LayoutA = layout::ColumnMajor;
+  using LayoutB = layout::ColumnMajor;
+  using Gemm = XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 16));
+}
 }
 } // namespace cutlass

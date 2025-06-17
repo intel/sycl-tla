@@ -1851,6 +1851,46 @@ struct DefaultGemmConfigurationToCutlass3Types<
     XE_2D_U32x8x16_ST_N, void, void>;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+
+namespace detail {
+
+  //
+  // float_e5m2_t
+  //
+  
+  /// Operand A - Row-major (K-Major)
+  template <>
+  struct DefaultGemm_TensorOpXe_OperandA<float_e5m2_t, layout::RowMajor, 32, 32>
+  {
+    using GmemTiledCopy = XE_2D_U8x32x32_LD_N;
+  };
+  
+  /// Operand A - Column-major (M-major)
+  template <int SizeK>
+  struct DefaultGemm_TensorOpXe_OperandA<float_e5m2_t, layout::ColumnMajor, 32, SizeK>
+  {
+    // Gmem
+    using GmemTiledCopy = XE_2D_U8x16x8_LD_T;
+  };
+  
+  /// Operand B - Row-major (N-Major)
+  template <>
+  struct DefaultGemm_TensorOpXe_OperandB<float_e5m2_t, layout::RowMajor, 32, 32>
+  {
+    using GmemTiledCopy = XE_2D_U8x32x32_LD_V;
+  };
+  
+  /// Operand B - Column-major (K-major)
+  template <int SizeK>
+  struct DefaultGemm_TensorOpXe_OperandB<float_e5m2_t, layout::ColumnMajor, 32, SizeK>
+  {
+    // Gmem
+    using GmemTiledCopy = XE_2D_U8x16x16_LD_T;
+  };
+  
+  }
+
 // Intel XE MMA FP32FP8
 template <typename LayoutA, typename LayoutB, typename LayoutC>
 struct DefaultGemmConfigurationToCutlass3Types<
@@ -1871,13 +1911,13 @@ struct DefaultGemmConfigurationToCutlass3Types<
   // A
   static constexpr int kAlignmentA = 32;
   using DefaultOperandA = detail::DefaultGemm_TensorOpXe_OperandA<
-    int8_t, LayoutA, kAlignmentA, 32>;
+    float_e5m2_t, LayoutA, kAlignmentA, 32>;
   using GmemTiledCopyA = typename DefaultOperandA::GmemTiledCopy;
 
   // B
   static constexpr int kAlignmentB = 32;
   using DefaultOperandB = detail::DefaultGemm_TensorOpXe_OperandB<
-    int8_t, LayoutB, kAlignmentB, 32>;
+    float_e5m2_t, LayoutB, kAlignmentB, 32>;
   using GmemTiledCopyB = typename DefaultOperandB::GmemTiledCopy;
 
   // Mainloop
