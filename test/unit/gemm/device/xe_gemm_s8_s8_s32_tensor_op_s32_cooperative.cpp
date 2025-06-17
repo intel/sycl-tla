@@ -99,6 +99,5 @@ TEST(XE_Device_Gemm_s8n_s8n_s32t_tensor_op_s32_cooperative, 64x128x32) {
   using Gemm = XE_Device_Gemm_s8_s8_s32_tensor_op_s32_cooperative<LayoutA, LayoutB>::Gemm;
   EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 32));
 }
-*/
 }
 } // namespace cutlass
