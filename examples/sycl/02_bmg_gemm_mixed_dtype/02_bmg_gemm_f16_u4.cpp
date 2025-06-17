@@ -550,7 +550,7 @@ void run_int4(Options const& options) {
 
   using MainloopBConvertAndScaleWithZeroPoint =
       MixedBuilderQuantB::template CollectiveMma<
-          ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>>;
+          ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero>>;
   using GemmBConvertAndScaleWithZeroPoint =
       GemmAdapterBuilder::template GemmUniversalAdapter<
           MainloopBConvertAndScaleWithZeroPoint>;

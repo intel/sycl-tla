@@ -590,19 +590,19 @@ int main(int argc, const char** argv)
 
   // A-narrow Mainloop & GemmUniversalAdapter
   using MainloopAConvertOnly =
-      MixedBuilderQuantA::CollectiveMma<cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>,
+      MixedBuilderQuantA::CollectiveMma<cute::tuple<ElementInputA>,
                                         ElementInputB>;
   using GemmAConvertOnly =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertOnly>;
 
   using MainloopAConvertAndScale = MixedBuilderQuantA::CollectiveMma<
-      cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>, ElementInputB>;
+      cute::tuple<ElementInputA, ElementScale>, ElementInputB>;
   using GemmAConvertAndScale =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertAndScale>;
 
   using MainloopAConvertAndScaleWithZeroPoint =
       MixedBuilderQuantA::CollectiveMma<
-          cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>, ElementInputB>;
+          cute::tuple<ElementInputA, ElementScale, ElementZero>, ElementInputB>;
   using GemmAConvertAndScaleWithZeroPoint =
       GemmAdapterBuilder::GemmUniversalAdapter<
           MainloopAConvertAndScaleWithZeroPoint>;
@@ -610,18 +610,18 @@ int main(int argc, const char** argv)
   // B-narrow Mainloop & GemmUniversalAdapter
   using MainloopBConvertOnly =
       MixedBuilderQuantB::CollectiveMma<ElementInputB,
-                                        cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>>;
+                                        cute::tuple<ElementInputA>>;
   using GemmBConvertOnly =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertOnly>;
 
   using MainloopBConvertAndScale = MixedBuilderQuantB::CollectiveMma<
-      ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>>;
+      ElementInputB, cute::tuple<ElementInputA, ElementScale>>;
   using GemmBConvertAndScale =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertAndScale>;
 
   using MainloopBConvertAndScaleWithZeroPoint =
       MixedBuilderQuantB::CollectiveMma<
-          ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero, StrideScale, StrideZero>>;
+          ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero>>;
   using GemmBConvertAndScaleWithZeroPoint =
       GemmAdapterBuilder::GemmUniversalAdapter<
           MainloopBConvertAndScaleWithZeroPoint>;
