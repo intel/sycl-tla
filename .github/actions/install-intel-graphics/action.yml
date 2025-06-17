@@ -30,7 +30,7 @@ runs:
             libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev hwinfo
         fi
         sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
-          intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc clinfo g++
+          intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
         dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
     - name: Install Intel graphics drivers
       if: inputs.IGC == 'STAGING'
@@ -39,10 +39,11 @@ runs:
         shopt -s expand_aliases
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
+          sudo rm /etc/apt/sources.list.d/ppa_kobuk_team_intel_graphics_oracular.list
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           sudo apt update
-          sudo apt-get install -y libze-intel-gpu1 intel-metrics-discovery intel-opencl-icd ocl-icd-opencl-dev \ 
-            clinfo intel-gsc libze-dev intel-ocloc g++
+          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+            intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         else
           exit 1
