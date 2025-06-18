@@ -158,6 +158,6 @@ void random_fill(T *src, int seed, size_t N, float max, float min) {
     syclcompat::memcpy<T>(src, buff.data(), N);
     syclcompat::wait();
   } else {
-    assert(0 & "Not supported dtype");
+    assert(0 && "Not supported dtype");
   }
 }
