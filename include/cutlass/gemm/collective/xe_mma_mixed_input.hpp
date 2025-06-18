@@ -54,8 +54,8 @@ struct scale_zero_copy_traits {
 // 4 bits
 template<class datatype, size_t N, class stride>
 struct scale_zero_copy_traits<datatype, N, stride,
-          std::enable_if_t<sizeof_bits_v<datatype> == 4 && !cute::detail::is_stride_leftmost<stride>>> {
-  using type = XE_2D_U4x16x8_LD_T;
+          std::enable_if_t<sizeof_bits_v<datatype> == 4 && decltype(get<0>(stride{}))::value == 8>> {
+  using type = XE_2D_U4x1x128_LD_N;  // 8 elements along K packed into one int32 and then N-major
 };
 
 // 8 bits
@@ -143,14 +143,18 @@ public:
   using ElementQuant = cute::conditional_t<IsATransformed, ElementA, ElementB>;
 
   using ElementScale = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<1, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<1, ElementBOptionalTuple>>;
-  using ElementZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>>;
+  using StrideScale = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>>;
 
-  using StrideScale = cute::Stride<_1, int64_t, int64_t>;
-  using StrideZero = StrideScale;
+  using ElementZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<3, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<3, ElementBOptionalTuple>>;
+  using StrideZero = cute::conditional_t<IsATransformed, detail::deduce_mixed_width_dtype_t<4, ElementAOptionalTuple>, detail::deduce_mixed_width_dtype_t<4, ElementBOptionalTuple>>;
 
   // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
   using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ElementScale>, ElementMMA, ElementScale>;
   using NonVoidElementZero = cute::conditional_t<cute::is_void_v<ElementZero>, ElementMMA, ElementZero>;
+
+  using NonVoidStrideScale = cute::conditional_t<cute::is_same_v<StrideScale, void>, cute::Stride<_1, int64_t, int64_t>, StrideScale>;
+  using NonVoidStrideZero = cute::conditional_t<cute::is_same_v<StrideZero, void>, cute::Stride<_1, int64_t, int64_t>, StrideZero>;
+  static constexpr auto zero_elements_packed_along_k = get<0>(NonVoidStrideZero{});
 
   using StrideA = StrideA_;
   using StrideB = StrideB_;
@@ -214,8 +218,8 @@ public:
   static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
   
-  using GmemTiledCopyScale = typename scale_zero_copy_traits<NonVoidElementScale, SG_N, StrideScale>::type;
-  using GmemTiledCopyZero = typename scale_zero_copy_traits<NonVoidElementZero, SG_N, StrideZero>::type;
+  using GmemTiledCopyScale = typename scale_zero_copy_traits<NonVoidElementScale, SG_N, NonVoidStrideScale>::type;
+  using GmemTiledCopyZero = typename scale_zero_copy_traits<NonVoidElementZero, SG_N, NonVoidStrideZero>::type;
 
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
@@ -233,12 +237,12 @@ public:
   using val_layout_load_B = decltype(make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
   using Copy_B = decltype(make_tiled_copy(atom_load_B{}, Layout<CopyThreadShape>{}, val_layout_load_B{}));
 
-  using traits_load_scale = Copy_Traits<GmemTiledCopyScale, StrideScale>;
+  using traits_load_scale = Copy_Traits<GmemTiledCopyScale, NonVoidStrideScale>;
   using atom_load_scale = Copy_Atom<traits_load_scale, NonVoidElementScale>;
   using val_layout_load_scale = decltype(make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Scale = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
   
-  using traits_load_zero = Copy_Traits<GmemTiledCopyZero, StrideZero>;
+  using traits_load_zero = Copy_Traits<GmemTiledCopyZero, NonVoidStrideZero>;
   using atom_load_zero = Copy_Atom<traits_load_zero, NonVoidElementZero>;
   using val_layout_load_zero = decltype(make_layout(shape_div(typename traits_load_zero::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Zero = decltype(make_tiled_copy(atom_load_zero{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero{}));
@@ -250,8 +254,8 @@ public:
     ElementB const* ptr_B;
     StrideB dB;
     NonVoidElementScale const* ptr_S = nullptr;
-    StrideScale dS{};
-    StrideZero dZ{};
+    NonVoidStrideScale dS{};
+    NonVoidStrideZero dZ{};
     int group_size = 1;
     NonVoidElementZero const* ptr_Z = nullptr;
   };
@@ -299,9 +303,11 @@ public:
     if constexpr(KernelConversionMode == ConversionMode::ConvertAndScale){
       return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, {}, args.group_size};
     }
+
     auto mZero =
         make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
-                    make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dZ));
+                    make_layout(make_shape(zero_elements_packed_along_k * (IsATransformed ? M : N), scale_k / zero_elements_packed_along_k, L),
+                    make_stride(_1{}, zero_elements_packed_along_k * (IsATransformed ? M : N), (IsATransformed ? M : N) * scale_k)));
     Copy_Zero tiled_copy_zero{Copy_Zero{}.with(mZero)};
 
     return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, tiled_copy_zero, args.group_size};
@@ -400,7 +406,7 @@ public:
               static_assert(dependent_false<LayoutIn> && "ATransform not support now");
             } else {
               using ret_type = cute::conditional_t<sizeof_bits_v<ZeroType> >= 8, ZeroType, int8_t>;
-              ret_type minus(0);
+              ret_type minus(data);
               if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero) {
                 minus = static_cast<ret_type>(data) - static_cast<ret_type>(tz);
               }
@@ -585,7 +591,7 @@ public:
     Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(FragScaleLayout{});
 
     static constexpr auto zero_traits_size = decltype(size(typename GmemTiledCopyZero::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto zero_traits_num = SG_N / size<1>(typename GmemTiledCopyZero::BlockShape{});
+    static constexpr auto zero_traits_num = SG_N * zero_elements_packed_along_k / size<1>(typename GmemTiledCopyZero::BlockShape{});
     using FragZeroLayout = std::conditional_t<IsATransformed,
                                                Layout<Shape<_2, _1, _1>>,
                                                Layout<Shape<Int<zero_traits_size>, Int<zero_traits_num>, _1>>>;
@@ -713,7 +719,7 @@ public:
         copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrS);
       }
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-        copy(mainloop.tiled_copy_zero, copy_iter_z(_, _, _, k_tile / k_reload_factor), copy_tCrZ);
+        copy(mainloop.tiled_copy_zero, copy_iter_z(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k), copy_tCrZ);
       }
 
       if(prefetch_k < k_tile_count) {

@@ -197,8 +197,8 @@ struct ExampleRunner {
   using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
   using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
   // Scale and Zero share a stride since the layout and shapes must be the same.
-  using StrideScale = typename CollectiveMainloop::StrideScale;
-  using StrideZero = typename CollectiveMainloop::StrideZero; 
+  using StrideScale = typename CollectiveMainloop::NonVoidStrideScale;
+  using StrideZero = typename CollectiveMainloop::NonVoidStrideZero;
 
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
@@ -361,19 +361,21 @@ struct ExampleRunner {
   void initialize(Options const& options) {
     auto [M, N, K, L] = ProblemShapeType{options.m, options.n, options.k, options.l};
 
+    auto zero_elements_packed_along_k = get<0>(StrideZero{});
     const int scale_k = cute::ceil_div(options.k, options.g);
     const int dq_mn_size = AIsNarrower ? options.m : options.n;
     auto shape_A = cute::make_shape(M, K, L);
     auto shape_B = cute::make_shape(N, K, L);
     auto shape_CD = cute::make_shape(M, N, L);
-    auto shape_scale_zero = cute::make_shape(dq_mn_size, scale_k, L);
+    auto shape_scale = cute::make_shape(dq_mn_size, scale_k, L);
+    auto shape_zero = cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, scale_k / zero_elements_packed_along_k), L);
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, shape_A);
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, shape_B);
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, shape_CD);
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
-    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
-    stride_Z = cutlass::make_cute_packed_stride(StrideZero{}, shape_scale_zero);
+    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale);
+    auto my_stride_Z = make_stride(zero_elements_packed_along_k, make_stride(_1{}, int64_t(zero_elements_packed_along_k * dq_mn_size)), int64_t(dq_mn_size * scale_k));
 
     block_A.reset(static_cast<std::size_t>(M) * K * L);
     block_A_dq.reset(static_cast<std::size_t>(M) * K * L);
@@ -395,8 +397,8 @@ struct ExampleRunner {
 
     auto layout_A = make_layout(shape_A, stride_A);
     auto layout_B = make_layout(shape_B, stride_B);
-    auto layout_scale = make_layout(shape_scale_zero, stride_S);
-    auto layout_zero = make_layout(shape_scale_zero, stride_Z);
+    auto layout_scale = make_layout(shape_scale, stride_S);
+    auto layout_zero = make_layout(shape_zero, my_stride_Z);
 
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
@@ -503,7 +505,8 @@ void run_int4(Options const& options) {
   using ElementScale = MmaType;
 
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
-  using StrideZero = StrideScale;//cute::Stride<int64_t, cute::Int<1>, int64_t>;
+  using StrideZero = StrideScale;
+  //decltype(make_stride(_8{}, make_stride(_1{}, int64_t(0)), int64_t(0)));
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
   using GmemTiledCopyA = copy_b;
@@ -542,22 +545,47 @@ void run_int4(Options const& options) {
   // Use the helpers to avoid template arg repetition
   using GemmAdapterBuilder = typename helpers::MixedGemmUniversalAdapterBuilder<Shape<int, int, int, int>, CollectiveEpilogue>;
 
+   // B-narrow Mainloop & GemmUniversalAdapter
   using MixedBuilderQuantB =
       helpers::MixedCollectiveMmaBuilder<GEMMDispatchPolicy, TileShape,
                                 cutlass::gemm::TagToStrideA_t<LayoutA>,
                                 cutlass::gemm::TagToStrideB_t<LayoutB>,
                                 TiledMma, GmemTiledCopyB, GmemTiledCopyA>;
 
+  using MainloopBConvertOnly =
+      MixedBuilderQuantB::template CollectiveMma<ElementInputB,
+                                        cute::tuple<ElementInputA>>;
+  using GemmBConvertOnly =
+      GemmAdapterBuilder::template GemmUniversalAdapter<MainloopBConvertOnly>;
+
+  using MainloopBConvertAndScale = MixedBuilderQuantB::template CollectiveMma<
+      ElementInputB, cute::tuple<ElementInputA, ElementScale, StrideScale>>;
+  using GemmBConvertAndScale =
+      GemmAdapterBuilder::template GemmUniversalAdapter<MainloopBConvertAndScale>;
+
   using MainloopBConvertAndScaleWithZeroPoint =
       MixedBuilderQuantB::template CollectiveMma<
-          ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero>>;
+          ElementInputB, cute::tuple<ElementInputA, ElementScale, StrideScale, ElementZero, StrideZero>>;
   using GemmBConvertAndScaleWithZeroPoint =
       GemmAdapterBuilder::template GemmUniversalAdapter<
           MainloopBConvertAndScaleWithZeroPoint>;
 
-  std::cout << "\n\nConfig(wg_m, wg_n, sg_k, thread_m, thread_n): " << wg_m << ", " << wg_n << ", " << sg_k << ", " << thread_m << ", " << thread_n << std::endl;
-
-  CUTLASS_CHECK(ExampleRunner<GemmBConvertAndScaleWithZeroPoint>{}.run(options, hw_info));
+  if(options.a_narrower){
+    // TODO: this feature not support now
+    std::cout << "Not support setting A as narrower type for int4 now." << std::endl;
+  } else {
+    std::cout << "Setting B as narrower type" << std::endl;
+    if(options.mode ==  GemmMode::ConvertOnly) {
+      std::cout << "Running in ConvertOnly mode." << std::endl;
+      CUTLASS_CHECK(ExampleRunner<GemmBConvertOnly>{}.run(options, hw_info));
+    }else if(options.mode == GemmMode::ConvertAndScale){
+      std::cout << "Running in ConvertAndScale mode." << std::endl;
+      CUTLASS_CHECK(ExampleRunner<GemmBConvertAndScale>{}.run(options, hw_info));
+    }else{
+      std::cout << "Running in ConvertAndScaleWithZeroPoint mode." << std::endl;
+      CUTLASS_CHECK(ExampleRunner<GemmBConvertAndScaleWithZeroPoint>{}.run(options, hw_info));
+    }
+  }
 }
 
 int main(int argc, const char** argv)

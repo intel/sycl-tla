@@ -214,8 +214,8 @@ struct ExampleRunner {
   using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
   using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
   // Scale and Zero share a stride since the layout and shapes must be the same.
-  using StrideScale = typename CollectiveMainloop::StrideScale;
-  using StrideZero = typename CollectiveMainloop::StrideZero; 
+  using StrideScale = typename CollectiveMainloop::NonVoidStrideScale;
+  using StrideZero = typename CollectiveMainloop::NonVoidStrideZero;
 
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
@@ -596,13 +596,13 @@ int main(int argc, const char** argv)
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertOnly>;
 
   using MainloopAConvertAndScale = MixedBuilderQuantA::CollectiveMma<
-      cute::tuple<ElementInputA, ElementScale>, ElementInputB>;
+      cute::tuple<ElementInputA, ElementScale, StrideScale>, ElementInputB>;
   using GemmAConvertAndScale =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertAndScale>;
 
   using MainloopAConvertAndScaleWithZeroPoint =
       MixedBuilderQuantA::CollectiveMma<
-          cute::tuple<ElementInputA, ElementScale, ElementZero>, ElementInputB>;
+          cute::tuple<ElementInputA, ElementScale, StrideScale, ElementZero, StrideZero>, ElementInputB>;
   using GemmAConvertAndScaleWithZeroPoint =
       GemmAdapterBuilder::GemmUniversalAdapter<
           MainloopAConvertAndScaleWithZeroPoint>;
@@ -615,13 +615,13 @@ int main(int argc, const char** argv)
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertOnly>;
 
   using MainloopBConvertAndScale = MixedBuilderQuantB::CollectiveMma<
-      ElementInputB, cute::tuple<ElementInputA, ElementScale>>;
+      ElementInputB, cute::tuple<ElementInputA, ElementScale, StrideScale>>;
   using GemmBConvertAndScale =
       GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertAndScale>;
 
   using MainloopBConvertAndScaleWithZeroPoint =
       MixedBuilderQuantB::CollectiveMma<
-          ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero>>;
+          ElementInputB, cute::tuple<ElementInputA, ElementScale, StrideScale, ElementZero, StrideZero>>;
   using GemmBConvertAndScaleWithZeroPoint =
       GemmAdapterBuilder::GemmUniversalAdapter<
           MainloopBConvertAndScaleWithZeroPoint>;
