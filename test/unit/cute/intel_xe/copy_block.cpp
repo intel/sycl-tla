@@ -105,6 +105,7 @@ struct copy_op<dtype, load, store, M, N, false> {
     //
     // Allocate and initialize
     //
+
     cutlass::host_vector<dtype> host_src(M * N);
     cutlass::host_vector<dtype> host_output(M * N);
 
@@ -259,13 +260,17 @@ struct copy_op<uint16_t, load, XE_2D_U16x2x16_ST_N, M, N, false> {
   }
 };
 
-template <class load, class store, int32_t M, int32_t N>
-struct copy_op<uint32_t, load, store, M, N, true> {
+template <class load, class store, int32_t M_, int32_t N_>
+struct copy_op<uint32_t, load, store, M_, N_, true> {
   void operator()() {
     //
     // Allocate and initialize
     //
     using dtype = uint32_t;
+
+    // reverse MN if transposed
+    constexpr auto M = N_;
+    constexpr auto N = M_;
 
     constexpr int elem_alignment = row_alignment / sizeof(dtype);
     constexpr int row_pitch_S = cute::ceil_div(N, elem_alignment) * elem_alignment;
