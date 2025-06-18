@@ -368,14 +368,26 @@ struct ExampleRunner {
     auto shape_B = cute::make_shape(N, K, L);
     auto shape_CD = cute::make_shape(M, N, L);
     auto shape_scale = cute::make_shape(dq_mn_size, scale_k, L);
-    auto shape_zero = cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, scale_k / zero_elements_packed_along_k), L);
+    auto shape_zero = [&]() {
+      if constexpr (is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(stride_Z))>>) {
+        return cute::make_shape(dq_mn_size, cute::make_shape(scale_k / zero_elements_packed_along_k, zero_elements_packed_along_k), L);
+      } else {
+        return shape_scale;
+      }
+    }();
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, shape_A);
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, shape_B);
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, shape_CD);
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale);
-    auto my_stride_Z = make_stride(zero_elements_packed_along_k, make_stride(_1{}, int64_t(zero_elements_packed_along_k * dq_mn_size)), int64_t(dq_mn_size * scale_k));
+    stride_Z = [&]() {
+      if constexpr (is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(stride_Z))>>) {
+        return make_stride(Int<zero_elements_packed_along_k>{}, make_stride(_1{}, int64_t(zero_elements_packed_along_k * dq_mn_size)), int64_t(dq_mn_size * scale_k));
+      } else {
+        return stride_S;
+      }
+    }();
 
     block_A.reset(static_cast<std::size_t>(M) * K * L);
     block_A_dq.reset(static_cast<std::size_t>(M) * K * L);
@@ -398,7 +410,7 @@ struct ExampleRunner {
     auto layout_A = make_layout(shape_A, stride_A);
     auto layout_B = make_layout(shape_B, stride_B);
     auto layout_scale = make_layout(shape_scale, stride_S);
-    auto layout_zero = make_layout(shape_zero, my_stride_Z);
+    auto layout_zero = make_layout(shape_zero, stride_Z);
 
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
