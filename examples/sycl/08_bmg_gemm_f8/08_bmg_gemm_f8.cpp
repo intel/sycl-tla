@@ -357,7 +357,7 @@ int launcher(Options& options)
       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
@@ -382,9 +382,9 @@ int launcher(Options& options)
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
-          ElementInputA,
+          cute::tuple<ElementInputA>,
           cutlass::gemm::TagToStrideA_t<LayoutA>,
-          ElementInputB,
+          cute::tuple<ElementInputB>,
           cutlass::gemm::TagToStrideB_t<LayoutB>,
           TiledMma,
           GmemTiledCopyA, void, void, cute::identity,

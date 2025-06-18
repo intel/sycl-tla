@@ -606,10 +606,10 @@ public:
         copy(mainloop.tiled_copy_zero_b, copy_iter_s_b(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZB);
       }
       if constexpr (IsATransformed) {
-        transform_quant<true,DoScaleA,DoZeroA>(quant_frag_a, mma_A, fragment_scale_input_a, fragment_zero_input_a);
+        transform_quant<true, DoScaleA, DoZeroA>(quant_frag_a, mma_A, fragment_scale_input_a, fragment_zero_input_a);
       }
       if constexpr (IsBTransformed) {
-        transform_quant<false,DoScaleB,DoZeroB>(quant_frag_b, mma_B, fragment_scale_input_b, fragment_zero_input_b);
+        transform_quant<false, DoScaleB, DoZeroB>(quant_frag_b, mma_B, fragment_scale_input_b, fragment_zero_input_b);
       }
 
       if(prefetch_k < k_tile_count) {
