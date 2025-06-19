@@ -180,10 +180,21 @@ public:
   }
 
   static bool
-  can_implement(Arguments const& args) {
-    bool mode_implementable = args.mode == GemmUniversalMode::kGrouped
-          && rank(typename ProblemShape::UnderlyingProblemShape{}) == 3;
-    return mode_implementable && TileScheduler::can_implement(args.scheduler);
+  can_implement(Arguments const& args) {constexpr int copy_alignment_bits = 128;
+    auto problem_shape_MNKL = append<4>(args.problem_shape, 1);
+    auto [M,N,K,L] = problem_shape_MNKL;
+
+    bool implementable = true;
+
+    implementable = implementable && (args.mode == GemmUniversalMode::kGrouped ||
+          (args.mode == GemmUniversalMode::kBatched && rank(typename ProblemShape::UnderlyingProblemShape{}) == 3));
+
+    implementable = implementable && TileScheduler::can_implement(args.scheduler);
+
+    implementable &= CollectiveMainloop::can_implement(args.problem_shape, args.mainloop);
+    implementable &= CollectiveEpilogue::can_implement(args.problem_shape, args.epilogue);
+
+    return implementable;
   }
 
   static size_t

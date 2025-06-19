@@ -146,6 +146,29 @@ struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, Element
     return Params{tiled_copy_a, tiled_copy_b};
   }
 
+  template<class ProblemShape>
+  static bool
+  can_implement(
+      ProblemShape problem_shapes,
+      Arguments const& args) {
+    constexpr int copy_alignment_bits = 128;
+    auto problem_shape_MNKL = append<4>(problem_shapes, 1);
+    auto [M,N,K,L] = problem_shape_MNKL;
+
+    bool implementable = true;
+
+    constexpr int min_aligned_elements_A = copy_alignment_bits / sizeof_bits<ElementA>::value;
+    implementable &= cutlass::detail::check_alignment<min_aligned_elements_A>(cute::make_shape(M,K,L), args.dA);
+    constexpr int min_aligned_elements_B = copy_alignment_bits / sizeof_bits<ElementB>::value;
+    implementable &= cutlass::detail::check_alignment<min_aligned_elements_B>(cute::make_shape(N,K,L), args.dB);
+
+    if (!implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum alignment requirements for XE 2D copy.\n");
+    }
+
+    return implementable;
+  }
+
   /// Perform a subgroup-scoped matrix multiply-accumulate
   template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator, class BlkCoord>
   CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,

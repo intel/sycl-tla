@@ -219,9 +219,36 @@ public:
   template <class ProblemShape>
   CUTLASS_HOST_DEVICE static bool
   can_implement(
-      ProblemShape const& problem_shape,
-      [[maybe_unused]] Arguments const& args) {
-    return true;
+      ProblemShape const& problem_shapes,
+      Arguments const& args) {
+    constexpr int copy_alignment_bits = 128;
+    auto problem_shape_MNKL = append<4>(problem_shapes, 1);
+    auto [M,N,K,L] = problem_shape_MNKL;
+
+    bool implementable = true;
+    bool fusion_implementable = true;
+
+    if constexpr (is_destination_supported) {
+      constexpr int min_aligned_elements_D = copy_alignment_bits / sizeof_bits<ElementD>::value;
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_D>(cute::make_shape(M,N,L), args.dD);
+    }
+
+    if constexpr (is_source_supported) {
+      constexpr int min_aligned_elements_C = copy_alignment_bits / sizeof_bits<ElementC>::value;
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_C>(cute::make_shape(M,N,L), args.dC);
+    }
+
+    fusion_implementable = fusion_implementable && FusionCallbacks::can_implement(problem_shape_MNKL, args.thread);
+
+    if (!implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum alignment requirements for XE 2D copy.\n");
+    }
+
+    if (!fusion_implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum requirements for FusionCallbacks.\n");
+    }
+
+    return implementable && fusion_implementable;
   }
 
   CUTLASS_HOST_DEVICE

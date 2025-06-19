@@ -159,7 +159,6 @@ public:
 
   static bool
   can_implement(Arguments const& args) {
-    constexpr int copy_alignment_bits = 32;
     auto problem_shape_MNKL = append<4>(args.problem_shape, 1);
     auto [M,N,K,L] = problem_shape_MNKL;
 
@@ -168,16 +167,11 @@ public:
     implementable = implementable && (args.mode == GemmUniversalMode::kGemm ||
           (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4));
 
-    implementable = implementable && TileScheduler::can_implement(args.scheduler);
+    implementable &= TileScheduler::can_implement(args.scheduler);
 
-    constexpr int min_aligned_elements_A = copy_alignment_bits / cutlass::sizeof_bits<ElementA>::value;
-    implementable = implementable && cutlass::detail::check_alignment<min_aligned_elements_A>(cute::make_shape(M,K,L), StrideA{});
-    constexpr int min_aligned_elements_B = copy_alignment_bits / cutlass::sizeof_bits<ElementB>::value;
-    implementable = implementable && cutlass::detail::check_alignment<min_aligned_elements_B>(cute::make_shape(N,K,L), StrideB{});
+    implementable &= CollectiveMainloop::can_implement(args.problem_shape, args.mainloop);
+    implementable &= CollectiveEpilogue::can_implement(args.problem_shape, args.epilogue);
 
-    if (!implementable) {
-      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum alignment requirements for XE 2D copy.\n");
-    }
     return implementable;
   }
 
