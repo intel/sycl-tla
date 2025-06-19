@@ -143,15 +143,6 @@ public:
   using TransformA = TransformA_;
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
-  using MmaType = typename TiledMma::ValTypeA; // ValTypeA and ValTypeB are always same and reflects MMA type on intel Xe
-  //using LargerElementType = std::conditional_t<(cute::sizeof_bits_v<ElementA> > cute::sizeof_bits_v<ElementB>),
-    //                                           ElementA,
-      //                                         ElementB>;
-
-  //static_assert(!cute::is_same_v<ElementA, ElementB>, "Mixed precision GEMM requires different types for A and B!");
-  //static_assert(std::is_same_v<LargerElementType, MmaType>,
-    //           "MainloopIntelXeXMX16MixedPrecision has the restriction that mixed dtype always converts the "
-      //         "narrower input type to the larger one and performs GEMM using the DPAS for the larger input type.");
 
   static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
   static_assert(std::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
@@ -162,22 +153,6 @@ private:
   static constexpr bool DoScaleB = !cute::is_void_v<ScaleB>;
   static constexpr bool DoZeroA = !cute::is_void_v<ZeroA>;
   static constexpr bool DoZeroB = !cute::is_void_v<ZeroB>;
-  /*static constexpr ConversionMode 
-  get_conversion_mode() {
-    if constexpr (cute::is_void_v<ElementScale>) {
-      return ConversionMode::DirectConvert;
-    } 
-    else if constexpr (cute::is_void_v<ElementZero>) {
-      return ConversionMode::ConvertAndScale;
-    }
-    else {
-      return ConversionMode::ConvertAndScaleWithZero;
-    }
-  }
-
-  static constexpr ConversionMode KernelConversionMode = get_conversion_mode();
-  static constexpr bool ModeHasScales = KernelConversionMode == ConversionMode::ConvertAndScale ||
-                                        KernelConversionMode == ConversionMode::ConvertAndScaleWithZero;*/
 
   static_assert(sizeof_bits_v<ElementA> >= 0, "Dequantization with sub-byte quant type not yet supported in Xe mixed precision Gemm");
   static_assert(sizeof_bits_v<ElementA> >= 0, "Dequantization with sub-byte quant type not yet supported in Xe mixed precision Gemm");
@@ -273,9 +248,6 @@ public:
     Copy_A tiled_copy_a{Copy_A{}.with(mA_mkl)};
     Copy_B tiled_copy_b{Copy_B{}.with(mB_nkl)};
 
-    /*if constexpr(!DoScaleA && !DoScaleB){
-      return Params{tiled_copy_a, tiled_copy_b, {}, {}, {}, {}, 0};
-    }*/
     Params res = {tiled_copy_a, tiled_copy_b, {}, {}, {}, {}, args.group_size};
 
     auto scale_k = cute::ceil_div(K, args.group_size);
@@ -293,9 +265,6 @@ public:
       res.tiled_copy_scale_b = {Copy_ScaleB{}.with(mScaleB)};
     }
 
-    /*if constexpr(!DoZeroA && !DoZeroB){
-      return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, {}, args.group_size};
-    }*/
     if constexpr(DoZeroA){
       auto mZeroA =
           make_tensor(make_gmem_ptr(args.ptr_ZA),
@@ -310,7 +279,6 @@ public:
       res.tiled_copy_zero_b = {Copy_ZeroB{}.with(mZeroB)};
     }
 
-    //return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, tiled_copy_zero, args.group_size};
     return res;
   }
 
@@ -468,17 +436,12 @@ public:
 
     // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
     // layout else we need mode N_iter from fragment_B layout.
-    //using FragScaleLayout = std::conditional_t<IsATransformed,
-      //                                         Layout<Shape<_2, _1, _1>>,
-        //                                       Layout<Shape<_2, _2, _1>>>;
-    Tensor fragment_scale_input_a = make_tensor<NonVoidElementScale>(Layout<Shape<_2, _1, _1>>{}); //TODO opt
+    Tensor fragment_scale_input_a = make_tensor<NonVoidElementScale>(Layout<Shape<_2, _1, _1>>{});
     Tensor fragment_zero_input_a =  make_tensor<NonVoidElementZero> (Layout<Shape<_2, _1, _1>>{});
     Tensor fragment_scale_input_b = make_tensor<NonVoidElementScale>(Layout<Shape<_2, _2, _1>>{});
     Tensor fragment_zero_input_b =  make_tensor<NonVoidElementZero> (Layout<Shape<_2, _2, _1>>{});
 
     // narrow input fragment
-    //Tensor quant_frag_a = make_tensor<uint8_t>(mma_A.layout());
-    //Tensor quant_frag_b = make_tensor<uint8_t>(mma_B.layout());
     Tensor quant_frag_a = [&](){
       if constexpr(IsATransformed){
         // workaround a perf issue that occurs if f8 tensor is allocated
@@ -500,18 +463,6 @@ public:
       }
     }();
 
-    //static_assert(std::is_same_v<typename decltype(quant_frag)::value_type, ElementQuant>);
-    //static_assert(std::is_same_v<typename decltype(mma_A)::value_type, ElementMMA>);
-    //static_assert(std::is_same_v<typename decltype(mma_B)::value_type, ElementMMA>);
-
-    // Retile for copy
-    /*auto [frag_copy_A, frag_copy_B] = [&](){
-      if constexpr (IsATransformed) {
-        return std::make_pair(thr_copy_A.retile_D(quant_frag), thr_copy_B.retile_D(mma_B));
-      } else {
-        return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(quant_frag));
-      }
-    }();*/
     auto frag_copy_A = [&](){
       if constexpr(IsATransformed){
         return thr_copy_A.retile_D(quant_frag_a);
