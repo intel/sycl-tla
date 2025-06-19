@@ -552,6 +552,7 @@ public:
     //
     // Mainloop
     //
+    constexpr int barrier_scope = 2;
     // TODO(Codeplay): Define these coord tensors using proper cute logic 
     auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
     const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
@@ -609,6 +610,8 @@ public:
     const int k_reload_factor = mainloop.group_size / BLK_K; 
 
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
+      barrier_arrive(barrier_scope);
+      
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
@@ -638,6 +641,8 @@ public:
       }
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
+
+      barrier_wait(barrier_scope);
     }
   }
 };
