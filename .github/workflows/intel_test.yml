@@ -93,7 +93,7 @@ jobs:
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
             -DCUTLASS_SYCL_RUNNING_CI=ON
-          cmake --build . -j 8
+          cmake --build . -j 6
       - name: Unit test
         shell: bash
         run: |
