@@ -244,10 +244,10 @@ public:
   struct Params {
     Copy_A tiled_copy_a;
     Copy_B tiled_copy_b;
-    Copy_ScaleA tiled_copy_scale_a;
-    Copy_ScaleB tiled_copy_scale_b;
-    Copy_ZeroA tiled_copy_zero_a;
-    Copy_ZeroB tiled_copy_zero_b;
+    std::conditional<DoScaleA, Copy_ScaleA, uint8_t> tiled_copy_scale_a;
+    std::conditional<DoScaleB, Copy_ScaleB, uint8_t> tiled_copy_scale_b;
+    std::conditional<DoZeroA, Copy_ZeroA, uint8_t> tiled_copy_zero_a;
+    std::conditional<DoZeroB, Copy_ZeroB, uint8_t> tiled_copy_zero_b;
     int group_size;
   };
 
@@ -451,10 +451,6 @@ public:
     // Partition the copying of A and B tiles across the threads
     auto thr_copy_A = mainloop.tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = mainloop.tiled_copy_b.get_slice(thread_idx);
-    auto thr_copy_scale_A = mainloop.tiled_copy_scale_a.get_slice(thread_idx);
-    auto thr_copy_scale_B = mainloop.tiled_copy_scale_b.get_slice(thread_idx);
-    auto thr_copy_zero_A = mainloop.tiled_copy_zero_a.get_slice(thread_idx);
-    auto thr_copy_zero_B = mainloop.tiled_copy_zero_b.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
@@ -531,10 +527,42 @@ public:
       }
     }();
 
-    Tensor copy_tCrSA = thr_copy_scale_A.retile_D(fragment_scale_input_a);
-    Tensor copy_tCrZA = thr_copy_zero_A.retile_D(fragment_zero_input_a);
-    Tensor copy_tCrSB = thr_copy_scale_B.retile_D(fragment_scale_input_b);
-    Tensor copy_tCrZB = thr_copy_zero_B.retile_D(fragment_zero_input_b);
+    auto copy_tCrSA = [&](){
+      if constexpr(DoScaleA){
+        auto thr_copy_scale_A = mainloop.tiled_copy_scale_a.get_slice(thread_idx);
+        return thr_copy_scale_A.retile_D(fragment_scale_input_a);
+      } else{
+        // returning a dummy value as it will be unused
+        return 1;
+      }
+    }();
+    auto copy_tCrZA = [&](){
+      if constexpr(DoZeroA){
+        auto thr_copy_zero_A = mainloop.tiled_copy_zero_a.get_slice(thread_idx);
+        return thr_copy_zero_A.retile_D(fragment_zero_input_a);
+      } else{
+        // returning a dummy value as it will be unused
+        return 1;
+      }
+    }();
+    auto copy_tCrSB = [&](){
+      if constexpr(DoScaleB){
+        auto thr_copy_scale_B = mainloop.tiled_copy_scale_b.get_slice(thread_idx);
+        return thr_copy_scale_B.retile_D(fragment_scale_input_b);
+      } else{
+        // returning a dummy value as it will be unused
+        return 1;
+      }
+    }();
+    auto copy_tCrZB = [&](){
+      if constexpr(DoZeroB){
+        auto thr_copy_zero_B = mainloop.tiled_copy_zero_b.get_slice(thread_idx);
+        return thr_copy_zero_B.retile_D(fragment_zero_input_b);
+      } else{
+        // returning a dummy value as it will be unused
+        return 1;
+      }
+    }();
 
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
