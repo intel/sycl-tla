@@ -307,7 +307,7 @@ struct XeSubgroup2DBlockLoad<1, 16, 1, 1> {
   CUTE_HOST_DEVICE void
   operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
           cute::intel::coord_t coordinate, T* dstPointer) {
-    *reinterpret_cast<intel::uchar64 *>(dstPointer) =  __builtin_IB_subgroup_block_read_flat_u8_m1k16v1(
+    *reinterpret_cast<intel::uchar *>(dstPointer) =  __builtin_IB_subgroup_block_read_flat_u8_m1k16v1(
        (intptr_t)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
   }
 };
