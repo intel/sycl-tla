@@ -547,6 +547,27 @@ struct Copy_Traits_{
 };
 
 template <class... args_t>
+struct Copy_Traits_<XE_2D_U8x1x16_LD_N, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U8x1x16_LD_N, args_t...> {
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16, Shape <_8, _1, _1>>,
+                           Stride< _0, Stride <_1, _1, _128>>>;
+  // Map from (dst-thr,dst-val) to bit
+  // mode 0 16:8  This will show there are 16 thread ehrtr each thread with stride of value with 8 bits away from the adjusent thread
+  // mode 1: <_1, _1, _8>:< _1, _1, _128> This says each thread will get 1x1 element
+  // each of them 8 bits. The stired shows each thread jumps 16x1x8 bits for the next row in the block
+  using DstLayout = Layout<Shape <_16, Shape <_8,  _1, _1>>,
+                           Stride<_8, Stride < _1, _1, _128>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgT>
+  Copy_Traits_(ArgT... args)
+      : XE_2D_LD_Unpack<XE_2D_U8x1x16_LD_N, args_t...>(args...) {}
+};
+
+template <class... args_t>
 struct Copy_Traits_<XE_2D_Packed_U8x1x32_LD_N, args_t...>
     : XE_2D_LD_Unpack<XE_2D_Packed_U8x1x32_LD_N, args_t...> {
   using ThrID = Layout<_16>;
@@ -797,24 +818,6 @@ struct Copy_Traits_<XE_2D_U4x32x16_LD_T, args_t...>
   template <class... ArgT>
   Copy_Traits_(ArgT... args)
       : XE_2D_LD_Unpack<XE_2D_U4x32x16_LD_T, args_t...>(args...) {}
-};
-
-template <class... args_t>
-struct Copy_Traits_<XE_2D_U8x1x16_LD_N, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U8x1x16_LD_N, args_t...> {
-  using ThrID = Layout<_16>;
-  // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_8>,
-                           Stride< _0,_1>>;
-  // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,_8>,
-                           Stride<_8, _1>>;
-  // Reference map from (thr,val) to bit
-  using RefLayout = DstLayout;
-
-  template <class... ArgT>
-  Copy_Traits_(ArgT... args)
-      : XE_2D_LD_Unpack<XE_2D_U8x1x16_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
