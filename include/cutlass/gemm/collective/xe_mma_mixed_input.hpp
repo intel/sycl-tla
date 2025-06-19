@@ -448,7 +448,6 @@ public:
         Tensor data_frag = make_tensor<uint8_t>(mma_A.layout());
         return make_tensor(reinterpret_cast<ElementA*>(data_frag.data()), mma_A.layout());
       } else{
-        // the same mma_A tensor
         return make_tensor(mma_A.data(), mma_A.layout());
       }
     }();
@@ -458,50 +457,12 @@ public:
         Tensor data_frag = make_tensor<uint8_t>(mma_B.layout());
         return make_tensor(reinterpret_cast<ElementB*>(data_frag.data()), mma_B.layout());
       } else{
-        // the same mma_B tensor
         return make_tensor(mma_B.data(), mma_B.layout());
       }
     }();
 
     auto frag_copy_A = thr_copy_A.retile_D(quant_frag_a);
     auto frag_copy_B = thr_copy_B.retile_D(quant_frag_b);
-
-    auto copy_tCrSA = [&](){
-      if constexpr(DoScaleA){
-        auto thr_copy_scale_A = mainloop.tiled_copy_scale_a.get_slice(thread_idx);
-        return thr_copy_scale_A.retile_D(fragment_scale_input_a);
-      } else{
-        // returning a dummy value as it will be unused
-        return 1;
-      }
-    }();
-    auto copy_tCrZA = [&](){
-      if constexpr(DoZeroA){
-        auto thr_copy_zero_A = mainloop.tiled_copy_zero_a.get_slice(thread_idx);
-        return thr_copy_zero_A.retile_D(fragment_zero_input_a);
-      } else{
-        // returning a dummy value as it will be unused
-        return 1;
-      }
-    }();
-    auto copy_tCrSB = [&](){
-      if constexpr(DoScaleB){
-        auto thr_copy_scale_B = mainloop.tiled_copy_scale_b.get_slice(thread_idx);
-        return thr_copy_scale_B.retile_D(fragment_scale_input_b);
-      } else{
-        // returning a dummy value as it will be unused
-        return 1;
-      }
-    }();
-    auto copy_tCrZB = [&](){
-      if constexpr(DoZeroB){
-        auto thr_copy_zero_B = mainloop.tiled_copy_zero_b.get_slice(thread_idx);
-        return thr_copy_zero_B.retile_D(fragment_zero_input_b);
-      } else{
-        // returning a dummy value as it will be unused
-        return 1;
-      }
-    }();
 
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
@@ -582,23 +543,33 @@ public:
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
-
-      if constexpr(DoScaleA){
-        copy(mainloop.tiled_copy_scale_a, copy_iter_s_a(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrSA);
-      }
-      if constexpr(DoScaleB){
-        copy(mainloop.tiled_copy_scale_b, copy_iter_s_b(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrSB);
-      }
-      if constexpr(DoZeroA){
-        copy(mainloop.tiled_copy_zero_a, copy_iter_s_a(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZA);
-      }
-      if constexpr(DoZeroB){
-        copy(mainloop.tiled_copy_zero_b, copy_iter_s_b(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZB);
-      }
+      
+      // Compiler is expected to move construction of tensors in the following ifs outside of loop.
+      // They are here to make code easier to read - without duplicating these ifs outside of loop in lambdas to optionally construct these tensors.
       if constexpr (IsATransformed) {
+        if constexpr(DoScaleA){
+          auto thr_copy_scale_A = mainloop.tiled_copy_scale_a.get_slice(thread_idx);
+          auto copy_tCrSA = thr_copy_scale_A.retile_D(fragment_scale_input_a);
+          copy(mainloop.tiled_copy_scale_a, copy_iter_s_a(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrSA);
+        }
+        if constexpr(DoZeroA){
+          auto thr_copy_zero_A = mainloop.tiled_copy_zero_a.get_slice(thread_idx);
+          auto copy_tCrZA = thr_copy_zero_A.retile_D(fragment_zero_input_a);
+          copy(mainloop.tiled_copy_zero_a, copy_iter_s_a(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZA);
+        }
         transform_quant<true, DoScaleA, DoZeroA>(quant_frag_a, mma_A, fragment_scale_input_a, fragment_zero_input_a);
       }
       if constexpr (IsBTransformed) {
+        if constexpr(DoScaleB){
+          auto thr_copy_scale_B = mainloop.tiled_copy_scale_b.get_slice(thread_idx);
+          auto copy_tCrSB = thr_copy_scale_B.retile_D(fragment_scale_input_b);
+          copy(mainloop.tiled_copy_scale_b, copy_iter_s_b(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrSB);
+        }
+        if constexpr(DoZeroB){
+          auto thr_copy_zero_B = mainloop.tiled_copy_zero_b.get_slice(thread_idx);
+          auto copy_tCrZB = thr_copy_zero_B.retile_D(fragment_zero_input_b);
+          copy(mainloop.tiled_copy_zero_b, copy_iter_s_b(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZB);
+        }
         transform_quant<false, DoScaleB, DoZeroB>(quant_frag_b, mma_B, fragment_scale_input_b, fragment_zero_input_b);
       }
 
