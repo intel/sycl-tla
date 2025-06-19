@@ -441,15 +441,15 @@ public:
     Tensor fragment_scale_input_b = make_tensor<NonVoidElementScale>(Layout<Shape<_2, _2, _1>>{});
     Tensor fragment_zero_input_b =  make_tensor<NonVoidElementZero> (Layout<Shape<_2, _2, _1>>{});
 
-    // narrow input fragment
+    // narrow input fragment or the same tensor used for MMA
     Tensor quant_frag_a = [&](){
       if constexpr(IsATransformed){
         // workaround a perf issue that occurs if f8 tensor is allocated
         Tensor data_frag = make_tensor<uint8_t>(mma_A.layout());
         return make_tensor(reinterpret_cast<ElementA*>(data_frag.data()), mma_A.layout());
       } else{
-        // returning a dummy value - it will not be used
-        return make_tensor(reinterpret_cast<ElementA*>(mma_A.data()), mma_A.layout());
+        // the same mma_A tensor
+        return make_tensor(mma_A.data(), mma_A.layout());
       }
     }();
     Tensor quant_frag_b = [&](){
@@ -458,25 +458,13 @@ public:
         Tensor data_frag = make_tensor<uint8_t>(mma_B.layout());
         return make_tensor(reinterpret_cast<ElementB*>(data_frag.data()), mma_B.layout());
       } else{
-        // returning a dummy value - it will not be used
-        return make_tensor(reinterpret_cast<ElementB*>(mma_A.data()), mma_A.layout());
+        // the same mma_B tensor
+        return make_tensor(mma_B.data(), mma_B.layout());
       }
     }();
 
-    auto frag_copy_A = [&](){
-      if constexpr(IsATransformed){
-        return thr_copy_A.retile_D(quant_frag_a);
-      } else{
-        return thr_copy_A.retile_D(mma_A);
-      }
-    }();
-    auto frag_copy_B = [&](){
-      if constexpr(IsBTransformed){
-        return thr_copy_B.retile_D(quant_frag_b);
-      } else{
-        return thr_copy_B.retile_D(mma_B);
-      }
-    }();
+    auto frag_copy_A = thr_copy_A.retile_D(quant_frag_a);
+    auto frag_copy_B = thr_copy_B.retile_D(quant_frag_b);
 
     auto copy_tCrSA = [&](){
       if constexpr(DoScaleA){
