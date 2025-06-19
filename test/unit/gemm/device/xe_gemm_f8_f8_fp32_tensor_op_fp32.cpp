@@ -30,8 +30,11 @@
  **************************************************************************************************/
 
 /*! \file
-    \brief Tests for Xe fp16_fp16_fp32
+    \brief Tests for Xe f8_f8_fp32
 */
+
+
+#include "cutlass/cutlass.h"
 
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/kernel/gemm_universal.hpp"
@@ -42,63 +45,48 @@
 namespace cutlass {
 namespace {
 template <typename LayoutA, typename LayoutB>
-struct XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative {
-  using ElementA = cute::half_t;
-  using ElementB = cute::half_t;
-
+struct XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32 {
   using Config = gemm::device::DefaultGemmConfigurationToCutlass3Types<
     arch::OpClassTensorOp, arch::IntelXe,
-    ElementA, LayoutA,
-    ElementB, LayoutB,
+    float_e5m2_t, LayoutA,
+    float_e5m2_t, LayoutB,
     float, layout::RowMajor,
     float>;
 
-  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-    cutlass::arch::IntelXe, cutlass::arch::OpClassTensorOp,
-    ElementA, LayoutA, 1,
-    ElementB, LayoutB, 1,
-    float,
-    typename Config::TileShape, Shape<_1, _1, _1>,
-    cutlass::gemm::collective::StageCountAuto,
-    cutlass::gemm::KernelXeCooperative
-  >::CollectiveOp;
-
   using GemmKernel = gemm::kernel::GemmUniversal<
-      cute::Shape<int,int,int,int>,
-      CollectiveMainloop,
-      typename Config::CollectiveEpilogue,
-      gemm::StreamKScheduler
-  >;
+    cute::Shape<int, int, int, int>,
+    typename Config::CollectiveMainloop,
+    typename Config::CollectiveEpilogue>;
 
   using Gemm = gemm::device::GemmUniversalAdapter<GemmKernel>;
 };
 
-TEST(XE_Device_Gemm_fp16t_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
+TEST(XE_Device_Gemm_f8t_f8t_fp32_tensor_op_fp32, 256x256x32) {
   using LayoutA = layout::RowMajor;
   using LayoutB = layout::RowMajor;
-  using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative<LayoutA, LayoutB>::Gemm;
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
+  using Gemm = XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 16));
 }
 
-TEST(XE_Device_Gemm_fp16n_fp16t_f32t_tensor_op_f32_cooperative, 256x256x32) {
+TEST(XE_Device_Gemm_f8n_f8t_fp32t_tensor_op_fp32, 256x256x32) {
   using LayoutA = layout::ColumnMajor;
   using LayoutB = layout::RowMajor;
-  using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative<LayoutA, LayoutB>::Gemm;
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
+  using Gemm = XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 16));
 }
 
-TEST(XE_Device_Gemm_fp16t_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
+TEST(XE_Device_Gemm_f8t_f8n_fp32t_tensor_op_fp32, 256x256x32) {
   using LayoutA = layout::RowMajor;
   using LayoutB = layout::ColumnMajor;
-  using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative<LayoutA, LayoutB>::Gemm;
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
+  using Gemm = XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 16));
 }
 
-TEST(XE_Device_Gemm_fp16n_fp16n_f32t_tensor_op_f32_cooperative, 256x256x32) {
+TEST(XE_Device_Gemm_f8n_f8n_fp32t_tensor_op_fp32, 256x256x32) {
   using LayoutA = layout::ColumnMajor;
   using LayoutB = layout::ColumnMajor;
-  using Gemm = XE_Device_Gemm_fp16_fp16_f32_tensor_op_f32_cooperative<LayoutA, LayoutB>::Gemm;
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
+  using Gemm = XE_Device_Gemm_f8_f8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 16));
 }
 }
 } // namespace cutlass
