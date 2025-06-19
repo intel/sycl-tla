@@ -222,7 +222,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
          convert_fp8_to_fp16<Tin, half_t>(in.get(), out.get(), in.size());
          return out;
       } else { 
-        return in;//cutlass::DeviceAllocation<Tin>(in.get(), in.size());
+        return in;
       };
   }
   //
@@ -776,7 +776,6 @@ template <bool Causal,
     // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
     // information is used by the underlying kernel.
     cutlass::KernelHardwareInfo hw_info;
-  //  constexpr int PipelineStages = 2;
     using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
     using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
     using CollectiveEpilogue = cutlass::flash_attention::collective::FlashDecodeEpilogue<

@@ -241,8 +241,6 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     Tensor tCgK = thread_mma_k.partition_B(gK);
 
     // Create fragments
-    //Tensor tCrQ = make_tensor<ElementQ>(make_fragment_layout(params.gmem_tiled_copy_q, take<0,3>(tCgQ.shape())));
-    //Tensor tCrK = make_tensor<ElementK>(make_fragment_layout(gmem_tiled_copy_k, take<0,3>(tCgK.shape())));
     using TCrQ_Type = cute::conditional_t<is_fp8_v<ElementQ>, uint8_t, ElementQ>;
     using TCrK_Type = cute::conditional_t<is_fp8_v<ElementQ>, uint8_t, ElementK>;
     Tensor tCrQ = make_tensor<TCrQ_Type>(make_fragment_layout(params.gmem_tiled_copy_q, take<0,3>(tCgQ.shape())));
@@ -323,7 +321,6 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     // convert X*512|1024 to 32*64*x*8|16 and use (_, sg.get_group_id()[0] / ATOM_N) to index in the (x,8|16) coordinate
     Tensor gV_ = take<0,3>(local_tile(gV, select<1,2>(SubgroupTileShapePV{}), make_coord(_, kv_tile_idx)));
     Tensor tCgV = thread_mma.partition_B(gV_);
-    //Tensor tCrV = make_tensor<ElementV>(make_fragment_layout(gmem_tiled_copy_v, take<0, 3>(tCgV.shape())));
     using TCrV_Type = cute::conditional_t<is_fp8_v<ElementV>, uint8_t, ElementV>;
     Tensor tCrV = make_tensor<TCrV_Type>(make_fragment_layout(gmem_tiled_copy_v, take<0, 3>(tCgV.shape())));
     auto gmem_thr_copy_V = gmem_tiled_copy_v.get_slice(thread_idx);
