@@ -481,8 +481,28 @@ public:
     Tensor fragment_zero_input_b =  make_tensor<NonVoidElementZero> (Layout<Shape<_2, _2, _1>>{});
 
     // narrow input fragment
-    Tensor quant_frag_a = make_tensor<ElementA>(mma_A.layout());
-    Tensor quant_frag_b = make_tensor<ElementB>(mma_B.layout());
+    //Tensor quant_frag_a = make_tensor<uint8_t>(mma_A.layout());
+    //Tensor quant_frag_b = make_tensor<uint8_t>(mma_B.layout());
+    Tensor quant_frag_a = [&](){
+      if constexpr(IsATransformed){
+        // workaround a perf issue that occurs if f8 tensor is allocated
+        Tensor data_frag = make_tensor<uint8_t>(mma_A.layout());
+        return make_tensor(reinterpret_cast<ElementA*>(data_frag.data()), mma_A.layout());
+      } else{
+        // returning a dummy value - it will not be used
+        return make_tensor(reinterpret_cast<ElementA*>(mma_A.data()), mma_A.layout());
+      }
+    }();
+    Tensor quant_frag_b = [&](){
+      if constexpr(IsBTransformed){
+        // workaround a perf issue that occurs if f8 tensor is allocated
+        Tensor data_frag = make_tensor<uint8_t>(mma_B.layout());
+        return make_tensor(reinterpret_cast<ElementB*>(data_frag.data()), mma_B.layout());
+      } else{
+        // returning a dummy value - it will not be used
+        return make_tensor(reinterpret_cast<ElementB*>(mma_A.data()), mma_A.layout());
+      }
+    }();
 
     //static_assert(std::is_same_v<typename decltype(quant_frag)::value_type, ElementQuant>);
     //static_assert(std::is_same_v<typename decltype(mma_A)::value_type, ElementMMA>);
