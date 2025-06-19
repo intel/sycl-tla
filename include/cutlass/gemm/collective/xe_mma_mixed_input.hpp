@@ -219,10 +219,10 @@ public:
   struct Params {
     Copy_A tiled_copy_a;
     Copy_B tiled_copy_b;
-    std::conditional<DoScaleA, Copy_ScaleA, uint8_t> tiled_copy_scale_a;
-    std::conditional<DoScaleB, Copy_ScaleB, uint8_t> tiled_copy_scale_b;
-    std::conditional<DoZeroA, Copy_ZeroA, uint8_t> tiled_copy_zero_a;
-    std::conditional<DoZeroB, Copy_ZeroB, uint8_t> tiled_copy_zero_b;
+    std::conditional_t<DoScaleA, Copy_ScaleA, uint8_t> tiled_copy_scale_a;
+    std::conditional_t<DoScaleB, Copy_ScaleB, uint8_t> tiled_copy_scale_b;
+    std::conditional_t<DoZeroA, Copy_ZeroA, uint8_t> tiled_copy_zero_a;
+    std::conditional_t<DoZeroB, Copy_ZeroB, uint8_t> tiled_copy_zero_b;
     int group_size;
   };
 
@@ -444,18 +444,26 @@ public:
     // narrow input fragment or the same tensor used for MMA
     Tensor quant_frag_a = [&](){
       if constexpr(IsATransformed){
-        // workaround a perf issue that occurs if f8 tensor is allocated
-        Tensor data_frag = make_tensor<uint8_t>(mma_A.layout());
-        return make_tensor(reinterpret_cast<ElementA*>(data_frag.data()), mma_A.layout());
+        if constexpr(sizeof_bits_v<ElementA> == 8){
+          // workaround a perf issue that occurs if f8 tensor is allocated
+          Tensor data_frag = make_tensor<uint8_t>(mma_A.layout());
+          return make_tensor(reinterpret_cast<ElementA*>(data_frag.data()), mma_A.layout());
+        } else{
+          return make_tensor<ElementA>(mma_A.layout());
+        }
       } else{
         return make_tensor(mma_A.data(), mma_A.layout());
       }
     }();
     Tensor quant_frag_b = [&](){
       if constexpr(IsBTransformed){
-        // workaround a perf issue that occurs if f8 tensor is allocated
-        Tensor data_frag = make_tensor<uint8_t>(mma_B.layout());
-        return make_tensor(reinterpret_cast<ElementB*>(data_frag.data()), mma_B.layout());
+        if constexpr(sizeof_bits_v<ElementB> == 8){
+          // workaround a perf issue that occurs if f8 tensor is allocated
+          Tensor data_frag = make_tensor<uint8_t>(mma_B.layout());
+          return make_tensor(reinterpret_cast<ElementB*>(data_frag.data()), mma_B.layout());
+        } else{
+          return make_tensor<ElementB>(mma_B.layout());
+        }
       } else{
         return make_tensor(mma_B.data(), mma_B.layout());
       }

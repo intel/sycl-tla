@@ -1902,7 +1902,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
 {
   using TileShape = Shape<_256, _256, _32>;
 
-  using DispatchPolicy = MainloopIntelW8A8<3>;
+  using DispatchPolicy = MainloopIntelXeXMX16MixedPrecision<3>;
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
                Layout<TileShape>,
@@ -1923,8 +1923,8 @@ struct DefaultGemmConfigurationToCutlass3Types<
   // Mainloop
   using CollectiveMainloop = collective::CollectiveMma<
     DispatchPolicy, TileShape,
-    float_e5m2_t, TagToStrideA_t<LayoutA>,
-    float_e5m2_t, TagToStrideB_t<LayoutB>,
+    cute::tuple<float_e5m2_t>, TagToStrideA_t<LayoutA>,
+    cute::tuple<float_e5m2_t>, TagToStrideB_t<LayoutB>,
     TiledMma,
     GmemTiledCopyA, void, void, cute::identity,  // A
     GmemTiledCopyB, void, void, cute::identity   // B
