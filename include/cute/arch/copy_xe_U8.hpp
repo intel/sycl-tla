@@ -35,7 +35,7 @@
 
 namespace cute
 {
-struct XE_2D_U8x1x32_LD_N {
+struct XE_2D_Packed_U8x1x32_LD_N {
   using BlockShape = Shape<_1, _32>;
   using inst_dtype = int8_t;
 
@@ -65,7 +65,7 @@ struct XE_2D_U8x1x32_LD_N {
   };
 };
 
-struct XE_2D_U8x2x32_LD_N {
+struct XE_2D_Packed_U8x2x32_LD_N {
   using BlockShape = Shape<_2, _32>;
   using inst_dtype = int8_t;
 
@@ -111,7 +111,7 @@ struct XE_2D_U8x2x32_ST_N {
   }
 };
 
-struct XE_2D_U8x4x32_LD_N {
+struct XE_2D_Packed_U8x4x32_LD_N {
   using BlockShape = Shape<_4, _32>;
 
   template <class T>
@@ -140,7 +140,7 @@ struct XE_2D_U8x4x32_LD_N {
   };
 };
 
-struct XE_2D_U8x8x32_LD_N {
+struct XE_2D_Packed_U8x8x32_LD_N {
   using BlockShape = Shape<_8, _32>;
 
   template <class T>
@@ -169,7 +169,7 @@ struct XE_2D_U8x8x32_LD_N {
   };
 };
 
-struct XE_2D_U8x16x32_LD_N {
+struct XE_2D_Packed_U8x16x32_LD_N {
   using BlockShape = Shape<_16, _32>;
 
   template <class T>
@@ -198,7 +198,7 @@ struct XE_2D_U8x16x32_LD_N {
   };
 };
 
-struct XE_2D_U8x32x32_LD_N {
+struct XE_2D_Packed_U8x32x32_LD_N {
   using BlockShape = Shape<_32, _32>;
 
   template <class T>
@@ -214,7 +214,26 @@ struct XE_2D_U8x32x32_LD_N {
   }
 };
 
-struct XE_2D_U8x1x64_LD_N {
+struct XE_2D_U8x32x32_LD_N {
+  using BlockShape = Shape<_32, _32>;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    // detail::XeSubgroup2DBlockLoad<1, 16, 32, 2>{}(baseoffset, width, height, pitch, coord, dst);
+    // Use the transform (VNNI) version as it provides better performance when loading the A matrix for
+    // GEMM FP8 and GEMM mixed-precision types.
+    detail::XeSubgroup2DBlockLoadTransform<1, 16, 32, 2>{}(baseoffset, width, height, pitch, coord, dst);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+struct XE_2D_Packed_U8x1x64_LD_N {
   using BlockShape = Shape<_1, _64>;
   
   template <class T>
@@ -243,7 +262,7 @@ struct XE_2D_U8x1x64_LD_N {
   };
 };
 
-struct XE_2D_U8x2x64_LD_N {
+struct XE_2D_Packed_U8x2x64_LD_N {
   using BlockShape = Shape<_2, _64>;
 
   template <class T>
@@ -272,7 +291,7 @@ struct XE_2D_U8x2x64_LD_N {
   };
 };
 
-struct XE_2D_U8x4x64_LD_N {
+struct XE_2D_Packed_U8x4x64_LD_N {
   using BlockShape = Shape<_4, _64>;
 
   template <class T>
@@ -301,7 +320,7 @@ struct XE_2D_U8x4x64_LD_N {
   };
 };
 
-struct XE_2D_U8x8x64_LD_N {
+struct XE_2D_Packed_U8x8x64_LD_N {
   using BlockShape = Shape<_8, _64>;
 
   template <class T>
@@ -330,7 +349,7 @@ struct XE_2D_U8x8x64_LD_N {
   };
 };
 
-struct XE_2D_U8x16x64_LD_N {
+struct XE_2D_Packed_U8x16x64_LD_N {
   using BlockShape = Shape<_16, _64>;
 
   template <class T>
@@ -359,7 +378,7 @@ struct XE_2D_U8x16x64_LD_N {
   };
 };
 
-struct XE_2D_U8x32x64_LD_N {
+struct XE_2D_Packed_U8x32x64_LD_N {
   using BlockShape = Shape<_32, _64>;
 
   template <class T>
@@ -445,6 +464,93 @@ struct XE_2D_U8x32x64_LD_V {
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
     detail::XeSubgroup2DBlockLoadTransform<1, 16, 32, 4>{}(baseoffset, width, height, pitch, coord, dst);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+struct XE_2D_U8x32x4_LD_T {
+  using BlockShape = Shape<_4, _32>;
+  using inst_dtype = uint8_t;
+  static constexpr bool is_transpose = true;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    detail::XeSubgroup2DBlockLoadTranspose<1, 4, 32, 1>{}(baseoffset, width, height, pitch, coord, dst);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+struct XE_2D_U8x32x8_LD_T {
+  using BlockShape = Shape<_8, _32>;
+  using inst_dtype = uint8_t;
+  static constexpr bool is_transpose = true;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    detail::XeSubgroup2DBlockLoadTranspose<1, 8, 32, 1>{}(baseoffset, width, height, pitch, coord, dst);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+struct XE_2D_U8x16x32_LD_T  {
+  using BlockShape = Shape<_32, _16>;
+  using inst_dtype = uint32_t;
+  static constexpr bool is_transpose = true;
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    detail::XeSubgroup2DBlockLoadTranspose<4, 8, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+struct XE_2D_U8x16x16_LD_T  {
+  using BlockShape = Shape<_16, _16>;
+  using inst_dtype = uint32_t;
+  static constexpr bool is_transpose = true;
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    detail::XeSubgroup2DBlockLoadTranspose<4, 4, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+struct XE_2D_U8x16x8_LD_T  {
+  using BlockShape = Shape<_8, _16>;
+  using inst_dtype = uint32_t;
+  static constexpr bool is_transpose = true;
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    detail::XeSubgroup2DBlockLoadTranspose<4, 2, 16, 1>{}(baseoffset, width, height, pitch, coord, dst);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif

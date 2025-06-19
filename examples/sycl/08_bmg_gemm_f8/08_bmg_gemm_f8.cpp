@@ -200,7 +200,7 @@ struct ExampleRunner {
           block_A_fp16.get(),
           block_A.size()
       );
-      convert_fp8_to_fp16<ElementA, half_t>(
+      convert_fp8_to_fp16<ElementB, half_t>(
           block_B.get(),
           block_B_fp16.get(),
           block_B.size()
@@ -346,7 +346,7 @@ int launcher(Options& options)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
   using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 
   using TileShape = Shape<_256, _256, _32>;

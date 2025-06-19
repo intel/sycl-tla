@@ -31,6 +31,48 @@
 
 #include "bmg_flash_attn_decode_runner.hpp"
 
+template <int KVTile, int NumSG, bool PagedKV, bool Varlen>
+int run_decode(Options const& options) {
+
+#if !defined(HEAD_DIM)
+  std::cerr << "HEAD_DIM must be defined" << std::endl;
+  return -1;
+#endif
+  if (options.head_size_vo != HEAD_DIM) {
+    std::cerr << "head_size_vo must be " << HEAD_DIM << ", but got " << options.head_size_vo << std::endl;
+    return -1;
+  }
+
+#if HEAD_DIM == 64
+    using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+    using ShapePV = Shape<_1, _32, Int<KVTile>>;
+    using ShapeOutput = Shape<_1, _64, Int<KVTile>>;
+    using SubgroupLayout = Layout<Shape<Int<NumSG>, _1, _1>, Stride<_1, _1, _1>>;
+
+#elif HEAD_DIM == 96
+    using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+    using ShapePV = Shape<_1, _32, Int<KVTile>>;
+    using ShapeOutput = Shape<_1, _96, Int<KVTile>>;
+    using SubgroupLayout = Layout<Shape<Int<NumSG>, _1, _1>, Stride<_1, _1, _1>>;
+
+#elif HEAD_DIM == 128
+    using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+    using ShapePV = Shape<_1, _32, Int<KVTile>>;
+    using ShapeOutput = Shape<_1, _128, Int<KVTile>>;
+    using SubgroupLayout = Layout<Shape<Int<NumSG>, _1, _1>, Stride<_1, _1, _1>>;
+
+#elif HEAD_DIM == 192
+    using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+    using ShapePV = Shape<_1, _32, Int<KVTile>>;
+    using ShapeOutput = Shape<_1, _192, Int<KVTile>>;
+    using SubgroupLayout = Layout<Shape<Int<NumSG>, _1, _1>, Stride<_1, _1, _1>>;
+
+#endif
+
+    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
+                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
+}
+
 int main(int argc, const char **argv) {
   //
   // Parse options
@@ -50,25 +92,13 @@ int main(int argc, const char **argv) {
     return -1;
   }
 
-  if (options.head_size_vo == 64 || options.head_size_vo == 96 || options.head_size_vo == 192) {
-
-    using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<Shape<_512, _64, _64>>,
-                                      Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>>::TiledMMA;
-
-    return options.is_causal ? FMHAConfig<true, Shape<_512, _64, _64, _64>, TiledMma>::run(options)
-                             : FMHAConfig<false, Shape<_512, _64, _64, _64>, TiledMma>::run(options);
-  } else if (options.head_size_vo == 128) {
-    using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-                                      Layout<Shape<_512, _128, _64>>,
-                                      Layout<Shape<_8, _2, _1>, Stride<_2, _1, _1>>>::TiledMMA;
-
-    return options.is_causal ? FMHAConfig<true, Shape<_512, _128, _64, _64>, TiledMma>::run(options)
-                             : FMHAConfig<false, Shape<_512, _128, _64, _64>, TiledMma>::run(options);
-  } else {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
+  if(options.varlen && !options.use_paged_kv) {
+    return run_decode<512, 8, false, true>(options);
+  } else if(options.varlen && options.use_paged_kv) {
+    return run_decode<512, 8, true, true>(options);
+  } else if(!options.varlen && !options.use_paged_kv) {
+    return run_decode<512, 8, false, false>(options);
+  } else if(!options.varlen && options.use_paged_kv) {
+    return run_decode<512, 8, true, false>(options);
   }
 }

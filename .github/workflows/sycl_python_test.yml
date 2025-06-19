@@ -35,6 +35,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Intel graphics drivers
+        uses: ./.github/actions/install-intel-graphics
+        with:
+          GPU: 'PVC'
+          IGC: 'ROLLING'
       - name: Install DPC++
         id: install_dpcpp
         uses: ./.github/actions/install-dpcpp
@@ -73,4 +78,5 @@ jobs:
           pip install -e .
           export CUTLASS_USE_SYCL=1
           export SYCL_UR_TRACE=2
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           python test/python/cutlass/gemm/run_all_tests.py
