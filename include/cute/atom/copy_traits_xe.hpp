@@ -60,10 +60,10 @@ static constexpr bool is_transpose_load<T, cute::void_t<std::bool_constant<T::is
 
 // ==========  is_stride_leftmost  ==========
 template <class T, class = void>
-static constexpr bool is_stride_leftmost = std::is_same_v<_1, decltype(get<0>(T{}))> || std::is_same_v<_8, decltype(get<0>(T{}))>;
+static constexpr bool is_stride_leftmost = std::is_same_v<_1, decltype(get<0>(T{}))>;
 
 template <class T>
-static constexpr bool is_stride_leftmost<T, cute::void_t<decltype(T{}.stride())>> = std::is_same_v<_1, decltype(get<0>(T{}.stride()))> || std::is_same_v<_8, decltype(get<0>(T{}.stride()))>;
+static constexpr bool is_stride_leftmost<T, cute::void_t<decltype(T{}.stride())>> = std::is_same_v<_1, decltype(get<0>(T{}.stride()))>;
 
 // Swap the Src or Dst Layout of a Copy_Traits if the logical/memory layouts differ 
 template <bool is_matrix_B, typename LayoutIn, typename BlockShape>
@@ -333,7 +333,7 @@ struct XE_2D_LD_Unpack {
 
   template <class... TensorArgs>
   XE_2D_LD_Unpack(Tensor<TensorArgs...> const &tensor) {
-    base_ptr = tensor.data().get();
+    base_ptr = raw_pointer_cast(tensor.data());
 
     if constexpr (is_tensor_M_major)
     {

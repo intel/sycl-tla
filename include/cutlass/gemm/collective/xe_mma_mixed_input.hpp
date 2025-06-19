@@ -284,8 +284,18 @@ public:
 
     auto mA_mkl =
         make_tensor(make_gmem_ptr(args.ptr_A), make_layout(make_shape(M, K, L), args.dA));
+
+    auto ptr_B = [&]() {
+      if constexpr (sizeof_bits_v<ElementB> < 8) {
+        return cute::subbyte_iterator<const ElementB>(args.ptr_B);
+      } else {
+        return make_gmem_ptr(static_cast<ElementB const *>(args.ptr_B));
+      }
+    }();
+
+
     auto mB_nkl =
-        make_tensor(make_gmem_ptr(args.ptr_B), make_layout(make_shape(N, K, L), args.dB));
+        make_tensor(ptr_B, make_layout(make_shape(N, K, L), args.dB));
 
     Copy_A tiled_copy_a{Copy_A{}.with(mA_mkl)};
     Copy_B tiled_copy_b{Copy_B{}.with(mB_nkl)};
@@ -304,8 +314,15 @@ public:
       return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, {}, args.group_size};
     }
 
-    auto mZero =
-        make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
+    auto ptr_Z = [&]() {
+      if constexpr (sizeof_bits_v<NonVoidElementZero> < 8) {
+        return cute::subbyte_iterator<const NonVoidElementZero>(args.ptr_Z);
+      } else {
+        return make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z));
+      }
+    }();
+
+    auto mZero = make_tensor(ptr_Z,
                     make_layout(make_shape(zero_elements_packed_along_k * (IsATransformed ? M : N), scale_k / zero_elements_packed_along_k, L),
                     make_stride(_1{}, zero_elements_packed_along_k * (IsATransformed ? M : N), (IsATransformed ? M : N) * scale_k)));
     Copy_Zero tiled_copy_zero{Copy_Zero{}.with(mZero)};

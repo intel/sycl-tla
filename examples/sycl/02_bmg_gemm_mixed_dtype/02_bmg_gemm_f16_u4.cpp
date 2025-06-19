@@ -517,8 +517,7 @@ void run_int4(Options const& options) {
   using ElementScale = MmaType;
 
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
-  using StrideZero = StrideScale;
-  //decltype(make_stride(_8{}, make_stride(_1{}, int64_t(0)), int64_t(0)));
+  using StrideZero = StrideScale; //decltype(make_stride(_8{}, make_stride(int64_t(0), _1{}), int64_t(0)));
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
   using GmemTiledCopyA = copy_b;
