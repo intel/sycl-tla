@@ -4050,8 +4050,10 @@ bool TestXe(
   std::vector<int> problem_size_n = {max_alignment_n, 512 - 2 * max_alignment_n};
   std::vector<int> problem_size_l = test_batch ? std::vector{1, 3, 4} : std::vector{1};
 
+  constexpr int Stages = Gemm::GemmKernel::DispatchPolicy::Stages;
   constexpr int TileShapeK = cute::size<2>(typename Gemm::GemmKernel::TileShape{});
-  std::vector<int> problem_size_k{TileShapeK, TileShapeK*32};
+  int max_alignment_k = std::max(Gemm::kAlignmentA, Gemm::kAlignmentB);
+  std::vector<int> problem_size_k = {max_alignment_k, TileShapeK * (Stages + 1) - max_alignment_k};
 
   using DecompositionMode = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode;
   std::vector decomposition_modes = {DecompositionMode::Heuristic};
