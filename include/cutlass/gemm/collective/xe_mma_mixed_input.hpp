@@ -55,7 +55,7 @@ struct scale_zero_copy_traits {
 template<class datatype, size_t N, class stride>
 struct scale_zero_copy_traits<datatype, N, stride,
           std::enable_if_t<sizeof_bits_v<datatype> == 4 && decltype(get<0>(stride{}))::value == 8>> {
-  using type = XE_2D_U4x1x128_LD_N;  // 8 elements along K packed into one int32 and then N-major
+  using type = XE_2D_Packed_U4x1x128_LD_N;  // 8 elements along K packed into one int32 and then N-major
 };
 
 // 8 bits

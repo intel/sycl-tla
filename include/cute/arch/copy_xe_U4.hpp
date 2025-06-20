@@ -37,7 +37,7 @@
 namespace cute
 {
 
-  struct XE_2D_U4x1x128_LD_N {
+  struct XE_2D_Packed_U4x1x128_LD_N {
   using BlockShape = Shape<_1, _128>;
   using inst_dtype = uint32_t;
 

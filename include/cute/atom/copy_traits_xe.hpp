@@ -369,9 +369,11 @@ struct XE_2D_LD_Unpack {
     static_assert(is_rmem<TD>::value);
     static_assert(size(SLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::SrcLayout{}),
                   "Src tensor size does not match copy atom size.");
+    static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::DstLayout{}),
+                  "Dst tensor size does not match copy atom size.");
 
     dtype *base_addr = (dtype *)traits.base_ptr;
-  
+
     auto [m, n, l] = src.data().coord_;
     int x = is_tensor_M_major ? m : n;
     int y = is_tensor_M_major ? n : m;
@@ -671,21 +673,21 @@ struct Copy_Traits_<XE_2D_U8x32x32_LD_N, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits_<XE_2D_U4x1x128_LD_N, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U4x1x128_LD_N, args_t...> {
+struct Copy_Traits_<XE_2D_Packed_U4x1x128_LD_N, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_Packed_U4x1x128_LD_N, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,Shape <_4,  _8>>,
                            Stride< _0,Stride< _1, _4>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16,Shape <_4,  _8>>,
-                           Stride<_16,Stride< _1, _4>>>;
+                           Stride<_32,Stride< _1, _4>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
   template <class... ArgT>
   Copy_Traits_(ArgT... args)
-      : XE_2D_LD_Unpack<XE_2D_U4x1x128_LD_N, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_Packed_U4x1x128_LD_N, args_t...>(args...) {}
 };
 
 template <class... args_t>
@@ -730,10 +732,10 @@ struct Copy_Traits_<XE_2D_U4x16x8_LD_T, args_t...>
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,Shape <_4, _8>>,
-                           Stride<_0,Stride< _1,_64>>>;
+                           Stride<_0,Stride< _1, _4>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16,Shape <_4, _8>>,
-                           Stride<_16,Stride< _1,_64>>>;
+                           Stride<_32,Stride<_1, _4>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 
@@ -2487,7 +2489,7 @@ struct Copy_Traits<COPY_OP, args_t...> : Copy_Traits_<COPY_OP, args_t...>{ \
       : Copy_Traits_<CopyOp, args_t...>(args...) {} \
 };
 
-COPY_TRAIT_LD_DEF(XE_2D_U4x1x128_LD_N)
+COPY_TRAIT_LD_DEF(XE_2D_Packed_U4x1x128_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U8x1x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_Packed_U8x1x32_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_Packed_U8x2x32_LD_N)
