@@ -167,9 +167,9 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
 
     if (L > 1) {
       constexpr int min_batch_aligned_elements_A = batch_alignment_bits / sizeof_bits<ElementA>::value;
-      implementable &= cutlass::detail::check_alignment<min_batch_aligned_elements_A>(cute::make_shape(L), get<2>(args.dA));
+      implementable &= get<2>(args.dA) % min_batch_aligned_elements_A == 0;
       constexpr int min_batch_aligned_elements_B = batch_alignment_bits / sizeof_bits<ElementB>::value;
-      implementable &= cutlass::detail::check_alignment<min_batch_aligned_elements_B>(cute::make_shape(L), get<2>(args.dB));
+      implementable &= get<2>(args.dB) % min_batch_aligned_elements_B == 0;
     }
 
     constexpr int min_width_aligned_elements_A = width_alignment_bits / sizeof_bits<ElementA>::value;

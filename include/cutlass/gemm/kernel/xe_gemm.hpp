@@ -159,9 +159,6 @@ public:
 
   static bool
   can_implement(Arguments const& args) {
-    auto problem_shape_MNKL = append<4>(args.problem_shape, 1);
-    auto [M,N,K,L] = problem_shape_MNKL;
-
     bool implementable = true;
 
     implementable = implementable && (args.mode == GemmUniversalMode::kGemm ||

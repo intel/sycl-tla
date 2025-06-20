@@ -256,7 +256,7 @@ public:
         implementable &= cutlass::detail::check_alignment<min_height_aligned_elements_D>(cute::make_shape(M,N), take<0,2>(InternalStrideD{}));
         if (L > 1) {
           constexpr int min_batch_aligned_elements_D = batch_alignment_bits / sizeof_bits<ElementD>::value;
-          implementable &= cutlass::detail::check_alignment<min_batch_aligned_elements_D>(cute::make_shape(L), get<2>(InternalStrideD{}));
+          implementable &= get<2>(InternalStrideD{}) % min_batch_aligned_elements_D == 0;
         }
         constexpr int min_width_aligned_elements_D = width_alignment_bits / sizeof_bits<ElementD>::value;
         implementable &= cutlass::detail::check_contiguous_alignment<min_width_aligned_elements_D>(cute::make_shape(M,N), take<0,2>(InternalStrideD{}));
@@ -267,7 +267,7 @@ public:
         implementable &= cutlass::detail::check_alignment<min_height_aligned_elements_C>(cute::make_shape(M,N), take<0,2>(InternalStrideC{}));
         if (L > 1) {
           constexpr int min_batch_aligned_elements_C = batch_alignment_bits / sizeof_bits<ElementC>::value;
-          implementable &= cutlass::detail::check_alignment<min_batch_aligned_elements_C>(cute::make_shape(L), get<2>(InternalStrideC{}));
+          implementable &= get<2>(InternalStrideC{}) % min_batch_aligned_elements_C == 0;
         }
         constexpr int min_width_aligned_elements_C = width_alignment_bits / sizeof_bits<ElementC>::value;
         implementable &= cutlass::detail::check_contiguous_alignment<min_width_aligned_elements_C>(cute::make_shape(M,N), take<0,2>(InternalStrideC{}));

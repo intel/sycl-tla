@@ -370,7 +370,7 @@ get_alignment_count_from_gmem_tiled_copy() {
     }
     // Intel 2D copy
     else if constexpr (is_xe_2d_copy_engine<GmemTiledCopy>()) {
-      return 512 / sizeof_bits<Element>::value;
+      return 128 / sizeof_bits<Element>::value;
     }
     else {
       // For non-TMA tiled copies, TiledCopy holds the alignment count directly in its TiledShape_MN

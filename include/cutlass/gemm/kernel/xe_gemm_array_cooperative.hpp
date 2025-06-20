@@ -180,7 +180,7 @@ public:
   }
 
   static bool
-  can_implement(Arguments const& args) {constexpr int copy_alignment_bits = 128;
+  can_implement(Arguments const& args) {
     bool implementable = true;
 
     implementable = implementable && (args.mode == GemmUniversalMode::kGrouped ||

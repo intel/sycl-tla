@@ -179,8 +179,8 @@ struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, El
       implementable &= cutlass::detail::check_alignment<min_height_aligned_elements_B>(cute::make_shape(N,K), take<0,2>(InternalStrideB{}));
 
       if (L > 1) {
-        implementable &= cutlass::detail::check_alignment<min_batch_aligned_elements_A>(cute::make_shape(L), get<2>(InternalStrideA{}));
-        implementable &= cutlass::detail::check_alignment<min_batch_aligned_elements_B>(cute::make_shape(L), get<2>(InternalStrideB{}));
+        implementable &= get<2>(InternalStrideA{}) % min_batch_aligned_elements_A == 0;
+        implementable &= get<2>(InternalStrideB{}) % min_batch_aligned_elements_B == 0;
       }
 
       implementable &= cutlass::detail::check_contiguous_alignment<min_width_aligned_elements_A>(cute::make_shape(M,K), take<0,2>(InternalStrideA{}));

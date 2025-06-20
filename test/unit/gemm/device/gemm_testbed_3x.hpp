@@ -3014,6 +3014,7 @@ struct TestbedImpl {
     if (status != cutlass::Status::kSuccess) {
 #if defined(CUTLASS_ENABLE_SYCL)
       std::cerr << "This test is not supported." << "\n";
+      return true;
 #else
       cudaError_t error = cudaGetLastError();
       const auto error_str = cudaGetErrorString(error);
