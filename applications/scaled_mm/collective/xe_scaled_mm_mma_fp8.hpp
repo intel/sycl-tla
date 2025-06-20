@@ -71,8 +71,8 @@ struct CollectiveMma<MainloopIntelScaledMMW8A8<Stages, Schedule>, TileShape_, El
   using ElementAccumulator = typename TiledMma::ValTypeC;
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_; 
-  using GmemTiledCopyScaleA = XE_2D_U16x32x32_LD_N; //Have to use the same shape size as FP8 used in the kernel
-  using GmemTiledCopyScaleB = XE_2D_U16x32x32_LD_N; //Have to use the same shape size as FP8 used in the kernel  
+  using GmemTiledCopyScaleA = XE_2D_U16x32x32_LD_N; // Shape of the copy atom for scales A must match shape of the copy atom for A in the number of elements
+  using GmemTiledCopyScaleB = XE_2D_U16x32x32_LD_N; // Shape of the copy atom for scales A must match shape of the copy atom for A in the number of elements
 
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;
@@ -169,15 +169,15 @@ struct CollectiveMma<MainloopIntelScaledMMW8A8<Stages, Schedule>, TileShape_, El
                               make_layout(make_shape(M, K, L), args.dA));
     auto mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.ptr_B)),
                               make_layout(make_shape(N, K, L), args.dB));
-    auto mscaleA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementScaleA const*>(args.ptr_scaleA)),
+    auto mScaleA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementScaleA const*>(args.ptr_scaleA)),
                               make_layout(make_shape(M, K, L), args.dscaleA));
-    auto mscaleB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementScaleB const*>(args.ptr_scaleB)),
+    auto mScaleB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementScaleB const*>(args.ptr_scaleB)),
                               make_layout(make_shape(N, K, L), args.dscaleB));
 
     Copy_A tiled_copy_a{Copy_A{}.with(mA_mkl)};
     Copy_B tiled_copy_b{Copy_B{}.with(mB_nkl)};
-    Copy_scaleA tiled_copy_scale_a{Copy_scaleA{}.with(mscaleA_mkl)};
-    Copy_scaleB tiled_copy_scale_b{Copy_scaleB{}.with(mscaleB_nkl)};
+    Copy_scaleA tiled_copy_scale_a{Copy_scaleA{}.with(mScaleA_mkl)};
+    Copy_scaleB tiled_copy_scale_b{Copy_scaleB{}.with(mScaleB_nkl)};
 
     return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale_a, tiled_copy_scale_b};
   }
@@ -204,40 +204,21 @@ struct CollectiveMma<MainloopIntelScaledMMW8A8<Stages, Schedule>, TileShape_, El
       using saType = typename EnginescaleA::value_type;
       using sbType = typename EnginescaleB::value_type;
 
-      auto const& a = a_tensor(_, _, _);
-      auto const& b = b_tensor(_, _, _);
-
-      aType* pA = a.data();
-      bType* pB = b.data();
+      aType* pA = a_tensor.data();
+      bType* pB = b_tensor.data();
       saType* psA = scale_a_tensor.data();
       sbType* psB = scale_b_tensor.data();
 
-      constexpr int a_num_elements = decltype(size(a))::value;
-      constexpr int b_num_elements = decltype(size(b))::value;
+      constexpr int a_num_elements = decltype(size(a_tensor))::value;
+      constexpr int b_num_elements = decltype(size(b_tensor))::value;
 
       for (int i = 0; i < a_num_elements; i++){
-        reinterpret_cast<aType*>(pA)[i] = reinterpret_cast<aType*>(pA)[i] * reinterpret_cast<saType*>(psA)[i];
+        pA[i] *= psA[i];
       }
       for (int i = 0; i < b_num_elements; i++){
-        reinterpret_cast<bType*>(pB)[i] = reinterpret_cast<bType*>(pB)[i] * reinterpret_cast<sbType*>(psB)[i];
+        pB[i] *= psB[i];
       }
   }   
-
-  template <class EngineIn,
-  class LayoutIn,
-  class... Ts>
-  CUTLASS_DEVICE
-  void debug(Tensor<EngineIn, LayoutIn> & in)
-  {
-    auto const& src = in(_, _, _);
-    using SrcType = typename EngineIn::value_type;
-    SrcType* pSrc = src.data();
-    constexpr int num_elements = decltype(size(src))::value;
-    for (int i = 0; i < num_elements; i++){
-      SrcType tmp = reinterpret_cast<SrcType*>(pSrc)[i];
-      print(static_cast<float>(tmp)); print(' ');
-    }
-  }
 
   //
   // Methods
@@ -264,13 +245,10 @@ struct CollectiveMma<MainloopIntelScaledMMW8A8<Stages, Schedule>, TileShape_, El
     static_assert(std::is_same_v<SrcType, uint8_t>, "Expected fp8 (E4M3) input as uint8_t");
     static_assert(std::is_same_v<DstType, half_t>, "Expected fp16 output as half_t");
 
-    auto const& src = in(_, _, _);
-    auto const& dst = out(_, _, _);
+    SrcType const* pSrc = in.data();
+    DstType* pDst = out.data();
 
-    SrcType const* pSrc = src.data();
-    DstType* pDst = dst.data();
-
-    constexpr int num_elements = decltype(size(src))::value;
+    constexpr int num_elements = decltype(size(in))::value;
     // TODO(Codeplay): Move conversion to NumericArrayConverter
     if constexpr (std::is_same_v<ElementA, float_e5m2_t>) {
       // Using something as simple as the following code surprisingly
@@ -285,7 +263,6 @@ struct CollectiveMma<MainloopIntelScaledMMW8A8<Stages, Schedule>, TileShape_, El
       SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc);
       DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst);
       E5M2_to_FP16<num_elements>(*pSrcArr, *pDstArr);
-      //E5M2_to_FP16_and_scale_fp16<num_elements>(*pSrcArr, *pDstArr);
     } else {
       // E4M3 -> FP16 conversion
       constexpr int chunk_size = 16;

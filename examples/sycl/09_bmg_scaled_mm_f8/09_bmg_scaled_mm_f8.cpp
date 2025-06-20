@@ -84,6 +84,7 @@ struct Options {
 
   bool help;
   bool error;
+  bool e5m2;
 
   int m, n, k, l, iterations;
   float alpha, beta;
@@ -101,6 +102,11 @@ struct Options {
 
     if (cmd.check_cmd_line_flag("help")) {
       help = true;
+      return;
+    }
+
+    if (cmd.check_cmd_line_flag("e5m2")) {
+      e5m2 = true;
       return;
     }
 
@@ -125,7 +131,8 @@ struct Options {
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
-      << "  --iterations=<int>          Iterations\n\n";
+      << "  --iterations=<int>          Iterations\n\n"
+      << "  --e5m2                      Use e5m2\n\n";
 
     return out;
   }
@@ -205,7 +212,10 @@ struct ExampleRunner {
       }
 
       syclcompat::memcpy(d_src, h_src_multiplied, size * sizeof(SrcT));
-      syclcompat::wait();    
+      syclcompat::wait();
+
+      delete[] h_src_multiplied;
+      delete[] h_scale;
   }
 
   template <typename SrcT, typename DstT>
@@ -221,6 +231,9 @@ struct ExampleRunner {
 
       syclcompat::memcpy(d_dst, h_dst, size * sizeof(DstT));
       syclcompat::wait();
+
+      delete[] h_src;
+      delete[] h_dst;
   }
 
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
@@ -393,10 +406,15 @@ int main(int argc, const char** argv)
   bool passed;
 
   using ElementAccumulator = float;
-  using ElementComputeEpilogue = float; 
-  // TODO: support E5M2
+  using ElementComputeEpilogue = float;
   using ElementInputA = cutlass::float_e4m3_t; 
   using ElementInputB = cutlass::float_e4m3_t;
+
+  if (options.e5m2){
+    using ElementInputA = cutlass::float_e5m2_t; 
+    using ElementInputB = cutlass::float_e5m2_t;
+  }
+
   using ElementOutput = float;
 
   using LayoutA = cutlass::layout::RowMajor;
