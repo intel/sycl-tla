@@ -181,9 +181,6 @@ public:
 
   static bool
   can_implement(Arguments const& args) {constexpr int copy_alignment_bits = 128;
-    auto problem_shape_MNKL = append<4>(args.problem_shape, 1);
-    auto [M,N,K,L] = problem_shape_MNKL;
-
     bool implementable = true;
 
     implementable = implementable && (args.mode == GemmUniversalMode::kGrouped ||

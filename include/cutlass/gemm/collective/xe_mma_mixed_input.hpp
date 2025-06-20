@@ -273,6 +273,43 @@ public:
     return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, tiled_copy_zero, args.group_size};
   }
 
+  template<class ProblemShape>
+  static bool
+  can_implement(
+      ProblemShape problem_shapes,
+      Arguments const& args) {
+    constexpr int width_alignment_bits = 32;
+    constexpr int height_alignment_bits = 128;
+    constexpr int batch_alignment_bits = 512;
+    auto problem_shape_MNKL = append<4>(problem_shapes, 1);
+    auto [M,N,K,L] = problem_shape_MNKL;
+
+    bool implementable = true;
+
+    constexpr int min_height_aligned_elements_A = height_alignment_bits / sizeof_bits<ElementA>::value;
+    implementable &= cutlass::detail::check_alignment<min_height_aligned_elements_A>(cute::make_shape(M,K), take<0,2>(args.dA));
+    constexpr int min_height_aligned_elements_B = height_alignment_bits / sizeof_bits<ElementB>::value;
+    implementable &= cutlass::detail::check_alignment<min_height_aligned_elements_B>(cute::make_shape(N,K), take<0,2>(args.dB));
+
+    if (L > 1) {
+      constexpr int min_batch_aligned_elements_A = batch_alignment_bits / sizeof_bits<ElementA>::value;
+      implementable &= cutlass::detail::check_alignment<min_batch_aligned_elements_A>(cute::make_shape(L), get<2>(args.dA));
+      constexpr int min_batch_aligned_elements_B = batch_alignment_bits / sizeof_bits<ElementB>::value;
+      implementable &= cutlass::detail::check_alignment<min_batch_aligned_elements_B>(cute::make_shape(L), get<2>(args.dB));
+    }
+
+    constexpr int min_width_aligned_elements_A = width_alignment_bits / sizeof_bits<ElementA>::value;
+    implementable &= cutlass::detail::check_contiguous_alignment<min_width_aligned_elements_A>(cute::make_shape(M,K), take<0,2>(args.dA));
+    constexpr int min_width_aligned_elements_B = width_alignment_bits / sizeof_bits<ElementB>::value;
+    implementable &= cutlass::detail::check_contiguous_alignment<min_width_aligned_elements_B>(cute::make_shape(N,K), take<0,2>(args.dB));
+
+    if (!implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum alignment requirements for XE 2D copy.\n");
+    }
+
+    return implementable;
+  }
+
   // Helper functions to select packing for conversion
   template <class SrcType,
             class DstType,
