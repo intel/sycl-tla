@@ -221,8 +221,7 @@ public:
   can_implement(
       ProblemShape const& problem_shapes,
       Arguments const& args) {
-    constexpr int width_alignment_bits = 32;
-    constexpr int height_alignment_bits = 128;
+    constexpr int copy_alignment_bits = 128;
     constexpr int batch_alignment_bits = 512;
     auto problem_shape_MNKL = append<4>(problem_shapes, 1);
     auto [M,N,K,L] = problem_shape_MNKL;
@@ -231,25 +230,21 @@ public:
     bool fusion_implementable = true;
 
     if constexpr (is_destination_supported) {
-      constexpr int min_height_aligned_elements_D = height_alignment_bits / sizeof_bits<ElementD>::value;
-      implementable &= cutlass::detail::check_alignment<min_height_aligned_elements_D>(cute::make_shape(M,N), take<0,2>(args.dD));
+      constexpr int min_aligned_elements_D = copy_alignment_bits / sizeof_bits<ElementD>::value;
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_D>(cute::make_shape(M,N,L), args.dD);
       if (L > 1) {
         constexpr int min_batch_aligned_elements_D = batch_alignment_bits / sizeof_bits<ElementD>::value;
         implementable &= get<2>(args.dD) % min_batch_aligned_elements_D == 0;
       }
-      constexpr int min_width_aligned_elements_D = width_alignment_bits / sizeof_bits<ElementD>::value;
-      implementable &= cutlass::detail::check_contiguous_alignment<min_width_aligned_elements_D>(cute::make_shape(M,N), take<0,2>(args.dD));
     }
 
     if constexpr (is_source_supported) {
-      constexpr int min_height_aligned_elements_C = height_alignment_bits / sizeof_bits<ElementC>::value;
-      implementable &= cutlass::detail::check_alignment<min_height_aligned_elements_C>(cute::make_shape(M,N), take<0,2>(args.dC));
+      constexpr int min_aligned_elements_C = copy_alignment_bits / sizeof_bits<ElementC>::value;
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_C>(cute::make_shape(M,N,L), args.dC);
       if (L > 1) {
         constexpr int min_batch_aligned_elements_C = batch_alignment_bits / sizeof_bits<ElementC>::value;
         implementable &= get<2>(args.dC) % min_batch_aligned_elements_C == 0;
       }
-      constexpr int min_width_aligned_elements_C = width_alignment_bits / sizeof_bits<ElementC>::value;
-      implementable &= cutlass::detail::check_contiguous_alignment<min_width_aligned_elements_C>(cute::make_shape(M,N), take<0,2>(args.dC));
     }
 
     fusion_implementable = fusion_implementable && FusionCallbacks::can_implement(problem_shape_MNKL, args.thread);

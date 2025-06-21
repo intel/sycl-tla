@@ -157,34 +157,28 @@ struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, El
   can_implement(
       ProblemShape problem_shapes,
       Arguments const& args) {
-    constexpr int width_alignment_bits = 32;
-    constexpr int height_alignment_bits = 128;
+    constexpr int copy_alignment_bits = 128;
     constexpr int batch_alignment_bits = 512;
     auto problem_shape_MNKL = append<4>(problem_shapes, 1);
     auto [M,N,K,L] = problem_shape_MNKL;
 
     bool implementable = true;
 
-    constexpr int min_height_aligned_elements_A = height_alignment_bits / sizeof_bits<ElementA>::value;
-    constexpr int min_height_aligned_elements_B = height_alignment_bits / sizeof_bits<ElementB>::value;
+    constexpr int min_aligned_elements_A = copy_alignment_bits / sizeof_bits<ElementA>::value;
+    constexpr int min_aligned_elements_B = copy_alignment_bits / sizeof_bits<ElementB>::value;
     constexpr int min_batch_aligned_elements_A = batch_alignment_bits / sizeof_bits<ElementA>::value;
     constexpr int min_batch_aligned_elements_B = batch_alignment_bits / sizeof_bits<ElementB>::value;
-    constexpr int min_width_aligned_elements_A = width_alignment_bits / sizeof_bits<ElementA>::value;
-    constexpr int min_width_aligned_elements_B = width_alignment_bits / sizeof_bits<ElementB>::value;
     for (int i = 0; i < problem_shapes.groups(); i++) {
       auto problem_shape_MNKL = append<4>(problem_shapes.get_host_problem_shape(i), 1);
       auto [M,N,K,L] = problem_shape_MNKL;
 
-      implementable &= cutlass::detail::check_alignment<min_height_aligned_elements_A>(cute::make_shape(M,K), take<0,2>(InternalStrideA{}));
-      implementable &= cutlass::detail::check_alignment<min_height_aligned_elements_B>(cute::make_shape(N,K), take<0,2>(InternalStrideB{}));
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_A>(cute::make_shape(M,K,L), InternalStrideA{});
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_B>(cute::make_shape(N,K,L), InternalStrideB{});
 
       if (L > 1) {
         implementable &= get<2>(InternalStrideA{}) % min_batch_aligned_elements_A == 0;
         implementable &= get<2>(InternalStrideB{}) % min_batch_aligned_elements_B == 0;
       }
-
-      implementable &= cutlass::detail::check_contiguous_alignment<min_width_aligned_elements_A>(cute::make_shape(M,K), take<0,2>(InternalStrideA{}));
-      implementable &= cutlass::detail::check_contiguous_alignment<min_width_aligned_elements_B>(cute::make_shape(N,K), take<0,2>(InternalStrideB{}));
     }
 
     if (!implementable) {

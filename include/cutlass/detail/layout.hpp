@@ -428,30 +428,6 @@ check_alignment(Shape const& shape, Stride const& stride) {
   return check_alignment<Alignment>(cute::make_layout(shape, stride));
 }
 
-template<int Alignment, class Shape, class Stride>
-CUTLASS_HOST_DEVICE constexpr
-bool
-check_contiguous_alignment(cute::Layout<Shape,Stride> const& layout) {
-  constexpr int R = cute::Layout<Shape,Stride>::rank;
-
-  bool contiguous_check = cute::any_of(cute::make_int_sequence<R>{}, [&layout] (auto s) {
-    return is_major<s, decltype(layout.stride())>;
-  });
-
-  bool stride_check = cute::all_of(cute::make_int_sequence<R>{}, [&layout] (auto s) {
-    return (!is_major<s, decltype(layout.stride())>) || (cute::get<s>(layout.shape()) % Alignment == 0);
-  });
-  return contiguous_check && stride_check;
-}
-
-template<int Alignment, class Shape, class Stride>
-CUTLASS_HOST_DEVICE constexpr
-bool
-check_contiguous_alignment(Shape const& shape, Stride const& stride) {
-  return check_contiguous_alignment<Alignment>(cute::make_layout(shape, stride));
-}
-
-
 template<int B, int M, int S>
 CUTLASS_HOST_DEVICE constexpr
 size_t
