@@ -97,16 +97,6 @@ enum class CacheControl {
   kL1IAR_L3C = 7, // Override to L1 invalidate-after-read, and L3 cached
 };
 
-SYCL_DEVICE_BUILTIN(
-    cute::intel::uchar __builtin_IB_subgroup_block_read_cacheopts_u8_m1k16v1(
-        intptr_t baseoffset, int width_minus_one, int height_minus_one,
-        int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control ));
-
-SYCL_DEVICE_BUILTIN(
-    cute::intel::uchar2 __builtin_IB_subgroup_block_read_cacheopts_u8_m1k16v2(
-        intptr_t baseoffset, int width_minus_one, int height_minus_one,
-        int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control ));
-
 // 8bits No transform No transpose
 SYCL_DEVICE_BUILTIN(
     cute::intel::uchar __builtin_IB_subgroup_block_read_flat_u8_m1k16v1(
@@ -504,28 +494,6 @@ SYCL_DEVICE_BUILTIN(
 
 namespace cute::detail
 {
-
-template<>
-struct XeSubgroup2DBlockLoad<1, 16, 1, 1> {
-    template<typename T>
-    CUTE_HOST_DEVICE void
-    operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
-            cute::intel::coord_t coordinate, T* dstPointer) {
-        *reinterpret_cast<intel::uchar*>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_u8_m1k16v1(
-           (intptr_t)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate,  CacheControl::kL1C_L3C);
-    }
-};
-
- template<>
-struct XeSubgroup2DBlockLoad<1, 16, 1, 2> {
-    template<typename T>
-    CUTE_HOST_DEVICE void
-    operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
-            cute::intel::coord_t coordinate, T* dstPointer) {
-        *reinterpret_cast<intel::uchar2*>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_u8_m1k16v2(
-           (intptr_t)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate,  CacheControl::kL1C_L3C);
-    }
-};
  
 template<>
 struct XeSubgroup2DBlockLoad<1, 16, 1, 1> {

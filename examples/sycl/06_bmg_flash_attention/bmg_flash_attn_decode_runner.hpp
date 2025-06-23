@@ -594,12 +594,10 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
       syclcompat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
       syclcompat::wait();
     }
-    (is_fp8_v<ElementQ>) ? initialize_block(block_Q.get(), block_Q.size(), seed + 2023, ElementQ(2), ElementQ(-1))
-                         : initialize_block(block_Q.get(), block_Q.size(), seed + 2023, ElementQ(8), ElementQ(-8));
-    (is_fp8_v<ElementK>) ? initialize_block(block_K.get(), block_K.size(), seed + 2022, ElementK(2), ElementK(-1))
-                         : initialize_block(block_K.get(), block_K.size(), seed + 2022, ElementK(8), ElementK(-8));
-    (is_fp8_v<ElementV>) ? initialize_block(block_V.get(), block_V.size(), seed + 2021, ElementV(2), ElementV(-1)) 
-                         : initialize_block(block_V.get(), block_V.size(), seed + 2021, ElementV(8), ElementV(-8));
+    
+    initialize_block(block_Q, seed + 2021);
+    initialize_block(block_K, seed + 2022);
+    initialize_block(block_V, seed + 2023);
     initialize_block(block_K_cache, seed + 2024);
     initialize_block(block_V_cache, seed + 2025);
 
