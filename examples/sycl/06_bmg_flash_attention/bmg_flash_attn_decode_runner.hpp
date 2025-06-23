@@ -201,23 +201,10 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
   template <typename SrcT, typename DstT>
   void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
-    constexpr int fragment_size = std::is_same_v<SrcT, cute::float_e5m2_t> ? 4 : 8;
-    syclcompat::get_default_queue().parallel_for(size/fragment_size, [=](auto i) {
-      auto in_frag = make_tensor<uint8_t>(cute::Shape<Int<fragment_size>>{});
-      auto out_frag =  make_tensor<DstT>(cute::Shape<Int<fragment_size>>{});
-      auto indx =  syclcompat::get_nd_item<1>().get_global_linear_id();
-      auto offset =  syclcompat::get_nd_item<1>().get_global_range()[0];
-      CUTLASS_PRAGMA_UNROLL
-      for (int i=0; i < fragment_size; i ++)
-        in_frag[i] = d_src[indx + i*offset];
-      convert_FP8_to_FP16<SrcT>(in_frag, out_frag);
-      CUTLASS_PRAGMA_UNROLL
-      for (int i=0; i < fragment_size; i++)
-        d_dst[indx + i*offset] = out_frag[i];
-       
-      }).wait();
+    syclcompat::get_default_queue().parallel_for(size, [=](auto indx) {
+      d_dst[indx] = static_cast<DstT>(d_src[indx]);
+    }).wait();
   }
-
 
   template <typename T>
   static constexpr bool is_fp8_v = cute::is_any_of_v<T, cute::float_e5m2_t, cute::float_e4m3_t>;
@@ -607,10 +594,12 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
       syclcompat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
       syclcompat::wait();
     }
-
-    initialize_block(block_Q, seed + 2023);
-    initialize_block(block_K, seed + 2022);
-    initialize_block(block_V, seed + 2021);
+    (is_fp8_v<ElementQ>) ? initialize_block(block_Q.get(), block_Q.size(), seed + 2023, ElementQ(2), ElementQ(-1))
+                         : initialize_block(block_Q.get(), block_Q.size(), seed + 2023, ElementQ(8), ElementQ(-8));
+    (is_fp8_v<ElementK>) ? initialize_block(block_K.get(), block_K.size(), seed + 2022, ElementK(2), ElementK(-1))
+                         : initialize_block(block_K.get(), block_K.size(), seed + 2022, ElementK(8), ElementK(-8));
+    (is_fp8_v<ElementV>) ? initialize_block(block_V.get(), block_V.size(), seed + 2021, ElementV(2), ElementV(-1)) 
+                         : initialize_block(block_V.get(), block_V.size(), seed + 2021, ElementV(8), ElementV(-8));
     initialize_block(block_K_cache, seed + 2024);
     initialize_block(block_V_cache, seed + 2025);
 
