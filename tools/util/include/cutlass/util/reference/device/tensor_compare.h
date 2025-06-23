@@ -99,7 +99,7 @@ __global__ void
 
     Element a = cutlass::ReferenceFactory<Element>::get(ptr_A, idx);
     Element b = cutlass::ReferenceFactory<Element>::get(ptr_B, idx);
-   // printf("idx: %lu | a: %f | b: %f\n", idx, a, b);
+
     if (!relatively_equal(a, b, epsilon, nonzero_floor)) {
       *equal = 0;
       return;
