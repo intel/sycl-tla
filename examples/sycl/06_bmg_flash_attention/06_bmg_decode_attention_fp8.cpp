@@ -35,8 +35,7 @@ template <int KVTile, int NumSG, bool PagedKV, bool Varlen>
 int run_decode(Options const& options) {
 
 #if !defined(HEAD_DIM)
-  std::cerr << "HEAD_DIM must be defined" << std::endl;
-  return -1;
+  static_assert(fasle, "HEAD_DIM must be defined");
 #endif
   if (options.head_size_vo != HEAD_DIM) {
     std::cerr << "head_size_vo must be " << HEAD_DIM << ", but got " << options.head_size_vo << std::endl;
