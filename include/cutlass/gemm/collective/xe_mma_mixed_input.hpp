@@ -122,6 +122,11 @@ private:
     ConvertAndScaleWithZero
   };
 
+  enum class QuantMode {
+    GroupWise,
+    TensorWise
+  };
+
 public:
   //
   // Type Aliases
@@ -156,6 +161,7 @@ public:
   using NonVoidStrideZero = cute::conditional_t<cute::is_same_v<StrideZero, void>, cute::Stride<_1, int64_t, int64_t>, StrideZero>;
   static constexpr auto zero_elements_packed_along_k = get<0>(NonVoidStrideZero{});
 
+  static constexpr auto quant_mode = rank_v<NonVoidStrideScale> == 2 ? QuantMode::TensorWise : QuantMode::GroupWise;
   using StrideA = StrideA_;
   using StrideB = StrideB_;
 
@@ -241,11 +247,13 @@ public:
   using atom_load_scale = Copy_Atom<traits_load_scale, NonVoidElementScale>;
   using val_layout_load_scale = decltype(make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Scale = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
+  using TensorScale = decltype(make_tensor(make_gmem_ptr((NonVoidElementScale const*) nullptr), make_layout(NonVoidStrideScale{}, NonVoidStrideScale{})));
   
   using traits_load_zero = Copy_Traits<GmemTiledCopyZero, NonVoidStrideZero>;
   using atom_load_zero = Copy_Atom<traits_load_zero, NonVoidElementZero>;
   using val_layout_load_zero = decltype(make_layout(shape_div(typename traits_load_zero::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Zero = decltype(make_tiled_copy(atom_load_zero{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero{}));
+  using TensorZero = decltype(make_tensor(make_gmem_ptr((NonVoidElementZero const*) nullptr), make_layout(NonVoidStrideZero{}, NonVoidStrideZero{})));
 
   // Host side kernel arguments
   struct Arguments {
@@ -263,8 +271,8 @@ public:
   struct Params {
     Copy_A tiled_copy_a;
     Copy_B tiled_copy_b;
-    Copy_Scale tiled_copy_scale;
-    Copy_Zero tiled_copy_zero;
+    std::conditional_t<quant_mode == QuantMode::GroupWise,Copy_Scale, TensorScale> tiled_copy_scale;
+    std::conditional_t<quant_mode == QuantMode::GroupWise,Copy_Zero, TensorZero> tiled_copy_zero;
     int group_size;
   };
 
@@ -308,7 +316,15 @@ public:
     auto mScale = make_tensor(
         make_gmem_ptr(static_cast<NonVoidElementScale const *>(args.ptr_S)),
         make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
-    Copy_Scale tiled_copy_scale{Copy_Scale{}.with(mScale)};
+    auto tiled_copy_scale = [&]() {
+      if constexpr(quant_mode == QuantMode::GroupWise) {
+        return Copy_Scale{}.with(mScale);
+      } else {
+        return make_tensor(
+          make_gmem_ptr(static_cast<NonVoidElementScale const *>(args.ptr_S)),
+          make_layout(make_shape(1, L), args.dS));
+      }
+    }();
 
     if constexpr(KernelConversionMode == ConversionMode::ConvertAndScale){
       return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, {}, args.group_size};
@@ -325,7 +341,15 @@ public:
     auto mZero = make_tensor(ptr_Z,
                     make_layout(make_shape(zero_elements_packed_along_k * (IsATransformed ? M : N), scale_k / zero_elements_packed_along_k, L),
                     make_stride(_1{}, zero_elements_packed_along_k * (IsATransformed ? M : N), (IsATransformed ? M : N) * scale_k)));
-    Copy_Zero tiled_copy_zero{Copy_Zero{}.with(mZero)};
+    auto tiled_copy_zero = [&](){
+      if constexpr(quant_mode == QuantMode::GroupWise) {
+        return Copy_Zero{}.with(mZero);
+      } else {
+        return make_tensor(
+          make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
+          make_layout(make_shape(1, L), args.dS));
+      }
+    }();
 
     return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, tiled_copy_zero, args.group_size};
   }
@@ -502,11 +526,23 @@ public:
         for (int i = 0; i < 16; ++i) {
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < 2; ++j) {
-            auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+            auto scale = [&](){
+              if constexpr(quant_mode == QuantMode::GroupWise){
+                return shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+              } else {
+                return tCrZ_input(0);
+              }
+            }();
             ZeroType minus_zp_0 =  static_cast<ZeroType>(tCrA_load(_, _, 0)[j * 16 + i]);
             ZeroType minus_zp_1 =  static_cast<ZeroType>(tCrA_load(_, _, 1)[j * 16 + i]);
             if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
+              auto zero = [&](){
+                if constexpr(quant_mode == QuantMode::GroupWise){
+                  return shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
+                } else {
+                  return tCrS_input(0);
+                }
+              }();
               minus_zp_0 -= zero;
               minus_zp_1 -= zero;
             }
@@ -519,14 +555,20 @@ public:
 
         CUTLASS_PRAGMA_UNROLL
         for (int n = 0; n < N; ++n) {
+          auto [zero, scale] = [&](){
+            if constexpr(quant_mode == QuantMode::GroupWise){
+              return std::make_pair(tCrZ_input(n), tCrS_input(n));
+            } else {
+              return std::make_pair(tCrZ_input(0), tCrS_input(0));
+            }
+          }();
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < decltype(size(tCrA_load))::value / N; ++i) {
             ZeroType minus_zp =  static_cast<ZeroType>(tCrA_load(_, n, _)[i]);
             if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              minus_zp -= tCrZ_input(n);
-              // tCrA_mma(_, n, _)[i] = static_cast<DstType>(minus) - tCrZ_input(n);
+              minus_zp -= zero;
             }
-            tCrA_mma(_, n, _)[i] = static_cast<DstType>(minus_zp) * tCrS_input(n);
+            tCrA_mma(_, n, _)[i] = static_cast<DstType>(minus_zp) * scale;
           }
         }
       }
@@ -578,20 +620,55 @@ public:
 
     // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
     // layout else we need mode N_iter from fragment_B layout.
-    static constexpr auto scale_traits_size = decltype(size(typename GmemTiledCopyScale::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto scale_traits_num = SG_N / size<1>(typename GmemTiledCopyScale::BlockShape{});
-    using FragScaleLayout = std::conditional_t<IsATransformed,
-                                               Layout<Shape<_2, _1, _1>>,
-                                               Layout<Shape<Int<scale_traits_size>, Int<scale_traits_num>, _1>>>;
-    Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(FragScaleLayout{});
+    static constexpr auto scale_traits_size = quant_mode == QuantMode::TensorWise ? 1 : decltype(size(typename GmemTiledCopyScale::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto scale_traits_num = quant_mode == QuantMode::TensorWise ? 1 : SG_N / size<1>(typename GmemTiledCopyScale::BlockShape{});
+    // using FragScaleLayout = std::conditional_t<IsATransformed,
+    //                                            Layout<Shape<_2, _1, _1>>,
+    //                                            Layout<Shape<Int<scale_traits_size>, Int<scale_traits_num>, _1>>>;
+    Tensor fragment_scale_input = [&](){
+      if constexpr(quant_mode == QuantMode::GroupWise) {
+        // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
+        // layout else we need mode N_iter from fragment_B layout.
+        using FragScaleLayout = std::conditional_t<IsATransformed,
+                                                   Layout<Shape<_2, _1, _1>>,
+                                                   Layout<Shape<Int<scale_traits_size>, Int<scale_traits_num>, _1>>>;
+        return make_tensor<NonVoidElementScale>(FragScaleLayout{});
+      } else {
+        return make_tensor<NonVoidElementScale>(make_layout(Shape<_1>{}));
+      }
+    }();
 
-    static constexpr auto zero_traits_size = decltype(size(typename GmemTiledCopyZero::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto zero_traits_num = SG_N * zero_elements_packed_along_k / size<1>(typename GmemTiledCopyZero::BlockShape{});
-    using FragZeroLayout = std::conditional_t<IsATransformed,
-                                               Layout<Shape<_2, _1, _1>>,
-                                               Layout<Shape<Int<zero_traits_size>, Int<zero_traits_num>, _1>>>;
-    Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragZeroLayout{});
+    static constexpr auto zero_traits_size = quant_mode == QuantMode::TensorWise ? 1 : decltype(size(typename GmemTiledCopyZero::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto zero_traits_num = quant_mode == QuantMode::TensorWise ? 1 : SG_N * zero_elements_packed_along_k / size<1>(typename GmemTiledCopyZero::BlockShape{});
+                                              
+    Tensor fragment_zero_input =  
+    [&](){
+      if constexpr(quant_mode == QuantMode::GroupWise) {
+        // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
+        // layout else we need mode N_iter from fragment_B layout.
+        using FragZeroLayout = std::conditional_t<IsATransformed,
+                                                   Layout<Shape<_2, _1, _1>>,
+                                                   Layout<Shape<Int<zero_traits_size>, Int<zero_traits_num>, _1>>>;
+        return make_tensor<NonVoidElementZero> (FragZeroLayout{});
+      } else {
+        return make_tensor<NonVoidElementZero>(make_layout(Shape<_1>{}));
+      }
+    }();
 
+    Tensor copy_tCrS = [&](){
+    if constexpr(quant_mode == QuantMode::GroupWise) {
+      return thr_copy_scale.retile_D(fragment_scale_input);
+    } else {
+      return make_tensor(static_cast<decltype(fragment_scale_input)&&>(fragment_scale_input).data(), fragment_scale_input.layout());
+    }
+    }();
+    Tensor copy_tCrZ = [&](){
+    if constexpr(quant_mode == QuantMode::GroupWise) {
+      return thr_copy_zero.retile_D(fragment_zero_input);
+    } else {
+      return make_tensor(static_cast<decltype(fragment_zero_input)&&>(fragment_zero_input).data(), fragment_zero_input.layout());
+    }
+    }();
     // narrow input fragment
     Tensor quant_frag = make_tensor<ElementQuant>(
         std::conditional_t<IsATransformed, decltype(mma_A.layout()),
@@ -609,9 +686,6 @@ public:
         return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(quant_frag));
       }
     }();
-
-    Tensor copy_tCrS = thr_copy_scale.retile_D(fragment_scale_input);
-    Tensor copy_tCrZ = thr_copy_zero.retile_D(fragment_zero_input);
 
     // Retile global tile for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
@@ -636,6 +710,7 @@ public:
     const int l_coord = l_idx;
 
     Tensor copy_iter_s = [&](){
+    if constexpr(quant_mode == QuantMode::GroupWise){
       if constexpr(IsATransformed){
         return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
                            make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count), 
@@ -645,9 +720,11 @@ public:
                            make_layout(make_shape(Int<scale_traits_size>{}, Int<scale_traits_num>{}, _1{}, k_tile_count),
                                        make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyScale::BlockShape{}), _0{}, E<1>{} * _1{})));
       }
+    }
     }();
 
     Tensor copy_iter_z = [&](){
+      if constexpr(quant_mode == QuantMode::GroupWise){
       if constexpr(IsATransformed){
         return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
                            make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count),
@@ -657,6 +734,7 @@ public:
                            make_layout(make_shape(Int<zero_traits_size>{}, Int<zero_traits_num>{}, _1{}, k_tile_count),
                                        make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyZero::BlockShape{}), _0{}, E<1>{} * _1{})));
       }
+    }
     }();
 
   #define LOG_GROUP 0
@@ -711,10 +789,18 @@ public:
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), frag_copy_B);
 
       if constexpr(ModeHasScales){
-        copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrS);
+        if constexpr(quant_mode == QuantMode::GroupWise){
+          copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrS);
+        } else {
+          copy(mainloop.tiled_copy_scale(_, l_coord), copy_tCrS);
+        }
       }
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-        copy(mainloop.tiled_copy_zero, copy_iter_z(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k), copy_tCrZ);
+        if constexpr(quant_mode == QuantMode::GroupWise){
+          copy(mainloop.tiled_copy_zero, copy_iter_z(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k), copy_tCrZ);
+        } else {
+          copy(mainloop.tiled_copy_zero(_, l_coord), copy_tCrZ);
+        }
       }
 
       if(prefetch_k < k_tile_count) {
