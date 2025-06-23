@@ -36,8 +36,11 @@
 #include "cutlass/util/reference/device/sycl_tensor_fill.h"
 
 /// Helper to initialize a block of device data
-template <class Element>  
-bool initialize_block(Element* block, std::size_t size, uint64_t seed, Element scope_max, Element scope_min) {
+template <class Element>
+bool initialize_block(Element* block, std::size_t size, uint64_t seed=2023) {
+
+  Element scope_max = Element(1 << cute::ceil_div(std::numeric_limits<Element>::digits, 4));
+  Element scope_min = cute::is_signed<Element>::value ? Element(-scope_max) : Element(0);
 
   cutlass::reference::device::BlockFillRandomUniform(
        block, size, seed, scope_max, scope_min, 0);
@@ -47,10 +50,10 @@ bool initialize_block(Element* block, std::size_t size, uint64_t seed, Element s
 }
 
 template <class Element>
-bool initialize_block(cutlass::DeviceAllocation<Element>& block, uint64_t seed=2023) {
-  Element scope_max = Element(1 << cute::ceil_div(std::numeric_limits<Element>::digits, 4));
-  Element scope_min = cute::is_signed<Element>::value ? Element(-scope_max) : Element(0);
-  return initialize_block<Element>(block.get(), block.size(), seed, scope_max, scope_min);
+bool initialize_block(
+        cutlass::DeviceAllocation<Element>& block,
+        uint64_t seed=2023) {
+  return initialize_block<Element>(block.get(), block.size(), seed);
 }
 
 template <typename T1, typename T2>
