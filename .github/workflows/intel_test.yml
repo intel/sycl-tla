@@ -114,4 +114,4 @@ jobs:
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
             -DCUTLASS_SYCL_RUNNING_CI=ON \
             -DCUTLASS_ENABLE_BENCHMARKS=ON
-          cmake --build . --target cutlass_benchmarks
+          cmake --build . --target cutlass_benchmarks -j 8
