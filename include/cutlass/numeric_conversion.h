@@ -6168,6 +6168,7 @@ private:
       int16_t tmp = source[i] + 26112 /* 0x6600 */;
       result[i] = reinterpret_cast<cutlass::half_t const &>(tmp) - 1536.0_hf;
     }
+    return reinterpret_cast<PackedResultType&>(r);
     #endif
 
     // View the input as reg
@@ -6207,6 +6208,14 @@ private:
     CUTLASS_PRAGMA_UNROLL
     for (int ii = 0; ii < RegArray::kElements; ++ii) {
 #if defined(CUTLASS_ENABLE_SYCL)
+      // TODO:element-wise data conversion works but not efficient
+      auto result = reinterpret_cast<PackedResultType&>(r);
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < PackedResultType::kElements; ++i) {
+        result[i] = static_cast<half_t>(source[i]);
+      }
+      return result;
+
       half2& fp16x2_val = reinterpret_cast<half2&>(r[ii]);
       fp16x2_val = fp16x2_val - bias;
 #else
