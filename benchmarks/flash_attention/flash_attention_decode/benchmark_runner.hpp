@@ -92,6 +92,11 @@ struct FMHADecodeOptions {
       std::cerr << "Invalid: seq_len_kv_cache must be divisible by page_size" << std::endl;
       return;
     }
+
+    if (head_size_vo != HEAD_DIM) {
+      std::cerr << "head_size_vo must be " << HEAD_DIM << ", but got " << head_size_vo << std::endl;
+      return -1;
+    }
   }
 
   std::string benchmark_name() const {
