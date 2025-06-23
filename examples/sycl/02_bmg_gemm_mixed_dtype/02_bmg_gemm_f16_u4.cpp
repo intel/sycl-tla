@@ -357,6 +357,92 @@ struct ExampleRunner {
     return true;
   }
 
+  template <
+  class QuantizedElement,
+  class DequantizedElement,
+  class OperandLayout,
+  class ElementScale,
+  class ElementZero,
+  class ScaleLayout,
+  class ZeroLayout>
+  static void dequantize_B(DequantizedElement* dq_buffer,
+                       QuantizedElement const* q_buffer,
+                       OperandLayout const operand_layout,
+                       ElementScale const* scale_buffer,
+                       ElementZero const* zero_buffer,
+                       ScaleLayout const scale_layout,
+                       ZeroLayout const zero_layout,
+                       int const group_size) {
+    std::vector<uint8_t> dst(size(operand_layout) * sizeof_bits_v<DequantizedElement> / 8, 0);
+    cutlass::device_memory::copy_to_host(dst.data(), (uint8_t*)dq_buffer, dst.size());
+
+    std::vector<uint8_t> src(size(operand_layout) * sizeof_bits_v<QuantizedElement> / 8, 0);
+    cutlass::device_memory::copy_to_host(src.data(), (uint8_t*)q_buffer, src.size());
+
+    std::vector<uint8_t> scale(size(scale_layout) * sizeof_bits_v<ElementScale> / 8, 0);
+    cutlass::device_memory::copy_to_host(scale.data(), (uint8_t*)scale_buffer, scale.size());
+
+    std::vector<uint8_t> zero(size(zero_layout) * sizeof_bits_v<ElementZero> / 8, 0);
+    cutlass::device_memory::copy_to_host(zero.data(), (uint8_t*)zero_buffer, zero.size());
+
+    syclcompat::wait();
+
+    auto dst_tensor = make_tensor(make_gmem_ptr(reinterpret_cast<DequantizedElement*>(dst.data())), operand_layout);
+
+    auto src_tensor = [&]() {
+      if constexpr (sizeof_bits_v<QuantizedElement> < 8) {
+        return make_tensor(cute::subbyte_iterator<const QuantizedElement>(src.data()), operand_layout);
+      } else {
+        return make_tensor(make_gmem_ptr(reinterpret_cast<QuantizedElement const *>(src.data())), operand_layout);
+      }
+    }();
+
+    auto scale_tensor = make_tensor(make_gmem_ptr(reinterpret_cast<ElementScale const *>(scale.data())), scale_layout);
+
+    auto zero_tensor = [&]() {
+      if constexpr (sizeof_bits_v<ElementZero> < 8) {
+        auto flatten_tensor = flatten(make_tensor(cute::subbyte_iterator<const ElementZero>(zero.data()), zero_layout));
+        static_assert(rank(flatten_tensor.layout()) == 4);
+        return make_tensor(flatten_tensor.data(), select<1, 0, 2, 3>(flatten_tensor.layout()));
+      } else {
+        return make_tensor(make_gmem_ptr(reinterpret_cast<ElementZero const *>(zero.data())), zero_layout);
+      }
+    }();
+
+    auto N = size<0>(src_tensor);
+    auto K = size<1>(src_tensor);
+    auto L = size<2>(src_tensor);
+
+    for (int l = 0; l < L; l++) {
+      for (int k= 0; k < K; k++) {
+        for (int n = 0; n < N; n++) {
+          using ret_type = cute::conditional_t<sizeof_bits_v<ElementZero> >= 8, ElementZero, int8_t>;
+          ret_type a = [&]() {
+            if constexpr (sizeof_bits_v<QuantizedElement> >= 8) {
+              return  (ret_type)(src_tensor(n, k, l));
+            } else {
+              return (ret_type)(src_tensor(n, k, l).get());
+            }}();
+
+          ret_type b = [&]() {
+            if constexpr (sizeof_bits_v<ElementZero> >= 8) {
+              return (ret_type)(zero_tensor(n, k / group_size, l));
+            } else {
+              auto zero_elements_packed_along_k = get<0>(zero_tensor.shape());
+              return (ret_type)(zero_tensor((k / group_size) % zero_elements_packed_along_k, n, k / group_size / zero_elements_packed_along_k, l).get());
+            }
+          }();
+
+          dst_tensor(n, k, l) = ((ElementScale)(a - b)) * scale_tensor(n, k / group_size, l);
+        }
+      }
+    }
+
+    cutlass::device_memory::copy_to_device(dq_buffer, (DequantizedElement*)(raw_pointer_cast(dst_tensor.data())), dst_tensor.size());
+    syclcompat::wait();
+  }
+
+
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(Options const& options) {
     auto [M, N, K, L] = ProblemShapeType{options.m, options.n, options.k, options.l};
@@ -370,7 +456,7 @@ struct ExampleRunner {
     auto shape_scale = cute::make_shape(dq_mn_size, scale_k, L);
     auto shape_zero = [&]() {
       if constexpr (is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(stride_Z))>>) {
-        return cute::make_shape(dq_mn_size, cute::make_shape(scale_k / zero_elements_packed_along_k, zero_elements_packed_along_k), L);
+        return cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, cute::max(1, scale_k / zero_elements_packed_along_k)), L);
       } else {
         return shape_scale;
       }
@@ -419,7 +505,7 @@ struct ExampleRunner {
                         block_scale.get(), block_zero.get(), layout_scale, layout_zero,
                         options.g);
     } else {
-      cutlass::dequantize(block_B_dq.get(), block_B.get(), layout_B,
+      dequantize_B(block_B_dq.get(), block_B.get(), layout_B,
                         block_scale.get(), block_zero.get(), layout_scale, layout_zero,
                         options.g);
     }
@@ -490,7 +576,10 @@ struct ExampleRunner {
 
 };
 
-template <class layout_a, class layout_b, class copy_a, class copy_b, uint32_t wg_m, uint32_t wg_n, uint32_t sg_k, uint32_t thread_m, uint32_t thread_n>
+template <class dtype_a, class dtype_b, class dtype_c, class dtype_scale, class dtype_zero,
+          class layout_a, class layout_b, class stride_scale, class stride_zero,
+          class copy_a, class copy_b, class copy_c, class mma,
+          uint32_t wg_m, uint32_t wg_n, uint32_t sg_k, uint32_t thread_m, uint32_t thread_n>
 void run_int4(Options const& options) {
   // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
   // information is used by the underlying kernel.
@@ -504,20 +593,20 @@ void run_int4(Options const& options) {
   // elements in input matrices.
   using ElementAccumulator = float;      // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = QuantType;       // <- data type of elements in input matrix A
-  using ElementInputB = MmaType;         // <- data type of elements in input matrix B
-  using ElementOutput = float;           // <- data type of elements in output matrix D
+  using ElementInputA = dtype_b;       // <- data type of elements in input matrix A
+  using ElementInputB = dtype_a;         // <- data type of elements in input matrix B
+  using ElementOutput = dtype_c;           // <- data type of elements in output matrix D
 
   using LayoutA = layout_a;
   using LayoutB = layout_b;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using ElementZero = int8_t;
-  using ElementScale = MmaType;
+  using ElementZero = dtype_zero;
+  using ElementScale = dtype_scale;
 
-  using StrideScale = cute::Stride<_1, int64_t, int64_t>;
-  using StrideZero = StrideScale; //decltype(make_stride(_8{}, make_stride(int64_t(0), _1{}), int64_t(0)));
+  using StrideScale = stride_scale;
+  using StrideZero = stride_zero;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
   using GmemTiledCopyA = copy_b;
@@ -528,7 +617,7 @@ void run_int4(Options const& options) {
   using TileShape = Shape<Int<wg_m>, Int<wg_n>, Int<sg_k>>;
 
   using TiledMma =
-      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
+      typename TiledMMAHelper<MMA_Atom<mma>, Layout<TileShape>,
                                     Layout<Shape<Int<thread_m>, Int<thread_n>, _1>, Stride<Int<thread_n>, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3;
@@ -550,7 +639,7 @@ void run_int4(Options const& options) {
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          std::conditional_t<std::is_same_v<LayoutB, cutlass::layout::RowMajor>, void, XE_2D_U32x8x16_ST_N>,
+          copy_c,
           void, void>;
 
   // Use the helpers to avoid template arg repetition
@@ -619,7 +708,50 @@ int main(int argc, const char** argv)
     return -1;
   }
 
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 64, 1, 2>(options);
+  run_int4<cutlass::half_t,
+           cutlass::uint4_t,
+           float,
+           cutlass::half_t,
+           int4_t,
+           cutlass::layout::RowMajor,
+           cutlass::layout::ColumnMajor,
+           cute::Stride<_1, int64_t, int64_t>,
+           cute::Stride<_8, cute::Stride<_1, int64_t>, int64_t>,
+           XE_2D_U16x16x32_LD_N,
+           XE_2D_U4x32x16_LD_T,
+           XE_2D_U32x8x16_ST_N,
+           XE_8x16x16_F32F16F16F32_TT,
+           16, 64, 64, 1, 2>(options);
+
+  run_int4<cutlass::half_t,
+           cutlass::uint4_t,
+           float,
+           cutlass::half_t,
+           int8_t,
+           cutlass::layout::RowMajor,
+           cutlass::layout::ColumnMajor,
+           cute::Stride<_1, int64_t, int64_t>,
+           cute::Stride<_1, int64_t, int64_t>,
+           XE_2D_U16x16x32_LD_N,
+           XE_2D_U4x32x16_LD_T,
+           XE_2D_U32x8x16_ST_N,
+           XE_8x16x16_F32F16F16F32_TT,
+           16, 64, 64, 1, 2>(options);
+
+  run_int4<cutlass::half_t,
+           cutlass::uint4_t,
+           float,
+           cutlass::half_t,
+           cutlass::half_t,
+           cutlass::layout::RowMajor,
+           cutlass::layout::ColumnMajor,
+           cute::Stride<_1, int64_t, int64_t>,
+           cute::Stride<_1, int64_t, int64_t>,
+           XE_2D_U16x16x32_LD_N,
+           XE_2D_U4x32x16_LD_T,
+           XE_2D_U32x8x16_ST_N,
+           XE_8x16x16_F32F16F16F32_TT,
+           16, 64, 64, 1, 2>(options);
 
   return 0;
 }
