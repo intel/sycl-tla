@@ -201,34 +201,40 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
   template <typename SrcT, typename DstT>
   void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
-      SrcT* h_src = new SrcT[size];
-      syclcompat::memcpy(h_src, d_src, size * sizeof(SrcT));
-      syclcompat::wait();
-
-      DstT* h_dst = new DstT[size];
-      for (size_t i = 0; i < size; ++i) {
-          h_dst[i] = static_cast<DstT>(h_src[i]);
-      }
-
-      syclcompat::memcpy(d_dst, h_dst, size * sizeof(DstT));
-      syclcompat::wait();
+    constexpr int fragment_size = std::is_same_v<SrcT, cute::float_e5m2_t> ? 4 : 8;
+    syclcompat::get_default_queue().parallel_for(size/fragment_size, [=](auto i) {
+      auto in_frag = make_tensor<uint8_t>(cute::Shape<Int<fragment_size>>{});
+      auto out_frag =  make_tensor<DstT>(cute::Shape<Int<fragment_size>>{});
+      auto indx =  syclcompat::get_nd_item<1>().get_global_linear_id();
+      auto offset =  syclcompat::get_nd_item<1>().get_global_range()[0];
+      CUTLASS_PRAGMA_UNROLL
+      for (int i=0; i < fragment_size; i ++)
+        in_frag[i] = d_src[indx + i*offset];
+      convert_FP8_to_FP16<SrcT>(in_frag, out_frag);
+      CUTLASS_PRAGMA_UNROLL
+      for (int i=0; i < fragment_size; i++)
+        d_dst[indx + i*offset] = out_frag[i];
+       
+      }).wait();
   }
+
+
   template <typename T>
   static constexpr bool is_fp8_v = cute::is_any_of_v<T, cute::float_e5m2_t, cute::float_e4m3_t>;
+
   template <typename Tin> inline auto in_memory(cutlass::DeviceAllocation<Tin>& in) {
-    using outTypr = cutlass::DeviceAllocation<cute::conditional_t<is_fp8_v<Tin>, half_t, Tin>>;
-      if constexpr(is_fp8_v<Tin>) {
-         cutlass::DeviceAllocation<half_t> out(in.size());
-         convert_fp8_to_fp16<Tin, half_t>(in.get(), out.get(), in.size());
-         return out;
-      } else { 
-        return in;
-      };
+    using outType = cutlass::DeviceAllocation<cute::conditional_t<is_fp8_v<Tin>, half_t, Tin>>;
+    if constexpr(is_fp8_v<Tin>) {
+      cutlass::DeviceAllocation<half_t> out(in.size());
+      convert_fp8_to_fp16<Tin, half_t>(in.get(), out.get(), in.size());
+      return out;
+    } else { 
+      return in;
+    };
   }
   //
   // Methods
   //
-
   bool verify(ProblemShapeType problem_size, bool is_causal, bool use_kv_cache) {
 
     if constexpr (isVarLen) {

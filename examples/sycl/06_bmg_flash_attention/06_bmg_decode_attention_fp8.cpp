@@ -52,7 +52,7 @@ int run_decode(Options const& options) {
     using ElementOutput = float;          // <- data type of elements in output matrix D
     constexpr int PipelineStages = 2;
     using MMAOperation = XE_1x16x16_F32F16F16F32_TT;
-    using GmemTiledCopyQ = XE_2D_U8x1x16_LD_N;
+    using GmemTiledCopyQ = XE_2D_U8x1x32_LD_N;
     using GmemTiledCopyK = XE_2D_U8x16x16_LD_T;
     using GmemTiledCopyV = XE_2D_U8x32x32_LD_V;
     using GmemTiledCopyStore = XE_2D_U32x1x16_ST_N;
