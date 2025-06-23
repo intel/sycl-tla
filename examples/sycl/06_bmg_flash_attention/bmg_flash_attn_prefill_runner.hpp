@@ -171,23 +171,30 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
   cutlass::DeviceAllocation<int> device_cumulative_seqlen_kv;
 
 
+  template <typename SrcT, typename DstT>
+  void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
+    constexpr int fragment_size = std::is_same_v<SrcT, cute::float_e5m2_t> ? 4 : 8;
+    syclcompat::get_default_queue().parallel_for(size, [=](auto indx) {
+      d_dst[indx] = static_cast<DstT>(d_src[indx]);
+    }).wait();
+  }
+
+  template <typename T>
+  static constexpr bool is_fp8_v = cute::is_any_of_v<T, cute::float_e5m2_t, cute::float_e4m3_t>;
+
+  template <typename Tin> inline auto in_memory(cutlass::DeviceAllocation<Tin>& in) {
+    using outType = cute::conditional_t<is_fp8_v<Tin>, half_t, Tin>;
+    if constexpr(is_fp8_v<Tin>) {
+      cutlass::DeviceAllocation<outType> out(in.size());
+      convert_fp8_to_fp16<Tin, outType>(in.get(), out.get(), in.size());
+      return out;
+    } else { 
+      return in;
+    };
+  }
    //
   // Methods
   //
-  template <typename SrcT, typename DstT>
-  void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
-      SrcT* h_src = new SrcT[size];
-      syclcompat::memcpy(h_src, d_src, size * sizeof(SrcT));
-      syclcompat::wait();
-      
-      DstT* h_dst = new DstT[size];
-      for (size_t i = 0; i < size; ++i) {
-          h_dst[i] = static_cast<DstT>(h_src[i]);
-      }
-
-      syclcompat::memcpy(d_dst, h_dst, size * sizeof(DstT));
-      syclcompat::wait();
-  }
 
   bool verify(ProblemShapeType problem_size, bool is_causal) {
     
@@ -201,27 +208,10 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,5,6>(problem_size);
     int seq_len_qo, seq_len_kv;
 
-    cutlass::DeviceAllocation<half_t> block_Q_fp16(block_Q.size());
-    cutlass::DeviceAllocation<half_t> block_K_fp16(block_K.size());
-    cutlass::DeviceAllocation<half_t> block_V_fp16(block_V.size());
-
-    // fp8 -> fp16
-    convert_fp8_to_fp16<ElementQ, half_t>(
-      block_Q.get(),
-      block_Q_fp16.get(),
-      block_Q.size()
-    );
-    convert_fp8_to_fp16<ElementK, half_t>(
-      block_K.get(),
-      block_K_fp16.get(),
-      block_K.size()
-    );
-    convert_fp8_to_fp16<ElementV, half_t>(
-      block_V.get(),
-      block_V_fp16.get(),
-      block_V.size()
-    );
-
+    auto block_Q_ = in_memory(block_Q);
+    auto block_K_ = in_memory(block_K);
+    auto block_V_ = in_memory(block_V);
+    using ElementV_ = cute::conditional_t<is_fp8_v<ElementV>, half_t, ElementV>;
     
     int offset_q = 0;
     int offset_k = 0;
@@ -244,9 +234,9 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
         cutlass::DeviceAllocation<ElementOutput> block_S;
         block_S.reset(seq_len_qo * seq_len_kv);
 
-        cutlass::TensorRef ref_Q(block_Q_fp16.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
-        cutlass::TensorRef ref_K(block_K_fp16.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
-        cutlass::TensorRef ref_V(block_V_fp16.get() + offset_v, LayoutV::packed({seq_len_kv, head_size_vo}));
+        cutlass::TensorRef ref_Q(block_Q_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
+        cutlass::TensorRef ref_K(block_K_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
+        cutlass::TensorRef ref_V(block_V_.get() + offset_v, LayoutV::packed({seq_len_kv, head_size_vo}));
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
         cutlass::TensorRef ref_O(block_ref_O.get() + offset_o, LayoutO::packed({seq_len_qo, head_size_vo}));
 
@@ -323,14 +313,14 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
           }
         }
 
-        std::vector<ElementV> host_P(host_S.size());
+        std::vector<ElementV_> host_P(host_S.size());
         for (int p = 0; p < host_P.size(); p++)
-          host_P[p] = static_cast<ElementV>(host_S[p]);
+          host_P[p] = static_cast<ElementV_>(host_S[p]);
 
-        cutlass::DeviceAllocation<ElementV> block_P;
+        cutlass::DeviceAllocation<ElementV_> block_P;
         block_P.reset(host_P.size());
 
-        syclcompat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
+        syclcompat::memcpy<ElementV_>(block_P.get(), host_P.data(), host_P.size());
         syclcompat::wait();
 
         cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));

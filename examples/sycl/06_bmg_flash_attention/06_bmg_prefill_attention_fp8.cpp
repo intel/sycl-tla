@@ -71,25 +71,50 @@ int main(int argc, const char **argv) {
     std::cerr << "Aborting execution." << std::endl;
     return -1;
   }
-  
+
+
+#if !defined(HEAD_DIM)
+  static_assert(false,"HEAD_DIM must be defined");
+#endif
+  if (options.head_size_vo != HEAD_DIM) {
+    std::cerr << "head_size_vo must be " << HEAD_DIM << ", but got " << options.head_size_vo << std::endl;
+    return -1;
+  }
+
+  // Define the work-group tile shape depending on the head-size of the second matmul
+ // Shape<_SequenceLenthOutputBLOCK, _HeadSizeout(NV), SequenceLengthKVBLOCK_KN/KV, HeadSizeQKBLOCK_KQK, HEADSIZEOutSlicerBlock>
     using ElementInputQ = cutlass::float_e5m2_t;     // <- data type of elements in input matrix A
     using ElementInputKV = cutlass::float_e5m2_t;    // <- data type of elements in input matrix B
     using MMAOperation = XE_8x16x16_F32F16F16F32_TT;
     using GmemTiledCopyQ = XE_2D_U8x8x32_LD_N;
     using GmemTiledCopyK = XE_2D_U8x16x16_LD_T; // _T designates a transposed block load operation
     using GmemTiledCopyV = XE_2D_U8x32x32_LD_V;
-
-  // Define the work-group tile shape depending on the head-size of the second matmul
- // Shape<_SequenceLenthOutputBLOCK, _HeadSizeout(NV), SequenceLengthKVBLOCK_KN/KV, HeadSizeQKBLOCK_KQK, HEADSIZEOutSlicerBlock>
- //
- 
-   if (options.head_size_vo == 64) {
     constexpr int PipelineStages = 2;
+#if HEAD_DIM == 64
     using ShapeQK = Shape<_128, _64, _64>;
     using ShapePV = Shape<_128, _32, _64>;
     using ShapeOutPut = Shape<_128, _64, _64>;
     using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
     
+#elif HEAD_DIM == 96
+    using ShapeQK = Shape<_128, _64, _32>;
+    using ShapePV = Shape<_128, _32, _64>;
+    using ShapeOutPut = Shape<_128, _96, _64>;
+    using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
+
+#elif HEAD_DIM == 128
+    using ShapeQK = Shape<_128, _64, _64>;
+    using ShapePV = Shape<_128, _32, _64>;
+    using ShapeOutPut = Shape<_128, _128, _64>;
+    using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>; 
+
+#elif HEAD_DIM == 192
+    using ShapeQK = Shape<_256, _64, _64>;
+    using ShapePV = Shape<_256, _32, _64>;
+    using ShapeOutPut = Shape<_256, _192, _64>;
+    using SubgroupLayout = Layout<Shape<_32, _1, _1>, Stride<_1, _1, _1>>; 
+
+#endif
     // Define whether or not to apply causal masking to the first matmul
     return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
                                           ElementInputQ, ElementInputKV, MMAOperation, 
@@ -97,48 +122,4 @@ int main(int argc, const char **argv) {
                              : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
                                           ElementInputQ, ElementInputKV, MMAOperation, 
                                           GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options);
-  } else if (options.head_size_vo == 96) {
-    constexpr int PipelineStages = 2;
-    using ShapeQK = Shape<_128, _64, _32>;
-    using ShapePV = Shape<_128, _32, _64>;
-    using ShapeOutPut = Shape<_128, _96, _64>;
-    using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
-
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
-                                          ElementInputQ, ElementInputKV, MMAOperation, 
-                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
-                                          ElementInputQ, ElementInputKV, MMAOperation, 
-                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options);
-
-  } else  if (options.head_size_vo == 128) {
-    constexpr int PipelineStages = 2;
-    using ShapeQK = Shape<_128, _64, _64>;
-    using ShapePV = Shape<_128, _32, _64>;
-    using ShapeOutPut = Shape<_128, _128, _64>;
-    using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>; 
-
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
-                                          ElementInputQ, ElementInputKV, MMAOperation, 
-                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
-                                          ElementInputQ, ElementInputKV, MMAOperation, 
-                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options);
-  }  else if (options.head_size_vo == 192) {
-    constexpr int PipelineStages = 2;
-    using ShapeQK = Shape<_256, _64, _64>;
-    using ShapePV = Shape<_256, _32, _64>;
-    using ShapeOutPut = Shape<_256, _192, _64>;
-    using SubgroupLayout = Layout<Shape<_32, _1, _1>, Stride<_1, _1, _1>>; 
-
-    return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
-                                          ElementInputQ, ElementInputKV, MMAOperation, 
-                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options)
-                             : FMHAConfig<false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
-                                          ElementInputQ, ElementInputKV, MMAOperation, 
-                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options);
-  } else {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
-  }
 }
