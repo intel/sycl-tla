@@ -173,7 +173,6 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
 
   template <typename SrcT, typename DstT>
   void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
-    constexpr int fragment_size = std::is_same_v<SrcT, cute::float_e5m2_t> ? 4 : 8;
     syclcompat::get_default_queue().parallel_for(size, [=](auto indx) {
       d_dst[indx] = static_cast<DstT>(d_src[indx]);
     }).wait();
