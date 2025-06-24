@@ -26,13 +26,13 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(TEST_BATCHES --l=2)
+set(TEST_GROUPS --groups=2)
 
 cutlass_example_add_executable(
   09_bmg_grouped_gemm_fp8
   09_bmg_grouped_gemm_fp8.cpp
   TEST_COMMAND_OPTIONS
-  TEST_BATCHES
+  TEST_GROUPS
 )
 # TODO(codeplay): Remove these once IGC VectorAliasThreshold issue is fixed
 set_target_properties( 09_bmg_grouped_gemm_fp8 PROPERTIES CXX_COMPILER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
