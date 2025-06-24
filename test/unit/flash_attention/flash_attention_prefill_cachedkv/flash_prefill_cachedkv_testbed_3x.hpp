@@ -62,6 +62,56 @@ namespace test {
 namespace flash_attention {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
+template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
+         typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
+         typename MMAOperation, bool HasCausalMask, bool UsePagedKV, bool isVarLen, int PipelineStages>
+struct XE_Flash_Attention_Prefill_CachedKV {
+  using LayoutQ = cutlass::layout::RowMajor;
+  using LayoutK = cutlass::layout::ColumnMajor;
+  using LayoutV = cutlass::layout::RowMajor;
+  using LayoutO = cutlass::layout::RowMajor;
+
+  using ElementAccumulator = ElementAccumulatorType;
+  using ElementComputeEpilogue = ElementOutputType;
+  using ElementInputQ = ElementInputType;
+  using ElementInputKV = ElementInputType;
+  using ElementOutput = ElementOutputType;
+
+  using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
+  using ProblemShapeVarlen = cute::tuple<int, int, int, cutlass::fmha::collective::VariableLength,
+                                         cutlass::fmha::collective::VariableLength, cutlass::fmha::collective::VariableLength,
+                                         int, int>;
+  using ProblemShapeType = std::conditional_t<isVarLen, ProblemShapeVarlen, ProblemShapeRegular>;
+
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+
+  using GmemTiledCopyQ = cute::XE_2D_U16x8x32_LD_N;
+  using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T; // _T designates a transposed block load operation
+  using GmemTiledCopyV = cute::XE_2D_U16x16x32_LD_V;
+  using GmemTiledCopyStore = cute::XE_2D_U32x8x16_ST_N;
+  using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillCachedEpilogue<
+        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
+        GmemTiledCopyStore>;
+  using FlashPrefillSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<
+        HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;
+
+  // Mainloop
+  using CollectiveMainloop = cutlass::flash_attention::collective::FlashPrefillCachedMma<
+        GEMMDispatchPolicy, ProblemShapeType, ElementInputQ,
+        cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutV>,
+        MMAOperation, TileShapeQK, TileShapePV, SubgroupLayout,
+        GmemTiledCopyQ, // Q
+        GmemTiledCopyK, // K
+        GmemTiledCopyV, // V,
+        HasCausalMask,
+        UsePagedKV>;
+
+    using Kernel = cutlass::flash_attention::kernel::FMHAPrefillCached<ProblemShapeType, CollectiveMainloop,
+                                                       FlashPrefillSoftmaxEpilogue, CollectiveEpilogue>;
+};
 
 namespace detail {
 
@@ -117,6 +167,7 @@ struct TestbedImpl {
 
   using ProblemShapeType = typename FlashPrefillCachedKV::ProblemShape;
   static constexpr bool HasCausalMask = CollectiveMainloop::CausalMask;
+  static constexpr bool UsePagedKV = CollectiveMainloop::PagedKV;
   static constexpr bool isVarLen = CollectiveMainloop::is_var_len;
 
   StrideQ stride_Q;
@@ -141,6 +192,13 @@ struct TestbedImpl {
   cutlass::DeviceAllocation<ElementV> block_V_cache;
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
+
+  struct PagedKVParams {
+      cutlass::DeviceAllocation<int> page_table;
+      int page_size = 128;
+      int num_pages_per_seq = 0;
+  };
+  PagedKVParams paged_kv_cache;
 
   //
   // Methods
@@ -187,6 +245,29 @@ struct TestbedImpl {
     block_V_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_vo);
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
+
+    if (use_kv_cache && UsePagedKV) {
+        int num_pages_per_seq = seq_len_kv_cache / paged_kv_cache.page_size;
+        paged_kv_cache.num_pages_per_seq = num_pages_per_seq;
+
+        int num_pages = num_pages_per_seq * batch;
+        paged_kv_cache.page_table.reset(batch * num_pages_per_seq);
+
+        // initialize block table with random mapping for non-contiguous layout
+        std::vector<int> page_mapping(batch * num_pages_per_seq);
+        for (int b = 0; b < batch; ++b) {
+            std::vector<int> physical_pages(num_pages_per_seq);
+            std::iota(physical_pages.begin(), physical_pages.end(), 0);
+            // shuffle physical pages
+            std::shuffle(physical_pages.begin(), physical_pages.end(), std::mt19937{ std::random_device{}() });
+            for (int blk = 0; blk < num_pages_per_seq; ++blk) {
+                int logical_idx = b * num_pages_per_seq + blk;
+                page_mapping[logical_idx] = physical_pages[blk];
+            }
+        }
+        syclcompat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
+        syclcompat::wait();
+    }
 
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
@@ -545,7 +626,10 @@ struct TestbedImpl {
       block_K.get(), stride_K,
       block_V.get(), stride_V,
       block_K_cache.get(), stride_K_cache,
-      block_V_cache.get(), stride_V_cache},
+      block_V_cache.get(), stride_V_cache,
+      UsePagedKV ? paged_kv_cache.page_table.get() : nullptr,
+      UsePagedKV ? paged_kv_cache.page_size : 0,
+      UsePagedKV ? paged_kv_cache.num_pages_per_seq : 0},
       {softmax_scale},
       {block_O.get(), stride_O},
       hw_info};

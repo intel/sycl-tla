@@ -29,100 +29,51 @@
  *
  **************************************************************************************************/
 
- #pragma once
+#pragma once
 
-#include <cutlass/half.h>
+#include <cute/layout.hpp>
+#include <cute/numeric/numeric_types.hpp>
+#include <cute/pointer.hpp>
+#include <cute/tensor_impl.hpp>
+#include <cute/underscore.hpp>
 #include <cute/util/sycl_vec.hpp>
+#include <cutlass/detail/helper_macros.hpp>
+#include <cutlass/half.h>
 
-using uchar16 = cute::intel::uchar16;
-using ushort16 = cute::intel::ushort16;
+template <typename Element, class EngineIn, class EngineOut, class LayoutIn,
+          class LayoutOut, class... Ts>
+CUTLASS_DEVICE void
+convert_FP8_to_FP16(cute::Tensor<EngineIn, LayoutIn> const &in,
+                    cute::Tensor<EngineOut, LayoutOut> &out) {
 
-static inline ushort16 convert_ushort16(uchar16 x) {
-    ushort16 result;
-    #pragma unroll
-    for (int i = 0; i < 16; ++i) {
-        result[i] = static_cast<uint16_t>(x[i]);
-    }
-    return result;
-}
+  static_assert(cute::is_rmem<EngineIn>::value,
+                "Input tensor for A conversion must come from registers");
+  static_assert(cute::is_rmem<EngineOut>::value,
+                "Output tensor for A conversion must come from registers");
+  static_assert(cute::cosize_v<LayoutIn> == cute::cosize_v<LayoutOut>);
+  static_assert(cute::size_v<LayoutIn> == cute::cosize_v<LayoutIn>);
+  static_assert(cute::size_v<LayoutOut> == cute::cosize_v<LayoutOut>);
 
-static inline unsigned short E4M3_to_FP16(unsigned char xin) {
-  unsigned char xa, sgn_x, nan_mask, den_mask;
+  using SrcType = typename EngineIn::value_type;
+  using DstType = typename EngineOut::value_type;
 
-  union {
-      signed short i;
-      _Float16 f;
-  } x16, den_corr;
+  static_assert(std::is_same_v<SrcType, uint8_t>,
+                "Expected fp8 input as uint8_t");
+  static_assert(cute::is_any_of_v<Element, cute::float_e5m2_t, cute::float_e4m3_t>,
+                "Expected Element to be float_e5m2_t or float_e4m3_t");
 
-  xa = xin & 0x7f;
-  sgn_x = xin ^ xa;
+  constexpr int num_elements = decltype(size(in))::value;
+  constexpr int fragment_size = std::is_same_v<Element, cute::float_e5m2_t> ? 4 : 8;
 
-  // mask for NaN input
-  nan_mask = (0x7e - xa) & 0x80;
-  // mask for denormal / zero input
-  den_mask = (((signed char)(xa - 8)) >> 7);
+  static_assert(num_elements % fragment_size == 0,
+                "Currently, FP8 -> FP16 conversion is only supported when "
+                "each work-item converts a multiple of fragment_size");
 
-  // apply Nan correction
-  xa += (nan_mask >> 1);
-  // first denormal correction
-  xa |= (den_mask & 8);
-  den_mask &= 0x48;
-  // exponent bias correction
-  xa += 0x40;
+  auto in_frag = cute::recast<cutlass::Array<Element, fragment_size>>(in);
+  auto out_frag = cute::recast<cutlass::Array<DstType, fragment_size>>(out);
 
-  // zero-extend to 16 bits
-  x16.i = xa;
-  den_corr.i = den_mask;
-  // FP16 format
-  x16.i <<= 7;
-  den_corr.i <<= 7;
-
-  // apply correction for denormals/zero
-  x16.f -= den_corr.f;
-
-  // finally, apply the sign
-  x16.i ^= (((signed short)sgn_x) << 8);
-
-  return (unsigned short)x16.i;
-}
-
-
-
-static inline ushort16 E4M3_to_FP16_chunk16(uchar16 xin) {
-  uchar16 xa = xin & 0x7F;
-  uchar16 sgn_x = xin ^ xa;
-
-  uchar16 zero_mask;
-  #pragma unroll
-  for (int i = 0; i < 16; ++i) {
-      zero_mask[i] = (xa[i] == 0) ? 1 : 0;
-  }
-  uchar16 nan_mask = (0x7E - xa) & 0x80;
-  uchar16 den_mask = ((xa - 8) >> 7) & 0x01;
-
-  xa += (nan_mask >> 1);
-  xa |= (den_mask & 8);
-  den_mask &= 0x48;
-  xa += 0x40 & ~(zero_mask * 0x40);
-
-  ushort16 x16 = convert_ushort16(xa) << 7;
-  ushort16 den_corr = convert_ushort16(den_mask & ~zero_mask) << 7;
-
-  ushort16 result = x16 - den_corr;
-  result &= ~(convert_ushort16(zero_mask) << 7);
-
-  ushort16 sign_ext = convert_ushort16(sgn_x) << 8;
-  result ^= sign_ext;
-
-  return result;
-}
-
-
-template<int N>
-static inline void E5M2_to_FP16(cutlass::Array<uint8_t, N> const &xin, cutlass::Array<uint16_t, N> &xout) {
-  // Adapted from https://github.com/pytorch/pytorch/blob/dfcfad2112933cc34247421ac0a4d3f19a1806c1/c10/util/Float8_e5m2.h#L30-L43
   CUTLASS_PRAGMA_UNROLL
-  for (int i = 0; i < N; i++) {
-    xout[i] = (static_cast<uint16_t>(xin[i])) << 8;
+  for (int i = 0; i < num_elements / fragment_size; ++i) {
+    out_frag(i) = cutlass::NumericArrayConverter<DstType, Element, fragment_size>{}(in_frag(i));
   }
 }

@@ -31,6 +31,7 @@
 
 #pragma once
 
+#include "cutlass/cutlass.h"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/sycl_tensor_fill.h"
 
@@ -38,19 +39,8 @@
 template <class Element>
 bool initialize_block(Element* block, std::size_t size, uint64_t seed=2023) {
 
-  Element scope_max, scope_min;
-  int bits_input = cutlass::sizeof_bits<Element>::value;
-
-  if (bits_input == 1) {
-   scope_max = Element(2);
-   scope_min = Element(0);
-  } else if (bits_input <= 8) {
-    scope_max = Element(2);
-    scope_min = Element(-2);
-  } else {
-    scope_max = Element(8);
-    scope_min = Element(-8);
-  }
+  Element scope_max = Element(1 << cute::ceil_div(std::numeric_limits<Element>::digits, 4));
+  Element scope_min = cute::is_signed<Element>::value ? Element(-scope_max) : Element(0);
 
   cutlass::reference::device::BlockFillRandomUniform(
        block, size, seed, scope_max, scope_min, 0);
@@ -75,18 +65,8 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
   std::ranlux24_base rng(std::random_device{}());
   rng.seed(seed);
 
-  int bits_input = cute::sizeof_bits_v<T1>;
-  T1 scope_max, scope_min;
-  if (bits_input == 1) {
-   scope_max = T1(2);
-   scope_min = T1(0);
-  } else if (bits_input <= 8) {
-    scope_max = T1(2);
-    scope_min = T1(-2);
-  } else {
-    scope_max = T1(8);
-    scope_min = T1(-8);
-  }
+  T1 scope_max = T1(1 << cute::ceil_div(std::numeric_limits<T1>::digits, 4));
+  T1 scope_min = cute::is_signed<T1>::value ? T1(-scope_max) : T1(0);
 
   std::uniform_int_distribution<> dist(scope_min, scope_max);
 
@@ -117,7 +97,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
     for (int i = 0; i < loop_cnt; i++) {
       cutlass::device_memory::copy_to_device(block_device.get() + (i * array_size) / elements_per_byte,
                                     raw_pointer_cast(block_host.begin()),
-                                    array_size);
+                                    array_size / elements_per_byte);
       cutlass::device_memory::copy_to_device(block_device_dq.get() + i * array_size,
                                     block_host_dq.data(),
                                     array_size);
@@ -127,10 +107,36 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
     if (tail_size) {
       cutlass::device_memory::copy_to_device(block_device.get() + (loop_cnt * array_size) / elements_per_byte,
                                     raw_pointer_cast(block_host.begin()),
-                                    tail_size);
+                                    tail_size / elements_per_byte);
       cutlass::device_memory::copy_to_device(block_device_dq.get() + loop_cnt * array_size,
                                     block_host_dq.data(),
                                     tail_size);
     }
+  }
+}
+
+template<typename T>
+inline
+bool is_close(T a, T b, float atol, float rtol) {
+  return std::abs((float)a - (float)b) <= atol + rtol * std::abs((float)b);
+}
+
+// TODO(Codeplay): use on device initialisation for this
+template<typename T>
+inline
+void random_fill(T *src, int seed, size_t N, float max, float min) {
+  if constexpr(std::is_same_v<T, float> || std::is_same_v<T, cute::bfloat16_t> || std::is_same_v<T, cute::half_t>) {
+    std::random_device rd;
+    std::mt19937 gen(seed);
+    std::uniform_real_distribution<float> dis(min, max);
+    auto buff = std::vector<T>(N);
+
+    for (size_t i = 0; i < N; ++i) {
+      buff[i] = (T)(dis(gen));
+    }
+    syclcompat::memcpy<T>(src, buff.data(), N);
+    syclcompat::wait();
+  } else {
+    assert(0 & "Not supported dtype");
   }
 }
