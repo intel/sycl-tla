@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,13 +29,16 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief CUTLASS Intel PVC Group Gemm
+    \brief CUTLASS Intel BMG Group Gemm
+
+    This file is almost a complete copy of 04_bmg_grouped_gemm,
+    except that it's used for FP8 (E5M2 & E4M3) datatype inputs.
 
     This example demonstrates fusing multiple GEMM operations into one kernel.
 
-    Note that the scalar arguments to e.g. the standard 00_pvc_gemm example, have been
+    Note that the scalar arguments to e.g. the standard 00_bmg_gemm example, have been
     replaced with vector equivalents, as each individual GEMM has its own inputs and outputs, which
-    needn't be contiguous in memory. For example, where 00_pvc_gemm receives an `ElementA *`
+    needn't be contiguous in memory. For example, where 00_bmg_gemm receives an `ElementA *`
     defining Matrix A, grouped gemm receives a `ElementA **`, i.e. a pointer to pointers, each
     pointing to a distinct Matrix A. Likewise, each individual GEMM operation may have its own alpha
     and beta factors for linear combination. This example demonstrates two approaches: the user can
@@ -53,8 +56,8 @@
 
     To build & run this example (from your build dir):
 
-      $ ninja 04_pvc_grouped_gemm
-      $ ./examples/sycl/04_pvc_grouped_gemm/04_pvc_grouped_gemm
+      $ ninja 09_bmg_grouped_gemm_fp8
+      $ ./examples/sycl/09_bmg_grouped_gemm_fp8/09_bmg_grouped_gemm_fp8
 
     Call with `--help` for information about available options.
 
@@ -142,7 +145,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "PVC Grouped GEMM\n\n"
+    out << "BMG Grouped GEMM\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --m=<int>                   Sets the M extent of the GEMM for all groups\n"
@@ -155,7 +158,7 @@ struct Options {
 
     out
       << "\n\nExamples:\n\n"
-      << "$ " << "pvc_grouped_gemm" << " --m=5120 --n=4096 --k=4096 --groups=5 --alpha=2.5 --beta=0.5 \n\n";
+      << "$ " << "09_bmg_grouped_gemm_fp8" << " --m=5120 --n=4096 --k=4096 --groups=5 --alpha=2.5 --beta=0.5 \n\n";
 
     return out;
   }
