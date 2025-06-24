@@ -322,6 +322,7 @@ struct XeSubgroup2DBlockLoad<1, 16, 1, 1> {
   }
 };
 
+template<>
 struct XeSubgroup2DBlockLoad<1, 16, 1, 2> {
 template<typename T>
   CUTE_HOST_DEVICE void 
