@@ -250,13 +250,12 @@ struct ExampleRunner {
   //
   // Methods
   //
-
   template <typename SrcT, typename DstT>
   void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
       SrcT* h_src = new SrcT[size];
       syclcompat::memcpy(h_src, d_src, size * sizeof(SrcT));
       syclcompat::wait();
-
+      
       DstT* h_dst = new DstT[size];
       for (size_t i = 0; i < size; ++i) {
           h_dst[i] = static_cast<DstT>(h_src[i]);
@@ -402,7 +401,7 @@ void initialize(const Options &options) {
     ptr_C_host.at(i) = block_C.get() + offset_C.at(i);
     ptr_D_host.at(i) = block_D.get() + offset_D.at(i);
     // Fill host vector of alpha & beta with random values if using per-group values
-    alpha_host.push_back((options.alpha == FLT_MAX) ? static_cast<ElementAccumulator>((rand() % 5) + 1) : options.alpha);
+    alpha_host.push_back((options.alpha == FLT_MAX) ? static_cast<ElementAccumulator>(rand() % 5 + 1) : options.alpha);
     beta_host.push_back((options.beta == FLT_MAX) ? static_cast<ElementAccumulator>(rand() % 5) : options.beta);
     // Fill host ptr vectors with offset addresses into device alpha/beta blocks
     ptr_alpha_host.at(i) = block_alpha.get() + i;
