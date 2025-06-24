@@ -255,9 +255,9 @@ public:
     StrideB dB;
     NonVoidElementScale const* ptr_S = nullptr;
     NonVoidStrideScale dS{};
+    NonVoidElementZero const* ptr_Z = nullptr;
     NonVoidStrideZero dZ{};
     int group_size = 1;
-    NonVoidElementZero const* ptr_Z = nullptr;
   };
 
   struct Params {
