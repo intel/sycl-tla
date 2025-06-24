@@ -252,17 +252,9 @@ struct ExampleRunner {
   //
   template <typename SrcT, typename DstT>
   void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
-      SrcT* h_src = new SrcT[size];
-      syclcompat::memcpy(h_src, d_src, size * sizeof(SrcT));
-      syclcompat::wait();
-      
-      DstT* h_dst = new DstT[size];
-      for (size_t i = 0; i < size; ++i) {
-          h_dst[i] = static_cast<DstT>(h_src[i]);
-      }
-
-      syclcompat::memcpy(d_dst, h_dst, size * sizeof(DstT));
-      syclcompat::wait();
+    syclcompat::get_default_queue().parallel_for(size, [=](auto indx) {
+      d_dst[indx] = static_cast<DstT>(d_src[indx]);
+    }).wait();
   }
 
   template<typename ElementType>
