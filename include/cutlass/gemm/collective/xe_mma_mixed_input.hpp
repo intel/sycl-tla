@@ -616,8 +616,12 @@ public:
     Tensor mma_A = make_tensor<ElementMMA>(make_fragment_layout(mainloop.tiled_copy_a, tCgA(_,_,_,0).shape()));
     Tensor mma_B = make_tensor<ElementMMA>(make_fragment_layout(mainloop.tiled_copy_b, tCgB(_,_,_,0).shape()));
 
-    static constexpr auto scale_traits_size = quant_mode == QuantMode::TensorWise ? 1 : decltype(size(typename GmemTiledCopyScale::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto scale_traits_num = quant_mode == QuantMode::TensorWise ? 1 : SG_N / size<1>(typename GmemTiledCopyScale::BlockShape{});
+    static constexpr auto scale_traits_size = quant_mode == QuantMode::TensorWise
+                                              ? 1
+                                              : decltype(size(typename GmemTiledCopyScale::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto scale_traits_num = quant_mode == QuantMode::TensorWise
+                                              ? 1
+                                              : SG_N / size<1>(typename GmemTiledCopyScale::BlockShape{});
 
     Tensor fragment_scale_input = [&](){
       if constexpr(quant_mode == QuantMode::GroupWise) {
@@ -632,8 +636,12 @@ public:
       }
     }();
 
-    static constexpr auto zero_traits_size = quant_mode == QuantMode::TensorWise ? 1 : decltype(size(typename GmemTiledCopyZero::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto zero_traits_num = quant_mode == QuantMode::TensorWise ? 1 : SG_N * zero_elements_packed_along_k / size<1>(typename GmemTiledCopyZero::BlockShape{});
+    static constexpr auto zero_traits_size = quant_mode == QuantMode::TensorWise
+                                             ? 1
+                                             : decltype(size(typename GmemTiledCopyZero::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto zero_traits_num = quant_mode == QuantMode::TensorWise
+                                             ? 1
+                                             : SG_N * zero_elements_packed_along_k / size<1>(typename GmemTiledCopyZero::BlockShape{});
                                               
     Tensor fragment_zero_input =  
     [&](){
@@ -792,15 +800,12 @@ public:
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), frag_copy_A);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), frag_copy_B);
 
-      if constexpr(ModeHasScales){
-        if constexpr(quant_mode == QuantMode::GroupWise){
+      if constexpr(ModeHasScales && quant_mode == QuantMode::GroupWise){
           copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrS);
-        }
       }
-      if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-        if constexpr(quant_mode == QuantMode::GroupWise){
-          copy(mainloop.tiled_copy_zero, copy_iter_z(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k), copy_tCrZ);
-        }
+      if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero
+                && quant_mode == QuantMode::GroupWise){
+        copy(mainloop.tiled_copy_zero, copy_iter_z(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k), copy_tCrZ);
       }
 
       if(prefetch_k < k_tile_count) {
