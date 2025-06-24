@@ -58,8 +58,6 @@ foreach(HEAD_DIM 64 96 128 192)
     06_bmg_prefill_attention_fp8_hdim${HEAD_DIM}
     06_bmg_prefill_attention_fp8.cpp
     TEST_COMMAND_OPTIONS
-    TEST_NO_PAGED
-    TEST_PAGED
 )
 
 
