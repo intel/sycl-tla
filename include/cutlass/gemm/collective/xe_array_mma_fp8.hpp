@@ -140,6 +140,7 @@ struct CollectiveMma<MainloopIntelXeXMX16GroupFP8<Stages, Schedule>, TileShape_,
   to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
     (void) workspace;
 
+    const int32_t mock_L = 1;
     auto problem_shape_MNK = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, mock_L);;
     auto init_M = get<0>(problem_shape_MNK);
     auto init_N = get<1>(problem_shape_MNK);
