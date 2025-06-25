@@ -255,7 +255,7 @@ struct ExampleRunner {
     using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
     using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-    using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementCompute,
+    using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementAccumulator, ElementCompute,
             ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
     using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
@@ -271,7 +271,7 @@ struct ExampleRunner {
             FusionCallBacks,
             XE_2D_U32x8x16_LD_N,
             void, void,
-            XE_2D_U32x8x16_ST_N,
+            XE_2D_U16x8x16_ST_N,
             void, void>;
 
     // Mainloop
@@ -609,7 +609,7 @@ int main(int argc, const char** argv) {
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
   using ElementInputA = uint4_t;         // <- data type of elements in input matrix A
   using ElementInputB = half_t;          // <- data type of elements in input matrix B
-  using ElementOutput = float;           // <- data type of elements in output matrix D
+  using ElementOutput = half_t;          // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::ColumnMajor;
@@ -636,7 +636,7 @@ int main(int argc, const char** argv) {
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
+  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementAccumulator, ElementComputeEpilogue,
           ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
@@ -651,7 +651,7 @@ int main(int argc, const char** argv) {
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          XE_2D_U32x8x16_ST_N,
+          XE_2D_U16x8x16_ST_N,
           void, void>;
 
   // Use the helpers to avoid template arg repetition
