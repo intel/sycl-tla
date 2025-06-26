@@ -6179,15 +6179,6 @@ private:
     }
     return result;
     #else
-    static constexpr uint32_t bias_rep = 0x66006600;
-    const half2& bias = reinterpret_cast<const half2&>(bias_rep);
-    CUTLASS_PRAGMA_UNROLL
-    for (int ii = 0; ii < RegArray::kElements; ++ii) {
-      half2& fp16x2_val = reinterpret_cast<__half2&>(r[ii]);
-      fp16x2_val = __hsub2(fp16x2_val, bias);
-    }
-    return reinterpret_cast<PackedResultType&>(r);
-    #endif
 
     // View the input as reg
     uint32_t src_reg = to_reg(source);
@@ -6221,7 +6212,15 @@ private:
                                 "=r"(r[ii]) : "r"(r[ii]), "n"(0x03FF03FF), "n"(0x66006600), "n"(kImmLut));
     }
 
+    static constexpr uint32_t bias_rep = 0x66006600;
+    const half2& bias = reinterpret_cast<const half2&>(bias_rep);
+    CUTLASS_PRAGMA_UNROLL
+    for (int ii = 0; ii < RegArray::kElements; ++ii) {
+      half2& fp16x2_val = reinterpret_cast<__half2&>(r[ii]);
+      fp16x2_val = __hsub2(fp16x2_val, bias);
+    }
     return reinterpret_cast<PackedResultType&>(r);
+    #endif
   }
 
   friend class detail::VectorizedConverter;
