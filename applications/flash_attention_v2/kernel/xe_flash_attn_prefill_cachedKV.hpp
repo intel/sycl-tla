@@ -385,16 +385,16 @@ public:
           if (is_next_KV_cache) {
             int curr_batch_pages = is_var_len ? mainloop_params.num_pages_per_seq[batch_coord + 1] - mainloop_params.num_pages_per_seq[batch_coord]
                                               : ceil_div(seq_len_kv_cache, mainloop_params.page_size);
-            int curr_page_logical_idx = nblock * QK_BLK_N / params.mainloop.page_size;
+            int next_page_logical_idx = next_cached_nblock * QK_BLK_N / params.mainloop.page_size;
             int batch_offset = is_var_len ? mainloop_params.num_pages_per_seq[batch_coord] : batch_coord * curr_batch_pages;
-            bool valid_page = curr_page_logical_idx < curr_batch_pages;
+            bool valid_page = next_page_logical_idx < curr_batch_pages;
             // get physical page idx from page table
             if (valid_page) {
               next_cached_nblock = params.mainloop.ptr_page_table[
                     batch_offset +                  // page table for this batch
-                    curr_page_logical_idx           // nblock (tile idx) to logical page idx
+                    next_page_logical_idx           // nblock (tile idx) to logical page idx
                     ] * tiles_per_page +            // base block idx of physical page
-                    nblock % tiles_per_page;        // offset within page
+                    next_cached_nblock % tiles_per_page;        // offset within page
             } else {
               next_cached_nblock = curr_batch_pages * tiles_per_page; // push idx out of bounds to respect the boundary between batches
             }
