@@ -561,7 +561,7 @@ public:
               if constexpr(quant_mode == QuantMode::GroupWise){
                 return shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
               } else {
-                return tCrZ_input(0);
+                return tCrS_input(0);
               }
             }();
             ZeroType minus_zp_0 =  static_cast<ZeroType>(tCrA_load(_, _, 0)[j * 16 + i]);
@@ -571,7 +571,7 @@ public:
                 if constexpr(quant_mode == QuantMode::GroupWise){
                   return shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
                 } else {
-                  return tCrS_input(0);
+                  return tCrZ_input(0);
                 }
               }();
               minus_zp_0 -= zero;

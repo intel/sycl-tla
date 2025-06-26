@@ -65,28 +65,28 @@ TEST(XE_Device_Gemm_f16t_s8t_fp32t_tensor_op_fp32, 256x256x32) {
   using LayoutA = layout::RowMajor;
   using LayoutB = layout::RowMajor;
   using Gemm = XE_Device_Gemm_f16_s8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 32));
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
 TEST(XE_Device_Gemm_f16n_s8t_fp32t_tensor_op_fp32, 256x256x32) {
   using LayoutA = layout::ColumnMajor;
   using LayoutB = layout::RowMajor;
   using Gemm = XE_Device_Gemm_f16_s8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 32));
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
 TEST(XE_Device_Gemm_f16t_s8n_fp32t_tensor_op_fp32, 256x256x32) {
   using LayoutA = layout::RowMajor;
   using LayoutB = layout::ColumnMajor;
   using Gemm = XE_Device_Gemm_f16_s8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 32));
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 
 TEST(XE_Device_Gemm_f16n_s8n_fp32t_tensor_op_fp32, 256x256x32) {
   using LayoutA = layout::ColumnMajor;
   using LayoutB = layout::ColumnMajor;
   using Gemm = XE_Device_Gemm_f16_s8_fp32_tensor_op_fp32<LayoutA, LayoutB>::Gemm;
-  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>(1.0, 0.0, true, 16));
+  EXPECT_TRUE(test::gemm::device::TestXe<Gemm>());
 }
 }
 } // namespace cutlass
