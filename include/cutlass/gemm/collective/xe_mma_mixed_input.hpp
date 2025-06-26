@@ -161,7 +161,8 @@ public:
   using NonVoidStrideZero = cute::conditional_t<cute::is_same_v<StrideZero, void>, cute::Stride<_1, int64_t, int64_t>, StrideZero>;
   static constexpr auto zero_elements_packed_along_k = get<0>(NonVoidStrideZero{});
 
-  static constexpr auto quant_mode = rank_v<NonVoidStrideScale> == 2 ? QuantMode::TensorWise : QuantMode::GroupWise;
+  // When stride is Stride<_0, _0, _1>, quantization can be determined as tensor-wise 
+  static constexpr auto quant_mode = is_static_v<NonVoidStrideScale> ? QuantMode::TensorWise : QuantMode::GroupWise;
   using StrideA = StrideA_;
   using StrideB = StrideB_;
 
@@ -247,13 +248,13 @@ public:
   using atom_load_scale = Copy_Atom<traits_load_scale, NonVoidElementScale>;
   using val_layout_load_scale = decltype(make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Scale = decltype(make_tiled_copy(atom_load_scale{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
-  using TensorScale = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementScale const*>(nullptr)), make_shape(_1{}, 0), NonVoidStrideScale{}));
+  using TensorScale = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementScale const*>(nullptr)), make_shape(_1{}, 0, 0), NonVoidStrideScale{}));
   
   using traits_load_zero = Copy_Traits<GmemTiledCopyZero, NonVoidStrideScale>;
   using atom_load_zero = Copy_Atom<traits_load_zero, NonVoidElementZero>;
   using val_layout_load_zero = decltype(make_layout(shape_div(typename traits_load_zero::BlockShape{}, CopyThreadShapeRev{}))); 
   using Copy_Zero = decltype(make_tiled_copy(atom_load_zero{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero{}));
-  using TensorZero = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const*>(nullptr)), make_shape(_1{}, 0), NonVoidStrideZero{}));
+  using TensorZero = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementZero const*>(nullptr)), make_shape(_1{}, 0, 0), NonVoidStrideZero{}));
 
   // Host side kernel arguments
   struct Arguments {
@@ -322,7 +323,7 @@ public:
       } else {
         return make_tensor(
           make_gmem_ptr(static_cast<NonVoidElementScale const *>(args.ptr_S)),
-          make_layout(make_shape(_1{}, 1), args.dS));
+          make_layout(make_shape(_1{}, 1, 1), args.dS));
       }
     }();
 
@@ -347,7 +348,7 @@ public:
       } else {
         return make_tensor(
           make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_Z)),
-          make_layout(make_shape(_1{}, 1), args.dZ));
+          make_layout(make_shape(_1{}, 1, 1), args.dZ));
       }
     }();
 
@@ -812,8 +813,8 @@ public:
     constexpr int barrier_scope = 2;
     int prefetch_k = k_start_idx;
     if constexpr(quant_mode == QuantMode::TensorWise) {
-      if constexpr(ModeHasScales) copy(mainloop.tiled_copy_scale(_, l_coord), copy_tCrS);
-      if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero) copy(mainloop.tiled_copy_zero(_, l_coord), copy_tCrZ);
+      if constexpr(ModeHasScales) copy(mainloop.tiled_copy_scale(_, 0, l_coord), copy_tCrS);
+      if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero) copy(mainloop.tiled_copy_zero(_, 0, l_coord), copy_tCrZ);
     }
 
     CUTLASS_PRAGMA_UNROLL
