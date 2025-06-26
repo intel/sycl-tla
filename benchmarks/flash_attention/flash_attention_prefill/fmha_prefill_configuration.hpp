@@ -44,9 +44,47 @@ namespace flash_attention{
   template <typename DispatchPolicy> struct MMAOP <DispatchPolicy, half_t, float> {
     using Type = cute::XE_8x16x16_F32F16F16F32_TT;
   };
-  
-template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
-          typename GmemTiledCopyQ, typename GmemTiledCopyK, typename GmemTiledCopyV, typename GmemTiledCopyO,
+
+  template <typename DispatchPolicy> struct MMAOP <DispatchPolicy, float_e5m2_t, float> {
+    using Type = cute::XE_8x16x16_F32F16F16F32_TT;
+  };
+
+  template <typename DispatchPolicy> struct MMAOP <DispatchPolicy, float_e4m3_t, float> {
+    using Type = cute::XE_8x16x16_F32F16F16F32_TT;
+  };
+/////////////////////////////////////////////////////////////////////
+  template <int input_bits, int output_bits> struct TiledCopyConfig;
+
+  template <> struct TiledCopyConfig<8, 32> {
+    using GmemTiledCopyQ = cute::XE_2D_U8x8x32_LD_N;
+    using GmemTiledCopyK = cute::XE_2D_U8x16x16_LD_T;
+    using GmemTiledCopyV = cute::XE_2D_U8x32x32_LD_V;
+    using GmemTiledCopyO = cute::XE_2D_U32x8x16_ST_N;
+  };
+
+  template <> struct TiledCopyConfig<8, 8> {
+    using GmemTiledCopyQ = cute::XE_2D_U8x8x32_LD_N;
+    using GmemTiledCopyK = cute::XE_2D_U8x16x16_LD_T;
+    using GmemTiledCopyV = cute::XE_2D_U8x32x32_LD_V;
+    using GmemTiledCopyO = cute::XE_2D_U8x8x16_ST_N;
+  };
+
+  template <> struct TiledCopyConfig<16, 32> {
+    using GmemTiledCopyQ = cute::XE_2D_U16x8x32_LD_N;
+    using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
+    using GmemTiledCopyV = cute::XE_2D_U16x16x32_LD_V;
+    using GmemTiledCopyO = cute::XE_2D_U32x8x16_ST_N;
+  };
+
+  template <> struct TiledCopyConfig<16, 16> {
+    using GmemTiledCopyQ = cute::XE_2D_U16x8x32_LD_N;
+    using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
+    using GmemTiledCopyV = cute::XE_2D_U16x16x32_LD_V;
+    using GmemTiledCopyO = cute::XE_2D_U16x8x16_ST_N;
+  };
+/////////////////////////////////////////////////////////////////////
+
+template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,
           typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
           bool HasCausal, bool IsVarLen, int PipelineStages>
 struct FMHAPrefillConfig {
@@ -64,7 +102,13 @@ struct FMHAPrefillConfig {
   static constexpr bool VarLen = IsVarLen;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
-  using MMAOperation = typename MMAOP<GEMMDispatchPolicy, ElementInputType,ElementAccumulator>::Type;
+  using MMAOperation = typename MMAOP<GEMMDispatchPolicy, ElementInputType, ElementAccumulator>::Type;
+
+  using GmemTiledCopyQ = typename TiledCopyConfig<cute::sizeof_bits_v<ElementInputQ>, cute::sizeof_bits_v<ElementOutput>>::GmemTiledCopyQ;
+  using GmemTiledCopyK = typename TiledCopyConfig<cute::sizeof_bits_v<ElementInputK>, cute::sizeof_bits_v<ElementOutput>>::GmemTiledCopyK;
+  using GmemTiledCopyV = typename TiledCopyConfig<cute::sizeof_bits_v<ElementInputV>, cute::sizeof_bits_v<ElementOutput>>::GmemTiledCopyV;
+  using GmemTiledCopyO = typename TiledCopyConfig<cute::sizeof_bits_v<ElementInputQ>, cute::sizeof_bits_v<ElementOutput>>::GmemTiledCopyO;
+
   using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillEpilogue<
                                     EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, 
                                     SubgroupLayout, ElementAccumulator, ElementOutputType,

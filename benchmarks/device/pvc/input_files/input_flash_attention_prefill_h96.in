@@ -1,0 +1,16 @@
+# FMHA Prefill BFloat16 benchmarks
+FMHAPrefillBF16BF16FP32FP32_RCR_h96_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
+FMHAPrefillBF16BF16FP32FP32_RCR_h96_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
+
+FMHAPrefillBF16BF16FP32FP32_RCR_h96_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
+FMHAPrefillBF16BF16FP32FP32_RCR_h96_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
+
+########################################################################################################################################################################################
+
+# FMHA Prefill FP16 benchmarks
+
+FMHAPrefillFP16FP16FP32FP32_RCR_h96_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
+FMHAPrefillFP16FP16FP32FP32_RCR_h96_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
+
+FMHAPrefillFP16FP16FP32FP32_RCR_h96_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96
+FMHAPrefillFP16FP16FP32FP32_RCR_h96_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024  --seq_len_kv=1024  --batch=8 --num_heads_q=32  --num_heads_kv=32    --head_size_vo=96 --head_size_qk=96

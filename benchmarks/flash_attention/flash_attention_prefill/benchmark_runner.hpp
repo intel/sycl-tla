@@ -56,7 +56,7 @@ using namespace cute;
 namespace cutlass::benchmark {
 
 // Command line options parsing
-struct FMHAOptions {
+struct FMHAPrefillOptions {
 
   bool error;
 
@@ -64,7 +64,7 @@ struct FMHAOptions {
   float softmax_scale;
   std::string bm_name;
 
-  FMHAOptions()
+  FMHAPrefillOptions()
       : error(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
         seq_len_kv(512), head_size_vo(128), iterations(100), softmax_scale(1.f), bm_name("Flash Attention v2") {}
 
@@ -77,12 +77,17 @@ struct FMHAOptions {
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 512);
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
+    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
     cmd.get_cmd_line_argument("bm_name", bm_name, std::string("Flash Attention v2"));
 
     softmax_scale = 1 / std::sqrt(static_cast<float>(head_size_qk));
+
+    if (head_size_vo != HEAD_DIM) {
+      std::cerr << "head_size_vo must be " << HEAD_DIM << ", but got " << head_size_vo << std::endl;
+      return;
+    }
   }
 
   std::string benchmark_name() const {
@@ -393,7 +398,7 @@ template <class FMHAPrefillConfiguration> struct BenchmarkRunnerFMHA {
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
-  ProblemShapeType initialize(const FMHAOptions &options) {
+  ProblemShapeType initialize(const FMHAPrefillOptions &options) {
     auto problem_shape_in =
         cute::make_tuple(options.batch, options.num_heads_q, options.num_heads_kv, options.seq_len_qo, options.seq_len_kv, options.head_size_qk, options.head_size_vo);
 
@@ -496,7 +501,7 @@ template <class FMHAPrefillConfiguration> struct BenchmarkRunnerFMHA {
     EventManager::getInstance().addEvent(event);
   }
 
-  void run(::benchmark::State& state, const FMHAOptions &options, const cutlass::KernelHardwareInfo &hw_info) {
+  void run(::benchmark::State& state, const FMHAPrefillOptions &options, const cutlass::KernelHardwareInfo &hw_info) {
 
     ProblemShapeType problem_size = initialize(options);
 
@@ -632,14 +637,3 @@ private:
 };
 
 }
-
-#define CUTLASS_FMHA_PREFILL_BENCHMARK(F) cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::FMHAOptions>::Register(#F, &F##_func)
-
-#define CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(F)                          \
-  static void F##_func(                                           \
-      ::benchmark::State& state,                                  \
-      cutlass::benchmark::FMHAOptions const& options,                 \
-      cutlass::KernelHardwareInfo const& hw_info) {               \
-    auto bench = cutlass::benchmark::BenchmarkRunnerFMHA<F>();    \
-    bench.run(state, options, hw_info);                           \
-  }

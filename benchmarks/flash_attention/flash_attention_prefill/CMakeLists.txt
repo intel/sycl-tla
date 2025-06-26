@@ -28,18 +28,19 @@
 
 set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
 
-# Pass these configuration files for the CI
-set(CONFIG_FILE_PVC --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/pvc/input_files/input_flash_attention_prefill.in)
-set(CONFIG_FILE_BMG --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_prefill_extend_nokvcache.in)
-
 cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_prefill
                             SUPERSUITE cutlass_benchmarks_flash_attention)
 
-cutlass_benchmark_add_executable(
-    cutlass_benchmarks_flash_attention_prefill_xe
+foreach(HEAD_DIM 64 96 128 192)
+  set(input_name "cutlass_benchmarks_flash_attention_prefill_h${HEAD_DIM}")
+  set(out_exe "${input_name}_xe")
+  set(SHAPE_H "Shape_h${HEAD_DIM}")
+  cutlass_benchmark_add_executable(
+    ${out_exe}
     main.cpp
-    TEST_COMMAND_OPTIONS
-    CONFIG_FILE_PVC
-    CONFIG_FILE_BMG
     SUITE cutlass_benchmarks_flash_attention_prefill
-)
+  )
+  target_compile_definitions(${out_exe} PRIVATE
+                              HEAD_DIM=${HEAD_DIM}
+                              SHAPE_H=${SHAPE_H})
+endforeach()

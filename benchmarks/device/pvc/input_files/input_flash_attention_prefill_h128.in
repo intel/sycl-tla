@@ -1,0 +1,72 @@
+# FMHA Prefill BFloat16 benchmarks
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=16 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=16 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=16 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=16 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=16 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=16 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=16 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=16 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=8 --num_heads_q=32  --num_heads_kv=32   --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=8 --num_heads_q=32  --num_heads_kv=32   --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=16 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=16 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=16 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=16 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=16 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=16 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=16 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=16 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=8 --num_heads_q=32  --num_heads_kv=32   --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=8 --num_heads_q=32  --num_heads_kv=32   --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_Causal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+FMHAPrefillBF16BF16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=bf16_bf16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+
+########################################################################################################################################################################################
+
+# FMHA Prefill FP16 benchmarks
+
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=16 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=16 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=16 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=16 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=16 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=16 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=16 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=16 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=8 --num_heads_q=32  --num_heads_kv=32   --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=8 --num_heads_q=32  --num_heads_kv=32   --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_FixedLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=2048 --batch=1 --num_heads_q=32, --num_heads_kv=8  --head_size_vo=128 --head_size_qk=128 
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=512 --seq_len_kv=512   --batch=32 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=16 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=1024 --seq_len_kv=1024  --batch=16 --num_heads_q=16  --num_heads_kv=16  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=16 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=16 --num_heads_q=8 --num_heads_kv=8  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=16 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=4096 --seq_len_kv=4096  --batch=16 --num_heads_q=4 --num_heads_kv=4  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=16 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=8192 --seq_len_kv=8192  --batch=16 --num_heads_q=2 --num_heads_kv=2  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=8 --num_heads_q=32  --num_heads_kv=32   --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=2048 --seq_len_kv=2048  --batch=8 --num_heads_q=32  --num_heads_kv=32   --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_Causal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
+FMHAPrefillFP16FP16FP32FP32_RCR_h128_NonCausal_VarLen --bm_name=fp16_fp16_fp32 --seq_len_qo=16384 --seq_len_kv=16384 --batch=16 --num_heads_q=1 --num_heads_kv=1  --head_size_qk=128 --head_size_vo=128
