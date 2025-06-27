@@ -211,7 +211,6 @@ template <class FMHAPrefillConfiguration> struct BenchmarkRunnerFMHA {
 
         std::vector<ElementAccumulator> host_S(block_S.size());
         syclcompat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(), host_S.size());
-        syclcompat::wait();
 
         // delete this memory as it is no longer needed
         block_S.reset();
@@ -278,7 +277,6 @@ template <class FMHAPrefillConfiguration> struct BenchmarkRunnerFMHA {
         block_P.reset(host_P.size());
 
         syclcompat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
-        syclcompat::wait();
 
         cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
 
@@ -302,7 +300,6 @@ template <class FMHAPrefillConfiguration> struct BenchmarkRunnerFMHA {
 
         std::vector<ElementAccumulator> vec_acc(block_acc.size());
         syclcompat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(), vec_acc.size());
-        syclcompat::wait();
 
         // delete this memory as it is no longer needed
         block_acc.reset();
@@ -311,7 +308,6 @@ template <class FMHAPrefillConfiguration> struct BenchmarkRunnerFMHA {
           vec_out[i] = static_cast<ElementOutput>(vec_acc[i]);
         }
         syclcompat::memcpy<ElementOutput>(block_ref_O.get() + offset_o, vec_out.data(), vec_out.size());
-        syclcompat::wait();
 
         offset_q += seq_len_qo * head_size_qk;
         if(kv_group_update % q_group_size==0) {
