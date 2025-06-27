@@ -253,13 +253,6 @@ struct ExampleRunner {
   //
   // Methods
   //
-  template <typename SrcT, typename DstT>
-  void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
-    syclcompat::get_default_queue().parallel_for(size, [=](auto indx) {
-      d_dst[indx] = static_cast<DstT>(d_src[indx]);
-    }).wait();
-  }
-
   template<typename ElementType>
   bool verify(const Options &options) {
     bool passed = true;
@@ -274,12 +267,12 @@ struct ExampleRunner {
       cutlass::DeviceAllocation<half_t> block_B_fp16(block_B.size());
 
       // fp8 -> fp16
-      convert_fp8_to_fp16<ElementType, half_t>(
+      convert_dtype<ElementType, half_t>(
           block_A.get(),
           block_A_fp16.get(),
           block_A.size()
       );
-      convert_fp8_to_fp16<ElementType, half_t>(
+      convert_dtype<ElementType, half_t>(
           block_B.get(),
           block_B_fp16.get(),
           block_B.size()
@@ -543,6 +536,8 @@ void initialize(const Options &options) {
         std::cout << "Datatype: float_e4m3_t"<< std::endl;
       } else if constexpr (std::is_same_v<ElementType, float_e5m2_t>) {
         std::cout << "Datatype: float_e5m2_t"<< std::endl;
+      } else {
+        static_assert(cutlass::detail::dependent_false<ElementType>, "Not a valid fp8 datatype.");
       }
       std::cout << "  Problem Sizes, Alpha, Beta " << std::endl;
       for (int32_t i = 0; i < options.groups; ++i) {

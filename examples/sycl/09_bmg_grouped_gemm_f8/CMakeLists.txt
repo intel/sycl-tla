@@ -29,11 +29,11 @@
 set(TEST_GROUPS --groups=2)
 
 cutlass_example_add_executable(
-  09_bmg_grouped_gemm_fp8
-  09_bmg_grouped_gemm_fp8.cpp
+  09_bmg_grouped_gemm_f8
+  09_bmg_grouped_gemm_f8.cpp
   TEST_COMMAND_OPTIONS
   TEST_GROUPS
 )
 # TODO(codeplay): Remove these once IGC VectorAliasThreshold issue is fixed
-set_target_properties( 09_bmg_grouped_gemm_fp8 PROPERTIES CXX_COMPILER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
-set_target_properties( 09_bmg_grouped_gemm_fp8 PROPERTIES CXX_LINKER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
+set_target_properties( 09_bmg_grouped_gemm_f8 PROPERTIES CXX_COMPILER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
+set_target_properties( 09_bmg_grouped_gemm_f8 PROPERTIES CXX_LINKER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )

@@ -75,7 +75,7 @@ struct CollectiveMma<MainloopIntelXeXMX16GroupFP8<Stages, Schedule>, TileShape_,
   using ArchTag = typename DispatchPolicy::ArchTag;
 
   static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopIntelXeXMX16Array requires that A and B have same type.");
-
+  static_assert(std::is_same_v<ElementA, float_e5m2_t> || std::is_same_v<ElementA, float_e4m3_t>);
   static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
   static_assert(std::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
 
@@ -199,7 +199,6 @@ struct CollectiveMma<MainloopIntelXeXMX16GroupFP8<Stages, Schedule>, TileShape_,
                                  Params const &mainloop, LoadTensors const& load_tensors) {
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
-    static_assert(std::is_same_v<ElementA, float_e5m2_t> || std::is_same_v<ElementA, float_e4m3_t>);
 
     (void)thread_idx;
 
@@ -275,7 +274,6 @@ struct CollectiveMma<MainloopIntelXeXMX16GroupFP8<Stages, Schedule>, TileShape_,
       prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
     }
 
-    CUTLASS_PRAGMA_UNROLL
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
