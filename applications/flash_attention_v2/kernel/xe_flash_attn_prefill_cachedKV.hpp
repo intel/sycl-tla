@@ -178,7 +178,7 @@ public:
   static bool can_implement(Arguments const &args) {
     bool mode_implementable = args.mode == gemm::GemmUniversalMode::kGemm or
                               (args.mode == gemm::GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
-    bool valid_page_size = !PagedKV ? true : args.mainloop.page_size >= QK_BLK_N && args.mainloop.page_size % QK_BLK_N == 0;
+    bool valid_page_size = !PagedKV || (args.mainloop.page_size >= QK_BLK_N && args.mainloop.page_size % QK_BLK_N == 0);
     return mode_implementable && valid_page_size;
   }
 

@@ -515,7 +515,7 @@ struct TestbedImpl {
           int idx = row * seq_len_kv_total;
           int max_idx = row;
           for (int col = 0; col < seq_len_kv_total; col++, idx++) {
-            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) / std::sqrt(static_cast<ElementAccumulator>((head_size_qk))));
+            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) * static_cast<ElementAccumulator>(softmax_scale));
           }
         }
 
