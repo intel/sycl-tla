@@ -315,7 +315,6 @@ struct ExampleRunner {
 
     // Verify that the result is correct
     bool passed = verify(problem_size, options.alpha, options.beta);
-    // bool passed = true;
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if(!passed) return cutlass::Status::kErrorInternal;
