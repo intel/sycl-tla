@@ -714,11 +714,11 @@ public:
     Tensor zero_A_ = make_tensor(make_gmem_ptr(mainloop.ptr_ZA), make_shape(M, scale_k, L), make_stride(1, M, M * scale_k));
     Tensor zero_B_ = make_tensor(make_gmem_ptr(mainloop.ptr_ZB), make_shape(N, scale_k, L), make_stride(1, N, N * scale_k));
 
-    Tensor zero_gA_ = local_tile(zero_A_, WorkgroupTileShape{}, make_coord(m_idx, k_idx, l_idx), Step<_1, X,_1>{});
-    Tensor zero_gB_ = local_tile(zero_B_, WorkgroupTileShape{}, make_coord(n_idx, k_idx, l_idx), Step<_1, X,_1>{});
+    Tensor zero_gA_ = local_tile(zero_A_, WorkgroupTileShape{}, make_coord(m_idx, _, l_coord), Step<_1, X,_1>{});
+    Tensor zero_gB_ = local_tile(zero_B_, WorkgroupTileShape{}, make_coord(n_idx, _, l_coord), Step<_1, X,_1>{});
 
-    Tensor zero_gA_2 = local_tile(zero_A_, WorkgroupTileShape{}, make_coord(m_idx, k_idx, l_idx), Step<_1, X,_1>{});
-    Tensor zero_gB_2 = local_tile(zero_B_, WorkgroupTileShape{}, make_coord(n_idx, k_idx, l_idx), Step<_1, X,_1>{});
+    Tensor zero_gA_2 = local_tile(zero_A_, make_shape(SG_M, SG_K, 1), make_coord(m_coord, k_idx, l_idx), Step<_1, X,_1>{});
+    Tensor zero_gB_2 = local_tile(zero_B_, make_shape(SG_N, SG_K, 1), make_coord(n_coord, k_idx, l_idx), Step<_1, X,_1>{});
 
     if (cutlass::thread(16, 0)) {
       print("zero_A: ");
@@ -732,6 +732,12 @@ public:
       print("\n");
       print("zero_gB: ");
       print(zero_gB_);
+      print("\n");
+      print("zero_gA2: ");
+      print_tensor(zero_gA_2);
+      print("\n");
+      print("zero_gB2: ");
+      print_tensor(zero_gB_2);
       print("\n");
     }
   #define LOG_GROUP 0

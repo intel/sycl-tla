@@ -107,11 +107,11 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 64);
-    cmd.get_cmd_line_argument("n", n, 64);
-    cmd.get_cmd_line_argument("k", k, 64);
+    cmd.get_cmd_line_argument("m", m, 5120);
+    cmd.get_cmd_line_argument("n", n, 4096);
+    cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
-    cmd.get_cmd_line_argument("g", g, 64);
+    cmd.get_cmd_line_argument("g", g, 128);
     cmd.get_cmd_line_argument("mode", mode, 0);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
