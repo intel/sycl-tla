@@ -278,7 +278,6 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
               block_V.get() + offset_v,
               seq_len_kv * head_size_vo
           );
-          syclcompat::wait();
 
           k_ptr = block_K_concat.get();
           v_ptr = block_V_concat.get();
@@ -306,7 +305,6 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
 
         std::vector<ElementAccumulator> host_S(block_S.size());
         syclcompat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(), host_S.size());
-        syclcompat::wait();
 
         // delete this memory as it is no longer needed
         block_S.reset();
@@ -374,7 +372,6 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
         block_P.reset(host_P.size());
 
         syclcompat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
-        syclcompat::wait();
 
         cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
 
@@ -398,7 +395,6 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
 
         std::vector<ElementAccumulator> vec_acc(block_acc.size());
         syclcompat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(), vec_acc.size());
-        syclcompat::wait();
 
         // delete this memory as it is no longer needed
         block_acc.reset();
@@ -407,7 +403,6 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
           vec_out[i] = static_cast<ElementOutput>(vec_acc[i]);
         }
         syclcompat::memcpy<ElementOutput>(block_ref_O.get() + offset_o, vec_out.data(), vec_out.size());
-        syclcompat::wait();
 
         offset_q += seq_len_qo * head_size_qk;
         if(kv_group_update % q_group_size==0) {
@@ -569,7 +564,6 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
 
       paged_kv_cache.num_pages_per_seq.reset(num_pages_per_seq.size());
       syclcompat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
-      syclcompat::wait();
     }
 
     initialize_block(block_Q, seed + 2023);
