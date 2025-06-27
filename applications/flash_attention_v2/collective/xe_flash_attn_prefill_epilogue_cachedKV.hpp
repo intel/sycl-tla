@@ -198,6 +198,9 @@ public:
     Tensor tOgO = thread_xe_store_o.partition_D(gO);
 
     Tensor final_out_reg = make_fragment_like<ElementOutput>(out_reg);
+    // iff ElementOutput == ElementAccumulator, then convert_type doesn't do the right conversion
+    // so we call copy() which internally performs a static_cast op on the data.
+    // for ElementOutput == bf16 | fp16, convert_type calls relevant NumericConverter specialization.    
     if constexpr (cute::is_same_v<ElementOutput, ElementCompute>) {
       copy(out_reg, final_out_reg);
     } else {
