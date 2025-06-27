@@ -69,7 +69,7 @@ public:
   using TiledMmaOutput = typename TiledMMAHelper<MMA_Atom<MMAOperation_>, Layout<TileShapeOutput>, SubgroupLayout>::TiledMMA;
   using GmemTiledCopyO = CopyOpO;
   using ElementOutput = ElementO_;
-  using ElementCompute = ElementO_;
+  using ElementCompute = ElementCompute_;
   using ElementAccumulator = ElementCompute_;
   using SubgroupTileShape = decltype(cute::shape_div(TileShapeOutput{}, (SubgroupLayout{}.shape())));
 
