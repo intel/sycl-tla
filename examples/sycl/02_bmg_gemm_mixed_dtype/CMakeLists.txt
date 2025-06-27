@@ -33,7 +33,7 @@ set(TEST_A_NARROW --l=2 --a_narrower)
 
 cutlass_example_add_executable(
   02_bmg_gemm_f18_s8_tensorwise
-  02_bmg_gemm_f18_s8_tensorwise.cpp
+  02_bmg_gemm_f8_s8_tensorwise.cpp
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
 )
