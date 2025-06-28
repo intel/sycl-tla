@@ -679,6 +679,7 @@ public:
       auto tensor_scale = scale_gA_2(_, k_tile / k_reload_factor, _);
       auto tensor_zero = zero_gA_2(_, k_tile / k_reload_factor, _);
       transform_quant<true, false>(quantA_frag, mma_A, tensor_scale, tensor_zero);
+//      transform_quant<true, false>(quantA_frag, mma_A, fragment_scaleA_input, fragment_zeroA_input);
       transform_quant<false, true>(quantB_frag, mma_B, fragment_scaleB_input, fragment_zeroB_input);
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
