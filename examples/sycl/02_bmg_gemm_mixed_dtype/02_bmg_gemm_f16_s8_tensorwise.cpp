@@ -29,22 +29,28 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief CUTLASS Intel PVC Gemm with float8 (float_e4m3_t or float_e5m2_t) input
+  This example demonstrates how to dispatch a mixed precision GEMM (int8 and float16) on BMG, with
+  tensor-wise dequantization:
 
-    This example demonstrates GEMM on PVC with float8 input. The GEMM in this example
-    performs the MMA with fp16 input, first upcasting the fp8 data for both A and B.
+  ConvertAndScaleWithZeroPoint:  Narrower type is converted to wider type, scaled and offset
 
-    Aside from the input datatypes, this example is identical to 00_pvc_gemm, except that
-    we're currently being forced to load A with VNNI layout, which probably degrades
-    performance. Ref: https://github.com/codeplaysoftware/cutlass-sycl/issues/357
+  The MMA operation itself takes float16 input for both A and B, and so the narrower type is first
+  upcasted (inside the mainloop) prior to being passed into the MMA atom.
 
+  Verification for this example is performed against a standard reference GEMM in the wider type.
+  The narrow-type input data are upcasted (or dequantized) externally before executing the
+  reference GEMM.
 
-    Verification for this example is a standard fp16 GEMM, with input data upcasted on the host.
+  Note: due to a bug in the IGC compiler, it's currently necessary to build this example with the
+  following environment variable set (CMake handles this for AOT compilation; for JIT, please set
+  this in your environment):
+
+    export IGC_allowDecompose2DBlockFuncs=0
 
     To build & run this example (from your build dir):
 
-      $ ninja 08_bmg_gemm_f8
-      $ ./examples/sycl/08_bmg_gemm_f8/08_bmg_gemm_f8
+      $ ninja 02_bmg_gemm_f18_s8_tensorwise
+      $ ./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f18_s8_tensorwise
 
     Call with `--help` for information about available options
 */
@@ -130,11 +136,14 @@ template <
   class Gemm
 >
 struct ExampleRunner {
+  using CollectiveMainloop = typename Gemm::CollectiveMainloop;
 
   using StrideA = typename Gemm::GemmKernel::StrideA;
   using StrideB = typename Gemm::GemmKernel::StrideB;
   using StrideC = typename Gemm::GemmKernel::StrideC;
   using StrideD = typename Gemm::GemmKernel::StrideD;
+  using StrideScale = typename CollectiveMainloop::NonVoidStrideScale;
+  using StrideZero = typename CollectiveMainloop::NonVoidStrideZero;
 
   using LayoutA = typename Gemm::LayoutA;
   using LayoutB = typename Gemm::LayoutB;
@@ -143,6 +152,8 @@ struct ExampleRunner {
 
   using ElementA = typename Gemm::ElementA;
   using ElementB = typename Gemm::ElementB;
+  using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
+  using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
   using ElementAcc = typename Gemm::ElementAccumulator;
 
   using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
@@ -162,36 +173,57 @@ struct ExampleRunner {
   StrideB stride_B;
   StrideC stride_C;
   StrideD stride_D;
+  StrideScale stride_s;
+  StrideZero stride_z;
   uint64_t seed = 0;
 
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
   cutlass::DeviceAllocation<ElementC> block_C;
+  cutlass::DeviceAllocation<ElementScale> block_Scale;
+  cutlass::DeviceAllocation<ElementZero> block_Zero;
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
 
   //
   // Methods
   //
+  template <typename SrcT, typename DstT>
+  void quantization(const SrcT* d_src, DstT* d_dst, const ElementScale* scale, const ElementZero* zero, size_t size, size_t L) {
+      SrcT* h_src = new SrcT[size * L];
+      ElementScale* scale_h = new ElementScale[L];
+      ElementZero* zero_h = new ElementZero[L];
+      syclcompat::memcpy(h_src, d_src, size * L * sizeof(SrcT));
+      syclcompat::wait();
+      syclcompat::memcpy(scale_h, scale, L * sizeof(ElementScale));
+      syclcompat::memcpy(zero_h, zero, L * sizeof(ElementZero));
+      
+      DstT* h_dst = new DstT[size * L];
+      for(size_t j = 0; j < L; ++j) {
+        for (size_t i = 0; i < size; ++i) {
+            h_dst[i + j * size] = (static_cast<DstT>(h_src[i + j * size]) - zero_h[j]) * scale_h[j];
+        }
+      }
+
+      syclcompat::memcpy(d_dst, h_dst, size * sizeof(DstT));
+      syclcompat::wait();
+  }
+
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
       auto [M, N, K, L] = problem_size;
 
       cutlass::DeviceAllocation<half_t> block_A_fp16(block_A.size());
       cutlass::DeviceAllocation<half_t> block_B_fp16(block_B.size());
 
-      // fp8 -> fp16
-      convert_dtype<ElementA, half_t>(
-          block_A.get(),
-          block_A_fp16.get(),
-          block_A.size()
-      );
-      convert_dtype<ElementB, half_t>(
+      quantization<ElementB, half_t>(
           block_B.get(),
           block_B_fp16.get(),
-          block_B.size()
+          block_Scale.get(),
+          block_Zero.get(),
+          N * K, L 
       );
 
-      cutlass::TensorRef ref_A(block_A_fp16.get(), LayoutA::packed({M, K}));
+      cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
       cutlass::TensorRef ref_B(block_B_fp16.get(), LayoutB::packed({K, N}));
       cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({ M, N }));
       cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({ M, N }));
@@ -230,16 +262,24 @@ struct ExampleRunner {
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
+    // stride_s = cutlass::make_cute_packed_stride(StrideScale{}, cute::make_shape(_1{}, 1, L));
+    // stride_z = cutlass::make_cute_packed_stride(StrideZero{}, cute::make_shape(_1{}, 1, L));
+
 
     block_A.reset(static_cast<std::size_t>(M) * K * L);
     block_B.reset(static_cast<std::size_t>(K) * N * L);
     block_C.reset(static_cast<std::size_t>(M) * N * L);
     block_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_Scale.reset(static_cast<std::size_t>(1) * L);
+    block_Zero.reset(static_cast<std::size_t>(1) * L);
     block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
+
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
+    initialize_block(block_Scale, seed + 2020);
+    initialize_block(block_Zero, seed + 2019);
   }
   
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -250,7 +290,8 @@ struct ExampleRunner {
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A.get(), stride_A, block_B.get(), stride_B},
+      {block_A.get(), stride_A, block_B.get(), stride_B,
+       block_Scale.get(), stride_s, block_Zero.get(), stride_z, 0},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
       hw_info
     };
@@ -259,11 +300,6 @@ struct ExampleRunner {
 
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
-
-    if (options.n < 16) {
-        std::cout << "Invalid Problem Size: N must be >= 16 for FP8 input with F16 MMA (XE_8x16x16_F32F16F16F32_TT). Got N=" << options.n << std::endl;
-        std::exit(1);
-    }
 
     if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
       std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
@@ -294,13 +330,6 @@ struct ExampleRunner {
       float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      if constexpr (std::is_same_v<ElementA, float_e4m3_t>) {
-        std::cout << "Datatype: float_e4m3_t"<< std::endl;
-      } else if constexpr (std::is_same_v<ElementA, float_e5m2_t>) {
-        std::cout << "Datatype: float_e5m2_t"<< std::endl;
-      } else {
-        static_assert(cutlass::detail::dependent_false<ElementA>, "Not a valid fp8 datatype.");
-      }
       printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
     }
 
@@ -309,12 +338,24 @@ struct ExampleRunner {
 
 };
 
-template<typename ElementType>
-int launcher(Options& options)
-{
+int main(int argc, const char** argv) {
   //
-  // Run examples
+  // Parse options
   //
+
+  Options options;
+
+  options.parse(argc, argv);
+
+  if (options.help) {
+    options.print_usage(std::cout) << std::endl;
+    return 0;
+  }
+
+  if (options.error) {
+    std::cerr << "Aborting execution." << std::endl;
+    return -1;
+  }
 
   cutlass::KernelHardwareInfo hw_info;
 
@@ -324,8 +365,8 @@ int launcher(Options& options)
 
   using ElementAccumulator = float;
   using ElementComputeEpilogue = float;
-  using ElementInputA = ElementType;
-  using ElementInputB = ElementType;
+  using ElementInputA = half_t;
+  using ElementInputB = int8_t;
   using ElementOutput = float;
 
   using LayoutA = cutlass::layout::RowMajor;
@@ -333,7 +374,7 @@ int launcher(Options& options)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_V;
   using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 
   using TileShape = Shape<_256, _256, _32>;
@@ -343,8 +384,13 @@ int launcher(Options& options)
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
+  using StrideScale = cute::Stride<_0, _0, _1>;
+  using StrideZero = StrideScale;
+  using ElementScale = half_t;
+  using ElementZero = half_t;
+
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
@@ -371,7 +417,7 @@ int launcher(Options& options)
           TileShape,
           ElementInputA,
           cutlass::gemm::TagToStrideA_t<LayoutA>,
-          ElementInputB,
+          cute::tuple<ElementInputB, ElementScale, StrideScale, ElementZero, StrideZero>,
           cutlass::gemm::TagToStrideB_t<LayoutB>,
           TiledMma,
           GmemTiledCopyA, void, void, cute::identity,
@@ -390,28 +436,5 @@ int launcher(Options& options)
 
   CUTLASS_CHECK(runner.run(options, hw_info));
 
-  return 0;
-}
-
-int main(int argc, const char** argv) {
-  //
-  // Parse options
-  //
-
-  Options options;
-
-  options.parse(argc, argv);
-
-  if (options.help) {
-    options.print_usage(std::cout) << std::endl;
-    return 0;
-  }
-
-  if (options.error) {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
-  }
-  launcher<cutlass::float_e5m2_t>(options);
-  launcher<cutlass::float_e4m3_t>(options);
   return 0;
 }
