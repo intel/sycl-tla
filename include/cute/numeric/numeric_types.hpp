@@ -142,7 +142,7 @@ print(float_e5m2_t a) {
 CUTE_HOST_DEVICE void
 pretty_print(bfloat16_t v) {
   //TODO(Codeplay) Remove this once DPC++ bugfix is in release.
-#if (SYCL_INTEL_TARGET)
+#if defined(SYCL_INTEL_TARGET)
   printf("%.2f", float(v));
   printf(" ");
 #else
@@ -153,7 +153,7 @@ pretty_print(bfloat16_t v) {
 CUTE_HOST_DEVICE void
 pretty_print(half_t v) {
   //TODO(Codeplay) Remove this once DPC++ bugfix is in release.
-#if (SYCL_INTEL_TARGET)
+#if defined(SYCL_INTEL_TARGET)
   printf("%.2f", float(v));
   printf(" ");
 #else
@@ -164,7 +164,7 @@ pretty_print(half_t v) {
 CUTE_HOST_DEVICE void
 pretty_print(tfloat32_t v) {
   //TODO(Codeplay) Remove this once DPC++ bugfix is in release.
-#if (SYCL_INTEL_TARGET)
+#if defined(SYCL_INTEL_TARGET)
   printf("%.2e", static_cast<float>(v));
   printf(" ");
 #else
@@ -175,7 +175,7 @@ pretty_print(tfloat32_t v) {
 CUTE_HOST_DEVICE void
 pretty_print(float_e4m3_t t) {
   //TODO(Codeplay) Remove this once DPC++ bugfix is in release.
-#if (SYCL_INTEL_TARGET)
+#if defined(SYCL_INTEL_TARGET)
   printf("%.2f", static_cast<float>(t));
   printf(" ");
 #else
@@ -186,7 +186,7 @@ pretty_print(float_e4m3_t t) {
 CUTE_HOST_DEVICE void
 pretty_print(float_e5m2_t t) {
   //TODO(Codeplay) Remove this once DPC++ bugfix is in release.
-#if (SYCL_INTEL_TARGET)
+#if defined(SYCL_INTEL_TARGET)
   printf("%.2f", static_cast<float>(t));
   printf(" ");
 #else
@@ -213,7 +213,7 @@ CUTE_HOST_DEVICE
 void
 pretty_print_float_exmy_base(cutlass::float_exmy_base<Encoding, Derived> t) {
   //TODO(Codeplay) Remove this once DPC++ bugfix is in release.
-#if (SYCL_INTEL_TARGET)
+#if defined(SYCL_INTEL_TARGET)
   printf("%.2f", static_cast<float>(t));
   printf(" ");
 #else
