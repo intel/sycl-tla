@@ -1044,6 +1044,10 @@ template<int Stages_, class KernelSchedule = KernelXe>
 struct MainloopIntelW8A8 : MainloopIntelXeXMX16<Stages_, KernelSchedule> {
 };
 
+template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
+struct MainloopIntelXeXMX16GroupFP8 : MainloopIntelXeXMX16<Stages_, KernelScheduler> {
+};
+
 template<int Stages_>
 struct MainloopIntelXeXMX16FP8Scaling : MainloopIntelXeXMX16<Stages_> {
 };
