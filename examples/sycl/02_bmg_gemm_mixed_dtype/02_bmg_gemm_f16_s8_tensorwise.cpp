@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,35 +29,28 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief CUTLASS Intel BMG Gemm Example.
+  This example demonstrates how to dispatch a mixed precision GEMM (int8 and float16) on BMG, with
+  tensor-wise dequantization:
 
-    This example constructs and executes a simple CUTLASS GEMM kernel on Intel BMG hardware, and
-    verifies its correctness with a reference implementation
-    (cutlass::reference::device::GemmComplex). The example also provides a performance measurement
-    for the GEMM in TFLOPS.
+  ConvertAndScaleWithZeroPoint:  Narrower type is converted to wider type, scaled and offset
 
-    This example makes use of BMGs subgroup cooperative 2d-block copy operations and DPAS instructions.
-    To support more input shapes using these instructions, rows of the input/output matrices are padded
-    to a multiple of 16 and each matrix in batch is padded to a multiple of 64, as required by these 
-    instructions.
+  The MMA operation itself takes float16 input for both A and B, and so the narrower type is first
+  upcasted (inside the mainloop) prior to being passed into the MMA atom.
 
-    The shapes of the A and B matrix are defined at runtime by `options.m`, `.n` and `.k`, and the
-    batch size is defined by `options.l`. The tile shape, which defines how much work is executed by
-    a single work-group, is defined at compile time by:
-    ```
-      using TileShape = Shape<_256, _256, _32>;
-    ```
-    That is, each work-group processes a tile of M=256, N=256, and iterates over `options.k` in
-    blocks of K=32.
+  Verification for this example is performed against a standard reference GEMM in the wider type.
+  The narrow-type input data are upcasted (or dequantized) externally before executing the
+  reference GEMM.
 
-    Performance of GEMM on BMG is heavily dependent on prefetching the A and B matrices. That is,
-    executing Intel specific prefetch instructions for future iterations to ensure that the required
-    blocks of A and B are resident in cache before they are needed.
+  Note: due to a bug in the IGC compiler, it's currently necessary to build this example with the
+  following environment variable set (CMake handles this for AOT compilation; for JIT, please set
+  this in your environment):
+
+    export IGC_allowDecompose2DBlockFuncs=0
 
     To build & run this example (from your build dir):
 
-      $ ninja 00_bmg_gemm
-      $ ./examples/sycl/00_bmg_gemm/00_bmg_gemm
+      $ ninja 02_bmg_gemm_f18_s8_tensorwise
+      $ ./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f18_s8_tensorwise
 
     Call with `--help` for information about available options
 */
@@ -71,6 +64,7 @@
 #include "cutlass/util/GPU_Clock.hpp"
 
 #include <cute/tensor.hpp>
+#include <random>
 
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
@@ -83,11 +77,6 @@
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-// The alignment requirement in bytes on inner dimmension that will work for both PVC and BMG
-constexpr int AlignmentInner = 16;
-// The alignment requirement in bytes on outer dimmension that will work for both PVC and BMG
-constexpr int AlignmentPtr = 64;
 
 // Command line options parsing
 struct Options {
@@ -147,11 +136,14 @@ template <
   class Gemm
 >
 struct ExampleRunner {
+  using CollectiveMainloop = typename Gemm::CollectiveMainloop;
 
   using StrideA = typename Gemm::GemmKernel::StrideA;
   using StrideB = typename Gemm::GemmKernel::StrideB;
   using StrideC = typename Gemm::GemmKernel::StrideC;
   using StrideD = typename Gemm::GemmKernel::StrideD;
+  using StrideScale = typename CollectiveMainloop::NonVoidStrideScale;
+  using StrideZero = typename CollectiveMainloop::NonVoidStrideZero;
 
   using LayoutA = typename Gemm::LayoutA;
   using LayoutB = typename Gemm::LayoutB;
@@ -160,21 +152,17 @@ struct ExampleRunner {
 
   using ElementA = typename Gemm::ElementA;
   using ElementB = typename Gemm::ElementB;
+  using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
+  using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
   using ElementAcc = typename Gemm::ElementAccumulator;
 
   using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
   using ElementC = typename Gemm::ElementC;
-  using ElementD = typename Gemm::ElementD;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
-
-  static constexpr int AlignElemA = AlignmentInner / sizeof(ElementA);
-  static constexpr int AlignElemB = AlignmentInner / sizeof(ElementB);
-  static constexpr int AlignElemC = AlignmentInner / sizeof(ElementB);
-  static constexpr int AlignElemD = AlignmentInner / sizeof(ElementD);
 
   //
   // Data members
@@ -185,64 +173,84 @@ struct ExampleRunner {
   StrideB stride_B;
   StrideC stride_C;
   StrideD stride_D;
+  StrideScale stride_s;
+  StrideZero stride_z;
   uint64_t seed = 0;
 
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
   cutlass::DeviceAllocation<ElementC> block_C;
+  cutlass::DeviceAllocation<ElementScale> block_Scale;
+  cutlass::DeviceAllocation<ElementZero> block_Zero;
   cutlass::DeviceAllocation<ElementOutput> block_D;
-  cutlass::DeviceAllocation<ElementOutput> block_ref_D; // Reference GEMM result for verification
+  cutlass::DeviceAllocation<ElementOutput> block_ref_D;
 
   //
   // Methods
   //
+  template <typename SrcT, typename DstT>
+  void quantization(const SrcT* d_src, DstT* d_dst, const ElementScale* scale, const ElementZero* zero, size_t size, size_t L) {
+      SrcT* h_src = new SrcT[size * L];
+      ElementScale* scale_h = new ElementScale[L];
+      ElementZero* zero_h = new ElementZero[L];
+      syclcompat::memcpy(h_src, d_src, size * L * sizeof(SrcT));
+      syclcompat::wait();
+      syclcompat::memcpy(scale_h, scale, L * sizeof(ElementScale));
+      syclcompat::memcpy(zero_h, zero, L * sizeof(ElementZero));
+      
+      DstT* h_dst = new DstT[size * L];
+      for(size_t j = 0; j < L; ++j) {
+        for (size_t i = 0; i < size; ++i) {
+            h_dst[i + j * size] = (static_cast<DstT>(h_src[i + j * size]) - zero_h[j]) * scale_h[j];
+        }
+      }
+
+      syclcompat::memcpy(d_dst, h_dst, size * sizeof(DstT));
+      syclcompat::wait();
+  }
 
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
-    auto [M, N, K, L] = problem_size;
-    
-    // Padded values
-    // The inner dimension is padded. Since this example is all RowMajor,
-    // we require the following:
-    int N_B = cute::round_up(N, AlignElemB);
-    int N_C = cute::round_up(N, AlignElemC);
-    int N_D = cute::round_up(N, AlignElemD);
-    int K_A = cute::round_up(K, AlignElemA);
-    
-    int AlignmentOuter = AlignmentPtr / AlignmentInner;
-    int M_ACD = cute::round_up(M, AlignmentOuter);
-    int K_B = cute::round_up(K, AlignmentOuter);
+      auto [M, N, K, L] = problem_size;
 
-    cutlass::TensorRef ref_A(block_A.get(), LayoutA(K_A));
-    cutlass::TensorRef ref_B(block_B.get(), LayoutB(N_B));
-    cutlass::TensorRef ref_C(block_C.get(), LayoutC(N_C));
-    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD(N_D));
+      cutlass::DeviceAllocation<half_t> block_A_fp16(block_A.size());
+      cutlass::DeviceAllocation<half_t> block_B_fp16(block_B.size());
 
-    cutlass::reference::device::GemmComplex(
-          {M, N, K},
+      quantization<ElementB, half_t>(
+          block_B.get(),
+          block_B_fp16.get(),
+          block_Scale.get(),
+          block_Zero.get(),
+          N * K, L 
+      );
+
+      cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
+      cutlass::TensorRef ref_B(block_B_fp16.get(), LayoutB::packed({K, N}));
+      cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({ M, N }));
+      cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({ M, N }));
+
+      cutlass::reference::device::GemmComplex(
+          { M, N, K },
           alpha,
-          ref_A,
+          ref_A,  // fp16
           cutlass::ComplexTransform::kNone,
-          ref_B,
+          ref_B,  // fp16
           cutlass::ComplexTransform::kNone,
           beta,
-          ref_C,
-          ref_D,
+          ref_C,  //fp32
+          ref_D,  //fp32
           ElementAccumulator(0),
-          L,     // batch_count
-          M_ACD * K_A, // batch_stride_A
-          K_B * N_B, // batch_stride_B
-          M_ACD * N_C, // batch_stride_C
-          M_ACD * N_D  // batch_stride_D
-        );
+          L,
+          M * K,
+          K * N,
+          M * N,
+          M * N 
+      );
+      syclcompat::wait();
 
-    // CUTLASS on SYCL uses the compatibility library syclcompat for e.g. default in-order queue
-    syclcompat::wait();
+      bool passed = cutlass::reference::device::BlockCompareEqual(
+          block_ref_D.get(), block_D.get(), block_D.size());
 
-    // Check if output from CUTLASS kernel and reference kernel are equal or not
-    bool passed = cutlass::reference::device::BlockCompareEqual(
-      block_ref_D.get(), block_D.get(), block_D.size());
-
-    return passed;
+      return passed;
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
@@ -250,33 +258,30 @@ struct ExampleRunner {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
-    // Padded values
-    int N_B = cute::round_up(N, AlignElemB);
-    int N_C = cute::round_up(N, AlignElemC);
-    int N_D = cute::round_up(N, AlignElemD);
-    int K_A = cute::round_up(K, AlignElemA);
+    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
+    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
+    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
+    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
+    // stride_s = cutlass::make_cute_packed_stride(StrideScale{}, cute::make_shape(_1{}, 1, L));
+    // stride_z = cutlass::make_cute_packed_stride(StrideZero{}, cute::make_shape(_1{}, 1, L));
 
-    int AlignmentOuter = AlignmentPtr / AlignmentInner;
-    int M_ACD = cute::round_up(M, AlignmentOuter);
-    int K_B = cute::round_up(K, AlignmentOuter);
 
-    // Complete the stride by combining static layout info (StrideA) with runtime size info (M,K,L)
-    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M_ACD, K_A, L));
-    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N_B, K_B, L));
-    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M_ACD, N_C, L));
-    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M_ACD, N_D, L));
+    block_A.reset(static_cast<std::size_t>(M) * K * L);
+    block_B.reset(static_cast<std::size_t>(K) * N * L);
+    block_C.reset(static_cast<std::size_t>(M) * N * L);
+    block_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_Scale.reset(static_cast<std::size_t>(1) * L);
+    block_Zero.reset(static_cast<std::size_t>(1) * L);
+    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
 
-    block_A.reset(M_ACD * K_A * L);
-    block_B.reset(K_B * N_B * L);
-    block_C.reset(M_ACD * N_C * L);
-    block_D.reset(M_ACD * N_D * L);
-    block_ref_D.reset(M_ACD * N_D * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
+    initialize_block(block_Scale, seed + 2020);
+    initialize_block(block_Zero, seed + 2019);
   }
-
+  
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
@@ -285,7 +290,8 @@ struct ExampleRunner {
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A.get(), stride_A, block_B.get(), stride_B},
+      {block_A.get(), stride_A, block_B.get(), stride_B,
+       block_Scale.get(), stride_s, block_Zero.get(), stride_z, 0},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
       hw_info
     };
@@ -295,12 +301,9 @@ struct ExampleRunner {
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess) {
-      std::cout << "Warning: Invalid problem size: "
-                << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l
-                << ".\nThis size is not directly supported by the selected kernel.\n"
-                << "However, this example applies padding as needed, so it will still run correctly."
-                << std::endl;
+    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
+      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      std::exit(1);
     }
 
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
@@ -335,8 +338,7 @@ struct ExampleRunner {
 
 };
 
-int main(int argc, const char** argv)
-{
+int main(int argc, const char** argv) {
   //
   // Parse options
   //
@@ -355,107 +357,79 @@ int main(int argc, const char** argv)
     return -1;
   }
 
-  //
-  // Run examples
-  //
-
-  // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
-  // information is used by the underlying kernel.
   cutlass::KernelHardwareInfo hw_info;
 
-  // Change device_id to another value if you are running on a machine with multiple GPUs and wish
-  // to use a GPU other than that with device ID 0.
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
   bool passed;
 
-  // The code section below describes datatype for input, output matrices and computation between
-  // elements in input matrices.
-  using ElementAccumulator = float;      // <- data type of accumulator
-  using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;      // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;      // <- data type of elements in input matrix B
-  using ElementOutput = float;           // <- data type of elements in output matrix D
+  using ElementAccumulator = float;
+  using ElementComputeEpilogue = float;
+  using ElementInputA = half_t;
+  using ElementInputB = int8_t;
+  using ElementOutput = float;
 
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  // The 2D block copy operations used for the A and B matrices
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 
-  // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
-  // A TiledMMA struct defines a tiling of an MMA atom over M, N and K, combining both additional
-  // hardware (sub-groups for Intel BMG) and iterations by each sub-group.
-  //
-  // The TiledMMAHelper struct defines a specific TiledMMA for a given MMA atom
-  // (XE_8x16x16_F32BF16BF16F32_TT), TileShape (<256, 256, 32>) and sub-group layout (8x4x1). The
-  // TiledMMA constructed using TiledMMAHelper has the property that each sub-group operates on a
-  // single contiguous chunk of the work-group TileShape. For this configuration, this implies that
-  // each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations). See
-  // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 4,1,0) for
-  // performance reasons.
-  using TiledMma =                    // M=8,N=16,K=16, D=f32,A=bf16,B=bf16,C=f32
-      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+  // TODO: Consider smaller tile size to reduce register pressure
+  using TiledMma =
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
+      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
-  // For Intel BMG, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
+  using StrideScale = cute::Stride<_0, _0, _1>;
+  using StrideZero = StrideScale;
+  using ElementScale = half_t;
+  using ElementZero = half_t;
+
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-  // This is the 'default' epilogue operation (Linear Combination) which performs everything in:
-  // (D = alpha * (A*B) + beta * C)
-  // aside from the (A*B), which is handled by the GEMM. See 05_bmg_gemm_with_epilogues for more
-  // complex epilogue examples.
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
           ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
-  // FusionCallbacks ties the EpilogueOp to an implementation (based on the dispatch
-  // policy/architecture) and defines the epilogue arguments.
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
-  // GEMM Epilogue - loads & stores C/D matrices, performs epilogue operations & load/stores any
-  // auxiliary data required
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
           TileShape,
           ElementAccumulator,
-          cutlass::gemm::TagToStrideC_t<LayoutC>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
+          cutlass::gemm::TagToStrideC_t<LayoutC>,
           ElementOutput,
-          cutlass::gemm::TagToStrideC_t<LayoutD>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
+          cutlass::gemm::TagToStrideC_t<LayoutD>,
           FusionCallBacks,
-          XE_2D_U32x8x16_LD_N, // The copy atom used to load matrix C
+          XE_2D_U32x8x16_LD_N,
           void, void,
-          XE_2D_U32x8x16_ST_N, // The copy atom used to store matrix D
+          XE_2D_U32x8x16_ST_N,
           void, void>;
 
-  // GEMM Mainloop - iteration over blocks in K dimension
+  // Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
           ElementInputA,
-          cutlass::gemm::TagToStrideA_t<LayoutA>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
-          ElementInputB,
-          cutlass::gemm::TagToStrideB_t<LayoutB>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
+          cutlass::gemm::TagToStrideA_t<LayoutA>,
+          cute::tuple<ElementInputB, ElementScale, StrideScale, ElementZero, StrideZero>,
+          cutlass::gemm::TagToStrideB_t<LayoutB>,
           TiledMma,
-          GmemTiledCopyA, void, void, cute::identity,  // A
-          GmemTiledCopyB, void, void, cute::identity   // B
+          GmemTiledCopyA, void, void, cute::identity,
+          GmemTiledCopyB, void, void, cute::identity
   >;
 
-  // Define the whole kernel (mainloop and epilogue)
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-  Shape<int, int, int, int>, // Defer global problem shape definition to runtime
+  Shape<int, int, int, int>,
   CollectiveMainloop,
   CollectiveEpilogue
   >;
 
-  // The GemmUniversalAdapter wraps the defined GEMM kernel and handles the launch, and e.g.
-  // persistent scratch memory if required.
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
   ExampleRunner<Gemm> runner;
