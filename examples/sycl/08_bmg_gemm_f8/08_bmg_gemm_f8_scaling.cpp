@@ -34,7 +34,6 @@
 
   - ConvertOnly:                   Narrower type is simply converted to the wider type before MMA
   - ConvertAndScale:               Narrower type is converted to wider type, then scaled
-  - ConvertAndScaleWithZeroPoint:  Narrower type is converted to wider type, scaled and offset
 
   - Requirements:
       - dequantization group size (options.g) must be multiple of k-block size
@@ -72,8 +71,7 @@ using namespace cute;
 
 enum GemmMode {
   ConvertOnly,
-  ConvertAndScale,
-  ConvertAndScaleWithZeroPoint
+  ConvertAndScale
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -111,7 +109,7 @@ struct Options {
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("g", g, 128);
-    cmd.get_cmd_line_argument("mode", mode, 2);
+    cmd.get_cmd_line_argument("mode", mode, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
@@ -128,7 +126,7 @@ struct Options {
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
       << "  --g=<int>                   The size of each group for the scales and zeros. To broadcast a vector of scales or zeros, set the group size to K.\n"
-      << "  --mode=<int>                The mode to run the gemm. 0 is Convert Only, 1 is Convert and Scale, 2 is Convert and Scale with Zero Point\n"
+      << "  --mode=<int>                The mode to run the gemm. 0 is Convert Only, 1 is Convert and Scale\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
       << "  --iterations=<int>          Iterations\n\n";
@@ -325,15 +323,10 @@ struct ExampleRunner {
     cutlass::DeviceAllocation<Element>& block,
     Options const& options) {
 
-    if (options.mode == GemmMode::ConvertAndScaleWithZeroPoint) {
-      std::vector<Element> stage(block.size(), Element(1.0f));
-      cutlass::reference::device::BlockFillRandomUniform(
-        block.get(), block.size(), seed, Element(2.0f), Element(-2.0f));
-    } else {
-      // No bias, so just initialize with 0 so we can use the same kernel to dequantize the data.
-      std::vector<Element> stage(block.size(), Element(0.0f));
-      block.copy_from_host(stage.data());
-    }
+    // No bias, so just initialize with 0 so we can use the same kernel to dequantize the data.
+    std::vector<Element> stage(block.size(), Element(0.0f));
+    block.copy_from_host(stage.data());
+
     return true;
   }
 
@@ -414,7 +407,7 @@ struct ExampleRunner {
       problem_size,
       {block_A.get(), stride_A, block_B.get(), stride_B,
       block_scaleA.get(), stride_SA, block_scaleB.get(), stride_SB,
-      block_zeroA.get(), stride_ZA, block_zeroB.get(), stride_ZB,
+      nullptr, stride_SA, nullptr, stride_SB,
       options.g},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
       hw_info
@@ -494,11 +487,9 @@ int launcher(Options& options)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using ElementZero = MmaType;
   using ElementScale = MmaType;
 
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
-  using StrideZero = StrideScale;
 
   using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
   using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
@@ -555,17 +546,6 @@ int launcher(Options& options)
           GmemTiledCopyA, void, void, cute::identity,
           GmemTiledCopyB, void, void, cute::identity
   >;
-  using ConvertAndScaleWithZeroPointCollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
-          GEMMDispatchPolicy,
-          TileShape,
-          cute::tuple<ElementInputA, ElementScale, StrideScale, ElementZero, StrideZero>,
-          cutlass::gemm::TagToStrideA_t<LayoutA>,
-          cute::tuple<ElementInputB, ElementScale, StrideScale, ElementZero, StrideZero>,
-          cutlass::gemm::TagToStrideB_t<LayoutB>,
-          TiledMma,
-          GmemTiledCopyA, void, void, cute::identity,
-          GmemTiledCopyB, void, void, cute::identity
-  >;
 
   if(options.mode ==  GemmMode::ConvertOnly) {
     std::cout << "Running in ConvertOnly mode." << std::endl;
@@ -585,17 +565,7 @@ int launcher(Options& options)
     >;
     using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
     CUTLASS_CHECK(ExampleRunner<Gemm>{}.run(options, hw_info));
-  } else {
-    std::cout << "Running in ConvertAndScaleWithZeroPoint mode." << std::endl;
-    using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-      Shape<int, int, int, int>,
-      ConvertAndScaleWithZeroPointCollectiveMainloop,
-      CollectiveEpilogue
-    >;
-    using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
-    CUTLASS_CHECK(ExampleRunner<Gemm>{}.run(options, hw_info));
   }
-
   return 0;
 }
 

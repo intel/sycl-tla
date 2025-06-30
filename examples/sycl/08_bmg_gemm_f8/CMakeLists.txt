@@ -28,7 +28,6 @@
 
 set(TEST_BATCHES --l=2)
 set(TEST_MODE_0 --l=2 --mode=0)
-set(TEST_MODE_1 --l=2 --mode=1)
 
 cutlass_example_add_executable(
   08_bmg_gemm_f8
@@ -43,7 +42,6 @@ cutlass_example_add_executable(
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
   TEST_MODE_0
-  TEST_MODE_1
 )
 
 if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
