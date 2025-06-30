@@ -37,9 +37,9 @@
 #include <cutlass/sycl_vector_types.h>
 #endif
 
-#if defined(CUTLASS_ENABLE_SYCL) && defined(SYCL_INTEL_TARGET)
+#if defined(CUTLASS_ENABLE_SYCL) && !defined(__CUDA__)
 #define printf sycl::ext::oneapi::experimental::printf
-#endif // defined(CUTLASS_ENABLE_SYCL) && defined(SYCL_INTEL_TARGET)
+#endif // defined(CUTLASS_ENABLE_SYCL) && !defined(__CUDA__)
 
 #include <cutlass/numeric_size.h>   // cutlass::sizeof_bits
 #include <cutlass/numeric_types.h>  // cutlass::float_e4m3_t, cutlass::float_e5m2_t, etc

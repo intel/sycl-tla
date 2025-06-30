@@ -111,7 +111,7 @@ struct Options {
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("g", g, 128);
-    cmd.get_cmd_line_argument("mode", mode, 0);
+    cmd.get_cmd_line_argument("mode", mode, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
