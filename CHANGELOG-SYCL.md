@@ -1,4 +1,4 @@
-# SYCL CUTLASS Changelogv3.9.3-0.
+# SYCL CUTLASS Changelog
 
 ## [Cutlass 3.9.3 SYCL backend Version 0.3](https://github.com/codeplay/cutlass-fork/releases/tag/v3.9.3-0.3) (2025-06-30)
 - Add support for GEMM FP8 (E5M2 and E4M3)
