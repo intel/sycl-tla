@@ -533,8 +533,8 @@ public:
     Tensor fragment_zeroB_input =  make_tensor<NonVoidElementZeroB> (FragZeroBLayout{});
 
     // narrow input fragment
-    Tensor quantA_frag = make_tensor<ElementA>(mma_A.layout());
-    Tensor quantB_frag = make_tensor<ElementB>(mma_B.layout());
+    Tensor quantA_frag = make_tensor<uint8_t>(mma_A.layout());
+    Tensor quantB_frag = make_tensor<uint8_t>(mma_B.layout());
 
     static_assert(std::is_same_v<typename decltype(mma_A)::value_type, ElementMMA>);
     static_assert(std::is_same_v<typename decltype(mma_B)::value_type, ElementMMA>);
