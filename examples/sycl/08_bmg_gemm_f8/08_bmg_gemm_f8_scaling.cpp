@@ -29,22 +29,21 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief CUTLASS Intel PVC Gemm with float8 (float_e4m3_t or float_e5m2_t) input
+\brief CUTLASS Intel BMG Gemm FP8 with optinal quantization.
+   The GemmMode enum describes the 3 modes of operation:
 
-    This example demonstrates GEMM on PVC with float8 input. The GEMM in this example
-    performs the MMA with fp16 input, first upcasting the fp8 data for both A and B.
+  - ConvertOnly:                   Narrower type is simply converted to the wider type before MMA
+  - ConvertAndScale:               Narrower type is converted to wider type, then scaled
+  - ConvertAndScaleWithZeroPoint:  Narrower type is converted to wider type, scaled and offset
 
-    Aside from the input datatypes, this example is identical to 00_pvc_gemm, except that
-    we're currently being forced to load A with VNNI layout, which probably degrades
-    performance. Ref: https://github.com/codeplaysoftware/cutlass-sycl/issues/357
-
-
-    Verification for this example is a standard fp16 GEMM, with input data upcasted on the host.
+  - Requirements:
+      - dequantization group size (options.g) must be multiple of k-block size
+      - scales & zeros must be MN-major
 
     To build & run this example (from your build dir):
 
-      $ ninja 08_bmg_gemm_f8
-      $ ./examples/sycl/08_bmg_gemm_f8/08_bmg_gemm_f8
+      $ ninja 08_bmg_gemm_f8_scaling
+      $ ./examples/sycl/08_bmg_gemm_f8/08_bmg_gemm_f8_scaling
 
     Call with `--help` for information about available options
 */
@@ -442,7 +441,7 @@ struct ExampleRunner {
     bool passed = verify(options);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-//    if(!passed) return cutlass::Status::kErrorInternal;
+    if(!passed) return cutlass::Status::kErrorInternal;
 
     if (options.iterations > 0) {
       GPU_Clock timer;
@@ -618,7 +617,19 @@ int main(int argc, const char** argv) {
     std::cerr << "Aborting execution." << std::endl;
     return -1;
   }
-  launcher<cutlass::float_e5m2_t>(options);
-  launcher<cutlass::float_e4m3_t>(options);
+  if (options.mode == GemmMode::ConvertOnly) {
+    // Run conversion-only mode for both FP8 formats
+    launcher<cutlass::float_e5m2_t>(options);
+    launcher<cutlass::float_e4m3_t>(options);
+  } else if(options.mode == GemmMode::ConvertAndScale) {
+    // Run convert-and-scale mode for float_e5m2_t only
+    launcher<cutlass::float_e5m2_t>(options);
+    // TODO(Codeplay): float_e4m3_t is currently not supported in ConvertAndScale mode
+    // due to an issue in the IGC compiler.
+    std::cout << "[Warning] ConvertAndScale mode is not supported for float_e4m3_t due to an IGC bug." << std::endl;
+  } else {
+    // TODO(Codeplay): ConvertAndScaleWithZeroPoint mode is not supported at all due to a compiler bug.
+    std::cout << "[Warning] ConvertAndScaleWithZeroPoint mode is not supported due to an IGC issue." << std::endl;
+  }
   return 0;
 }

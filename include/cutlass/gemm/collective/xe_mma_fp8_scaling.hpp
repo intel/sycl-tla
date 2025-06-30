@@ -440,8 +440,7 @@ public:
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
-    auto src_tensor = make_tensor(reinterpret_cast<const uint8_t*>(tCrA_load.data()), tCrA_load.layout());
-    convert_FP8_to_FP16<ElementQuant>(src_tensor, tCrA_mma);
+    convert_FP8_to_FP16<ElementQuant>(tCrA_load, tCrA_mma);
 
     if constexpr (IsATransformed && isA && ModeHasScalesA) {
       // The current scale load atom (1x32) gives 2 scale values to
