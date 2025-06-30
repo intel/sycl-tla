@@ -118,8 +118,13 @@ struct CollectiveMma<
 private:
   using ScaleA = detail::deduce_mixed_width_dtype_t<1, ElementAOptionalTuple>;
   using ScaleB = detail::deduce_mixed_width_dtype_t<1, ElementBOptionalTuple>;
-  using ZeroA = detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>;
-  using ZeroB = detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>;
+  using StrideScaleA = detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>;
+  using StrideScaleB = detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>;
+
+  using ZeroA = detail::deduce_mixed_width_dtype_t<3, ElementAOptionalTuple>;
+  using ZeroB = detail::deduce_mixed_width_dtype_t<3, ElementBOptionalTuple>;
+  using StrideZeroA = detail::deduce_mixed_width_dtype_t<4, ElementAOptionalTuple>;
+  using StrideZeroB = detail::deduce_mixed_width_dtype_t<4, ElementBOptionalTuple>;
 
 public:
   //
@@ -144,21 +149,20 @@ public:
   using ElementQuant = cute::conditional_t<IsATransformed, ElementA, ElementB>;
 
   static_assert(cute::is_same_v<ElementMMA, ScaleA> || cute::is_same_v<ScaleA, void>, "Quantization scale type must match MMA type.");
-  static_assert(cute::is_same_v<ElementMMA, ZeroA> || cute::is_same_v<ZeroA, void>, "Quantization zero point must match MMA type.");
   static_assert(cute::is_same_v<ElementMMA, ScaleB> || cute::is_same_v<ScaleB, void>, "Quantization scale type must match MMA type.");
-  static_assert(cute::is_same_v<ElementMMA, ZeroB> || cute::is_same_v<ZeroB, void>, "Quantization zero point must match MMA type.");
 
   // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
   using NonVoidElementScaleA = cute::conditional_t<cute::is_void_v<ScaleA>, ElementMMA, ScaleA>;
   using NonVoidElementZeroA = cute::conditional_t<cute::is_void_v<ZeroA>, ElementMMA, ZeroA>;
   using NonVoidElementScaleB = cute::conditional_t<cute::is_void_v<ScaleB>, ElementMMA, ScaleB>;
   using NonVoidElementZeroB = cute::conditional_t<cute::is_void_v<ZeroB>, ElementMMA, ZeroB>;
-  using NonVoidElementScale = cute::conditional_t<cute::is_void_v<ScaleA>, NonVoidElementScaleB, ScaleA>;
-  using NonVoidElementZero = cute::conditional_t<cute::is_void_v<ZeroA>, NonVoidElementZeroB, ZeroA>;
 
-  using NonVoidStrideScale = cute::conditional_t<cute::is_same_v<StrideScale, void>, cute::Stride<_1, int64_t, int64_t>, StrideScale>;
-  using NonVoidStrideZero = cute::conditional_t<cute::is_same_v<StrideZero, void>, cute::Stride<_1, int64_t, int64_t>, StrideZero>;
-  static constexpr auto zero_elements_packed_along_k = get<0>(NonVoidStrideZero{});
+  using NonVoidStrideScaleA = cute::conditional_t<cute::is_same_v<StrideScaleA, void>, cute::Stride<_1, int64_t, int64_t>, StrideScaleA>;
+  using NonVoidStrideScaleB = cute::conditional_t<cute::is_same_v<StrideScaleB, void>, cute::Stride<_1, int64_t, int64_t>, StrideScaleB>;
+  using NonVoidStrideZeroA = cute::conditional_t<cute::is_same_v<StrideZeroA, void>, cute::Stride<_1, int64_t, int64_t>, StrideZeroA>;
+  using NonVoidStrideZeroB = cute::conditional_t<cute::is_same_v<StrideZeroB, void>, cute::Stride<_1, int64_t, int64_t>, StrideZeroB>;
+  static constexpr auto zero_elements_packed_along_k_a = get<0>(NonVoidStrideZeroA{});
+  static constexpr auto zero_elements_packed_along_k_b = get<0>(NonVoidStrideZeroB{});
 
   using StrideA = StrideA_;
   using StrideB = StrideB_;
@@ -204,8 +208,10 @@ public:
   static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
   
-  using GmemTiledCopyScale = typename scale_zero_copy_traits<NonVoidElementScale, SG_N, NonVoidStrideScale>::type;
-  using GmemTiledCopyZero = typename scale_zero_copy_traits<NonVoidElementZero, SG_N, NonVoidStrideZero>::type;
+  using GmemTiledCopyScaleA = typename scale_zero_copy_traits<NonVoidElementScaleA, SG_N, NonVoidStrideScaleA>::type;
+  using GmemTiledCopyScaleB = typename scale_zero_copy_traits<NonVoidElementScaleB, SG_N, NonVoidStrideScaleB>::type;
+  using GmemTiledCopyZeroA = typename scale_zero_copy_traits<NonVoidElementZeroA, SG_N, NonVoidStrideZeroA>::type;
+  using GmemTiledCopyZeroB = typename scale_zero_copy_traits<NonVoidElementZeroB, SG_N, NonVoidStrideZeroB>::type;
 
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
@@ -223,20 +229,23 @@ public:
   using val_layout_load_B = decltype(make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
   using Copy_B = decltype(make_tiled_copy(atom_load_B{}, Layout<CopyThreadShape>{}, val_layout_load_B{}));
 
-  using traits_load_scale = Copy_Traits<GmemTiledCopyScale, NonVoidStrideScale>;
-  using traits_load_zero = Copy_Traits<GmemTiledCopyZero, NonVoidStrideZero>;
-  using val_layout_load_scale = decltype(make_layout(shape_div(typename traits_load_scale::BlockShape{}, CopyThreadShapeRev{}))); 
-  using val_layout_load_zero = decltype(make_layout(shape_div(typename traits_load_zero::BlockShape{}, CopyThreadShapeRev{}))); 
+  using traits_load_scale_a = Copy_Traits<GmemTiledCopyScaleA, NonVoidStrideScaleA>;
+  using traits_load_zero_a = Copy_Traits<GmemTiledCopyZeroA, NonVoidStrideZeroA>;
+  using val_layout_load_scale_a = decltype(make_layout(shape_div(typename traits_load_scale_a::BlockShape{}, CopyThreadShapeRev{}))); 
+  using val_layout_load_zero_a = decltype(make_layout(shape_div(typename traits_load_zero_a::BlockShape{}, CopyThreadShapeRev{}))); 
+  using atom_load_scaleA = Copy_Atom<traits_load_scale_a, NonVoidElementScaleA>;
+  using Copy_ScaleA = decltype(make_tiled_copy(atom_load_scaleA{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale_a{}));
+  using atom_load_zeroA = Copy_Atom<traits_load_zero_a, NonVoidElementZeroA>;
+  using Copy_ZeroA = decltype(make_tiled_copy(atom_load_zeroA{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero_a{}));
 
-  using atom_load_scaleA = Copy_Atom<traits_load_scale, NonVoidElementScaleA>;
-  using Copy_ScaleA = decltype(make_tiled_copy(atom_load_scaleA{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
-  using atom_load_zeroA = Copy_Atom<traits_load_zero, NonVoidElementZeroA>;
-  using Copy_ZeroA = decltype(make_tiled_copy(atom_load_zeroA{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
-
-  using atom_load_scaleB = Copy_Atom<traits_load_scale, NonVoidElementScaleB>;
-  using Copy_ScaleB = decltype(make_tiled_copy(atom_load_scaleB{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
-  using atom_load_zeroB = Copy_Atom<traits_load_zero, NonVoidElementZeroB>;
-  using Copy_ZeroB = decltype(make_tiled_copy(atom_load_scaleB{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale{}));
+  using traits_load_scale_b = Copy_Traits<GmemTiledCopyScaleB, NonVoidStrideScaleB>;
+  using traits_load_zero_b = Copy_Traits<GmemTiledCopyZeroB, NonVoidStrideZeroB>;
+  using val_layout_load_scale_b = decltype(make_layout(shape_div(typename traits_load_scale_b::BlockShape{}, CopyThreadShapeRev{}))); 
+  using val_layout_load_zero_b = decltype(make_layout(shape_div(typename traits_load_zero_b::BlockShape{}, CopyThreadShapeRev{}))); 
+  using atom_load_scaleB = Copy_Atom<traits_load_scale_b, NonVoidElementScaleB>;
+  using Copy_ScaleB = decltype(make_tiled_copy(atom_load_scaleB{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale_b{}));
+  using atom_load_zeroB = Copy_Atom<traits_load_zero_b, NonVoidElementZeroB>;
+  using Copy_ZeroB = decltype(make_tiled_copy(atom_load_zeroB{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero_b{}));
 
   // Host side kernel arguments
   struct Arguments {
@@ -246,9 +255,11 @@ public:
     StrideB dB;
     NonVoidElementScaleA const* ptr_SA = nullptr;
     NonVoidElementScaleB const* ptr_SB = nullptr;
-    StrideScale dS{}; //TODO duplicate?
-    NonVoidStrideZero dZ{}; //TODO duplicate?
-    int group_size = 1; //TODO duplicate?
+    NonVoidStrideScaleA dSA{};
+    NonVoidStrideScaleB dSB{};
+    NonVoidStrideZeroA dZA{};
+    NonVoidStrideZeroB dZB{};
+    int group_size = 1; //TODO(Codeplay): should this be duplicated for A/B?
     NonVoidElementZeroA const* ptr_ZA = nullptr;
     NonVoidElementZeroB const* ptr_ZB = nullptr;
   };
@@ -301,44 +312,44 @@ public:
     if constexpr(DoScaleA){
       auto mScaleA = make_tensor(
           make_gmem_ptr(args.ptr_SA),
-          make_layout(make_shape(M, scale_k, L), args.dS));
+          make_layout(make_shape(M, scale_k, L), args.dSA));
       res.tiled_copy_scale_a = {Copy_ScaleA{}.with(mScaleA)};
     }
 
     if constexpr(DoScaleB){
       auto mScaleB = make_tensor(
           make_gmem_ptr(args.ptr_SB),
-          make_layout(make_shape(N, scale_k, L), args.dS));
+          make_layout(make_shape(N, scale_k, L), args.dSB));
       res.tiled_copy_scale_b = {Copy_ScaleB{}.with(mScaleB)};
     }
 
     if constexpr(DoZeroA){
       auto ptr_ZA = [&]() {
-        if constexpr (sizeof_bits_v<NonVoidElementZero> < 8) {
-          return cute::subbyte_iterator<const NonVoidElementZero>(args.ptr_ZA);
+        if constexpr (sizeof_bits_v<NonVoidElementZeroA> < 8) {
+          return cute::subbyte_iterator<const NonVoidElementZeroA>(args.ptr_ZA);
         } else {
-          return make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_ZA));
+          return make_gmem_ptr(static_cast<NonVoidElementZeroA const *>(args.ptr_ZA));
         }
       }();
       auto mZeroA =
           make_tensor(ptr_ZA,
-                      make_layout(make_shape(zero_elements_packed_along_k * M, scale_k / zero_elements_packed_along_k, L), 
-                      make_stride(_1{}, zero_elements_packed_along_k * M, M * scale_k))));
+                      make_layout(make_shape(zero_elements_packed_along_k_a * M, scale_k / zero_elements_packed_along_k_a, L), 
+                      make_stride(_1{}, zero_elements_packed_along_k_a * M, M * scale_k)));
       res.tiled_copy_zero_a = {Copy_ZeroA{}.with(mZeroA)};
     }
 
     if constexpr(DoZeroB){
       auto ptr_ZB = [&]() {
-        if constexpr (sizeof_bits_v<NonVoidElementZero> < 8) {
-          return cute::subbyte_iterator<const NonVoidElementZero>(args.ptr_ZB);
+        if constexpr (sizeof_bits_v<NonVoidElementZeroB> < 8) {
+          return cute::subbyte_iterator<const NonVoidElementZeroB>(args.ptr_ZB);
         } else {
-          return make_gmem_ptr(static_cast<NonVoidElementZero const *>(args.ptr_ZB));
+          return make_gmem_ptr(static_cast<NonVoidElementZeroB const *>(args.ptr_ZB));
         }
       }();
       auto mZeroB =
           make_tensor(ptr_ZB,
-                      make_layout(make_shape(zero_elements_packed_along_k * N, scale_k / zero_elements_packed_along_k, L), 
-                      make_stride(_1{}, zero_elements_packed_along_k * N, N * scale_k))));
+                      make_layout(make_shape(zero_elements_packed_along_k_b * N, scale_k / zero_elements_packed_along_k_b, L), 
+                      make_stride(_1{}, zero_elements_packed_along_k_b * N, N * scale_k)));
       res.tiled_copy_zero_b = {Copy_ZeroB{}.with(mZeroB)};
     }
 
@@ -437,13 +448,13 @@ public:
             }
           }();
 
-          if constexpr (ModeHasScales) {
+          if constexpr (DoScale) {
             if constexpr (IsATransformed) {
               static_assert(dependent_false<LayoutIn> && "ATransform not support now");
             } else {
               using ret_type = cute::conditional_t<sizeof_bits_v<ZeroType> >= 8, ZeroType, int8_t>;
               ret_type minus(data);
-              if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero) {
+              if constexpr (DoZeroOffset) {
                 minus = static_cast<ret_type>(data) - static_cast<ret_type>(tz);
               }
               dst[i] = (static_cast<ScaleType>(minus)) * ts;
@@ -589,14 +600,15 @@ public:
 
     // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
     // layout else we need mode N_iter from fragment_B layout.
-    static constexpr auto scale_traits_size = decltype(size(typename GmemTiledCopyScale::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto scale_traits_num = SG_N / size<1>(typename GmemTiledCopyScale::BlockShape{});
-    Tensor fragment_scale_input_a = make_tensor<NonVoidElementScale>(Layout<Shape<_2, _1, _1>>{});
-    Tensor fragment_scale_input_b = make_tensor<NonVoidElementScale>(Layout<Shape<Int<scale_traits_size>, Int<scale_traits_num>, _1>>{});
-    static constexpr auto zero_traits_size = decltype(size(typename GmemTiledCopyZero::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto zero_traits_num = SG_N * zero_elements_packed_along_k / size<1>(typename GmemTiledCopyZero::BlockShape{});
-    Tensor fragment_zero_input_a =  make_tensor<NonVoidElementZero> (Layout<Shape<_2, _1, _1>>{});
-    Tensor fragment_zero_input_b =  make_tensor<NonVoidElementZero> (Layout<Shape<Int<zero_traits_size>, Int<zero_traits_num>, _1>>{});
+    static constexpr auto scale_traits_size_b = decltype(size(typename GmemTiledCopyScaleB::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto scale_traits_num_b = SG_N / size<1>(typename GmemTiledCopyScaleB::BlockShape{});
+    Tensor fragment_scale_input_a = make_tensor<NonVoidElementScaleA>(Layout<Shape<_2, _1, _1>>{});
+    Tensor fragment_scale_input_b = make_tensor<NonVoidElementScaleB>(Layout<Shape<Int<scale_traits_size_b>, Int<scale_traits_num_b>, _1>>{});
+    static constexpr auto zero_traits_size_a = decltype(size(typename GmemTiledCopyZeroA::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto zero_traits_size_b = decltype(size(typename GmemTiledCopyZeroB::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto zero_traits_num_b = SG_N * zero_elements_packed_along_k_b / size<1>(typename GmemTiledCopyZeroB::BlockShape{});
+    Tensor fragment_zero_input_a = make_tensor<NonVoidElementZeroA> (Layout<Shape<_2, _1, _1>>{});
+    Tensor fragment_zero_input_b = make_tensor<NonVoidElementZeroB> (Layout<Shape<Int<zero_traits_size_b>, Int<zero_traits_num_b>, _1>>{});
 
     // narrow input fragment or the same tensor used for MMA
     Tensor quant_frag_a = [&](){
@@ -645,7 +657,6 @@ public:
     //
     // Mainloop
     //
-    constexpr int barrier_scope = 2;
     // TODO(Codeplay): Define these coord tensors using proper cute logic 
     auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
     const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
@@ -656,14 +667,14 @@ public:
                                        make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count), 
                                                    make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
     Tensor copy_iter_s_b = make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
-                                       make_layout(make_shape(Int<scale_traits_size>{}, Int<scale_traits_num>{}, _1{}, k_tile_count),
-                                                   make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyScale::BlockShape{}), _0{}, E<1>{} * _1{})));
+                                       make_layout(make_shape(Int<scale_traits_size_b>{}, Int<scale_traits_num_b>{}, _1{}, k_tile_count),
+                                                   make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyScaleB::BlockShape{}), _0{}, E<1>{} * _1{})));
     Tensor copy_iter_z_a = make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
                                        make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count),
                                                    make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
     Tensor copy_iter_z_b = make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
-                                       make_layout(make_shape(Int<zero_traits_size>{}, Int<zero_traits_num>{}, _1{}, k_tile_count),
-                                                   make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyZero::BlockShape{}), _0{}, E<1>{} * _1{})));
+                                       make_layout(make_shape(Int<zero_traits_size_b>{}, Int<zero_traits_num_b>{}, _1{}, k_tile_count),
+                                                   make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyZeroB::BlockShape{}), _0{}, E<1>{} * _1{})));
 
   #define LOG_GROUP 0
   #define LOG_THREAD 0
@@ -713,8 +724,8 @@ public:
       barrier_arrive(barrier_scope);
 
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
-      copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
+      copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), frag_copy_A);
+      copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), frag_copy_B);
       
       // Compiler is expected to move construction of tensors in the following ifs outside of loop.
       // They are here to make code easier to read - without duplicating these ifs outside of loop in lambdas to optionally construct these tensors.
@@ -727,10 +738,10 @@ public:
         if constexpr(DoZeroA){
           auto thr_copy_zero_A = mainloop.tiled_copy_zero_a.get_slice(thread_idx);
           auto copy_tCrZA = thr_copy_zero_A.retile_D(fragment_zero_input_a);
-          copy(mainloop.tiled_copy_zero_a, copy_iter_z(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k), copy_tCrZA);
+          copy(mainloop.tiled_copy_zero_a, copy_iter_z_a(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k_a), copy_tCrZA);
         }
         if constexpr(sizeof_bits_v<NonVoidElementZeroA> < 8){
-          transform_quant<true, DoScaleA, DoZeroA>(quant_frag_a, mma_A, fragment_scale_input_a, fragment_zero_input_a((k_tile / k_reload_factor) % zero_traits_size, _, 0));
+          transform_quant<true, DoScaleA, DoZeroA>(quant_frag_a, mma_A, fragment_scale_input_a, fragment_zero_input_a((k_tile / k_reload_factor) % zero_traits_size_a, _, 0));
         } else{
           transform_quant<true, DoScaleA, DoZeroA>(quant_frag_a, mma_A, fragment_scale_input_a, fragment_zero_input_a);
         }
@@ -744,10 +755,10 @@ public:
         if constexpr(DoZeroB){
           auto thr_copy_zero_B = mainloop.tiled_copy_zero_b.get_slice(thread_idx);
           auto copy_tCrZB = thr_copy_zero_B.retile_D(fragment_zero_input_b);
-          copy(mainloop.tiled_copy_zero_b, copy_iter_z(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k), copy_tCrZB);
+          copy(mainloop.tiled_copy_zero_b, copy_iter_z_b(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k_b), copy_tCrZB);
         }
         if constexpr(sizeof_bits_v<NonVoidElementZeroA> < 8){
-          transform_quant<false, DoScaleB, DoZeroB>(quant_frag_b, mma_B, fragment_scale_input_b, fragment_zero_input_b((k_tile / k_reload_factor) % zero_traits_size, _, 0));
+          transform_quant<false, DoScaleB, DoZeroB>(quant_frag_b, mma_B, fragment_scale_input_b, fragment_zero_input_b((k_tile / k_reload_factor) % zero_traits_size_b, _, 0));
         } else{
           transform_quant<false, DoScaleB, DoZeroB>(quant_frag_b, mma_B, fragment_scale_input_b, fragment_zero_input_b);
         }

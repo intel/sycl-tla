@@ -194,11 +194,11 @@ struct ExampleRunner {
   using ElementMMA = std::conditional_t<AIsNarrower, ElementB, ElementA>;
   using ElementQuant = std::conditional_t<AIsNarrower, ElementA, ElementB>;
 
-  using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
-  using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
+  using ElementScale = std::conditional_t<AIsNarrower, typename CollectiveMainloop::NonVoidElementScaleA, typename CollectiveMainloop::NonVoidElementScaleB>;
+  using ElementZero = std::conditional_t<AIsNarrower, typename CollectiveMainloop::NonVoidElementZeroA, typename CollectiveMainloop::NonVoidElementZeroB>;
   // Scale and Zero share a stride since the layout and shapes must be the same.
-  using StrideScale = typename CollectiveMainloop::NonVoidStrideScale;
-  using StrideZero = typename CollectiveMainloop::NonVoidStrideZero;
+  using StrideScale = std::conditional_t<AIsNarrower, typename CollectiveMainloop::NonVoidStrideScaleA, typename CollectiveMainloop::NonVoidStrideScaleB>;
+  using StrideZero = std::conditional_t<AIsNarrower, typename CollectiveMainloop::NonVoidStrideZeroA, typename CollectiveMainloop::NonVoidStrideZeroB>;
 
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
@@ -429,12 +429,13 @@ struct ExampleRunner {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
     initialize(options);
-
+    ElementZero* tmp = block_zero.get();
     typename Gemm::GemmKernel::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         problem_size,
-        {block_A.get(), stride_A, block_B.get(), stride_B, block_scale.get(),
-         stride_S, stride_Z, options.g, block_zero.get()},
+        {block_A.get(), stride_A, block_B.get(), stride_B, AIsNarrower ? block_scale.get() : nullptr, AIsNarrower ? nullptr : block_scale.get(),
+         stride_S, stride_S, stride_Z, stride_Z, options.g, reinterpret_cast<typename CollectiveMainloop::NonVoidElementZeroA*>(AIsNarrower ? tmp : nullptr), 
+                                                            reinterpret_cast<typename CollectiveMainloop::NonVoidElementZeroB*>(AIsNarrower ? nullptr : tmp)},
         {{options.alpha, options.beta},
          block_C.get(),
          stride_C,
