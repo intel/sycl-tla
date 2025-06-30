@@ -1825,6 +1825,25 @@ struct Copy_Traits_<XE_2D_U16x16x16_LD_V, args_t...>
 };
 
 template <class... args_t>
+struct Copy_Traits_<XE_2D_U16x16x16_LD_V_Natural, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_V_Natural, args_t...> {
+  // Logical thread id to thread idx
+  using ThrID = Layout<_16>;
+  // Map from (src-thr,src-val) to bit
+  using SrcLayout = Layout<Shape <_16, Shape <_16,  _16>>,
+                           Stride< _0, Stride< _1, _256>>>;
+  // Map from (dst-thr,dst-val) to bit
+  using DstLayout = Layout<Shape <Shape <_2,    _8>, Shape <_16,   _2,   _8>>,
+                           Stride<Stride<_256, _16>, Stride< _1, _128, _512>>>;
+  // Reference map from (thr,val) to bit
+  using RefLayout = DstLayout;
+
+  template <class... ArgTs>
+  Copy_Traits_(ArgTs... args)
+      : XE_2D_LD_Unpack<XE_2D_U16x16x16_LD_V_Natural, args_t...>(args...) {}
+};
+
+template <class... args_t>
 struct Copy_Traits_<XE_2D_U16x32x16_LD_V, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U16x32x16_LD_V, args_t...> {
   using ThrID = Layout<_16>;
@@ -2488,6 +2507,7 @@ COPY_TRAIT_LD_DEF(XE_2D_TF32x8x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U32x16x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U32x32x16_LD_N)
 COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_V)
+COPY_TRAIT_LD_DEF(XE_2D_U16x16x16_LD_V_Natural)
 COPY_TRAIT_LD_DEF(XE_2D_U16x32x16_LD_V)
 COPY_TRAIT_LD_DEF(XE_2D_U16x32x32_LD_V)
 COPY_TRAIT_LD_DEF(XE_2D_U16x16x32_LD_V)

@@ -236,6 +236,34 @@ struct XE_8x16x16_F32F16F16F32_TT
   }
 };
 
+struct XE_8x16x16_F32F16F16F32_TT_Natural
+{
+  using DRegisters = intel::float8[1];
+  using ARegisters = intel::ushort8[1];
+  using BRegisters = intel::ushort16[1];
+  using CRegisters = intel::float8[1];
+
+  CUTE_HOST_DEVICE static void
+  fma(intel::float8        & d,
+      intel::ushort8  const& a,
+      intel::ushort16 const& b,
+      intel::float8   const& c)
+  {
+#if defined(CUTE_ARCH_MMA_XE_ENABLED)
+    asm(
+      "{\n"
+      ".decl SRC1_UD v_type=G type=UD num_elts=128 alias=<%2,0>\n"
+      ".decl SRC2_UD v_type=G type=UD num_elts=64 alias=<%1,0>\n"
+      "dpas.hf.hf.8.8 (M1, 16) %0.0 %3.0 SRC1_UD.0 SRC2_UD(0,0)\n"
+      "}\n"
+      : "=rw"(d) : "rw"(a), "rw"(b), "rw"(c)
+    );
+#else
+    CUTE_INVALID_CONTROL_PATH("Attempting to use XE_8x16x16_F32F16F16F32_TT on non-Xe hardware");
+#endif
+  }
+};
+
 struct XE_4x16x16_F32F16F16F32_TT
 {
   using DRegisters = intel::float4[1];
