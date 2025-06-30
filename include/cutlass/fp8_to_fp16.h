@@ -56,8 +56,8 @@ convert_FP8_to_FP16(TensorIn const &in,
   using SrcType = typename TensorIn::value_type;
   using DstType = typename TensorOut::value_type;
 
-  static_assert(cute::is_any_of_v<EncodingType, cute::float_e5m2_t, cute::float_e4m3_t, uint8_t>,
-                "Expected fp8 input to be float_e5m2_t float_e4m3_t or uint8_t");
+  static_assert(std::is_same_v<SrcType, uint8_t>,
+                "Expected fp8 input as uint8_t");
   static_assert(cute::is_any_of_v<EncodingType, cute::float_e5m2_t, cute::float_e4m3_t>,
                 "Expected EncodingType to be float_e5m2_t or float_e4m3_t");
 
