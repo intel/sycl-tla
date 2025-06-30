@@ -42,6 +42,8 @@ cutlass_example_add_executable(
   08_bmg_gemm_f8_scaling.cpp
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
+  TEST_MODE_2
+  TEST_MODE_0
 )
 
 if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
