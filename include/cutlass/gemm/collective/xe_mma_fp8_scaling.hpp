@@ -94,11 +94,9 @@ public:
   using WorkgroupTileShape = TileShape_;
 
   
-  static_assert(
-     (cute::is_tuple<ElementAOptionalTuple>::value ^ cute::is_tuple<ElementBOptionalTuple>::value) |
-     (cute::is_tuple<ElementAOptionalTuple>::value & cute::is_tuple<ElementAOptionalTuple>::value &
+  static_assert((cute::is_tuple<ElementAOptionalTuple>::value & cute::is_tuple<ElementAOptionalTuple>::value &
         (cute::is_any_of_v<detail::deduce_mixed_width_dtype_t<0, ElementAOptionalTuple>, float_e4m3_t, float_e5m2_t>)),
-    "Either A OR B must be a tuple. It must take the from {ElementOperand, [ElementScale],"
+    "Either A and B must be a tuple. It must take the from {ElementOperand, [ElementScale],"
     "[ElementZero]}. Inputs in [] are optional.");
 
   using ElementA = detail::deduce_mixed_width_dtype_t<0, ElementAOptionalTuple>;
@@ -110,7 +108,7 @@ public:
   using ElementMMA = typename TiledMma_::ValTypeA;
   using ElementQuant = cute::conditional_t<IsATransformed, ElementA, ElementB>;
 
-  // TODO(Codeplay): Create a ScaledTensor class to encapsulate this A/B nightmare
+  // TODO(Codeplay): Create a ScaledTensor class to encapsulate scale logic
   using ElementScaleA = detail::deduce_mixed_width_dtype_t<1, ElementAOptionalTuple>;
   using StrideScaleA = detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>;
   using ElementZeroA = detail::deduce_mixed_width_dtype_t<3, ElementAOptionalTuple>;
