@@ -585,9 +585,6 @@ public:
                            make_layout(make_shape(Int<zeroB_traits_size>{}, Int<zeroB_traits_num>{}, _1{}, k_tile_count),
                                        make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyZeroB::BlockShape{}), _0{}, E<1>{} * _1{})));
 
-    auto [M, N, K, L] = mainloop.problem_shape;
-    auto scale_k = cute::ceil_div(K, mainloop.group_size);
-
   #define LOG_GROUP 0
   #define LOG_THREAD 0
   #define CUTLASS_ENABLE_DEBUG_PRINTS 0
