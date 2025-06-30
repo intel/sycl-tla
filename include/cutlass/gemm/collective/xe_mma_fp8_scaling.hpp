@@ -273,11 +273,6 @@ public:
     Copy_ScaleB tiled_copy_scaleB;
     Copy_ZeroB tiled_copy_zeroB;
     int group_size;
-    NonVoidElementScaleA const* ptr_SA = nullptr;
-    NonVoidElementScaleB const* ptr_SB = nullptr;
-    NonVoidElementZeroA const* ptr_ZA = nullptr;
-    NonVoidElementZeroA const* ptr_ZB = nullptr;
-    Shape<int, int, int, int> problem_shape;
   };
 
   //
@@ -367,7 +362,7 @@ public:
     }
 
     return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scaleA, tiled_copy_zeroA, tiled_copy_scaleB,
-            tiled_copy_zeroB, args.group_size, args.ptr_SA, args.ptr_SB, args.ptr_ZA, args.ptr_ZB, problem_shape};
+            tiled_copy_zeroB, args.group_size};
   }
 
   template<class ProblemShape>
@@ -433,7 +428,7 @@ public:
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
     static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineScales::value_type>);
-//    static_assert(std::is_same_v<LayoutScales, LayoutZeros>);
+    static_assert(std::is_same_v<LayoutScales, LayoutZeros>);
 
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
@@ -449,12 +444,11 @@ public:
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < 2; ++j) {
           if constexpr (ModeHasScalesZeroA){
-            auto zero = tCrZ_input(j * 16 + i); //shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
-//            auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
+            auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
             tCrA_mma(_, _, 0)[j * 16 + i] -= zero;
             tCrA_mma(_, _, 1)[j * 16 + i] -= zero;
           }
-          auto scale = tCrS_input(j * 16 + i); // shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+          auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
           tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
           tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
         }
@@ -594,15 +588,6 @@ public:
     auto [M, N, K, L] = mainloop.problem_shape;
     auto scale_k = cute::ceil_div(K, mainloop.group_size);
 
-    Tensor scale_A_ = make_tensor(make_gmem_ptr(mainloop.ptr_SA), make_shape(M, scale_k, L), make_stride(1, M, M * scale_k));
-    Tensor zero_A_ = make_tensor(make_gmem_ptr(mainloop.ptr_ZA), make_shape(M, scale_k, L), make_stride(1, M, M * scale_k));
-
-    Tensor zero_gA_ = local_tile(zero_A_, WorkgroupTileShape{}, make_coord(m_idx,n_idx,l_idx), Step<_1, X,_1>{});
-
-    const int sg_m_idx = m_idx * ATOM_M + (get_sub_group_id() / ATOM_N);
-    Tensor scale_gA_2 = local_tile(scale_A_, make_shape(SG_M, scale_k), make_coord(sg_m_idx ,0));
-    Tensor zero_gA_2 = local_tile(zero_A_, make_shape(SG_M, scale_k), make_coord(sg_m_idx ,0));
-
   #define LOG_GROUP 0
   #define LOG_THREAD 0
   #define CUTLASS_ENABLE_DEBUG_PRINTS 0
@@ -655,14 +640,14 @@ public:
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), frag_copy_B);
 
       if constexpr(ModeHasScalesA){
-//        copy(mainloop.tiled_copy_scaleA, copy_iter_sA(_, _, _, k_tile / k_reload_factor), copy_tCrSA);
+        copy(mainloop.tiled_copy_scaleA, copy_iter_sA(_, _, _, k_tile / k_reload_factor), copy_tCrSA);
       }
       if constexpr(ModeHasScalesB){
         copy(mainloop.tiled_copy_scaleB, copy_iter_sB(_, _, _, k_tile / k_reload_factor), copy_tCrSB);
       }
 
       if constexpr(ModeHasScalesZeroA){
-//        copy(mainloop.tiled_copy_zeroA, copy_iter_zA(_, _, _, k_tile / k_reload_factor), copy_tCrZA);
+        copy(mainloop.tiled_copy_zeroA, copy_iter_zA(_, _, _, k_tile / k_reload_factor), copy_tCrZA);
       }
       if constexpr(ModeHasScalesZeroB){
         copy(mainloop.tiled_copy_zeroB, copy_iter_zB(_, _, _, k_tile / k_reload_factor), copy_tCrZB);
@@ -673,10 +658,7 @@ public:
         prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
 
-      auto tensor_scale = scale_gA_2(_, k_tile / k_reload_factor, _);
-      auto tensor_zero = zero_gA_2(_, k_tile / k_reload_factor, _);
-      transform_quant<true, false>(quantA_frag, mma_A, tensor_scale, tensor_zero);
-//      transform_quant<true, false>(quantA_frag, mma_A, fragment_scaleA_input, fragment_zeroA_input);
+      transform_quant<true, false>(quantA_frag, mma_A, fragment_scaleA_input, fragment_zeroA_input);
       transform_quant<false, true>(quantB_frag, mma_B, fragment_scaleB_input, fragment_zeroB_input);
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
@@ -684,7 +666,6 @@ public:
     }
   }
 };
-
 
 } // namespace cutlass::gemm::collective
 
