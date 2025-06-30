@@ -111,7 +111,7 @@ struct Options {
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("g", g, 128);
-    cmd.get_cmd_line_argument("mode", mode, 1);
+    cmd.get_cmd_line_argument("mode", mode, 2);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
@@ -617,19 +617,7 @@ int main(int argc, const char** argv) {
     std::cerr << "Aborting execution." << std::endl;
     return -1;
   }
-  if (options.mode == GemmMode::ConvertOnly) {
-    // Run conversion-only mode for both FP8 formats
-    launcher<cutlass::float_e5m2_t>(options);
-    launcher<cutlass::float_e4m3_t>(options);
-  } else if(options.mode == GemmMode::ConvertAndScale) {
-    // Run convert-and-scale mode for float_e5m2_t only
-    launcher<cutlass::float_e5m2_t>(options);
-    // TODO(Codeplay): float_e4m3_t is currently not supported in ConvertAndScale mode
-    // due to an issue in the IGC compiler.
-    std::cout << "[Warning] ConvertAndScale mode is not supported for float_e4m3_t due to an IGC bug." << std::endl;
-  } else {
-    // TODO(Codeplay): ConvertAndScaleWithZeroPoint mode is not supported at all due to a compiler bug.
-    std::cout << "[Warning] ConvertAndScaleWithZeroPoint mode is not supported due to an IGC issue." << std::endl;
-  }
+  launcher<cutlass::float_e5m2_t>(options);
+  launcher<cutlass::float_e4m3_t>(options);
   return 0;
 }

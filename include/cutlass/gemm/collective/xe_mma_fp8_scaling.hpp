@@ -436,22 +436,31 @@ public:
     convert_FP8_to_FP16<ElementQuant>(tCrA_load, tCrA_mma);
 
     if constexpr (IsATransformed && isA && ModeHasScalesA) {
+      half_t z0 = tCrZ_input(0);
+      half_t z1 = tCrZ_input(1);
+      half_t s0 =  tCrS_input(0);
+      half_t s1 =  tCrS_input(1);
+      auto ptr_tcrA_mm = tCrA_mma.data();
       // The current scale load atom (1x32) gives 2 scale values to
       // each thread. All threads need access to all other threads
       // scale values, and each scale value is reused twice (unrolled)
-      CUTLASS_PRAGMA_UNROLL
+      auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+      CUTLASS_PRAGMA_NO_UNROLL
       for (int i = 0; i < 16; ++i) {
-        CUTLASS_PRAGMA_UNROLL
-        for (int j = 0; j < 2; ++j) {
-          if constexpr (ModeHasScalesZeroA){
-            auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
-            tCrA_mma(_, _, 0)[j * 16 + i] -= zero;
-            tCrA_mma(_, _, 1)[j * 16 + i] -= zero;
-          }
-          auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
-          tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
-          tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
+        if constexpr (ModeHasScalesZeroA){
+          auto zero0 = group_broadcast(sg, z0, i);
+          ptr_tcrA_mm[i] -= zero0;
+          ptr_tcrA_mm[32 + i] -= zero0;
+          auto zero1 = group_broadcast(sg, z1, i);
+          ptr_tcrA_mm[16 + i] -= zero1;
+          ptr_tcrA_mm[32 + 16 + i] -= zero1;
         }
+        auto scale0 = group_broadcast(sg, s0, i);
+        ptr_tcrA_mm[i] *= scale0;
+        ptr_tcrA_mm[32 + i] *= scale0;
+        auto scale1 = group_broadcast(sg, s1, i);
+        ptr_tcrA_mm[16 + i] *= scale1;
+        ptr_tcrA_mm[32 + 16 + i] *= scale1;
       }
    } else if constexpr (IsBTransformed && isB && ModeHasScalesB) {
       static constexpr auto N = decltype(size<1>(tCrA_load))::value;
