@@ -61,24 +61,24 @@ struct scale_zero_copy_traits<datatype, N, stride,
 // 8 bits
 template<class datatype, class stride>
 struct scale_zero_copy_traits<datatype, 16, stride,
-          std::enable_if_t<sizeof_bits_v<datatype> == 8 && cute::detail::is_stride_leftmost<stride>>> {
+          std::enable_if_t<sizeof_bits_v<datatype> == 8>> {
   using type = XE_2D_U8x1x16_LD_N;
 };
 template<class datatype, size_t N, class stride>
 struct scale_zero_copy_traits<datatype, N, stride,
-          std::enable_if_t<sizeof_bits_v<datatype> == 8 && N >= 32 && cute::detail::is_stride_leftmost<stride>>> {
+          std::enable_if_t<sizeof_bits_v<datatype> == 8 && N >= 32>> {
   using type = XE_2D_U8x1x16_LD_N;  // XE_2D_U8x1x32_LD_N not work, use this instead
 };
 
 // 16 bits
 template<class datatype, class stride>
 struct scale_zero_copy_traits<datatype, 16, stride,
-          std::enable_if_t<sizeof_bits_v<datatype> == 16 && cute::detail::is_stride_leftmost<stride>>> {
+          std::enable_if_t<sizeof_bits_v<datatype> == 16>> {
   using type = XE_2D_U16x1x16_LD_N;
 };
 template<class datatype, size_t N, class stride>
 struct scale_zero_copy_traits<datatype, N, stride,
-          std::enable_if_t<sizeof_bits_v<datatype> == 16 && N >= 32 && cute::detail::is_stride_leftmost<stride>>> {
+          std::enable_if_t<sizeof_bits_v<datatype> == 16 && N >= 32>> {
   using type = XE_2D_U16x1x32_LD_N;
 };
 
@@ -126,6 +126,11 @@ private:
   using StrideZeroA = detail::deduce_mixed_width_dtype_t<4, ElementAOptionalTuple>;
   using StrideZeroB = detail::deduce_mixed_width_dtype_t<4, ElementBOptionalTuple>;
 
+  enum class QuantMode {
+    GroupWise,
+    TensorWise
+  };
+
 public:
   //
   // Type Aliases
@@ -164,6 +169,9 @@ public:
   static constexpr auto zero_elements_packed_along_k_a = get<0>(NonVoidStrideZeroA{});
   static constexpr auto zero_elements_packed_along_k_b = get<0>(NonVoidStrideZeroB{});
 
+  // When stride is Stride<_0, _0, _1>, quantization can be determined as tensor-wise 
+  static constexpr auto quant_mode_a = is_static_v<NonVoidStrideScaleA> ? QuantMode::TensorWise : QuantMode::GroupWise;
+  static constexpr auto quant_mode_b = is_static_v<NonVoidStrideScaleB> ? QuantMode::TensorWise : QuantMode::GroupWise;
   using StrideA = StrideA_;
   using StrideB = StrideB_;
 
@@ -237,6 +245,8 @@ public:
   using Copy_ScaleA = decltype(make_tiled_copy(atom_load_scaleA{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale_a{}));
   using atom_load_zeroA = Copy_Atom<traits_load_zero_a, NonVoidElementZeroA>;
   using Copy_ZeroA = decltype(make_tiled_copy(atom_load_zeroA{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero_a{}));
+  using TensorScaleA = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementScaleA const*>(nullptr)), make_shape(_1{}, 0, 0), NonVoidStrideScaleA{}));
+  using TensorZeroA = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementZeroA const*>(nullptr)), make_shape(_1{}, 0, 0), NonVoidStrideZeroA{}));
 
   using traits_load_scale_b = Copy_Traits<GmemTiledCopyScaleB, NonVoidStrideScaleB>;
   using traits_load_zero_b = Copy_Traits<GmemTiledCopyZeroB, NonVoidStrideZeroB>;
@@ -246,6 +256,8 @@ public:
   using Copy_ScaleB = decltype(make_tiled_copy(atom_load_scaleB{}, Layout<CopyThreadShapeRev>{}, val_layout_load_scale_b{}));
   using atom_load_zeroB = Copy_Atom<traits_load_zero_b, NonVoidElementZeroB>;
   using Copy_ZeroB = decltype(make_tiled_copy(atom_load_zeroB{}, Layout<CopyThreadShapeRev>{}, val_layout_load_zero_b{}));
+  using TensorScaleB = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementScaleB const*>(nullptr)), make_shape(_1{}, 0, 0), NonVoidStrideScaleB{}));
+  using TensorZeroB = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementZeroB const*>(nullptr)), make_shape(_1{}, 0, 0), NonVoidStrideZeroB{}));
 
   // Host side kernel arguments
   struct Arguments {
@@ -254,23 +266,23 @@ public:
     ElementB const* ptr_B;
     StrideB dB;
     NonVoidElementScaleA const* ptr_SA = nullptr;
-    NonVoidElementScaleB const* ptr_SB = nullptr;
     NonVoidStrideScaleA dSA{};
+    NonVoidElementScaleB const* ptr_SB = nullptr;
     NonVoidStrideScaleB dSB{};
+    NonVoidElementZeroA const* ptr_ZA = nullptr;
     NonVoidStrideZeroA dZA{};
+    NonVoidElementZeroB const* ptr_ZB = nullptr;
     NonVoidStrideZeroB dZB{};
     int group_size = 1; //TODO(Codeplay): should this be duplicated for A/B?
-    NonVoidElementZeroA const* ptr_ZA = nullptr;
-    NonVoidElementZeroB const* ptr_ZB = nullptr;
   };
 
   struct Params {
     Copy_A tiled_copy_a;
     Copy_B tiled_copy_b;
-    std::conditional_t<DoScaleA, Copy_ScaleA, uint8_t> tiled_copy_scale_a;
-    std::conditional_t<DoScaleB, Copy_ScaleB, uint8_t> tiled_copy_scale_b;
-    std::conditional_t<DoZeroA, Copy_ZeroA, uint8_t> tiled_copy_zero_a;
-    std::conditional_t<DoZeroB, Copy_ZeroB, uint8_t> tiled_copy_zero_b;
+    std::conditional_t<DoScaleA, std::conditional_t<quant_mode_a == QuantMode::GroupWise, Copy_ScaleA, TensorScaleA>, uint8_t> tiled_copy_scale_a;
+    std::conditional_t<DoScaleB, std::conditional_t<quant_mode_b == QuantMode::GroupWise, Copy_ScaleB, TensorScaleB>, uint8_t> tiled_copy_scale_b;
+    std::conditional_t<DoZeroA, std::conditional_t<quant_mode_a == QuantMode::GroupWise, Copy_ZeroA, TensorZeroA>, uint8_t> tiled_copy_zero_a;
+    std::conditional_t<DoZeroB, std::conditional_t<quant_mode_b == QuantMode::GroupWise, Copy_ZeroB, TensorZeroB>, uint8_t> tiled_copy_zero_b;
     int group_size;
   };
 
@@ -313,14 +325,30 @@ public:
       auto mScaleA = make_tensor(
           make_gmem_ptr(args.ptr_SA),
           make_layout(make_shape(M, scale_k, L), args.dSA));
-      res.tiled_copy_scale_a = {Copy_ScaleA{}.with(mScaleA)};
+      res.tiled_copy_scale_a = {[&]() {
+          if constexpr(quant_mode_a == QuantMode::GroupWise) {
+            return Copy_ScaleA{}.with(mScaleA);
+          } else {
+            return make_tensor(
+              make_gmem_ptr(args.ptr_SA),
+              make_layout(make_shape(_1{}, 1, 1), args.dSA));
+          }
+        }()};
     }
 
     if constexpr(DoScaleB){
       auto mScaleB = make_tensor(
           make_gmem_ptr(args.ptr_SB),
           make_layout(make_shape(N, scale_k, L), args.dSB));
-      res.tiled_copy_scale_b = {Copy_ScaleB{}.with(mScaleB)};
+      res.tiled_copy_scale_b = {[&]() {
+          if constexpr(quant_mode_b == QuantMode::GroupWise) {
+            return Copy_ScaleB{}.with(mScaleB);
+          } else {
+            return make_tensor(
+              make_gmem_ptr(args.ptr_SB),
+              make_layout(make_shape(_1{}, 1, 1), args.dSB));
+          }
+        }()};
     }
 
     if constexpr(DoZeroA){
@@ -335,7 +363,15 @@ public:
           make_tensor(ptr_ZA,
                       make_layout(make_shape(zero_elements_packed_along_k_a * M, scale_k / zero_elements_packed_along_k_a, L), 
                       make_stride(_1{}, zero_elements_packed_along_k_a * M, M * scale_k)));
-      res.tiled_copy_zero_a = {Copy_ZeroA{}.with(mZeroA)};
+      res.tiled_copy_zero_a = {[&](){
+          if constexpr(quant_mode_a == QuantMode::GroupWise) {
+            return Copy_ZeroA{}.with(mZeroA);
+          } else {
+            return make_tensor(
+              make_gmem_ptr(static_cast<NonVoidElementZeroA const *>(args.ptr_ZA)),
+              make_layout(make_shape(_1{}, 1, 1), args.dZA));
+          }
+        }()};
     }
 
     if constexpr(DoZeroB){
@@ -350,10 +386,49 @@ public:
           make_tensor(ptr_ZB,
                       make_layout(make_shape(zero_elements_packed_along_k_b * N, scale_k / zero_elements_packed_along_k_b, L), 
                       make_stride(_1{}, zero_elements_packed_along_k_b * N, N * scale_k)));
-      res.tiled_copy_zero_b = {Copy_ZeroB{}.with(mZeroB)};
+      res.tiled_copy_zero_b = {[&](){
+          if constexpr(quant_mode_b == QuantMode::GroupWise) {
+            return Copy_ZeroB{}.with(mZeroB);
+          } else {
+            return make_tensor(
+              make_gmem_ptr(static_cast<NonVoidElementZeroB const *>(args.ptr_ZB)),
+              make_layout(make_shape(_1{}, 1, 1), args.dZB));
+          }
+        }()};
     }
 
     return res;
+  }
+
+  template<class ProblemShape>
+  static bool
+  can_implement(
+      ProblemShape problem_shapes,
+      Arguments const& args) {
+    constexpr int copy_alignment_bits = 128;
+    constexpr int batch_alignment_bits = 512;
+    auto problem_shape_MNKL = append<4>(problem_shapes, 1);
+    auto [M,N,K,L] = problem_shape_MNKL;
+
+    bool implementable = true;
+
+    constexpr int min_aligned_elements_A = copy_alignment_bits / sizeof_bits<ElementA>::value;
+    implementable &= cutlass::detail::check_alignment<min_aligned_elements_A>(cute::make_shape(M,K,L), args.dA);
+    constexpr int min_aligned_elements_B = copy_alignment_bits / sizeof_bits<ElementB>::value;
+    implementable &= cutlass::detail::check_alignment<min_aligned_elements_B>(cute::make_shape(N,K,L), args.dB);
+
+    if (L > 1) {
+      constexpr int min_batch_aligned_elements_A = batch_alignment_bits / sizeof_bits<ElementA>::value;
+      implementable &= get<2>(args.dA) % min_batch_aligned_elements_A == 0;
+      constexpr int min_batch_aligned_elements_B = batch_alignment_bits / sizeof_bits<ElementB>::value;
+      implementable &= get<2>(args.dB) % min_batch_aligned_elements_B == 0;
+    }
+
+    if (!implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum alignment requirements for XE 2D copy.\n");
+    }
+
+    return implementable;
   }
 
   // Helper functions to select packing for conversion
@@ -489,40 +564,45 @@ public:
   ) {
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
+    using ScaleType = typename EngineScales::value_type;
+    using ZeroType = typename EngineZeros::value_type;
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
     static_assert(std::is_same_v<DstType, typename EngineScales::value_type>);
-    static_assert(std::is_same_v<LayoutScales, LayoutZeros>);
 
-    if constexpr(cute::is_any_of_v<SrcType, float_e4m3_t, float_e5m2_t>
-              && cute::is_any_of_v<DstType, bfloat16_t, half_t>) {
-      convert_FP8_to_FP16<ElementQuant>(make_tensor(reinterpret_cast<const uint8_t*>(tCrA_load.data()), tCrA_load.layout()), tCrA_mma);
-    } else {
-      auto const& src = tCrA_load(_, _, _);
-      auto const& dst = tCrA_mma(_, _, _);
-      auto pSrc = const_cast<SrcType*>(raw_pointer_cast(src.data()));
-      auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
-      constexpr int num_elements = decltype(size(src))::value;
+    if constexpr (!DoScale && !DoZeroOffset){
+      if constexpr(cute::is_any_of_v<SrcType, float_e4m3_t, float_e5m2_t>
+                && cute::is_any_of_v<DstType, bfloat16_t, half_t>) {
+        convert_FP8_to_FP16<ElementQuant>(make_tensor(reinterpret_cast<const uint8_t*>(tCrA_load.data()), tCrA_load.layout()), tCrA_mma);
+      } else {
+        auto const& src = tCrA_load(_, _, _);
+        auto const& dst = tCrA_mma(_, _, _);
+        auto pSrc = const_cast<SrcType*>(raw_pointer_cast(src.data()));
+        auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
+        constexpr int num_elements = decltype(size(src))::value;
 
-    // TODO(Codeplay): (perf) consider replacing `pack` with `num_elements` here - See xe_flash_attn_mma.hpp
-      constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
-      using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
-      using SrcArray = cutlass::Array<SrcType, pack>;
-      using DstArray = cutlass::Array<DstType, pack>;
-      constexpr int iters = num_elements / pack;
+      // TODO(Codeplay): (perf) consider replacing `pack` with `num_elements` here - See xe_flash_attn_mma.hpp
+        constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
+        using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
+        using SrcArray = cutlass::Array<SrcType, pack>;
+        using DstArray = cutlass::Array<DstType, pack>;
+        constexpr int iters = num_elements / pack;
 
-      CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < iters; ++i) {
-        SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
-        DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
-        *pDstArr = Converter::convert(*pSrcArr);
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < iters; ++i) {
+          SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
+          DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
+          *pDstArr = Converter::convert(*pSrcArr);
+        }
       }
     }
 
     if constexpr (DoScale) {
       if constexpr(IsA){
+        static_assert(is_same_v<ScaleType, ZeroType>,
+                      "Currently ATransformation is supported when ScaleType = ZeroTypes");
         // The current scale load atom (1x32) gives 2 scale values to
         // each thread. All threads need access to all other threads
         // scale values, and each scale value is reused twice (unrolled)
@@ -530,14 +610,28 @@ public:
         for (int i = 0; i < 16; ++i) {
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < 2; ++j) {
-            auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+            auto scale = [&](){
+              if constexpr(quant_mode_a == QuantMode::GroupWise){
+                return shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
+              } else {
+                return tCrS_input(0);
+              }
+            }();
+            ZeroType minus_zp_0 =  static_cast<ZeroType>(tCrA_load(_, _, 0)[j * 16 + i]);
+            ZeroType minus_zp_1 =  static_cast<ZeroType>(tCrA_load(_, _, 1)[j * 16 + i]);
             if constexpr (DoZeroOffset){
-              auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
-              tCrA_mma(_, _, 0)[j * 16 + i] -= zero;
-              tCrA_mma(_, _, 1)[j * 16 + i] -= zero;
+              auto zero = [&](){
+                if constexpr(quant_mode_a == QuantMode::GroupWise){
+                  return shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
+                } else {
+                  return tCrZ_input(0);
+                }
+              }();
+              minus_zp_0 -= zero;
+              minus_zp_1 -= zero;
             }
-            tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
-            tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
+            tCrA_mma(_, _, 0)[j * 16 + i] = static_cast<DstType>(minus_zp_0) * scale;
+            tCrA_mma(_, _, 1)[j * 16 + i] = static_cast<DstType>(minus_zp_1) * scale;
           }
         }
       } else {
@@ -545,12 +639,20 @@ public:
 
         CUTLASS_PRAGMA_UNROLL
         for (int n = 0; n < N; ++n) {
+          auto [zero, scale] = [&](){
+            if constexpr(quant_mode_b == QuantMode::GroupWise){
+              return std::make_pair(tCrZ_input(n), tCrS_input(n));
+            } else {
+              return std::make_pair(tCrZ_input(0), tCrS_input(0));
+            }
+          }();
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < decltype(size(tCrA_load))::value / N; ++i) {
+            ZeroType minus_zp =  static_cast<ZeroType>(tCrA_load(_, n, _)[i]);
             if constexpr (DoZeroOffset){
-              tCrA_mma(_, n, _)[i] -= tCrZ_input(n);
+              minus_zp -= zero;
             }
-            tCrA_mma(_, n, _)[i] *= tCrS_input(n);
+            tCrA_mma(_, n, _)[i] = static_cast<DstType>(minus_zp) * scale;
           }
         }
       }
@@ -600,15 +702,27 @@ public:
 
     // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
     // layout else we need mode N_iter from fragment_B layout.
-    static constexpr auto scale_traits_size_b = decltype(size(typename GmemTiledCopyScaleB::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto scale_traits_num_b = SG_N / size<1>(typename GmemTiledCopyScaleB::BlockShape{});
-    Tensor fragment_scale_input_a = make_tensor<NonVoidElementScaleA>(Layout<Shape<_2, _1, _1>>{});
-    Tensor fragment_scale_input_b = make_tensor<NonVoidElementScaleB>(Layout<Shape<Int<scale_traits_size_b>, Int<scale_traits_num_b>, _1>>{});
-    static constexpr auto zero_traits_size_a = decltype(size(typename GmemTiledCopyZeroA::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto zero_traits_size_b = decltype(size(typename GmemTiledCopyZeroB::BlockShape{}))::value / SubgroupSize;
-    static constexpr auto zero_traits_num_b = SG_N * zero_elements_packed_along_k_b / size<1>(typename GmemTiledCopyZeroB::BlockShape{});
-    Tensor fragment_zero_input_a = make_tensor<NonVoidElementZeroA> (Layout<Shape<_2, _1, _1>>{});
-    Tensor fragment_zero_input_b = make_tensor<NonVoidElementZeroB> (Layout<Shape<Int<zero_traits_size_b>, Int<zero_traits_num_b>, _1>>{});
+    static constexpr auto scale_traits_size_b = quant_mode_b == QuantMode::TensorWise
+                                              ? 1
+                                              : decltype(size(typename GmemTiledCopyScaleB::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto scale_traits_num_b = quant_mode_b == QuantMode::TensorWise
+                                              ? 1
+                                              : SG_N / size<1>(typename GmemTiledCopyScaleB::BlockShape{});
+    Tensor fragment_scale_input_a = make_tensor<NonVoidElementScaleA>(Layout<Shape<Int<quant_mode_a == QuantMode::GroupWise ? 2 : 1>, _1, _1>>{});
+    Tensor fragment_scale_input_b = make_tensor<NonVoidElementScaleB>(Layout<Shape<Int<quant_mode_b == QuantMode::GroupWise ? scale_traits_size_b : 1>, 
+                                                                                   Int<quant_mode_b == QuantMode::GroupWise ? scale_traits_num_b : 1>, _1>>{});
+    static constexpr auto zero_traits_size_a = quant_mode_a == QuantMode::TensorWise
+                                             ? 1
+                                             : decltype(size(typename GmemTiledCopyZeroA::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto zero_traits_size_b = quant_mode_b == QuantMode::TensorWise
+                                             ? 1
+                                             : decltype(size(typename GmemTiledCopyZeroB::BlockShape{}))::value / SubgroupSize;
+    static constexpr auto zero_traits_num_b = quant_mode_b == QuantMode::TensorWise
+                                             ? 1
+                                             : SG_N * zero_elements_packed_along_k_b / size<1>(typename GmemTiledCopyZeroB::BlockShape{});
+    Tensor fragment_zero_input_a = make_tensor<NonVoidElementZeroA>(Layout<Shape<Int<quant_mode_a == QuantMode::GroupWise ? 2 : 1>, _1, _1>>{});
+    Tensor fragment_zero_input_b = make_tensor<NonVoidElementZeroB>(Layout<Shape<Int<quant_mode_b == QuantMode::GroupWise ? zero_traits_size_b : 1>, //TODO simplify?
+                                                                                 Int<quant_mode_b == QuantMode::GroupWise ? zero_traits_num_b : 1>, _1>>{});
 
     // narrow input fragment or the same tensor used for MMA
     Tensor quant_frag_a = [&](){
@@ -711,6 +825,26 @@ public:
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
     constexpr int barrier_scope = 2;
     int prefetch_k = k_start_idx;
+    if constexpr(quant_mode_a == QuantMode::TensorWise) {
+      if constexpr(DoScaleA){
+        Tensor copy_tCrSA = make_tensor(static_cast<decltype(fragment_scale_input_a)&&>(fragment_scale_input_a).data(), fragment_scale_input_a.layout());
+        copy(mainloop.tiled_copy_scale_a(_, 0, l_coord), copy_tCrSA);
+      }
+      if constexpr(DoZeroA){
+        Tensor copy_tCrZA = make_tensor(static_cast<decltype(fragment_zero_input_a)&&>(fragment_zero_input_a).data(), fragment_zero_input_a.layout());
+        copy(mainloop.tiled_copy_zero_a(_, 0, l_coord), copy_tCrZA);
+      }
+    }
+    if constexpr(quant_mode_b == QuantMode::TensorWise) {
+      if constexpr(DoScaleB){
+        Tensor copy_tCrSB = make_tensor(static_cast<decltype(fragment_scale_input_b)&&>(fragment_scale_input_b).data(), fragment_scale_input_b.layout());
+        copy(mainloop.tiled_copy_scale_b(_, 0, l_coord), copy_tCrSB);
+      }
+      if constexpr(DoZeroB){
+        Tensor copy_tCrZB = make_tensor(static_cast<decltype(fragment_zero_input_b)&&>(fragment_zero_input_b).data(), fragment_zero_input_b.layout());
+        copy(mainloop.tiled_copy_zero_b(_, 0, l_coord), copy_tCrZB);
+      }
+    }
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
@@ -730,12 +864,12 @@ public:
       // Compiler is expected to move construction of tensors in the following ifs outside of loop.
       // They are here to make code easier to read - without duplicating these ifs outside of loop in lambdas to optionally construct these tensors.
       if constexpr (IsATransformed) {
-        if constexpr(DoScaleA){
+        if constexpr(DoScaleA && quant_mode_a == QuantMode::GroupWise){
           auto thr_copy_scale_A = mainloop.tiled_copy_scale_a.get_slice(thread_idx);
           auto copy_tCrSA = thr_copy_scale_A.retile_D(fragment_scale_input_a);
           copy(mainloop.tiled_copy_scale_a, copy_iter_s_a(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrSA);
         }
-        if constexpr(DoZeroA){
+        if constexpr(DoZeroA && quant_mode_a == QuantMode::GroupWise){
           auto thr_copy_zero_A = mainloop.tiled_copy_zero_a.get_slice(thread_idx);
           auto copy_tCrZA = thr_copy_zero_A.retile_D(fragment_zero_input_a);
           copy(mainloop.tiled_copy_zero_a, copy_iter_z_a(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k_a), copy_tCrZA);
@@ -747,12 +881,12 @@ public:
         }
       }
       if constexpr (IsBTransformed) {
-        if constexpr(DoScaleB){
+        if constexpr(DoScaleB && quant_mode_b == QuantMode::GroupWise){
           auto thr_copy_scale_B = mainloop.tiled_copy_scale_b.get_slice(thread_idx);
           auto copy_tCrSB = thr_copy_scale_B.retile_D(fragment_scale_input_b);
           copy(mainloop.tiled_copy_scale_b, copy_iter_s_b(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrSB);
         }
-        if constexpr(DoZeroB){
+        if constexpr(DoZeroB && quant_mode_b == QuantMode::GroupWise){
           auto thr_copy_zero_B = mainloop.tiled_copy_zero_b.get_slice(thread_idx);
           auto copy_tCrZB = thr_copy_zero_B.retile_D(fragment_zero_input_b);
           copy(mainloop.tiled_copy_zero_b, copy_iter_z_b(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k_b), copy_tCrZB);

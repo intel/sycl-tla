@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,6 +37,7 @@
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
 #include "cute/tensor_predicate.hpp"
+#include "cutlass/fp8_to_fp16.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -47,13 +48,13 @@ using namespace cute;
 template <int Stages, class Schedule, class TileShape_, class ElementA_, class StrideA_, class ElementB_, class StrideB_,
           class TiledMma_, class GmemTiledCopyA_, class SmemLayoutAtomA_, class SmemCopyAtomA_, class TransformA_,
           class GmemTiledCopyB_, class SmemLayoutAtomB_, class SmemCopyAtomB_, class TransformB_>
-struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
+struct CollectiveMma<MainloopIntelXeXMX16GroupFP8<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
                      GmemTiledCopyA_, SmemLayoutAtomA_, SmemCopyAtomA_, TransformA_, GmemTiledCopyB_, SmemLayoutAtomB_,
                      SmemCopyAtomB_, TransformB_> {
   //
   // Type Aliases
   //
-  using DispatchPolicy = MainloopIntelXeXMX16Group<Stages, Schedule>;
+  using DispatchPolicy = MainloopIntelXeXMX16GroupFP8<Stages, Schedule>;
   using WorkgroupTileShape = TileShape_;
   using ElementA = ElementA_;
   using StrideA = StrideA_;
@@ -74,7 +75,7 @@ struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, El
   using ArchTag = typename DispatchPolicy::ArchTag;
 
   static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopIntelXeXMX16Array requires that A and B have same type.");
-
+  static_assert(std::is_same_v<ElementA, float_e5m2_t> || std::is_same_v<ElementA, float_e4m3_t>);
   static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
   static_assert(std::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
 
@@ -139,7 +140,8 @@ struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, El
   to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
     (void) workspace;
 
-    auto problem_shape_MNK = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, int32_t(1));;
+    const int32_t mock_L = 1;
+    auto problem_shape_MNK = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, mock_L);;
     auto init_M = get<0>(problem_shape_MNK);
     auto init_N = get<1>(problem_shape_MNK);
     auto init_K = get<2>(problem_shape_MNK);
@@ -218,9 +220,12 @@ struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, El
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
-    Tensor tCrA = make_tensor<ElementA>(make_fragment_layout(tiled_copy_a, tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<ElementB>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
+    Tensor tCrA = make_tensor<uint8_t>(make_fragment_layout(tiled_copy_a, tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<uint8_t>(make_fragment_layout(tiled_copy_b, tCgB(_,_,_,0).shape()));
   
+    Tensor tCrA_fp16 = make_fragment_like<half_t>(tCrA);
+    Tensor tCrB_fp16 = make_fragment_like<half_t>(tCrB);
+
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
     Tensor tBrB = thr_copy_B.retile_D(tCrB);
@@ -275,12 +280,15 @@ struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, El
       copy(tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
       copy(tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
 
+      convert_FP8_to_FP16<ElementA>(tCrA, tCrA_fp16);
+      convert_FP8_to_FP16<ElementB>(tCrB, tCrB_fp16);
+
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
       }
 
-      cute::gemm(tiled_mma, tCrA, tCrB, accum);
+      cute::gemm(tiled_mma, tCrA_fp16, tCrB_fp16, accum);
       barrier_wait(barrier_scope);
     }
   }
