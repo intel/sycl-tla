@@ -1,4 +1,4 @@
-# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+# Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,25 +26,14 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(TEST_BATCHES --l=2)
-set(TEST_MODE_0 --l=2 --mode=0)
+set(TEST_GROUPS --groups=2)
 
 cutlass_example_add_executable(
-  08_bmg_gemm_f8
-  08_bmg_gemm_f8.cpp
+  09_bmg_grouped_gemm_f8
+  09_bmg_grouped_gemm_f8.cpp
   TEST_COMMAND_OPTIONS
-  TEST_BATCHES
+  TEST_GROUPS
 )
-
-cutlass_example_add_executable(
-  08_bmg_gemm_f8_scaling
-  08_bmg_gemm_f8_scaling.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-  TEST_MODE_0
-)
-
-if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
-  # TODO(codeplay): Remove these once IGC block load loop hoisting bug is fixed
-  target_link_options( 08_bmg_gemm_f8_scaling PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
-endif()
+# TODO(codeplay): Remove these once IGC VectorAliasThreshold issue is fixed
+set_target_properties( 09_bmg_grouped_gemm_f8 PROPERTIES CXX_COMPILER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
+set_target_properties( 09_bmg_grouped_gemm_f8 PROPERTIES CXX_LINKER_LAUNCHER "IGC_VectorAliasBBThreshold=10000" )
