@@ -44,7 +44,16 @@ cutlass_example_add_executable(
   TEST_MODE_0
 )
 
+cutlass_example_add_executable(
+  08_bmg_gemm_f8_deepseek_scaling
+  08_bmg_gemm_f8_deepseek_scaling.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+  TEST_MODE_0
+)
+
 if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
   # TODO(codeplay): Remove these once IGC block load loop hoisting bug is fixed
   target_link_options( 08_bmg_gemm_f8_scaling PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
+  target_link_options( 08_bmg_gemm_f8_deepseek_scaling PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )  
 endif()
