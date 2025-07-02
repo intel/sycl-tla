@@ -518,8 +518,20 @@ struct ExampleRunner {
     //TODO cleanup
     ElementZero* tmp = block_zero.get();
     //stride_Z ="wer";
-    typename CollectiveMainloop::NonVoidStrideZeroA a = stride_Z;
-    typename CollectiveMainloop::NonVoidStrideZeroB b = stride_Z;
+    typename CollectiveMainloop::NonVoidStrideZeroA a = [=](){
+      if constexpr(AIsNarrower){
+        return stride_Z;
+      } else{
+        return typename CollectiveMainloop::NonVoidStrideZeroA{};
+      }
+    }();
+    typename CollectiveMainloop::NonVoidStrideZeroB b = [=](){
+      if constexpr(AIsNarrower){
+        return typename CollectiveMainloop::NonVoidStrideZeroB{};
+      } else{
+        return stride_Z;
+      }
+    }();
     typename Gemm::GemmKernel::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         problem_size,

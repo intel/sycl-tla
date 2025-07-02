@@ -435,7 +435,7 @@ struct ExampleRunner {
     typename Gemm::GemmKernel::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         problem_size,
-        {block_A.get(), stride_A, block_B.get(), stride_B, 
+        {block_A.get(), stride_A, block_B.get(), stride_B,
          AIsNarrower ? block_scale.get() : nullptr, stride_S, 
          AIsNarrower ? nullptr : block_scale.get(), stride_S, 
          AIsNarrower ? block_zero.get() : nullptr, stride_Z, 

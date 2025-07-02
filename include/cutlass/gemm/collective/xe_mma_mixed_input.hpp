@@ -238,7 +238,7 @@ public:
   using Copy_B = decltype(make_tiled_copy(atom_load_B{}, Layout<CopyThreadShape>{}, val_layout_load_B{}));
 
   using traits_load_scale_a = Copy_Traits<GmemTiledCopyScaleA, NonVoidStrideScaleA>;
-  using traits_load_zero_a = Copy_Traits<GmemTiledCopyZeroA, NonVoidStrideZeroA>;
+  using traits_load_zero_a = Copy_Traits<GmemTiledCopyZeroA, NonVoidStrideScaleA>;
   using val_layout_load_scale_a = decltype(make_layout(shape_div(typename traits_load_scale_a::BlockShape{}, CopyThreadShapeRev{}))); 
   using val_layout_load_zero_a = decltype(make_layout(shape_div(typename traits_load_zero_a::BlockShape{}, CopyThreadShapeRev{}))); 
   using atom_load_scaleA = Copy_Atom<traits_load_scale_a, NonVoidElementScaleA>;
@@ -249,7 +249,7 @@ public:
   using TensorZeroA = decltype(make_tensor(make_gmem_ptr(static_cast<NonVoidElementZeroA const*>(nullptr)), make_shape(_1{}, 0, 0), NonVoidStrideZeroA{}));
 
   using traits_load_scale_b = Copy_Traits<GmemTiledCopyScaleB, NonVoidStrideScaleB>;
-  using traits_load_zero_b = Copy_Traits<GmemTiledCopyZeroB, NonVoidStrideZeroB>;
+  using traits_load_zero_b = Copy_Traits<GmemTiledCopyZeroB, NonVoidStrideScaleB>;
   using val_layout_load_scale_b = decltype(make_layout(shape_div(typename traits_load_scale_b::BlockShape{}, CopyThreadShapeRev{}))); 
   using val_layout_load_zero_b = decltype(make_layout(shape_div(typename traits_load_zero_b::BlockShape{}, CopyThreadShapeRev{}))); 
   using atom_load_scaleB = Copy_Atom<traits_load_scale_b, NonVoidElementScaleB>;
@@ -786,7 +786,7 @@ public:
     Tensor copy_iter_z_a = make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
                                        make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count),
                                                    make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
-    Tensor copy_iter_z_b = make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
+    Tensor copy_iter_z_b = make_tensor(make_inttuple_iter(make_coord(n_coord * zero_elements_packed_along_k_b, 0, l_coord)),
                                        make_layout(make_shape(Int<zero_traits_size_b>{}, Int<zero_traits_num_b>{}, _1{}, k_tile_count),
                                                    make_stride(E<0>{} * _16{}, E<0>{} * size<1>(typename GmemTiledCopyZeroB::BlockShape{}), _0{}, E<1>{} * _1{})));
 
@@ -891,7 +891,7 @@ public:
           auto copy_tCrZB = thr_copy_zero_B.retile_D(fragment_zero_input_b);
           copy(mainloop.tiled_copy_zero_b, copy_iter_z_b(_, _, _, k_tile / k_reload_factor / zero_elements_packed_along_k_b), copy_tCrZB);
         }
-        if constexpr(sizeof_bits_v<NonVoidElementZeroA> < 8){
+        if constexpr(sizeof_bits_v<NonVoidElementZeroB> < 8){
           transform_quant<false, DoScaleB, DoZeroB>(quant_frag_b, mma_B, fragment_scale_input_b, fragment_zero_input_b((k_tile / k_reload_factor) % zero_traits_size_b, _, 0));
         } else{
           transform_quant<false, DoScaleB, DoZeroB>(quant_frag_b, mma_B, fragment_scale_input_b, fragment_zero_input_b);

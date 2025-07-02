@@ -138,12 +138,14 @@ template <
 struct ExampleRunner {
   using CollectiveMainloop = typename Gemm::CollectiveMainloop;
 
+  static constexpr bool AIsNarrower = CollectiveMainloop::IsATransformed;
+
   using StrideA = typename Gemm::GemmKernel::StrideA;
   using StrideB = typename Gemm::GemmKernel::StrideB;
   using StrideC = typename Gemm::GemmKernel::StrideC;
   using StrideD = typename Gemm::GemmKernel::StrideD;
-  using StrideScale = typename CollectiveMainloop::NonVoidStrideScale;
-  using StrideZero = typename CollectiveMainloop::NonVoidStrideZero;
+  using StrideScale = std::conditional_t<AIsNarrower, typename CollectiveMainloop::NonVoidStrideScaleA, typename CollectiveMainloop::NonVoidStrideScaleB>;
+  using StrideZero = std::conditional_t<AIsNarrower, typename CollectiveMainloop::NonVoidStrideZeroA, typename CollectiveMainloop::NonVoidStrideZeroB>;
 
   using LayoutA = typename Gemm::LayoutA;
   using LayoutB = typename Gemm::LayoutB;
@@ -152,8 +154,8 @@ struct ExampleRunner {
 
   using ElementA = typename Gemm::ElementA;
   using ElementB = typename Gemm::ElementB;
-  using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
-  using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
+  using ElementScale = std::conditional_t<AIsNarrower, typename CollectiveMainloop::NonVoidElementScaleA, typename CollectiveMainloop::NonVoidElementScaleB>;
+  using ElementZero = std::conditional_t<AIsNarrower, typename CollectiveMainloop::NonVoidElementZeroA, typename CollectiveMainloop::NonVoidElementZeroB>;
   using ElementAcc = typename Gemm::ElementAccumulator;
 
   using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
@@ -287,11 +289,43 @@ struct ExampleRunner {
 
     initialize(problem_size);
 
+    typename CollectiveMainloop::NonVoidStrideScaleA stride_sa = [=](){
+      if constexpr(AIsNarrower){
+        return stride_s;
+      } else{
+        return typename CollectiveMainloop::NonVoidStrideScaleA{};
+      }
+    }();
+    typename CollectiveMainloop::NonVoidStrideScaleB stride_sb = [=](){
+      if constexpr(AIsNarrower){
+        return typename CollectiveMainloop::NonVoidStrideScaleB{};
+      } else{
+        return stride_s;
+      }
+    }();
+    typename CollectiveMainloop::NonVoidStrideZeroA stride_za = [=](){
+      if constexpr(AIsNarrower){
+        return stride_z;
+      } else{
+        return typename CollectiveMainloop::NonVoidStrideZeroA{};
+      }
+    }();
+    typename CollectiveMainloop::NonVoidStrideZeroB stride_zb = [=](){
+      if constexpr(AIsNarrower){
+        return typename CollectiveMainloop::NonVoidStrideZeroB{};
+      } else{
+        return stride_z;
+      }
+    }();
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
       {block_A.get(), stride_A, block_B.get(), stride_B,
-       block_Scale.get(), stride_s, block_Zero.get(), stride_z, 0},
+         AIsNarrower ? block_Scale.get() : nullptr, stride_sa, 
+         AIsNarrower ? nullptr : block_Scale.get(), stride_sb, 
+         AIsNarrower ? block_Zero.get() : nullptr, stride_za, 
+         AIsNarrower ? nullptr : block_Zero.get(), stride_zb, 
+         0},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
       hw_info
     };
