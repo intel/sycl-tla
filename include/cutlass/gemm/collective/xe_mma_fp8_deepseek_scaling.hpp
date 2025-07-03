@@ -38,6 +38,7 @@
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
 #include "cute/tensor_predicate.hpp"
+#include "cutlass/tensor_ref.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -365,7 +366,7 @@ public:
     }
   }
 
-  /// Utilities to transform A.
+  /// Utilities to transform B.
   template <class EngineIn,
             class EngineOut, 
             class LayoutIn,

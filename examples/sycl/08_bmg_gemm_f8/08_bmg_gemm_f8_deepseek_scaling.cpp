@@ -209,8 +209,8 @@ struct ExampleRunner {
   }
 
   bool verify(const Options &options) {
-    using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-    using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
+    using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
+    using GmemTiledCopyB = XE_2D_U8x16x16_LD_T;
 
     // Workgroup-level tile
     using TileShape = Shape<_128, _256, _32>;
@@ -242,6 +242,8 @@ struct ExampleRunner {
             XE_2D_U32x8x16_ST_N,
             void, void>;
 
+    //using realStrideOfB = decltype(cute::reverse(cutlass::gemm::TagToStrideB_t<LayoutB>{}));
+
     // Mainloop
     using CollectiveMainloopRef = cutlass::gemm::collective::CollectiveMma<
             GEMMDispatchPolicy,
@@ -254,7 +256,7 @@ struct ExampleRunner {
             GmemTiledCopyA, void, void, cute::identity,  // A
             GmemTiledCopyB, void, void, cute::identity   // B
     >;
-
+    /*
     using GemmKernelRef = cutlass::gemm::kernel::GemmUniversal<
     Shape<int, int, int, int>,
     CollectiveMainloopRef,
@@ -269,7 +271,7 @@ struct ExampleRunner {
       {block_A_dq.get(), stride_A, block_B_dq.get(), stride_B},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_ref_D.get(), stride_D}
     };
-    /*
+
     // Run the gemm where the scaling is performed outside of the kernel.
     GemmRef gemm_ref;
     size_t workspace_size = GemmRef::get_workspace_size(arguments);
@@ -330,7 +332,7 @@ struct ExampleRunner {
     auto shape_A = cute::make_shape(M, K, L);
     auto shape_B = cute::make_shape(N, K, L);
     auto shape_CD = cute::make_shape(M, N, L);
-    auto shape_scale_zeroA = cute::make_shape(options.m, scale_k, L);
+    auto shape_scale_zeroA = cute::make_shape(M, scale_k, L);
     auto shape_scale_zeroB = cute::make_shape(scale_n, scale_k, L);
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, shape_A);
@@ -339,7 +341,6 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_SA = cutlass::make_cute_packed_stride(StrideScaleA{}, shape_scale_zeroA);
     stride_SB = cutlass::make_cute_packed_stride(StrideScaleB{}, shape_scale_zeroB);
-
 
     block_A.reset(static_cast<std::size_t>(M) * K * L);
     block_A_dq.reset(static_cast<std::size_t>(M) * K * L);
@@ -461,8 +462,6 @@ int launcher(Options& options)
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
   bool passed;
-
-  using MmaType = half_t;
   using QuantType = ElementType;
 
   using ElementAccumulator = float;
@@ -472,7 +471,7 @@ int launcher(Options& options)
   using ElementOutput = float;
 
   using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
@@ -481,7 +480,7 @@ int launcher(Options& options)
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
 
   using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyB = XE_2D_U8x16x16_LD_T;
 
   using TileShape = Shape<_128, _256, _32>;
 
