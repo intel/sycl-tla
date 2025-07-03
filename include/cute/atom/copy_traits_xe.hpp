@@ -293,7 +293,6 @@ template <class CopyOp, class StrideOrTensor = cute::Stride<int64_t, cute::Int<1
 struct XE_2D_LD_Unpack {
   using BlockShape = typename CopyOp::BlockShape; // this is not the same as Traits_LD_t::BlockShape iff is_matrix_B
   using Traits_LD_t = Copy_Traits<CopyOp, StrideOrTensor>;
- 
   static constexpr auto stride_rank = rank(StrideOrTensor{});
   static_assert(stride_rank == 2 || stride_rank == 3);
 
