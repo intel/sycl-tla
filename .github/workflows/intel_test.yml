@@ -95,7 +95,8 @@ jobs:
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
-            -DCUTLASS_SYCL_RUNNING_CI=ON
+            -DCUTLASS_ENABLE_BENCHMARKS=OFF \ 
+            -DCUTLASS_SYCL_RUNNING_CI=ON 
           cmake --build .
       - name: Unit test
         shell: bash
@@ -108,4 +109,9 @@ jobs:
       - name: Benchmarks
         shell: bash
         run: |
-          cmake --build . --target cutlass_benchmarks
+          cmake -G Ninja  \
+            -DCUTLASS_ENABLE_SYCL=ON \
+            -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
+            -DCUTLASS_ENABLE_BENCHMARKS=ON \ 
+            -DCUTLASS_SYCL_RUNNING_CI=ON           
+          cmake --build . --target cutlass_benchmarks -j 1
