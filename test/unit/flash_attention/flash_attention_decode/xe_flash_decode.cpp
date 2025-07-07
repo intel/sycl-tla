@@ -38,67 +38,55 @@
 namespace cutlass {
 
 using MMAOperation = test::flash_attention::MMAOP;
-using GmemTiledCopyQ = test::flash_attention::GmemTiledCopyQU16;
-using GmemTiledCopyK = test::flash_attention::GmemTiledCopyKU16;
-using GmemTiledCopyV = test::flash_attention::GmemTiledCopyVU16;
-using GmemTiledCopyStore = test::flash_attention::TILEDCOPYSTORE;
 
 using Shape_h = test::flash_attention::SHAPE_H<KV_TILE, NUM_SG>;
 
 TEST(TEST_NAME, nonpaged_causal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, false,
-                                            GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, false>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, false, false>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEAD_DIM));
 }
 
 TEST(TEST_NAME, nonpaged_noncausal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, false,
-                                            GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, false>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, false, false>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEAD_DIM));
 }
 
 TEST(TEST_NAME, nonpaged_varlen_causal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, true,
-                                            GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, false>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, true, false>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEAD_DIM));
 }
 
 TEST(TEST_NAME, nonpaged_varlen_noncausal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, true,
-                                            GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, false>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, true, false>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEAD_DIM));
 }
 
 TEST(TEST_NAME, paged_causal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, false,
-                                            GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, true>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, false, true>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEAD_DIM));
 }
 
 TEST(TEST_NAME, paged_noncausal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, false,
-                                            GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, true>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, false, true>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEAD_DIM));
 }
 
 TEST(TEST_NAME, paged_varlen_causal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, true,
-                                            GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, true>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, true, true>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEAD_DIM));
 }
 
 TEST(TEST_NAME, paged_varlen_noncausal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, true,
-                                            GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, true>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, true, true>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(HEAD_DIM));
 }
 
 } // namespace cutlass
