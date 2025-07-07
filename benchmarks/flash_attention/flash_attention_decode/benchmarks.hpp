@@ -1,5 +1,5 @@
 /***************************************************************************************************
-* Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+* Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,40 +31,22 @@
 
 #pragma once
 
-#include <benchmarks_h64_fp32_fp32_512_nonpaged.cpp>
-#include <benchmarks_h64_fp32_fp32_1024_nonpaged.cpp>
-#include <benchmarks_h96_fp32_fp32_512_nonpaged.cpp>
-#include <benchmarks_h96_fp32_fp32_1024_nonpaged.cpp>
-#include <benchmarks_h128_fp32_fp32_512_nonpaged.cpp>
-#include <benchmarks_h128_fp32_fp32_1024_nonpaged.cpp>
-#include <benchmarks_h192_fp32_fp32_512_nonpaged.cpp>
-#include <benchmarks_h192_fp32_fp32_1024_nonpaged.cpp>
-
-#include <benchmarks_h64_fp32_u16_512_nonpaged.cpp>
-#include <benchmarks_h64_fp32_u16_1024_nonpaged.cpp>
-#include <benchmarks_h96_fp32_u16_512_nonpaged.cpp>
-#include <benchmarks_h96_fp32_u16_1024_nonpaged.cpp>
-#include <benchmarks_h128_fp32_u16_512_nonpaged.cpp>
-#include <benchmarks_h128_fp32_u16_1024_nonpaged.cpp>
-#include <benchmarks_h192_fp32_u16_512_nonpaged.cpp>
-#include <benchmarks_h192_fp32_u16_1024_nonpaged.cpp>
+#include <benchmarks_h64_512_nonpaged.cpp>
+#include <benchmarks_h64_1024_nonpaged.cpp>
+#include <benchmarks_h96_512_nonpaged.cpp>
+#include <benchmarks_h96_1024_nonpaged.cpp>
+#include <benchmarks_h128_512_nonpaged.cpp>
+#include <benchmarks_h128_1024_nonpaged.cpp>
+#include <benchmarks_h192_512_nonpaged.cpp>
+#include <benchmarks_h192_1024_nonpaged.cpp>
 
 static void register_flash_attention_decode_benchmarks() {
-  register_flash_attention_decode_benchmarks_nonpaged_h64_fp32_fp32_512();
-  register_flash_attention_decode_benchmarks_nonpaged_h96_fp32_fp32_512();
-  register_flash_attention_decode_benchmarks_nonpaged_h128_fp32_fp32_512();
-  register_flash_attention_decode_benchmarks_nonpaged_h192_fp32_fp32_512();
-  register_flash_attention_decode_benchmarks_nonpaged_h64_fp32_fp32_1024();
-  register_flash_attention_decode_benchmarks_nonpaged_h96_fp32_fp32_1024();
-  register_flash_attention_decode_benchmarks_nonpaged_h128_fp32_fp32_1024();
-  register_flash_attention_decode_benchmarks_nonpaged_h192_fp32_fp32_1024();
-
-  register_flash_attention_decode_benchmarks_nonpaged_h64_fp32_u16_512();
-  register_flash_attention_decode_benchmarks_nonpaged_h96_fp32_u16_512();
-  register_flash_attention_decode_benchmarks_nonpaged_h128_fp32_u16_512();
-  register_flash_attention_decode_benchmarks_nonpaged_h192_fp32_u16_512();
-  register_flash_attention_decode_benchmarks_nonpaged_h64_fp32_u16_1024();
-  register_flash_attention_decode_benchmarks_nonpaged_h96_fp32_u16_1024();
-  register_flash_attention_decode_benchmarks_nonpaged_h128_fp32_u16_1024();
-  register_flash_attention_decode_benchmarks_nonpaged_h192_fp32_u16_1024();
+  register_flash_attention_decode_benchmarks_nonpaged_h64_512();
+  register_flash_attention_decode_benchmarks_nonpaged_h96_512();
+  register_flash_attention_decode_benchmarks_nonpaged_h128_512();
+  register_flash_attention_decode_benchmarks_nonpaged_h192_512();
+  register_flash_attention_decode_benchmarks_nonpaged_h64_1024();
+  register_flash_attention_decode_benchmarks_nonpaged_h96_1024();
+  register_flash_attention_decode_benchmarks_nonpaged_h128_1024();
+  register_flash_attention_decode_benchmarks_nonpaged_h192_1024();
 }
