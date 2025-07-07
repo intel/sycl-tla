@@ -1168,12 +1168,14 @@ struct HostCollectiveEpilogue {
   static constexpr SfStrategy SfGenStrategy              = (!IsBlockScaleSupported) ? SfStrategy::None : SfStrategy::SfDGen;
   static constexpr int32_t SFD_VectorSize = IsBlockScaleSupported ? FusionOp::SFVecSize : 1;
   using ElementSFD = non_void_t<cute::remove_pointer_t<typename FusionOp::ElementBlockScaleFactor>, ElementD>;
+#if !defined(SYCL_INTEL_TARGET)
   using Sm1xxBlockScaledOutputConfig= cutlass::detail::Sm1xxBlockScaledOutputConfig<
                                           SFD_VectorSize
                                         >;
   using Blk_MN = typename Sm1xxBlockScaledOutputConfig::Blk_MN;
   using Blk_SF = typename Sm1xxBlockScaledOutputConfig::Blk_SF; 
   using OutputSFAtom = typename Sm1xxBlockScaledOutputConfig::SfAtom;
+#endif
   std::vector<cutlass::HostTensor<ElementSFD, LayoutTagD>> tensors_SFD;
   std::vector<cutlass::HostTensor<ElementSFD, LayoutTagD>> references_SFD;
   cutlass::DeviceAllocation<ElementSFD *> device_tensors_SFD;
@@ -1414,7 +1416,7 @@ struct HostCollectiveEpilogue {
       }
     }
 
-    
+#if !defined(SYCL_INTEL_TARGET)
     if constexpr (IsBlockScaleSupported) {
       for (int32_t i = 0; i < L; ++i) {
         auto [M, N, K, _] = cute::append<4>(problem_shapes.get_host_problem_shape(i), 1);
@@ -1432,7 +1434,7 @@ struct HostCollectiveEpilogue {
       EXPECT_TRUE(initialize_tensor(norm_constant.host_view(), init_scale, seed + 2023));
       norm_constant.sync_device();
     }
-    
+#endif
 
     return true;
   }
@@ -1773,6 +1775,7 @@ struct HostCollectiveEpilogue {
         cute::make_layout(cute::make_shape(M, N, cute::_1{}), cute::make_stride(cute::_1{}, cute::_0{}, N)));
     
     auto SfD = [&](){
+#if !defined(SYCL_INTEL_TARGET)
       if constexpr (IsBlockScaleSupported) {
         auto tensor = make_tensor(detail::make_iterator(references_SFD[batch].host_data()),
           Sm1xxBlockScaledOutputConfig::tile_atom_to_shape_SFD(problem_shape_MNKL));
@@ -1782,6 +1785,9 @@ struct HostCollectiveEpilogue {
         // Reference kernel has a logic to ignore scalefactor computation if we pass the tensor type same as output D tensor.
         return D;
       }
+#else
+        return D;
+#endif
     }();
     
 

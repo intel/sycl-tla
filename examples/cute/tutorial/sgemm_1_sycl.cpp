@@ -202,8 +202,6 @@ gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler,
     //     tAsA(i) = tAgAk(i);
     //   }
 
-    cp_async_fence();        // Label the end of (potential) cp.async instructions
-    cp_async_wait<0>();      // Sync on all (potential) cp.async instructions
     syclcompat::wg_barrier();// Wait for all threads to write to smem
 
     // Compute gemm on tC thread-partitioned smem

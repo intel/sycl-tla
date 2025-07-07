@@ -60,16 +60,18 @@ struct StaticPersistentScheduler { };
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "cutlass/gemm/kernel/sm90_tile_scheduler.hpp"
-#include "cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp" 
+
+#if defined(SYCL_INTEL_TARGET)
+#include "cutlass/gemm/kernel/xe_tile_scheduler_streamk.hpp"
+#include "cutlass/gemm/kernel/xe_tile_scheduler_group.hpp"
+#else
+#include "cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp"
 
 #include "cutlass/gemm/kernel/sm90_tile_scheduler_stream_k.hpp"
 #include "cutlass/gemm/kernel/sm90_tile_scheduler_group.hpp"
 #include "cutlass/gemm/kernel/sm100_tile_scheduler.hpp"            
 #include "cutlass/gemm/kernel/sm100_tile_scheduler_stream_k.hpp"   
 #include "cutlass/gemm/kernel/sm100_tile_scheduler_group.hpp"
-#if defined (SYCL_INTEL_TARGET)
-#include "cutlass/gemm/kernel/xe_tile_scheduler_streamk.hpp"
-#include "cutlass/gemm/kernel/xe_tile_scheduler_group.hpp"
 #endif
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -96,14 +98,14 @@ template <
   class ArchTag,
   class TileShape,
   class ClusterShape
-  , uint32_t SchedulerPipelineStageCount     
+  , uint32_t SchedulerPipelineStageCount
 >
 struct TileSchedulerSelector<
     PersistentScheduler,
     ArchTag,
     TileShape,
     ClusterShape
-    , SchedulerPipelineStageCount              
+    , SchedulerPipelineStageCount
   > {
   using Scheduler = PersistentTileSchedulerSm90;
 };
@@ -130,6 +132,52 @@ struct TileSchedulerSelector<
       , SchedulerPipelineStageCount            
   >::Scheduler;
 };
+
+#if defined(SYCL_INTEL_TARGET)
+template <
+  class TileShape,
+  class ClusterShape,
+  uint32_t ThreadsPerBlock
+>
+struct TileSchedulerSelector<
+  StreamKScheduler,
+  arch::IntelXe,
+  TileShape,
+  ClusterShape,
+  ThreadsPerBlock
+  > {
+  using Scheduler = PersistentTileSchedulerXeStreamK<TileShape, ThreadsPerBlock>;
+};
+
+template <
+  class TileShape,
+  class ClusterShape,
+  uint32_t SchedulerPipelineStageCount,
+  class GroupProblemShape
+>
+struct TileSchedulerSelector<
+    GroupScheduler,
+    arch::IntelXe,
+    TileShape,
+    ClusterShape,
+    SchedulerPipelineStageCount,
+    GroupProblemShape
+  > {
+  using Scheduler = PersistentTileSchedulerXeGroup<GroupProblemShape>;
+};
+template <
+  class TileShape,
+  class ClusterShape
+>
+struct TileSchedulerSelector<
+  PersistentScheduler,
+  arch::IntelXe,
+  TileShape,
+  ClusterShape
+  > {
+  using Scheduler = PersistentTileSchedulerSm90;
+};
+#else
 
 template <
   class TileShape,
@@ -178,52 +226,6 @@ struct TileSchedulerSelector<
   > {
   using Scheduler = PersistentTileSchedulerSm90Group<GroupProblemShape, SchedulerPipelineStageCount>;
 };
-
-#if defined (SYCL_INTEL_TARGET)
-template <
-  class TileShape,
-  class ClusterShape,
-  uint32_t ThreadsPerBlock
->
-struct TileSchedulerSelector<
-  StreamKScheduler,
-  arch::IntelXe,
-  TileShape,
-  ClusterShape,
-  ThreadsPerBlock
-  > {
-  using Scheduler = PersistentTileSchedulerXeStreamK<TileShape, ThreadsPerBlock>;
-};
-
-template <
-  class TileShape,
-  class ClusterShape,
-  uint32_t SchedulerPipelineStageCount,
-  class GroupProblemShape
->
-struct TileSchedulerSelector<
-    GroupScheduler,
-    arch::IntelXe,
-    TileShape,
-    ClusterShape,
-    SchedulerPipelineStageCount,
-    GroupProblemShape
-  > {
-  using Scheduler = PersistentTileSchedulerXeGroup<GroupProblemShape>;
-};
-template <
-  class TileShape,
-  class ClusterShape
->
-struct TileSchedulerSelector<
-  PersistentScheduler,
-  arch::IntelXe,
-  TileShape,
-  ClusterShape
-  > {
-  using Scheduler = PersistentTileSchedulerSm90;
-};
-#endif
 
 template <class TileShape, class ClusterShape, uint32_t SchedulerPipelineStageCount>
 struct TileSchedulerSelector<
@@ -405,6 +407,7 @@ struct TileSchedulerSelector<
   > {
   using Scheduler = PersistentTileSchedulerSm90Group<GroupProblemShape, SchedulerPipelineStageCount>;
 };
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

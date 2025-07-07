@@ -36,10 +36,6 @@
 #include <cute/tensor_impl.hpp>
 #include <cute/util/type_traits.hpp>
 
-#if defined(CUTLASS_ENABLE_SYCL)
-#include <cute/atom/mma_traits_xe.hpp>
-#endif
-
 namespace cute {
 
 template <class... Args>
@@ -1184,6 +1180,9 @@ print_svg(TiledMMA<Args...> const &mma) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(SYCL_INTEL_TARGET)
+#include <cute/atom/mma_traits_xe.hpp>
+#else
 #include <cute/atom/mma_traits_sm61.hpp>
 #include <cute/atom/mma_traits_sm70.hpp>
 #include <cute/atom/mma_traits_sm75.hpp>
@@ -1194,8 +1193,5 @@ print_svg(TiledMMA<Args...> const &mma) {
 #include <cute/atom/mma_traits_sm100.hpp>
 #include <cute/atom/mma_traits_sm120.hpp>
 #include <cute/atom/mma_traits_sm120_sparse.hpp>
-
-#if defined(CUTLASS_ENABLE_SYCL)
-#include <cute/atom/mma_traits_xe.hpp>
 #endif
 ////////////////////////////////////////////////////////////////////////////////////////////////////

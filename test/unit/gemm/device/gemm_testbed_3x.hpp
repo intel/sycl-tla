@@ -1902,11 +1902,13 @@ struct HostCollectiveEpilogue {
   static constexpr int32_t SFD_VectorSize = IsBlockScaleSupported ? FusionOp::SFVecSize : 1;
   static constexpr bool IsKMajorSFD = cute::is_same_v<typename FusionOp::GmemLayoutTagScalefactor, cutlass::layout::RowMajor>;
   using ElementSFD = non_void_t<typename FusionOp::ElementBlockScaleFactor, ElementD>;
+#if !defined(SYCL_INTEL_TARGET)
   using Sm1xxBlockScaledOutputConfig= cutlass::detail::Sm1xxBlockScaledOutputConfig<SFD_VectorSize,
                                         IsKMajorSFD ? cute::UMMA::Major::K : cute::UMMA::Major::MN>;
   using Blk_MN = typename Sm1xxBlockScaledOutputConfig::Blk_MN;
   using Blk_SF = typename Sm1xxBlockScaledOutputConfig::Blk_SF; 
   using OutputSFAtom = typename Sm1xxBlockScaledOutputConfig::SfAtom;
+#endif
   cutlass::HostTensor<ElementSFD, LayoutTagD> tensor_SFD;
   cutlass::HostTensor<ElementSFD, LayoutTagD> reference_SFD;
   
@@ -2197,7 +2199,7 @@ struct HostCollectiveEpilogue {
       }
     }
 
-    
+#if !defined(SYCL_INTEL_TARGET)
     if constexpr (IsBlockScaleSupported) {
       auto m_blks = cutlass::ceil_div(M, cute::size<0>(cute::shape(OutputSFAtom{})));
       auto n_blks = cutlass::ceil_div(N, cute::size<1>(cute::shape(OutputSFAtom{})));
@@ -2216,7 +2218,7 @@ struct HostCollectiveEpilogue {
       EXPECT_TRUE(initialize_tensor(norm_constant.host_view(), init_scale, seed + 2023));
       norm_constant.sync_device();
     }
-    
+#endif
 
     return true;
   }
@@ -2577,6 +2579,7 @@ struct HostCollectiveEpilogue {
     }();
     
     auto SfD = [&](){
+#if !defined(SYCL_INTEL_TARGET)
       if constexpr (IsBlockScaleSupported) {
         auto tensor = make_tensor(detail::make_iterator(reference_SFD.host_data()),
           Sm1xxBlockScaledOutputConfig::tile_atom_to_shape_SFD(problem_shape_MNKL));
@@ -2586,6 +2589,9 @@ struct HostCollectiveEpilogue {
         // Reference kernel has a logic to ignore scalefactor computation if we pass the tensor type same as output D tensor.
         return D;
       }
+#else
+        return D;
+#endif
     }();
     cutlass::reference::host::GettEpilogueParams<
       ElementScalar,

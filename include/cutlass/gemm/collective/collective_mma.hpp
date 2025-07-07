@@ -34,7 +34,14 @@
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-
+#if defined(SYCL_INTEL_TARGET)
+#include "cutlass/gemm/collective/xe_mma.hpp"
+#include "cutlass/gemm/collective/xe_array_mma.hpp"
+#include "cutlass/gemm/collective/xe_array_mma_fp8.hpp"
+#include "cutlass/gemm/collective/xe_mma_mixed_input.hpp"
+#include "cutlass/gemm/collective/xe_mma_w8a8.hpp"
+#include "cutlass/gemm/collective/xe_mma_fp8_scaling.hpp"
+#else
 #include "cutlass/gemm/collective/sm70_mma_twostage.hpp"
 #include "cutlass/gemm/collective/sm80_mma_multistage.hpp"
 #include "cutlass/gemm/collective/sm90_mma_multistage_gmma_ss_warpspecialized.hpp"
@@ -68,14 +75,6 @@
 #include "cutlass/gemm/collective/sm120_sparse_mma_tma.hpp"
 #include "cutlass/gemm/collective/sm120_blockscaled_sparse_mma_tma.hpp"
 #endif // !defined(__CUDACC_RTC__)
-
-#if defined(SYCL_INTEL_TARGET)
-#include "cutlass/gemm/collective/xe_mma.hpp"
-#include "cutlass/gemm/collective/xe_array_mma.hpp"
-#include "cutlass/gemm/collective/xe_array_mma_fp8.hpp"
-#include "cutlass/gemm/collective/xe_mma_mixed_input.hpp"
-#include "cutlass/gemm/collective/xe_mma_w8a8.hpp"
-#include "cutlass/gemm/collective/xe_mma_fp8_scaling.hpp"
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)

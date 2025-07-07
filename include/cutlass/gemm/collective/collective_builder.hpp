@@ -37,6 +37,9 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "cutlass/gemm/collective/collective_builder_decl.hpp"
+#if defined(SYCL_INTEL_TARGET)
+#include "cutlass/gemm/collective/builders/xe_mma_builder.inl"
+#else
 #include "cutlass/gemm/collective/builders/sm90_gmma_builder.inl"
 #include "cutlass/gemm/collective/builders/sm90_sparse_gmma_builder.inl"
 #if !defined(__CUDACC_RTC__) 
@@ -51,9 +54,6 @@
 #include "cutlass/gemm/collective/builders/sm120_sparse_mma_builder.inl"
 #include "cutlass/gemm/collective/builders/sm120_blockscaled_sparse_mma_builder.inl"
 #endif
-
-#if defined(SYCL_INTEL_TARGET)
-#include "cutlass/gemm/collective/builders/xe_mma_builder.inl"
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)

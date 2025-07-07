@@ -118,12 +118,12 @@ struct CallbacksBuilder<
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(SYCL_INTEL_TARGET)
+#include "builders/xe_builder.inl"
+#else
 #include "builders/sm90_builder.inl"
 #include "builders/sm100_builder.inl"
 #include "builders/sm120_builder.inl"
-
-#if defined(SYCL_INTEL_TARGET)
-#include "builders/xe_builder.inl"
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)

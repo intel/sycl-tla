@@ -729,11 +729,15 @@ print_latex_copy(LayoutS const& S, ThrIDS const& TS,  // (m,n) -> (tid,vid)  and
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(SYCL_INTEL_TARGET)
+#include <cute/atom/copy_traits_xe.hpp>
+#else
 #include <cute/atom/copy_traits_sm50.hpp>
 #include <cute/atom/copy_traits_sm75.hpp>
 #include <cute/atom/copy_traits_sm80.hpp>
 #include <cute/atom/copy_traits_sm90.hpp>
 #include <cute/atom/copy_traits_sm100.hpp>
+#endif
 
 
 // Config
@@ -759,11 +763,6 @@ print_latex_copy(LayoutS const& S, ThrIDS const& TS,  // (m,n) -> (tid,vid)  and
 
 #if defined(CUTE_COPY_ATOM_TMA_SM100_ENABLED)
 #include <cute/atom/copy_traits_sm100_tma.hpp>
-#endif
-
-
-#if defined(SYCL_INTEL_TARGET)
-#include <cute/atom/copy_traits_xe.hpp>
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
