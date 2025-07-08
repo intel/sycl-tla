@@ -74,6 +74,7 @@ struct FMHADecodeOptions {
   void parse(int argc, char const **args) {
     cutlass::CommandLine cmd(argc, args);
 
+    head_size_vo = HEAD_DIM;
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
@@ -81,7 +82,6 @@ struct FMHADecodeOptions {
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
     cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
     cmd.get_cmd_line_argument("page_size", page_size, 128);
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
     cmd.get_cmd_line_argument("bm_name", bm_name, std::string("Flash Attention v2"));
@@ -91,11 +91,6 @@ struct FMHADecodeOptions {
     if (seq_len_kv_cache % page_size != 0) {
       std::cerr << "Invalid: seq_len_kv_cache must be divisible by page_size" << std::endl;
       return;
-    }
-
-    if (head_size_vo != HEAD_DIM) {
-      std::cerr << "head_size_vo must be " << HEAD_DIM << ", but got " << head_size_vo << std::endl;
-      return -1;
     }
   }
 

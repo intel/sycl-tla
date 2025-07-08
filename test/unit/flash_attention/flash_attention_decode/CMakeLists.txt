@@ -26,131 +26,52 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-foreach(INPUT_TYPE bfloat16_t half_t)
-  set(input_name "cutlass_test_unit_flash_attention_decode_bf16")
-  set(test_name_input "XE_Flash_Attention_Decode_bf16")
-  set(is_bf16 true)
-  set(MMAOP MMAOperationBF16)
-  set(OUT_TYPE_LIST float)
-  if(${INPUT_TYPE} STREQUAL "half_t")
-    set(input_name "cutlass_test_unit_flash_attention_decode_fp16")
-    set(is_bf16 false)
-    list(APPEND OUT_TYPE_LIST half_t)
-    set(test_name_input "XE_Flash_Attention_Decode_fp16")
-    set(MMAOP MMAOperationFP16)
-  else()
-    list(APPEND OUT_TYPE_LIST bfloat16_t)
-  endif()
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_flash_attention_decode_h64_xe
+  xe_flash_decode_bf16_fp32_fp32_h64_512_nonpaged.cpp
+  xe_flash_decode_bf16_fp32_fp32_h64_1024_nonpaged.cpp
+  xe_flash_decode_fp16_fp32_fp32_h64_512_nonpaged.cpp
+  xe_flash_decode_fp16_fp32_fp32_h64_1024_nonpaged.cpp
+)
 
-  foreach(OUT_TYPE IN LISTS OUT_TYPE_LIST)
-    set(out_name "fp32")
-    set(TILEDCOPYSTORE GmemTiledCopyStoreU32)
-    if(${OUT_TYPE} STREQUAL "bfloat16_t")
-      set(out_name "bf16")
-      set(TILEDCOPYSTORE GmemTiledCopyStoreU16)
-    elseif(${OUT_TYPE} STREQUAL "half_t")
-      set(out_name "fp16")
-      set(TILEDCOPYSTORE GmemTiledCopyStoreU16)
-    endif()
-    set(input_name_out "${input_name}_fp32_${out_name}")
-    set(test_name_input_out "${test_name_input}_fp32_${out_name}")
-    foreach(HEAD_DIM 64 96 128 192)
-      foreach(KV_TILE 512 1024)
-        set(NUM_SG 8)
-        if(${KV_TILE} EQUAL 1024)
-          set(NUM_SG 16)
-        endif()
-        set(out_exe "${input_name_out}_h${HEAD_DIM}_${KV_TILE}_xe")
-        set(TEST_NAME "${test_name_input_out}_h${HEAD_DIM}_KVTile${KV_TILE}")
-        set(SHAPE_H "Shape_h${HEAD_DIM}")
-        cutlass_test_unit_add_executable(
-          ${out_exe} xe_flash_decode.cpp
-        )
-        target_compile_definitions(${out_exe} PRIVATE
-                                    INPUT_TYPE=${INPUT_TYPE}
-                                    OUT_TYPE=${OUT_TYPE}
-                                    TEST_NAME=${TEST_NAME}
-                                    HEAD_DIM=${HEAD_DIM}
-                                    KV_TILE=${KV_TILE}
-                                    NUM_SG=${NUM_SG}
-                                    SHAPE_H=${SHAPE_H}
-                                    MMAOP=${MMAOP}
-                                    TILEDCOPYSTORE=${TILEDCOPYSTORE})
-      endforeach()
-    endforeach()
-  endforeach()
-endforeach()
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_flash_attention_decode_h96_xe
+  xe_flash_decode_bf16_fp32_fp32_h96_512_nonpaged.cpp
+  xe_flash_decode_bf16_fp32_fp32_h96_1024_nonpaged.cpp
+  xe_flash_decode_fp16_fp32_fp32_h96_512_nonpaged.cpp
+  xe_flash_decode_fp16_fp32_fp32_h96_1024_nonpaged.cpp
+)
+
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_flash_attention_decode_h128_xe
+  xe_flash_decode_bf16_fp32_fp32_h128_512_nonpaged.cpp
+  xe_flash_decode_bf16_fp32_fp32_h128_1024_nonpaged.cpp
+  xe_flash_decode_fp16_fp32_fp32_h128_512_nonpaged.cpp
+  xe_flash_decode_fp16_fp32_fp32_h128_1024_nonpaged.cpp
+)
+
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_flash_attention_decode_h192_xe
+  xe_flash_decode_bf16_fp32_fp32_h192_512_nonpaged.cpp
+  xe_flash_decode_bf16_fp32_fp32_h192_1024_nonpaged.cpp
+  xe_flash_decode_fp16_fp32_fp32_h192_512_nonpaged.cpp
+  xe_flash_decode_fp16_fp32_fp32_h192_1024_nonpaged.cpp
+)
 
 add_custom_target(
   cutlass_test_unit_flash_attention_decode
   DEPENDS
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_fp32_h64_512_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_fp32_h64_1024_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp32_h64_512_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp32_h64_1024_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_bf16_h64_512_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_bf16_h64_1024_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp16_h64_512_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp16_h64_1024_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_fp32_h96_512_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_fp32_h96_1024_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp32_h96_512_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp32_h96_1024_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_bf16_h96_512_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_bf16_h96_1024_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp16_h96_512_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp16_h96_1024_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_fp32_h128_512_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_fp32_h128_1024_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp32_h128_512_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp32_h128_1024_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_bf16_h128_512_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_bf16_h128_1024_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp16_h128_512_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp16_h128_1024_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_fp32_h192_512_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_fp32_h192_1024_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp32_h192_512_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp32_h192_1024_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_bf16_h192_512_xe
-  cutlass_test_unit_flash_attention_decode_bf16_fp32_bf16_h192_1024_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp16_h192_512_xe
-  cutlass_test_unit_flash_attention_decode_fp16_fp32_fp16_h192_1024_xe
+  cutlass_test_unit_flash_attention_decode_h64_xe
+  cutlass_test_unit_flash_attention_decode_h96_xe
+  cutlass_test_unit_flash_attention_decode_h128_xe
+  cutlass_test_unit_flash_attention_decode_h192_xe
 )
 
 add_custom_target(
   test_unit_flash_attention_decode
   DEPENDS
-  test_unit_flash_attention_decode_bf16_fp32_fp32_h64_512_xe
-  test_unit_flash_attention_decode_bf16_fp32_fp32_h64_1024_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp32_h64_512_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp32_h64_1024_xe
-  test_unit_flash_attention_decode_bf16_fp32_bf16_h64_512_xe
-  test_unit_flash_attention_decode_bf16_fp32_bf16_h64_1024_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp16_h64_512_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp16_h64_1024_xe
-  test_unit_flash_attention_decode_bf16_fp32_fp32_h96_512_xe
-  test_unit_flash_attention_decode_bf16_fp32_fp32_h96_1024_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp32_h96_512_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp32_h96_1024_xe
-  test_unit_flash_attention_decode_bf16_fp32_bf16_h96_512_xe
-  test_unit_flash_attention_decode_bf16_fp32_bf16_h96_1024_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp16_h96_512_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp16_h96_1024_xe
-  test_unit_flash_attention_decode_bf16_fp32_fp32_h128_512_xe
-  test_unit_flash_attention_decode_bf16_fp32_fp32_h128_1024_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp32_h128_512_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp32_h128_1024_xe
-  test_unit_flash_attention_decode_bf16_fp32_bf16_h128_512_xe
-  test_unit_flash_attention_decode_bf16_fp32_bf16_h128_1024_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp16_h128_512_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp16_h128_1024_xe
-  test_unit_flash_attention_decode_bf16_fp32_fp32_h192_512_xe
-  test_unit_flash_attention_decode_bf16_fp32_fp32_h192_1024_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp32_h192_512_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp32_h192_1024_xe
-  test_unit_flash_attention_decode_bf16_fp32_bf16_h192_512_xe
-  test_unit_flash_attention_decode_bf16_fp32_bf16_h192_1024_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp16_h192_512_xe
-  test_unit_flash_attention_decode_fp16_fp32_fp16_h192_1024_xe
+  test_unit_flash_attention_decode_h64_xe
+  test_unit_flash_attention_decode_h96_xe
+  test_unit_flash_attention_decode_h128_xe
+  test_unit_flash_attention_decode_h192_xe
 )
