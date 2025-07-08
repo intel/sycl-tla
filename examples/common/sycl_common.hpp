@@ -38,9 +38,6 @@
 template <class T, class = void>
 static constexpr auto is_signed_v = cute::is_signed<T>::value;
 
-template <class T>
-static constexpr auto is_signed_v<T, cute::void_t<decltype(cutlass::platform::numeric_limits<T>::is_signed)>> = cutlass::platform::numeric_limits<T>::is_signed;
-
 template<class T>
 static constexpr auto digits = std::numeric_limits<T>::digits > 0 ? std::numeric_limits<T>::digits : cute::numeric_limits<T>::digits;
 
