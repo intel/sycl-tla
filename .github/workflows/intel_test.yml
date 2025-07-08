@@ -97,7 +97,7 @@ jobs:
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
             -DCUTLASS_ENABLE_BENCHMARKS=OFF \
             -DCUTLASS_SYCL_RUNNING_CI=ON 
-          cmake --build .
+          cmake --build .  -j$(($(nproc) / 2))
       - name: Unit test
         shell: bash
         run: |
