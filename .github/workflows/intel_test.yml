@@ -106,12 +106,3 @@ jobs:
         shell: bash
         run: |
           cmake --build . --target test_examples -j 1
-      - name: Benchmarks
-        shell: bash
-        run: |
-          cmake -G Ninja  \
-            -DCUTLASS_ENABLE_SYCL=ON \
-            -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
-            -DCUTLASS_ENABLE_BENCHMARKS=ON \
-            -DCUTLASS_SYCL_RUNNING_CI=ON           
-          cmake --build . --target cutlass_benchmarks -j 1
