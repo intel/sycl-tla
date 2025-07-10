@@ -28,22 +28,29 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-/***************************************
-* Mixed Precision PVC Gemm Example
-*
-* This example demonstrates how to dispatch a mixed precision GEMM on PVC, with optional dequantization.
-* The GemmMode enum describes the 3 modes of operation:
-*
-* - ConvertOnly: Narrower type is simply converted to the wider type before MMA
-* - ConvertAndScale:   Narrower type is converted to wider type, then scaled
-* - ConvertAndScaleWithZeroPoint:   Narrower type is converted to wider type, then scaled and shifted by zero point
-* - Limitations:
-*    - group must be multiple of k-block size
-*    - scales & zeros must be MN-major
-*
-* Note: due to a bug in the IGC compiler, it's currently necessary to build this example with the following
-* environment variable set:
-*   export IGC_allowDecompose2DBlockFuncs=0
+
+/*! \file
+    \brief Mixed Precision BMG Gemm Example
+
+ This example demonstrates how to dispatch a mixed precision GEMM on BMG, with optional dequantization.
+ The GemmMode enum describes the 3 modes of operation:
+
+ - ConvertOnly: Narrower type is simply converted to the wider type before MMA
+ - ConvertAndScale:   Narrower type is converted to wider type, then scaled
+ - ConvertAndScaleWithZeroPoint:   Narrower type is converted to wider type, then scaled and shifted by zero point
+ - Limitations:
+    - group must be multiple of k-block size
+    - scales & zeros must be MN-major
+
+ Note: due to a bug in the IGC compiler, it's currently necessary to build this example with the following
+ environment variable set:
+   export IGC_allowDecompose2DBlockFuncs=0
+ To build & run this example (from your build dir):
+
+    $ ninja 02_bmg_gemm_f16_u4
+    $ ./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4
+
+  Call with `--help` for information about available options
 */
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
@@ -210,8 +217,8 @@ struct ExampleRunner {
   using ElementScale = typename CollectiveMainloop::NonVoidElementScale;
   using ElementZero = typename CollectiveMainloop::NonVoidElementZero;
   // Scale and Zero share a stride since the layout and shapes must be the same.
-  using StrideScale = typename CollectiveMainloop::StrideScale;
-  using StrideZero = StrideScale; 
+  using StrideScale = typename CollectiveMainloop::NonVoidStrideScale;
+  using StrideZero = typename CollectiveMainloop::NonVoidStrideZero;
 
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
@@ -230,6 +237,7 @@ struct ExampleRunner {
   StrideC stride_C;
   StrideD stride_D;
   StrideScale stride_S;
+  StrideZero stride_Z;
 
   uint64_t seed = 0;
 
@@ -320,7 +328,7 @@ struct ExampleRunner {
     using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
     using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-    using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementCompute,
+    using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementAccumulator, ElementCompute,
             ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
     using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
@@ -336,7 +344,7 @@ struct ExampleRunner {
             FusionCallBacks,
             XE_2D_U32x8x16_LD_N,
             void, void,
-            XE_2D_U32x8x16_ST_N,
+            XE_2D_U16x8x16_ST_N,
             void, void>;
 
     // Mainloop
@@ -434,67 +442,158 @@ struct ExampleRunner {
     return true;
   }
 
+  template <
+  class QuantizedElement,
+  class DequantizedElement,
+  class OperandLayout,
+  class ElementScale,
+  class ElementZero,
+  class ScaleLayout,
+  class ZeroLayout>
+  static void dequantize_B(DequantizedElement* dq_buffer,
+                       QuantizedElement const* q_buffer,
+                       OperandLayout const operand_layout,
+                       ElementScale const* scale_buffer,
+                       ElementZero const* zero_buffer,
+                       ScaleLayout const scale_layout,
+                       ZeroLayout const zero_layout,
+                       int const group_size) {
+    std::vector<uint8_t> dst(size(operand_layout) * sizeof_bits_v<DequantizedElement> / 8, 0);
+    cutlass::device_memory::copy_to_host(dst.data(), (uint8_t*)dq_buffer, dst.size());
+
+    std::vector<uint8_t> src(size(operand_layout) * sizeof_bits_v<QuantizedElement> / 8, 0);
+    cutlass::device_memory::copy_to_host(src.data(), (uint8_t*)q_buffer, src.size());
+
+    std::vector<uint8_t> scale(size(scale_layout) * sizeof_bits_v<ElementScale> / 8, 0);
+    cutlass::device_memory::copy_to_host(scale.data(), (uint8_t*)scale_buffer, scale.size());
+
+    std::vector<uint8_t> zero(size(zero_layout) * sizeof_bits_v<ElementZero> / 8, 0);
+    cutlass::device_memory::copy_to_host(zero.data(), (uint8_t*)zero_buffer, zero.size());
+
+    syclcompat::wait();
+
+    auto dst_tensor = make_tensor(make_gmem_ptr(reinterpret_cast<DequantizedElement*>(dst.data())), operand_layout);
+
+    auto src_tensor = [&]() {
+      if constexpr (sizeof_bits_v<QuantizedElement> < 8) {
+        return make_tensor(cute::subbyte_iterator<const QuantizedElement>(src.data()), operand_layout);
+      } else {
+        return make_tensor(make_gmem_ptr(reinterpret_cast<QuantizedElement const *>(src.data())), operand_layout);
+      }
+    }();
+
+    auto scale_tensor = make_tensor(make_gmem_ptr(reinterpret_cast<ElementScale const *>(scale.data())), scale_layout);
+
+    auto zero_tensor = [&]() {
+      if constexpr (sizeof_bits_v<ElementZero> < 8) {
+        auto flatten_tensor = flatten(make_tensor(cute::subbyte_iterator<const ElementZero>(zero.data()), zero_layout));
+        static_assert(rank(flatten_tensor.layout()) == 4);
+        return make_tensor(flatten_tensor.data(), select<1, 0, 2, 3>(flatten_tensor.layout()));
+      } else {
+        return make_tensor(make_gmem_ptr(reinterpret_cast<ElementZero const *>(zero.data())), zero_layout);
+      }
+    }();
+
+    auto N = size<0>(src_tensor);
+    auto K = size<1>(src_tensor);
+    auto L = size<2>(src_tensor);
+
+    for (int l = 0; l < L; l++) {
+      for (int k= 0; k < K; k++) {
+        for (int n = 0; n < N; n++) {
+          using ret_type = cute::conditional_t<sizeof_bits_v<ElementZero> >= 8, ElementZero, int8_t>;
+          ret_type a = [&]() {
+            if constexpr (sizeof_bits_v<QuantizedElement> >= 8) {
+              return  (ret_type)(src_tensor(n, k, l));
+            } else {
+              return (ret_type)(src_tensor(n, k, l).get());
+            }}();
+
+          ret_type b = [&]() {
+            if constexpr (sizeof_bits_v<ElementZero> >= 8) {
+              return (ret_type)(zero_tensor(n, k / group_size, l));
+            } else {
+              auto zero_elements_packed_along_k = get<0>(zero_tensor.shape());
+              return (ret_type)(zero_tensor((k / group_size) % zero_elements_packed_along_k, n, k / group_size / zero_elements_packed_along_k, l).get());
+            }
+          }();
+
+          dst_tensor(n, k, l) = ((ElementScale)(a - b)) * scale_tensor(n, k / group_size, l);
+        }
+      }
+    }
+
+    cutlass::device_memory::copy_to_device(dq_buffer, (DequantizedElement*)(raw_pointer_cast(dst_tensor.data())), dst_tensor.size());
+    syclcompat::wait();
+  }
+
+
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(Options const& options) {
     auto [M, N, K, L] = ProblemShapeType{options.m, options.n, options.k, options.l};
 
+    auto zero_elements_packed_along_k = get<0>(StrideZero{});
     const int scale_k = cute::ceil_div(options.k, options.g);
     const int dq_mn_size = AIsNarrower ? options.m : options.n;
     auto shape_A = cute::make_shape(M, K, L);
     auto shape_B = cute::make_shape(N, K, L);
     auto shape_CD = cute::make_shape(M, N, L);
-    auto shape_scale_zero = cute::make_shape(dq_mn_size, scale_k, L);
+    auto shape_scale = cute::make_shape(dq_mn_size, scale_k, L);
+    auto shape_zero = [&]() {
+      if constexpr (is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(stride_Z))>>) {
+        return cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, cute::max(1, scale_k / zero_elements_packed_along_k)), L);
+      } else {
+        return shape_scale;
+      }
+    }();
 
     stride_A = cutlass::make_cute_packed_stride(StrideA{}, shape_A);
     stride_B = cutlass::make_cute_packed_stride(StrideB{}, shape_B);
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, shape_CD);
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
-    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
+    stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale);
+    stride_Z = [&]() {
+      if constexpr (is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(stride_Z))>>) {
+        return make_stride(Int<zero_elements_packed_along_k>{}, make_stride(_1{}, int64_t(zero_elements_packed_along_k * dq_mn_size)), int64_t(dq_mn_size * scale_k));
+      } else {
+        return stride_S;
+      }
+    }();
 
-#if FLUSH_CACHE == 1
-    auto max_size = options.l3_cache * MByte * 8 / sizeof_bits_v<ElementB>;
-    auto b_cache_elements = max_size > K * N * L ? max_size : K * N * L;
-    block_B.reset(b_cache_elements * CACHE_CNT);
-#else
-    block_B.reset(K * N * L);
-#endif
+    block_A.reset(static_cast<std::size_t>(M) * K * L);
+    block_A_dq.reset(static_cast<std::size_t>(M) * K * L);
+    block_B.reset(static_cast<std::size_t>(K) * N * L);
+    block_B_dq.reset(static_cast<std::size_t>(K) * N * L);
+    block_C.reset(static_cast<std::size_t>(M) * N * L);
+    block_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_scale.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
+    block_zero.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
 
-    block_A.reset(M * K * L);
-    block_A_dq.reset(M * K * L);
+    initialize_mixed_dtype_block(block_A, block_A_dq, seed + 2022);
+    initialize_mixed_dtype_block(block_B, block_B_dq, seed + 2023);
 
-    block_B_dq.reset(K * N * L);
-    block_C.reset(M * N * L);
-    block_D.reset(M * N * L);
-    block_ref_D.reset(M * N * L);
-    block_scale.reset(scale_k * L * dq_mn_size);
-    block_zero.reset(scale_k * L * dq_mn_size);
-
-    initialize_mixed_dtype_block(block_A, block_A_dq, seed + 2023);
-    initialize_mixed_dtype_block(block_B, block_B_dq, seed + 2022);
-
-    initialize_block(block_C, seed + 2021);
+    initialize_block(block_C, seed + 2024);
 
     initialize_scale(block_scale, options);
     initialize_zero(block_zero, options);
 
     auto layout_A = make_layout(shape_A, stride_A);
     auto layout_B = make_layout(shape_B, stride_B);
-    auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
-
-#ifdef QUANTIZATION
+    auto layout_scale = make_layout(shape_scale, stride_S);
+    auto layout_zero = make_layout(shape_zero, stride_Z);
 
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
     if constexpr (AIsNarrower) {
       dequantize(block_A_dq.get(), block_A.get(), layout_A,
-                        block_scale.get(), block_zero.get(), layout_scale_zero,
+                        block_scale.get(), block_zero.get(), layout_scale, layout_zero,
                         options.g);
     } else {
-      cutlass::dequantize(block_B_dq.get(), block_B.get(), layout_B,
-                        block_scale.get(), block_zero.get(), layout_scale_zero,
+      dequantize_B(block_B_dq.get(), block_B.get(), layout_B,
+                        block_scale.get(), block_zero.get(), layout_scale, layout_zero,
                         options.g);
     }
-#endif
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -508,7 +607,7 @@ struct ExampleRunner {
         cutlass::gemm::GemmUniversalMode::kGemm,
         problem_size,
         {block_A.get(), stride_A, block_B.get(), stride_B, block_scale.get(),
-         stride_S, options.g, block_zero.get()},
+         stride_S,  block_zero.get(), stride_Z, options.g},
         {{options.alpha, options.beta},
          block_C.get(),
          stride_C,
@@ -629,7 +728,8 @@ void run_int4(Options const& options) {
   using ElementZero = int8_t;
   using ElementScale = MmaType;
 
-  // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
+  using StrideScale = cute::Stride<_1, int64_t, int64_t>;
+  using StrideZero = cute::Stride<_8, cute::Stride<_1, int64_t>, int64_t>; // int4_t zero point packed 8 elements along K dimension and then along N dimension
   using GmemTiledCopyA = copy_b;
   using GmemTiledCopyB = copy_a;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
@@ -645,7 +745,7 @@ void run_int4(Options const& options) {
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
+  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementAccumulator, ElementComputeEpilogue,
           ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
@@ -660,7 +760,7 @@ void run_int4(Options const& options) {
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          std::conditional_t<std::is_same_v<LayoutB, cutlass::layout::RowMajor>, void, XE_2D_U32x8x16_ST_N>,
+          XE_2D_U16x8x16_ST_N,
           void, void>;
 
   // Use the helpers to avoid template arg repetition
