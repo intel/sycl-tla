@@ -50,7 +50,7 @@ cutlass_example_add_executable(
 
 cutlass_example_add_executable(
   02_bmg_gemm_f16_u4_f16
-  02_bmg_gemm_f16_u4_f16.cpp
+  02_bmg_gemm_f16_u4_f16_perf.cpp
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
   TEST_MODE_1
