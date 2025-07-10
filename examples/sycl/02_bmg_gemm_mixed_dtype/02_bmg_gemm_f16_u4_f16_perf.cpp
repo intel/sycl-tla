@@ -344,7 +344,7 @@ struct ExampleRunner {
             FusionCallBacks,
             XE_2D_U32x8x16_LD_N,
             void, void,
-            XE_2D_U16x8x16_ST_N,
+            std::conditional_t<sizeof_bits_v<ElementOutput> == 16, XE_2D_U16x8x16_ST_N, XE_2D_U32x8x16_ST_N>,
             void, void>;
 
     // Mainloop
@@ -725,11 +725,11 @@ void run_int4(Options const& options) {
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using ElementZero = int4_t;
+  using ElementZero = int8_t;
   using ElementScale = MmaType;
 
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
-  using StrideZero = cute::Stride<_8, cute::Stride<_1, int64_t>, int64_t>; // int4_t zero point packed 8 elements along K dimension and then along N dimension
+  using StrideZero = StrideScale;//cute::Stride<_8, cute::Stride<_1, int64_t>, int64_t>; // int4_t zero point packed 8 elements along K dimension and then along N dimension
   using GmemTiledCopyA = copy_a;
   using GmemTiledCopyB = copy_b;
   // static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
@@ -760,7 +760,7 @@ void run_int4(Options const& options) {
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          XE_2D_U16x8x16_ST_N,
+          std::conditional_t<sizeof_bits_v<ElementOutput> == 16, XE_2D_U16x8x16_ST_N, XE_2D_U32x8x16_ST_N>,
           void, void>;
 
   // Use the helpers to avoid template arg repetition
@@ -804,25 +804,25 @@ int main(int argc, const char** argv)
     return -1;
   }
 
-  options.m = 32;
-  options.n = 4096;
-  options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4>(options);
+  // options.m = 32;
+  // options.n = 4096;
+  // options.k = 4096;
+  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4>(options);
 
   options.m = 32;
   options.n = 14336;
   options.k = 4096;
   run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 128, 32, 1, 4>(options);
 
-  options.m = 48;
-  options.n = 4096;
-  options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4>(options);
+  // options.m = 48;
+  // options.n = 4096;
+  // options.k = 4096;
+  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4>(options);
 
-  options.m = 48;
-  options.n = 14336;
-  options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4>(options);
+  // options.m = 48;
+  // options.n = 14336;
+  // options.k = 4096;
+  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4>(options);
 
   return 0;
 }
