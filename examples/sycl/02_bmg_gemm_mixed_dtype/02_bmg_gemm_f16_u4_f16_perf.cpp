@@ -88,7 +88,7 @@ enum GemmMode {
 
 #define CACHE_CNT (2)
 
-using MmaType = _Float16;
+using MmaType = half_t;
 using QuantType = uint4_t;//_BitInt(4);
 
 // Command line options parsing
@@ -716,23 +716,23 @@ void run_int4(Options const& options) {
   // elements in input matrices.
   using ElementAccumulator = float;      // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = QuantType;       // <- data type of elements in input matrix A
-  using ElementInputB = MmaType;         // <- data type of elements in input matrix B
-  using ElementOutput = float;           // <- data type of elements in output matrix D
+  using ElementInputA = MmaType;       // <- data type of elements in input matrix A
+  using ElementInputB = QuantType;         // <- data type of elements in input matrix B
+  using ElementOutput = MmaType;           // <- data type of elements in output matrix D
 
   using LayoutA = layout_a;
   using LayoutB = layout_b;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using ElementZero = int8_t;
+  using ElementZero = int4_t;
   using ElementScale = MmaType;
 
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
   using StrideZero = cute::Stride<_8, cute::Stride<_1, int64_t>, int64_t>; // int4_t zero point packed 8 elements along K dimension and then along N dimension
-  using GmemTiledCopyA = copy_b;
-  using GmemTiledCopyB = copy_a;
-  static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
+  using GmemTiledCopyA = copy_a;
+  using GmemTiledCopyB = copy_b;
+  // static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile
   using TileShape = Shape<Int<wg_m>, Int<wg_n>, Int<sg_k>>;
@@ -770,23 +770,11 @@ void run_int4(Options const& options) {
       helpers::MixedCollectiveMmaBuilder<GEMMDispatchPolicy, TileShape,
                                 cutlass::gemm::TagToStrideA_t<LayoutA>,
                                 cutlass::gemm::TagToStrideB_t<LayoutB>,
-                                TiledMma, GmemTiledCopyB, GmemTiledCopyA>;
-
-  // B-narrow Mainloop & GemmUniversalAdapter
-  using MainloopBConvertOnly =
-      MixedBuilderQuantB::template CollectiveMma<ElementInputB,
-                                        cute::tuple<ElementInputA>>;
-  using GemmBConvertOnly =
-      GemmAdapterBuilder::template GemmUniversalAdapter<MainloopBConvertOnly>;
-
-  using MainloopBConvertAndScale = MixedBuilderQuantB::template CollectiveMma<
-      ElementInputB, cute::tuple<ElementInputA, ElementScale>>;
-  using GemmBConvertAndScale =
-      GemmAdapterBuilder::template GemmUniversalAdapter<MainloopBConvertAndScale>;
+                                TiledMma, GmemTiledCopyA, GmemTiledCopyB>;
 
   using MainloopBConvertAndScaleWithZeroPoint =
       MixedBuilderQuantB::template CollectiveMma<
-          ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero>>;
+          ElementInputA, cute::tuple<ElementInputB, ElementScale, StrideScale, ElementZero, StrideZero>>;
   using GemmBConvertAndScaleWithZeroPoint =
       GemmAdapterBuilder::template GemmUniversalAdapter<
           MainloopBConvertAndScaleWithZeroPoint>;
