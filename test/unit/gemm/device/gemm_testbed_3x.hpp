@@ -307,6 +307,10 @@ bool initialize_tensor(
       }
     
     }
+    else if (cute::is_any_of_v<Element, cutlass::bfloat16_t, cutlass::half_t>) {
+      scope_max = 1;
+      scope_min = -1;
+    }
     else{
       scope_max = 4;
       scope_min = -4;
@@ -2470,17 +2474,20 @@ struct HostCollectiveEpilogue {
       // example of how to set kernel activation arguments
       // see ActivationFunctor::Arguments in activation.h for definition
       // if Arguments doesn't exist then fusion_args.activation is empty
+      auto init_activation_args = [] (auto activation, auto& args) {
+        using Activation = cute::remove_cvref_t<decltype(activation)>;
+        if constexpr (cute::is_same_v<Activation, cutlass::epilogue::thread::Clamp<ElementCompute>>) {
+          args.lower_bound = 0; // Treat Clamp as ReLU
+          args.upper_bound = cutlass::platform::identity_for_minimum<ElementCompute>();
+        }
+        if constexpr (cute::is_same_v<Activation, cutlass::epilogue::thread::ScaledGELU_taylor<ElementCompute>>) {
+          args.scale = ElementCompute(1);
+        }
+      };
 
-      if constexpr (cute::is_same_v<ActivationFunctor, cutlass::epilogue::thread::ScaledGELU_taylor<ElementCompute>>) {
-        fusion_args.activation.scale = ElementCompute(1);
+      if constexpr (not cute::is_same_v<ActivationFunctor, cutlass::epilogue::thread::Identity<ElementCompute>>) {
+        init_activation_args(ActivationFunctor{}, fusion_args.activation);
       }
-
-      // Treat Clamp as ReLU
-      if constexpr (cute::is_same_v<ActivationFunctor, cutlass::epilogue::thread::Clamp<ElementCompute>>) {
-        fusion_args.activation.lower_bound = 0;
-        fusion_args.activation.upper_bound = std::numeric_limits<ElementCompute>::max();
-      }
-
       if constexpr (IsAbsMaxEnabledD) {
         fusion_args.amax_D_ptr = abs_max_D.device_data();
       }
@@ -3007,6 +3014,7 @@ struct TestbedImpl {
     if (status != cutlass::Status::kSuccess) {
 #if defined(CUTLASS_ENABLE_SYCL)
       std::cerr << "This test is not supported." << "\n";
+      return true;
 #else
       cudaError_t error = cudaGetLastError();
       const auto error_str = cudaGetErrorString(error);
@@ -4017,8 +4025,8 @@ template <typename Gemm, template <class T> class ActivationFunctor =
                              cutlass::epilogue::thread::Identity>
 // TODO(Codeplay): remove the test_batch option once batching is enabled for all tests
 bool TestXe(
-    double alpha = 1.0, double beta = 0.0,
-    bool test_batch = true, int max_alignment = 8,
+    double alpha = 1.0, double beta = cute::is_same_v<typename Gemm::GemmKernel::ElementC, void> ? 0.0 : 1.0,
+    bool test_batch = true,
     CheckEquality check_relative_equality = CheckEquality::RELATIVE) {
   using ElementScalar = typename Gemm::EpilogueOutputOp::ElementScalar;
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
@@ -4033,14 +4041,20 @@ bool TestXe(
 
   // For M & N we test a small and a big size
   // For K, we currently only support K = TileShapeK
-  // TODO(codeplay): unhardcode max_alignment
-
-  std::vector<int> problem_size_m{max_alignment, 512 - 3 * max_alignment};
-  std::vector<int> problem_size_n{max_alignment, 512 - 2 * max_alignment};
+  int max_alignment_m = std::max({Gemm::kAlignmentA, Gemm::kAlignmentC, Gemm::kAlignmentD});
+  int max_alignment_n = std::max({Gemm::kAlignmentB, Gemm::kAlignmentC, Gemm::kAlignmentD});
+  if constexpr (std::is_base_of_v<cutlass::epilogue::fusion::FusionOperation, typename Gemm::EpilogueOutputOp>) {
+    max_alignment_m = std::max(max_alignment_m, Gemm::EpilogueOutputOp::AlignmentAux);
+    max_alignment_n = std::max(max_alignment_n, Gemm::EpilogueOutputOp::AlignmentAux);
+  }
+  std::vector<int> problem_size_m = {max_alignment_m, 512 - 3 * max_alignment_m};
+  std::vector<int> problem_size_n = {max_alignment_n, 512 - 2 * max_alignment_n};
   std::vector<int> problem_size_l = test_batch ? std::vector{1, 3, 4} : std::vector{1};
 
+  constexpr int Stages = Gemm::GemmKernel::DispatchPolicy::Stages;
   constexpr int TileShapeK = cute::size<2>(typename Gemm::GemmKernel::TileShape{});
-  std::vector<int> problem_size_k{TileShapeK, TileShapeK*32};
+  int max_alignment_k = std::max(Gemm::kAlignmentA, Gemm::kAlignmentB);
+  std::vector<int> problem_size_k = {max_alignment_k, TileShapeK * (Stages + 1) - max_alignment_k};
 
   using DecompositionMode = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode;
   std::vector decomposition_modes = {DecompositionMode::Heuristic};
@@ -4056,7 +4070,7 @@ bool TestXe(
 
     // Use larger K sizes for stream-K tests
     static constexpr int min_tiles_per_sk_unit = cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::min_iters_per_sk_unit_;
-    problem_size_k = {TileShapeK * min_tiles_per_sk_unit, TileShapeK * 3 * min_tiles_per_sk_unit - max_alignment};
+    problem_size_k = {TileShapeK * min_tiles_per_sk_unit, TileShapeK * 3 * min_tiles_per_sk_unit};
   }
 
   using RasterOrderOptions = typename cutlass::gemm::kernel::detail::PersistentTileSchedulerSm90::RasterOrderOptions;
@@ -4072,7 +4086,7 @@ bool TestXe(
           for (auto raster_order : raster_orders) {
             for (auto max_swizzle_size : max_swizzle_sizes) {
               for (DecompositionMode decomp_mode : decomposition_modes) {
-                            std::vector problem_splits = {detail::Splits{1}};
+                std::vector problem_splits = {detail::Splits{1}};
                 if (decomp_mode == DecompositionMode::Heuristic || decomp_mode == DecompositionMode::SplitK) {
                   auto max_splits = (k + TileShapeK - 1) / TileShapeK;
                   if (max_splits > 2) {

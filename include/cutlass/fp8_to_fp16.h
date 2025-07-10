@@ -28,90 +28,51 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
- 
- #pragma once
 
-#include <cutlass/half.h> 
+#pragma once
+
+#include <cute/layout.hpp>
+#include <cute/numeric/numeric_types.hpp>
+#include <cute/pointer.hpp>
+#include <cute/tensor_impl.hpp>
+#include <cute/underscore.hpp>
 #include <cute/util/sycl_vec.hpp>
+#include <cutlass/detail/helper_macros.hpp>
+#include <cutlass/half.h>
 
-using half_t = cutlass::half_t;
-using uchar16 = cute::intel::uchar16;
-using ushort16 = cute::intel::ushort16;
+template <typename EncodingType, typename TensorIn, typename TensorOut>
+CUTLASS_DEVICE void
+convert_FP8_to_FP16(TensorIn const &in,
+                    TensorOut &out) {
 
-static inline ushort16 convert_ushort16(uchar16 x) {
-    ushort16 result;
-    #pragma unroll
-    for (int i = 0; i < 16; ++i) {
-        result[i] = static_cast<uint16_t>(x[i]);
-    }
-    return result;
-}
+  static_assert(cute::is_rmem<typename TensorIn::engine_type>::value,
+                "Input tensor for A conversion must come from registers");
+  static_assert(cute::is_rmem<typename TensorOut::engine_type>::value,
+                "Output tensor for A conversion must come from registers");
+  static_assert(cute::cosize_v<typename TensorIn::layout_type> == cute::cosize_v<typename TensorOut::layout_type>);
+  static_assert(cute::size_v<typename TensorIn::layout_type> == cute::cosize_v<typename TensorIn::layout_type>);
+  static_assert(cute::size_v<typename TensorOut::layout_type> == cute::cosize_v<typename TensorOut::layout_type>);
 
-static inline ushort16 E4M3_to_FP16_vec16(uchar16 xin) {
-    uchar16 xa = xin & 0x7F;
-    uchar16 sgn_x = xin ^ xa;
+  using SrcType = typename TensorIn::value_type;
+  using DstType = typename TensorOut::value_type;
 
-    uchar16 zero_mask;
-    #pragma unroll
-    for (int i = 0; i < 16; ++i) {
-        zero_mask[i] = (xa[i] == 0) ? 1 : 0;
-    }
-    uchar16 nan_mask = (0x7E - xa) & 0x80;
-    uchar16 den_mask = ((xa - 8) >> 7) & 0x01;
+  static_assert(std::is_same_v<SrcType, uint8_t>,
+                "Expected fp8 input as uint8_t");
+  static_assert(cute::is_any_of_v<EncodingType, cute::float_e5m2_t, cute::float_e4m3_t>,
+                "Expected EncodingType to be float_e5m2_t or float_e4m3_t");
 
-    xa += (nan_mask >> 1);
-    xa |= (den_mask & 8);
-    den_mask &= 0x48;
-    xa += 0x40 & ~(zero_mask * 0x40);
+  constexpr int num_elements = decltype(size(in))::value;
+  constexpr int fragment_size = std::is_same_v<EncodingType, cute::float_e5m2_t> ? 4 : 8;
 
-    ushort16 x16 = convert_ushort16(xa) << 7;
-    ushort16 den_corr = convert_ushort16(den_mask & ~zero_mask) << 7;
+  static_assert(num_elements % fragment_size == 0,
+                "Currently, FP8 -> FP16 conversion is only supported when "
+                "each work-item converts a multiple of fragment_size");
 
-    ushort16 result = x16 - den_corr;
-    result &= ~(convert_ushort16(zero_mask) << 7);
+  auto in_frag = cute::recast<cutlass::Array<EncodingType, fragment_size>>(in);
+  auto out_frag = cute::recast<cutlass::Array<DstType, fragment_size>>(out);
 
-    ushort16 sign_ext = convert_ushort16(sgn_x) << 8;
-    result ^= sign_ext;
-
-    return result;
-}
-
-static inline unsigned short E4M3_to_FP16(unsigned char xin) {
-    unsigned char xa, sgn_x, nan_mask, den_mask;
-
-    union {
-        signed short i;
-        _Float16 f;
-    } x16, den_corr;
-
-    xa = xin & 0x7f;
-    sgn_x = xin ^ xa;
-
-    // mask for NaN input
-    nan_mask = (0x7e - xa) & 0x80;
-    // mask for denormal / zero input
-    den_mask = (((signed char)(xa - 8)) >> 7);
-
-    // apply Nan correction
-    xa += (nan_mask >> 1);
-    // first denormal correction
-    xa |= (den_mask & 8);
-    den_mask &= 0x48;
-    // exponent bias correction
-    xa += 0x40;
-
-    // zero-extend to 16 bits
-    x16.i = xa;
-    den_corr.i = den_mask;
-    // FP16 format
-    x16.i <<= 7;
-    den_corr.i <<= 7;
-
-    // apply correction for denormals/zero
-    x16.f -= den_corr.f;
-
-    // finally, apply the sign
-    x16.i ^= (((signed short)sgn_x) << 8);
-
-    return (unsigned short)x16.i;
+  CUTLASS_PRAGMA_UNROLL
+  for (int i = 0; i < num_elements / fragment_size; ++i) {
+    out_frag(i) = cutlass::NumericArrayConverter<DstType, EncodingType, fragment_size>{}(in_frag(i));
+  }
 }

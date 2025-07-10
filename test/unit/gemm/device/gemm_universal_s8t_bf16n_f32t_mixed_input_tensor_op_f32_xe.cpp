@@ -75,8 +75,7 @@ TEST(XE_Device_GemmUniversal_s8t_bf16n_f32t_mixed_input_tensor_op_f32, 128x128x6
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
-  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
   using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
@@ -131,8 +130,7 @@ TEST(XE_Device_GemmUniversal_s8t_bf16n_f32t_mixed_input_tensor_op_f32, 128x128x6
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
-  // TODO(Codeplay): gemm batch doesn't work for mixed type
-  bool passed = test::gemm::device::TestXe<Gemm>(1.0, 1.0);
+  bool passed = test::gemm::device::TestXe<Gemm>();
   EXPECT_TRUE(passed);
 }
 ////////////////////////////////////////////////////////////////////////////////

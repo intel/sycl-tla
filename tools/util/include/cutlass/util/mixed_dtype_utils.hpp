@@ -70,6 +70,7 @@ template <
   class ElementScale,
   class ElementZero,
   class ScaleBroadCastLayout,
+  class ZeroBroadCastLayout,
   class ThrLayout>
 CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
                                   QuantizedElement const* q_buffer,
@@ -77,6 +78,7 @@ CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
                                   ElementScale const* scale_buffer,
                                   ElementZero const* zero_buffer,
                                   ScaleBroadCastLayout const broadcasted_scale_layout,
+                                  ZeroBroadCastLayout const broadcasted_zero_layout,
                                   ThrLayout thr_layout) {
   using namespace cute;
 
@@ -95,7 +97,7 @@ CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
   // While the scales are expected to have shape [MN, G, L] but with a stride to allow broadcasting
   // It is expected that K % G == 0
   cute::Tensor gmem_scale_broadcasted = cute::make_tensor(make_gmem_ptr(scale_buffer), broadcasted_scale_layout);
-  cute::Tensor gmem_zero_broadcasted = cute::make_tensor(make_gmem_ptr(zero_buffer), broadcasted_scale_layout);
+  cute::Tensor gmem_zero_broadcasted = cute::make_tensor(make_gmem_ptr(zero_buffer), broadcasted_zero_layout);
 
   // Assign 1 thread per element in the thread block
   auto blk_shape = cute::make_shape(size<0>(thr_layout), _1{}, _1{}); //
@@ -117,9 +119,11 @@ CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
   cute::Tensor rmem_scale = cute::make_fragment_like(tScale_gScale(_, _, _, 0));
   cute::Tensor rmem_zero = cute::make_fragment_like(tZero_gZero(_, _, _, 0));
   cute::Tensor rmem_op_dq = cute::make_fragment_like(tOpDq_gOpDq(_, _, _, 0));
-  cute::Tensor rmem_op_scaled = cute::make_fragment_like<ElementZero>(rmem_op_dq);
   cute::Tensor rmem_zero_buf = cute::make_fragment_like<ElementZero>(rmem_zero);
-  cute::Tensor rmem_op_scaled1 = cute::make_fragment_like<ElementScale>(rmem_op_dq);
+  using zero_out_type = std::conditional_t<sizeof_bits_v<ElementZero> >= 8, ElementZero, int8_t>;
+  cute::Tensor rmem_zero_out = cute::make_fragment_like<zero_out_type>(rmem_zero);
+  cute::Tensor rmem_op_zero_out = cute::make_fragment_like<zero_out_type>(rmem_op_dq);
+  cute::Tensor rmem_op_scaled_out = cute::make_fragment_like<ElementScale>(rmem_op_dq);
 
   cute::Tensor pred_id = cute::make_identity_tensor(shape(operand_layout));
   auto pred_blk_tile = cute::local_tile(pred_id, blk_shape, blk_coord);
@@ -134,11 +138,13 @@ CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
       cute::copy(tScale_gScale(_, _, _, ii), rmem_scale);
       cute::copy(tZero_gZero(_, _, _, ii), rmem_zero);
 
-      cute::transform(rmem_op_q, rmem_op_scaled, [] (const QuantizedElement& elt) { return ElementZero(elt); } );
-      cute::transform(rmem_op_scaled, rmem_zero, rmem_op_scaled, cute::minus{});
-      cute::transform(rmem_op_scaled, rmem_op_scaled1, [] (const ElementZero& elt) { return ElementScale(elt); } );
-      cute::transform(rmem_op_scaled1, rmem_scale, rmem_op_scaled1, cute::multiplies{});
-      cute::transform(rmem_op_scaled1, rmem_op_dq, [] (const ElementScale& elt) { return DequantizedElement(elt); } );
+      cute::transform(rmem_op_q, rmem_op_zero_out, [] (const QuantizedElement& elt) { return zero_out_type(elt); } );
+      cute::transform(rmem_zero, rmem_zero_out, [] (const ElementZero& elt) { return zero_out_type(elt); } );
+
+      cute::transform(rmem_op_zero_out, rmem_zero_out, rmem_op_zero_out, cute::minus{});
+      cute::transform(rmem_op_zero_out, rmem_op_scaled_out, [] (const zero_out_type& elt) { return ElementScale(elt); } );
+      cute::transform(rmem_op_scaled_out, rmem_scale, rmem_op_scaled_out, cute::multiplies{});
+      cute::transform(rmem_op_scaled_out, rmem_op_dq, [] (const ElementScale& elt) { return DequantizedElement(elt); } );
       cute::copy(rmem_op_dq, tOpDq_gOpDq(_, _, _, ii));
     }
   }
@@ -150,13 +156,15 @@ template <
   class OperandLayout,
   class ElementScale,
   class ElementZero,
-  class ScaleLayout>
+  class ScaleLayout,
+  class ZeroLayout>
 static void dequantize(DequantizedElement* dq_buffer,
                        QuantizedElement const* q_buffer,
                        OperandLayout const operand_layout,
                        ElementScale const* scale_buffer,
                        ElementZero const* zero_buffer,
                        ScaleLayout const scale_layout,
+                       ZeroLayout const zero_layout,
                        int const group_size,
                        cudaStream_t stream = 0) {
   using namespace cute;
@@ -184,6 +192,12 @@ static void dequantize(DequantizedElement* dq_buffer,
   auto scale_stride_bcast = make_stride(scale_stride0, make_stride(0, scale_stride1), scale_stride2);
   auto scale_layout_bcast = make_layout(scale_shape_bcast, scale_stride_bcast);
 
+  const auto zero_stride0 = get<0>(stride(zero_layout));
+  const auto zero_stride1 = get<1>(stride(zero_layout));
+  const auto zero_stride2 = get<2>(stride(zero_layout));
+  auto zero_shape_bcast = make_shape(num_rows, make_shape(group_size, scale_k), batches);
+  auto zero_stride_bcast = make_stride(zero_stride0, make_stride(0, zero_stride1), zero_stride2);
+  auto zero_layout_bcast = make_layout(zero_shape_bcast, zero_stride_bcast);
   const auto blocks_x = gemm_k;
   const auto blocks_y = batches;
 
@@ -191,9 +205,9 @@ static void dequantize(DequantizedElement* dq_buffer,
 #ifdef CUTLASS_ENABLE_SYCL
   syclcompat::launch<dequantize_kernel<
       QuantizedElement, DequantizedElement, OperandLayout, ElementScale,
-      ElementZero, decltype(scale_layout_bcast), decltype(thr_layout)>>(
+      ElementZero, decltype(scale_layout_bcast), decltype(zero_layout_bcast), decltype(thr_layout)>>(
       blocks, tpb, dq_buffer, q_buffer, operand_layout, scale_buffer,
-      zero_buffer, scale_layout_bcast, thr_layout);
+      zero_buffer, scale_layout_bcast, zero_layout_bcast, thr_layout);
 
   syclcompat::wait_and_throw();
 #else
@@ -497,58 +511,6 @@ void reorder_tensor(
   cutlass::DeviceAllocation<T> temp(size(layout_src));
   reorder_tensor(data, layout_src, temp.get(), layout_dst);
   cutlass::device_memory::copy_device_to_device(data, temp.get(), static_cast<size_t>(size(layout_src)));
-}
-
-template<class Src, class Dst>
-void convert_int_subbyte_to_half(Dst & out, Src const& in) {
-  using SrcType = typename Src::value_type;
-
-  static_assert(sizeof_bits_v<SrcType> < 8);
-  static_assert(std::is_same_v<half_t, typename Dst::value_type> ||
-                std::is_same_v<_Float16, typename Dst::value_type>);
-
-  using format_type = ushort;
-
-  static constexpr auto src_bits = sizeof_bits_v<SrcType>;
-  static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
-  static constexpr auto loop_cnt = decltype(size<0>(out))::value;
-  static constexpr auto v_cnt = decltype(size(out))::value / scalar / loop_cnt;
-  static constexpr auto is_src_signed = is_signed<SrcType>::value;
-
-  static constexpr auto DPAS = decltype(size<0>(in))::value;
-  static constexpr auto N = decltype(size<1>(in))::value;
-  static constexpr auto K = decltype(size<2>(in))::value;
-
-  #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
-
-
-  #pragma unroll
-  for (int v = 0; v < N; v++) {
-    static constexpr auto size_dk =  decltype(size(out))::value / N;    
-    auto& src = *reinterpret_cast<const cute::intel::vector_t<format_type, size_dk / scalar>*>(raw_pointer_cast(in(_, v, _).data()));
-    auto& dst = *reinterpret_cast<cute::intel::vector_t<_Float16, size_dk>*>(raw_pointer_cast(out(_, v, _).data()));
-
-
-    #pragma unroll
-    for (int j = 0; j < (size_dk / scalar); j++) {
-      #pragma unroll
-      for (int s = 0; s < scalar; s++) {
-        if constexpr (is_src_signed) {
-          dst[j * scalar + s] = static_cast<_Float16>((int32_t)(static_cast<SrcType>((src[j] >> (src_bits * s)) & 0xf)));
-        } else {
-          dst[j * scalar + s] = static_cast<_Float16>((src[j] >> (src_bits * s)) & 0xf);
-        }
-      }
-    }
-  }
-
-  // if (thread0()) {
-  //   PRINT_S(in);
-  //   PRINT_S(out);
-  //   for (int i =0; i <  out.size(); i++) {
-  //     PRINT_S((float)(out[i]));
-  //   }
-  // }
 }
 
 #undef CUDA_CHECK

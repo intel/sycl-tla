@@ -159,18 +159,17 @@ public:
 
   static bool
   can_implement(Arguments const& args) {
-    auto m = get<0>(args.problem_shape);
-    auto n = get<1>(args.problem_shape);
-    auto k = get<2>(args.problem_shape);
-    // TODO(codeplay): base *_valid on the atom shapes
-    bool m_valid = m > 0;
-    bool n_valid = n > 0 && n % 4 == 0;
-    bool k_valid = k > 0 && k % get<2>(TileShape{}) == 0;
-    bool shape_implementable = (m_valid && n_valid && k_valid);
+    bool implementable = true;
 
-    bool mode_implementable = args.mode == GemmUniversalMode::kGemm ||
-          (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4);
-    return shape_implementable && mode_implementable && TileScheduler::can_implement(args.scheduler);
+    implementable = implementable && (args.mode == GemmUniversalMode::kGemm ||
+          (args.mode == GemmUniversalMode::kBatched && rank(ProblemShape{}) == 4));
+
+    implementable &= TileScheduler::can_implement(args.scheduler);
+
+    implementable &= CollectiveMainloop::can_implement(args.problem_shape, args.mainloop);
+    implementable &= CollectiveEpilogue::can_implement(args.problem_shape, args.epilogue);
+
+    return implementable;
   }
 
   static int

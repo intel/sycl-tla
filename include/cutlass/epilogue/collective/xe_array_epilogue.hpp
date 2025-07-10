@@ -108,14 +108,14 @@ public:
   using GmemTiledCopyC = CopyOpG2R;
   using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
                                              CopyOpR2G, XE_2D_U32x8x16_ST_N>;
-  using ElementOutput = typename FusionCallbacks::ElementOutput;
-  using ElementCompute = typename FusionCallbacks::ElementCompute;
+  using ElementOutput = ElementD;
+  using ElementCompute = ElementAccumulator;
   using ElementSource = typename FusionCallbacks::ElementSource;
   using ElementScalar = typename FusionCallbacks::ElementScalar;
   static constexpr FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest;
 
   static_assert(cute::is_same_v<typename FusionCallbacks::Operation, 
-                                fusion::LinearCombination<ElementOutput, ElementCompute, ElementSource, ElementScalar, RoundStyle>>,
+                                fusion::LinearCombination<ElementAccumulator, ElementCompute, ElementSource, ElementScalar, RoundStyle>>,
   "Only Linear Combination Epilogue is supported for Grouped GEMM at the moment.");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
@@ -236,11 +236,50 @@ public:
   }
 
   template <class ProblemShape>
-  CUTLASS_HOST_DEVICE static bool
+  static bool
   can_implement(
-      ProblemShape const& problem_shape,
-      [[maybe_unused]] Arguments const& args) {
-    return true;
+      ProblemShape problem_shape,
+      Arguments const& args) {
+    constexpr int copy_alignment_bits = 128;
+    constexpr int batch_alignment_bits = 512;
+
+    bool implementable = true;
+    bool fusion_implementable = true;
+
+    for (int i = 0; i < problem_shape.groups(); ++i) {
+      auto problem_shape_MNKL = append<4>(problem_shape.get_host_problem_shape(i), 1);
+      auto [M,N,K,L] = problem_shape_MNKL;
+
+      if constexpr (is_destination_supported) {
+        constexpr int min_aligned_elements_D = copy_alignment_bits / sizeof_bits<ElementD>::value;
+        implementable &= cutlass::detail::check_alignment<min_aligned_elements_D>(cute::make_shape(M,N,L), InternalStrideD{});
+        if (L > 1) {
+          constexpr int min_batch_aligned_elements_D = batch_alignment_bits / sizeof_bits<ElementD>::value;
+          implementable &= get<2>(InternalStrideD{}) % min_batch_aligned_elements_D == 0;
+        }
+      }
+
+      if constexpr (is_source_supported) {
+        constexpr int min_aligned_elements_C = copy_alignment_bits / sizeof_bits<ElementC>::value;
+        implementable &= cutlass::detail::check_alignment<min_aligned_elements_C>(cute::make_shape(M,N,L), InternalStrideC{});
+        if (L > 1) {
+          constexpr int min_batch_aligned_elements_C = batch_alignment_bits / sizeof_bits<ElementC>::value;
+          implementable &= get<2>(InternalStrideC{}) % min_batch_aligned_elements_C == 0;
+        }
+      }
+
+      fusion_implementable = fusion_implementable && FusionCallbacks::can_implement(problem_shape_MNKL, args.thread);
+    }
+
+    if (!implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum alignment requirements for XE 2D copy.\n");
+    }
+
+    if (!fusion_implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum requirements for FusionCallbacks.\n");
+    }
+
+    return implementable && fusion_implementable;
   }
 
   CUTLASS_HOST_DEVICE
@@ -332,7 +371,7 @@ public:
     Tensor tCgD = thread_xe_store_d.partition_D(gD);
 
     Tensor trC = make_tensor<typename TiledMma::ValTypeC>(Shape<Int<FragmentSize>>{});
-    Tensor trD = make_tensor<typename TiledMma::ValTypeD>(Shape<Int<FragmentSize>>{});
+    Tensor trD_compute = make_tensor<ElementCompute>(Shape<Int<FragmentSize>>{});
 
     // Because Sm90 uses shared memory, they are not tied to using the same accumulator values
     // for MMA and Epilogue. But because we are operating directly in the accumulators, we need to be
@@ -370,7 +409,10 @@ public:
 
     cst_callbacks.begin();
 
-    auto acc_frag = recast<Array<ElementOutput, FragmentSize>>(accumulators);
+    auto acc_frag = recast<Array<ElementCompute, FragmentSize>>(accumulators);
+    auto trD_compute_frag = recast<Array<ElementCompute, FragmentSize>>(trD_compute);
+
+    Tensor trD = make_tensor<ElementOutput>(Shape<Int<FragmentSize>>{});
     auto trD_frag = recast<Array<ElementOutput, FragmentSize>>(trD);
 
     constexpr int ValuesLoaded =
@@ -394,12 +436,16 @@ public:
         auto acc_frag_mn = acc_frag(_, epi_m, epi_n);
 
         CUTLASS_PRAGMA_UNROLL
-        for (int epi_v = 0; epi_v < size<0>(trD_frag); ++epi_v) {
-          trD_frag(epi_v) = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
+        for (int epi_v = 0; epi_v < size<0>(trD_compute_frag); ++epi_v) {
+          trD_compute_frag(epi_v) = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
         }
-        cst_callbacks.reduce(nullptr, synchronize, epi_m, epi_n, (epi_m == FragsM - 1 && epi_n == FragsN - 1), trD);
+        cst_callbacks.reduce(nullptr, synchronize, epi_m, epi_n, (epi_m == FragsM - 1 && epi_n == FragsN - 1), trD_compute_frag);
         
         if constexpr (is_destination_supported) {
+          CUTLASS_PRAGMA_UNROLL
+          for (int i = 0; i < size(trD_compute_frag); ++i) {
+            trD_frag(i) = cutlass::NumericArrayConverter<ElementOutput, ElementCompute, FragmentSize>{}(trD_compute_frag(i));
+          }
           copy(params.xe_store_d.with(get<1>(load_store_tensors)), trD, tCgD(_, epi_m, epi_n));
         }
       }

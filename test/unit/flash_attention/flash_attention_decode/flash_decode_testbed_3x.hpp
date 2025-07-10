@@ -39,7 +39,7 @@
 #include "flash_attention_v2/collective/fmha_fusion.hpp"
 #include "flash_attention_v2/kernel/tile_scheduler.hpp"
 #include "cutlass/util/packed_stride.hpp"
-#include "flash_attention_v2/kernel/xe_flash_attn_decode_gemm.hpp"
+#include "flash_attention_v2/kernel/xe_flash_attn_decode.hpp"
 #include "flash_attention_v2/collective/xe_flash_attn_decode_epilogue.hpp"
 #include "flash_attention_v2/collective/xe_flash_attn_decode_softmax_epilogue.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
@@ -60,6 +60,101 @@
 
 namespace test {
 namespace flash_attention {
+
+using namespace cute;
+
+using MMAOperationBF16 = XE_1x16x16_F32BF16BF16F32_TT;
+using MMAOperationFP16 = XE_1x16x16_F32F16F16F32_TT;
+
+template <int KVTile, int NumSGs>
+struct Shape_h64 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _64, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template <int KVTile, int NumSGs>
+struct Shape_h96 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _96, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template <int KVTile, int NumSGs>
+struct Shape_h128 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _128, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+template <int KVTile, int NumSGs>
+struct Shape_h192 {
+  using ShapeQK = Shape<_1, Int<KVTile>, _64>;
+  using ShapePV = Shape<_1, _32, Int<KVTile>>;
+  using ShapeOutput = Shape<_1, _192, Int<KVTile>>;
+  using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
+};
+
+using GmemTiledCopyQU16 = cute::XE_2D_U16x1x16_LD_N;
+using GmemTiledCopyKU16 = cute::XE_2D_U16x16x16_LD_T;
+using GmemTiledCopyVU16 = cute::XE_2D_U16x32x32_LD_V;
+using GmemTiledCopyStoreU32 = cute::XE_2D_U32x1x16_ST_N;
+using GmemTiledCopyStoreU16 = cute::XE_2D_U16x1x16_ST_N;
+
+template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
+         typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
+         typename MMAOperation, bool HasCausalMask, bool isVarLen, typename TiledCopyQ, typename TiledCopyK,
+         typename TiledCopyV, typename TiledCopyStore, bool PagedKV>
+struct XE_Flash_Attention_Decode {
+  using LayoutQ = cutlass::layout::RowMajor;
+  using LayoutK = cutlass::layout::ColumnMajor;
+  using LayoutV = cutlass::layout::RowMajor;
+  using LayoutO = cutlass::layout::RowMajor;
+
+  using ElementAccumulator = ElementAccumulatorType;
+  using ElementComputeEpilogue = ElementAccumulatorType;
+  using ElementInputQ = ElementInputType;
+  using ElementInputKV = ElementInputType;
+  using ElementOutput = ElementOutputType;
+
+  using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
+  using ProblemShapeVarlen = cute::tuple<int, int, int, cutlass::fmha::collective::VariableLength,
+                                         cutlass::fmha::collective::VariableLength, cutlass::fmha::collective::VariableLength,
+                                         int, int>;
+  using ProblemShapeType = std::conditional_t<isVarLen, ProblemShapeVarlen, ProblemShapeRegular>;
+
+  static constexpr int PipelineStages = 2;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+
+  using GmemTiledCopyQ = TiledCopyQ;
+  using GmemTiledCopyK = TiledCopyK;
+  using GmemTiledCopyV = TiledCopyV;
+  using GmemTiledCopyStore = TiledCopyStore;
+  using CollectiveEpilogue = cutlass::flash_attention::collective::FlashDecodeEpilogue<
+        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, ElementOutput, cutlass::gemm::TagToStrideC_t<LayoutO>,
+        ElementOutput, GmemTiledCopyStore>;
+  using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashDecodeSoftmaxEpilogue<
+        HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;
+
+  // Mainloop
+  using CollectiveMainloop = cutlass::flash_attention::collective::FlashDecodeMma<
+        GEMMDispatchPolicy, ProblemShapeType, ElementInputQ,
+        cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutV>, MMAOperation,
+        TileShapeQK, TileShapePV, SubgroupLayout,
+        GmemTiledCopyQ, // Q
+        GmemTiledCopyK, // K
+        GmemTiledCopyV, // V,
+        HasCausalMask, PagedKV>;
+
+    using Kernel = cutlass::flash_attention::kernel::FMHADecode<ProblemShapeType, CollectiveMainloop,
+                                                       CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
+};
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -118,6 +213,7 @@ struct TestbedImpl {
   using ProblemShapeType = typename FlashDecode::ProblemShape;
   static constexpr bool HasCausalMask = CollectiveMainloop::CausalMask;
   static constexpr bool isVarLen = CollectiveMainloop::is_var_len;
+  static constexpr bool PagedKV = CollectiveMainloop::PagedKV;
 
   StrideQ stride_Q;
   StrideK stride_K;
@@ -142,18 +238,31 @@ struct TestbedImpl {
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
 
+  struct PagedKVParams {
+      cutlass::DeviceAllocation<int> page_table;
+      int page_size = 0;
+      cutlass::DeviceAllocation<int> num_pages_per_seq;
+  };
+  PagedKVParams paged_kv_cache;
+
   //
   // Methods
   //
 
   /// Initializes data structures
   template <class ProblemShape>
-  ProblemShapeType initialize(ProblemShape problem_shape_in) {
+  ProblemShapeType initialize(ProblemShape problem_shape_in, int page_size) {
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::initialize(problem_size)");
 #endif
     ProblemShapeType problem_shape;
     ProblemShape problem_size;
+
+    if (cute::get<5>(problem_shape_in) > 0) {
+      use_kv_cache = true;
+    } else {
+      use_kv_cache = false;
+    }
 
     if constexpr (isVarLen) {
       auto [problem_shape_init, problem_shape_launch] = initialize_varlen(problem_shape_in);
@@ -182,17 +291,42 @@ struct TestbedImpl {
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
 
+    if constexpr (PagedKV) {
+      paged_kv_cache.page_size = page_size;
+      std::vector<int> num_pages_per_seq{0};
+      int num_pages = 0;
+      for(int b = 0; b < get<0>(problem_shape); b++) {
+        int seq_len_cache = isVarLen ? cumulative_seqlen_kv_cache[b + 1] - cumulative_seqlen_kv_cache[b] : seq_len_kv_cache;
+        int pages_per_seq = ceil_div(seq_len_cache, paged_kv_cache.page_size);
+        num_pages_per_seq.push_back(num_pages_per_seq.back() + pages_per_seq);
+        num_pages += pages_per_seq;
+      }
+      paged_kv_cache.page_table.reset(num_pages);
+
+      // initialize block table with random mapping for non-contiguous layout
+      std::vector<int> page_mapping(num_pages);
+      for (int b = 0; b < get<0>(problem_shape); ++b) {
+        std::vector<int> physical_pages(num_pages_per_seq[b + 1] - num_pages_per_seq[b]);
+        std::iota(physical_pages.begin(), physical_pages.end(), 0);
+        // shuffle physical pages
+        std::shuffle(physical_pages.begin(), physical_pages.end(), std::mt19937{ std::random_device{}() });
+        for (int blk = 0; blk < physical_pages.size(); ++blk) {
+          int logical_idx = num_pages_per_seq[b] + blk;
+          page_mapping[logical_idx] = physical_pages[blk];
+        }
+      }
+      syclcompat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
+
+      paged_kv_cache.num_pages_per_seq.reset(num_pages_per_seq.size());
+      syclcompat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
+      syclcompat::wait();
+    }
+
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
     initialize_block(block_K_cache, seed + 2024);
     initialize_block(block_V_cache, seed + 2025);
-
-    if (seq_len_kv_cache > 0) {
-      use_kv_cache = true;
-    } else {
-      use_kv_cache = false;
-    }
 
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
@@ -210,6 +344,7 @@ struct TestbedImpl {
       device_cumulative_seqlen_kv_cache.copy_from_host(
         cumulative_seqlen_kv_cache.data(), cumulative_seqlen_kv_cache.size());
     }
+
     if constexpr (isVarLen) {
       cute::get<3>(problem_shape).cumulative_length = device_cumulative_seqlen_q.get();
       cute::get<4>(problem_shape).cumulative_length = device_cumulative_seqlen_kv.get();
@@ -231,6 +366,11 @@ struct TestbedImpl {
     std::normal_distribution<double> dist_kv(cute::get<4>(problem_size), cute::get<4>(problem_size) / 2);
     std::normal_distribution<double> dist_kv_cache(cute::get<5>(problem_size), cute::get<5>(problem_size) / 2);
 
+    // Use Cacheline Size to calculate alignment
+    constexpr int cacheline_bytes = 64;
+    constexpr int AlignmentQ = cacheline_bytes / sizeof(ElementQ);    // Alignment of Q matrix in units of elements
+    constexpr int AlignmentKV = cacheline_bytes / sizeof(ElementK);   // Alignment of Kand V matrix in units of elements
+
     auto generate_positive_int = [](auto& dist, auto& gen) {
       int result = 0;
       do {
@@ -251,9 +391,10 @@ struct TestbedImpl {
     int max_seqlen_kv_cache = 0;
 
     for (int i = 0; i < num_batches; i++) {
-      int seqlen_q = VarlenSame ? cute::get<3>(problem_size) : generate_positive_int(dist_q, rng);
-      int seqlen_kv = VarlenSame ? cute::get<4>(problem_size) : generate_positive_int(dist_kv, rng);
-      int seqlen_kv_cache = VarlenSame ? cute::get<5>(problem_size) : generate_positive_int(dist_kv_cache, rng);
+      //seqlen_q is usually set to 1 for decode.
+      int seqlen_q = cute::get<3>(problem_size) == 1 ? 1 : std::min(cute::get<3>(problem_size), cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ));
+      int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
+      int seqlen_kv_cache = cute::get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
 
       total_seqlen_q += seqlen_q;
       total_seqlen_kv += seqlen_kv;
@@ -329,7 +470,7 @@ struct TestbedImpl {
 
       int kv_group_update = 1;
       for (int h = 0; h < num_heads_q; h++) {
-        cutlass::DeviceAllocation<ElementOutput> block_S;
+        cutlass::DeviceAllocation<ElementAccumulator> block_S;
         block_S.reset(seq_len_qo * seq_len_kv_total);
 
         ElementK* k_ptr;
@@ -376,11 +517,10 @@ struct TestbedImpl {
         cutlass::TensorRef ref_K(k_ptr, LayoutK::packed({head_size_qk, seq_len_kv_total}));
         cutlass::TensorRef ref_V(v_ptr, LayoutV::packed({seq_len_kv_total, head_size_vo}));
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
-        cutlass::TensorRef ref_O(block_ref_O.get() + offset_o, LayoutO::packed({seq_len_qo, head_size_vo}));
 
-        cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv_total, head_size_qk}, 1.f, ref_Q,
+        cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv_total, head_size_qk}, ElementAccumulator{1}, ref_Q,
                                                 cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
-                                                0.f, ref_S, ref_S, ElementAccumulator(0),
+                                                ElementAccumulator{0}, ref_S, ref_S, ElementAccumulator{0},
                                                 1,                   // batch_count
                                                 seq_len_qo * head_size_qk, // batch_stride_Q
                                                 seq_len_kv_total * head_size_qk, // batch_stride_K
@@ -390,28 +530,30 @@ struct TestbedImpl {
 
         syclcompat::wait();
 
-        std::vector<ElementOutput> host_S(block_S.size());
-        syclcompat::memcpy<ElementOutput>(host_S.data(), block_S.get(), host_S.size());
+        std::vector<ElementAccumulator> host_S(block_S.size());
+        syclcompat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(), host_S.size());
         syclcompat::wait();
 
         // delete this memory as it is no longer needed
         block_S.reset();
 
+        auto offset = cute::min(seq_len_qo, seq_len_kv);
+        auto discard_seq_coord = seq_len_qo - offset;
+        auto full_tile_offset = seq_len_kv - offset;
+        int start_col = use_kv_cache ? seq_len_kv_cache : 0;
+
         if (HasCausalMask) {
           // apply mask to S
-          int start_col = use_kv_cache ? seq_len_kv_cache : 0;
-          // apply mask to S
-          int column_offset = seq_len_kv - seq_len_qo;
           for (int row = 0; row < seq_len_qo; row++) {
             for (int col = start_col; col < seq_len_kv_total; col++) {
-              if (col - column_offset > row + start_col)
-                host_S[col + row * seq_len_kv_total] = -INFINITY;
+              if (col - full_tile_offset > row + start_col - discard_seq_coord)
+                host_S[col + row * seq_len_kv_total] = ElementAccumulator{-INFINITY};
             }
           }
         }
 
         // compute max element per row of S
-        std::vector<ElementOutput> max_vec(seq_len_qo, -INFINITY);
+        std::vector<ElementAccumulator> max_vec(seq_len_qo, ElementAccumulator{-INFINITY});
         for (int row = 0; row < seq_len_qo; row++) {
           int idx = row * seq_len_kv_total;
           int max_idx = row;
@@ -427,12 +569,12 @@ struct TestbedImpl {
           int idx = row * seq_len_kv_total;
           int max_idx = row;
           for (int col = 0; col < seq_len_kv_total; col++, idx++) {
-            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) * softmax_scale);
+            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) / sqrt(static_cast<ElementAccumulator>((head_size_qk))));
           }
         }
 
         // compute sum per row of S
-        std::vector<ElementOutput> sum_vec(seq_len_qo, ElementOutput{0});
+        std::vector<ElementAccumulator> sum_vec(seq_len_qo, ElementAccumulator{0});
         for (int row = 0; row < seq_len_qo; row++) {
           int idx = row * seq_len_kv_total;
           int sum_idx = row;
@@ -444,7 +586,11 @@ struct TestbedImpl {
           idx = row * seq_len_kv_total;
           sum_idx = row;
           for (int col = 0; col < seq_len_kv_total; col++, idx++) {
-            host_S[idx] /= sum_vec[sum_idx];
+            if(HasCausalMask && row < discard_seq_coord) { 
+              host_S[idx] = 0;
+            } else {
+              host_S[idx] /= sum_vec[sum_idx];
+            }
           }
         }
 
@@ -460,9 +606,13 @@ struct TestbedImpl {
 
         cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
 
-        cutlass::reference::device::GemmComplex({seq_len_qo, head_size_vo, seq_len_kv_total}, 1.f, ref_P,
+        cutlass::DeviceAllocation<ElementAccumulator> block_acc;
+        block_acc.reset(seq_len_qo * head_size_vo);
+        cutlass::TensorRef ref_acc(block_acc.get(), LayoutO::packed({seq_len_qo, head_size_vo}));
+
+        cutlass::reference::device::GemmComplex({seq_len_qo, head_size_vo, seq_len_kv_total}, ElementAccumulator{1}, ref_P,
                                                 cutlass::ComplexTransform::kNone, ref_V, cutlass::ComplexTransform::kNone,
-                                                0.f, ref_O, ref_O, ElementAccumulator(0),
+                                                ElementAccumulator{0}, ref_acc, ref_acc, ElementAccumulator{0},
                                                 1,                   // batch_count
                                                 seq_len_qo * seq_len_kv_total,   // batch_stride_P
                                                 seq_len_kv_total * head_size_vo, // batch_stride_V
@@ -473,6 +623,19 @@ struct TestbedImpl {
         syclcompat::wait();
         // delete this memory as it is no longer needed
         block_P.reset();
+
+        std::vector<ElementAccumulator> vec_acc(block_acc.size());
+        syclcompat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(), vec_acc.size());
+        syclcompat::wait();
+
+        // delete this memory as it is no longer needed
+        block_acc.reset();
+        std::vector<ElementOutput> vec_out(vec_acc.size());
+        for(int i = 0; i < vec_out.size(); i++) {
+          vec_out[i] = static_cast<ElementOutput>(vec_acc[i]);
+        }
+        syclcompat::memcpy<ElementOutput>(block_ref_O.get() + offset_o, vec_out.data(), vec_out.size());
+        syclcompat::wait();
 
         offset_q += seq_len_qo * head_size_qk;
         if(kv_group_update % q_group_size == 0) {
@@ -490,7 +653,7 @@ struct TestbedImpl {
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
-                                                                          block_O.size(), 0.5f, 0.5f);
+                                                                          block_O.size(), ElementOutput{0.5}, ElementOutput{0.5});
     return passed;
   }
 
@@ -500,7 +663,7 @@ struct TestbedImpl {
 
   /// Executes one test
   template<class ProblemShape>
-  bool run(ProblemShape problem_size_init, float softmax_scale)
+  bool run(ProblemShape problem_size_init, float softmax_scale, int page_size)
   {
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run"); 
@@ -518,7 +681,7 @@ struct TestbedImpl {
     }
 #endif
 
-    ProblemShapeType problem_size = this->initialize(problem_size_init);
+    ProblemShapeType problem_size = this->initialize(problem_size_init, page_size);
 
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: this->initialize() returned true");
@@ -535,7 +698,10 @@ struct TestbedImpl {
       block_K.get(), stride_K,
       block_V.get(), stride_V,
       block_K_cache.get(), stride_K_cache,
-      block_V_cache.get(), stride_V_cache},
+      block_V_cache.get(), stride_V_cache,
+      PagedKV ? paged_kv_cache.page_table.get() : nullptr,
+      PagedKV ? paged_kv_cache.page_size : 0,
+      PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
       {softmax_scale},
       {block_O.get(), stride_O},
       hw_info};
@@ -648,10 +814,11 @@ struct Testbed3x {
   template <class ProblemShape>
   bool run(
    ProblemShape problem_size,
-   float softmax_scale
+   float softmax_scale,
+   int page_size
     )
   {
-    return impl_.run(problem_size, softmax_scale);
+    return impl_.run(problem_size, softmax_scale, page_size);
   }
 };
 
@@ -663,6 +830,7 @@ bool TestFlashDecodeAll(int head_size) {
   std::vector<int> problem_size_num_heads{32};
   std::vector<int> problem_size_seq_len{1024};
   std::vector<int> problem_size_seq_len_cache{0, 1024};
+  std::vector<int> cache_page_size{64, 128};
   std::vector<float> problem_size_softmax_scale{ 1.f / sqrt(static_cast<float>(head_size)) };
   bool passed = true;
 
@@ -670,51 +838,53 @@ bool TestFlashDecodeAll(int head_size) {
     for (int num_heads : problem_size_num_heads) {
       for (int seq_len : problem_size_seq_len) {
         for (int seq_len_cache : problem_size_seq_len_cache) {
-          for (float softmax_scale : problem_size_softmax_scale) {
-            auto num_heads_q = num_heads;
-            auto num_heads_kv = num_heads;
-            auto seq_len_qo = 1;
-            auto seq_len_kv = seq_len;
-            auto seq_len_kv_cache = seq_len_cache;
-            auto head_size_qk = head_size;
-            auto head_size_vo = head_size;
+          for (int page_size : cache_page_size) {
+            for (float softmax_scale : problem_size_softmax_scale) {
+              auto num_heads_q = num_heads;
+              auto num_heads_kv = num_heads;
+              auto seq_len_qo = 1;
+              auto seq_len_kv = seq_len;
+              auto seq_len_kv_cache = seq_len_cache;
+              auto head_size_qk = head_size;
+              auto head_size_vo = head_size;
 
-            auto problem_size = cute::make_tuple(
-              batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo);
-            try {
-              passed = testbed.run(problem_size, softmax_scale);
-            }
-            catch (std::exception const& e) {
-              EXPECT_TRUE(false) << "TestFlashDecodeAll: testbed.run {"
+              auto problem_size = cute::make_tuple(
+                batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo);
+              try {
+                passed = testbed.run(problem_size, softmax_scale, page_size);
+              }
+              catch (std::exception const& e) {
+                EXPECT_TRUE(false) << "TestFlashDecodeAll: testbed.run {"
+                  << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
+                  << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
+                  << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
+                  << ", scale: " << softmax_scale << ", page_size: " << page_size
+                  << "} threw an exception: " << e.what();
+                throw;
+              }
+              catch (...) {
+                EXPECT_TRUE(false) << "TestFlashDecodeAll: testbed.run {"
+                  << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
+                  << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
+                  << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
+                  << ", scale: " << softmax_scale << ", page_size: " << page_size
+                  << "} threw an exception (unknown)";
+                throw;
+              }
+
+              EXPECT_TRUE(passed) << "TestFlashDecodeAll: testbed.run {"
                 << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
                 << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
                 << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
-                << ", scale: " << softmax_scale
-                << "} threw an exception: " << e.what();
-              throw;
-            }
-            catch (...) {
-              EXPECT_TRUE(false) << "TestFlashDecodeAll: testbed.run {"
-                << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
-                << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
-                << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
-                << ", scale: " << softmax_scale
-                << "} threw an exception (unknown)";
-              throw;
-            }
+                << ", scale: " << softmax_scale << ", page_size: " << page_size
+                << "} failed";
 
-            EXPECT_TRUE(passed) << "TestFlashDecodeAll: testbed.run {"
-              << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
-              << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
-              << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
-              << ", scale: " << softmax_scale
-              << "} failed";
-
-            if (!passed) {
-              std::cout << __FILE__ << ':' << __LINE__ << " : Flash Decode FAILED.\n";
-              return false;
-            }
-          } // softmax_scale
+              if (!passed) {
+                std::cout << __FILE__ << ':' << __LINE__ << " : Flash Decode FAILED.\n";
+                return false;
+              }
+            } // softmax_scale
+          } // page_size
         } // seq_len_cache
       } // seq_len
     } // num_heads

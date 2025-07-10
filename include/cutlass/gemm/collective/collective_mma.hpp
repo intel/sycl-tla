@@ -61,8 +61,10 @@
 #include "cutlass/gemm/collective/sm100_blockscaled_mma_warpspecialized.hpp" 
 #include "cutlass/gemm/collective/sm100_blockscaled_mma_array_warpspecialized.hpp" 
 #include "cutlass/gemm/collective/sm100_mma_warpspecialized_blockwise_scaling.hpp"
+#include "cutlass/gemm/collective/sm100_mma_array_warpspecialized_blockwise_scaling.hpp"
 #include "cutlass/gemm/collective/sm120_mma_tma.hpp"
 #include "cutlass/gemm/collective/sm120_blockscaled_mma_tma.hpp"
+#include "cutlass/gemm/collective/sm120_blockscaled_mma_array_tma.hpp"
 #include "cutlass/gemm/collective/sm120_sparse_mma_tma.hpp"
 #include "cutlass/gemm/collective/sm120_blockscaled_sparse_mma_tma.hpp"
 #endif // !defined(__CUDACC_RTC__)
@@ -70,8 +72,10 @@
 #if defined(SYCL_INTEL_TARGET)
 #include "cutlass/gemm/collective/xe_mma.hpp"
 #include "cutlass/gemm/collective/xe_array_mma.hpp"
+#include "cutlass/gemm/collective/xe_array_mma_fp8.hpp"
 #include "cutlass/gemm/collective/xe_mma_mixed_input.hpp"
 #include "cutlass/gemm/collective/xe_mma_w8a8.hpp"
+#include "cutlass/gemm/collective/xe_mma_fp8_scaling.hpp"
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)
