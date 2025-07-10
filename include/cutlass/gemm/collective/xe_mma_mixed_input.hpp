@@ -451,23 +451,26 @@ public:
 
     CUTLASS_PRAGMA_UNROLL
     for (int n = 0; n < N; n++) {
-      const auto ts = tCrS_input(n);
-      const auto tz = [&](){
+      const auto scale = tCrS_input(n);
+      const auto zero = [&](){
         if constexpr (sizeof_bits_v<ZeroType> >= 8) {
           return tCrZ_input(n);
         } else {
-          return tCrZ_input(n).get();
+          return (int8_t)(tCrZ_input(n).get());
         }
       }();
 
-      auto& src = *(cute::array<format_type, loop_cnt / scalar>*)(s_tensor(_, n).data());
+      auto& src = *(cute::intel::vector_t<format_type, loop_cnt / scalar>*)(s_tensor(_, n).data());
 
       CUTLASS_PRAGMA_UNROLL
       for (int s = 0; s < splits; s++) {
         auto idx =  vec_size * s / scalar;
         auto format_data = src[idx];
 
-        auto& dst = *(cute::array<DstType, vec_size>*)(d_tensor(_, s, n).data());
+        // for performance, _Float16 have better performance than half_t here
+        using vector_type = cute::conditional_t<std::is_same_v<DstType, half_t>, _Float16, DstType>;
+
+        auto& dst = *(cute::intel::vector_t<vector_type, vec_size>*)(d_tensor(_, s, n).data());
 
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < vec_size; i++) {
@@ -483,12 +486,11 @@ public:
             if constexpr (IsATransformed) {
               static_assert(dependent_false<LayoutIn> && "ATransform not support now");
             } else {
-              using ret_type = cute::conditional_t<sizeof_bits_v<ZeroType> >= 8, ZeroType, int8_t>;
-              ret_type minus(data);
-              if constexpr (ModeScaleZero) {
-                minus = static_cast<ret_type>(data) - static_cast<ret_type>(tz);
+              if constexpr (ModeScale) {
+                dst[i] = data * scale;
+              } else if constexpr (ModeScaleZero) {
+                dst[i] = (static_cast<decltype(zero)>(data) - zero) * scale;
               }
-              dst[i] = (static_cast<ScaleType>(minus)) * ts;
             }
           } else {
             dst[i] = static_cast<DstType>(data);
