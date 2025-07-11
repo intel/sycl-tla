@@ -423,8 +423,8 @@ public:
     using ZeroType = typename EngineZeros::value_type;
     using ScaleType = typename EngineScales::value_type;
 
-    static constexpr bool is_quantization = !((cutlass::platform::numeric_limits<SrcType>::is_integer && cutlass::platform::numeric_limits<DstType>::is_integer)
-                                       || (cutlass::platform::is_floating_point<SrcType>::value && cutlass::platform::is_floating_point<DstType>::value));
+    static constexpr bool is_quantization = cutlass::platform::numeric_limits<SrcType>::is_integer
+                                              ^ cutlass::platform::numeric_limits<DstType>::is_integer;
 
     static constexpr auto DPAS = decltype(size<0>(in))::value;
     static constexpr auto N = decltype(size<1>(in))::value;
@@ -441,7 +441,7 @@ public:
     static constexpr auto splits = loop_cnt / vec_size;
     static_assert(vec_size <= scalar);
 
-    if (std::is_same_v<SrcType, DstType>) {
+    if constexpr (std::is_same_v<SrcType, DstType>) {
       return;
     }
 
@@ -452,7 +452,7 @@ public:
     CUTLASS_PRAGMA_UNROLL
     for (int n = 0; n < N; n++) {
       const auto scale = tCrS_input(n);
-      const auto zero = [&](){
+      const auto zero = [&]() {
         if constexpr (sizeof_bits_v<ZeroType> >= 8) {
           return tCrZ_input(n);
         } else {
@@ -474,7 +474,7 @@ public:
 
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < vec_size; i++) {
-          auto data = [&](){
+          auto data = [&]() {
             if constexpr (cutlass::platform::numeric_limits<SrcType>::is_signed) {
               return static_cast<SrcType>((format_data >> (src_bits * i)) & 0xf);
             } else {
@@ -526,13 +526,36 @@ public:
     using DstType = typename EngineOut::value_type;
     using ZeroType = typename EngineZeros::value_type;
     using ScaleType = typename EngineScales::value_type;
-    using MmaType = DstType;
 
-    if constexpr (!std::is_same_v<SrcType, DstType>) {
-      if constexpr(cute::is_any_of_v<ElementA,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t>
-                && cute::is_any_of_v<ElementB,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t>) {
-        convert_FP8_to_FP16<ElementQuant>(make_tensor(reinterpret_cast<const uint8_t*>(in.data()), in.layout()), out);
-      } else {
+    if constexpr (std::is_same_v<SrcType, DstType>) {
+      return;
+    }
+
+    if constexpr (cute::is_any_of_v<ElementA,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t>
+                  && cute::is_any_of_v<ElementB,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t>) {
+      convert_FP8_to_FP16<ElementQuant>(make_tensor(reinterpret_cast<const uint8_t*>(in.data()), in.layout()), out);
+      return;
+    }
+
+    if constexpr (!ModeHasScales) {
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < decltype(size(in))::value; ++i) {
+        out[i] = static_cast<DstType>(in[i]);
+      }
+      return;
+    }
+
+    if constexpr (IsATransformed) {
+      // The current scale load atom (1x32) gives 2 scale values to
+      // each thread. All threads need access to all other threads
+      // scale values, and each scale value is reused twice (unrolled)
+
+      static constexpr auto M = decltype(size<1>(in))::value;
+      static constexpr auto K = decltype(size(in))::value / 8 / M;
+
+      static constexpr auto is_dst_int = cutlass::platform::numeric_limits<DstType>::is_integer;
+
+      if constexpr (!is_dst_int) {
         auto const& src = in(_, _, _);
         auto const& dst = out(_, _, _);
         auto pSrc = const_cast<SrcType*>(raw_pointer_cast(src.data()));
@@ -546,82 +569,66 @@ public:
         using DstArray = cutlass::Array<DstType, pack>;
         constexpr int iters = num_elements / pack;
 
-        if constexpr (!cutlass::platform::numeric_limits<DstType>::is_integer) {
-          CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i < iters; ++i) {
-            SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
-            DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
-            *pDstArr = Converter::convert(*pSrcArr);
-          }
-        } else if constexpr (!ModeHasScales) {
-          CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i < decltype(size(in))::value; ++i) {
-            out[i] = static_cast<DstType>(in[i]);
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < iters; ++i) {
+          SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
+          DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
+          *pDstArr = Converter::convert(*pSrcArr);
+        }
+      }
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < 16 ; ++i) {
+        CUTLASS_PRAGMA_UNROLL
+        for (int m = 0; m < M / 2; ++m) {
+          const auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(m), i);
+          const auto zero = [&]() {
+            if constexpr (sizeof_bits_v<ZeroType> >= 8) {
+              return shfl_sync(0xFFFFFFFF, tCrZ_input(m), i);
+            } else {
+              return shfl_sync(0xFFFFFFFF, tCrZ_input(m).get(), i);
+            }
+          }();
+
+          if constexpr (is_dst_int) { // quantization
+            CUTLASS_PRAGMA_UNROLL
+            for (int k = 0; k < K; k++) {
+              out[2 * (m * 16 + i) + k] = in[2 * (m * 16 + i) + k] / scale;
+              if constexpr (ModeScaleZero) {
+                out[2 * (m * 16 + i) + k] += zero;
+              }
+            }
+          } else { // dequantization
+            CUTLASS_PRAGMA_UNROLL
+            for (int k = 0; k < K; k++) {
+              if constexpr (ModeScaleZero) {
+                out(_, _, k)[m * 16 + i] -= zero;
+              }
+              out(_, _, k)[m * 16 + i] *= scale;
+            }
           }
         }
+      }
+    } else {
+      static constexpr auto N = decltype(size<1>(in))::value;
 
-        if constexpr (ModeHasScales) {
-          if constexpr(IsATransformed){
-            // The current scale load atom (1x32) gives 2 scale values to
-            // each thread. All threads need access to all other threads
-            // scale values, and each scale value is reused twice (unrolled)
-
-            static constexpr auto M = decltype(size<1>(in))::value;
-            static constexpr auto K = decltype(size(in))::value / 8 / M;
-
-            CUTLASS_PRAGMA_UNROLL
-            for (int i = 0; i < 16 ; ++i) {
-              CUTLASS_PRAGMA_UNROLL
-              for (int m = 0; m < M / 2; ++m) {
-                auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(m), i);
-                auto zero = 
-                [&]() {
-                  if constexpr (sizeof_bits_v<ZeroType> >= 8) {
-                    return shfl_sync(0xFFFFFFFF, tCrZ_input(m), i);
-                  } else {
-                    return shfl_sync(0xFFFFFFFF, tCrZ_input(m).get(), i);
-                  }
-                }();
-
-                if constexpr (cutlass::platform::numeric_limits<MmaType>::is_integer) { // quantization
-                  for (int k = 0; k < K; k++) {
-                    out[2 * (m * 16 + i) + k] = in[2 * (m * 16 + i) + k] / scale;
-                    if constexpr (ModeScaleZero) {
-                      out[2 * (m * 16 + i) + k] += zero;
-                    }
-                  }
-                } else { // dequantization
-                  for (int k = 0; k < K; k++) {
-                    if constexpr (ModeScaleZero) {
-                      out(_, _, k)[m * 16 + i] -= zero;
-                    }
-                    out(_, _, k)[m * 16 + i] *= scale;
-                  }
-                }
-              }
-            }
+      CUTLASS_PRAGMA_UNROLL
+      for (int n = 0; n < N; ++n) {
+        const auto [zero, scale] = [&]() {
+          if constexpr (is_groupwise) {
+            return std::make_pair(tCrZ_input(n), tCrS_input(n));
           } else {
-            static constexpr auto N = decltype(size<1>(in))::value;
-
-            CUTLASS_PRAGMA_UNROLL
-            for (int n = 0; n < N; ++n) {
-              auto [zero, scale] = [&](){
-                if constexpr(is_groupwise){
-                  return std::make_pair(tCrZ_input(n), tCrS_input(n));
-                } else {
-                  return std::make_pair(tCrZ_input(0), tCrS_input(0));
-                }
-                }();
-              CUTLASS_PRAGMA_UNROLL
-              for (int i = 0; i < decltype(size(in))::value / N; ++i) {
-                ZeroType minus_zp =  static_cast<ZeroType>(in(_, n, _)[i]);
-                if constexpr (ModeScaleZero) {
-                  minus_zp -= zero;
-                }
-                out(_, n, _)[i] = static_cast<DstType>(minus_zp) * scale;
-              }
-            }
+            return std::make_pair(tCrZ_input(0), tCrS_input(0));
           }
+        }();
+
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < decltype(size(in))::value / N; ++i) {
+          ZeroType minus_zp =  static_cast<ZeroType>(in(_, n, _)[i]);
+          if constexpr (ModeScaleZero) {
+            minus_zp -= zero;
+          }
+          out(_, n, _)[i] = static_cast<DstType>(minus_zp) * scale;
         }
       }
     }
