@@ -47,8 +47,8 @@
    export IGC_allowDecompose2DBlockFuncs=0
  To build & run this example (from your build dir):
 
-    $ ninja 02_bmg_gemm_f16_u4
-    $ ./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4
+    $ ninja 02_bmg_gemm_f16_u4_s8
+    $ ./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_s8
 
   Call with `--help` for information about available options
 */
