@@ -411,9 +411,10 @@ public:
   transform_quant(
     Tensor<EngineIn, LayoutIn> const& in,
     Tensor<EngineOut, LayoutOut>& out,
-    Tensor<EngineScales, LayoutScales>& tCrS_input,
-    Tensor<EngineZeros, LayoutZeros>& tCrZ_input
+    Tensor<EngineScales, LayoutScales> const& tCrS_input,
+    Tensor<EngineZeros, LayoutZeros> const& tCrZ_input
   ) {
+
     static_assert(is_rmem<EngineIn>::value, "Input tensor for conversion must come from registers");
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(std::is_same_v<LayoutOut, LayoutIn>);
@@ -514,8 +515,8 @@ public:
   transform_quant(
     Tensor<EngineIn, LayoutIn> const& in,
     Tensor<EngineOut, LayoutOut>& out,
-    Tensor<EngineScales, LayoutScales>& tCrS_input,
-    Tensor<EngineZeros, LayoutZeros>& tCrZ_input
+    Tensor<EngineScales, LayoutScales> const& tCrS_input,
+    Tensor<EngineZeros, LayoutZeros> const& tCrZ_input
   ) {
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
