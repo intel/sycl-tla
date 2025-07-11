@@ -66,7 +66,7 @@ export OCL_ICD_VENDORS=$HOME
 # ================= target =================
 #target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
 target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16
-#target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16
+target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16
 #target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_s8_f16_tensorwise
 #target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_s8
 

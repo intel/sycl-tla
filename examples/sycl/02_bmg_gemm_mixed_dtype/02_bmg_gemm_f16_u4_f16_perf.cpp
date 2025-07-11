@@ -718,7 +718,7 @@ void run_int4(Options const& options) {
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
   using ElementInputA = MmaType;       // <- data type of elements in input matrix A
   using ElementInputB = QuantType;         // <- data type of elements in input matrix B
-  using ElementOutput = MmaType;           // <- data type of elements in output matrix D
+  using ElementOutput = float;           // <- data type of elements in output matrix D
 
   using LayoutA = layout_a;
   using LayoutB = layout_b;
