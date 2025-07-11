@@ -879,7 +879,7 @@ bool TestFlashDecodeAll(int head_size) {
 
   std::vector<int> problem_size_batch{4};
   std::vector<int> problem_size_num_heads{2};
-  std::vector<int> problem_size_seq_len{512};
+  std::vector<int> problem_size_seq_len{1024};
   std::vector<int> problem_size_seq_len_cache{0, 512};
   std::vector<int> cache_page_size{64, 128};
   std::vector<float> problem_size_softmax_scale{ 1.f / sqrt(static_cast<float>(head_size)) };
