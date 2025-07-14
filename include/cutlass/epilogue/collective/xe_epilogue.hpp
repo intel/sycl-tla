@@ -419,11 +419,9 @@ public:
         cst_callbacks.reduce(nullptr, synchronize, epi_m, epi_n, (epi_m == FragsM - 1 && epi_n == FragsN - 1), trD_compute_frag);
         
         if constexpr (is_destination_supported) {
-          if constexpr (!std::is_same_v<ElementOutput, ElementCompute>) {
-            CUTLASS_PRAGMA_UNROLL
-            for (int i = 0; i < size(trD_compute_frag); ++i) {
-              trD_frag(i) = cutlass::NumericArrayConverter<ElementOutput, ElementCompute, FragmentSize>{}(trD_compute_frag(i));
-            }
+          CUTLASS_PRAGMA_UNROLL
+          for (int i = 0; i < size(trD_compute_frag); ++i) {
+            trD_frag(i) = cutlass::NumericArrayConverter<ElementOutput, ElementCompute, FragmentSize>{}(trD_compute_frag(i));
           }
           copy(params.xe_store_d, trD, tCgD(_, epi_m, epi_n));
         }
