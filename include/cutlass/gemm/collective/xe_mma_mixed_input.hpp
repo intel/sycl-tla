@@ -596,13 +596,8 @@ public:
 
             CUTLASS_PRAGMA_UNROLL
             for (int n = 0; n < N; ++n) {
-              auto [zero, scale] = [&](){
-                if constexpr(is_groupwise){
-                  return std::make_pair(tCrZ_input(n), tCrS_input(n));
-                } else {
-                  return std::make_pair(tCrZ_input(0), tCrS_input(0));
-                }
-                }();
+              auto [zero, scale] = (is_groupwise) ? cute::make_tuple(tCrZ_input(n), tCrS_input(n)) :  cute::make_tuple(tCrZ_input(0), tCrS_input(0));
+
               CUTLASS_PRAGMA_UNROLL
               for (int i = 0; i < decltype(size(in))::value / N; ++i) {
                 ZeroType minus_zp =  static_cast<ZeroType>(in(_, n, _)[i]);
