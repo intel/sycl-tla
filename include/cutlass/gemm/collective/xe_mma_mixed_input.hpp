@@ -184,8 +184,8 @@ public:
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
 
-  static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
-  static_assert(std::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
+  static_assert(cute::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
+  static_assert(cute::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
   
 private:
    
@@ -417,7 +417,7 @@ public:
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for conversion must come from registers");
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
-    static_assert(std::is_same_v<LayoutOut, LayoutIn>);
+    static_assert(cute::is_same_v<LayoutOut, LayoutIn>);
 
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
@@ -442,9 +442,7 @@ public:
     static constexpr auto splits = loop_cnt / vec_size;
     static_assert(vec_size <= scalar);
 
-    if constexpr (std::is_same_v<SrcType, DstType>) {
-      return;
-    }
+    static_assert(!cute::is_same_v<SrcType, DstType>);
 
     // reshape tensors for easy access
     auto s_tensor = make_tensor((format_type*)(raw_pointer_cast(in.data())), Shape<Int<loop_cnt / scalar>, Int<N>>{});
@@ -469,7 +467,7 @@ public:
         auto format_data = src[idx];
 
         // for performance, _Float16 have better performance than half_t here
-        using vector_type = cute::conditional_t<std::is_same_v<DstType, half_t>, _Float16, DstType>;
+        using vector_type = cute::conditional_t<cute::is_same_v<DstType, half_t>, _Float16, DstType>;
 
         auto& dst = *(cute::intel::vector_t<vector_type, vec_size>*)(d_tensor(_, s, n).data());
 
@@ -521,16 +519,14 @@ public:
 
     static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
-    static_assert(std::is_same_v<LayoutOut, LayoutIn>);
+    static_assert(cute::is_same_v<LayoutOut, LayoutIn>);
 
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
     using ZeroType = typename EngineZeros::value_type;
     using ScaleType = typename EngineScales::value_type;
 
-    if constexpr (std::is_same_v<SrcType, DstType>) {
-      return;
-    }
+    static_assert(!cute::is_same_v<SrcType, DstType>);
 
     if constexpr (cute::is_any_of_v<ElementA,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t>
                   && cute::is_any_of_v<ElementB,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t>) {
@@ -734,7 +730,7 @@ public:
     Tensor quant_frag_B = make_tensor<ElementB>(mma_B.layout());
 
     auto frag_copy_A = [&]() -> decltype(auto) {
-      if constexpr (std::is_same_v<ElementMMA, ElementA>) {
+      if constexpr (cute::is_same_v<ElementMMA, ElementA>) {
         return thr_copy_A.retile_D(mma_A);
       } else {
         return thr_copy_A.retile_D(quant_frag_A);
@@ -742,7 +738,7 @@ public:
     }();
 
     auto frag_copy_B = [&]() -> decltype(auto) {
-      if constexpr (std::is_same_v<ElementMMA, ElementB>) {
+      if constexpr (cute::is_same_v<ElementMMA, ElementB>) {
         return thr_copy_B.retile_D(mma_B);
       } else {
         return thr_copy_B.retile_D(quant_frag_B);
@@ -874,8 +870,13 @@ public:
         }
       }();
 
-      transform_quant(quant_frag_A, mma_A, fragment_scale, quant_zero);
-      transform_quant(quant_frag_B, mma_B, fragment_scale, quant_zero);
+      if constexpr (!cute::is_same_v<ElementA, ElementMMA>) {
+        transform_quant(quant_frag_A, mma_A, fragment_scale, quant_zero);
+      }
+
+      if constexpr (!cute::is_same_v<ElementB, ElementMMA>) {
+        transform_quant(quant_frag_B, mma_B, fragment_scale, quant_zero);
+      }
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
       barrier_wait(barrier_scope);
