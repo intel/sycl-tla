@@ -308,6 +308,7 @@ public:
       return Params{tiled_copy_a, tiled_copy_b, {}, {}, 0};
     } else if constexpr (ModeScale || ModeScaleZero) {
       auto tiled_copy_scale = [&]() {
+      auto [M, N, K, L] = problem_shape;
         if constexpr(is_groupwise) {
           auto scale_k = cute::ceil_div(K, args.group_size);
           auto mScale = make_tensor(make_gmem_ptr(static_cast<NonVoidElementScale const *>(args.ptr_S)),
