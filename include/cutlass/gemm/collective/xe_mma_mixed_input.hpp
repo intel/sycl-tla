@@ -337,7 +337,7 @@ public:
           if constexpr (is_groupwise) {
             auto scale_k = cute::ceil_div(K, args.group_size);
             auto mZero = make_tensor(ptr_Z,
-                                    make_layout(make_shape(zero_elements_packed_along_k * (IsATransformed ? M : N), scale_k / zero_elements_packed_along_k, options.l),
+                                    make_layout(make_shape(zero_elements_packed_along_k * (IsATransformed ? M : N), scale_k / zero_elements_packed_along_k, L),
                                     make_stride(_1{}, zero_elements_packed_along_k * (IsATransformed ? M : N), (IsATransformed ? M : N) * scale_k)));
             return Copy_Zero{}.with(mZero);
           } else {
