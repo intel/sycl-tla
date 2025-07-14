@@ -333,6 +333,8 @@ public:
         }();
 
         auto tiled_copy_zero = [&](){
+        auto [M, N, K, L] = problem_shape;
+
           if constexpr(is_groupwise) {
             auto scale_k = cute::ceil_div(K, args.group_size);
             auto mZero = make_tensor(ptr_Z,
