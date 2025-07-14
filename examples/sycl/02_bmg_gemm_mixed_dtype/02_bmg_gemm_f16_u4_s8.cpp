@@ -552,7 +552,7 @@ struct ExampleRunner {
     auto shape_scale = cute::make_shape(dq_mn_size, scale_k, L);
     auto shape_zero = [&]() {
       if constexpr (is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(stride_Z))>>) {
-        return cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, cute::max(1, scale_k / zero_elements_packed_along_k)), L);
+        return cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, cute::max(1, scale_k / zero_elements_packed_along_k)), options.l);
       } else {
         return shape_scale;
       }
