@@ -57,8 +57,8 @@
 
   To build & run this example (from your build dir):
 
-    $ ninja 02_bmg_gemm_bf16_s8
-    $ ./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8
+    $ ninja 02_bmg_gemm_bf16_s8_bf16
+    $ ./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16
 
   Call with `--help` for information about available options
 */

@@ -237,16 +237,9 @@ public:
 
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
   using CopyThreadShapeRev = decltype(cute::reverse(CopyThreadShape{}));
-
-  using traits_load_A = Copy_Traits<GmemTiledCopyA, StrideA>;
-  using atom_load_A = Copy_Atom<traits_load_A, ElementA>;
-  using val_layout_load_A = decltype(make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
-  using Copy_A = decltype(make_tiled_copy(atom_load_A{}, Layout<CopyThreadShape>{}, val_layout_load_A{}));
-
-  using traits_load_B = Copy_Traits<GmemTiledCopyB, StrideB>;
-  using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
-  using val_layout_load_B = decltype(make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
-  using Copy_B = decltype(make_tiled_copy(atom_load_B{}, Layout<CopyThreadShape>{}, val_layout_load_B{}));
+  
+  using Copy_A = typename Copy_Traits<GmemTiledCopyA, StrideA>::template DefaultTiledCopy<ElementA>;
+  using Copy_B = typename Copy_Traits<GmemTiledCopyB, StrideB>::template DefaultTiledCopy<ElementB>;
 
   using traits_load_scale = Copy_Traits<GmemTiledCopyScale, NonVoidStrideScale>;
   using atom_load_scale = Copy_Atom<traits_load_scale, NonVoidElementScale>;
@@ -315,7 +308,8 @@ public:
       return Params{tiled_copy_a, tiled_copy_b, {}, {}, 0};
     } else if constexpr (ModeScale || ModeScaleZero) {
       auto tiled_copy_scale = [&]() {
-        if constexpr(is_groupwise) {
+        auto [M, N, K, L] = problem_shape;
+        if constexpr (is_groupwise) {
           auto scale_k = cute::ceil_div(K, args.group_size);
           auto mScale = make_tensor(make_gmem_ptr(static_cast<NonVoidElementScale const *>(args.ptr_S)),
                                     make_layout(make_shape(IsATransformed ? M : N, scale_k, L), args.dS));
@@ -339,7 +333,8 @@ public:
         }();
 
         auto tiled_copy_zero = [&](){
-          if constexpr(is_groupwise) {
+          auto [M, N, K, L] = problem_shape;
+          if constexpr (is_groupwise) {
             auto scale_k = cute::ceil_div(K, args.group_size);
             auto mZero = make_tensor(ptr_Z,
                                     make_layout(make_shape(zero_elements_packed_along_k * (IsATransformed ? M : N), scale_k / zero_elements_packed_along_k, L),
@@ -611,13 +606,7 @@ public:
 
       CUTLASS_PRAGMA_UNROLL
       for (int n = 0; n < N; ++n) {
-        const auto [zero, scale] = [&]() {
-          if constexpr (is_groupwise) {
-            return std::make_pair(tCrZ_input(n), tCrS_input(n));
-          } else {
-            return std::make_pair(tCrZ_input(0), tCrS_input(0));
-          }
-        }();
+        auto [zero, scale] = (is_groupwise) ? cute::make_tuple(tCrZ_input(n), tCrS_input(n)) :  cute::make_tuple(tCrZ_input(0), tCrS_input(0));
 
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < decltype(size(in))::value / N; ++i) {

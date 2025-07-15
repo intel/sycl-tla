@@ -47,8 +47,8 @@
    export IGC_allowDecompose2DBlockFuncs=0
  To build & run this example (from your build dir):
 
-    $ ninja 02_bmg_gemm_f16_u4
-    $ ./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4
+    $ ninja 02_bmg_gemm_f16_u4_s8
+    $ ./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_s8
 
   Call with `--help` for information about available options
 */
@@ -552,7 +552,7 @@ struct ExampleRunner {
     auto shape_scale = cute::make_shape(dq_mn_size, scale_k, L);
     auto shape_zero = [&]() {
       if constexpr (is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(stride_Z))>>) {
-        return cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, cute::max(1, scale_k / zero_elements_packed_along_k)), L);
+        return cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, cute::max(1, scale_k / zero_elements_packed_along_k)), options.l);
       } else {
         return shape_scale;
       }
