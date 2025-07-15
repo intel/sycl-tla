@@ -60,17 +60,12 @@ struct TestbedImpl : public FlashDecodeRunner<FlashDecode> {
 
   /// Initializes data structures
   template <class ProblemShape>
-  ProblemShapeType initialize(ProblemShape problem_shape_in) {
+  ProblemShapeType initialize(ProblemShape problem_shape_in, int page_size) {
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::initialize(problem_size)");
 #endif
-    auto [problem_shape, mem_count] = FlashDecodeRunner<FlashDecode>::initialize(problem_shape_in, false);
+    auto [problem_shape, mem_count] = FlashDecodeRunner<FlashDecode>::initialize(problem_shape_in, page_size);
     return problem_shape;
-  }
-
-  template<class ProblemShape>
-  auto initialize_varlen(const ProblemShape& problem_size) {
-    return FlashDecodeRunner<FlashDecode>::initialize_varlen(problem_size);
   }
 
   /// Verifies the result
@@ -84,7 +79,7 @@ struct TestbedImpl : public FlashDecodeRunner<FlashDecode> {
 
   /// Executes one test
   template<class ProblemShape>
-  bool run(ProblemShape problem_size_init, float softmax_scale)
+  bool run(ProblemShape problem_size_init, float softmax_scale, int page_size)
   {
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run"); 
@@ -102,7 +97,7 @@ struct TestbedImpl : public FlashDecodeRunner<FlashDecode> {
     }
 #endif
 
-    ProblemShapeType problem_size = this->initialize(problem_size_init);
+    ProblemShapeType problem_size = this->initialize(problem_size_init, page_size);
 
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: this->initialize() returned true");
@@ -197,10 +192,11 @@ struct Testbed3x {
   template <class ProblemShape>
   bool run(
    ProblemShape problem_size,
-   float softmax_scale
+   float softmax_scale,
+   int page_size
     )
   {
-    return impl_.run(problem_size, softmax_scale);
+    return impl_.run(problem_size, softmax_scale, page_size);
   }
 };
 
@@ -212,6 +208,7 @@ bool TestFlashDecodeAll(int head_size) {
   std::vector<int> problem_size_num_heads{32};
   std::vector<int> problem_size_seq_len{1024};
   std::vector<int> problem_size_seq_len_cache{0, 1024};
+  std::vector<int> cache_page_size{64, 128};
   std::vector<float> problem_size_softmax_scale{ 1.f / sqrt(static_cast<float>(head_size)) };
   bool passed = true;
 
@@ -219,51 +216,53 @@ bool TestFlashDecodeAll(int head_size) {
     for (int num_heads : problem_size_num_heads) {
       for (int seq_len : problem_size_seq_len) {
         for (int seq_len_cache : problem_size_seq_len_cache) {
-          for (float softmax_scale : problem_size_softmax_scale) {
-            auto num_heads_q = num_heads;
-            auto num_heads_kv = num_heads;
-            auto seq_len_qo = 1;
-            auto seq_len_kv = seq_len;
-            auto seq_len_kv_cache = seq_len_cache;
-            auto head_size_qk = head_size;
-            auto head_size_vo = head_size;
+          for (int page_size : cache_page_size) {
+            for (float softmax_scale : problem_size_softmax_scale) {
+              auto num_heads_q = num_heads;
+              auto num_heads_kv = num_heads;
+              auto seq_len_qo = 1;
+              auto seq_len_kv = seq_len;
+              auto seq_len_kv_cache = seq_len_cache;
+              auto head_size_qk = head_size;
+              auto head_size_vo = head_size;
 
-            auto problem_size = cute::make_tuple(
-              batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo);
-            try {
-              passed = testbed.run(problem_size, softmax_scale);
-            }
-            catch (std::exception const& e) {
-              EXPECT_TRUE(false) << "TestFlashDecodeAll: testbed.run {"
+              auto problem_size = cute::make_tuple(
+                batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo);
+              try {
+                passed = testbed.run(problem_size, softmax_scale, page_size);
+              }
+              catch (std::exception const& e) {
+                EXPECT_TRUE(false) << "TestFlashDecodeAll: testbed.run {"
+                  << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
+                  << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
+                  << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
+                  << ", scale: " << softmax_scale << ", page_size: " << page_size
+                  << "} threw an exception: " << e.what();
+                throw;
+              }
+              catch (...) {
+                EXPECT_TRUE(false) << "TestFlashDecodeAll: testbed.run {"
+                  << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
+                  << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
+                  << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
+                  << ", scale: " << softmax_scale << ", page_size: " << page_size
+                  << "} threw an exception (unknown)";
+                throw;
+              }
+
+              EXPECT_TRUE(passed) << "TestFlashDecodeAll: testbed.run {"
                 << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
                 << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
                 << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
-                << ", scale: " << softmax_scale
-                << "} threw an exception: " << e.what();
-              throw;
-            }
-            catch (...) {
-              EXPECT_TRUE(false) << "TestFlashDecodeAll: testbed.run {"
-                << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
-                << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
-                << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
-                << ", scale: " << softmax_scale
-                << "} threw an exception (unknown)";
-              throw;
-            }
+                << ", scale: " << softmax_scale << ", page_size: " << page_size
+                << "} failed";
 
-            EXPECT_TRUE(passed) << "TestFlashDecodeAll: testbed.run {"
-              << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
-              << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
-              << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
-              << ", scale: " << softmax_scale
-              << "} failed";
-
-            if (!passed) {
-              std::cout << __FILE__ << ':' << __LINE__ << " : Flash Decode FAILED.\n";
-              return false;
-            }
-          } // softmax_scale
+              if (!passed) {
+                std::cout << __FILE__ << ':' << __LINE__ << " : Flash Decode FAILED.\n";
+                return false;
+              }
+            } // softmax_scale
+          } // page_size
         } // seq_len_cache
       } // seq_len
     } // num_heads

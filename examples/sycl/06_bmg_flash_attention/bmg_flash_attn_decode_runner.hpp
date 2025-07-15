@@ -42,6 +42,7 @@ struct Options : public FMHADecodeOptions {
 
   bool is_causal;
   bool varlen;
+  bool use_paged_kv;
 
   int head_size_vo;
   // Parses the command line
@@ -54,6 +55,10 @@ struct Options : public FMHADecodeOptions {
 
     if (cmd.check_cmd_line_flag("varlen")) {
       varlen = true;
+    }
+
+    if (cmd.check_cmd_line_flag("use_paged_kv")) {
+      use_paged_kv = true;
     }
 
     FMHADecodeOptions::parse(cmd, argc, args);
@@ -75,7 +80,7 @@ struct ExampleRunner : public FlashDecodeRunner<FMHADecodeConfiguration> {
   using ProblemShapeType = typename FMHADecodeKernel::ProblemShape;
   static constexpr bool Causal = FMHADecodeConfiguration::Causal;
   static constexpr bool VarLen = FMHADecodeConfiguration::VarLen;
-
+  static constexpr bool PagedKV = FMHADecodeConfiguration::PagedKV;
   //
   // Methods
   //
@@ -84,14 +89,9 @@ struct ExampleRunner : public FlashDecodeRunner<FMHADecodeConfiguration> {
     return FlashDecodeRunner<FMHADecodeConfiguration>::verify(problem_size);
   }
 
-  template<class ProblemShape>
-  auto initialize_varlen(const ProblemShape& problem_size) {
-    return FlashDecodeRunner<FMHADecodeConfiguration>::initialize_varlen(problem_size);
-  }
-
   /// Initialize operands to be used in the GEMM and reference GEMM
   ProblemShapeType initialize(const FMHADecodeOptions &options) {
-    auto [problem_shape, mem_count] = FlashDecodeRunner<FMHADecodeConfiguration>::initialize(options, false);
+    auto [problem_shape, mem_count] = FlashDecodeRunner<FMHADecodeConfiguration>::initialize(options);
     return problem_shape;
   }
 
@@ -146,7 +146,8 @@ struct ExampleRunner : public FlashDecodeRunner<FMHADecodeConfiguration> {
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q << "\tNumHeads_kv: " << options.num_heads_kv << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tSeq Length KV Cache: " << options.seq_len_kv_cache << "\tHead Size QK: " << options.head_size_qk
                 << "\tHead Size VO: " << options.head_size_vo << "\tCausal Mask: " << (Causal ? "true" : "false")
-                << "\tVariable Sequence Length: " << (VarLen ? "true" : "false") << "\t Scheduler: Individual";
+                << "\tVariable Sequence Length: " << (VarLen ? "true" : "false") << "\t Scheduler: Individual"
+                << "\t Paged KV cache: " << (PagedKV ? "true" : "false");
       printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
     }
 
@@ -154,7 +155,18 @@ struct ExampleRunner : public FlashDecodeRunner<FMHADecodeConfiguration> {
   }
 };
 
-template <bool Causal, typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename TileSubgroupLayout, bool isVarLen> struct FMHAConfig {
+template <bool Causal, 
+          bool PagedKV,
+          typename TileShapeQK, 
+          typename TileShapePV, 
+          typename TileShapeOutput, 
+          typename TileSubgroupLayout, 
+          bool isVarLen,
+          typename ElementInputQ = bfloat16_t, 
+          typename ElementInputKV = bfloat16_t,
+          typename ElementAccumulator = float,
+          typename ElementComputeEpilogue = float,
+          typename ElementOutput = float> struct FMHAConfig {
 
   struct TileShapeConfig {
     using ShapeQK = TileShapeQK;
@@ -172,18 +184,10 @@ template <bool Causal, typename TileShapeQK, typename TileShapePV, typename Tile
     // information is used by the underlying kernel.
     cutlass::KernelHardwareInfo hw_info;
 
-    // The code section below describes datatype for input, output matrices and computation between
-    // elements in input matrices.
-    using ElementAccumulator = float;     // <- data type of accumulator
-    using ElementComputeEpilogue = float; // <- data type of epilogue operations
-    using ElementInputQ = bfloat16_t;     // <- data type of elements in input matrix A
-    using ElementInputKV = bfloat16_t;    // <- data type of elements in input matrix B
-    using ElementOutput = float;          // <- data type of elements in output matrix D
-
-    using FlashDecodeConfig = typename FMHADecodeConfigGen<ElementInputQ, ElementAccumulator, ElementOutput, Causal, isVarLen, TileShapeConfig>::type;
+    using FlashDecodeConfig = typename FMHADecodeConfigGen<ElementInputQ, ElementAccumulator, ElementOutput, Causal, isVarLen, TileShapeConfig, PagedKV>::type;
     ExampleRunner<FlashDecodeConfig> runner;
 
     CUTLASS_CHECK(runner.run(options, hw_info));
-    return 0;    
+    return 0;
   }
 };

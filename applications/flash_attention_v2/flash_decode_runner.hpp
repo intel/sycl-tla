@@ -66,12 +66,14 @@ struct FMHADecodeOptions {
   bool error;
 
   int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo, iterations;
+  int page_size;
   float softmax_scale;
   std::string bm_name;
 
   FMHADecodeOptions()
       : error(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
-        seq_len_kv(512), seq_len_kv_cache(0), head_size_vo(128), iterations(100), softmax_scale(1.f), bm_name("Flash Attention v2 Decode") {}
+        seq_len_kv(512), seq_len_kv_cache(0), head_size_vo(128), iterations(100), page_size(128), softmax_scale(1.f),
+        bm_name("Flash Attention v2 Decode") {}
 
   // Parses the command line
   void parse(cutlass::CommandLine& cmd, int argc, char const **args) {
@@ -84,12 +86,17 @@ struct FMHADecodeOptions {
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 1);
-    cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
+    cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, 1024);
     cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
+#if defined HEAD_DIM
+    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
+#else
     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
+#endif
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
     cmd.get_cmd_line_argument("bm_name", bm_name, std::string("Flash Attention v2"));
+    cmd.get_cmd_line_argument("page_size", page_size, 128);
 
     softmax_scale = 1 / std::sqrt(static_cast<float>(head_size_qk));
   }
@@ -119,7 +126,7 @@ struct FMHADecodeOptions {
   /// Prints the usage statement.
   std::ostream &print_usage(std::ostream &out) const {
 
-    out << "BMG Flash Attention v2 Example\n\n"
+    out << "BMG Flash Attention v2 Decode\n\n"
         << "Options:\n\n"
         << "  --help                      If specified, displays this usage statement\n\n"
         << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
@@ -131,6 +138,8 @@ struct FMHADecodeOptions {
         << "  --seq_len_qo=<int>          Sets the Sequence length of the Query input in Multi-Head Self Attention module\n"
         << "  --seq_len_kv=<int>          Sets the Sequence length of the Key-Value pair in Multi-Head Self Attention module\n"
         << "  --seq_len_kv_cache=<int>    Sets the Sequence length of the Key-Value Cache pair in Multi-Head Self Attention module\n"
+        << "  --use_paged_kv              Use paged (non-contiguous) KV cache. Default is contiguous KV Cache\n"
+        << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
         << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
         << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
         << "  --iterations=<int>          Iterations\n\n";
@@ -181,6 +190,7 @@ struct FlashDecodeRunner {
   using ProblemShapeType = typename FMHADecodeKernel::ProblemShape;
   static constexpr bool Causal = FMHADecodeConfiguration::Causal;
   static constexpr bool isVarLen = FMHADecodeConfiguration::VarLen;
+  static constexpr bool PagedKV = FMHADecodeConfiguration::PagedKV;
 
   int32_t count;
 
@@ -213,9 +223,37 @@ struct FlashDecodeRunner {
   cutlass::DeviceAllocation<int> device_cumulative_seqlen_kv;
   cutlass::DeviceAllocation<int> device_cumulative_seqlen_kv_cache;
 
+  struct PagedKVParams {
+      cutlass::DeviceAllocation<int> page_table;
+      int page_size = 0;
+      cutlass::DeviceAllocation<int> num_pages_per_seq;
+  };
+  PagedKVParams paged_kv_cache;
+
   //
   // Methods
   //
+
+  template <typename T>
+  static constexpr bool is_fp8_v = cute::is_any_of_v<T, cute::float_e5m2_t, cute::float_e4m3_t>;
+
+  template <typename SrcT, typename DstT>
+  void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
+    syclcompat::get_default_queue().parallel_for(size, [=](auto indx) {
+      d_dst[indx] = static_cast<DstT>(d_src[indx]);
+    }).wait();
+  }
+
+  template <typename Tin> inline auto in_memory(cutlass::DeviceAllocation<Tin>& in) {
+    using outType = cutlass::DeviceAllocation<cute::conditional_t<is_fp8_v<Tin>, half_t, Tin>>;
+    if constexpr(is_fp8_v<Tin>) {
+      cutlass::DeviceAllocation<half_t> out(in.size());
+      convert_fp8_to_fp16<Tin, half_t>(in.get(), out.get(), in.size());
+      return out;
+    } else { 
+      return in;
+    };
+  }
 
   bool verify(ProblemShapeType problem_size, ElementAccumulator softmax_scale) {
     if constexpr (isVarLen) {
@@ -229,6 +267,12 @@ struct FlashDecodeRunner {
 
     auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,6,7>(problem_size);
     int seq_len_qo, seq_len_kv, seq_len_kv_cache;
+
+    auto block_Q_ = in_memory(block_Q[0]);
+    auto block_K_ = in_memory(block_K[0]);
+    auto block_V_ = in_memory(block_V[0]);
+    using ElementK_ = cute::conditional_t<is_fp8_v<ElementK>, half_t, ElementK>;
+    using ElementV_ = cute::conditional_t<is_fp8_v<ElementV>, half_t, ElementV>;
 
     int offset_q = 0;
     int offset_k = 0;
@@ -257,34 +301,36 @@ struct FlashDecodeRunner {
         cutlass::DeviceAllocation<ElementAccumulator> block_S;
         block_S.reset(seq_len_qo * seq_len_kv_total);
 
-        ElementK* k_ptr;
-        ElementV* v_ptr;
+        ElementK_* k_ptr;
+        ElementV_* v_ptr;
 
         if (seq_len_kv_cache > 0) {
-            cutlass::DeviceAllocation<ElementK> block_K_concat(head_size_qk * seq_len_kv_total);
-            cutlass::DeviceAllocation<ElementV> block_V_concat(seq_len_kv_total * head_size_vo);
+            auto block_K_cache_ = in_memory(block_K_cache[0]);
+            auto block_V_cache_ = in_memory(block_V_cache[0]);
+            cutlass::DeviceAllocation<ElementK_> block_K_concat(head_size_qk * seq_len_kv_total);
+            cutlass::DeviceAllocation<ElementV_> block_V_concat(seq_len_kv_total * head_size_vo);
 
             // Concatenate K_cache and K
-            syclcompat::memcpy<ElementK>(
+            syclcompat::memcpy<ElementK_>(
                 block_K_concat.get(),
-                block_K_cache[0].get() + offset_k_cache,
+                block_K_cache_.get() + offset_k_cache,
                 seq_len_kv_cache * head_size_qk
             );
-            syclcompat::memcpy<ElementK>(
+            syclcompat::memcpy<ElementK_>(
                 block_K_concat.get() + seq_len_kv_cache * head_size_qk,
-                block_K[0].get() + offset_k,
+                block_K_.get() + offset_k,
                 seq_len_kv * head_size_qk
             );
 
             // Concatenate V_cache and V
-            syclcompat::memcpy<ElementV>(
+            syclcompat::memcpy<ElementV_>(
                 block_V_concat.get(),
-                block_V_cache[0].get() + offset_v_cache,
+                block_V_cache_.get() + offset_v_cache,
                 seq_len_kv_cache * head_size_vo
             );
-            syclcompat::memcpy<ElementV>(
+            syclcompat::memcpy<ElementV_>(
                 block_V_concat.get() + seq_len_kv_cache * head_size_vo,
-                block_V[0].get() + offset_v,
+                block_V_.get() + offset_v,
                 seq_len_kv * head_size_vo
             );
             syclcompat::wait();
@@ -293,11 +339,11 @@ struct FlashDecodeRunner {
             v_ptr = block_V_concat.get();
         }
         else {
-            k_ptr = block_K[0].get() + offset_k;
-            v_ptr = block_V[0].get() + offset_v;
+            k_ptr = block_K_.get() + offset_k;
+            v_ptr = block_V_.get() + offset_v;
         }
 
-        cutlass::TensorRef ref_Q(block_Q[0].get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
+        cutlass::TensorRef ref_Q(block_Q_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
         cutlass::TensorRef ref_K(k_ptr, LayoutK::packed({head_size_qk, seq_len_kv_total}));
         cutlass::TensorRef ref_V(v_ptr, LayoutV::packed({seq_len_kv_total, head_size_vo}));
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
@@ -376,14 +422,14 @@ struct FlashDecodeRunner {
           }
         }
 
-        std::vector<ElementV> host_P(host_S.size());
+        std::vector<ElementV_> host_P(host_S.size());
         for (int p = 0; p < host_P.size(); p++)
-          host_P[p] = static_cast<ElementV>(host_S[p]);
+          host_P[p] = static_cast<ElementV_>(host_S[p]);
 
-        cutlass::DeviceAllocation<ElementV> block_P;
+        cutlass::DeviceAllocation<ElementV_> block_P;
         block_P.reset(host_P.size());
 
-        syclcompat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
+        syclcompat::memcpy<ElementV_>(block_P.get(), host_P.data(), host_P.size());
         syclcompat::wait();
 
         cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
@@ -521,7 +567,7 @@ struct FlashDecodeRunner {
   }
 
   template <typename ProblemShapeIn>
-  auto initialize(ProblemShapeIn const problem_shape_in, bool is_bench = false) {
+  auto initialize(ProblemShapeIn const problem_shape_in, int page_size, bool is_bench = false) {
 
     ProblemShapeType problem_shape;
     ProblemShapeIn problem_size;
@@ -573,10 +619,41 @@ struct FlashDecodeRunner {
       block_V_cache[i].reset(mem_size_v_cache);
 
       initialize_block(block_Q[i], seed + i);
-      initialize_block(block_K[i], seed + i + 100);
-      initialize_block(block_V[i], seed + i + 101);
-      initialize_block(block_K_cache[i], seed + i + 102);
-      initialize_block(block_V_cache[i], seed + i + 103);
+      initialize_block(block_K[i], seed + i + 2018);
+      initialize_block(block_V[i], seed + i + 2019);
+      initialize_block(block_K_cache[i], seed + i + 2020);
+      initialize_block(block_V_cache[i], seed + i + 2021);
+    }
+
+    if constexpr (PagedKV) {
+      paged_kv_cache.page_size = page_size;
+      std::vector<int> num_pages_per_seq{0};
+      int num_pages = 0;
+      for(int b = 0; b < get<0>(problem_shape); b++) {
+        int seq_len_cache = isVarLen ? cumulative_seqlen_kv_cache[b + 1] - cumulative_seqlen_kv_cache[b] : seq_len_kv_cache;
+        int pages_per_seq = ceil_div(seq_len_cache, page_size);
+        num_pages_per_seq.push_back(num_pages_per_seq.back() + pages_per_seq);
+        num_pages += pages_per_seq;
+      }
+      paged_kv_cache.page_table.reset(num_pages);
+
+      // initialize block table with random mapping for non-contiguous layout
+      std::vector<int> page_mapping(num_pages);
+      for (int b = 0; b < get<0>(problem_shape); ++b) {
+        std::vector<int> physical_pages(num_pages_per_seq[b + 1] - num_pages_per_seq[b]);
+        std::iota(physical_pages.begin(), physical_pages.end(), 0);
+        // shuffle physical pages
+        std::shuffle(physical_pages.begin(), physical_pages.end(), std::mt19937{ std::random_device{}() });
+        for (int blk = 0; blk < physical_pages.size(); ++blk) {
+          int logical_idx = num_pages_per_seq[b] + blk;
+          page_mapping[logical_idx] = physical_pages[blk];
+        }
+      }
+      syclcompat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
+
+      paged_kv_cache.num_pages_per_seq.reset(num_pages_per_seq.size());
+      syclcompat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
+      syclcompat::wait();
     }
 
     block_O.reset(mem_size_o);
@@ -614,7 +691,7 @@ struct FlashDecodeRunner {
     auto problem_shape_in =
         cute::make_tuple(options.batch, options.num_heads_q, options.num_heads_kv, options.seq_len_qo, options.seq_len_kv, options.seq_len_kv_cache, options.head_size_qk, options.head_size_vo);
 
-    return initialize(problem_shape_in);
+    return initialize(problem_shape_in, options.page_size, is_bench);
   }
 
   template <typename SoftmaxScaleT>
@@ -627,7 +704,10 @@ struct FlashDecodeRunner {
         block_K[mem_idx].get(), stride_K,
         block_V[mem_idx].get(), stride_V,
         block_K_cache[mem_idx].get(), stride_K_cache,
-        block_V_cache[mem_idx].get(), stride_V_cache},
+        block_V_cache[mem_idx].get(), stride_V_cache,
+        PagedKV ? paged_kv_cache.page_table.get() : nullptr,
+        PagedKV ? paged_kv_cache.page_size : 0,
+        PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
         {scale},
         {block_O.get(), stride_O},
         hw_info};

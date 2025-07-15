@@ -47,6 +47,7 @@ struct BenchmarkRunnerFMHADecode : public FlashDecodeRunner<FMHADecodeConfigurat
   using ProblemShapeType = typename FMHADecodeKernel::ProblemShape;
   static constexpr bool Causal = FMHADecodeConfiguration::Causal;
   static constexpr bool isVarLen = FMHADecodeConfiguration::VarLen;
+  static constexpr bool PagedKV = FMHADecodeConfiguration::PagedKV;
 
   int32_t count;
   //
@@ -55,11 +56,6 @@ struct BenchmarkRunnerFMHADecode : public FlashDecodeRunner<FMHADecodeConfigurat
 
   bool verify(ProblemShapeType problem_size) {
     return FlashDecodeRunner<FMHADecodeConfiguration>::verify(problem_size);
-  }
-
-  template<class ProblemShape>
-  auto initialize_varlen(const ProblemShape& problem_size) {
-    return FlashDecodeRunner<FMHADecodeConfiguration>::initialize_varlen(problem_size);
   }
 
   /// Initialize operands to be used in the Flash Attention
@@ -107,9 +103,11 @@ struct BenchmarkRunnerFMHADecode : public FlashDecodeRunner<FMHADecodeConfigurat
     state.counters["seq_len_kv_cache"] = options.seq_len_kv_cache;
     state.counters["head_size_kv"] = options.head_size_qk;
     state.counters["head_size_vo"] = options.head_size_vo;
+    state.counters["page_size"] = options.page_size;
     state.counters["scale"] = options.softmax_scale;
     state.counters["causal"] = Causal;
     state.counters["varlen"] = isVarLen;
+    state.counters["paged_kv"] = PagedKV;
 
     std::stringstream extra_label;
     extra_label << "layoutQ=RowMajor ";

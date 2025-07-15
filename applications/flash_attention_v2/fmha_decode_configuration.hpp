@@ -42,14 +42,14 @@ template <typename DispatchPolicy> struct MMAOP <DispatchPolicy, bfloat16_t, flo
     using TYPE = cute::XE_1x16x16_F32BF16BF16F32_TT;
 };
 
-template <typename DispatchPolicy> struct MMAOP <DispatchPolicy, half_t, float> {
+template <typename DispatchPolicy, typename input> struct MMAOP <DispatchPolicy, input, float> {
     using TYPE = cute::XE_1x16x16_F32F16F16F32_TT;
 };
 
 template <typename ElementInputType_, typename ElementAccumulatorType_, typename ElementOutputType_,
           typename GmemTiledCopyQ_, typename GmemTiledCopyK_, typename GmemTiledCopyV_, typename GmemTiledCopyO_, 
           typename TileShapeQK_, typename TileShapePV_, typename TileShapeOutput_, typename SubgroupLayout_,
-          bool Causal_, bool VarLen_>
+          bool Causal_, bool VarLen_, bool PagedKV_>
 struct FMHADecodeConfig {
 
   using ElementO = ElementOutputType_;     // <- data type of output
@@ -70,6 +70,7 @@ struct FMHADecodeConfig {
 
   static constexpr bool Causal = Causal_;
   static constexpr bool VarLen = VarLen_;
+  static constexpr bool PagedKV = PagedKV_;
   
   static constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
@@ -99,7 +100,7 @@ struct FMHADecodeConfig {
       GmemTiledCopyQ, // Q
       GmemTiledCopyK, // K
       GmemTiledCopyV, // V,
-      Causal>;
+      Causal, PagedKV>;
 
   using FMHADecodeKernel = cutlass::flash_attention::kernel::FMHADecode<ProblemShapeType, CollectiveMainloop,
                                                                     CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
@@ -138,52 +139,28 @@ struct Shape_h192 {
   using SubgroupLayout = Layout<Shape<Int<NumSGs>, _1, _1>>;
 };
 
-template<class QKVType, class AccumulatorType, class OutputType, bool Causal, bool VarLen, class TileShapeConfig>
+template<class QKVType, class AccumulatorType, class OutputType, bool Causal, bool VarLen, class TileShapeConfig, bool PagedKV, class Enable = void>
 struct FMHADecodeConfigGen;
 
-template<class QKVType, bool Causal, bool VarLen, class TileShapeConfig>
-struct FMHADecodeConfigGen<QKVType, float, float, Causal, VarLen, TileShapeConfig> {
+template<class QKVType, class OutputType, bool Causal, bool VarLen, class TileShapeConfig, bool PagedKV>
+struct FMHADecodeConfigGen<QKVType, float, OutputType, Causal, VarLen, TileShapeConfig, PagedKV, 
+                           cute::enable_if_t<cute::is_any_of_v<OutputType, cute::float_e5m2_t, cute::float_e4m3_t, 
+                                                                        cutlass::bfloat16_t, cutlass::half_t, float> && 
+                                             cute::is_any_of_v<QKVType, cute::float_e5m2_t, cute::float_e4m3_t, 
+                                                                        cutlass::bfloat16_t, cutlass::half_t>>> {
 
-using GmemTiledCopyQ = cute::XE_2D_U16x1x16_LD_N;
-using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
-using GmemTiledCopyV = cute::XE_2D_U16x32x32_LD_V;
-using GmemTiledCopyO = cute::XE_2D_U32x1x16_ST_N;
-
-using type = cutlass::flash_attention::FMHADecodeConfig<
-      QKVType, float, float, GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV,
-      GmemTiledCopyO, typename TileShapeConfig::ShapeQK, typename TileShapeConfig::ShapePV,
-      typename TileShapeConfig::ShapeOutput, typename TileShapeConfig::SubgroupLayout,
-      Causal, VarLen>;
-};
-
-template<class QKVType, bool Causal, bool VarLen, class TileShapeConfig>
-struct FMHADecodeConfigGen<QKVType, float, cutlass::bfloat16_t, Causal, VarLen, TileShapeConfig> {
-
-using GmemTiledCopyQ = cute::XE_2D_U16x1x16_LD_N;
-using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
-using GmemTiledCopyV = cute::XE_2D_U16x32x32_LD_V;
-using GmemTiledCopyO = cute::XE_2D_U16x1x16_ST_N;
+using GmemTiledCopyQ = std::conditional_t<cute::sizeof_bits_v<QKVType> == 8, cute::XE_2D_U8x1x32_LD_N, cute::XE_2D_U16x1x16_LD_N>;
+using GmemTiledCopyK = std::conditional_t<cute::sizeof_bits_v<QKVType> == 8, cute::XE_2D_U8x16x16_LD_T, cute::XE_2D_U16x16x16_LD_T>;
+using GmemTiledCopyV = std::conditional_t<cute::sizeof_bits_v<QKVType> == 8, cute::XE_2D_U8x32x32_LD_V, cute::XE_2D_U16x32x32_LD_V>;
+using GmemTiledCopyO = std::conditional_t<cute::sizeof_bits_v<OutputType> == 8, cute::XE_2D_U8x1x16_ST_N,
+                                          std::conditional_t<cute::sizeof_bits_v<OutputType> == 16, cute::XE_2D_U16x1x16_ST_N,
+                                                                                                 cute::XE_2D_U32x1x16_ST_N>>;
 
 using type = cutlass::flash_attention::FMHADecodeConfig<
-      QKVType, float, cutlass::bfloat16_t, GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV,
+      QKVType, float, OutputType, GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV,
       GmemTiledCopyO, typename TileShapeConfig::ShapeQK, typename TileShapeConfig::ShapePV,
       typename TileShapeConfig::ShapeOutput, typename TileShapeConfig::SubgroupLayout,
-      Causal, VarLen>;
-};
-
-template<class QKVType, bool Causal, bool VarLen, class TileShapeConfig>
-struct FMHADecodeConfigGen<QKVType, float, cutlass::half_t, Causal, VarLen, TileShapeConfig> {
-
-using GmemTiledCopyQ = cute::XE_2D_U16x1x16_LD_N;
-using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
-using GmemTiledCopyV = cute::XE_2D_U16x32x32_LD_V;
-using GmemTiledCopyO = cute::XE_2D_U16x1x16_ST_N;
-
-using type = cutlass::flash_attention::FMHADecodeConfig<
-      QKVType, float, cutlass::half_t, GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV,
-      GmemTiledCopyO, typename TileShapeConfig::ShapeQK, typename TileShapeConfig::ShapePV,
-      typename TileShapeConfig::ShapeOutput, typename TileShapeConfig::SubgroupLayout,
-      Causal, VarLen>;
+      Causal, VarLen, PagedKV>;
 };
 
 } // namespace flash_attention

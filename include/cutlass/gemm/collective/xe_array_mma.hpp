@@ -98,17 +98,8 @@ struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, El
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
-  using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
-
-  using traits_load_A = Copy_Traits<GmemTiledCopyA, InternalStrideA>;
-  using atom_load_A = Copy_Atom<traits_load_A, ElementA>;
-  using val_layout_load_A = decltype(make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
-  using Copy_A = decltype(make_tiled_copy(atom_load_A{}, Layout<CopyThreadShape>{}, val_layout_load_A{}));
-
-  using traits_load_B = Copy_Traits<GmemTiledCopyB, InternalStrideB>;
-  using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
-  using val_layout_load_B = decltype(make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
-  using Copy_B = decltype(make_tiled_copy(atom_load_B{}, Layout<CopyThreadShape>{}, val_layout_load_B{}));
+  using Copy_A = typename Copy_Traits<GmemTiledCopyA, InternalStrideA>::template DefaultTiledCopy<ElementA>;
+  using Copy_B = typename Copy_Traits<GmemTiledCopyB, InternalStrideB>::template DefaultTiledCopy<ElementB>;
 
   using TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), InternalStrideA{}));   //(m, k)
   using TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), InternalStrideB{}));   //(n, k)
@@ -139,11 +130,6 @@ struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, El
   to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
     (void) workspace;
 
-    // Batches/Groups are managed by using appropriate pointers to input matrices
-    const int32_t mock_L = 1;
-    ElementA const* ptr_A_first_batch = reinterpret_cast<ElementA const*>(args.ptr_A);
-    ElementB const* ptr_B_first_batch = reinterpret_cast<ElementB const*>(args.ptr_B);
-
     auto problem_shape_MNK = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, int32_t(1));;
     auto init_M = get<0>(problem_shape_MNK);
     auto init_N = get<1>(problem_shape_MNK);
@@ -155,6 +141,42 @@ struct CollectiveMma<MainloopIntelXeXMX16Group<Stages, Schedule>, TileShape_, El
       args.ptr_B,
       args.dB
     };
+  }
+
+  template<class ProblemShape>
+  static bool
+  can_implement(
+      ProblemShape problem_shapes,
+      Arguments const& args) {
+    constexpr int copy_alignment_bits = 128;
+    constexpr int batch_alignment_bits = 512;
+    auto problem_shape_MNKL = append<4>(problem_shapes, 1);
+    auto [M,N,K,L] = problem_shape_MNKL;
+
+    bool implementable = true;
+
+    constexpr int min_aligned_elements_A = copy_alignment_bits / sizeof_bits<ElementA>::value;
+    constexpr int min_aligned_elements_B = copy_alignment_bits / sizeof_bits<ElementB>::value;
+    constexpr int min_batch_aligned_elements_A = batch_alignment_bits / sizeof_bits<ElementA>::value;
+    constexpr int min_batch_aligned_elements_B = batch_alignment_bits / sizeof_bits<ElementB>::value;
+    for (int i = 0; i < problem_shapes.groups(); i++) {
+      auto problem_shape_MNKL = append<4>(problem_shapes.get_host_problem_shape(i), 1);
+      auto [M,N,K,L] = problem_shape_MNKL;
+
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_A>(cute::make_shape(M,K,L), InternalStrideA{});
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_B>(cute::make_shape(N,K,L), InternalStrideB{});
+
+      if (L > 1) {
+        implementable &= get<2>(InternalStrideA{}) % min_batch_aligned_elements_A == 0;
+        implementable &= get<2>(InternalStrideB{}) % min_batch_aligned_elements_B == 0;
+      }
+    }
+
+    if (!implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum alignment requirements for XE 2D copy.\n");
+    }
+
+    return implementable;
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
