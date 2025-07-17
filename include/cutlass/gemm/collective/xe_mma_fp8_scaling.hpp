@@ -111,13 +111,13 @@ public:
   // TODO(Codeplay): Create a ScaledTensor class to encapsulate scale logic
   using ElementScaleA = detail::deduce_mixed_width_dtype_t<1, ElementAOptionalTuple>;
   using StrideScaleA = detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>;
-  using ElementZeroA = detail::deduce_mixed_width_dtype_t<3, ElementAOptionalTuple>;
-  using StrideZeroA = detail::deduce_mixed_width_dtype_t<4, ElementAOptionalTuple>;
+  using ElementZeroA = detail::deduce_mixed_width_dtype_t<1, ElementAOptionalTuple>;
+  using StrideZeroA = detail::deduce_mixed_width_dtype_t<2, ElementAOptionalTuple>;
 
   using ElementScaleB = detail::deduce_mixed_width_dtype_t<1, ElementBOptionalTuple>;
   using StrideScaleB = detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>;
-  using ElementZeroB = detail::deduce_mixed_width_dtype_t<3, ElementBOptionalTuple>;
-  using StrideZeroB = detail::deduce_mixed_width_dtype_t<4, ElementBOptionalTuple>;
+  using ElementZeroB = detail::deduce_mixed_width_dtype_t<1, ElementBOptionalTuple>;
+  using StrideZeroB = detail::deduce_mixed_width_dtype_t<2, ElementBOptionalTuple>;
 
   // For cases where we can't have a void type, we can use this to allow the code to compile when the scale / zero is void.
   using NonVoidElementScaleA = cute::conditional_t<cute::is_void_v<ElementScaleA>, ElementMMA, ElementScaleA>;
