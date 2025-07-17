@@ -487,7 +487,7 @@ int launcher(Options& options)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using ElementScale = MmaType;
+  using ElementScale = float;
 
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
 
