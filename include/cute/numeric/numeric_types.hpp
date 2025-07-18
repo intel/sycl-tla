@@ -34,6 +34,7 @@
 #include <cute/numeric/int.hpp>     // cute::int2_t, cute::int4_t, etc
 
 #if defined(CUTLASS_ENABLE_SYCL)
+#include <cute/util/print.hpp>
 #include <cutlass/sycl_vector_types.h>
 #endif
 
@@ -107,57 +108,57 @@ using cutlass::detail::type_erased_dynamic_float6_unpacksmem_t;
 CUTE_HOST_DEVICE
 void
 print(half_t a) {
-  printf("%f", static_cast<float>(a));
+  sycl::ext::oneapi::experimental::printf("%f", static_cast<float>(a));
 }
 
 CUTE_HOST_DEVICE
 void
 print(bfloat16_t a) {
-  printf("%f", static_cast<float>(a));
+  sycl::ext::oneapi::experimental::printf("%f", static_cast<float>(a));
 }
 
 
 CUTE_HOST_DEVICE
 void
 print(tfloat32_t a) {
-  printf("%f", static_cast<float>(a));
+  sycl::ext::oneapi::experimental::printf("%f", static_cast<float>(a));
 }
 
 CUTE_HOST_DEVICE
 void
 print(float_e4m3_t a) {
-  printf("%f", static_cast<float>(a));
+  sycl::ext::oneapi::experimental::printf("%f", static_cast<float>(a));
 }
 
 CUTE_HOST_DEVICE
 void
 print(float_e5m2_t a) {
-  printf("%f", static_cast<float>(a));
+  sycl::ext::oneapi::experimental::printf("%f", static_cast<float>(a));
 }
 
 CUTE_HOST_DEVICE void
 pretty_print(bfloat16_t v) {
-  printf("%*.2f", 8, float(v));
+  sycl::ext::oneapi::experimental::printf("%*.2f", 8, float(v));
 }
 
 CUTE_HOST_DEVICE void
 pretty_print(half_t v) {
-  printf("%*.2f", 8, float(v));
+  sycl::ext::oneapi::experimental::printf("%*.2f", 8, float(v));
 }
 
 CUTE_HOST_DEVICE void
 pretty_print(tfloat32_t v) {
-  printf("%*.2e", 10, static_cast<float>(v));
+  sycl::ext::oneapi::experimental::printf("%*.2e", 10, static_cast<float>(v));
 }
 
 CUTE_HOST_DEVICE void
 pretty_print(float_e4m3_t t) {
-  printf("%*.2f", 8, static_cast<float>(t));
+  sycl::ext::oneapi::experimental::printf("%*.2f", 8, static_cast<float>(t));
 }
 
 CUTE_HOST_DEVICE void
 pretty_print(float_e5m2_t t) {
-  printf("%*.2f", 8, static_cast<float>(t));
+  sycl::ext::oneapi::experimental::printf("%*.2f", 8, static_cast<float>(t));
 }
 
 
@@ -168,7 +169,7 @@ template <
 CUTE_HOST_DEVICE
 void
 print(cutlass::float_exmy_base<Encoding, Derived> a) {
-  printf("%f", static_cast<float>(a));
+  sycl::ext::oneapi::experimental::printf("%f", static_cast<float>(a));
 }
 
 template <
@@ -178,7 +179,7 @@ template <
 CUTE_HOST_DEVICE
 void
 pretty_print_float_exmy_base(cutlass::float_exmy_base<Encoding, Derived> t) {
-  printf("%*.2f", 8, static_cast<float>(t));
+  sycl::ext::oneapi::experimental::printf("%*.2f", 8, static_cast<float>(t));
 }
 
 
