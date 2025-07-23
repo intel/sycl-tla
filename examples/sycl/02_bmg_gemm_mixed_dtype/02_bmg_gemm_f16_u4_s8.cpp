@@ -83,9 +83,6 @@ enum GemmMode {
   ConvertAndScaleWithZeroPoint
 };
 
-using MmaType = cutlass::half_t;
-using QuantType = uint4_t;
-
 // Command line options parsing
 struct Options {
 
