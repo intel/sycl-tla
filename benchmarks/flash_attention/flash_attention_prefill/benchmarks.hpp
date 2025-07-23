@@ -34,6 +34,8 @@
 #include "benchmark_runner.hpp"
 #include "fmha_prefill_configuration.hpp"
 
+using namespace cutlass;
+using namespace cutlass::flash_attention;
 
 struct Shape_h64 {
   static constexpr int PipelineStages = 2;
@@ -67,21 +69,10 @@ struct Shape_h192 {
   using SubgroupLayout = Layout<Shape<_32, _1, _1>, Stride<_1, _1, _1>>; 
 };
 
-template<class QKVType, bool Causal, bool VarLen, class TileShapeConfig>
+template<class QKVType, class AccumType, class OutType, bool Causal, bool VarLen, class TileShapeConfig>
 struct FMHAPrefillConfigGen {
- // Todo(codeplay) this type should be passed as parameter as well since come shape may get better performace
- // with different copy
-  using GmemTiledCopyQ = XE_2D_U16x8x32_LD_N;
-  using GmemTiledCopyK = XE_2D_U16x16x16_LD_T; // _T designates a transposed block load operation
-  using GmemTiledCopyV = XE_2D_U16x16x32_LD_V;
-  using GmemTiledCopyO = XE_2D_U32x8x16_ST_N;
   using type = cutlass::flash_attention::FMHAPrefillConfig<
-     // todo(codeplay) : accumulator type and output type should be pass as template parameter
-      QKVType, float, float,  
-      GmemTiledCopyQ ,
-      GmemTiledCopyK,
-      GmemTiledCopyV ,
-      GmemTiledCopyO,
+      QKVType, AccumType, OutType,
       typename TileShapeConfig::ShapeQK,
       typename TileShapeConfig::ShapePV,
       typename TileShapeConfig::ShapeOutPut,
@@ -89,109 +80,87 @@ struct FMHAPrefillConfigGen {
       Causal, VarLen, TileShapeConfig::PipelineStages>;
 };
 
-using PvcFMHAPrefillBF16BF16FP32_RCR_h64_Causal_FixedLen = FMHAPrefillConfigGen<cutlass::bfloat16_t,  true, false, Shape_h64>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h96_Causal_FixedLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, true, false, Shape_h96>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h128_Causal_FixedLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, true, false, Shape_h128>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h192_Causal_FixedLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, true, false, Shape_h192>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h64_Causal_VarLen = FMHAPrefillConfigGen<cutlass::bfloat16_t,  true, true, Shape_h64>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h96_Causal_VarLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, true, true, Shape_h96>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h128_Causal_VarLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, true, true, Shape_h128>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h192_Causal_VarLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, true, true, Shape_h192>::type;
+/////////////////////////////////////////////////////////////////////////////////////
+template <typename FMHAPrefill>
+static void inline FMHAPrefillFunc(::benchmark::State& state,
+                                cutlass::benchmark::FMHAPrefillOptions const& options,
+                                KernelHardwareInfo const& hw_info) {
+  auto bench = cutlass::benchmark::BenchmarkRunnerFMHA<FMHAPrefill>();
+  bench.run(state, options, hw_info);
+}
 
-using PvcFMHAPrefillBF16BF16FP32_RCR_h64_NonCausal_FixedLen = FMHAPrefillConfigGen<cutlass::bfloat16_t,  false, false, Shape_h64>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h96_NonCausal_FixedLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, false, false, Shape_h96>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h128_NonCausal_FixedLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, false, false, Shape_h128>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h192_NonCausal_FixedLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, false, false, Shape_h192>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h64_NonCausal_VarLen = FMHAPrefillConfigGen<cutlass::bfloat16_t,  false, true, Shape_h64>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h96_NonCausal_VarLen = FMHAPrefillConfigGen<cutlass::bfloat16_t,  false, true, Shape_h96>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h128_NonCausal_VarLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, false, true, Shape_h128>::type;
-using PvcFMHAPrefillBF16BF16FP32_RCR_h192_NonCausal_VarLen = FMHAPrefillConfigGen<cutlass::bfloat16_t, false, true, Shape_h192>::type;
+struct FMHAPrefillBenchGenConfig {
+  static constexpr auto get_bool_tuple() {
+    return std::make_tuple(true, false);
+  }
 
-using PvcFMHAPrefillFP16FP16FP32_RCR_h64_Causal_FixedLen = FMHAPrefillConfigGen<cutlass::half_t,  true, false, Shape_h64>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h96_Causal_FixedLen = FMHAPrefillConfigGen<cutlass::half_t, true, false, Shape_h96>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h128_Causal_FixedLen = FMHAPrefillConfigGen<cutlass::half_t, true, false, Shape_h128>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h192_Causal_FixedLen = FMHAPrefillConfigGen<cutlass::half_t, true, false, Shape_h192>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h64_Causal_VarLen = FMHAPrefillConfigGen<cutlass::half_t,  true, true, Shape_h64>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h96_Causal_VarLen = FMHAPrefillConfigGen<cutlass::half_t,  true, true, Shape_h96>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h128_Causal_VarLen = FMHAPrefillConfigGen<cutlass::half_t, true, true, Shape_h128>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h192_Causal_VarLen = FMHAPrefillConfigGen<cutlass::half_t, true, true, Shape_h192>::type;
+  template <typename String, typename InT>
+  static constexpr String get_input_string() {
+    if constexpr (std::is_same_v<InT, bfloat16_t>) {
+      return String{"BF16BF16FP32"};
+    } else if constexpr (std::is_same_v<InT, half_t>) {
+      return String{"FP16FP16FP32"};
+    } else if constexpr (std::is_same_v<InT, float_e5m2_t>) {
+      return String{"FP8E5M2FP8E5M2FP32"};
+    } else {
+      return String{"FP8E4M3FP8E4M3FP32"};
+    }
+  }
 
-using PvcFMHAPrefillFP16FP16FP32_RCR_h64_NonCausal_FixedLen = FMHAPrefillConfigGen<cutlass::half_t,  false, false, Shape_h64>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h96_NonCausal_FixedLen = FMHAPrefillConfigGen<cutlass::half_t,  false, false, Shape_h96>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h128_NonCausal_FixedLen = FMHAPrefillConfigGen<cutlass::half_t, false, false, Shape_h128>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h192_NonCausal_FixedLen = FMHAPrefillConfigGen<cutlass::half_t, false, false, Shape_h192>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h64_NonCausal_VarLen = FMHAPrefillConfigGen<cutlass::half_t,  false, true, Shape_h64>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h96_NonCausal_VarLen = FMHAPrefillConfigGen<cutlass::half_t,  false, true, Shape_h96>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h128_NonCausal_VarLen = FMHAPrefillConfigGen<cutlass::half_t, false, true, Shape_h128>::type;
-using PvcFMHAPrefillFP16FP16FP32_RCR_h192_NonCausal_VarLen = FMHAPrefillConfigGen<cutlass::half_t, false, true, Shape_h192>::type;
+  template <typename String, typename OutT>
+  static constexpr String get_output_string() {
+    if constexpr (std::is_same_v<OutT, bfloat16_t>) {
+      return String{"BF16_RCR_"};
+    } else if constexpr (std::is_same_v<OutT, half_t>) {
+      return String{"FP16_RCR_"};
+    } else if constexpr (std::is_same_v<OutT, float_e5m2_t>) {
+      return String{"FP8E5M2_RCR_"};
+    } else if constexpr (std::is_same_v<OutT, float_e4m3_t>) {
+      return String{"FP8E4M3_RCR_"};
+    } else {
+      return String{"FP32_RCR_"};
+    }
+  }
+};
+/////////////////////////////////////////////////////////////////////////////////////
 
+template <typename ConfigTupleGen, typename String, typename InT, typename AccumT, typename OutT, bool Causal, bool VarLen>
+static constexpr void generate_benchmarks() {
+  using F = typename FMHAPrefillConfigGen<InT, AccumT, OutT, Causal, VarLen, SHAPE_H>::type;
 
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h64_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h64_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h96_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h96_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h128_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h128_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h192_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h192_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h64_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h64_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h96_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h96_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h128_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h128_NonCausal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h192_Causal_FixedLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h192_NonCausal_FixedLen);
+  String str = "FMHAPrefill";
+  String input_str = str + ConfigTupleGen::template get_input_string<String, InT>();
+  String out_str = input_str + ConfigTupleGen::template get_output_string<String, OutT>();
+  String head_dim_str = out_str + String{"h"} + String{std::to_string(HEAD_DIM)} + String{"_"};
+  String causal_str = head_dim_str + String{Causal ? "Causal_" : "NonCausal_"};
+  String bench_name = causal_str + String{VarLen ? "VarLen" : "FixedLen"};
 
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h64_Causal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h64_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h96_Causal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h96_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h128_Causal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h128_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h192_Causal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h192_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h64_Causal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h64_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h96_Causal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h96_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h128_Causal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h128_NonCausal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h192_Causal_VarLen);
-CUTLASS_CREATE_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h192_NonCausal_VarLen);
+  cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::FMHAPrefillOptions>::Register(bench_name, FMHAPrefillFunc<F>);
+}
 
-static void register_flash_attention_prefill_benchmarks() {
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h64_Causal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h64_NonCausal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h96_Causal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h96_NonCausal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h128_Causal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h128_NonCausal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h192_Causal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h192_NonCausal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h64_Causal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h64_NonCausal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h96_NonCausal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h96_Causal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h128_Causal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h128_NonCausal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h192_Causal_FixedLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h192_NonCausal_FixedLen);
+template <typename ConfigTupleGen, typename InT, typename AccumT, typename OutT, bool Causal, int varlen_idx = 0>
+static constexpr void generate_benchmarks_varlen() {
+  if constexpr (varlen_idx < std::tuple_size_v<decltype(ConfigTupleGen::get_bool_tuple())>) {
+    generate_benchmarks<ConfigTupleGen, std::string, InT, AccumT, OutT, Causal, get<varlen_idx>(ConfigTupleGen::get_bool_tuple())>();
+    generate_benchmarks_varlen<ConfigTupleGen, InT, AccumT, OutT, Causal, varlen_idx + 1>();
+  }
+}
 
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h64_Causal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h64_NonCausal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h96_Causal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h96_NonCausal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h128_Causal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h128_NonCausal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h192_Causal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillBF16BF16FP32_RCR_h192_NonCausal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h64_Causal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h64_NonCausal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h96_Causal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h96_NonCausal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h128_Causal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h128_NonCausal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h192_Causal_VarLen);
-  CUTLASS_FMHA_PREFILL_BENCHMARK(PvcFMHAPrefillFP16FP16FP32_RCR_h192_NonCausal_VarLen);
+template <typename ConfigTupleGen, typename InT, typename AccumT, typename OutT, int causal_idx = 0>
+static constexpr void generate_benchmarks_causal() {
+  if constexpr (causal_idx < std::tuple_size_v<decltype(ConfigTupleGen::get_bool_tuple())>) {
+    generate_benchmarks_varlen<ConfigTupleGen, InT, AccumT, OutT, get<causal_idx>(ConfigTupleGen::get_bool_tuple())>();
+    generate_benchmarks_causal<ConfigTupleGen, InT, AccumT, OutT, causal_idx + 1>();
+  }
+}
+
+static constexpr void register_flash_attention_prefill_benchmarks() {
+  generate_benchmarks_causal<FMHAPrefillBenchGenConfig, cutlass::bfloat16_t, float, float>();
+  generate_benchmarks_causal<FMHAPrefillBenchGenConfig, cutlass::bfloat16_t, float, cutlass::bfloat16_t>();
+  generate_benchmarks_causal<FMHAPrefillBenchGenConfig, cutlass::half_t, float, float>();
+  generate_benchmarks_causal<FMHAPrefillBenchGenConfig, cutlass::half_t, float, cutlass::half_t>();
+  generate_benchmarks_causal<FMHAPrefillBenchGenConfig, cutlass::float_e5m2_t, float, float>();
+  generate_benchmarks_causal<FMHAPrefillBenchGenConfig, cutlass::float_e5m2_t, float, cutlass::float_e5m2_t>();
+  generate_benchmarks_causal<FMHAPrefillBenchGenConfig, cutlass::float_e4m3_t, float, float>();
+  generate_benchmarks_causal<FMHAPrefillBenchGenConfig, cutlass::float_e4m3_t, float, cutlass::float_e4m3_t>();
 }
