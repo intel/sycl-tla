@@ -34,7 +34,7 @@
 #include "cutlass/cutlass.h"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/sycl_tensor_fill.h"
-
+#include "cutlass/util/mixed_dtype_utils.hpp"
 
 template<typename T>
 inline
