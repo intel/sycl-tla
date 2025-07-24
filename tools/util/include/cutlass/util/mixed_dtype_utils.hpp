@@ -519,8 +519,11 @@ static constexpr auto is_signed_v = cute::is_signed<T>::value;
 template<class T>
 static constexpr auto digits = std::numeric_limits<T>::digits > 0 ? std::numeric_limits<T>::digits : cute::numeric_limits<T>::digits;
 
+template<class T, class = void>
+auto max_for_test = T(1 << cute::ceil_div(digits<T> , 4));
+
 template<class T>
-auto max_for_test = T(cute::sizeof_bits_v<T> >= 8 ? 1 << cute::ceil_div(digits<T> , 4) : cutlass::platform::numeric_limits<T>::max() / 2);
+auto max_for_test<T, std::enable_if_t<cute::sizeof_bits_v<T> < 8>> = T(cutlass::platform::numeric_limits<T>::max() / 2);
 
 /// Helper to initialize a block of device data
 template <class Element, class... Args_t>
