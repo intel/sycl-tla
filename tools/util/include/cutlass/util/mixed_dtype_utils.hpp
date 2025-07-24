@@ -513,6 +513,7 @@ void reorder_tensor(
   cutlass::device_memory::copy_device_to_device(data, temp.get(), static_cast<size_t>(size(layout_src)));
 }
 
+#ifdef CUTLASS_ENABLE_SYCL
 
 template <class T, class = void>
 static constexpr auto is_signed_v = cute::is_signed<T>::value;
@@ -653,6 +654,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
 
   syclcompat::wait();
 }
+#endif
 
 #undef CUDA_CHECK
 
