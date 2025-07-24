@@ -61,7 +61,7 @@ namespace cutlass::benchmark {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if defined(CUTLASS_ENABLE_SYCL)
+#if defined(SYCL_INTEL_TARGET)
 template <class T, int Stages = 0>
 static constexpr auto is_mixed_dtype = false;
 
