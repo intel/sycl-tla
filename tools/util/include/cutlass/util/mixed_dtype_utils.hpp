@@ -513,7 +513,7 @@ void reorder_tensor(
   cutlass::device_memory::copy_device_to_device(data, temp.get(), static_cast<size_t>(size(layout_src)));
 }
 
-#ifdef CUTLASS_ENABLE_SYCL
+#if defined(SYCL_INTEL_TARGET)
 
 template <class T, class = void>
 static constexpr auto is_signed_v = cute::is_signed<T>::value;
