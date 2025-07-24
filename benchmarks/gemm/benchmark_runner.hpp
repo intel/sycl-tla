@@ -67,6 +67,9 @@ static constexpr auto is_mixed_dtype = false;
 
 template <int Stages>
 static constexpr auto is_mixed_dtype<cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<Stages>> = true;
+#else
+template <class T, int Stages = 0>
+static constexpr auto is_mixed_dtype = false;
 #endif
 
 template <class T, class = void>
