@@ -379,6 +379,20 @@ struct ThrCopy
     //               "Expected ValType for tiling DstTensor.");
     return make_tensor(static_cast<DTensor&&>(dtensor).data(), TiledCopy::retile(dtensor.layout()));
   }
+
+  template <class STensor>
+  CUTE_HOST_DEVICE
+  auto
+  partition_fragment_S(STensor&& stensor) const {
+    return make_fragment_like<typename TiledCopy::ValType>(partition_S(stensor));
+  }
+
+  template <class DTensor>
+  CUTE_HOST_DEVICE
+  auto
+  partition_fragment_D(DTensor&& dtensor) const {
+    return make_fragment_like<typename TiledCopy::ValType>(partition_D(dtensor));
+  }
 };
 
 
@@ -544,6 +558,27 @@ make_cotiled_copy(Copy_Atom<Args...> const& copy_atom,
   // (tid,vid) -> tile_coord
   auto layout_tv = composition(left_inverse(tile2data), layout_tv_data);
   return make_tiled_copy_impl(copy_atom, layout_tv, tiler);
+}
+
+// Variant of make_cotiled_copy that uses the atom's reference TV-layout.
+template <class... Args, class DataLayout>
+CUTE_HOST_DEVICE constexpr
+auto
+make_cotiled_copy(Copy_Atom<Args...> const& copy_atom,
+                  DataLayout         const& data_layout)      // coord -> data addr    The target layout
+{
+  using AtomTVLayout = typename Copy_Atom<Args...>::ValLayoutRef;
+  return make_cotiled_copy(copy_atom, AtomTVLayout{}, data_layout);
+}
+
+// Xe-specific variant of make_cotiled_copy that uses the atom's reference TV-layout
+//   and built-in 2D block shape.
+template <class... Args>
+CUTE_HOST_DEVICE constexpr
+auto
+make_cotiled_copy(Copy_Atom<Args...> const& copy_atom) {
+  using BlockShape = typename Copy_Atom<Args...>::BlockShape;
+  return make_cotiled_copy(copy_atom, Layout<BlockShape>{});
 }
 
 // Make a TiledCopy out of the copy_atom that matches the Src-Layout of tiled_copy

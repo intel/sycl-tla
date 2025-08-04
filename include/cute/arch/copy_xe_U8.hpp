@@ -235,7 +235,7 @@ struct XE_2D_U8x32x32_LD_N {
 
 struct XE_2D_Packed_U8x1x64_LD_N {
   using BlockShape = Shape<_1, _64>;
-  
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -407,7 +407,25 @@ struct XE_2D_Packed_U8x32x64_LD_N {
   };
 };
 
+struct XE_2D_U8x16x16_LD_V_Natural {
+  using BlockShape = Shape<_16, _16>;
 
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    auto &dv = *reinterpret_cast<intel::uchar16 *>(dst);
+    width--, height--, pitch--;
+    asm("lsc_load_block2d.ugm (M1, 1)  %0:d8.16x16nt flat[%1,%2,%3,%4,%5,%6]"
+          : "=rw"(dv)
+          : "rw.u"(baseoffset), "rw.u"(width), "rw.u"(height), "rw.u"(pitch), "rw.u"(coord[0]), "rw.u"(coord[1]));
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
 
 struct XE_2D_U8x32x16_LD_V {
   using BlockShape = Shape<_32, _16>;
