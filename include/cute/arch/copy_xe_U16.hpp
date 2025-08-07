@@ -491,7 +491,7 @@ struct XE_2D_U16x32x32_LD_V_Natural {
     static_assert(sizeof(T) == 2, "Expected T to have size 2");
     auto &dv = *reinterpret_cast<intel::ushort16 *>(dst);
     width--, height--, pitch--;
-    asm("lsc_load_block2d.ugm (M1, 1)  %0:d16.16x32x2nt flat[%1,%2,%3,%4,%5,%6]"
+    asm("lsc_load_block2d.ugm (M1, 1)  %0:d16.2x16x32nt flat[%1,%2,%3,%4,%5,%6]"
           : "=rw"(dv)
           : "rw.u"(baseoffset), "rw.u"(width), "rw.u"(height), "rw.u"(pitch), "rw.u"(coord[0]), "rw.u"(coord[1]));
 #else

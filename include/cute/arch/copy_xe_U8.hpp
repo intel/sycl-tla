@@ -427,6 +427,70 @@ struct XE_2D_U8x16x16_LD_V_Natural {
   }
 };
 
+struct XE_2D_U8x16x32_LD_V_Natural {
+  using BlockShape = Shape<_16, _32>;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    auto &dv = *reinterpret_cast<intel::uchar64 *>(dst);
+    width--, height--, pitch--;
+    asm("lsc_load_block2d.ugm (M1, 1)  %0:d8.2x16x16nt flat[%1,%2,%3,%4,%5,%6]"
+          : "=rw"(dv)
+          : "rw.u"(baseoffset), "rw.u"(width), "rw.u"(height), "rw.u"(pitch), "rw.u"(coord[0]), "rw.u"(coord[1]));
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
+// These two builtins creates a new address payload
+SYCL_EXTERNAL extern "C" int* __builtin_IB_subgroup_createBlock2DAddressPayload(long base, int width_minus_one, int height_minus_one, int pitch_minus_one,
+                                                                                int blockX, int blockY, int blockWidth, int blockHeight, int numBlocks);
+SYCL_EXTERNAL extern "C" int* __builtin_IB_subgroup_copyBlock2DAddressPayload(int* AP);
+
+// The following updates the existing address payload
+SYCL_EXTERNAL extern "C" void __builtin_IB_subgroup_addBlock2DAddressPayloadBlockX(int* addrPayload, int blockX);
+SYCL_EXTERNAL extern "C" void __builtin_IB_subgroup_addBlock2DAddressPayloadBlockY(int* addrPayload, int blockY);
+SYCL_EXTERNAL extern "C" void __builtin_IB_subgroup_setBlock2DAddressPayloadBlockX(int* addrPayload, int blockX);
+SYCL_EXTERNAL extern "C" void __builtin_IB_subgroup_setBlock2DAddressPayloadBlockY(int* addrPayload, int blockY);
+SYCL_EXTERNAL extern "C" void __builtin_IB_subgroup_setBlock2DAddressPayloadBase(int* addrPayload, long base);
+SYCL_EXTERNAL extern "C" void __builtin_IB_subgroup_setBlock2DAddressPayloadWidth(int* addrPayload, int width_minus_one);
+SYCL_EXTERNAL extern "C" void __builtin_IB_subgroup_setBlock2DAddressPayloadHeigth(int* addrPayload, int height_minus_one);
+SYCL_EXTERNAL extern "C" void __builtin_IB_subgroup_setBlock2DAddressPayloadPitch(int* addrPayload, int pitch_minus_one);
+
+struct XE_2D_U8x16x64_LD_V_Natural {
+  using BlockShape = Shape<_16, _64>;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    auto &dv = *reinterpret_cast<intel::uchar64 *>(dst);
+    width--, height--, pitch--;
+#ifdef DECOMP_B2D
+    auto payload = __builtin_IB_subgroup_createBlock2DAddressPayload((long) baseoffset, width, height, pitch, 0, 0, 16, 16, 4);
+    __builtin_IB_subgroup_setBlock2DAddressPayloadBlockX(payload, coord[0]);
+    __builtin_IB_subgroup_setBlock2DAddressPayloadBlockY(payload, coord[1]);
+    asm("lsc_load_block2d.ugm (M1, 1)  %0:d8.4x16x16nt flat[%1+(0,0)]"
+          : "=rw"(dv)
+          : "rw"(*payload));
+#else
+    asm("lsc_load_block2d.ugm (M1, 1)  %0:d8.4x16x16nt flat[%1,%2,%3,%4,%5,%6]"
+          : "=rw"(dv)
+          : "rw.u"(baseoffset), "rw.u"(width), "rw.u"(height), "rw.u"(pitch), "rw.u"(coord[0]), "rw.u"(coord[1]));
+#endif
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
 struct XE_2D_U8x32x16_LD_V {
   using BlockShape = Shape<_32, _16>;
 
@@ -471,6 +535,27 @@ struct XE_2D_U8x32x32_LD_V {
 #endif
   }
 };
+
+struct XE_2D_U8x32x32_LD_V_Natural {
+  using BlockShape = Shape<_32, _32>;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(CUTE_ARCH_COPY_XE_ENABLED)
+    static_assert(sizeof(T) == 1, "Expected T to have size 1");
+    auto &dv = *reinterpret_cast<intel::uchar64 *>(dst);
+    width--, height--, pitch--;
+    asm("lsc_load_block2d.ugm (M1, 1)  %0:d8.2x16x32nt flat[%1,%2,%3,%4,%5,%6]"
+          : "=rw"(dv)
+          : "rw.u"(baseoffset), "rw.u"(width), "rw.u"(height), "rw.u"(pitch), "rw.u"(coord[0]), "rw.u"(coord[1]));
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
+#endif
+  }
+};
+
 
 struct XE_2D_U8x32x64_LD_V {
   using BlockShape = Shape<_32, _64>;
