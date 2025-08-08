@@ -479,7 +479,7 @@ struct XE_2D_U8x16x64_LD_V_Natural {
     __builtin_IB_subgroup_setBlock2DAddressPayloadBlockY(payload, coord[1]);
     asm("lsc_load_block2d.ugm (M1, 1)  %0:d8.4x16x16nt flat[%1+(0,0)]"
           : "=rw"(dv)
-          : "rw"(*payload));
+          : "rw.u"(payload));
 #else
     asm("lsc_load_block2d.ugm (M1, 1)  %0:d8.4x16x16nt flat[%1,%2,%3,%4,%5,%6]"
           : "=rw"(dv)
