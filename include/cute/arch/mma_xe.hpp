@@ -78,19 +78,33 @@ using DPASType_s4 = int4_t;
 
 #define CUTE_DECLARE_XE_DPAS_TT(M, M8, M16, TD, TA, TB, TC) \
 template <> struct XE_DPAS_TT<M, detail::DPASType_ ## TD, detail::DPASType_ ## TA, detail::DPASType_ ## TB, detail::DPASType_ ## TC> \
-  : public XE_DPAS_TT_Base<M, detail::DPASType_ ## TD, detail::DPASType_ ## TA, detail::DPASType_ ## TB, detail::DPASType_ ## TC> { \
+    : public XE_DPAS_TT_Base<M, detail::DPASType_ ## TD, detail::DPASType_ ## TA, detail::DPASType_ ## TB, detail::DPASType_ ## TC> { \
+  template <typename CVector_ = CVector> \
   CUTE_HOST_DEVICE static void \
-  fma(DVector& d, AVector const& a, BVector const& b, CVector const& c) { \
-    asm( \
-      "{\n" \
-      ".decl DST     v_type=G type=" #TD " num_elts=" #M16 " alias=<%0,0>\n" \
-      ".decl SRC0    v_type=G type=" #TC " num_elts=" #M16 " alias=<%3,0>\n" \
-      ".decl SRC1_UD v_type=G type=UD num_elts=128 alias=<%2,0>\n" \
-      ".decl SRC2_UD v_type=G type=UD num_elts=" #M8 " alias=<%1,0>\n" \
-      "dpas." #TB "." #TA ".8." #M " (M1, 16) DST.0 SRC0.0 SRC1_UD.0 SRC2_UD(0,0)\n" \
-      "}\n" \
-      : "=rw"(d) : "rw"(a), "rw"(b), "rw"(c) \
-    ); \
+  fma(DVector& d, AVector const& a, BVector const& b, CVector_ const& c) { \
+    if constexpr (std::is_same_v<CVector_, DVector>) { \
+      d = c; \
+      asm ( \
+        "{\n" \
+        ".decl DST     v_type=G type=" #TD " num_elts=" #M16 " alias=<%0,0>\n" \
+        ".decl SRC1_UD v_type=G type=UD num_elts=128 alias=<%2,0>\n" \
+        ".decl SRC2_UD v_type=G type=UD num_elts=" #M8 " alias=<%1,0>\n" \
+        "dpas." #TB "." #TA ".8." #M " (M1, 16) DST.0 DST.0 SRC1_UD.0 SRC2_UD(0,0)\n" \
+        "}\n" \
+        : "+rw"(d) : "rw"(a), "rw"(b) \
+      ); \
+    } else { \
+      asm ( \
+        "{\n" \
+        ".decl DST     v_type=G type=" #TD " num_elts=" #M16 " alias=<%0,0>\n" \
+        ".decl SRC0    v_type=G type=" #TC " num_elts=" #M16 " alias=<%3,0>\n" \
+        ".decl SRC1_UD v_type=G type=UD num_elts=128 alias=<%2,0>\n" \
+        ".decl SRC2_UD v_type=G type=UD num_elts=" #M8 " alias=<%1,0>\n" \
+        "dpas." #TB "." #TA ".8." #M " (M1, 16) DST.0 SRC0.0 SRC1_UD.0 SRC2_UD(0,0)\n" \
+        "}\n" \
+        : "=rw"(d) : "rw"(a), "rw"(b), "rw"(c) \
+      ); \
+    } \
   } \
 };
 
@@ -130,5 +144,8 @@ CUTE_DECLARE_XE_DPAS_TT_ALLM(d,   u8,   u8,   d)
 CUTE_DECLARE_XE_DPAS_TT_ALLM(d,   u8,   s8,   d)
 CUTE_DECLARE_XE_DPAS_TT_ALLM(d,   s8,   u8,   d)
 CUTE_DECLARE_XE_DPAS_TT_ALLM(d,   s8,   s8,   d)
+
+#undef CUTE_DECLARE_XE_DPAS_TT
+#undef CUTE_DECLARE_XE_DPAS_TT_ALLM
 
 } //namespace cute
