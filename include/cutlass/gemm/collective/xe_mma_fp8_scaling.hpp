@@ -324,6 +324,7 @@ public:
       tiled_copy_scaleB = {};
     }
 
+    // TODO: Current examples/sycl/08_bmg_gemm_f8/08_bmg_gemm_f8_scaling.cpp doesn't cover this path
     static_assert(!ModeHasScalesZeroA && !ModeHasScalesZeroB);
 
     if constexpr(ModeHasScalesZeroA) {
@@ -435,11 +436,14 @@ public:
       static constexpr auto K = decltype(size(in))::value / 8 / M;
       CUTLASS_PRAGMA_NO_UNROLL
       for (int i = 0; i < 16; ++i) {
+        // Example: for the scale load atom (1x32) gives 2 scale values to
+        // each thread. All threads need access to all other threads
+        // scale values, and each scale value is reused twice (k unrolled below)
         CUTLASS_PRAGMA_UNROLL
         for (int m = 0; m < M / 2; ++m) {
           auto scale = static_cast<DstType>(shfl_sync(0xFFFFFFFF, tCrS_input(m), i));
           auto zero = static_cast<DstType>(shfl_sync(0xFFFFFFFF, tCrZ_input(m), i));
-
+          CUTLASS_PRAGMA_UNROLL
           for (int k = 0; k < K; k++) {
             if constexpr (ModeHasScalesZeroA) {
               out(_, _, k)[m * 16 + i] -= zero;
