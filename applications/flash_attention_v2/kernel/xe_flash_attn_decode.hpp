@@ -343,7 +343,7 @@ public:
       Tensor out_reg = make_tensor<ElementAccumulator>(AccumShape{});
       clear(out_reg);
 
-      auto smem = syclcompat::local_mem<ElementAccumulator[((Int<size(AccumShape{}) + 1>{}) * Num_SGs * SubgroupSize)]>();
+      auto smem = cutlasscompat::local_mem<ElementAccumulator[((Int<size(AccumShape{}) + 1>{}) * Num_SGs * SubgroupSize)]>();
       Tensor shmem_max_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<Num_SGs * FragsM>{}));
 
       bool is_KV_cache = seq_len_kv_cache != 0;
@@ -459,7 +459,7 @@ public:
       collective_mma.template mmaPV<VSlicer>(out_reg, tSr, gV, out_reg, mainloop_params, false, curr_kv_tile_idx);
 
       // need to apply barrier here to avoid race condition
-      auto group = syclcompat::get_nd_item<1>().get_group();
+      auto group = cutlasscompat::get_nd_item<1>().get_group();
       sycl::group_barrier(group);
 
       Tensor shmem_out_tensor = make_tensor(make_smem_ptr(smem), make_shape(Int<(size(AccumShape{})) * SubgroupSize * Num_SGs>{}));
