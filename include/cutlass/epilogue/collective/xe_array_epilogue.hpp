@@ -90,8 +90,10 @@ public:
   using DispatchPolicy = IntelXeXMX16Group;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
-  using ElementC = ElementC_;
-  using ElementAccumulator = ElementC_;
+  using ElementC = ElementD_;
+  // simple heristic to determine accumulator dtype
+  using ElementAccumulator = conditional_t<std::is_same_v<ElementC, bfloat16_t> || 
+    std::is_same_v<ElementC, half_t> || std::is_same_v<ElementC, float>, float, float>;
   using StrideC = StrideC_;
   using InternalStrideC = cute::remove_pointer_t<StrideC>;
   using ElementD = ElementD_;
@@ -115,7 +117,7 @@ public:
   static constexpr FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest;
 
   static_assert(cute::is_same_v<typename FusionCallbacks::Operation, 
-                                fusion::LinearCombination<ElementAccumulator, ElementCompute, ElementSource, ElementScalar, RoundStyle>>,
+                                fusion::LinearCombination<ElementOutput, ElementCompute, ElementSource, ElementScalar, RoundStyle>>,
   "Only Linear Combination Epilogue is supported for Grouped GEMM at the moment.");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
@@ -421,6 +423,8 @@ public:
     constexpr int MN = get<0>(CtaTileMNK{}) * get<1>(CtaTileMNK{});
     static_assert(ValuesLoaded == MN, "the total elements loaded by all threads should be the same as MxN" );
 
+    constexpr bool is_same_dtype_accum_and_output = std::is_same_v<typename TiledMma::ValTypeC, ElementC>;
+
     auto synchronize = [&] () {};
     CUTLASS_PRAGMA_UNROLL
     for (int epi_n = 0; epi_n < FragsN; epi_n++) {
@@ -428,8 +432,19 @@ public:
       for (int epi_m = 0; epi_m < FragsM; epi_m++) {
 
         if (is_C_load_needed) {
-          //cordinates for C and D are the same
+          if constexpr (is_same_dtype_accum_and_output) {
+            //cordinates for C and D are the same
           copy(params.xe_load_c.with(get<0>(load_store_tensors)), tCgD(_, epi_m, epi_n), trC);
+          } else {
+            Tensor trC_ori = make_tensor<ElementC>(Shape<Int<FragmentSize>>{});
+            copy(params.xe_load_c.with(get<0>(load_store_tensors)), tCgD(_, epi_m, epi_n), trC_ori);
+            // convert trC from original dtype to accumulator dtype
+            CUTLASS_PRAGMA_UNROLL
+            for (int copy_n = 0; copy_n < FragmentSize; copy_n++) {
+              trC(copy_n) = (typename TiledMma::ValTypeC)trC_ori(copy_n);
+            }
+          }
+          
         }
 
         cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);
@@ -438,7 +453,13 @@ public:
 
         CUTLASS_PRAGMA_UNROLL
         for (int epi_v = 0; epi_v < size<0>(trD_compute_frag); ++epi_v) {
-          trD_compute_frag(epi_v) = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
+          if constexpr (is_same_dtype_accum_and_output) {
+            trD_compute_frag(epi_v) = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
+          } else {
+            // align dtypes firstly
+            auto tmp = cst_callbacks.visit(acc_frag_mn(epi_v), epi_v, epi_m, epi_n);
+            trD_compute_frag(epi_v) = cutlass::NumericArrayConverter<ElementCompute, ElementOutput, FragmentSize>{}(tmp);
+          }
         }
         cst_callbacks.reduce(nullptr, synchronize, epi_m, epi_n, (epi_m == FragsM - 1 && epi_n == FragsN - 1), trD_compute_frag);
         
