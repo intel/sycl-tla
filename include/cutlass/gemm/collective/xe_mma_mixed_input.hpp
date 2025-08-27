@@ -87,7 +87,7 @@ struct scale_zero_copy_traits<datatype, 16, stride,
 template<class datatype, size_t N, class stride>
 struct scale_zero_copy_traits<datatype, N, stride,
           std::enable_if_t<sizeof_bits_v<datatype> == 8 && N >= 32>> {
-  using type = XE_2D_U8x1x32_LD_N;  // XE_2D_U8x1x32_LD_N not work, use this instead
+  using type = XE_2D_U8x1x16_LD_N;  // XE_2D_U8x1x32_LD_N not work, use this instead
 };
 
 // 16 bits
