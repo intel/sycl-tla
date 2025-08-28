@@ -32,15 +32,44 @@ set(TEST_MODE_0 --l=2 --mode=0)
 set(TEST_A_NARROW --l=2 --a_narrower)
 
 cutlass_example_add_executable(
-  02_bmg_gemm_mixed_dtype
-  02_bmg_gemm_mixed_dtype.cpp
+  02_bmg_gemm_f16_s8_f16_tensorwise
+  02_bmg_gemm_f16_s8_f16_tensorwise.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)
+
+cutlass_example_add_executable(
+  02_bmg_gemm_bf16_s8_bf16
+  02_bmg_gemm_bf16_s8_bf16.cpp
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
   TEST_MODE_1
   TEST_MODE_0
   TEST_A_NARROW
 )
+
+cutlass_example_add_executable(
+  02_bmg_gemm_f16_u4_f16
+  02_bmg_gemm_f16_u4_f16.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+  TEST_MODE_1
+  TEST_MODE_0
+)
+
+cutlass_example_add_executable(
+  02_bmg_gemm_f16_u4_s8
+  02_bmg_gemm_f16_u4_s8.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+  TEST_MODE_1
+  TEST_MODE_0
+)
+
 if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
   # TODO(codeplay): Remove these once IGC block load loop hoisting bug is fixed
-  target_link_options( 02_bmg_gemm_mixed_dtype PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
+  target_link_options( 02_bmg_gemm_f16_s8_f16_tensorwise PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
+  target_link_options( 02_bmg_gemm_bf16_s8_bf16 PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
+  target_link_options( 02_bmg_gemm_f16_u4_f16 PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
+  target_link_options( 02_bmg_gemm_f16_u4_s8 PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
 endif()
