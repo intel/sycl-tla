@@ -91,9 +91,8 @@ public:
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
   using ElementC = ElementD_;
-  // simple heristic to determine accumulator dtype
-  using ElementAccumulator = conditional_t<std::is_same_v<ElementC, bfloat16_t> || 
-    std::is_same_v<ElementC, half_t> || std::is_same_v<ElementC, float>, float, float>;
+  // simple use fp32 as accumulator dtype
+  using ElementAccumulator = float;
   using StrideC = StrideC_;
   using InternalStrideC = cute::remove_pointer_t<StrideC>;
   using ElementD = ElementD_;
@@ -374,6 +373,7 @@ public:
     Tensor tCgD = thread_xe_store_d.partition_D(gD);
 
     Tensor trC = make_tensor<typename TiledMma::ValTypeC>(Shape<Int<FragmentSize>>{});
+    auto trC_frag = recast<Array<typename TiledMma::ValTypeC, FragmentSize>>(trC);
     Tensor trD_compute = make_tensor<ElementCompute>(Shape<Int<FragmentSize>>{});
 
     // Because Sm90 uses shared memory, they are not tied to using the same accumulator values
@@ -438,10 +438,10 @@ public:
           } else {
             Tensor trC_ori = make_tensor<ElementC>(Shape<Int<FragmentSize>>{});
             copy(params.xe_load_c.with(get<0>(load_store_tensors)), tCgD(_, epi_m, epi_n), trC_ori);
-            // convert trC from original dtype to accumulator dtype
+            auto trC_ori_frag = recast<Array<ElementC, FragmentSize>>(trC_ori);
             CUTLASS_PRAGMA_UNROLL
-            for (int copy_n = 0; copy_n < FragmentSize; copy_n++) {
-              trC(copy_n) = (typename TiledMma::ValTypeC)trC_ori(copy_n);
+            for (int i = 0; i < size(trC_frag); ++i) {
+              trC_frag(i) = cutlass::NumericArrayConverter<typename TiledMma::ValTypeC, ElementC, FragmentSize>{}(trC_ori_frag(i));
             }
           }
           
