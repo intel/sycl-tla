@@ -77,6 +77,7 @@
 #include "cutlass/gemm/collective/xe_array_mma_mixed_input.hpp"
 #include "cutlass/gemm/collective/xe_mma_w8a8.hpp"
 #include "cutlass/gemm/collective/xe_mma_fp8_scaling.hpp"
+#include "cutlass/gemm/collective/xe_mma_fp8_deepseek_scaling.hpp"
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)

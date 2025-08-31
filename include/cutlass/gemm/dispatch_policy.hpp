@@ -1056,6 +1056,10 @@ template<int Stages_>
 struct MainloopIntelXeXMX16FP8Scaling : MainloopIntelXeXMX16<Stages_> {
 };
 
+template<int Stages_>
+struct MainloopIntelXeXMX16FP8DeepSeekScaling : MainloopIntelXeXMX16<Stages_> {
+};
+
 #endif
 
 #if defined(CUTLASS_ENABLE_SYCL)
