@@ -418,10 +418,7 @@ public:
             Tensor trC_ori = make_tensor<ElementC>(Shape<Int<FragmentSize>>{});
             copy(params.xe_load_c, tCgC(_, epi_m, epi_n), trC_ori);
             auto trC_ori_frag = recast<Array<ElementC, FragmentSize>>(trC_ori);
-            CUTLASS_PRAGMA_UNROLL
-            for (int i = 0; i < size(trC_frag); ++i) {
-              trC_frag(i) = cutlass::NumericArrayConverter<typename TiledMma::ValTypeC, ElementC, FragmentSize>{}(trC_ori_frag(i));
-            }
+            *(trC_frag.data()) = cutlass::NumericArrayConverter<typename TiledMma::ValTypeC, ElementC, FragmentSize>{}(*(trC_ori_frag.data()));
           }
         }
 
