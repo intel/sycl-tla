@@ -592,7 +592,7 @@ int main(int argc, const char** argv)
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
           TileShape,
-          ElementOutput,
+          ElementAccumulator,
           cutlass::gemm::TagToStrideC_t<LayoutC*>,
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD*>,
