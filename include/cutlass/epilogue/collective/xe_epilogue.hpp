@@ -89,10 +89,8 @@ public:
   using DispatchPolicy = IntelXeXMX16;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
-  // assume C and D have same dtype
-  using ElementC = ElementD_;
-  // simple use fp32 as accumulator dtype
-  using ElementAccumulator = float;
+  using ElementC = typename FusionCallbacks::ElementSource;;
+  using ElementAccumulator = ElementC_;
   using StrideC = StrideC_;
   using ElementD = ElementD_;
   using StrideD = StrideD_;

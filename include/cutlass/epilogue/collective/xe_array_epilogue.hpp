@@ -90,9 +90,8 @@ public:
   using DispatchPolicy = IntelXeXMX16Group;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
-  using ElementC = ElementD_;
-  // simple use fp32 as accumulator dtype
-  using ElementAccumulator = float;
+  using ElementC = typename FusionCallbacks::ElementSource;
+  using ElementAccumulator = ElementC_;
   using StrideC = StrideC_;
   using InternalStrideC = cute::remove_pointer_t<StrideC>;
   using ElementD = ElementD_;
