@@ -102,7 +102,7 @@ public:
   using CopyOpR2S = CopyOpR2S_;
 
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
-  using GmemTiledCopyC = CopyOpG2R;
+  using GmemTiledCopyC = conditional_t<cute::is_void_v<CopyOpG2R>, XE_2D_U32x8x16_LD_N, CopyOpG2R>;
   using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
                                              CopyOpR2G, XE_2D_U32x8x16_ST_N>;
   using ElementOutput = ElementD;
@@ -343,6 +343,9 @@ public:
     // Tile the output tensor per SG and select tile for the current SG
     Tensor gD = local_tile(g_wg_D, take<0,2>(SubgroupTileShape{}), make_coord(m_sg,n_sg));            // (SG_M,SG_N)
 
+    auto thread_xe_load_c = params.xe_load_c.get_thread_slice(thread_idx);
+    Tensor tCgC = thread_xe_load_c.partition_S(gD);
+
     auto thread_xe_store_d = params.xe_store_d.get_thread_slice(thread_idx);
     Tensor tCgD = thread_xe_store_d.partition_D(gD);
 
@@ -404,8 +407,7 @@ public:
         cst_callbacks.begin_loop(epi_m, epi_n);
 
         if (is_C_load_needed) {
-          //cordinates for C and D are the same
-          copy(params.xe_load_c, tCgD(_, epi_m, epi_n), trC);
+          copy(params.xe_load_c, tCgC(_, epi_m, epi_n), trC);
         }
 
         cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);

@@ -1,4 +1,4 @@
-# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+# Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,50 +26,59 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(TEST_BATCHES --l=2)
-set(TEST_MODE_1 --l=2 --mode=1)
-set(TEST_MODE_0 --l=2 --mode=0)
-set(TEST_A_NARROW --l=2 --a_narrower)
+set(TEST_GROUPS --groups=2)
+set(TEST_MODE_1 --groups=2 --mode=1)
+set(TEST_MODE_0 --groups=2 --mode=0)
+set(TEST_A_NARROW --groups=2 --a_narrower)
+set(TEST_GROUP_DEQUANT --g=128)
+
+set(MMA_T bfloat16_t half_t)
+set(QUANT_T int8_t)
+set(EXE_LIST "")
+
+foreach(MMA_TYPE IN LISTS MMA_T)
+  set(mma_name "10_bmg_grouped_gemm_bf16")
+  if(${MMA_TYPE} STREQUAL "half_t")
+    set(mma_name "10_bmg_grouped_gemm_f16")
+  endif()
+  foreach(QUANT_TYPE IN LISTS QUANT_T)
+    set(exe_name "${mma_name}_s8")
+    if(${MMA_TYPE} STREQUAL "half_t" AND ${QUANT_TYPE} STREQUAL "int8_t")
+      set(exe_name "${mma_name}_s8_tensorwise")
+      set(TEST_GROUP_DEQUANT --g=0)
+      set(TEST_A_NARROW --groups=2)
+    endif()
+
+    cutlass_example_add_executable(
+      ${exe_name}
+      10_bmg_grouped_gemm_bf16_f16_s8.cpp
+      TEST_COMMAND_OPTIONS
+      TEST_GROUPS
+      TEST_MODE_1
+      TEST_MODE_0
+      TEST_A_NARROW
+      TEST_GROUP_DEQUANT
+    )
+    list(APPEND EXE_LIST ${exe_name})
+    target_compile_definitions(${exe_name} PRIVATE MMA_TYPE=${MMA_TYPE} QUANT_TYPE=${QUANT_TYPE})
+  endforeach()
+endforeach()
 
 cutlass_example_add_executable(
-  02_bmg_gemm_f16_s8_f16_tensorwise
-  02_bmg_gemm_f16_s8_f16_tensorwise.cpp
+  10_bmg_grouped_gemm_f16_u4
+  10_bmg_grouped_gemm_f16_u4.cpp
   TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-)
-
-cutlass_example_add_executable(
-  02_bmg_gemm_bf16_s8_bf16
-  02_bmg_gemm_bf16_s8_bf16.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
+  TEST_GROUPS
   TEST_MODE_1
   TEST_MODE_0
   TEST_A_NARROW
-)
-
-cutlass_example_add_executable(
-  02_bmg_gemm_f16_u4_f16
-  02_bmg_gemm_f16_u4_f16.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-  TEST_MODE_1
-  TEST_MODE_0
-)
-
-cutlass_example_add_executable(
-  02_bmg_gemm_f16_u4_s8
-  02_bmg_gemm_f16_u4_s8.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-  TEST_MODE_1
-  TEST_MODE_0
+  TEST_GROUP_DEQUANT
 )
 
 if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
   # TODO(codeplay): Remove these once IGC block load loop hoisting bug is fixed
-  target_link_options( 02_bmg_gemm_f16_s8_f16_tensorwise PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
-  target_link_options( 02_bmg_gemm_bf16_s8_bf16 PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
-  target_link_options( 02_bmg_gemm_f16_u4_f16 PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
-  target_link_options( 02_bmg_gemm_f16_u4_s8 PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
+  foreach(target_exe IN LISTS EXE_LIST)
+    target_link_options(${target_exe} PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
+  endforeach()
+  target_link_options(10_bmg_grouped_gemm_f16_u4 PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
 endif()
