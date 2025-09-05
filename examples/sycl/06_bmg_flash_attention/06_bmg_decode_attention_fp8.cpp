@@ -49,12 +49,6 @@ int run_decode(Options const& options) {
     using ElementInputQ = cutlass::float_e5m2_t;     // <- data type of elements in input matrix A
     using ElementInputKV = cutlass::float_e5m2_t;    // <- data type of elements in input matrix B
     using ElementOutput = float;          // <- data type of elements in output matrix D
-    constexpr int PipelineStages = 2;
-    using MMAOperation = XE_1x16x16_F32F16F16F32_TT;
-    using GmemTiledCopyQ = XE_2D_U8x1x32_LD_N;
-    using GmemTiledCopyK = XE_2D_U8x16x16_LD_T;
-    using GmemTiledCopyV = XE_2D_U8x32x32_LD_V;
-    using GmemTiledCopyStore = XE_2D_U32x1x16_ST_N;
 
 #if HEAD_DIM == 64
     using ShapeQK = Shape<_1, Int<KVTile>, _64>;
@@ -82,12 +76,10 @@ int run_decode(Options const& options) {
 
 #endif
 
- return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen, 
-                                       PipelineStages, ElementInputQ, ElementInputKV, MMAOperation, GmemTiledCopyQ, GmemTiledCopyK, 
-                                       GmemTiledCopyV, ElementAccumulator, ElementComputeEpilogue, ElementOutput, GmemTiledCopyStore>::run(options)
-                          : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput,  SubgroupLayout, Varlen, 
-                                       PipelineStages, ElementInputQ, ElementInputKV, MMAOperation, GmemTiledCopyQ, GmemTiledCopyK, 
-                                       GmemTiledCopyV, ElementAccumulator, ElementComputeEpilogue, ElementOutput, GmemTiledCopyStore>::run(options);
+ return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen, ElementInputQ,
+                                       ElementInputKV, ElementAccumulator, ElementComputeEpilogue, ElementOutput>::run(options)
+                          : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen, ElementInputQ,
+                                       ElementInputKV, ElementAccumulator, ElementComputeEpilogue, ElementOutput>::run(options);
 }
 
 int main(int argc, const char **argv) {
