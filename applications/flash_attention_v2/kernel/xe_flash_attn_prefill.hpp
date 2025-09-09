@@ -377,8 +377,8 @@ public:
         }
       }
       // Add masking for partial tiles at the end block
-      if (seq_len % QK_BLK_N != 0) {
-        const int remainder = seq_len % QK_BLK_N;
+      if (seq_len_kv % QK_BLK_N != 0) {
+        const int remainder = seq_len_kv % QK_BLK_N;
         const int item_id = thread_idx % SubgroupSize;
         int col_idx = item_id + (nblock_limit - 1) * QK_BLK_N;
         CUTLASS_PRAGMA_UNROLL
