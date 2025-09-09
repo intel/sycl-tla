@@ -107,6 +107,9 @@ public:
   using MmaAtomShape = typename CollectiveMainloop::MmaAtomShape;
   using SubgroupTileShape = typename CollectiveMainloop::SubgroupTileShape;
 
+  using MainloopTensors = typename CollectiveMainloop::MainloopTensors;
+  using EpilogueTensors = typename CollectiveEpilogue::EpilogueTensors;
+
   // Kernel level shared memory storage
   struct SharedStorage {
     using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;
@@ -181,9 +184,17 @@ public:
 
   static bool
   can_implement(Arguments const& args) {
-    bool mode_implementable = args.mode == GemmUniversalMode::kGrouped
-          && rank(typename ProblemShape::UnderlyingProblemShape{}) == 3;
-    return mode_implementable && TileScheduler::can_implement(args.scheduler);
+    bool implementable = true;
+
+    implementable = implementable && (args.mode == GemmUniversalMode::kGrouped ||
+          (args.mode == GemmUniversalMode::kBatched && rank(typename ProblemShape::UnderlyingProblemShape{}) == 3));
+
+    implementable = implementable && TileScheduler::can_implement(args.scheduler);
+
+    implementable &= CollectiveMainloop::can_implement(args.problem_shape, args.mainloop);
+    implementable &= CollectiveEpilogue::can_implement(args.problem_shape, args.epilogue);
+
+    return implementable;
   }
 
   static size_t
@@ -244,8 +255,8 @@ public:
     int32_t curr_group = -1;
     using ProblemShapeMNKL = Shape<int, int, int, int>;
     ProblemShapeMNKL problem_shape_MNKL;
-    cute::tuple<typename CollectiveMainloop::TensorMKL, typename CollectiveMainloop::TensorNKL> AB_tensors;
-    cute::tuple<typename CollectiveEpilogue::TensorC, typename CollectiveEpilogue::TensorD> CD_tensors;
+    MainloopTensors AB_tensors;
+    EpilogueTensors CD_tensors;
 
     if (work_tile_info.is_valid()) {
       curr_group = work_tile_info.L_idx;

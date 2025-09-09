@@ -45,6 +45,11 @@ cute::intel::uchar64 __builtin_IB_subgroup_block_read_flat_u8_m32k16v2(
   int pitch_minus_one, cute::intel::coord_t coord);
 
 SYCL_EXTERNAL extern "C"
+cute::intel::ushort64 __builtin_IB_subgroup_block_read_cacheopts_u16_m32k32v1(
+  long baseoffset, int width_minus_one, int height_minus_one,
+  int pitch_minus_one, cute::intel::coord_t coord, int cacheOpt = 0);
+
+SYCL_EXTERNAL extern "C"
 cute::intel::uint2 __builtin_IB_subgroup_block_read_flat_transpose_u32_k2(
   intptr_t baseoffset, int width_minus_one, int height_minus_one,
   int pitch_minus_one, cute::intel::coord_t coord);
@@ -356,6 +361,17 @@ struct XeSubgroup2DBlockLoad<1, 16, 32, 2> {
 };
 
 template<>
+struct XeSubgroup2DBlockLoad<2, 32, 32, 1> {
+  template<typename T>
+  CUTE_HOST_DEVICE void
+  operator()(const void* srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
+          cute::intel::coord_t coordinate, T* dstPointer) {
+    *reinterpret_cast<intel::ushort64 *>(dstPointer) =  __builtin_IB_subgroup_block_read_cacheopts_u16_m32k32v1(
+       (intptr_t)(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+  }
+};
+
+template<>
 struct XeSubgroup2DBlockLoadTranspose<4, 2, 16, 1> {
   template<typename T>
   CUTE_HOST_DEVICE
@@ -451,7 +467,7 @@ struct XeSubgroup2DBlockPrefetch<1, 32, 8, 1> {
   operator()(const void *srcBasePointer, int memoryWidth, int memoryHeight, int memoryPitch,
              cute::intel::coord_t coordinate) {
     __builtin_IB_subgroup_block_read_prefetch_u8_m8k32v1(
-      reinterpret_cast<intptr_t>(srcBasePointer), memoryWidth, memoryHeight, memoryPitch, coordinate,
+      reinterpret_cast<intptr_t>(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate,
       CacheControl::kL1C_L3C);
   }
 };

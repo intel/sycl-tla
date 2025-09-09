@@ -102,7 +102,7 @@ public:
   using CopyOpR2S = CopyOpR2S_;
 
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
-  using GmemTiledCopyC = CopyOpG2R;
+  using GmemTiledCopyC = conditional_t<cute::is_void_v<CopyOpG2R>, XE_2D_U32x8x16_LD_N, CopyOpG2R>;
   using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
                                              CopyOpR2G, XE_2D_U32x8x16_ST_N>;
   using ElementOutput = ElementD;
@@ -219,9 +219,45 @@ public:
   template <class ProblemShape>
   CUTLASS_HOST_DEVICE static bool
   can_implement(
-      ProblemShape const& problem_shape,
-      [[maybe_unused]] Arguments const& args) {
-    return true;
+      ProblemShape const& problem_shapes,
+      Arguments const& args) {
+    constexpr int copy_alignment_bits = 128;
+    constexpr int batch_alignment_bits = 512;
+    auto problem_shape_MNKL = append<4>(problem_shapes, 1);
+    auto [M,N,K,L] = problem_shape_MNKL;
+
+    bool implementable = true;
+    bool fusion_implementable = true;
+
+    if constexpr (is_destination_supported) {
+      constexpr int min_aligned_elements_D = copy_alignment_bits / sizeof_bits<ElementD>::value;
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_D>(cute::make_shape(M,N,L), args.dD);
+      if (L > 1) {
+        constexpr int min_batch_aligned_elements_D = batch_alignment_bits / sizeof_bits<ElementD>::value;
+        implementable &= get<2>(args.dD) % min_batch_aligned_elements_D == 0;
+      }
+    }
+
+    if constexpr (is_source_supported) {
+      constexpr int min_aligned_elements_C = copy_alignment_bits / sizeof_bits<ElementC>::value;
+      implementable &= cutlass::detail::check_alignment<min_aligned_elements_C>(cute::make_shape(M,N,L), args.dC);
+      if (L > 1) {
+        constexpr int min_batch_aligned_elements_C = batch_alignment_bits / sizeof_bits<ElementC>::value;
+        implementable &= get<2>(args.dC) % min_batch_aligned_elements_C == 0;
+      }
+    }
+
+    fusion_implementable = fusion_implementable && FusionCallbacks::can_implement(problem_shape_MNKL, args.thread);
+
+    if (!implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum alignment requirements for XE 2D copy.\n");
+    }
+
+    if (!fusion_implementable) {
+      CUTLASS_TRACE_HOST("  CAN IMPLEMENT: Problem Size doesn't meet the minimum requirements for FusionCallbacks.\n");
+    }
+
+    return implementable && fusion_implementable;
   }
 
   CUTLASS_HOST_DEVICE
@@ -307,6 +343,9 @@ public:
     // Tile the output tensor per SG and select tile for the current SG
     Tensor gD = local_tile(g_wg_D, take<0,2>(SubgroupTileShape{}), make_coord(m_sg,n_sg));            // (SG_M,SG_N)
 
+    auto thread_xe_load_c = params.xe_load_c.get_thread_slice(thread_idx);
+    Tensor tCgC = thread_xe_load_c.partition_S(gD);
+
     auto thread_xe_store_d = params.xe_store_d.get_thread_slice(thread_idx);
     Tensor tCgD = thread_xe_store_d.partition_D(gD);
 
@@ -368,8 +407,7 @@ public:
         cst_callbacks.begin_loop(epi_m, epi_n);
 
         if (is_C_load_needed) {
-          //cordinates for C and D are the same
-          copy(params.xe_load_c, tCgD(_, epi_m, epi_n), trC);
+          copy(params.xe_load_c, tCgC(_, epi_m, epi_n), trC);
         }
 
         cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);

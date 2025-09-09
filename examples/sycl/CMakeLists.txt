@@ -1,4 +1,4 @@
-# Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -37,6 +37,8 @@ if(SYCL_INTEL_TARGET)
   add_subdirectory(06_bmg_flash_attention)
   add_subdirectory(07_bmg_dual_gemm)
   add_subdirectory(08_bmg_gemm_f8)
+  add_subdirectory(09_bmg_grouped_gemm_f8)
+  add_subdirectory(10_bmg_grouped_gemm_mixed_dtype)
 endif()
 
 if (CUTLASS_ENABLE_SYCL)
