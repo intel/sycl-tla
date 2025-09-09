@@ -73,6 +73,11 @@ else()
     tiled_copy_sycl.cpp
   )
 
+  cutlass_example_add_executable(
+    cute_tutorial_tiled_copy_if
+    tiled_copy_if_sycl.cpp
+  )
+
   if (SYCL_INTEL_TARGET)
     cutlass_example_add_executable(
       cute_tutorial_bmg
