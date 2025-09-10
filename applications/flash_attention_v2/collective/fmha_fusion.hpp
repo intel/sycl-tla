@@ -39,7 +39,6 @@ using namespace cute;
 
 struct VariableLength {
   int max_length;
-  int total_length = 0;
   int* cumulative_length = nullptr;
 
   CUTE_HOST_DEVICE operator int() const {
