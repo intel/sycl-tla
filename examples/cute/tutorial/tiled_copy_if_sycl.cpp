@@ -239,6 +239,7 @@ int main(int argc, char** argv)
   Layout val_layout = make_layout(make_shape(Int<4>{}, Int<1>{}));   // (4,1) -> val_idx
   // Define `AccessType` which controls the size of the actual memory access instruction.
   using CopyOp = UniversalCopy<uint_byte_t<sizeof(Element) * size(val_layout)>>;     // A very specific access width copy instruction
+  //using CopyOp = UniversalCopy<cutlass::AlignedArray<Element, size(val_layout)>>;  // A more generic type that supports many copy strategies
 
   // A Copy_Atom corresponds to one CopyOperation applied to Tensors of type Element.
   using Atom = Copy_Atom<CopyOp, Element>;
