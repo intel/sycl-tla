@@ -76,6 +76,7 @@ struct IsCutlass3ArrayKernel<ProblemShape, cute::void_t<typename ProblemShape::U
 #include "cutlass/gemm/kernel/xe_gemm.hpp"
 #include "cutlass/gemm/kernel/xe_gemm_cooperative.hpp"
 #include "cutlass/gemm/kernel/xe_gemm_array_cooperative.hpp"
+#include "cutlass/gemm/kernel/xe_moe_gemm.hpp"
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////

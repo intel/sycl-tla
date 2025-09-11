@@ -160,7 +160,7 @@ struct CollectiveBuilder<
   cutlass::gemm::collective::StageCountAuto,
   KernelScheduleType,
   cute::enable_if_t<
-    cute::is_any_of_v<KernelScheduleType, KernelScheduleAuto, KernelXe, KernelXeCooperative, KernelXePtrArrayCooperative> &&
+    cute::is_any_of_v<KernelScheduleType, KernelScheduleAuto, KernelXe, KernelXeCooperative, KernelXePtrArrayCooperative, KernelXeMoEGEMM> &&
     cute::is_any_of_v<ElementA, bfloat16_t, half_t, cute::int8_t> &&
     cute::is_any_of_v<ElementB, bfloat16_t, half_t, cute::int8_t, cute::uint4_t>
   >
@@ -190,7 +190,7 @@ struct CollectiveBuilder<
                                   Layout<TileShape_MNK>,
                                   Layout<Shape<atoms_M, atoms_N, _1>, Stride<atoms_N, _1, _0>>>::TiledMMA;
 
-      static constexpr bool IsGroup = cute::is_same_v<KernelScheduleType, KernelXePtrArrayCooperative>;
+      static constexpr bool IsGroup = cute::is_same_v<KernelScheduleType, KernelXePtrArrayCooperative> || cute::is_same_v<KernelScheduleType, KernelXeMoEGEMM>;
 
       using KernelSchedule = std::conditional_t<cute::is_same_v<KernelScheduleType, KernelScheduleAuto>, KernelXe, KernelScheduleType>;
       static constexpr int PipelineStages = IsGroup ? 2 : 3;

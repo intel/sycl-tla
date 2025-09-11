@@ -138,6 +138,7 @@ struct KernelTmaWarpSpecializedCooperativeMixedInput: KernelTmaWarpSpecializedCo
 struct KernelXe { };
 struct KernelXeCooperative { };
 struct KernelXePtrArrayCooperative { };
+struct KernelXeMoEGEMM { };
 //////////////////////////////////////////////////////////////////////////////
 
 //
@@ -1032,9 +1033,15 @@ struct MainloopIntelXeXMX16 {
   using ClusterShape = Shape<_1,_1,_1>;
 };
 
+// primary (one default only)
 template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
-struct MainloopIntelXeXMX16Group : MainloopIntelXeXMX16<Stages_, KernelScheduler> {
-};
+struct MainloopIntelXeXMX16Group
+    : MainloopIntelXeXMX16<Stages_, KernelScheduler> { };
+
+// partial specialization for KernelXeMoEGEMM (no defaults here)
+template<int Stages_>
+struct MainloopIntelXeXMX16Group<Stages_, KernelXeMoEGEMM>
+    : MainloopIntelXeXMX16<Stages_, KernelXeMoEGEMM> { };
 
 template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
 struct MainloopIntelXeXMX16GroupMixedPrecision : MainloopIntelXeXMX16<Stages_, KernelScheduler> {
