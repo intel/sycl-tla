@@ -1,12 +1,12 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause
+ * Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights
+ *reserved. SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
@@ -18,19 +18,20 @@
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ *ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ *LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ *CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ *SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ *CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ *ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ *POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
 /*! \file
-    \brief This file contains definitions and utility functions for describing problem shapes 
-           for 3.x Ptr-Array GEMMs and Grouped GEMMs.
+    \brief This file contains definitions and utility functions for describing
+   problem shapes for 3.x Ptr-Array GEMMs and Grouped GEMMs.
 */
 
 #pragma once
@@ -40,7 +41,7 @@
 
 #include "cute/container/array.hpp"
 
-#if ! defined(__CUDACC_RTC__)
+#if !defined(__CUDACC_RTC__)
 #include <initializer_list>
 #endif
 
@@ -50,51 +51,56 @@ namespace cutlass::gemm {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class ProblemShape_>
-struct GroupProblemShape {
+template <class ProblemShape_> struct GroupProblemShape {
   using UnderlyingProblemShape = ProblemShape_;
   int32_t num_groups = 1;
-  UnderlyingProblemShape* problem_shapes = nullptr;
-  UnderlyingProblemShape const* host_problem_shapes = nullptr;
+  UnderlyingProblemShape *problem_shapes = nullptr;
+  UnderlyingProblemShape const *host_problem_shapes = nullptr;
 
   CUTLASS_HOST_DEVICE
   int32_t groups() const { return num_groups; }
 
   CUTLASS_HOST_DEVICE
-  UnderlyingProblemShape const
-  get_problem_shape(int32_t group_idx) const {
+  UnderlyingProblemShape const get_problem_shape(int32_t group_idx) const {
     return problem_shapes[group_idx];
   }
 
   CUTLASS_HOST_DEVICE
   UnderlyingProblemShape const
-  get_host_problem_shape(int32_t group_idx) const {
-    return host_problem_shapes != nullptr ? host_problem_shapes[group_idx] : UnderlyingProblemShape{};
+  get_problem_shape(int32_t group_idx,
+                    const int32_t *num_rows_per_expert) const {
+    auto problem = problem_shapes[group_idx];
+    const int N = get<1>(problem);
+    const int K = get<2>(problem);
+    return UnderlyingProblemShape(num_rows_per_expert[group_idx], N, K);
   }
 
   CUTLASS_HOST_DEVICE
-  bool
-  is_host_problem_shape_available() {
+  UnderlyingProblemShape const get_host_problem_shape(int32_t group_idx) const {
+    return host_problem_shapes != nullptr ? host_problem_shapes[group_idx]
+                                          : UnderlyingProblemShape{};
+  }
+
+  CUTLASS_HOST_DEVICE
+  bool is_host_problem_shape_available() {
     return host_problem_shapes != nullptr;
   }
 };
 
-template <class ProblemShape_>
-class ArrayProblemShape {
+template <class ProblemShape_> class ArrayProblemShape {
 public:
   using UnderlyingProblemShape = ProblemShape_;
 
   ArrayProblemShape() = default;
   ArrayProblemShape(UnderlyingProblemShape ps) : problem_shape_(ps) {}
 
-  // Num of groups for Ptr-Array GEMM always remain one, just the number of batches (l) can vary
-  // This is just to maintain uniformity with GroupProblemShape
+  // Num of groups for Ptr-Array GEMM always remain one, just the number of
+  // batches (l) can vary This is just to maintain uniformity with
+  // GroupProblemShape
   constexpr int32_t groups() const { return 1; }
 
-  UnderlyingProblemShape* problem_shapes() const {
-    return &problem_shape_;
-  }
-  UnderlyingProblemShape const* host_problem_shapes() const {
+  UnderlyingProblemShape *problem_shapes() const { return &problem_shape_; }
+  UnderlyingProblemShape const *host_problem_shapes() const {
     return &problem_shape_;
   }
 
@@ -112,12 +118,10 @@ public:
   }
 
   CUTLASS_HOST_DEVICE
-  bool
-  is_host_problem_shape_available() {
-    return true;
-  }
+  bool is_host_problem_shape_available() { return true; }
+
 private:
   UnderlyingProblemShape problem_shape_{};
 };
 
-} // namespace cutlass::gemm 
+} // namespace cutlass::gemm
