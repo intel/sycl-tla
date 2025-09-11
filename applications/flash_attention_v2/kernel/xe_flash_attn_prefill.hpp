@@ -381,13 +381,14 @@ public:
         const int remainder = seq_len_kv % QK_BLK_N;
         const int item_id = thread_idx % SubgroupSize;
         int col_idx = item_id + (nblock_limit - 1) * QK_BLK_N;
+        int column_offset = seq_len;
         CUTLASS_PRAGMA_UNROLL
         for (int n = 0; n < FragsN; ++n, col_idx += get<1>(MmaAtomShape())) {
           CUTLASS_PRAGMA_UNROLL
           for (int m = 0; m < FragsM; ++m) {
             CUTLASS_PRAGMA_UNROLL
             for (int row = 0; row < Vec; ++row) {
-              if (col_idx >= remainder) {
+              if (col_idx - column_offset >= remainder) {
                 tSr(row, m, n) = ElementAccumulator{-INFINITY};
               }
             }
