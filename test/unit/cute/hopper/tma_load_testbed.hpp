@@ -53,7 +53,7 @@ struct SharedStorage
   alignas(16) cute::uint64_t tma_load_mbar[1];
 };
 
-#if 1 //CUDA_12_0_SM90_FEATURES_SUPPORTED
+#if CUDA_12_0_SM90_FEATURES_SUPPORTED
 
 template <class T, class TiledCopy, class CTA_Tiler, class GmemLayout, class SmemLayout>
 CUTLASS_GLOBAL void

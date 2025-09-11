@@ -52,7 +52,7 @@ struct SharedStorage
   cute::ArrayEngine<ElementType, cute::cosize_v<SmemLayout>> smem;
 };
 
-#if 1 //CUDA_12_0_SM90_FEATURES_SUPPORTED
+#if CUDA_12_0_SM90_FEATURES_SUPPORTED
 
 template <class T, class TiledCopy, class CTA_Tiler, class GmemLayout, class SmemLayout>
 CUTLASS_GLOBAL void

@@ -132,7 +132,7 @@ stsm_test_device_cute(uint16_t* g_in, uint16_t* g_out,
   }
 }
 
-#if 1 //CUDA_12_0_SM90_FEATURES_SUPPORTED
+#if CUDA_12_0_SM90_FEATURES_SUPPORTED
 TEST(SM90_CuTe_Hopper, Stsm)
 {
   constexpr int count = 1024;

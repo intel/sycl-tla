@@ -52,7 +52,7 @@ struct SharedStorage {
   cute::array_aligned<ElementType, cute::cosize_v<SmemLayout>> smem;
 };
 
-#if 1 //CUDA_12_0_SM90_FEATURES_SUPPORTED
+#if CUDA_12_0_SM90_FEATURES_SUPPORTED
 template <class T, class GmemLayout, class SmemLayout>
 CUTLASS_GLOBAL void
 bulk_copy_test_device_cute(T const* g_in,
