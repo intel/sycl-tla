@@ -275,19 +275,19 @@ struct FlashPrefillCachedMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeTyp
       copy(params.gmem_tiled_copy_q, tQgQ(_,_,_,k_tile), tQrQ);
       copy(gmem_tiled_copy_k, tKgK(_,_,_,k_tile), tKrK);
       if constexpr (is_fp8_v<ElementQ> && is_fp8_v<ElementK>) {
-        auto tCrQ_ = make_fragment_like<half_t>(tCrQ);
-        convert_FP8_to_FP16<ElementQ>(tCrQ, tCrQ_);
-        auto tCrK_ = make_fragment_like<half_t>(tCrK);
-        convert_FP8_to_FP16<ElementK>(tCrK, tCrK_);
-        cute::gemm(tiled_mma, accum, tCrQ_, tCrK_, frag_src);
+        auto tCrQ_fp16 = make_fragment_like<half_t>(tCrQ);
+        convert_FP8_to_FP16<ElementQ>(tCrQ, tCrQ_fp16);
+        auto tCrK_fp16 = make_fragment_like<half_t>(tCrK);
+        convert_FP8_to_FP16<ElementK>(tCrK, tCrK_fp16);
+        cute::gemm(tiled_mma, accum, tCrQ_fp16, tCrK_fp16, frag_src);
       } else if constexpr (is_fp8_v<ElementQ> && !is_fp8_v<ElementK>) {
-        auto tCrQ_ = make_fragment_like<half_t>(tCrQ);
-        convert_FP8_to_FP16<ElementQ>(tCrQ, tCrQ_);
-        cute::gemm(tiled_mma, accum, tCrQ_ , tCrK, frag_src);
+        auto tCrQ_fp16 = make_fragment_like<half_t>(tCrQ);
+        convert_FP8_to_FP16<ElementQ>(tCrQ, tCrQ_fp16);
+        cute::gemm(tiled_mma, accum, tCrQ_fp16 , tCrK, frag_src);
       } else if constexpr (!is_fp8_v<ElementQ> && is_fp8_v<ElementK>) {
-        auto tCrK_ = make_fragment_like<half_t>(tCrK);
-        convert_FP8_to_FP16<ElementK>(tCrK, tCrK_);
-        cute::gemm(tiled_mma, accum, tCrQ , tCrK_, frag_src);
+        auto tCrK_fp16 = make_fragment_like<half_t>(tCrK);
+        convert_FP8_to_FP16<ElementK>(tCrK, tCrK_fp16);
+        cute::gemm(tiled_mma, accum, tCrQ , tCrK_fp16, frag_src);
       } else {
         cute::gemm(tiled_mma, accum, tCrQ , tCrK, frag_src);
       }
@@ -343,9 +343,9 @@ struct FlashPrefillCachedMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeTyp
     for(int i = 0; i< tile_count; i++) {
       copy(gmem_tiled_copy_v, tVgV(_,_,_,i), tVrV);
       if constexpr (is_fp8_v<ElementV>) {
-        auto tCrV_ = make_fragment_like<half_t>(tCrV);
-        convert_FP8_to_FP16<ElementV>(tCrV, tCrV_);
-        cute::gemm(tiled_mma, accum(_,_,_,i), tPr, tCrV_, frag_src(_,_,_,i));
+        auto tCrV_fp16 = make_fragment_like<half_t>(tCrV);
+        convert_FP8_to_FP16<ElementV>(tCrV, tCrV_fp16);
+        cute::gemm(tiled_mma, accum(_,_,_,i), tPr, tCrV_fp16, frag_src(_,_,_,i));
       } else {
         cute::gemm(tiled_mma, accum(_,_,_,i), tPr, tCrV, frag_src(_,_,_,i));
       }    
