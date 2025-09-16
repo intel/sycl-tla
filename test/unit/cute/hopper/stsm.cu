@@ -62,14 +62,14 @@ stsm_test_device(uint16_t* g_in, uint16_t* g_out)
     auto smem = sycl_ext::get_work_group_scratch_memory();
   #endif
   #if defined(CUTLASS_ENABLE_SYCL) && !defined(__SYCL_DEVICE_ONLY__)
-    uint128_t* smem; // dummy declaration to avoid compilation errors during the host compilation phase
+    uint32_t* smem; // dummy declaration to avoid compilation errors during the host compilation phase
   #endif
   #if !defined(CUTLASS_ENABLE_SYCL)
-    CUTLASS_SHARED uint128_t smem[32 * count];
+    CUTLASS_SHARED uint32_t smem[32 * count];
   #endif
 
   // load rmem -> smem using STSM
-  uint128_t* smem_ptr = reinterpret_cast<uint128_t*>(smem) + tid;
+  uint32_t* smem_ptr = reinterpret_cast<uint32_t*>(smem) + tid;
   T*         rmem_ptr = reinterpret_cast<T*>(reg);
   cute::copy_stsm(rmem_ptr, smem_ptr);
 
@@ -77,7 +77,7 @@ stsm_test_device(uint16_t* g_in, uint16_t* g_out)
 
   // store output smem -> gmem
   for (int i = 0; i < (sizeof(T) / 4); i++) {
-    reinterpret_cast<uint128_t*>(g_out)[tid + (stride * i)] = smem_ptr[tid + (stride * i)];
+    reinterpret_cast<uint32_t*>(g_out)[tid + (stride * i)] = smem_ptr[tid + (stride * i)];
   }
 }
 

@@ -172,7 +172,6 @@ tma_test_device_cute(T const* g_in, T* g_out,
   }
 }
 
-
 template <class> class PT;
 template <class T, class TmaType = T, class CopyOp, class GMEM_Layout, class SMEM_Layout, class CTA_Tile>
 auto

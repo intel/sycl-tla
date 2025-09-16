@@ -83,9 +83,16 @@ bulk_copy_test_device_cute(T const* g_in,
   //
 
   // Input gmem -> smem
+  #if defined(CUTLASS_ENABLE_SYCL) || defined(__SYCL_DEVICE_ONLY__)
   for (int i = ThreadIdxX(); i < size(sA); i +=  BlockDimX()) {
     sA(i) = gA(i);
   }
+  #else
+  for (int i = threadIdx.x; i < size(sA); i += blockDim.x) {
+    sA(i) = gA(i);
+  }
+  #endif
+
 
   cp_async_fence();
   cp_async_wait<0>();
