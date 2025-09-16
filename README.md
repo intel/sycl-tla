@@ -511,6 +511,7 @@ The official list of CUTLASS developers and contributors is available here: [CON
 # Copyright
 
 Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+Copyright (c) 2025 Intel Corporation. All rights reserved.
 SPDX-License-Identifier: BSD-3-Clause
 
 ```
