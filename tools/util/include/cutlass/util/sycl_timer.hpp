@@ -76,6 +76,10 @@ struct SYCLTimer {
     syclEventSynchronize(start_, stop_);
     float time;
     syclEventElapsedTime(&time, start_, stop_);
+    syclEventDestroy(start_);
+    syclEventDestroy(stop_);
+    start_ = SyclEvent{};
+    stop_ = SyclEvent{};
     return time;
 #else
     syclcompat::get_default_queue().wait();
