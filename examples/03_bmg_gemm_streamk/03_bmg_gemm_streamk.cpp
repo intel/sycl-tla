@@ -60,7 +60,7 @@
     To avoid register spills, build the example by setting the environment variable:
       $ export IGC_VectorAliasBBThreshold=10000
 */
-
+#define CUTLASS_SYCL_PROFILING_ENABLED
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
@@ -84,8 +84,6 @@
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#define CUTLASS_SYCL_PROFILING_ENABLED
 
 // Command line options parsing
 struct Options {
@@ -302,9 +300,9 @@ struct ExampleRunner {
     if(!passed) return cutlass::Status::kErrorInternal;
 
     if (options.iterations > 0) {
-      GPU_Clock timer;
       float elapsed_time_seconds = 0.f;
       for (int i = 0; i < options.iterations; ++i) {
+        GPU_Clock timer;
         gemm_op.initialize(arguments, workspace.get());
         timer.start();
         gemm_op.run();
