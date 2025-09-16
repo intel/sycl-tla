@@ -1,4 +1,4 @@
-name: "SYCL Intel Test"
+name: "SYCL Intel G++ Host Compilation Test"
 
 on:
   push:
