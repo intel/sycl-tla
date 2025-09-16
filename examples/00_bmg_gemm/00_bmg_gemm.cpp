@@ -311,7 +311,7 @@ struct ExampleRunner {
 
 
 template<class B_Layout>
-int launcher(Options& options)
+void launcher(Options& options)
 {
   //
   // Run examples
@@ -420,8 +420,6 @@ int launcher(Options& options)
   ExampleRunner<Gemm> runner;
 
   CUTLASS_CHECK(runner.template run<B_Layout>(options, hw_info));
-
-  return 0;
 }
 
 int main(int argc, const char** argv) {
