@@ -176,8 +176,10 @@ void BlockFillRandomUniformCopyFromHost(
   size_t capacity,
   uint64_t seed,                          ///< seed for RNG
   typename RealType<Element>::Type max,   ///< upper bound of distribution
-  typename RealType<Element>::Type min,    ///< lower bound for distribution
-  int bits = -1
+  typename RealType<Element>::Type min,   ///< lower bound for distribution
+  int bits = -1                           ///< If non-negative, specifies number of fractional bits that
+                                          ///  are not truncated to zero. Permits reducing precision of
+                                          ///  data.
 ) {
   auto buff = std::vector<Element>(capacity);
 
