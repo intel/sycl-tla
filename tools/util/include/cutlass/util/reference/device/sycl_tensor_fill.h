@@ -44,9 +44,9 @@
 #include "cutlass/cutlass.h"
 #include "cutlass/complex.h"
 #include "cutlass/util/reference/device/tensor_foreach.h"
+#include "cutlass/util/reference/host/tensor_fill.h"
 #include "cutlass/tensor_view.h"
 #include "cutlass/layout/vector.h"
-#include "cutlass/util/reference/host/tensor_fill.h"
 
 
 namespace cutlass {
