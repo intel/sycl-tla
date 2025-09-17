@@ -60,7 +60,7 @@
     To avoid register spills, build the example by setting the environment variable:
       $ export IGC_VectorAliasBBThreshold=10000
 */
-#define CUTLASS_SYCL_PROFILING_ENABLED
+
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/xe_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
