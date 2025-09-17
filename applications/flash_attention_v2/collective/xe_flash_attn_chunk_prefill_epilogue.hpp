@@ -159,7 +159,7 @@ public:
 
   template <class ProblemShape, class SequenceLengthShape, class TileCoord, class FragOut, class FragMax, class FragSum>
   CUTLASS_DEVICE void operator()(ProblemShape problem_shape, SequenceLengthShape sequence_length_shape, TileCoord tile_coord, FragOut &out,
-                                 FragMax const &max,FragSum &sum) {
+                                 FragMax const &max, FragSum &sum) {
 
     using namespace cute;
 
