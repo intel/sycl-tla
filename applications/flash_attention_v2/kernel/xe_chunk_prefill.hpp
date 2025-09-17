@@ -350,6 +350,7 @@ public:
       Tensor mV_cache_nkl = cute::get_xe_tensor(
           make_shape(head_size_vo, seq_len_kv_cache, 1)); // (n_cache,k,l)
 
+      // block_size and head_size are the same size. So no coord is needed.
       Tensor mQ_mk = mQ_mkl(_, _, 0);
 
       Tensor mK_nk = mK_nkl(_, _, 0); // (n,k)
@@ -480,6 +481,7 @@ public:
                              is_KV_cache);
 
         if constexpr (LocalMask) {
+          // Sliding windows
           // mask the elements of each tile where j - left > i || j + right < i
           const int item_id = thread_idx % SubgroupSize;
           int col_idx;
@@ -509,7 +511,7 @@ public:
         }
 
         if constexpr(!(CausalMask || LocalMask) && PagedKV) {
-        // mask padding
+        // Processing Not divisible, mask padding
           const int item_id = thread_idx % SubgroupSize;
           int col_idx = item_id + split * cute::min(QK_BLK_N, seq_len_kv_cache + seq_len_kv);
             CUTLASS_PRAGMA_UNROLL
