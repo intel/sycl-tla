@@ -45,6 +45,7 @@
 #include "cutlass/util/reference/device/tensor_foreach.h"
 #include "cutlass/tensor_view.h"
 #include "cutlass/layout/vector.h"
+#include "cutlass/util/reference/host/tensor_fill.h"
 
 
 namespace cutlass {
@@ -175,25 +176,15 @@ void BlockFillRandomUniformCopyFromHost(
   size_t capacity,
   uint64_t seed,                          ///< seed for RNG
   typename RealType<Element>::Type max,   ///< upper bound of distribution
-  typename RealType<Element>::Type min    ///< lower bound for distribution
-  ) {
-  
-  if constexpr(std::is_same_v<Element, float> || 
-               std::is_same_v<Element, cute::bfloat16_t> || 
-               std::is_same_v<Element, cute::half_t>) {
-    std::random_device rd;
-    std::mt19937 gen(seed);
-    std::uniform_real_distribution<float> dis(min, max);
-    auto buff = std::vector<Element>(capacity);
+  typename RealType<Element>::Type min,    ///< lower bound for distribution
+  int bits = -1
+) {
+  auto buff = std::vector<Element>(capacity);
 
-    for (size_t i = 0; i < capacity; ++i) {
-      buff[i] = (Element)(dis(gen));
-    }
-    syclcompat::memcpy<Element>(ptr, buff.data(), capacity);
-    syclcompat::wait();
-  } else {
-    assert(false && "Not supported dtype");
-  }
+  cutlass::reference::host::BlockFillRandomUniform(buff.data(), capacity, seed, max, min, bits);
+
+  syclcompat::memcpy<Element>(ptr, buff.data(), capacity);
+  syclcompat::wait();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
