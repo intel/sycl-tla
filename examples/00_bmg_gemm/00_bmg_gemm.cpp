@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -210,7 +211,7 @@ struct ExampleRunner {
           M * N  // batch_stride_D
         );
 
-    // CUTLASS on SYCL uses the compatibility library syclcompat for e.g. default in-order queue
+    // CUTLASS on SYCL uses the compatibility library cutlasscompat for e.g. default in-order queue
     cutlasscompat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not

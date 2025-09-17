@@ -1,6 +1,7 @@
 /***************************************************************************
  *
  *  Copyright (C) Codeplay Software Ltd.
+ *  Copyright (C) 2025 Intel Corporation, All rights reserved.
  *
  *  Part of the LLVM Project, under the Apache License v2.0 with LLVM
  *  Exceptions. See https://llvm.org/LICENSE.txt for license information.
@@ -219,7 +220,7 @@ struct KernelFunctor {
       : _kernel_properties{kernel_props}, _local_acc{local_acc},
         _argument_tuple(std::make_tuple(args...)) {}
 
-  auto get(sycl_exp::properties_tag) { return _kernel_properties; }
+  auto get(sycl_exp::properties_tag) const { return _kernel_properties; }
 
   __cutlasscompat_inline__ void
   operator()(cutlasscompat::detail::range_to_item_t<Range>) const {

@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,7 +35,7 @@
 #include <cutlasscompat.hpp>
 
 #include <cutlass/util/device_memory.h>
-#include <syclcompat/syclcompat.hpp>
+#include <cutlasscompat/cutlasscompat.hpp>
 #include <cutlass/cutlass.h>
 
 using namespace cutlasscompat::experimental;
