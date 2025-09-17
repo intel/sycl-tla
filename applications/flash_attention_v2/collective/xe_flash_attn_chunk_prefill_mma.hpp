@@ -438,12 +438,12 @@ struct FlashChunkPrefillMma<
                  kv_head_coord * head_size_vo;
       offset_k_cache = seq_len_kv_cache == 0
                            ? 0
-                           : PagedKV?
+                           : PagedKV? // For page_kv, there is no batch dimension.
                             kv_head_coord * head_size_qk
                             : num_heads_kv * head_size_qk * kv_cached_cumulative_length[l_coord] + kv_head_coord * head_size_qk;
       offset_v_cache = seq_len_kv_cache == 0
                            ? 0
-                           : PagedKV?
+                           : PagedKV?   // For page_kv, there is no batch dimension.
                            kv_head_coord * head_size_vo
                            : num_heads_kv * head_size_vo * kv_cached_cumulative_length[l_coord] + kv_head_coord * head_size_vo;
       total_seq_len_kv_cache = get<5>(problem_shape).total_length;
@@ -485,6 +485,8 @@ struct FlashChunkPrefillMma<
     auto v_traits_cache =
         static_cast<traits_load_V const &>(params.gmem_tiled_copy_v_cache);
     const ElementV *v_cache_ptr = (const ElementV *)v_traits_cache.base_ptr;
+    // NHD format{batch, seq_len, head, dim_head}
+    // stride {seq_len*head*dim_head, head*dim_head, dim_head, 1}
     auto shape_q =
         make_shape(static_cast<int>(seq_len_qo), head_size_qk * num_heads_q, 1);
     StrideQ stride_q = cutlass::make_cute_packed_stride(StrideQ{}, shape_q);
