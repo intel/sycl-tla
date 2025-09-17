@@ -162,7 +162,7 @@ public:
     constexpr int FragsNAcc = get<2>(FragAccLayout{}.shape());
     constexpr int FragsNOut = size(select<2,3>(FragOutLayout{}.shape()));
     reduce_max<Vec, FragsM, FragsNAcc>(frag_s, max);
-    static_assert(Vec * FragsM  % 8 ==0, " No. of attention rows per subgroup should be >= 1 MMA Atom worth of rows.");
+    static_assert(Vec * FragsM  % 8 == 0, " No. of attention rows per subgroup should be >= 1 MMA Atom worth of rows.");
     if (!is_first) {
       auto sg = syclcompat::get_nd_item<1>().get_sub_group();
       Element max_scale{max * params.scale};
@@ -198,12 +198,12 @@ public:
               Element eq = frag_s(base_indx) - max_scale_bcast;
               frag_s(base_indx) = sycl::native::exp2(eq);
           }
-          sum(indx) += frag_s(base_indx);  
+          sum(indx) += frag_s(base_indx);
         }
         CUTLASS_PRAGMA_UNROLL
         for (int z = 0; z < FragsNOut; z++) {
           auto base_indx = indx + (z * Vec * FragsM);
-          out(base_indx ) *= exp_scale_bcast;     
+          out(base_indx) *= exp_scale_bcast;
         }
       }
     } else {

@@ -359,7 +359,6 @@ bool verify(ProblemShapeType problem_size, Options options) {
           auto offset = cute::min(seq_len_qo, seq_len_kv);
           auto discard_seq_coord = seq_len_qo - offset;
           auto full_tile_offset = seq_len_kv - offset;
-          int start_col = seq_len_kv_cache;
           // apply mask to S
           for (int row = 0; row < seq_len_qo; row++) {
             for (int col = 0; col < seq_len_kv_total; col++) {
@@ -368,8 +367,9 @@ bool verify(ProblemShapeType problem_size, Options options) {
                 host_S[col + row * seq_len_kv_total] = ElementAccumulator{-INFINITY};
               }
               // sliding window mask
-              bool left_mask = col < cute::max(0, seq_len_kv_cache + row - options.window_left);
-              bool right_mask = col > cute::min(seq_len_kv_total, seq_len_kv_cache + row + options.window_right);
+              int col_ref = seq_len_kv_cache + seq_len_kv - seq_len_qo;
+              bool left_mask = col < cute::max(0, col_ref + row - options.window_left);
+              bool right_mask = col > cute::min(seq_len_kv_total, col_ref + row + options.window_right);
               if (options.is_local_mask && (left_mask || right_mask)) {
                 host_S[col + row * seq_len_kv_total] = ElementAccumulator{-INFINITY};
               }
@@ -408,11 +408,12 @@ bool verify(ProblemShapeType problem_size, Options options) {
             // scale each row with the sum to compute softmax
             idx = row * seq_len_kv_total;
             sum_idx = row;
+            int col_ref = seq_len_kv_cache + seq_len_kv - seq_len_qo;
             for (int col = 0; col < seq_len_kv_total; col++, idx++) {
               if (options.is_causal && row < discard_seq_coord) {
                 host_S[idx] = 0;
-              } else if (options.is_local_mask && (col < cute::max(0, seq_len_kv_cache + row - options.window_left) 
-                    || col > cute::min(seq_len_kv_total, seq_len_kv_cache + row + options.window_right))) {
+              } else if (options.is_local_mask && (col < cute::max(0, col_ref + row - options.window_left) 
+                    || col > cute::min(seq_len_kv_total, col_ref + row + options.window_right))) {
                 host_S[idx] = 0;
               } else {
                 host_S[idx] /= sum_vec[sum_idx];

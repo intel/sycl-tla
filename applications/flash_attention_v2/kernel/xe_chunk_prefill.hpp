@@ -482,11 +482,11 @@ public:
         if constexpr (LocalMask) {
           // mask the elements of each tile where j - left > i || j + right < i
           const int item_id = thread_idx % SubgroupSize;
-          int col_idx = item_id;
+          int col_idx;
           if (split < kv_splits_cache) {
-            col_idx += split * cute::min(QK_BLK_N, seq_len_kv_cache) ;
+            col_idx = item_id + split * cute::min(QK_BLK_N, seq_len_kv_cache) ;
           } else {
-            col_idx += seq_len_kv_cache + (split - kv_splits_cache) * cute::min(QK_BLK_N, seq_len_kv);
+            col_idx = item_id + seq_len_kv_cache + (split - kv_splits_cache) * cute::min(QK_BLK_N, seq_len_kv);
           }
 
           CUTLASS_PRAGMA_UNROLL
@@ -495,10 +495,11 @@ public:
               CUTLASS_PRAGMA_UNROLL
               for (int m = 0; m < FragsM; m++) { // 2
                 int row_idx = m * Vec + seq_coord;
+                int col_ref = seq_len_kv_cache + seq_len_kv -  seq_len_qo;
                 CUTLASS_PRAGMA_UNROLL
                 for (int row = 0; row < Vec; row++) { // 8
-                  bool left_mask = col_idx < cute::max(0, row + row_idx + seq_len_kv_cache - mainloop_params.window_left);
-                  bool right_mask = col_idx > cute::min(seq_len_kv_cache + seq_len_kv, row + row_idx + seq_len_kv_cache + mainloop_params.window_right);
+                  bool left_mask = col_idx < cute::max(0, row + row_idx + col_ref - mainloop_params.window_left);
+                  bool right_mask = col_idx > cute::min(seq_len_kv_cache + seq_len_kv, row + row_idx + col_ref + mainloop_params.window_right);
                   if (left_mask || right_mask) {
                     tSr(row, m, n) = ElementAccumulator{-INFINITY};
                   }
@@ -510,20 +511,16 @@ public:
         if constexpr(!(CausalMask || LocalMask) && PagedKV) {
         // mask padding
           const int item_id = thread_idx % SubgroupSize;
-          int col_start = item_id + split * cute::min(QK_BLK_N, seq_len_kv_cache + seq_len_kv);
-          int col_end = col_start + (FragsN - 1) * get<1>(MmaAtomShape());
-          if (col_end >= seq_len_kv_cache + seq_len_kv) {
-            int col_idx = col_start;
+          int col_idx = item_id + split * cute::min(QK_BLK_N, seq_len_kv_cache + seq_len_kv);
             CUTLASS_PRAGMA_UNROLL
             for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) { // 4
-              if (col_idx < seq_len_kv_cache + seq_len_kv) {
-                continue;
-              }
               CUTLASS_PRAGMA_UNROLL
               for (int m = 0; m < FragsM; m++) { // 2
+                int row_idx = m * Vec + seq_coord;
                 CUTLASS_PRAGMA_UNROLL
                 for (int row = 0; row < Vec; row++) { // 8
-                  tSr(row, m, n) = ElementAccumulator{-INFINITY};
+                  if (col_idx >= seq_len_kv_cache + seq_len_kv || row_idx + row >= seq_len_qo) {
+                    tSr(row, m, n) = ElementAccumulator{-INFINITY};
                 }
               }
             }
@@ -567,7 +564,7 @@ public:
           }
         }
 
-        // // 4) Fused softmax
+        // 4) Fused softmax
         CollectiveSoftmaxEpilogue softmax(params.softmax);
         softmax(split == 0, tSr, max_reg, sum_reg, out_reg);
    
