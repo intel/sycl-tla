@@ -44,6 +44,7 @@
 #include "flash_attention_v2/collective/xe_flash_attn_prefill_softmax_epilogue.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
+#include "cutlass/util/initialize_block.hpp"
 
 #include <cute/tensor.hpp>
 #include <random>
@@ -177,33 +178,6 @@ struct XE_Flash_Attention_Prefill {
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
-
-/// Helper to initialize a block of device data
-template <class Element>
-bool initialize_block(
-        cutlass::DeviceAllocation<Element>& block,
-        uint64_t seed=2023) {
-
-  Element scope_max, scope_min;
-  int bits_input = cutlass::sizeof_bits<Element>::value;
-
-  if (bits_input == 1) {
-    scope_max = Element(2);
-    scope_min = Element(0);
-  } else if (bits_input <= 8) {
-    scope_max = Element(2);
-    scope_min = Element(-2);
-  } else {
-    scope_max = Element(8);
-    scope_min = Element(-8);
-  }
-
-  cutlass::reference::device::BlockFillRandomUniform(
-       block.get(), block.size(), seed, scope_max, scope_min, 0);
-
-  syclcompat::wait();
-  return true;
-}
 
 template <typename FlashAttention>
 struct TestbedImpl {
@@ -725,12 +699,23 @@ struct Testbed3x {
 };
 
 template <typename FlashAttention>
-bool TestFlashPrefillAll(int head_size) {
+bool TestFlashPrefillAll(int head_size, std::string config="default") {
   Testbed3x<FlashAttention> testbed;
 
-  std::vector<int> problem_size_batch{8};
-  std::vector<int> problem_size_num_heads{8};
-  std::vector<int> problem_size_seq_len{512};
+  std::vector<int> problem_size_batch;
+  std::vector<int> problem_size_num_heads;
+  std::vector<int> problem_size_seq_len;
+
+  if(config == "llama3_70b"){
+    problem_size_batch = {1, 2};
+    problem_size_num_heads = {128};
+    problem_size_seq_len = {512, 1024};
+  }
+  else{
+    problem_size_batch = {8};
+    problem_size_num_heads = {8};
+    problem_size_seq_len = {512};
+  }
   std::vector<float> problem_size_softmax_scale{ 1.f / sqrt(static_cast<float>(head_size)) };
   bool passed = true;
 

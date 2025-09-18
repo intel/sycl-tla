@@ -349,7 +349,7 @@ public:
       bool is_KV_cache = seq_len_kv_cache != 0;
 
       CUTLASS_PRAGMA_UNROLL
-      for(int split = 0; split < kv_splits - CausalMask; split++) {
+      for(int split = 0; split < kv_splits - 1; split++) {
         int curr_kv_tile_idx = is_KV_cache ? PagedKV ? kv_cache_tile_idx : split * ATOM_M + kv_tile_idx 
                                            : (split - kv_splits_cache) * ATOM_M + kv_tile_idx;
 
@@ -412,21 +412,21 @@ public:
         }
       }
 
+      Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
+      clear(tSr);
+
+      int curr_kv_tile_idx = (kv_splits_new - 1) * ATOM_M + kv_tile_idx;
+      // Perform GEMM S = Q*K
+      collective_mma.mmaQK(tSr, gQ, gK(_, _, kv_splits_new - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, false, kv_tile_idx);
+
+      // each sub-group gets a different base offset for prefetch to load it's own
+      // required data for matrix V.
+      CUTLASS_PRAGMA_UNROLL
+      for(int v = 0; v < VSlicer; v++) {
+        prefetch(tiled_prefetch_v, pVgV(_, _, _, v, curr_kv_tile_idx));
+      }
+
       if constexpr (CausalMask) {
-        Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
-        clear(tSr);
-
-        int curr_kv_tile_idx = (kv_splits_new - 1) * ATOM_M + kv_tile_idx;
-        // Perform GEMM S = Q*K
-        collective_mma.mmaQK(tSr, gQ, gK(_, _, kv_splits_new - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params, false, kv_tile_idx);
-
-        // each sub-group gets a different base offset for prefetch to load it's own
-        // required data for matrix V.
-        CUTLASS_PRAGMA_UNROLL
-        for(int v = 0; v < VSlicer; v++) {
-          prefetch(tiled_prefetch_v, pVgV(_, _, _, v, curr_kv_tile_idx));
-        }
-
         const int required_sgs = ceil_div(seq_len_kv, QK_SG_N);
         if(kv_tile_idx == (required_sgs % ATOM_M) - 1) {
           int column_offset = seq_len_kv - seq_len_qo + seq_len_kv_cache;
@@ -439,12 +439,24 @@ public:
             }
           }
         }
-
-        CollectiveSoftmaxEpilogue softmax(params.softmax);
-        softmax.template operator()<Num_SGs>((kv_splits - 1) == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
-
-        collective_mma.template mmaPV<VSlicer>(out_reg, tSr, gV, out_reg, mainloop_params, false, curr_kv_tile_idx);
       }
+
+      if (seq_len_kv % QK_BLK_N != 0) {
+        int col_idx = (kv_tile_idx + (kv_splits_new - 1) * ATOM_M) * QK_SG_N + thread_idx % SubgroupSize;
+        int remainder = seq_len_kv % QK_BLK_N;
+        int column_offset = (kv_splits_new - 1) * QK_BLK_N + kv_splits_cache * QK_BLK_N;
+        CUTLASS_PRAGMA_UNROLL
+        for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) {
+          if (col_idx - column_offset >= remainder) {
+            tSr(0, 0, n) = ElementAccumulator{-INFINITY};
+          }
+        }
+      }
+
+      CollectiveSoftmaxEpilogue softmax(params.softmax);
+      softmax.template operator()<Num_SGs>((kv_splits - 1) == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
+
+      collective_mma.template mmaPV<VSlicer>(out_reg, tSr, gV, out_reg, mainloop_params, false, curr_kv_tile_idx);
 
       // need to apply barrier here to avoid race condition
       auto group = syclcompat::get_nd_item<1>().get_group();

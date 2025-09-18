@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,10 +36,6 @@
 #include <cute/atom/mma_traits.hpp>
 #include <cute/tensor_impl.hpp>
 #include <cute/util/type_traits.hpp>
-
-#if defined(CUTLASS_ENABLE_SYCL)
-#include <cute/atom/mma_traits_xe.hpp>
-#endif
 
 namespace cute {
 
@@ -184,10 +181,10 @@ struct MMA_Atom<MMA_Traits<MMAOperation, Args...>>
     if constexpr (has_dereference<FrgTypeB>::value) {
       // If the intended FrgTypeB is a view (of the current tensor), forward the whole
       static_assert(is_same<ValTypeB, typename remove_cvref_t<BTensor>::value_type>::value
-                      
+
                       || (sizeof_bits_v<typename remove_cvref_t<BTensor>::value_type> == 8 &&
                           (sizeof_bits_v<ValTypeB> == 8 || sizeof_bits_v<ValTypeB> == 6 || sizeof_bits_v<ValTypeB> == 4))
-                      
+
                       , "Expecting ValTypeB type");
       return make_tensor<FrgTypeB>(static_cast<BTensor&&>(btensor));
     } else {
@@ -375,6 +372,12 @@ struct TiledMMA : MMA_Atom
     return get_slice(thr_idx);
   }
 
+  CUTE_HOST_DEVICE constexpr
+  auto
+  tile_mnk() const {
+    return make_tile(tile_size_mnk<0>(), tile_size_mnk<1>(), tile_size_mnk<2>());
+  }
+
   //
   // Utility for printing and visualization
   //
@@ -400,53 +403,20 @@ struct TiledMMA : MMA_Atom
 
   CUTE_HOST_DEVICE constexpr
   auto
-  get_layoutC_MN() const
-  {
-    // (M,N) -> (M,N)
-    auto ref_C = make_layout(make_shape(tile_size_mnk<0>(), tile_size_mnk<1>()));
-    // (cthrid,val) -> (M,N)
-    auto layoutC_TV = thrfrg_C(ref_C);
-    // (M,N) -> (cthrid,frg)
-    auto layoutC_MN = right_inverse(layoutC_TV).with_shape(shape(ref_C));
-
-    // cthrid = (v,m,n) -> thr_idx
-    auto thrID_C = thr_layout_vmnk_(_,_,_,Int<0>{});
-
-    return cute::make_tuple(layoutC_MN, thrID_C);
-  }
-
-  CUTE_HOST_DEVICE constexpr
-  auto
   get_layoutC_TV() const
   {
     // (M,N) -> (M,N)
     auto ref_C = make_layout(make_shape(tile_size_mnk<0>(), tile_size_mnk<1>()));
-    // (cthrid,val) -> (M,N)
-    auto layoutC_TV = thrfrg_C(ref_C);
 
     // thr_idx -> (ThrV,ThrM,ThrN,ThrK)
-    auto thridx_2_thrid = right_inverse(thr_layout_vmnk_);
+    auto thridx_2_thrid = composition(make_layout(make_shape (size(thr_layout_vmnk_), Int<1>{}),
+                                                  make_stride(Int<1>{},               Int<0>{})),
+                                      right_inverse(make_layout(thr_layout_vmnk_, complement(thr_layout_vmnk_))));
 
     // (thr_idx,val) -> (M,N)
-    return layoutC_TV.compose(thridx_2_thrid, _);
+    return thrfrg_C(ref_C).compose(thridx_2_thrid, _);
   }
 
-  CUTE_HOST_DEVICE constexpr
-  auto
-  get_layoutA_MK() const
-  {
-    // (M,K) -> (M,K)
-    auto ref_A = make_layout(make_shape(tile_size_mnk<0>(), tile_size_mnk<2>()));
-    // (athrid,val) -> (M,K)
-    auto layoutA_TV = thrfrg_A(ref_A);
-    // (M,K) -> (athrid,frg)
-    auto layoutA_MK = right_inverse(layoutA_TV).with_shape(shape(ref_A));
-
-    // athrid = (v,m,k) -> thr_idx
-    auto thrID_A = thr_layout_vmnk_(_,_,Int<0>{},_);
-
-    return cute::make_tuple(layoutA_MK, thrID_A);
-  }
 
   CUTE_HOST_DEVICE constexpr
   auto
@@ -462,27 +432,12 @@ struct TiledMMA : MMA_Atom
                                      _));
 
     // thr_idx -> (ThrV,ThrM,ThrN,ThrK)
-    auto thridx_2_thrid = right_inverse(thr_layout_vmnk_);
+    auto thridx_2_thrid = composition(make_layout(make_shape (size(thr_layout_vmnk_), Int<1>{}),
+                                                  make_stride(Int<1>{},               Int<0>{})),
+                                      right_inverse(make_layout(thr_layout_vmnk_, complement(thr_layout_vmnk_))));
 
     // (thr_idx,val) -> (M,K)
     return thrfrg_A(ref_A).compose(atile, _).compose(thridx_2_thrid, _);
-  }
-
-  CUTE_HOST_DEVICE constexpr
-  auto
-  get_layoutB_NK() const
-  {
-    // (N,K) -> (N,K)
-    auto ref_B = make_layout(make_shape(tile_size_mnk<1>(), tile_size_mnk<2>()));
-    // (bthrid,val) -> (N,K)
-    auto layoutB_TV = thrfrg_B(ref_B);
-    // (N,K) -> (bthrid,frg)
-    auto layoutB_NK = right_inverse(layoutB_TV).with_shape(shape(ref_B));
-
-    // bthrid = (v,n,k) -> thr_idx
-    auto thrID_B = thr_layout_vmnk_(_,Int<0>{},_,_);
-
-    return cute::make_tuple(layoutB_NK, thrID_B);
   }
 
   CUTE_HOST_DEVICE constexpr
@@ -499,7 +454,9 @@ struct TiledMMA : MMA_Atom
                                      _));
 
     // thr_idx -> (ThrV,ThrM,ThrN,ThrK)
-    auto thridx_2_thrid = right_inverse(thr_layout_vmnk_);
+    auto thridx_2_thrid = composition(make_layout(make_shape (size(thr_layout_vmnk_), Int<1>{}),
+                                                  make_stride(Int<1>{},               Int<0>{})),
+                                      right_inverse(make_layout(thr_layout_vmnk_, complement(thr_layout_vmnk_))));
 
     // (thr_idx,val) -> (N,K)
     return thrfrg_B(ref_B).compose(btile, _).compose(thridx_2_thrid, _);
@@ -544,6 +501,40 @@ struct ThrMMA : TiledMMA
     return thr_tensor(thr_vnk, make_coord(_, repeat<rank<1,1>(thr_tensor)>(_)));
   }
 
+  // Atom-level partitioning
+  template <class CTensor>
+  CUTE_HOST_DEVICE constexpr
+  auto
+  atom_partition_C(CTensor&& ctensor) const
+  {
+    auto thr_tensor = make_tensor(static_cast<CTensor&&>(ctensor).data(), this->thrfrg_C(ctensor.layout()));
+
+    auto atom_vmn = make_coord(_, make_coord(get<1>(thr_vmnk_), get<2>(thr_vmnk_)));
+    return thr_tensor(atom_vmn, _);       // (atom-local thr, val) -> coord
+  }
+
+  template <class ATensor>
+  CUTE_HOST_DEVICE constexpr
+  auto
+  atom_partition_A(ATensor&& atensor) const
+  {
+    auto thr_tensor = make_tensor(static_cast<ATensor&&>(atensor).data(), this->thrfrg_A(atensor.layout()));
+
+    auto atom_vmk = make_coord(_, make_coord(get<1>(thr_vmnk_), get<3>(thr_vmnk_)));
+    return thr_tensor(atom_vmk, _);
+  }
+
+  template <class BTensor>
+  CUTE_HOST_DEVICE constexpr
+  auto
+  atom_partition_B(BTensor&& btensor) const
+  {
+    auto thr_tensor = make_tensor(static_cast<BTensor&&>(btensor).data(), this->thrfrg_B(btensor.layout()));
+
+    auto atom_vnk = make_coord(_, make_coord(get<2>(thr_vmnk_), get<3>(thr_vmnk_)));
+    return thr_tensor(atom_vnk, _);
+  }
+
   template <class CTensor>
   CUTE_HOST_DEVICE constexpr
   auto
@@ -566,6 +557,33 @@ struct ThrMMA : TiledMMA
   partition_fragment_B(BTensor&& btensor) const
   {
     return TiledMMA::make_fragment_B(partition_B(btensor));
+  }
+
+  template <class CTensor>
+  CUTE_HOST_DEVICE constexpr
+  auto
+  partition_sg_fragment_C(CTensor&& ctensor) const
+  {
+    return make_subgroup_tensor(partition_fragment_C(ctensor),
+                                layout(atom_partition_C(ctensor)));
+  }
+
+  template <class ATensor>
+  CUTE_HOST_DEVICE constexpr
+  auto
+  partition_sg_fragment_A(ATensor&& atensor) const
+  {
+    return make_subgroup_tensor(partition_fragment_A(atensor),
+                                layout(atom_partition_A(atensor)));
+  }
+
+  template <class BTensor>
+  CUTE_HOST_DEVICE constexpr
+  auto
+  partition_sg_fragment_B(BTensor&& btensor) const
+  {
+    return make_subgroup_tensor(partition_fragment_B(btensor),
+                                layout(atom_partition_B(btensor)));
   }
 };
 
@@ -607,10 +625,10 @@ make_tiled_mma(MMA_Op       const&,
 // media/docs/cute/0t_mma_atom.md#tiledmmas to construct a scatter
 // permutation which ensures hardware operates on contiguous
 // chunks of the TiledMMA. The docs describe how the Layout
-// implies a repetition of the atom across additional hardware. 
+// implies a repetition of the atom across additional hardware.
 // Permutations, in the simplest form, imply additional iterations
 // to cover a larger tile (i.e. CTALayout) than the hardware can handle
-// at once. 
+// at once.
 //
 // Consider an example for Xe hardware:
 //   using TiledMma =
@@ -618,13 +636,13 @@ make_tiled_mma(MMA_Op       const&,
 //                Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
 //                Tile<_256, _256, _32>>;
 //
-// This MMA_Atom is performed by a whole warp and operates on an 8x16x16 chunk. 
+// This MMA_Atom is performed by a whole warp and operates on an 8x16x16 chunk.
 // The second arg (Layout) defines a repetition of the atom across *additional warps*,
 // i.e. iterating across more hardware. The third arg (Tile) defines a repetition of this
 // MMA across *additional values*. For this example, in the M dimension, the atom produces
 // 8 values of C, the hardware repetition (8) scales this up to 64 values in M, and the
-// requested permutation (256) scales this up to 256 values (implying 4 iterations in the 
-// M direction). 
+// requested permutation (256) scales this up to 256 values (implying 4 iterations in the
+// M direction).
 //
 // By cute convention, the repetition of the atom across hardware is the inner
 // iteration, while the repetition across values is the outer. We can use a more complex
@@ -641,11 +659,11 @@ make_tiled_mma(MMA_Op       const&,
 //                  Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, // Permutation on N
 //                  _32>>; // K unpermuted
 //
-// Consider only the M permutation (each mode's permutation is independent and in this 
+// Consider only the M permutation (each mode's permutation is independent and in this
 // example the M & N permutations are similar). This permutation maintains blocks of 8
 // contiguous values from the canonical tiling (mode 0 is 8:1).
-// It scatters 8 of these blocks of 8 to a spacing of 32 values (mode 1 is 8:32), leaving 
-// a 'gap' of 24. These gaps of 24 are filled by repeating the preceding pattern 4 times, 
+// It scatters 8 of these blocks of 8 to a spacing of 32 values (mode 1 is 8:32), leaving
+// a 'gap' of 24. These gaps of 24 are filled by repeating the preceding pattern 4 times,
 // at a spacing of 8 values (mode 2 is 4:8).
 // In this manner, the tiling has been permuted so that the values handled by each thread are
 // closer together.
@@ -810,376 +828,6 @@ print(ThrMMA<TiledMMA, ThrVMNK> const& thr_mma)
   print(static_cast<TiledMMA>(thr_mma));
 }
 
-// MMA Atom to LaTeX TikZ
-template <class... Args, class TikzColorFn = TikzColor_TV>
-CUTE_HOST_DEVICE
-void
-print_latex(MMA_Atom<Args...> const& mma_atom,
-            TikzColorFn color = {})             // lambda(thr_idx,val_idx) -> tikz color string
-{
-  print_latex(make_tiled_mma(mma_atom));
-}
-
-// TiledMMA to LaTeX TikZ
-template <class... Args, class TikzColorFn = TikzColor_TV>
-CUTE_HOST_DEVICE
-void
-print_latex(TiledMMA<Args...> const& mma,
-            TikzColorFn color = {})             // lambda(thr_idx,val_idx) -> tikz color string
-{
-  auto layout_and_thrid_C = mma.get_layoutC_MN();
-  auto layoutC_MN = get<0>(layout_and_thrid_C);
-  auto thrID_C    = get<1>(layout_and_thrid_C);
-
-  auto layout_and_thrid_A = mma.get_layoutA_MK();
-  auto layoutA_MK = get<0>(layout_and_thrid_A);
-  auto thrID_A    = get<1>(layout_and_thrid_A);
-
-  auto layout_and_thrid_B = mma.get_layoutB_NK();
-  auto layoutB_NK = get<0>(layout_and_thrid_B);
-  auto thrID_B    = get<1>(layout_and_thrid_B);
-
-  print_latex_mma(layoutC_MN, thrID_C,
-                  layoutA_MK, thrID_A,
-                  layoutB_NK, thrID_B);
-}
-
-// MNK MMA Layout to LaTeX TikZ
-template <class LayoutC, class ThrIDC,
-          class LayoutA, class ThrIDA,
-          class LayoutB, class ThrIDB,
-          class TikzColorFn = TikzColor_TV>
-CUTE_HOST_DEVICE
-void
-print_latex_mma(LayoutC const& C, ThrIDC const& TC,  // (m,n) -> (tid,vid)  and  tid -> thr_idx
-                LayoutA const& A, ThrIDA const& TA,  // (m,k) -> (tid,vid)  and  tid -> thr_idx
-                LayoutB const& B, ThrIDB const& TB,  // (n,k) -> (tid,vid)  and  tid -> thr_idx
-                TikzColorFn color = {})              // lambda(thr_idx,val_idx) -> tikz color string
-{
-  CUTE_STATIC_ASSERT_V(rank(C) == Int<2>{});
-  CUTE_STATIC_ASSERT_V(rank(A) == Int<2>{});
-  CUTE_STATIC_ASSERT_V(rank(B) == Int<2>{});
-
-  assert(size<0>(A) == size<0>(C));
-  assert(size<0>(B) == size<1>(C));
-  assert(size<1>(A) == size<1>(B));
-
-  // Commented prints
-  printf("%% LayoutC: "); print(C);  printf("\n");
-  printf("%% ThrIDC : "); print(TC); printf("\n");
-  printf("%% LayoutA: "); print(A);  printf("\n");
-  printf("%% ThrIDA : "); print(TA); printf("\n");
-  printf("%% LayoutB: "); print(B);  printf("\n");
-  printf("%% ThrIDB : "); print(TB); printf("\n\n");
-  // Header
-  printf("\\documentclass[convert]{standalone}\n"
-         "\\usepackage{tikz}\n\n"
-         "\\begin{document}\n"
-         "\\begin{tikzpicture}[x={(0cm,-1cm)},y={(1cm,0cm)},every node/.style={minimum size=1cm, outer sep=0pt}]\n\n");
-
-  // C starting at 0,0
-  for (int m = 0; m < size<0>(C); ++m) {
-    for (int n = 0; n < size<1>(C); ++n) {
-      int thrid   = C(m,n) % size(TC);
-      int val_idx = C(m,n) / size(TC);
-      int thr_idx = TC(thrid);
-
-      printf("\\node[fill=%s] at (%d,%d) {\\shortstack{T%d \\\\ V%d}};\n",
-             color(thr_idx, val_idx),
-             m, n,
-             thr_idx, val_idx);
-    }
-  }
-  // Grid
-  printf("\\draw[color=black,thick,shift={(-0.5,-0.5)}] (%d,%d) grid (%d,%d);\n\n",
-         0, 0, int(size<0>(C)), int(size<1>(C)));
-
-  // A starting at 0,-size<1>(A)-1
-  for (int m = 0; m < size<0>(A); ++m) {
-    for (int k = 0; k < size<1>(A); ++k) {
-      int thrid   = A(m,k) % size(TA);
-      int val_idx = A(m,k) / size(TA);
-      int thr_idx = TA(thrid);
-
-      printf("\\node[fill=%s] at (%d,%d) {\\shortstack{T%d \\\\ V%d}};\n",
-             color(thr_idx, val_idx),
-             m, k-1-size<1>(A),
-             thr_idx, val_idx);
-    }
-  }
-  // Grid
-  printf("\\draw[color=black,thick,shift={(-0.5,-0.5)}] (%d,%d) grid (%d,%d);\n\n",
-         0, int(-size<1>(A)-1), int(size<0>(A)), -1);
-  // A labels
-  for (int m =  0, k = -1; m < size<0>(A); ++m) {
-    printf("\\node at (%d,%d) {\\Large{\\texttt{%d}}};\n", m, k-1-size<1>(A), m);
-  }
-  for (int m = -1, k =  0; k < size<1>(A); ++k) {
-    printf("\\node at (%d,%d) {\\Large{\\texttt{%d}}};\n", m, k-1-size<1>(A), k);
-  }
-
-  // B starting at -size<1>(B)-1,0
-  for (int n = 0; n < size<0>(B); ++n) {
-    for (int k = 0; k < size<1>(B); ++k) {
-      int thrid   = B(n,k) % size(TB);
-      int val_idx = B(n,k) / size(TB);
-      int thr_idx = TB(thrid);
-
-      printf("\\node[fill=%s] at (%d,%d) {\\shortstack{T%d \\\\ V%d}};\n",
-             color(thr_idx, val_idx),
-             k-1-size<1>(B), n,
-             thr_idx, val_idx);
-    }
-  }
-  // Grid
-  printf("\\draw[color=black,thick,shift={(-0.5,-0.5)}] (%d,%d) grid (%d,%d);\n\n",
-         int(-size<1>(B)-1), 0, -1, int(size<0>(B)));
-  // B labels
-  for (int n =  0, k = -1; n < size<0>(B); ++n) {
-    printf("\\node at (%d,%d) {\\Large{\\texttt{%d}}};\n", k-1-size<1>(B), n, n);
-  }
-  for (int n = -1, k =  0; k < size<1>(B); ++k) {
-    printf("\\node at (%d,%d) {\\Large{\\texttt{%d}}};\n", k-1-size<1>(B), n, k);
-  }
-
-  // Footer
-  printf("\\end{tikzpicture}\n"
-         "\\end{document}\n");
-}
-
-// MNK MMA Layout to console printer
-template <class LayoutC, class ThrIDC,
-          class LayoutA, class ThrIDA,
-          class LayoutB, class ThrIDB>
-CUTE_HOST_DEVICE
-void
-print_layout_mma(LayoutC const& C, ThrIDC const& TC,  // (m,n) -> (tid,vid)  and  tid -> thr_idx
-                 LayoutA const& A, ThrIDA const& TA,  // (m,k) -> (tid,vid)  and  tid -> thr_idx
-                 LayoutB const& B, ThrIDB const& TB)  // (n,k) -> (tid,vid)  and  tid -> thr_idx
-{
-  CUTE_STATIC_ASSERT_V(rank(C) == Int<2>{});
-  CUTE_STATIC_ASSERT_V(rank(A) == Int<2>{});
-  CUTE_STATIC_ASSERT_V(rank(B) == Int<2>{});
-
-  assert(size<0>(A) == size<0>(C));
-  assert(size<0>(B) == size<1>(C));
-  assert(size<1>(A) == size<1>(B));
-
-  int a_width = size<1>(A) * 6 + 4;
-
-  // Print out B (white-shifted) k-by-n
-  for (int k = 0; k < size<1>(B); ++k) {
-    // Header
-    printf("%*s", a_width, "");
-    for (int n = 0; n < size<0>(B); ++n) printf("+-----");
-    printf("+\n");
-    // Values
-    printf("%*s", a_width, "");
-    for (int n = 0; n < size<0>(B); ++n) printf("|T%02dV%1d", int(TB(B(n,k) % size(TB))), int(B(n,k) / size(TB)));
-    printf("|\n");
-  }
-  // Footer
-  printf("%*s", a_width, "");
-  for (int n = 0; n < size<0>(B); ++n) printf("+-----");
-  printf("+\n\n");
-
-  // Print out A m-by-k and C m-by-n
-  for (int m = 0; m < size<0>(A); ++m) {
-    // Header
-    for (int k = 0; k < size<1>(A); ++k) printf("+-----");
-    printf("+   ");
-    for (int n = 0; n < size<1>(C); ++n) printf("+-----");
-    printf("+\n");
-    // Values
-    for (int k = 0; k < size<1>(A); ++k) printf("|T%02dV%1d", int(TA(A(m,k) % size(TA))), int(A(m,k) / size(TA)));
-    printf("|   ");
-    for (int n = 0; n < size<1>(C); ++n) printf("|T%02dV%1d", int(TC(C(m,n) % size(TC))), int(C(m,n) / size(TC)));
-    printf("|\n");
-  }
-  // Footer
-  for (int k = 0; k < size<1>(A); ++k) printf("+-----");
-  printf("+   ");
-  for (int n = 0; n < size<1>(C); ++n) printf("+-----");
-  printf("+\n");
-}
-
-// MNK MMA Layout to SVG -- 8-value color coded by thread
-template <class LayoutC, class ThrIDC,
-          class LayoutA, class ThrIDA,
-          class LayoutB, class ThrIDB>
-CUTE_HOST_DEVICE
-void
-print_svg_mma(LayoutC const& C, ThrIDC const& TC,  // (m,n) -> (tid,vid)  and  tid -> thr_idx
-              LayoutA const& A, ThrIDA const& TA,  // (m,k) -> (tid,vid)  and  tid -> thr_idx
-              LayoutB const& B, ThrIDB const& TB)  // (n,k) -> (tid,vid)  and  tid -> thr_idx
-{
-  char const *color_map[8] = {"175,175,255", "175,255,175", "255,255,175",
-                              "255,175,175", "210,210,255", "210,255,210",
-                              "255,255,210", "255,210,210"};
-
-  const int cell_width = 20;
-  const int cell_height = 20;
-
-  const int page_width = (size<1>(A) + size<0>(B) + 2) * cell_width;
-  const int page_height = (size<1>(B) + size<0>(A) + 2) * cell_height;
-
-  // header
-  printf("<svg width=\"100%%\" height=\"100%%\" viewBox=\"0 0 %d %d\" "
-         "preserveAspectRatio=\"xMidYMid meet\" "
-         "xmlns=\"http://www.w3.org/2000/svg\">\n",
-         page_width, page_height);
-
-  // C
-  int c_base_x = (size<1>(A) + 2) * cell_width;
-  int c_base_y = (size<1>(B) + 2) * cell_height;
-  for (int m = 0; m < cute::size<0>(C); ++m) {
-    for (int n = 0; n < cute::size<1>(C); ++n) {
-
-      int thrid = C(m, n) % size(TC);
-      int val_idx = C(m, n) / size(TC);
-      int thr_idx = TC(thrid);
-
-      int x = n * cell_width + c_base_x;
-      int y = m * cell_height + c_base_y;
-
-      int thr_x = x + cell_width / 2;
-      int thr_y = y + cell_height / 4;
-      int val_x = x + cell_width / 2;
-      int val_y = y + cell_height * 3 / 4;
-
-      printf("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" "
-             "fill=\"rgb(%s)\" stroke=\"black\"/>\n",
-             x, y, cell_width, cell_height, color_map[thr_idx % 8]);
-
-      printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-             "alignment-baseline=\"central\" font-size=\"8\">T%d</text>\n",
-             thr_x, thr_y, thr_idx);
-      printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-             "alignment-baseline=\"central\" font-size=\"8\">V%d</text>\n",
-             val_x, val_y, val_idx);
-    }
-  }
-
-  // A
-  int a_base_x = cell_width;
-  int a_base_y = (size<1>(B) + 2) * cell_height;
-  for (int m = 0; m < size<0>(A); ++m) {
-    for (int k = 0; k < size<1>(A); ++k) {
-      int thrid = A(m, k) % size(TA);
-      int val_idx = A(m, k) / size(TA);
-      int thr_idx = TA(thrid);
-
-      int x = k * cell_width + a_base_x;
-      int y = m * cell_height + a_base_y;
-
-      int thr_x = x + cell_width / 2;
-      int thr_y = y + cell_height / 4;
-      int val_x = x + cell_width / 2;
-      int val_y = y + cell_height * 3 / 4;
-
-      printf("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" "
-             "fill=\"rgb(%s)\" stroke=\"black\" />\n",
-             x, y, cell_width, cell_height, color_map[thr_idx % 8]);
-      printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-             "alignment-baseline=\"central\" font-size=\"8\">T%d</text>\n",
-             thr_x, thr_y, thr_idx);
-      printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-             "alignment-baseline=\"central\" font-size=\"8\">V%d</text>\n",
-             val_x, val_y, val_idx);
-    }
-  }
-
-  // B
-  int b_base_x = (size<1>(A) + 2) * cell_width;
-  int b_base_y = cell_height;
-  for (int n = 0; n < size<0>(B); ++n) {
-    for (int k = 0; k < size<1>(B); ++k) {
-      int thrid = B(n, k) % size(TB);
-      int val_idx = B(n, k) / size(TB);
-      int thr_idx = TB(thrid);
-
-      int x = n * cell_width + b_base_x;
-      int y = k * cell_height + b_base_y;
-
-      int thr_x = x + cell_width / 2;
-      int thr_y = y + cell_height / 4;
-      int val_x = x + cell_width / 2;
-      int val_y = y + cell_height * 3 / 4;
-
-      printf("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" "
-             "fill=\"rgb(%s)\" stroke=\"black\" />\n",
-             x, y, cell_width, cell_height, color_map[thr_idx % 8]);
-      printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-             "alignment-baseline=\"central\" font-size=\"8\">T%d</text>\n",
-             thr_x, thr_y, thr_idx);
-      printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-             "alignment-baseline=\"central\" font-size=\"8\">V%d</text>\n",
-             val_x, val_y, val_idx);
-    }
-  }
-
-  // A labels
-  for (int m = 0; m < size<0>(A); ++m) {
-    int x = cell_width / 2;
-    int y = m * cell_height + cell_height / 2 + a_base_y;
-    printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-           "alignment-baseline=\"central\" font-size=\"12\">%d</text>\n",
-           x, y, m);
-  }
-  for (int k = 0; k < size<1>(A); ++k) {
-    int x = cell_width + k * cell_width + cell_width / 2;
-    int y = -cell_height / 2 + a_base_y;
-    printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-           "alignment-baseline=\"central\" font-size=\"12\">%d</text>\n",
-           x, y, k);
-  }
-
-  // B labels
-  for (int n = 0; n < size<0>(B); ++n) {
-    int x = b_base_x + cell_width * n + cell_width / 2;
-    int y = cell_height / 2;
-    printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-           "alignment-baseline=\"central\" font-size=\"12\">%d</text>\n",
-           x, y, n);
-  }
-  for (int k = 0; k < size<1>(B); ++k) {
-    int x = b_base_x - cell_width / 2;
-    int y = cell_height * (k + 1) + cell_height / 2;
-    printf("<text x=\"%d\" y=\"%d\" text-anchor=\"middle\" "
-           "alignment-baseline=\"central\" font-size=\"12\">%d</text>\n",
-           x, y, k);
-  }
-
-  // footer
-  printf("</svg>\n");
-}
-
-template <class... Args>
-CUTE_HOST_DEVICE
-void
-print_svg(MMA_Atom<Args...> const &mma_atom) {
-  print_svg(make_tiled_mma(mma_atom));
-}
-
-template <class... Args>
-CUTE_HOST_DEVICE
-void
-print_svg(TiledMMA<Args...> const &mma) {
-  auto layout_and_thrid_C = mma.get_layoutC_MN();
-  auto layoutC_MN = get<0>(layout_and_thrid_C);
-  auto thrID_C = get<1>(layout_and_thrid_C);
-
-  auto layout_and_thrid_A = mma.get_layoutA_MK();
-  auto layoutA_MK = get<0>(layout_and_thrid_A);
-  auto thrID_A = get<1>(layout_and_thrid_A);
-
-  auto layout_and_thrid_B = mma.get_layoutB_NK();
-  auto layoutB_NK = get<0>(layout_and_thrid_B);
-  auto thrID_B = get<1>(layout_and_thrid_B);
-
-  print_svg_mma(layoutC_MN, thrID_C, layoutA_MK, thrID_A, layoutB_NK, thrID_B);
-}
-
 } // namespace cute
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1197,5 +845,6 @@ print_svg(TiledMMA<Args...> const &mma) {
 
 #if defined(CUTLASS_ENABLE_SYCL)
 #include <cute/atom/mma_traits_xe.hpp>
+#include <cute/atom/mma_traits_xe_legacy.hpp>
 #endif
 ////////////////////////////////////////////////////////////////////////////////////////////////////

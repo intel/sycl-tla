@@ -37,7 +37,6 @@
 #include "cute/algorithm/functional.hpp"
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
-#include "cute/tensor_predicate.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -80,6 +79,13 @@ template<class datatype, size_t N, class stride>
 struct scale_zero_copy_traits<datatype, N, stride,
           std::enable_if_t<sizeof_bits_v<datatype> == 16 && N >= 32>> {
   using type = XE_2D_U16x1x32_LD_N;
+};
+
+// 32 bits
+template<class datatype, size_t N, class stride>
+struct scale_zero_copy_traits<datatype, N, stride,
+          std::enable_if_t<sizeof_bits_v<datatype> == 32>> {
+  using type = XE_2D_U32x1x16_LD_N;
 };
 
 template <
@@ -322,7 +328,7 @@ public:
       }();
 
       if constexpr (ModeScale) {
-        return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, {}, args.group_size};
+        return Params{tiled_copy_a, tiled_copy_b, {tiled_copy_scale}, {}, args.group_size};
       } else {
         auto ptr_Z = [&]() {
           if constexpr (sizeof_bits_v<NonVoidElementZero> < 8) {
@@ -347,7 +353,7 @@ public:
           }
         }();
 
-        return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, tiled_copy_zero, args.group_size};
+        return Params{tiled_copy_a, tiled_copy_b, {tiled_copy_scale}, {tiled_copy_zero}, args.group_size};
       }
     }
   }

@@ -1,5 +1,6 @@
 /***************************************************************************************************
 * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+* Copyright (c) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +44,7 @@
 #include "cutlass/cutlass.h"
 #include "cutlass/complex.h"
 #include "cutlass/util/reference/device/tensor_foreach.h"
+#include "cutlass/util/reference/host/tensor_fill.h"
 #include "cutlass/tensor_view.h"
 #include "cutlass/layout/vector.h"
 
@@ -166,6 +168,26 @@ void BlockFillRandomUniform(
 
   typename RandomFunc::Params params(seed, max, min, bits);
   BlockForEach<Element, RandomFunc>(ptr, capacity, params);
+}
+
+/// This function generates random values on the host and then copies them to the device.
+template <typename Element>
+void BlockFillRandomUniformCopyFromHost(
+  Element *ptr,
+  size_t capacity,
+  uint64_t seed,                          ///< seed for RNG
+  typename RealType<Element>::Type max,   ///< upper bound of distribution
+  typename RealType<Element>::Type min,   ///< lower bound for distribution
+  int bits = -1                           ///< If non-negative, specifies number of fractional bits that
+                                          ///  are not truncated to zero. Permits reducing precision of
+                                          ///  data.
+  ) {
+  auto buff = std::vector<Element>(capacity);
+
+  cutlass::reference::host::BlockFillRandomUniform(buff.data(), capacity, seed, max, min, bits);
+
+  syclcompat::memcpy<Element>(ptr, buff.data(), capacity);
+  syclcompat::wait();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
