@@ -78,10 +78,12 @@ public:
   using SoftmaxParams = typename CollectiveSoftmaxEpilogue::Params;
   
   static_assert(cute::is_void_v<TileScheduler_> or cute::is_same_v<TileScheduler_, PersistentScheduler> or 
+    cute::is_same_v<TileScheduler_, IndividualValidOnlyScheduler> or
     cute::is_same_v<TileScheduler_, IndividualScheduler>, "Unsupported TileScheduler for Intel Xe.");
   using TileSchedulerTag = TileScheduler_;
   using TileScheduler = typename detail::TileSchedulerSelector<TileScheduler_, ArchTag>::Scheduler;
   using TileSchedulerParams = typename TileScheduler::Params;
+  using XeFlashRowTile = cutlass::flash_attention::XeFlashRowTile;
   
   // Epilogue derived types
   using CollectiveEpilogue = CollectiveEpilogue_;
@@ -147,6 +149,8 @@ public:
     SoftmaxArguments softmax{};
     EpilogueArguments epilogue{};
     KernelHardwareInfo hw_info{};
+    const XeFlashRowTile* tiles = nullptr;
+    int total_tiles = 0;
   };
 
   // Kernel entry point API
@@ -166,11 +170,19 @@ public:
   // Convert to underlying arguments. In this case, a simple copy for the aliased type.
   static Params to_underlying_arguments(Arguments const &args, void *workspace) {
     (void)workspace;
-    return {args.mode, args.problem_shape,
-            CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
-            CollectiveSoftmaxEpilogue::to_underlying_arguments(args.softmax),
-            CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace),
-            TileScheduler::to_underlying_arguments(args.problem_shape, args.hw_info, TileShapeOutput{})};
+    if constexpr (cute::is_same_v<TileScheduler_, IndividualValidOnlyScheduler>) {
+      return {args.mode, args.problem_shape,
+              CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
+              CollectiveSoftmaxEpilogue::to_underlying_arguments(args.softmax),
+              CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace),
+              TileScheduler::to_underlying_arguments(args.problem_shape, args.hw_info, TileShapeOutput{}, args.tiles, args.total_tiles)};
+    } else {
+      return {args.mode, args.problem_shape,
+              CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
+              CollectiveSoftmaxEpilogue::to_underlying_arguments(args.softmax),
+              CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace),
+              TileScheduler::to_underlying_arguments(args.problem_shape, args.hw_info, TileShapeOutput{})};
+    }
   }
 
   static bool can_implement(Arguments const &args) {
@@ -223,6 +235,7 @@ public:
     int sub_group_id = thread_idx / SubgroupSize;
 
     TileScheduler tile_scheduler{params.scheduler};
+
 
     CUTLASS_PRAGMA_NO_UNROLL
     for (; tile_scheduler.is_valid(); ++tile_scheduler) {
