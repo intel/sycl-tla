@@ -162,6 +162,7 @@ public:
 
   using TensorC = decltype(make_tensor(make_gmem_ptr(static_cast<ElementC const*>(nullptr)), make_shape(0,0,0), InternalStrideC{}));   //(m, n)
   using TensorD = decltype(make_tensor(make_gmem_ptr(static_cast<ElementD*>(nullptr)), make_shape(0,0,0), InternalStrideD{}));         //(m, n)
+  using EpilogueTensors = cute::tuple<TensorC, TensorD>;
 
   // Host side epilogue arguments
   struct Arguments {
@@ -347,7 +348,7 @@ public:
     auto m_sg = get_sub_group_id() / ATOM_N;
     auto n_sg = get_sub_group_id() % ATOM_N;
 
-    using EpilogueTile = decltype(get<0>(params.xe_store_d.get_layoutS_MN()).shape());
+    auto mn_shape = shape(typename decltype(params.xe_store_d)::Tiler_MN{});
 
     auto sg_local_m_coord = get_sub_group_id() / ATOM_N;
     auto sg_local_n_coord = get_sub_group_id() % ATOM_N;
@@ -383,9 +384,9 @@ public:
     Tensor mD_crd = make_identity_tensor(make_shape(M,N));                                                     // (M,N)
     Tensor cD = local_tile(mD_crd, take<0,2>(SubgroupTileShape{}), make_coord(sg_m_coord, sg_n_coord));
     Tensor cD_mn = local_tile(mD_crd, take<0,2>(CtaTileMNK{}), make_coord(m_coord, n_coord));          // (CTA_M,CTA_N)
-    Tensor tRS_cD_mn = thread_g2r.partition_S(flat_divide(cD_mn, EpilogueTile{}));     // (G2R,G2R_M,G2R_N,EPI_M,EPI_N)
+    Tensor tRS_cD_mn = thread_g2r.partition_S(flat_divide(cD_mn, mn_shape));     // (G2R,G2R_M,G2R_N,EPI_M,EPI_N)
 
-    Tensor tRS_cD = make_counting_tensor(tRS_cD_mn.layout());                          // (G2R,G2R_M,G2R_N,EPI_M,EPI_N)
+    Tensor tRS_cD = make_coord_tensor(tRS_cD_mn.layout());                          // (G2R,G2R_M,G2R_N,EPI_M,EPI_N)
 
     // Get the fusion callbacks
     // Arguments passed here relate to sub-group tiles, rather than CTA (work-group) tiles
@@ -396,7 +397,7 @@ public:
                       SubgroupTileShape{},
                       sg_coord,
                       tiled_mma,
-                      EpilogueTile{},
+                      mn_shape,
                       params.xe_store_d,
                       cD,
                       residue_mn,

@@ -1,5 +1,5 @@
-
 # Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (C) 2025 Intel Corporation, All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -27,32 +27,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-if (NOT CUTLASS_ENABLE_SYCL)
-  cutlass_example_add_executable(
-    cute_tutorial_sgemm_1
-    sgemm_1.cu
-  )
+if (CUTLASS_ENABLE_SYCL)
+  message(STATUS "Building CuTE tutorial examples with SYCL")
 
-  cutlass_example_add_executable(
-    cute_tutorial_sgemm_2
-    sgemm_2.cu
-  )
-
-  cutlass_example_add_executable(
-    cute_tutorial_sgemm_sm70
-    sgemm_sm70.cu
-  )
-
-  cutlass_example_add_executable(
-    cute_tutorial_sgemm_sm80
-    sgemm_sm80.cu
-  )
-
-  cutlass_example_add_executable(
-    cute_tutorial_tiled_copy
-    tiled_copy.cu
-  )
-else()
   cutlass_example_add_executable(
     cute_tutorial_sgemm_1
     sgemm_1_sycl.cpp
@@ -68,13 +45,27 @@ else()
     tiled_copy_sycl.cpp
   )
 
-if (SYCL_INTEL_TARGET)
   cutlass_example_add_executable(
-    cute_tutorial_bmg
-    sgemm_bmg.cpp
+    cute_tutorial_tiled_copy_if
+    tiled_copy_if_sycl.cpp
   )
-endif()
+
+  if (SYCL_INTEL_TARGET)
+    message(STATUS "Building CuTE examples for Intel GPU targets")
+    cutlass_example_add_executable(
+      cute_tutorial_bmg
+      bgemm_bmg_legacy.cpp
+    )
+
+    cutlass_example_add_executable(
+      cute_tutorial_xe_gemm
+      xe_gemm.cpp
+    )
+  endif()
+
   if (SYCL_NVIDIA_TARGET)
+    message(STATUS "Building CuTE examples for NVIDIA GPU targets with SYCL")
+
     cutlass_example_add_executable(
       cute_tutorial_sgemm_sm70
       sgemm_sm70_sycl.cpp
@@ -85,4 +76,8 @@ endif()
       sgemm_sm80_sycl.cpp
     )
   endif()
+
+else()
+  message(STATUS "CUTLASS_ENABLE_SYCL is OFF - CuTE tutorial examples will not be built")
+  message(STATUS "Enable SYCL support to build CuTE tutorial examples")
 endif()

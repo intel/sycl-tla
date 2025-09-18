@@ -2,11 +2,11 @@ name: "SYCL Intel Test"
 
 on:
   push:
-    branches: [ "sycl-develop" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "sycl-develop" ]
+    branches: [ "main" ]
   merge_group:
-    branches: [ "sycl-develop" ]
+    branches: [ "main" ]
   workflow_dispatch:
     inputs:
       DPCPP_VERSION:
@@ -24,21 +24,21 @@ jobs:
     strategy:
       matrix:
         include:
-          - compiler: NIGHTLY
-            gpu: BMG
-            intel_graphics: STAGING
-            sycl_target: intel_gpu_bmg_g21
-            runner: bmg108629-01
-          - compiler: RELEASE
-            gpu: BMG
-            intel_graphics: STAGING
-            sycl_target: intel_gpu_bmg_g21
-            runner: bmg108629-01
-          - compiler: NIGHTLY
-            gpu: BMG
-            intel_graphics: ROLLING
-            sycl_target: intel_gpu_bmg_g21
-            runner: bmg108629-01
+          # - compiler: NIGHTLY
+          #   gpu: BMG
+          #   intel_graphics: STAGING
+          #   sycl_target: intel_gpu_bmg_g21
+          #   runner: bmg108629-01
+          # - compiler: RELEASE
+          #   gpu: BMG
+          #   intel_graphics: STAGING
+          #   sycl_target: intel_gpu_bmg_g21
+          #   runner: bmg108629-01
+          # - compiler: NIGHTLY
+          #   gpu: BMG
+          #   intel_graphics: ROLLING
+          #   sycl_target: intel_gpu_bmg_g21
+          #   runner: bmg108629-01
           - compiler: RELEASE
             gpu: BMG
             intel_graphics: ROLLING

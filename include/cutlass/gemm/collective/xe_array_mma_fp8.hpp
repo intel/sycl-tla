@@ -36,7 +36,6 @@
 #include "cute/algorithm/functional.hpp"
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
-#include "cute/tensor_predicate.hpp"
 #include "cutlass/fp8_to_fp16.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -104,7 +103,7 @@ struct CollectiveMma<MainloopIntelXeXMX16GroupFP8<Stages, Schedule>, TileShape_,
 
   using TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), InternalStrideA{}));   //(m, k)
   using TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), InternalStrideB{}));   //(n, k)
-
+  using MainloopTensors = cute::tuple<TensorMKL, TensorNKL>;
   // Host side kernel arguments
   struct Arguments {
     ElementA const** ptr_A;
