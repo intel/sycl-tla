@@ -39,6 +39,11 @@
 
 namespace cutlass::flash_attention {
 
+struct XeFlashRowTile {
+  int bh;     // = b * num_heads_q + h
+  int m_tile; // row tile index along Q
+};
+
 namespace kernel {
 
 struct XeFlashIndividualTileScheduler {
@@ -87,6 +92,62 @@ struct XeFlashIndividualTileScheduler {
 
   CUTLASS_DEVICE
   XeFlashIndividualTileScheduler& operator++() {
+    valid_ = false;
+    return *this;
+  }
+};
+
+// Only schedule valid(non-empty) work groups.
+struct XeFlashIndividualValidOnlyTileScheduler {
+  struct Params {
+    dim3 grid;
+    FastDivmod divmod_num_heads;
+    const XeFlashRowTile* tiles = nullptr;
+    int total_tiles = 0;
+  };
+
+  bool valid_ = true;
+  Params params;
+
+  CUTLASS_DEVICE
+  XeFlashIndividualValidOnlyTileScheduler(Params const& params) : params(params) {}
+
+  template<class ProblemSize, class TileShape>
+  static Params to_underlying_arguments(
+      ProblemSize const& problem_size, KernelHardwareInfo hw_info,
+      TileShape const& tile_shape,
+      const XeFlashRowTile* tiles_dev, int total_tiles) {
+
+    using namespace cute;
+    // problem_size = [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo]
+    dim3 grid(size(ceil_div(shape<6>(problem_size), shape<1>(tile_shape))), total_tiles, 1);
+
+    return Params{grid, {shape<1>(problem_size)}, tiles_dev, total_tiles};
+  }
+
+  template <int Num_SGs>
+  static dim3 get_grid_shape(Params const& params) {
+    return params.grid;
+  }
+
+  CUTLASS_DEVICE
+  bool is_valid() {
+    return valid_;
+  }
+
+  CUTLASS_DEVICE
+  auto get_block_coord() {
+  using namespace cute;
+
+  int t = BlockIdxY();
+  XeFlashRowTile tile = params.tiles[t];
+  int bidb = 0, bidh = 0;
+  params.divmod_num_heads(bidb, bidh, tile.bh);
+  return make_coord(BlockIdxX(), tile.m_tile, bidb, bidh);
+}
+
+  CUTLASS_DEVICE
+  XeFlashIndividualValidOnlyTileScheduler& operator++() {
     valid_ = false;
     return *this;
   }
@@ -230,6 +291,7 @@ struct XeFlashPersistentTileScheduler {
 }  // namespace kernel
 
   struct IndividualScheduler{};
+  struct IndividualValidOnlyScheduler{};
   struct PersistentScheduler{};
   struct FlashDecodeIndividualScheduler{};
 
@@ -265,6 +327,15 @@ struct XeFlashPersistentTileScheduler {
         cute::enable_if_t<cute::is_same_v<ArchTag, cutlass::arch::IntelXe>>>
     {
       using Scheduler = kernel::XeFlashIndividualTileScheduler;
+    };
+
+    template <class ArchTag>
+    struct TileSchedulerSelector<
+        IndividualValidOnlyScheduler,
+        ArchTag,
+        cute::enable_if_t<cute::is_same_v<ArchTag, cutlass::arch::IntelXe>>>
+    {
+      using Scheduler = kernel::XeFlashIndividualValidOnlyTileScheduler;
     };
 
     template <class ArchTag>
