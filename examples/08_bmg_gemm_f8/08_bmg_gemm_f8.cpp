@@ -387,9 +387,9 @@ int launcher(Options& options)
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 
-  // ExampleRunner<Gemm> runner;
+  ExampleRunner<Gemm> runner;
 
-  CUTLASS_CHECK(ExampleRunner<Gemm>{}.run(options, hw_info));
+  CUTLASS_CHECK(runner.run(options, hw_info));
 
   return 0;
 }

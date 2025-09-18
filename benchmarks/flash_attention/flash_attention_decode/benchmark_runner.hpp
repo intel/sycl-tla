@@ -619,7 +619,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
 
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
     using namespace compat::experimental;
-    auto event = launch<cutlass::device_kernel<FMHADecodeKernel>>(
+    auto event = launch<cutlass::device_kernel<FMHADecodeKernel>, FMHADecodeKernel>(
         launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
                       kernel_properties{sycl_exp::sub_group_size<FMHADecodeKernel::DispatchPolicy::SubgroupSize>}},
         params);
