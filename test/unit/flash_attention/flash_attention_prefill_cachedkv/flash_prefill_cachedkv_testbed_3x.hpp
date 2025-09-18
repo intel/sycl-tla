@@ -739,13 +739,49 @@ struct Testbed3x {
 };
 
 template <typename FlashPrefillCachedKV>
-bool TestFlashPrefillCachedKVAll(int head_size) {
+bool TestFlashPrefillCachedKVAll(int head_size, std::string config="default") {
   Testbed3x<FlashPrefillCachedKV> testbed;
 
-  std::vector<int> problem_size_batch{8};
-  std::vector<int> problem_size_num_heads{8};
-  std::vector<int> problem_size_seq_len{1024};
-  std::vector<int> problem_size_seq_len_cache{0, 1024};
+  std::vector<int> problem_size_batch;
+  std::vector<int> problem_size_num_heads;
+  std::vector<int> problem_size_seq_len;
+  std::vector<int> problem_size_seq_len_cache;
+  if(config == "whisper_v3_large"){
+    problem_size_batch = {1, 2, 4};
+    problem_size_num_heads = {20};
+    problem_size_seq_len = {512, 1024};
+    problem_size_seq_len_cache = {0, 1024};
+  }
+  else if(config == "llama3_8b"){
+    problem_size_batch = {1, 2, 4};
+    problem_size_num_heads = {32};
+    problem_size_seq_len = {512, 1024};
+    problem_size_seq_len_cache = {0, 1024};
+  }
+  else if(config == "llama3_405b"){
+    problem_size_batch = {1, 2};
+    problem_size_num_heads = {128};
+    problem_size_seq_len = {512, 1024};
+    problem_size_seq_len_cache = {0, 1024};
+  }
+  else if(config == "qwen2_5_72b"){
+    problem_size_batch = {1, 2};
+    problem_size_num_heads = {64};
+    problem_size_seq_len = {512, 1024};
+    problem_size_seq_len_cache = {0, 1024};
+  }
+  else if(config == "deepseek_r1"){
+    problem_size_batch = {1, 2};
+    problem_size_num_heads = {64};
+    problem_size_seq_len = {512, 1024};
+    problem_size_seq_len_cache = {0, 1024};
+  }
+  else{
+    problem_size_batch = {8};
+    problem_size_num_heads = {8};
+    problem_size_seq_len = {1024};
+    problem_size_seq_len_cache = {0, 1024};
+  }
   std::vector<float> problem_size_softmax_scale{ 1.f / sqrt(static_cast<float>(head_size)) };
   bool passed = true;
 
