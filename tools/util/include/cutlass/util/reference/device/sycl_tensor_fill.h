@@ -181,7 +181,7 @@ void BlockFillRandomUniformCopyFromHost(
   int bits = -1                           ///< If non-negative, specifies number of fractional bits that
                                           ///  are not truncated to zero. Permits reducing precision of
                                           ///  data.
-) {
+  ) {
   auto buff = std::vector<Element>(capacity);
 
   cutlass::reference::host::BlockFillRandomUniform(buff.data(), capacity, seed, max, min, bits);
