@@ -28,32 +28,32 @@ jobs:
           #   gpu: BMG
           #   intel_graphics: STAGING
           #   sycl_target: intel_gpu_bmg_g21
-          #   runner: bmg108629-01
+          #   runner: bmg
           # - compiler: RELEASE
           #   gpu: BMG
           #   intel_graphics: STAGING
           #   sycl_target: intel_gpu_bmg_g21
-          #   runner: bmg108629-01
+          #   runner: bmg
           # - compiler: NIGHTLY
           #   gpu: BMG
           #   intel_graphics: ROLLING
           #   sycl_target: intel_gpu_bmg_g21
-          #   runner: bmg108629-01
+          #   runner: bmg
           - compiler: RELEASE
             gpu: BMG
             intel_graphics: ROLLING
             sycl_target: intel_gpu_bmg_g21
-            runner: bmg108629-01
+            runner: bmg
           - compiler: RELEASE
             gpu: PVC
             intel_graphics: ROLLING
             sycl_target: intel_gpu_pvc
-            runner: pvc146162-01
+            runner: pvc
           - compiler: NIGHTLY
             gpu: PVC
             intel_graphics: ROLLING
             sycl_target: intel_gpu_pvc
-            runner: pvc146162-01
+            runner: pvc
 
     name: Run Intel ${{ matrix.compiler }} tests on ${{ matrix.gpu }} with intel-graphics ${{ matrix.intel_graphics }}
     runs-on: ${{ matrix.runner }}
@@ -103,7 +103,9 @@ jobs:
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
-            -DCUTLASS_SYCL_RUNNING_CI=ON
+            -DCUTLASS_SYCL_RUNNING_CI=ON \
+            -DCUTLASS_ENABLE_BENCHMARKS=ON \
+            -DCUTLASS_ENABLE_TESTS=ON 
           # Use reduced parallelism for BMG runners, full for PVC
           if [[ "${{ matrix.gpu }}" == "BMG" ]]; then
             cmake --build . -j 2
@@ -121,7 +123,7 @@ jobs:
       - name: Benchmarks
         shell: bash
         run: |
-          cmake --build . --target cutlass_benchmarks
+          cmake --build . --target benchmarks
       - name: Cleanup DPC++
         if: always()
         shell: bash
