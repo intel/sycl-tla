@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (c) 2025 Intel Corporation
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -140,6 +141,7 @@ struct KernelTmaWarpSpecializedCooperativeMixedInput: KernelTmaWarpSpecializedCo
 struct KernelXe { };
 struct KernelXeCooperative { };
 struct KernelXePtrArrayCooperative { };
+struct KernelXeMoEGEMM { };
 //////////////////////////////////////////////////////////////////////////////
 
 //
@@ -1214,9 +1216,14 @@ struct MainloopIntelXeXMX16 {
   using ClusterShape = Shape<_1,_1,_1>;
 };
 
-template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
-struct MainloopIntelXeXMX16Group : MainloopIntelXeXMX16<Stages_, KernelScheduler> {
-};
+template <int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
+struct MainloopIntelXeXMX16Group
+    : MainloopIntelXeXMX16<Stages_, KernelScheduler> {};
+
+// partial specialization for KernelXeMoEGEMM
+template <int Stages_>
+struct MainloopIntelXeXMX16Group<Stages_, KernelXeMoEGEMM>
+    : MainloopIntelXeXMX16<Stages_, KernelXeMoEGEMM> {};
 
 template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
 struct MainloopIntelXeXMX16GroupMixedPrecision : MainloopIntelXeXMX16<Stages_, KernelScheduler> {
