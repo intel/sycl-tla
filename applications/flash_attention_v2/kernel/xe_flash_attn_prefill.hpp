@@ -132,6 +132,7 @@ public:
   using AccumeShape =  decltype(make_shape(Int<Vec>{}, Int<FragsM>{}, get<1>(TileShapePV{})/get<1>(MmaAtomShape()), Int<VSlicer>{}));
 
   static constexpr bool is_var_len = CollectiveMainloop::is_var_len;
+  static constexpr bool rope_enabled = CollectiveMainloop::rope_enabled;
 
   // Kernel level shared memory storage
   struct SharedStorage {
@@ -272,9 +273,23 @@ public:
       Tensor mK_nk = mK_nkl(_, _, blk_l_coord/group_heads_q);                                                    // (n,k)
       Tensor mV_nk = mV_nkl(_, _, blk_l_coord/group_heads_q);                                                    // (n,k)
 
+      Tensor mCosQ_mkl = cute::get_xe_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads_q));  // (m, k, l)
+      Tensor mSinQ_mkl = cute::get_xe_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads_q));  // (m, k, l)
+      Tensor mCosK_nkl = cute::get_xe_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_head_kv));  // (n, k, l)
+      Tensor mSinK_nkl = cute::get_xe_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_head_kv));  // (n, k, l)
+      Tensor mCosQ_mk = mCosQ_mkl(_, _, blk_l_coord);                                                // (m,k)
+      Tensor mSinQ_mk = mSinQ_mkl(_, _, blk_l_coord);                                                // (m,k)
+      Tensor mCosK_nk = mCosK_nkl(_, _, blk_l_coord/group_heads_q);                                                // (n,k)
+      Tensor mSinK_nk = mSinK_nkl(_, _, blk_l_coord/group_heads_q);
+
       auto gQ = local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
       auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
       auto gV = local_tile(mV_nk, TileShapeOutput{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
+
+      auto gCosQ = local_tile(mCosQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
+      auto gSinQ = local_tile(mSinQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
+      auto gCosK = local_tile(mCosK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
+      auto gSinK = local_tile(mSinK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, sequence_length_shape, batch_coord);
       // we limit the horisontal size to two subgroup, the empirical resutls show that reading the two cacheline side by side in gives better performance and 
@@ -289,6 +304,12 @@ public:
       auto pKgK = thr_prefetch_K.partition_S(gK);
       auto pVgV = thr_prefetch_V.partition_S(gV);
 
+      // RoPE coordinate tensor partitions
+      auto pCosQgCosQ = thr_prefetch_Q.partition_S(gCosQ);
+      auto pSinQgSinQ = thr_prefetch_Q.partition_S(gSinQ);
+      auto pCosKgCosK = thr_prefetch_K.partition_S(gCosK);
+      auto pSinKgSinK = thr_prefetch_K.partition_S(gSinK);
+
       for (int i = 0; i < size<3>(pQgQ); i++) {
         prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
       }
@@ -296,6 +317,18 @@ public:
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < DispatchPolicy::Stages; i++) {
           prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
+        }
+      }
+
+      for (int i = 0; i < size<3>(pQgQ); i++) {
+        prefetch(tiled_prefetch_q, pCosQgCosQ(_, _, _, i));
+        prefetch(tiled_prefetch_q, pSinQgSinQ(_, _, _, i));
+      }
+      for (int j = 0; j < size<4>(pKgK); j++) {
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < DispatchPolicy::Stages; i++) {
+          prefetch(tiled_prefetch_k, pCosKgCosK(_, _, _ , i, j));
+          prefetch(tiled_prefetch_k, pSinKgSinK(_, _, _ , i, j));
         }
       }
 
@@ -325,7 +358,7 @@ public:
         clear(tSr);
 
         // 3) Perform GEMM S = Q*K
-        collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
+        collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size_qk, QK_BLK_K), gCosQ, gSinQ, gCosK(_, _, nblock, _), gSinK(_, _, nblock, _), mainloop_params, params.problem_shape);
 
         // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
         // prefetching it the same way as cutlass K matrix does not make sense
@@ -343,6 +376,12 @@ public:
         for (int j = 0; j < size<4>(pKgK); j++) {
           prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
         }
+
+        for (int j = 0; j < size<4>(pKgK); j++) {
+          prefetch(tiled_prefetch_k, pCosKgCosK(_, _, _, nblock + DispatchPolicy::Stages, j));
+          prefetch(tiled_prefetch_k, pSinKgSinK(_, _, _, nblock + DispatchPolicy::Stages, j));
+        }
+
         barrier_wait(barrier_scope);
       }
 
@@ -351,7 +390,7 @@ public:
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
       // 3) Perform GEMM S = Q*K
-      collective_mma.mmaQK(tSr, gQ,  gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
+      collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), gCosQ, gSinQ, gCosK(_, _, nblock_limit - 1, _), gSinK(_, _, nblock_limit - 1, _), mainloop_params, params.problem_shape);
       // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
       // prefetching it the same way as cutlass K matrix does not make sense
       for(int i=0; i< size<1>(pVgV); i++) {
