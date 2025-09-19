@@ -225,7 +225,7 @@ struct TestbedImpl {
       int num_pages = 0;
       for(int b = 0; b < cute::get<0>(problem_shape); b++) {
         int seq_len_cache = isVarLen ? cumulative_seqlen_kv_cache[b + 1] - cumulative_seqlen_kv_cache[b] : seq_len_kv_cache;
-        int pages_per_seq = ceil_div(seq_len_cache, paged_kv_cache.page_size);
+        int pages_per_seq = cute::ceil_div(seq_len_cache, paged_kv_cache.page_size);
         num_pages_per_seq.push_back(num_pages_per_seq.back() + pages_per_seq);
         num_pages += pages_per_seq;
       }

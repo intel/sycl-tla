@@ -60,7 +60,8 @@ cutlass_test_unit_add_executable(
 
 cutlass_test_unit_add_executable(
   cutlass_test_unit_flash_attention_decode_models_xe
-  xe_flash_decode_models_parameterized.cpp
+  xe_flash_decode_models_fp16_nonpaged.cpp
+  xe_flash_decode_models_bf16_nonpaged.cpp
 )
 
 add_custom_target(
