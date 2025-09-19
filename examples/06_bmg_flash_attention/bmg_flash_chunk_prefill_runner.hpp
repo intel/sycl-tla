@@ -261,8 +261,8 @@ bool verify(ProblemShapeType problem_size, Options options) {
           int num_pages = paged_kv_cache.page_table.size();
           std::vector<int> host_page_table(paged_kv_cache.page_table.size());
           std::vector<int> host_num_pages_per_seq(paged_kv_cache.num_pages_per_seq.size());
-          syclcompat::memcpy<int>(host_page_table.data(), paged_kv_cache.page_table.get(), paged_kv_cache.page_table.size());
-          syclcompat::memcpy<int>(host_num_pages_per_seq.data(), paged_kv_cache.num_pages_per_seq.get(), paged_kv_cache.num_pages_per_seq.size());
+          compat::memcpy<int>(host_page_table.data(), paged_kv_cache.page_table.get(), paged_kv_cache.page_table.size());
+          compat::memcpy<int>(host_num_pages_per_seq.data(), paged_kv_cache.num_pages_per_seq.get(), paged_kv_cache.num_pages_per_seq.size());
         
           int curr_batch_pages = isVarLen ? host_num_pages_per_seq[b + 1] - host_num_pages_per_seq[b] : ceil_div(seq_len_kv_cache, paged_kv_cache.page_size);
           int batch_offset = isVarLen ? host_num_pages_per_seq[b] : b * curr_batch_pages;
@@ -272,57 +272,57 @@ bool verify(ProblemShapeType problem_size, Options options) {
           for (int p = 0; p < curr_batch_pages; p++) {
             int page_idx = host_page_table[batch_offset + p];
             // copy the page from KV cache to the concatenated buffer
-            syclcompat::memcpy<ElementK>(
+            compat::memcpy<ElementK>(
               block_K_concat.get() + p * paged_kv_cache.page_size * num_heads_kv * head_size_qk,
               block_K_cache.get() + page_idx * paged_kv_cache.page_size * num_heads_kv * head_size_qk,
               paged_kv_cache.page_size * num_heads_kv * head_size_qk
             );
-            syclcompat::memcpy<ElementV>(
+            compat::memcpy<ElementV>(
               block_V_concat.get() + p * paged_kv_cache.page_size * num_heads_kv * head_size_vo,
               block_V_cache.get() + page_idx * paged_kv_cache.page_size * num_heads_kv * head_size_vo,
               paged_kv_cache.page_size * num_heads_kv * head_size_vo
             );
           }
           if (seq_len_kv > 0) {
-            syclcompat::memcpy<ElementK>(
+            compat::memcpy<ElementK>(
               // block_K_concat.get() + curr_batch_pages * paged_kv_cache.page_sze * num_heads_kv *head_size_qk,
               block_K_concat.get() + seq_len_kv_cache * num_heads_kv * head_size_qk,
               block_K.get() + offset_k,
               seq_len_kv * num_heads_kv * head_size_qk
             );
-            syclcompat::memcpy<ElementV>(
+            compat::memcpy<ElementV>(
               block_V_concat.get() + seq_len_kv_cache * num_heads_kv * head_size_vo,
               block_V.get() + offset_v,
               seq_len_kv * num_heads_kv * head_size_vo
             );
           }
-          syclcompat::wait();
+          compat::wait();
         } else {
           block_K_concat.reset(seq_len_kv_total * num_heads_kv * head_size_qk);
           block_V_concat.reset(seq_len_kv_total * num_heads_kv * head_size_vo);
           // Concatenate K_cache and K
-          syclcompat::memcpy<ElementK>(
+          compat::memcpy<ElementK>(
             block_K_concat.get(),
             block_K_cache.get() + offset_k_cache,
             seq_len_kv_cache * num_heads_kv * head_size_qk
           );
-          syclcompat::memcpy<ElementK>(
+          compat::memcpy<ElementK>(
             block_K_concat.get() + seq_len_kv_cache * num_heads_kv * head_size_qk,
             block_K.get() + offset_k,
             seq_len_kv * num_heads_kv * head_size_qk
           );
           // Concatenate V_cache and V
-          syclcompat::memcpy<ElementV>(
+          compat::memcpy<ElementV>(
               block_V_concat.get(),
               block_V_cache.get() + offset_v_cache,
               seq_len_kv_cache * num_heads_kv * head_size_vo
             );
-          syclcompat::memcpy<ElementV>(
+          compat::memcpy<ElementV>(
             block_V_concat.get() + seq_len_kv_cache * num_heads_kv * head_size_vo,
             block_V.get() + offset_v,
             seq_len_kv * num_heads_kv * head_size_vo
           );
-          // syclcompat::wait();
+          // compat::wait();
         }
       k_ptr = block_K_concat.get();
       v_ptr = block_V_concat.get();
@@ -350,9 +350,9 @@ bool verify(ProblemShapeType problem_size, Options options) {
                                                   seq_len_qo * seq_len_kv_total,   // batch_stride_S
                                                   seq_len_qo * seq_len_kv_total    // batch_stride_S
           );
-          syclcompat::wait();
+          compat::wait();
           std::vector<ElementAccumulator> host_S(block_S.size());
-          syclcompat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(), host_S.size());
+          compat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(), host_S.size());
           
           // delete this memory as it is no longer needed
           block_S.reset();
@@ -427,7 +427,7 @@ bool verify(ProblemShapeType problem_size, Options options) {
           cutlass::DeviceAllocation<ElementV> block_P;
           block_P.reset(host_P.size());
   
-          syclcompat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
+          compat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
   
           cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
   
@@ -445,12 +445,12 @@ bool verify(ProblemShapeType problem_size, Options options) {
                                                   seq_len_qo * head_size_vo  // batch_stride_O
           );
   
-          syclcompat::wait();
+          compat::wait();
           // delete this memory as it is no longer needed
           block_P.reset();
   
           std::vector<ElementAccumulator> vec_acc(block_acc.size());
-          syclcompat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(), vec_acc.size());
+          compat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(), vec_acc.size());
   
           // delete this memory as it is no longer needed
           block_acc.reset();
@@ -475,8 +475,8 @@ bool verify(ProblemShapeType problem_size, Options options) {
       offset_o += seq_len_qo * num_heads_q * head_size_vo;
     } // end of batch loop
 
-    syclcompat::wait();
-    syclcompat::memcpy<ElementOutput>(block_ref_O.get(), host_O.data(), host_O.size());
+    compat::wait();
+    compat::memcpy<ElementOutput>(block_ref_O.get(), host_O.data(), host_O.size());
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
                                                                           block_O.size(), ElementOutput{0.5}, ElementOutput{0.5});
@@ -623,10 +623,10 @@ bool verify(ProblemShapeType problem_size, Options options) {
           page_mapping[logical_idx] = physical_pages[blk];
         }
       }
-      syclcompat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
+      compat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
 
       paged_kv_cache.num_pages_per_seq.reset(num_pages_per_seq.size());
-      syclcompat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
+      compat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
 
       block_K_cache.reset(num_pages * paged_kv_cache.page_size * num_heads_kv * head_size_qk);
       block_V_cache.reset(num_pages * paged_kv_cache.page_size * num_heads_kv * head_size_vo);
@@ -683,25 +683,25 @@ bool verify(ProblemShapeType problem_size, Options options) {
     // configure smem size and carveout
     int smem_size = FMHAChunkPrefillKernel::SharedStorageSize;
 
-    const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
-    const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
+    const auto sycl_block = compat::dim3(block.x, block.y, block.z);
+    const auto sycl_grid = compat::dim3(grid.x, grid.y, grid.z);
 
 // Launch parameters depend on whether SYCL compiler supports work-group scratch memory extension
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
-    using namespace syclcompat::experimental;
+    using namespace compat::experimental;
     auto event = launch<cutlass::device_kernel<FMHAChunkPrefillKernel>>(
         launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
                       kernel_properties{sycl_exp::sub_group_size<FMHAChunkPrefillKernel::DispatchPolicy::SubgroupSize>}},
         params);
 #else
-    syclcompat::experimental::launch_properties launch_props {
+    compat::experimental::launch_properties launch_props {
       sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
     };
-    syclcompat::experimental::kernel_properties kernel_props{
+    compat::experimental::kernel_properties kernel_props{
       sycl::ext::oneapi::experimental::sub_group_size<FMHAChunkPrefillKernel::DispatchPolicy::SubgroupSize>
     };
-    syclcompat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
-    auto event = syclcompat::experimental::launch<cutlass::device_kernel<FMHAChunkPrefillKernel>>(policy, params);
+    compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
+    auto event = compat::experimental::launch<cutlass::device_kernel<FMHAChunkPrefillKernel>, FMHAChunkPrefillKernel>(policy, params);
 #endif
 
     EventManager::getInstance().addEvent(event);
@@ -748,7 +748,7 @@ bool verify(ProblemShapeType problem_size, Options options) {
     // Run the Flash Attention implementation.
     run(params);
 
-    syclcompat::wait();
+    compat::wait();
 
     // Verify that the result is correct
     bool passed = verify(problem_size, options);
@@ -764,7 +764,7 @@ bool verify(ProblemShapeType problem_size, Options options) {
       for (int i = 0; i < options.iterations; ++i) {
         run(params);
       }
-      syclcompat::wait();
+      compat::wait();
  
       auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
       auto discard_seq_coord = options.seq_len_qo - offset;

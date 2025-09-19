@@ -273,7 +273,7 @@ struct FlashChunkPrefillMma<
     TiledMmaQK tiled_mma;
     // To make all threads in a warp have the same global tensors pass in the
     // index of thread 0 in each warp
-    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto sg = compat::get_nd_item<1>().get_sub_group();
     auto first_thread_in_sg_idx =
         sg.get_group_id()[0] * DispatchPolicy::SubgroupSize;
     auto thread_mma_q = tiled_mma.get_slice(first_thread_in_sg_idx);
@@ -361,7 +361,7 @@ struct FlashChunkPrefillMma<
     // Register spill
     Tensor gV_ = take<0, 3>(
         local_tile(gV, select<1, 2>(TileShapePV{}), make_coord(_, _)));
-    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto sg = compat::get_nd_item<1>().get_sub_group();
     auto first_thread_in_sg_idx =
         sg.get_group_id()[0] * DispatchPolicy::SubgroupSize;
     auto thread_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
