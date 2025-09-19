@@ -39,9 +39,9 @@
 #include <sycl/memory_enums.hpp>
 #include <sycl/multi_ptr.hpp>
 
-#include <cutlasscompat/traits.hpp>
+#include <compat/traits.hpp>
 
-namespace cutlasscompat {
+namespace compat {
 
 /// Atomically add the value operand to the value at the addr and assign the
 /// result to the value at addr.
@@ -471,4 +471,4 @@ public:
   }
 };
 
-} // namespace cutlasscompat
+} // namespace compat

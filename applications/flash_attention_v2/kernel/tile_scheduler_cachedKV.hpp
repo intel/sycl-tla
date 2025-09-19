@@ -142,7 +142,7 @@ struct XeFlashPersistentTileScheduler {
 
   template <int Num_SGs>
   static dim3 get_grid_shape(Params const& params) {
-    auto queue = cutlasscompat::get_default_queue();
+    auto queue = compat::get_default_queue();
     auto dev = queue.get_device();
     const size_t maxSubgroups =
       dev.template get_info<sycl::info::device::max_num_sub_groups>();

@@ -34,13 +34,13 @@
 
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
-#include <cutlasscompat.hpp>
+#include <compat.hpp>
 
 #include "cutlass_unit_test.h"
 
 using namespace cute;
 using namespace cutlass;
-using namespace cutlasscompat::experimental;
+using namespace compat::experimental;
 
 #define SUBGROUP_SIZE (16)
 constexpr int row_alignment = 16; // Alignment requirement for Xe 2D Block Copy Instructions
@@ -134,7 +134,7 @@ struct copy_op<dtype, load, store, M, N, false> {
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
         make_layout(shape_div(typename Copy_Traits<store, decltype(S)>::BlockShape{}, Shape<_1, _16>{})));
 
-    auto blockDim = cutlasscompat::dim3(size(tiled_load));
+    auto blockDim = compat::dim3(size(tiled_load));
     //
     // Launch the kernel
     //
@@ -142,11 +142,11 @@ struct copy_op<dtype, load, store, M, N, false> {
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), load>>(
         launch_policy{
-            cutlasscompat::dim3(1), blockDim,
+            compat::dim3(1), blockDim,
             kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
         S, D, tiled_load, tiled_store);
 
-    cutlasscompat::wait_and_throw();
+    compat::wait_and_throw();
     host_output = device_output;
     for (int i = 0; i < M * N; ++i) {
       EXPECT_EQ(host_output[i], host_src[i]);
@@ -186,7 +186,7 @@ struct copy_op<char, load, XE_2D_U8x2x32_ST_N, M, N, false> {
         Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N, decltype(D)>, dtype>{}.with(D), Layout<Shape<_1, _16>>{},
         make_layout(shape_div(typename Copy_Traits<XE_2D_U8x2x32_ST_N, decltype(S)>::BlockShape{}, Shape<_1, _16>{})));
 
-    auto blockDim = cutlasscompat::dim3(size(tiled_load));
+    auto blockDim = compat::dim3(size(tiled_load));
     //
     // Launch the kernel
     //
@@ -194,11 +194,11 @@ struct copy_op<char, load, XE_2D_U8x2x32_ST_N, M, N, false> {
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), load>>(
         launch_policy{
-            cutlasscompat::dim3(1), blockDim,
+            compat::dim3(1), blockDim,
             kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
         S, D, tiled_load, tiled_store);
 
-    cutlasscompat::wait_and_throw();
+    compat::wait_and_throw();
     host_output = device_output;
     for (int i = 0; i < M * N; ++i) {
       EXPECT_EQ(host_output[i], host_src[i]);
@@ -238,7 +238,7 @@ struct copy_op<uint16_t, load, XE_2D_U16x2x16_ST_N, M, N, false> {
         Copy_Atom<Copy_Traits<XE_2D_U16x2x16_ST_N, decltype(D)>, uint16_t>{}.with(
             device_output.data(), M * 2, N / 2), Layout<Shape<_1, _16>>{},
         make_layout(shape_div(typename Copy_Traits<XE_2D_U16x2x16_ST_N, decltype(S)>::BlockShape{}, Shape<_1, _16>{})));
-    auto blockDim = cutlasscompat::dim3(size(tiled_load));
+    auto blockDim = compat::dim3(size(tiled_load));
     //
     // Launch the kernel
     //
@@ -246,11 +246,11 @@ struct copy_op<uint16_t, load, XE_2D_U16x2x16_ST_N, M, N, false> {
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), load>>(
         launch_policy{
-            cutlasscompat::dim3(1), blockDim,
+            compat::dim3(1), blockDim,
             kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
         S, D, tiled_load, tiled_store);
 
-    cutlasscompat::wait_and_throw();
+    compat::wait_and_throw();
     host_output = device_output;
     for (int i = 0; i < M * 2; ++i) {
       for (int j = 0; j < N / 2; ++j) {
@@ -300,7 +300,7 @@ struct copy_op<uint32_t, load, store, M_, N_, true> {
         Copy_Atom<Copy_Traits<store, decltype(D)>, dtype>{}.with(D),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
         make_layout(shape_div(typename Copy_Traits<store, decltype(D)>::BlockShape{}, Shape<_1, _16>{})));
-    auto blockDim = cutlasscompat::dim3(size(tiled_load));
+    auto blockDim = compat::dim3(size(tiled_load));
     //
     // Launch the kernel
     //
@@ -308,11 +308,11 @@ struct copy_op<uint32_t, load, store, M_, N_, true> {
         copy_kernel_vectorized<decltype(S), decltype(D), decltype(tiled_load),
                                decltype(tiled_store), load>>(
         launch_policy{
-            cutlasscompat::dim3(1), blockDim,
+            compat::dim3(1), blockDim,
             kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
         S, D, tiled_load, tiled_store);
 
-    cutlasscompat::wait_and_throw();
+    compat::wait_and_throw();
     host_output = device_output;
     for (int i = 0; i < N; ++i) {
       for (int j = 0; j < M; ++j) {

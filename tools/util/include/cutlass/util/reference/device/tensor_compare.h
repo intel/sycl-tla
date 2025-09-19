@@ -151,11 +151,11 @@ bool BlockCompareEqual(
   int *device_equal_flag = nullptr;
 
 #if defined (CUTLASS_ENABLE_SYCL)
-  device_equal_flag = reinterpret_cast<int*>(cutlasscompat::malloc(sizeof(int)));
+  device_equal_flag = reinterpret_cast<int*>(compat::malloc(sizeof(int)));
   if (device_equal_flag == nullptr) {
     throw std::runtime_error("Failed to allocate device flag.");
   }
-  cutlasscompat::memcpy(device_equal_flag, &equal_flag, sizeof(int));
+  compat::memcpy(device_equal_flag, &equal_flag, sizeof(int));
 #else
   if (cudaMalloc((void **)&device_equal_flag, sizeof(int)) != cudaSuccess) {
     throw std::runtime_error("Failed to allocate device flag.");
@@ -193,14 +193,14 @@ bool BlockCompareEqual(
   }
 
 #if defined(CUTLASS_ENABLE_SYCL)
-  const auto sycl_block = cutlasscompat::dim3(block_size, 1, 1);
-  const auto sycl_grid = cutlasscompat::dim3(grid_size, 1, 1);
-  cutlasscompat::launch<kernel::BlockCompareEqual<Element>>(sycl_grid, sycl_block, device_equal_flag, ptr_A, ptr_B, capacity);
-  cutlasscompat::wait();
+  const auto sycl_block = compat::dim3(block_size, 1, 1);
+  const auto sycl_grid = compat::dim3(grid_size, 1, 1);
+  compat::launch<kernel::BlockCompareEqual<Element>>(sycl_grid, sycl_block, device_equal_flag, ptr_A, ptr_B, capacity);
+  compat::wait();
 
-  cutlasscompat::memcpy(&equal_flag, device_equal_flag, sizeof(int));
+  compat::memcpy(&equal_flag, device_equal_flag, sizeof(int));
 
-  cutlasscompat::free(reinterpret_cast<void*>(device_equal_flag));
+  compat::free(reinterpret_cast<void*>(device_equal_flag));
 #else
   dim3 grid(grid_size, 1, 1);
   dim3 block(block_size, 1, 1);
@@ -244,11 +244,11 @@ bool BlockCompareRelativelyEqual(
   int *device_equal_flag = nullptr;
 
 #if defined (CUTLASS_ENABLE_SYCL)
-  device_equal_flag = reinterpret_cast<int*>(cutlasscompat::malloc(sizeof(int)));
+  device_equal_flag = reinterpret_cast<int*>(compat::malloc(sizeof(int)));
   if (device_equal_flag == nullptr) {
     throw std::runtime_error("Failed to allocate device flag.");
   }
-  cutlasscompat::memcpy(device_equal_flag, &equal_flag, sizeof(int));
+  compat::memcpy(device_equal_flag, &equal_flag, sizeof(int));
 #else
   if (cudaMalloc((void **)&device_equal_flag, sizeof(int)) != cudaSuccess) {
     throw std::runtime_error("Failed to allocate device flag.");
@@ -286,16 +286,16 @@ bool BlockCompareRelativelyEqual(
   }
 
 #if defined(CUTLASS_ENABLE_SYCL)
-  const auto sycl_block = cutlasscompat::dim3(block_size, 1, 1);
-  const auto sycl_grid = cutlasscompat::dim3(grid_size, 1, 1);
+  const auto sycl_block = compat::dim3(block_size, 1, 1);
+  const auto sycl_grid = compat::dim3(grid_size, 1, 1);
 
-  cutlasscompat::launch<kernel::BlockCompareRelativelyEqual<Element>>(sycl_grid, sycl_block, device_equal_flag, ptr_A, ptr_B, capacity,
+  compat::launch<kernel::BlockCompareRelativelyEqual<Element>>(sycl_grid, sycl_block, device_equal_flag, ptr_A, ptr_B, capacity,
                                                                   epsilon, nonzero_floor);
-  cutlasscompat::wait();
+  compat::wait();
 
-  cutlasscompat::memcpy(&equal_flag, device_equal_flag, sizeof(int));
+  compat::memcpy(&equal_flag, device_equal_flag, sizeof(int));
 
-  cutlasscompat::free(reinterpret_cast<void*>(device_equal_flag));
+  compat::free(reinterpret_cast<void*>(device_equal_flag));
 #else
   dim3 grid(grid_size, 1, 1);
   dim3 block(block_size, 1, 1);
@@ -364,9 +364,9 @@ void BlockElementwiseOp(
   }
 
 #if defined(CUTLASS_ENABLE_SYCL)
-  const auto sycl_block = cutlasscompat::dim3(block_size, 1, 1);
-  const auto sycl_grid = cutlasscompat::dim3(grid_size, 1, 1);
-  cutlasscompat::launch<kernel::BlockElementwiseOp<BinaryOp, Element>>(
+  const auto sycl_block = compat::dim3(block_size, 1, 1);
+  const auto sycl_grid = compat::dim3(grid_size, 1, 1);
+  compat::launch<kernel::BlockElementwiseOp<BinaryOp, Element>>(
       sycl_grid, sycl_block, ptr_dst, ptr_A, ptr_B, capacity);
 #else
   dim3 grid(grid_size, 1, 1);

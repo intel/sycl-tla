@@ -95,7 +95,7 @@ function(cutlass_test_unit_add_executable NAME)
       ${NAME}
       PUBLIC
       GTest::gtest 
-      # TODO: This change works for resolving 'cutlasscompat.hpp' not found issue, fix this if it blocks merging
+      # TODO: This change works for resolving 'compat.hpp' not found issue, fix this if it blocks merging
       cutlass_tools_util_includes
     )
   else()

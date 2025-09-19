@@ -114,7 +114,7 @@ void FilterArchitecture() {
     {architecture::intel_gpu_bmg_g21, 1}
   };
   auto device_architecture =
-        cutlasscompat::get_default_queue().get_device().get_info<info::device::architecture>();
+        compat::get_default_queue().get_device().get_info<info::device::architecture>();
   if (device_architecture == architecture::unknown) {
     throw std::runtime_error("Encountered Unknown architecture.");
   }

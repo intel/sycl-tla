@@ -30,11 +30,11 @@
 #include <sycl/range.hpp>
 #include <sycl/reduction.hpp>
 
-#include <cutlasscompat/device.hpp>
-#include <cutlasscompat/dims.hpp>
-#include <cutlasscompat/launch_policy.hpp>
+#include <compat/device.hpp>
+#include <compat/dims.hpp>
+#include <compat/launch_policy.hpp>
 
-namespace cutlasscompat {
+namespace compat {
 
 namespace detail {
 
@@ -119,15 +119,15 @@ launch(const dim3 &grid, const dim3 &threads, Args... args) {
   return launch<F>(grid, threads, get_default_queue(), args...);
 }
 
-} // namespace cutlasscompat
+} // namespace compat
 
-namespace cutlasscompat::experimental {
+namespace compat::experimental {
 
 namespace detail {
 
 template <auto F, typename LaunchPolicy, typename... Args>
 sycl::event launch(LaunchPolicy launch_policy, sycl::queue q, Args... args) {
-  static_assert(cutlasscompat::args_compatible<LaunchPolicy, F, Args...>,
+  static_assert(compat::args_compatible<LaunchPolicy, F, Args...>,
                 "Mismatch between device function signature and supplied "
                 "arguments. Have you correctly handled local memory/char*?");
 
@@ -136,12 +136,12 @@ sycl::event launch(LaunchPolicy launch_policy, sycl::queue q, Args... args) {
 
   return sycl_exp::submit_with_event(q, [&](sycl::handler &cgh) {
     auto KernelFunctor = build_kernel_functor<F>(cgh, launch_policy, args...);
-    if constexpr (cutlasscompat::detail::is_range_v<
+    if constexpr (compat::detail::is_range_v<
                       typename LaunchPolicy::RangeT>) {
       parallel_for(cgh, config, KernelFunctor);
     } else {
       static_assert(
-          cutlasscompat::detail::is_nd_range_v<typename LaunchPolicy::RangeT>);
+          compat::detail::is_nd_range_v<typename LaunchPolicy::RangeT>);
       nd_launch(cgh, config, KernelFunctor);
     }
   });
@@ -162,4 +162,4 @@ sycl::event launch(LaunchPolicy launch_policy, Args... args) {
   return launch<F>(launch_policy, get_default_queue(), args...);
 }
 
-} // namespace cutlasscompat::experimental
+} // namespace compat::experimental

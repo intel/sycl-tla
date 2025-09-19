@@ -202,7 +202,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
   template <typename SrcT, typename DstT>
   void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
-    cutlasscompat::get_default_queue().parallel_for(size, [=](auto indx) {
+    compat::get_default_queue().parallel_for(size, [=](auto indx) {
       d_dst[indx] = static_cast<DstT>(d_src[indx]);
     }).wait();
   }
@@ -279,29 +279,29 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
             cutlass::DeviceAllocation<ElementV_> block_V_concat(seq_len_kv_total * head_size_vo);
 
             // Concatenate K_cache and K
-            cutlasscompat::memcpy<ElementK_>(
+            compat::memcpy<ElementK_>(
                 block_K_concat.get(),
                 block_K_cache_.get() + offset_k_cache,
                 seq_len_kv_cache * head_size_qk
             );
-            cutlasscompat::memcpy<ElementK_>(
+            compat::memcpy<ElementK_>(
                 block_K_concat.get() + seq_len_kv_cache * head_size_qk,
                 block_K_.get() + offset_k,
                 seq_len_kv * head_size_qk
             );
 
             // Concatenate V_cache and V
-            cutlasscompat::memcpy<ElementV_>(
+            compat::memcpy<ElementV_>(
                 block_V_concat.get(),
                 block_V_cache_.get() + offset_v_cache,
                 seq_len_kv_cache * head_size_vo
             );
-            cutlasscompat::memcpy<ElementV_>(
+            compat::memcpy<ElementV_>(
                 block_V_concat.get() + seq_len_kv_cache * head_size_vo,
                 block_V_.get() + offset_v,
                 seq_len_kv * head_size_vo
             );
-            cutlasscompat::wait();
+            compat::wait();
 
             k_ptr = block_K_concat.get();
             v_ptr = block_V_concat.get();
@@ -326,11 +326,11 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
                                                 seq_len_qo * seq_len_kv_total    // batch_stride_S
         );
 
-        cutlasscompat::wait();
+        compat::wait();
 
         std::vector<ElementAccumulator> host_S(block_S.size());
-        cutlasscompat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(), host_S.size());
-        cutlasscompat::wait();
+        compat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(), host_S.size());
+        compat::wait();
 
         // delete this memory as it is no longer needed
         block_S.reset();
@@ -398,8 +398,8 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
         cutlass::DeviceAllocation<ElementV_> block_P;
         block_P.reset(host_P.size());
 
-        cutlasscompat::memcpy<ElementV_>(block_P.get(), host_P.data(), host_P.size());
-        cutlasscompat::wait();
+        compat::memcpy<ElementV_>(block_P.get(), host_P.data(), host_P.size());
+        compat::wait();
 
         cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
 
@@ -417,13 +417,13 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
                                                 seq_len_qo * head_size_vo  // batch_stride_O
         );
 
-        cutlasscompat::wait();
+        compat::wait();
         // delete this memory as it is no longer needed
         block_P.reset();
 
         std::vector<ElementAccumulator> vec_acc(block_acc.size());
-        cutlasscompat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(), vec_acc.size());
-        cutlasscompat::wait();
+        compat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(), vec_acc.size());
+        compat::wait();
 
         // delete this memory as it is no longer needed
         block_acc.reset();
@@ -431,8 +431,8 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
         for(int i = 0; i < vec_out.size(); i++) {
           vec_out[i] = static_cast<ElementOutput>(vec_acc[i]);
         }
-        cutlasscompat::memcpy<ElementOutput>(block_ref_O.get() + offset_o, vec_out.data(), vec_out.size());
-        cutlasscompat::wait();
+        compat::memcpy<ElementOutput>(block_ref_O.get() + offset_o, vec_out.data(), vec_out.size());
+        compat::wait();
 
         offset_q += seq_len_qo * head_size_qk;
         if(kv_group_update % q_group_size == 0) {
@@ -446,7 +446,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
       }
     }
 
-    cutlasscompat::wait();
+    compat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
@@ -589,11 +589,11 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
           page_mapping[logical_idx] = physical_pages[blk];
         }
       }
-      cutlasscompat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
+      compat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
 
       paged_kv_cache.num_pages_per_seq.reset(num_pages_per_seq.size());
-      cutlasscompat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
-      cutlasscompat::wait();
+      compat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
+      compat::wait();
     }
     
     initialize_block(block_Q, seed + 2021);
@@ -634,24 +634,24 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
     // configure smem size and carveout
     int smem_size = FMHAKernel::SharedStorageSize;
 
-    const auto sycl_block = cutlasscompat::dim3(block.x, block.y, block.z);
-    const auto sycl_grid = cutlasscompat::dim3(grid.x, grid.y, grid.z);
+    const auto sycl_block = compat::dim3(block.x, block.y, block.z);
+    const auto sycl_grid = compat::dim3(grid.x, grid.y, grid.z);
 
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
-    using namespace cutlasscompat::experimental;
+    using namespace compat::experimental;
     auto event = launch<cutlass::device_kernel<FMHAKernel>>(
         launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
                       kernel_properties{sycl_exp::sub_group_size<FMHAKernel::DispatchPolicy::SubgroupSize>}},
         params);
 #else
-    cutlasscompat::experimental::launch_properties launch_props {
+    compat::experimental::launch_properties launch_props {
       sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
     };
-    cutlasscompat::experimental::kernel_properties kernel_props{
+    compat::experimental::kernel_properties kernel_props{
       sycl::ext::oneapi::experimental::sub_group_size<FMHAKernel::DispatchPolicy::SubgroupSize>
     };
-    cutlasscompat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
-    auto event = cutlasscompat::experimental::launch<cutlass::device_kernel<FMHAKernel>>(policy, params);
+    compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
+    auto event = compat::experimental::launch<cutlass::device_kernel<FMHAKernel>>(policy, params);
 #endif
 
     EventManager::getInstance().addEvent(event);
@@ -694,7 +694,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
     // Run the GEMM
     run(params);
 
-    cutlasscompat::wait();
+    compat::wait();
 
     // Verify that the result is correct
     bool use_kv_cache = options.seq_len_kv_cache > 0;
@@ -711,7 +711,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
       for (int i = 0; i < options.iterations; ++i) {
         run(params);
       }
-      cutlasscompat::wait();
+      compat::wait();
 
       double cute_time = timer.seconds() / options.iterations;
 

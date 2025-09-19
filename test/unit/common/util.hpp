@@ -32,7 +32,7 @@
  **************************************************************************************************/
 
 #if defined(CUTLASS_ENABLE_SYCL)
-#include <cutlasscompat/cutlasscompat.hpp>
+#include <compat/compat.hpp>
 
 #include <vector>
 #else
@@ -49,7 +49,7 @@ namespace cutlass {
   namespace kernel {
     template<typename T>
     void memset(T* ptr, T init_val, std::size_t num_elements) {
-      auto global_id = cutlasscompat::global_id::x();
+      auto global_id = compat::global_id::x();
       if (global_id  < num_elements) {
         ptr[global_id] = init_val;
       }
@@ -89,9 +89,9 @@ class device_vector {
   device_vector(std::size_t num_elements, T init_value) { 
     n_elements = num_elements;
     dev_ptr = make_shared(num_elements);
-    cutlasscompat::launch<kernel::memset<T>>(sycl::range<1>(num_elements), 
+    compat::launch<kernel::memset<T>>(sycl::range<1>(num_elements), 
       sycl::range<1>(32), dev_ptr.get(), init_value, num_elements);
-    cutlasscompat::wait_and_throw(); 
+    compat::wait_and_throw(); 
   }
 
   device_vector<T>& operator=(host_vector<T> host_vec);
@@ -103,7 +103,7 @@ class device_vector {
 
  private:
   T* safe_malloc(std::size_t size) {
-    T* ptr = cutlasscompat::malloc<T>(size * sizeof(T));
+    T* ptr = compat::malloc<T>(size * sizeof(T));
     if(!ptr) {
       throw std::runtime_error("Allocation Failed.");
     }
@@ -112,8 +112,8 @@ class device_vector {
   std::shared_ptr<T> make_shared(std::size_t size) {
     return std::shared_ptr<T>(safe_malloc(size), [=](T* ptr) {
       if (ptr != nullptr) {
-        cutlasscompat::wait_and_throw();
-        cutlasscompat::free(ptr);
+        compat::wait_and_throw();
+        compat::free(ptr);
       }
     });
   }
@@ -123,9 +123,9 @@ class device_vector {
 
 template<typename T>
 host_vector<T>& host_vector<T>::operator=(device_vector<T> device_vec) {
-    cutlasscompat::wait_and_throw();
+    compat::wait_and_throw();
     host_vector host_vec(device_vec.size());
-    cutlasscompat::memcpy(host_vec.data(), device_vec.data(),
+    compat::memcpy(host_vec.data(), device_vec.data(),
                        device_vec.size() * sizeof(T));
     *this = host_vec;
     return *this;
@@ -133,9 +133,9 @@ host_vector<T>& host_vector<T>::operator=(device_vector<T> device_vec) {
 
 template<typename T>
 host_vector<T>::host_vector(device_vector<T> device_vec) {
-    cutlasscompat::wait_and_throw();
+    compat::wait_and_throw();
     host_vector host_vec(device_vec.size());
-    cutlasscompat::memcpy(host_vec.data(), device_vec.data(),
+    compat::memcpy(host_vec.data(), device_vec.data(),
                        device_vec.size() * sizeof(T));
     *this = host_vec;
 }
@@ -143,8 +143,8 @@ host_vector<T>::host_vector(device_vector<T> device_vec) {
 template<typename T>
 device_vector<T>& device_vector<T>::operator=(host_vector<T> host_vec) {
     device_vector device_vec(host_vec.size());
-    cutlasscompat::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
-    cutlasscompat::wait_and_throw();
+    compat::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
+    compat::wait_and_throw();
     *this = device_vec;
     return *this;
 }
@@ -152,8 +152,8 @@ device_vector<T>& device_vector<T>::operator=(host_vector<T> host_vec) {
 template<typename T>
 device_vector<T>::device_vector(host_vector<T> host_vec) {
     device_vector device_vec(host_vec.size());
-    cutlasscompat::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
-    cutlasscompat::wait_and_throw();
+    compat::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
+    compat::wait_and_throw();
     *this = device_vec;
 }
 

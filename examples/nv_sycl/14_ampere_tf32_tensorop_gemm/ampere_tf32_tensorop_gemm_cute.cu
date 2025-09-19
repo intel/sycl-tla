@@ -267,7 +267,7 @@ struct ExampleRunner {
     );
 
 #if defined(CUTLASS_ENABLE_SYCL)
-    cutlasscompat::wait_and_throw();
+    compat::wait_and_throw();
 #else
     cudaError_t result = cudaDeviceSynchronize();
     if (result != cudaSuccess) {

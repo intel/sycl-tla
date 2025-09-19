@@ -244,7 +244,7 @@ struct ExampleRunner {
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
-    auto q = cutlasscompat::create_queue();
+    auto q = compat::create_queue();
     Memory mem(q, problem_size);
     initialize(problem_size, mem);
 

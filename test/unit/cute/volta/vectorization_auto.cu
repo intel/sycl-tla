@@ -77,8 +77,8 @@ test_copy_vectorization(CopyPolicy policy, GmemLayout gmem_layout, RmemTiler rme
   device_vector<T> d_in = h_in;
   Tensor m_in = make_tensor(make_gmem_ptr(raw_pointer_cast(d_in.data())), gmem_layout);
   #if defined(CUTLASS_ENABLE_SYCL)
-  cutlasscompat::launch<kernel<decltype(m_in),decltype(rmem_tiler),  decltype(policy)>>(
-    cutlasscompat::dim3(1), cutlasscompat::dim3(1),
+  compat::launch<kernel<decltype(m_in),decltype(rmem_tiler),  decltype(policy)>>(
+    compat::dim3(1), compat::dim3(1),
     m_in, rmem_tiler, policy
   );
   #else

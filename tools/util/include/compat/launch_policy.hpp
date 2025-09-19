@@ -30,12 +30,12 @@
 #include <sycl/queue.hpp>
 #include <sycl/range.hpp>
 
-#include <cutlasscompat/defs.hpp>
-#include <cutlasscompat/device.hpp>
-#include <cutlasscompat/dims.hpp>
-#include <cutlasscompat/traits.hpp>
+#include <compat/defs.hpp>
+#include <compat/device.hpp>
+#include <compat/dims.hpp>
+#include <compat/traits.hpp>
 
-namespace cutlasscompat {
+namespace compat {
 namespace experimental {
 
 namespace sycl_exp = sycl::ext::oneapi::experimental;
@@ -97,8 +97,8 @@ template <typename Range, typename KProps, typename LProps, bool LocalMem>
 class launch_policy {
   static_assert(sycl_exp::is_property_list_v<KProps>);
   static_assert(sycl_exp::is_property_list_v<LProps>);
-  static_assert(cutlasscompat::detail::is_range_or_nd_range_v<Range>);
-  static_assert(cutlasscompat::detail::is_nd_range_v<Range> || !LocalMem,
+  static_assert(compat::detail::is_range_or_nd_range_v<Range>);
+  static_assert(compat::detail::is_nd_range_v<Range> || !LocalMem,
                 "sycl::range kernel launches are incompatible with local "
                 "memory usage!");
 
@@ -195,14 +195,14 @@ launch_policy(dim3, dim3, Ts...) -> launch_policy<
 namespace detail {
 // Custom std::apply helpers to enable inlining
 template <class F, class Tuple, size_t... Is>
-__cutlasscompat_inline__ constexpr void apply_expand(F &&f, Tuple &&t,
+__compat_inline__ constexpr void apply_expand(F &&f, Tuple &&t,
                                                   std::index_sequence<Is...>) {
   [[clang::always_inline]] std::forward<F>(f)(
       get<Is>(std::forward<Tuple>(t))...);
 }
 
 template <class F, class Tuple>
-__cutlasscompat_inline__ constexpr void apply_helper(F &&f, Tuple &&t) {
+__compat_inline__ constexpr void apply_helper(F &&f, Tuple &&t) {
   apply_expand(
       std::forward<F>(f), std::forward<Tuple>(t),
       std::make_index_sequence<std::tuple_size_v<std::decay_t<Tuple>>>{});
@@ -222,8 +222,8 @@ struct KernelFunctor {
 
   auto get(sycl_exp::properties_tag) const { return _kernel_properties; }
 
-  __cutlasscompat_inline__ void
-  operator()(cutlasscompat::detail::range_to_item_t<Range>) const {
+  __compat_inline__ void
+  operator()(compat::detail::range_to_item_t<Range>) const {
     if constexpr (HasLocalMem) {
       char *local_mem_ptr = static_cast<char *>(
           _local_acc.template get_multi_ptr<sycl::access::decorated::no>()
@@ -270,4 +270,4 @@ auto build_kernel_functor(sycl::handler &cgh, LaunchPolicy launch_policy,
 
 } // namespace detail
 } // namespace experimental
-} // namespace cutlasscompat
+} // namespace compat

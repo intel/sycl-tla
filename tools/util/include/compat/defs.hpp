@@ -13,12 +13,12 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  CUTLASScompat
+ *  Compat
  *
  *  defs.hpp
  *
  *  Description:
- *    helper aliases and definitions for CUTLASScompat
+ *    helper aliases and definitions for Compat
  *
  **************************************************************************/
 
@@ -35,39 +35,39 @@
 
 #include <iostream>
 
-template <class... Args> class cutlasscompat_kernel_name;
-template <int Arg> class cutlasscompat_kernel_scalar;
+template <class... Args> class compat_kernel_name;
+template <int Arg> class compat_kernel_scalar;
 
 #if defined(_MSC_VER)
-#define __cutlasscompat_align__(n) __declspec(align(n))
-#define __cutlasscompat_inline__ __forceinline
-#define __cutlasscompat_noinline__ __declspec(noinline)
+#define __compat_align__(n) __declspec(align(n))
+#define __compat_inline__ __forceinline
+#define __compat_noinline__ __declspec(noinline)
 #else
-#define __cutlasscompat_align__(n) __attribute__((aligned(n)))
-#define __cutlasscompat_inline__ __inline__ __attribute__((always_inline))
-#define __cutlasscompat_noinline__ __attribute__((noinline))
+#define __compat_align__(n) __attribute__((aligned(n)))
+#define __compat_inline__ __inline__ __attribute__((always_inline))
+#define __compat_noinline__ __attribute__((noinline))
 #endif
 
-#define CUTLASSCOMPAT_COMPATIBILITY_TEMP (900)
+#define COMPAT_COMPATIBILITY_TEMP (900)
 
 #ifdef _WIN32
-#define CUTLASSCOMPAT_EXPORT __declspec(dllexport)
+#define COMPAT_EXPORT __declspec(dllexport)
 #else
-#define CUTLASSCOMPAT_EXPORT
+#define COMPAT_EXPORT
 #endif
 
-#define CUTLASSCOMPAT_MAJOR_VERSION 0
-#define CUTLASSCOMPAT_MINOR_VERSION 2
-#define CUTLASSCOMPAT_PATCH_VERSION 0
+#define COMPAT_MAJOR_VERSION 0
+#define COMPAT_MINOR_VERSION 2
+#define COMPAT_PATCH_VERSION 0
 
-#define CUTLASSCOMPAT_MAKE_VERSION(_major, _minor, _patch)                        \
+#define COMPAT_MAKE_VERSION(_major, _minor, _patch)                        \
   ((1E6 * _major) + (1E3 * _minor) + _patch)
 
-#define CUTLASSCOMPAT_VERSION                                                     \
-  CUTLASSCOMPAT_MAKE_VERSION(CUTLASSCOMPAT_MAJOR_VERSION, CUTLASSCOMPAT_MINOR_VERSION,  \
-                          CUTLASSCOMPAT_PATCH_VERSION)
+#define COMPAT_VERSION                                                     \
+  COMPAT_MAKE_VERSION(COMPAT_MAJOR_VERSION, COMPAT_MINOR_VERSION,  \
+                          COMPAT_PATCH_VERSION)
 
-namespace cutlasscompat {
+namespace compat {
 enum error_code { success = 0, backend_error = 1, default_error = 999 };
 /// A dummy function introduced to assist auto migration.
 /// The SYCLomatic user should replace it with a real error-handling function.
@@ -77,18 +77,18 @@ inline const char *get_error_string_dummy(int ec) {
   return "<FIXME: Placeholder>"; // Return the error string for the error code
                                  // ec.
 }
-} // namespace cutlasscompat
+} // namespace compat
 
-#define CUTLASSCOMPAT_CHECK_ERROR(expr)                                           \
+#define COMPAT_CHECK_ERROR(expr)                                           \
   [&]() {                                                                      \
     try {                                                                      \
       expr;                                                                    \
-      return cutlasscompat::error_code::success;                                  \
+      return compat::error_code::success;                                  \
     } catch (sycl::exception const &e) {                                       \
       std::cerr << e.what() << std::endl;                                      \
-      return cutlasscompat::error_code::backend_error;                            \
+      return compat::error_code::backend_error;                            \
     } catch (std::runtime_error const &e) {                                    \
       std::cerr << e.what() << std::endl;                                      \
-      return cutlasscompat::error_code::default_error;                            \
+      return compat::error_code::default_error;                            \
     }                                                                          \
   }()

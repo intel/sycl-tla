@@ -42,8 +42,8 @@
 using namespace cute;
 
 #if defined(CUTLASS_ENABLE_SYCL)
-namespace sc = cutlasscompat;
-namespace sc_exp = cutlasscompat::experimental;
+namespace sc = compat;
+namespace sc_exp = compat::experimental;
 namespace sycl_ext = sycl::ext::oneapi::experimental;
 
 template <class T>

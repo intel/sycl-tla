@@ -61,7 +61,7 @@ T* allocate(size_t count = 1) {
 
 #if defined(CUTLASS_ENABLE_SYCL)
   if (count > 0) {
-    ptr = reinterpret_cast<T*>(cutlasscompat::malloc(bytes));
+    ptr = reinterpret_cast<T*>(compat::malloc(bytes));
     if ((void*)ptr == nullptr) {
       throw std::runtime_error("Failed to allocate memory");
     }
@@ -94,7 +94,7 @@ template <typename T>
 void free(T* ptr) {
   if (ptr) {
 #if defined(CUTLASS_ENABLE_SYCL)
-    cutlasscompat::free(ptr);
+    compat::free(ptr);
     if (ptr != nullptr) {
       throw std::runtime_error("Failed to free device memory");
     }
@@ -118,7 +118,7 @@ void copy(T* dst, T const* src, size_t count, cudaMemcpyKind kind) {
     bytes = 1;
   }
 #if defined(CUTLASS_ENABLE_SYCL)
-  cutlasscompat::memcpy(dst, src, bytes);
+  compat::memcpy(dst, src, bytes);
 #else
   cudaError_t cuda_error = (cudaMemcpy(dst, src, bytes, kind));
   if (cuda_error != cudaSuccess) {
@@ -199,7 +199,7 @@ public:
   struct deleter {
     void operator()(T* ptr) {
 #if defined(CUTLASS_ENABLE_SYCL)
-      cutlasscompat::free(ptr);
+      compat::free(ptr);
 #else
       cudaError_t cuda_error = (cudaFree(ptr));
       if (cuda_error != cudaSuccess) {

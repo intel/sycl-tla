@@ -34,7 +34,7 @@
 #include <sycl/nd_range.hpp>
 #include <type_traits>
 
-namespace cutlasscompat {
+namespace compat {
 
 // Equivalent to C++20's std::type_identity (used to create non-deduced
 // contexts)
@@ -213,7 +213,7 @@ struct properties_or_empty_helper<true, PropertyContainer, Ts...> {
 };
 
 // Template type alias which searches variadic types for e.g.
-// cutlasscompat::experimental::kernel_properties, launch_properties and returns
+// compat::experimental::kernel_properties, launch_properties and returns
 // the contained sycl_exp::properties. If not found, returns
 // sycl_exp::empty_properties_t
 template <template <typename TT> typename PropertyContainer, typename... Ts>
@@ -268,12 +268,12 @@ template <> struct is_floating_point<sycl::ext::oneapi::bfloat16> : std::true_ty
 template <typename T>
 inline constexpr bool is_floating_point_v = is_floating_point<T>::value;
 
-} // namespace cutlasscompat
+} // namespace compat
 
 // Specialize std::common_type for bfloat16
 // Semantics here match bfloat16.hpp operator overloads (all mixed type math
 // ops return bfloat16)
-// TODO(cutlasscompat-lib-reviewers) Move this to bfloat extension
+// TODO(compat-lib-reviewers) Move this to bfloat extension
 namespace std {
 template <> struct common_type<sycl::ext::oneapi::bfloat16> {
   using type = sycl::ext::oneapi::bfloat16;

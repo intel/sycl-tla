@@ -55,7 +55,7 @@
 #include <sycl/nd_range.hpp>
 #include <sycl/queue.hpp>
 
-namespace cutlasscompat {
+namespace compat {
 
 typedef void (*kernel_functor)(sycl::queue &, const sycl::nd_range<3> &,
                                unsigned int, void **, void **);
@@ -99,7 +99,7 @@ static inline fs::path write_data_to_file(char const *const data, size_t size) {
 
   if (sizeof(size_t) >= sizeof(std::streamsize) &&
       size > (std::numeric_limits<std::streamsize>::max)())
-    throw std::runtime_error("[CUTLASScompat] data file too large");
+    throw std::runtime_error("[Compat] data file too large");
 
   // random number generator
   std::random_device dev;
@@ -109,7 +109,7 @@ static inline fs::path write_data_to_file(char const *const data, size_t size) {
   // find temporary directory
   auto tmp_dir = fs::temp_directory_path(ec);
   if (ec)
-    throw std::runtime_error("[CUTLASScompat] could not find temporary directory");
+    throw std::runtime_error("[Compat] could not find temporary directory");
 
   // create private directory
   std::stringstream directory;
@@ -125,13 +125,13 @@ static inline fs::path write_data_to_file(char const *const data, size_t size) {
     }
   }
   if (i == max_attempts)
-    throw std::runtime_error("[CUTLASScompat] could not create directory");
+    throw std::runtime_error("[Compat] could not create directory");
 
   // only allow owner permissions to private directory
   fs::permissions(directory_path, fs::perms::owner_all, ec);
   if (ec)
     throw std::runtime_error(
-        "[CUTLASScompat] could not set directory permissions");
+        "[Compat] could not set directory permissions");
 
   // random filename in private directory
   std::stringstream filename;
@@ -148,20 +148,20 @@ static inline fs::path write_data_to_file(char const *const data, size_t size) {
     // only allow program to write file
     fs::permissions(filepath, fs::perms::owner_write, ec);
     if (ec)
-      throw std::runtime_error("[CUTLASScompat] could not set permissions");
+      throw std::runtime_error("[Compat] could not set permissions");
 
     outfile.write(data, size);
     if (!outfile.good())
-      throw std::runtime_error("[CUTLASScompat] could not write data");
+      throw std::runtime_error("[Compat] could not write data");
     outfile.close();
 
     // only allow program to read/execute file
     fs::permissions(filepath, fs::perms::owner_read | fs::perms::owner_exec,
                     ec);
     if (ec)
-      throw std::runtime_error("[CUTLASScompat] could not set permissions");
+      throw std::runtime_error("[Compat] could not set permissions");
   } else
-    throw std::runtime_error("[CUTLASScompat] could not write data");
+    throw std::runtime_error("[Compat] could not write data");
 
   // check temporary file contents
   auto infile = std::ifstream(filepath, std::ios::in | std::ios::binary);
@@ -179,12 +179,12 @@ static inline fs::path write_data_to_file(char const *const data, size_t size) {
     }
     if (cnt != size || mismatch)
       throw std::runtime_error(
-          "[CUTLASScompat] file contents not written correctly");
+          "[Compat] file contents not written correctly");
   } else
-    throw std::runtime_error("[CUTLASScompat] could not validate file");
+    throw std::runtime_error("[Compat] could not validate file");
 
   if (!filepath.is_absolute())
-    throw std::runtime_error("[CUTLASScompat] temporary filepath is not absolute");
+    throw std::runtime_error("[Compat] temporary filepath is not absolute");
 
   return filepath;
 }
@@ -231,7 +231,7 @@ static inline uint64_t get_lib_size(char const *const blob) {
   unsigned char const *const ublob =
       reinterpret_cast<unsigned char const *const>(blob);
   if (ublob[0] != 0x4d || ublob[1] != 0x5a) {
-    throw std::runtime_error("[CUTLASScompat] blob is not a Windows DLL.");
+    throw std::runtime_error("[Compat] blob is not a Windows DLL.");
   }
   uint32_t pe_header_offset = extract32(ublob + 0x3c);
 
@@ -243,13 +243,13 @@ static inline uint64_t get_lib_size(char const *const blob) {
   uint32_t pe_signature = extract32(pe_header + 0);
   if (pe_signature != 0x00004550) {
     throw std::runtime_error(
-        "[CUTLASScompat] PE-header signature is not 0x00004550");
+        "[Compat] PE-header signature is not 0x00004550");
   }
 
   // machine
   uint16_t machine = extract16(pe_header + 4);
   if (machine != 0x8664) {
-    throw std::runtime_error("[CUTLASScompat] only DLLs for x64 supported");
+    throw std::runtime_error("[Compat] only DLLs for x64 supported");
   }
 
   // number of sections
@@ -261,7 +261,7 @@ static inline uint64_t get_lib_size(char const *const blob) {
   // magic
   uint16_t magic = extract16(pe_header + 24);
   if (magic != 0x10b && magic != 0x20b) {
-    throw std::runtime_error("[CUTLASScompat] MAGIC is not 0x010b or 0x020b");
+    throw std::runtime_error("[Compat] MAGIC is not 0x010b or 0x020b");
   }
 
   ///////////////////////////////////////////////////////////////////////
@@ -286,14 +286,14 @@ static inline uint64_t get_lib_size(char const *const blob) {
   return sizeof_raw_data + pointer_to_raw_data;
 #else
   if (blob[0] != 0x7F || blob[1] != 'E' || blob[2] != 'L' || blob[3] != 'F')
-    throw std::runtime_error("[CUTLASScompat] blob is not in ELF format");
+    throw std::runtime_error("[Compat] blob is not in ELF format");
 
   if (blob[4] != 0x02)
-    throw std::runtime_error("[CUTLASScompat] only 64-bit headers are supported");
+    throw std::runtime_error("[Compat] only 64-bit headers are supported");
 
   if (blob[5] != 0x01)
     throw std::runtime_error(
-        "[CUTLASScompat] only little-endian headers are supported");
+        "[Compat] only little-endian headers are supported");
 
   unsigned char const *const ublob =
       reinterpret_cast<unsigned char const *const>(blob);
@@ -327,7 +327,7 @@ public:
     fs::permissions(path, fs::perms::owner_all);
     if (fs::remove_all(path.remove_filename(), ec) != 2 || ec)
       // one directory and one temporary file should have been deleted
-      throw std::runtime_error("[CUTLASScompat] directory delete failed");
+      throw std::runtime_error("[Compat] directory delete failed");
 
     lib_to_path.erase(library);
   }
@@ -364,7 +364,7 @@ static inline kernel_library load_dl_from_data(char const *const data,
   void *so = dlopen(filename.c_str(), RTLD_LAZY);
 #endif
   if (so == nullptr)
-    throw std::runtime_error("[CUTLASScompat] failed to load kernel library");
+    throw std::runtime_error("[Compat] failed to load kernel library");
 
 #ifdef _WIN32
   detail::path_lib_record::record_lib_path(filename, so);
@@ -374,7 +374,7 @@ static inline kernel_library load_dl_from_data(char const *const data,
   // Windows DLL cannot be deleted while in use
   if (fs::remove_all(filename.remove_filename(), ec) != 2 || ec)
     // one directory and one temporary file should have been deleted
-    throw std::runtime_error("[CUTLASScompat] directory delete failed");
+    throw std::runtime_error("[Compat] directory delete failed");
 #endif
 
   return so;
@@ -444,7 +444,7 @@ static inline kernel_function get_kernel_function(kernel_library &library,
       dlsym(library, (name + std::string("_wrapper")).c_str()));
 #endif
   if (fn == nullptr)
-    throw std::runtime_error("[CUTLASScompat] failed to get function");
+    throw std::runtime_error("[Compat] failed to get function");
   return fn;
 }
 
@@ -467,4 +467,4 @@ static inline void invoke_kernel_function(kernel_function &function,
            local_mem_size, kernel_params, extra);
 }
 
-} // namespace cutlasscompat
+} // namespace compat

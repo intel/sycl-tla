@@ -69,7 +69,7 @@
 #include <sycl/properties/queue_properties.hpp>
 #include <sycl/queue.hpp>
 
-namespace cutlasscompat {
+namespace compat {
 
 namespace detail {
 static void parse_version_string(const std::string &ver, int &major,
@@ -111,7 +111,7 @@ inline auto exception_handler = [](sycl::exception_list exceptions) {
     try {
       std::rethrow_exception(e);
     } catch (sycl::exception const &e) {
-      std::cerr << "[CUTLASScompat] Caught asynchronous SYCL exception:"
+      std::cerr << "[Compat] Caught asynchronous SYCL exception:"
                 << std::endl
                 << e.what() << std::endl
                 << "Exception caught at file:" << __FILE__
@@ -356,13 +356,13 @@ has_capability_or_fail(const sycl::device &dev,
     switch (it) {
     case sycl::aspect::fp64:
       throw sycl::exception(sycl::make_error_code(sycl::errc::runtime),
-                            "[CUTLASScompat] 'double' is not supported in '" +
+                            "[Compat] 'double' is not supported in '" +
                                 dev.get_info<sycl::info::device::name>() +
                                 "' device");
       break;
     case sycl::aspect::fp16:
       throw sycl::exception(sycl::make_error_code(sycl::errc::runtime),
-                            "[CUTLASScompat] 'half' is not supported in '" +
+                            "[Compat] 'half' is not supported in '" +
                                 dev.get_info<sycl::info::device::name>() +
                                 "' device");
       break;
@@ -385,7 +385,7 @@ has_capability_or_fail(const sycl::device &dev,
 #undef __SYCL_ASPECT
       throw sycl::exception(
           sycl::make_error_code(sycl::errc::runtime),
-          "[CUTLASScompat] '" + getAspectNameStr(it) + "' is not supported in '" +
+          "[Compat] '" + getAspectNameStr(it) + "' is not supported in '" +
               dev.get_info<sycl::info::device::name>() + "' device");
     }
     break;
@@ -418,9 +418,9 @@ public:
   }
 
   bool is_native_host_atomic_supported() { return false; }
-  int get_major_version() const { return cutlasscompat::get_major_version(*this); }
+  int get_major_version() const { return compat::get_major_version(*this); }
 
-  int get_minor_version() const { return cutlasscompat::get_minor_version(*this); }
+  int get_minor_version() const { return compat::get_minor_version(*this); }
 
   int get_max_compute_units() const {
     return get_device_info().get_max_compute_units();
@@ -464,7 +464,7 @@ public:
   /// device.
   void get_memory_info(size_t &free_memory, size_t &total_memory) const {
     if (!has(sycl::aspect::ext_intel_free_memory)) {
-      std::cerr << "[CUTLASSCompat] get_memory_info: ext_intel_free_memory is not "
+      std::cerr << "[Compat] get_memory_info: ext_intel_free_memory is not "
                    "supported."
                 << std::endl;
       free_memory = 0;
@@ -658,7 +658,7 @@ Use 64 bits as memory_bus_width default value."
   /// sycl::aspect.
   void has_capability_or_fail(
       const std::initializer_list<sycl::aspect> &props) const {
-    ::cutlasscompat::has_capability_or_fail(*this, props);
+    ::compat::has_capability_or_fail(*this, props);
   }
 
 private:
@@ -668,7 +668,7 @@ private:
   queue_ptr create_queue_impl(bool print_on_async_exceptions = false,
                               PropertiesT... properties) {
     sycl::property_list prop = sycl::property_list(
-#ifdef CUTLASSCOMPAT_PROFILING_ENABLED
+#ifdef COMPAT_PROFILING_ENABLED
         sycl::property::queue::enable_profiling(),
 #endif
         properties...);
@@ -723,7 +723,7 @@ public:
   device_ext &cpu_device() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (_cpu_device == -1) {
-      throw std::runtime_error("[CUTLASScompat] No valid cpu device");
+      throw std::runtime_error("[Compat] No valid cpu device");
     } else {
       return *_devs[_cpu_device];
     }
@@ -754,8 +754,8 @@ public:
   unsigned int get_device_id(const sycl::device &dev) {
     if (!_devs.size()) {
       throw std::runtime_error(
-          "[CUTLASScompat] No SYCL devices found in the device list. Device list "
-          "may have been filtered by cutlasscompat::filter_device");
+          "[Compat] No SYCL devices found in the device list. Device list "
+          "may have been filtered by compat::filter_device");
     }
     unsigned int id = 0;
     for (auto dev_item : _devs) {
@@ -764,9 +764,9 @@ public:
       }
       id++;
     }
-    throw std::runtime_error("[CUTLASScompat] The device[" +
+    throw std::runtime_error("[Compat] The device[" +
                              dev.get_info<sycl::info::device::name>() +
-                             "] is filtered out by cutlasscompat::filter_device "
+                             "] is filtered out by compat::filter_device "
                              "in current device list!");
   }
 
@@ -781,7 +781,7 @@ public:
   /// Filter out devices; only keep the device whose name contains one of the
   /// subname in \p dev_subnames.
   /// May break device id mapping and change current device. It's better to be
-  /// called before other CUTLASScompat/SYCL APIs.
+  /// called before other Compat/SYCL APIs.
   void filter(const std::vector<std::string> &dev_subnames) {
     std::lock_guard<std::mutex> lock(m_mutex);
     auto iter = _devs.begin();
@@ -807,7 +807,7 @@ public:
       }
     }
     _thread2dev_map.clear();
-#ifdef CUTLASSCOMPAT_VERBOSE
+#ifdef COMPAT_VERBOSE
     list_devices();
 #endif
   }
@@ -855,7 +855,7 @@ private:
         _cpu_device = _devs.size() - 1;
       }
     }
-#ifdef CUTLASSCOMPAT_VERBOSE
+#ifdef COMPAT_VERBOSE
     list_devices();
 #endif
   }
@@ -935,7 +935,7 @@ static inline device_ext &cpu_device() {
 /// Filter out devices; only keep the device whose name contains one of the
 /// subname in \p dev_subnames.
 /// May break device id mapping and change current device. It's better to be
-/// called before other CUTLASScompat or SYCL APIs.
+/// called before other Compat or SYCL APIs.
 static inline void filter_device(const std::vector<std::string> &dev_subnames) {
   detail::dev_mgr::instance().filter(dev_subnames);
 }
@@ -964,4 +964,4 @@ static inline unsigned int get_device_id(const sycl::device &dev) {
 static inline unsigned int device_count() {
   return detail::dev_mgr::instance().device_count();
 }
-} // namespace cutlasscompat
+} // namespace compat

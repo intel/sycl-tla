@@ -13,24 +13,14 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  CUTLASScompat
+ *  Compat
  *
- *  cutlasscompat.hpp
+ *  compat.hpp
  *
  *  Description:
- *    Main include internal header for CUTLASScompat
+ *    Main include header for Compat
  **************************************************************************/
 
 #pragma once
 
-#include <cutlasscompat/atomic.hpp>
-#include <cutlasscompat/defs.hpp>
-#include <cutlasscompat/device.hpp>
-#include <cutlasscompat/dims.hpp>
-#include <cutlasscompat/group_utils.hpp>
-#include <cutlasscompat/id_query.hpp>
-#include <cutlasscompat/kernel.hpp>
-#include <cutlasscompat/launch.hpp>
-#include <cutlasscompat/math.hpp>
-#include <cutlasscompat/memory.hpp>
-#include <cutlasscompat/util.hpp>
+#include <compat/compat.hpp>
