@@ -3,37 +3,18 @@
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/codeplaysoftware/cutlass-fork/badge)](https://scorecard.dev/viewer/?uri=github.com/codeplaysoftware/cutlass-fork)
 
-This repository contains a development version of the CUTLASS repository
-with experimental SYCL support enabled. The aim is to
-support other SYCL-enabled devices with minimal source code modifications by using the same CUTLASS features and concepts.
-
-Given that most of the backend work happens in the CUTE implementation,
-the CUTLASS interface remains the same, and the SYCL support only needs 
-changes at the atom and pipeline level.
-
 SYCL[1] is a royalty-free, cross-platform abstraction layer that enables
 code for heterogeneous and offload processors to be written with modern 
 ISO C++, and provides API and abstractions to find devices and manage 
 resources for GPUs. 
 
-## Support for NVIDIA GPUs using CUDA
-
-The support for NVIDIA GPUs using CUTLASS is unmodified; you can still use this repository as a drop-in replacement for the upstream NVIDIA repository.
-The SYCL support does not conflict with the original NVIDIA CUDA path.
-Only some portions of the common headers and the build system are slightly modified
-to enable the SYCL compilation mode.
-
-We aim to integrate any changes from the upstream NVIDIA repository as soon
-as we can.
-
 ## Support for Intel GPUs
 
-The SYCL backend supports running CUTLASS on Intel GPUs.
-Currently, Intel Data Center Max 1550 and 1100 (a.k.a Ponte Vecchio - PVC) are supported.
-Intel Arc B580 is known to work but is not yet optimized.
+The CUTLASS-SYCL supports running on Intel GPUs.
+Currently, Intel Data Center Max 1550 and 1100 (a.k.a Ponte Vecchio - PVC) along with Intel Arc B580 (a.k.a BattleMage - BMG) are supported.
 
-The `examples/sycl` directory shows a number of GEMM algorithms and examples of 
-CUTLASS running on PVC, including flash attention V2.
+The `examples` directory shows a number of GEMM algorithms and examples of 
+CUTLASS-SYCL running on PVC and BMG, including flash attention V2.
 
 Only Linux platforms are supported.
 
