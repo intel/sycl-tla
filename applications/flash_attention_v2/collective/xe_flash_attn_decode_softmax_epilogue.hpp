@@ -107,7 +107,7 @@ public:
 
   template <int FragsN, class FragAcc, class FragMax, class FragSum>
   CUTLASS_DEVICE void scale_exp_log2(FragAcc &frag_s, FragMax const &max, FragSum &sum) {
-    auto sg = cutlasscompat::get_nd_item<1>().get_sub_group();
+    auto sg = compat::get_nd_item<1>().get_sub_group();
     const auto max_scale = max * params.scale;
       const auto max_scale_bcast = group_broadcast(sg, max_scale, 0);
       CUTLASS_PRAGMA_UNROLL
@@ -120,8 +120,8 @@ public:
 
   template <int Num_SGs, int FragsN, class FragSrc, class STensorMax>
   CUTLASS_DEVICE void reduce_max(FragSrc &src, STensorMax &stensor_max, Element& max_val) {
-    auto sg = cutlasscompat::get_nd_item<1>().get_sub_group();
-    auto group = cutlasscompat::get_nd_item<1>().get_group();
+    auto sg = compat::get_nd_item<1>().get_sub_group();
+    auto group = compat::get_nd_item<1>().get_group();
     const int sg_group_id = sg.get_group_id()[0];
     const int sg_local_id = sg.get_local_id()[0];
 
@@ -163,7 +163,7 @@ public:
     reduce_max<Num_SGs,FragsNS>(frag_s, shmem_tensor_max, max_val);
 
     if (!is_first) {
-      auto sg = cutlasscompat::get_nd_item<1>().get_sub_group();
+      auto sg = compat::get_nd_item<1>().get_sub_group();
       const int sg_group_id = sg.get_group_id()[0];
       const int sg_local_id = sg.get_local_id()[0];
       const int sg_size = sg.get_local_range()[0];

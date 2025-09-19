@@ -306,7 +306,7 @@ struct ExampleRunner {
           );
 
       // Wait for kernel to finish
-      cutlasscompat::wait();
+      compat::wait();
 
       // Check if output from CUTLASS kernel and reference kernel are equal or not
       passed &= cutlass::reference::device::BlockCompareEqual(block_ref_D.get() + offset_D.at(i), block_D.get() + offset_D.at(i), M * N);
@@ -514,7 +514,7 @@ void initialize(const Options &options) {
     // Run the GEMM
     CUTLASS_CHECK(gemm_op.run());
 
-    cutlasscompat::wait();
+    compat::wait();
 
     // Verify that the result is correct
     bool passed = verify<ElementType>(options);
@@ -528,7 +528,7 @@ void initialize(const Options &options) {
       for (int iter = 0; iter < options.iterations; ++iter) {
         CUTLASS_CHECK(gemm_op.run());
       }
-      cutlasscompat::wait();
+      compat::wait();
 
       float cute_time = timer.seconds() * 1000;
       double cute_average_time = double(cute_time) / double(options.iterations);

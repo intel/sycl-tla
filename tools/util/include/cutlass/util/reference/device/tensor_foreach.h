@@ -79,9 +79,9 @@ struct TensorForEach {
     }
 
 #if defined(CUTLASS_ENABLE_SYCL)
-    const auto sycl_block = cutlasscompat::dim3(block_size, 1, 1);
-    const auto sycl_grid = cutlasscompat::dim3(grid_size, 1, 1);
-    cutlasscompat::launch<kernel::TensorForEach<Func, Rank, Params>, TensorForEachKernelName<Func, decltype(Rank)>>(sycl_grid, sycl_block, size, params);
+    const auto sycl_block = compat::dim3(block_size, 1, 1);
+    const auto sycl_grid = compat::dim3(grid_size, 1, 1);
+    compat::launch<kernel::TensorForEach<Func, Rank, Params>, TensorForEachKernelName<Func, decltype(Rank)>>(sycl_grid, sycl_block, size, params);
 #else
     dim3 grid(grid_size, 1, 1);
     dim3 block(block_size, 1, 1);
@@ -109,9 +109,9 @@ struct TensorDiagonalForEach {
     }
 
 #if defined(CUTLASS_ENABLE_SYCL)
-    const auto sycl_block = cutlasscompat::dim3(block_size, 1, 1);
-    const auto sycl_grid = cutlasscompat::dim3((end - start + block_size - 1) / block_size, 1, 1);
-    cutlasscompat::launch<kernel::TensorDiagonalForEach<Func, Rank, Params>, TensorDiagonalForEachKernelName<Func, decltype(Rank), Params>>(sycl_grid, sycl_block, size, params, start, end);
+    const auto sycl_block = compat::dim3(block_size, 1, 1);
+    const auto sycl_grid = compat::dim3((end - start + block_size - 1) / block_size, 1, 1);
+    compat::launch<kernel::TensorDiagonalForEach<Func, Rank, Params>, TensorDiagonalForEachKernelName<Func, decltype(Rank), Params>>(sycl_grid, sycl_block, size, params, start, end);
 #else
     dim3 block(block_size, 1, 1);
     dim3 grid((end - start + block_size - 1) / block_size, 1, 1);
@@ -161,9 +161,9 @@ struct BlockForEach {
     }
 
 #if defined(CUTLASS_ENABLE_SYCL)
-    const auto sycl_block = cutlasscompat::dim3(block_size, 1, 1);
-    const auto sycl_grid = cutlasscompat::dim3(grid_size, 1, 1);
-    cutlasscompat::launch<kernel::BlockForEach<Element, Func>, BlockForEachKernelName<Element, Func>>(sycl_grid, sycl_block, ptr, capacity, params);
+    const auto sycl_block = compat::dim3(block_size, 1, 1);
+    const auto sycl_grid = compat::dim3(grid_size, 1, 1);
+    compat::launch<kernel::BlockForEach<Element, Func>, BlockForEachKernelName<Element, Func>>(sycl_grid, sycl_block, ptr, capacity, params);
 #else
     dim3 grid(grid_size, 1, 1);
     dim3 block(block_size, 1, 1);

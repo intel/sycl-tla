@@ -36,7 +36,7 @@
 #include <sycl/feature_test.hpp>
 #include <type_traits>
 
-// TODO(cutlasscompat-lib-reviewers): this should not be required
+// TODO(compat-lib-reviewers): this should not be required
 #ifndef SYCL_EXT_ONEAPI_COMPLEX
 #define SYCL_EXT_ONEAPI_COMPLEX
 #endif
@@ -45,9 +45,9 @@
 #include <sycl/ext/oneapi/experimental/bfloat16_math.hpp>
 #endif
 #include <sycl/ext/oneapi/experimental/complex/complex.hpp>
-#include <cutlasscompat/traits.hpp>
+#include <compat/traits.hpp>
 
-namespace cutlasscompat {
+namespace compat {
 namespace detail {
 
 namespace complex_namespace = sycl::ext::oneapi::experimental;
@@ -71,7 +71,7 @@ inline ValueT clamp(ValueT val, ValueT min_val, ValueT max_val) {
   return sycl::clamp(val, min_val, max_val);
 }
 #ifdef SYCL_EXT_ONEAPI_BFLOAT16_MATH_FUNCTIONS
-// TODO(cutlasscompat-lib-reviewers): Follow the process to add this (& other math
+// TODO(compat-lib-reviewers): Follow the process to add this (& other math
 // fns) to the bfloat16 math function extension. If added, remove this
 // functionality from the header.
 template <>
@@ -274,7 +274,7 @@ template <typename ValueT> inline bool isnan(const ValueT a) {
   }
 }
 
-// FIXME(cutlasscompat-lib-reviewers): move bfe outside detail once perf is
+// FIXME(compat-lib-reviewers): move bfe outside detail once perf is
 // improved & semantics understood
 /// Bitfield-extract.
 ///
@@ -286,7 +286,7 @@ template <typename T>
 inline T bfe(const T source, const uint32_t bit_start,
              const uint32_t num_bits) {
   static_assert(std::is_unsigned_v<T>);
-  // FIXME(cutlasscompat-lib-reviewers): This ternary was added to catch a case
+  // FIXME(compat-lib-reviewers): This ternary was added to catch a case
   // which may be undefined anyway. Consider that we are losing perf here.
   const T mask =
       num_bits >= std::numeric_limits<unsigned char>::digits * sizeof(T)
@@ -351,7 +351,7 @@ inline T bfe_safe(const T source, const uint32_t bit_start,
   const uint32_t pos = std::min(bit_start, bit_width);
   const uint32_t len = std::min(pos + num_bits, bit_width) - pos;
   if constexpr (std::is_signed_v<T>) {
-    // FIXME(cutlasscompat-lib-reviewers): As above, catching a case whose result
+    // FIXME(compat-lib-reviewers): As above, catching a case whose result
     // is undefined and likely losing perf.
     const T mask = len >= bit_width ? T{-1} : static_cast<T>((T{1} << len) - 1);
 
@@ -363,12 +363,12 @@ inline T bfe_safe(const T source, const uint32_t bit_start,
     const T sign_bit_padding = (-sign_bit & ~mask);
     return ((source >> pos) & mask) | sign_bit_padding;
   } else {
-    return cutlasscompat::detail::bfe(source, pos, len);
+    return compat::detail::bfe(source, pos, len);
   }
 }
 
 namespace detail {
-// FIXME(cutlasscompat-lib-reviewers): move bfi outside detail once perf is
+// FIXME(compat-lib-reviewers): move bfi outside detail once perf is
 // improved & semantics understood
 /// Bitfield-insert.
 ///
@@ -430,7 +430,7 @@ inline T bfi_safe(const T x, const T y, const uint32_t bit_start,
       std::numeric_limits<unsigned char>::digits * sizeof(T);
   const uint32_t pos = std::min(bit_start, bit_width);
   const uint32_t len = std::min(pos + num_bits, bit_width) - pos;
-  return cutlasscompat::detail::bfi(x, y, pos, len);
+  return compat::detail::bfi(x, y, pos, len);
 }
 
 /// Emulated function for __funnelshift_l
@@ -761,8 +761,8 @@ min(ValueT a, ValueU b) {
 }
 
 template <typename ValueT, typename ValueU>
-inline std::enable_if_t<cutlasscompat::is_floating_point_v<ValueT> &&
-                            cutlasscompat::is_floating_point_v<ValueU>,
+inline std::enable_if_t<compat::is_floating_point_v<ValueT> &&
+                            compat::is_floating_point_v<ValueU>,
                         std::common_type_t<ValueT, ValueU>>
 min(ValueT a, ValueU b) {
   if constexpr (std::is_same_v<std::common_type_t<ValueT, ValueU>,
@@ -786,8 +786,8 @@ max(ValueT a, ValueU b) {
                    static_cast<std::common_type_t<ValueT, ValueU>>(b));
 }
 template <typename ValueT, typename ValueU>
-inline std::enable_if_t<cutlasscompat::is_floating_point_v<ValueT> &&
-                            cutlasscompat::is_floating_point_v<ValueU>,
+inline std::enable_if_t<compat::is_floating_point_v<ValueT> &&
+                            compat::is_floating_point_v<ValueU>,
                         std::common_type_t<ValueT, ValueU>>
 max(ValueT a, ValueU b) {
   if constexpr (std::is_same_v<std::common_type_t<ValueT, ValueU>,
@@ -812,7 +812,7 @@ inline std::common_type_t<ValueT, ValueU> fmax_nan(const ValueT a,
                                                    const ValueU b) {
   if (detail::isnan(a) || detail::isnan(b))
     return NAN;
-  return cutlasscompat::max(a, b);
+  return compat::max(a, b);
 }
 
 template <typename ValueT, typename ValueU>
@@ -837,7 +837,7 @@ inline std::common_type_t<ValueT, ValueU> fmin_nan(const ValueT a,
                                                    const ValueU b) {
   if (detail::isnan(a) || detail::isnan(b))
     return NAN;
-  return cutlasscompat::min(a,b);
+  return compat::min(a,b);
 }
 
 template <typename ValueT, typename ValueU>
@@ -861,7 +861,7 @@ inline typename std::enable_if_t<std::is_floating_point_v<ValueT>, ValueT>
 pow(const ValueT a, const ValueU b) {
   return sycl::pow(a, static_cast<ValueT>(b));
 }
-// TODO(cutlasscompat-lib-reviewers)  calling pow with non-floating point values
+// TODO(compat-lib-reviewers)  calling pow with non-floating point values
 // is currently defaulting to double, which fails on devices without
 // aspect::fp64. This has to be properly documented, and maybe changed to
 // support all devices.
@@ -875,7 +875,7 @@ pow(const ValueT a, const ValueU b) {
 /// \param [in] a The input value
 /// \returns the relu saturation result
 template <typename ValueT> inline ValueT relu(const ValueT a) {
-  if constexpr (cutlasscompat::is_floating_point_v<ValueT>)
+  if constexpr (compat::is_floating_point_v<ValueT>)
     if (detail::isnan(a))
       return a;
   if (a < ValueT(0))
@@ -1172,7 +1172,7 @@ template <typename T1, typename T2>
 inline dot_product_acc_t<T1, T2> dp2a_lo(T1 a, T2 b,
                                          dot_product_acc_t<T1, T2> c) {
   static_assert(detail::is_int32_type<T1> && detail::is_int32_type<T2>,
-                "[CUTLASScompat] dp2a_lo expects 32-bit integers as operands.");
+                "[Compat] dp2a_lo expects 32-bit integers as operands.");
 #if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__) &&                     \
     defined(__SYCL_CUDA_ARCH__) && __SYCL_CUDA_ARCH__ >= 610
   dot_product_acc_t<T1, T2> res;
@@ -1219,7 +1219,7 @@ template <typename T1, typename T2>
 inline dot_product_acc_t<T1, T2> dp2a_hi(T1 a, T2 b,
                                          dot_product_acc_t<T1, T2> c) {
   static_assert(detail::is_int32_type<T1> && detail::is_int32_type<T2>,
-                "[CUTLASScompat] dp2a_hi expects 32-bit integers as operands.");
+                "[Compat] dp2a_hi expects 32-bit integers as operands.");
 #if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__) &&                     \
     defined(__SYCL_CUDA_ARCH__) && __SYCL_CUDA_ARCH__ >= 610
   dot_product_acc_t<T1, T2> res;
@@ -1264,7 +1264,7 @@ inline dot_product_acc_t<T1, T2> dp2a_hi(T1 a, T2 b,
 template <typename T1, typename T2>
 inline dot_product_acc_t<T1, T2> dp4a(T1 a, T2 b, dot_product_acc_t<T1, T2> c) {
   static_assert(detail::is_int32_type<T1> && detail::is_int32_type<T2>,
-                "[CUTLASScompat] dp4a expects 32-bit integers as operands.");
+                "[Compat] dp4a expects 32-bit integers as operands.");
 #if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__) &&                     \
     defined(__SYCL_CUDA_ARCH__) && __SYCL_CUDA_ARCH__ >= 610
   dot_product_acc_t<T1, T2> res;
@@ -2383,4 +2383,4 @@ inline constexpr unsigned extend_vcompare4_add(AT a, BT b, unsigned c,
   return detail::extend_vbinary4<unsigned, false, true>(a, b, c, cmp);
 }
 
-} // namespace cutlasscompat
+} // namespace compat

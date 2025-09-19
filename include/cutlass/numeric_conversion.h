@@ -5560,7 +5560,7 @@ private:
     CUTLASS_PRAGMA_UNROLL
     for (int ii = 0; ii < PackedResultType::kElements; ++ii) {
 #if defined(CUTLASS_ENABLE_SYCL)
-      t[ii] = cutlasscompat::dp4a(x, mask[ii], 0);
+      t[ii] = compat::dp4a(x, mask[ii], 0);
 #else
       t[ii] = __dp4a(x, mask[ii], 0);
 #endif

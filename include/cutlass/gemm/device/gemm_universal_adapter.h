@@ -381,8 +381,8 @@ public:
     dim3 const grid = get_grid_shape(params);
 
 #if defined(CUTLASS_ENABLE_SYCL)
-    const cutlasscompat::dim3 sycl_block(block.x, block.y, block.z);
-    const cutlasscompat::dim3 sycl_grid(grid.x, grid.y, grid.z);
+    const compat::dim3 sycl_block(block.x, block.y, block.z);
+    const compat::dim3 sycl_grid(grid.x, grid.y, grid.z);
 #endif
 
     // configure smem size and carveout
@@ -548,9 +548,9 @@ public:
       else {
         CUTLASS_ASSERT(cuda_adapter == nullptr);
 #if defined(CUTLASS_ENABLE_SYCL)
-        sycl::queue q = stream ? *stream : cutlasscompat::get_default_queue();
+        sycl::queue q = stream ? *stream : compat::get_default_queue();
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
-        using namespace cutlasscompat::experimental;
+        using namespace compat::experimental;
         if constexpr (cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>) {
           auto event = launch<device_kernel<GemmKernel>>(launch_policy{
             sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
@@ -576,20 +576,20 @@ public:
             cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>;
           if constexpr (!allow_subgroup_size_prop or is_device_agnostic) {
             using EmptyProperties = decltype(sycl::ext::oneapi::experimental::properties());
-            return cutlasscompat::experimental::kernel_properties<EmptyProperties>{};
+            return compat::experimental::kernel_properties<EmptyProperties>{};
           } else {
-            return cutlasscompat::experimental::kernel_properties{
+            return compat::experimental::kernel_properties{
               sycl::ext::oneapi::experimental::sub_group_size<DispatchPolicy::SubgroupSize>
             };
           }
         }();
-        cutlasscompat::experimental::launch_properties launch_props {
+        compat::experimental::launch_properties launch_props {
           sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
         };
-        cutlasscompat::experimental::launch_policy policy{
+        compat::experimental::launch_policy policy{
           sycl_grid, sycl_block, launch_props, kernel_props
         };
-        auto event = cutlasscompat::experimental::launch<device_kernel<GemmKernel>, GemmKernel>(policy, q, params);
+        auto event = compat::experimental::launch<device_kernel<GemmKernel>, GemmKernel>(policy, q, params);
         EventManager::getInstance().addEvent(event);
 #endif // !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 #else

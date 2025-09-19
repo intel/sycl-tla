@@ -52,9 +52,9 @@
 #include <sycl/ext/intel/experimental/usm_properties.hpp>
 #endif
 
-#include <cutlasscompat/device.hpp>
-#include <cutlasscompat/traits.hpp>
-#include <cutlasscompat/defs.hpp>
+#include <compat/device.hpp>
+#include <compat/traits.hpp>
+#include <compat/defs.hpp>
 
 #if defined(__linux__)
 #include <sys/mman.h>
@@ -67,7 +67,7 @@
 #error "Only support Windows and Linux."
 #endif
 
-namespace cutlasscompat {
+namespace compat {
 
 template <typename AllocT>
 #ifdef __SYCL_DEVICE_ONLY__
@@ -93,7 +93,7 @@ enum memcpy_direction {
 } // namespace detail
 
 template <typename T>
-__cutlasscompat_inline__
+__compat_inline__
     std::enable_if_t<std::is_same_v<T, uint32_t> || std::is_same_v<T, size_t>,
                      T>
     ptr_to_int(void *ptr) {
@@ -230,7 +230,7 @@ public:
     std::lock_guard<std::mutex> lock(m_mutex);
     if (next_free + size > mapped_address_space + mapped_region_size) {
       throw std::runtime_error(
-          "[CUTLASScompat] malloc: out of memory for virtual memory pool");
+          "[Compat] malloc: out of memory for virtual memory pool");
     }
     // Allocation
     sycl::range<1> buffer_range(size);
@@ -289,14 +289,14 @@ private:
     auto it = m_map.upper_bound((byte_t *)ptr);
     if (it == m_map.end()) {
       // Not a virtual pointer.
-      throw std::runtime_error("[CUTLASScompat] can not get buffer from non-virtual pointer");
+      throw std::runtime_error("[Compat] can not get buffer from non-virtual pointer");
     }
     const allocation &alloc = it->second;
     if (ptr < alloc.alloc_ptr) {
       // Out of bound.
       // This may happen if there's a gap between allocations due to alignment
       // or extra padding and pointer points to this gap.
-      throw std::runtime_error("[CUTLASScompat] invalid virtual pointer");
+      throw std::runtime_error("[Compat] invalid virtual pointer");
     }
     return it;
   }
@@ -331,11 +331,11 @@ public:
 };
 
 static inline void *malloc(size_t size, sycl::queue q) {
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
   return mem_mgr::instance().mem_alloc(size * sizeof(byte_t));
 #else
   return sycl::malloc_device(size, q.get_device(), q.get_context());
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
 }
 
 /// Calculate pitch (padded length of major dimension \p x) by rounding up to
@@ -371,7 +371,7 @@ static inline void *malloc(size_t &pitch, size_t x, size_t y, size_t z,
 template <class T>
 static inline sycl::event fill(sycl::queue q, void *dev_ptr, const T &pattern,
                                size_t count) {
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
   auto &mm = mem_mgr::instance();
   assert(mm.is_device_ptr(dev_ptr));
   auto alloc = mm.translate_ptr(dev_ptr);
@@ -400,7 +400,7 @@ static inline sycl::event fill(sycl::queue q, void *dev_ptr, const T &pattern,
 /// \returns An event representing the memset operation.
 static inline sycl::event memset(sycl::queue q, void *dev_ptr, int value,
                                  size_t size) {
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
   auto &mm = mem_mgr::instance();
   assert(mm.is_device_ptr(dev_ptr));
   auto alloc = mm.translate_ptr(dev_ptr);
@@ -418,7 +418,7 @@ static inline sycl::event memset(sycl::queue q, void *dev_ptr, int value,
   });
 #else
   return q.memset(dev_ptr, value, size);
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
 }
 
 /// \brief Sets \p value to the 3D memory region pointed by \p data in \p q.
@@ -472,7 +472,7 @@ enum class pointer_access_attribute {
 
 static pointer_access_attribute get_pointer_attribute(sycl::queue q,
                                                       const void *ptr) {
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
   return mem_mgr::instance().is_device_ptr(ptr)
              ? pointer_access_attribute::device_only
              : pointer_access_attribute::host_only;
@@ -486,7 +486,7 @@ static pointer_access_attribute get_pointer_attribute(sycl::queue q,
   case sycl::usm::alloc::host:
     return pointer_access_attribute::host_device;
   }
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
 }
 
 static memcpy_direction
@@ -507,7 +507,7 @@ static sycl::event memcpy(sycl::queue q, void *to_ptr, const void *from_ptr,
                           const std::vector<sycl::event> &dep_events = {}) {
   if (!size)
     return sycl::event{};
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
   auto &mm = mem_mgr::instance();
   auto real_direction = deduce_memcpy_direction(q, to_ptr, from_ptr);
 
@@ -563,11 +563,11 @@ static sycl::event memcpy(sycl::queue q, void *to_ptr, const void *from_ptr,
     });
   }
   default:
-    throw std::runtime_error("[CUTLASScompat] memcpy: invalid direction value");
+    throw std::runtime_error("[Compat] memcpy: invalid direction value");
   }
 #else
   return q.memcpy(to_ptr, from_ptr, size, dep_events);
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
 }
 
 // Get actual copy range and make sure it will not exceed range.
@@ -688,7 +688,7 @@ memcpy(sycl::queue q, void *to_ptr, const void *from_ptr,
     break;
   }
   case device_to_device:
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
   {
     auto &mm = mem_mgr::instance();
     auto to_alloc = mm.translate_ptr(to_surface);
@@ -722,10 +722,10 @@ memcpy(sycl::queue q, void *to_ptr, const void *from_ptr,
             from_surface[get_offset(id, from_slice, from_range.get(0))];
       });
     }));
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
     break;
   default:
-    throw std::runtime_error("[CUTLASScompat] memcpy: invalid direction value");
+    throw std::runtime_error("[Compat] memcpy: invalid direction value");
   }
   return event_list;
 }
@@ -761,7 +761,7 @@ static sycl::event combine_events(std::vector<sycl::event> &events,
 
 } // namespace detail
 
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
 /// Check if the pointer \p ptr represents device pointer or not.
 ///
 /// \param ptr The pointer to be checked.
@@ -786,7 +786,7 @@ static std::pair<buffer_t, size_t> get_buffer_and_offset(const void *ptr) {
     return std::make_pair(alloc.buffer, offset);
   } else {
     throw std::runtime_error(
-        "[CUTLASScompat] NULL pointer argument in get_buffer_and_offset function is invalid");
+        "[Compat] NULL pointer argument in get_buffer_and_offset function is invalid");
   }
 }
 
@@ -854,7 +854,7 @@ static sycl::accessor<byte_t, 1, accessMode> get_access(const void *ptr,
     return alloc.buffer.get_access<accessMode>(cgh);
   } else {
     throw std::runtime_error(
-        "[CUTLASScompat] NULL pointer argument in get_access function is invalid");
+        "[Compat] NULL pointer argument in get_access function is invalid");
   }
 }
 
@@ -868,10 +868,10 @@ memcpy(sycl::queue q, const experimental::memcpy_parameter &param) {
   if (param.to.image_bindless != nullptr &&
       param.from.image_bindless != nullptr) {
     throw std::runtime_error(
-        "[CUTLASScompat] memcpy: Unsupported bindless_image API.");
+        "[Compat] memcpy: Unsupported bindless_image API.");
     // TODO: Need change logic when sycl support image_mem to image_mem copy.
     std::vector<sycl::event> event_list;
-    cutlasscompat::detail::host_buffer buf(param.size.size(), q, event_list);
+    compat::detail::host_buffer buf(param.size.size(), q, event_list);
     to.set_data_ptr(buf.get_ptr());
     experimental::detail::memcpy(param.from.image_bindless, param.from.pos, to,
                                  sycl::id<3>(0, 0, 0), param.size, q);
@@ -882,27 +882,27 @@ memcpy(sycl::queue q, const experimental::memcpy_parameter &param) {
     return event_list;
   } else if (param.to.image_bindless != nullptr) {
     throw std::runtime_error(
-        "[CUTLASScompat] memcpy: Unsupported bindless_image API.");
+        "[Compat] memcpy: Unsupported bindless_image API.");
     return {experimental::detail::memcpy(from, param.from.pos,
                                          param.to.image_bindless, param.to.pos,
                                          param.size, q)};
   } else if (param.from.image_bindless != nullptr) {
     throw std::runtime_error(
-        "[CUTLASScompat] memcpy: Unsupported bindless_image API.");
+        "[Compat] memcpy: Unsupported bindless_image API.");
     return {experimental::detail::memcpy(param.from.image_bindless,
                                          param.from.pos, to, param.to.pos,
                                          param.size, q)};
   }
 #endif
   if (param.to.image != nullptr) {
-    throw std::runtime_error("[CUTLASScompat] memcpy: Unsupported image API.");
+    throw std::runtime_error("[Compat] memcpy: Unsupported image API.");
     to = experimental::detail::to_pitched_data(param.to.image);
   }
   if (param.from.image != nullptr) {
-    throw std::runtime_error("[CUTLASScompat] memcpy: Unsupported image API.");
+    throw std::runtime_error("[Compat] memcpy: Unsupported image API.");
     from = experimental::detail::to_pitched_data(param.from.image);
   }
-  return cutlasscompat::detail::memcpy(q, to, param.to.pos, from, param.from.pos,
+  return compat::detail::memcpy(q, to, param.to.pos, from, param.from.pos,
                                     param.size);
 }
 } // namespace detail
@@ -995,11 +995,11 @@ namespace detail {
 
 inline void free(void *ptr, const sycl::queue &q) {
   if (ptr) {
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
     detail::mem_mgr::instance().mem_free(ptr);
 #else
     sycl::free(ptr, q.get_context());
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
   }
 }
 } // namespace detail
@@ -1252,7 +1252,7 @@ namespace experimental {
 /// \returns no return value.
 static inline void memcpy(const memcpy_parameter &param,
                           sycl::queue q = get_default_queue()) {
-  sycl::event::wait(cutlasscompat::experimental::detail::memcpy(q, param));
+  sycl::event::wait(compat::experimental::detail::memcpy(q, param));
 }
 
 /// [UNSUPPORTED] Asynchronously copies 2D/3D memory data specified by \p param
@@ -1263,7 +1263,7 @@ static inline void memcpy(const memcpy_parameter &param,
 /// \returns no return value.
 static inline void memcpy_async(const memcpy_parameter &param,
                                 sycl::queue q = get_default_queue()) {
-  cutlasscompat::experimental::detail::memcpy(q, param);
+  compat::experimental::detail::memcpy(q, param);
 }
 } // namespace experimental
 
@@ -1523,14 +1523,14 @@ private:
 };
 
 /// Device variable with address space of shared or global.
-// TODO(cutlasscompat-lib-reviewers): This doesn't yet support multi-device (ptr
+// TODO(compat-lib-reviewers): This doesn't yet support multi-device (ptr
 // per device)
 template <class T, memory_region Memory, size_t Dimension> class device_memory {
 public:
   using accessor_t =
       typename detail::memory_traits<Memory, T>::template accessor_t<Dimension>;
   using value_t = typename detail::memory_traits<Memory, T>::value_t;
-  using cutlasscompat_accessor_t = cutlasscompat::accessor<T, Memory, Dimension>;
+  using compat_accessor_t = compat::accessor<T, Memory, Dimension>;
 
   device_memory(sycl::queue q = get_default_queue())
       : device_memory(sycl::range<Dimension>(1), q) {}
@@ -1575,7 +1575,7 @@ public:
                   "device memory region should be global, constant or shared");
     // Make sure that singleton class dev_mgr will destruct later than this.
     detail::dev_mgr::instance();
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
     detail::mem_mgr::instance();
 #endif
   }
@@ -1596,7 +1596,7 @@ public:
 
   ~device_memory() {
     if (_device_ptr && !_reference)
-      cutlasscompat::free(_device_ptr, _q);
+      compat::free(_device_ptr, _q);
     if (_host_ptr)
       std::free(_host_ptr);
   }
@@ -1637,16 +1637,16 @@ public:
   template <size_t Dim = Dimension>
   typename std::enable_if<Dim == 1, T>::type &operator[](size_t index) {
     init();
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
-    return cutlasscompat::get_buffer<typename std::enable_if<Dim == 1, T>::type>(
+#ifdef COMPAT_USM_LEVEL_NONE
+    return compat::get_buffer<typename std::enable_if<Dim == 1, T>::type>(
                _device_ptr)
         .template get_access<sycl::access_mode::read_write>()[index];
 #else
     return _device_ptr[index];
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
   }
 
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
   /// Get sycl::accessor for the device memory object when usm is not used.
   accessor_t get_access(sycl::handler &cgh) {
     return get_buffer(_device_ptr)
@@ -1658,11 +1658,11 @@ public:
   /// Get compat_accessor with dimension info for the device memory object
   /// when usm is used and dimension is greater than 1.
   template <size_t Dim = Dimension>
-  typename std::enable_if<Dim != 1, cutlasscompat_accessor_t>::type
+  typename std::enable_if<Dim != 1, compat_accessor_t>::type
   get_access(sycl::handler &cgh) {
-    return cutlasscompat_accessor_t((T *)_device_ptr, _range);
+    return compat_accessor_t((T *)_device_ptr, _range);
   }
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
 
 private:
   device_memory(value_t *memory_ptr, size_t size,
@@ -1671,7 +1671,7 @@ private:
         _device_ptr(memory_ptr), _q(q) {}
 
   void allocate_device(sycl::queue q) {
-#ifndef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifndef COMPAT_USM_LEVEL_NONE
     if (Memory == memory_region::usm_shared) {
       _device_ptr = (value_t *)sycl::malloc_shared(_size, q.get_device(),
                                                    q.get_context());
@@ -1710,14 +1710,14 @@ public:
 
   /// Default constructor
   device_memory(sycl::queue q = get_default_queue()) : base(1, q) {}
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
   /// Get sycl::accessor for the device memory object when usm is not used.
   accessor_t get_access(sycl::handler &cgh) {
     auto buf = get_buffer(base::get_ptr())
                    .template reinterpret<T, 1>(sycl::range<1>(1));
     return accessor_t(buf, cgh);
   }
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
 };
 
 template <class T, size_t Dimension>
@@ -1730,9 +1730,9 @@ using shared_memory = device_memory<T, memory_region::usm_shared, Dimension>;
 class pointer_attributes {
 public:
   void init(const void *ptr, sycl::queue q = get_default_queue()) {
-#ifdef CUTLASSCOMPAT_USM_LEVEL_NONE
+#ifdef COMPAT_USM_LEVEL_NONE
     throw std::runtime_error(
-        "[CUTLASScompat] pointer_attributes: only works for USM pointer.");
+        "[Compat] pointer_attributes: only works for USM pointer.");
 #else
     memory_type = sycl::get_pointer_type(ptr, q.get_context());
     device_pointer = (memory_type != sycl::usm::alloc::unknown) ? ptr : nullptr;
@@ -1742,7 +1742,7 @@ public:
                        : nullptr;
     sycl::device device_obj = sycl::get_pointer_device(ptr, q.get_context());
     device_id = detail::dev_mgr::instance().get_device_id(device_obj);
-#endif // CUTLASSCOMPAT_USM_LEVEL_NONE
+#endif // COMPAT_USM_LEVEL_NONE
   }
 
   sycl::usm::alloc get_memory_type() { return memory_type; }
@@ -1762,4 +1762,4 @@ private:
   unsigned int device_id = 0;
 };
 
-} // namespace cutlasscompat
+} // namespace compat

@@ -13,14 +13,14 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  CUTLASScompat
+ *  Compat
  *
- *  cutlasscompat.hpp
+ *  compat.hpp
  *
  *  Description:
- *    Main include header for CUTLASScompat
+ *    Main include header for Compat
  **************************************************************************/
 
 #pragma once
 
-#include <cutlasscompat/cutlasscompat.hpp>
+#include <compat/compat.hpp>

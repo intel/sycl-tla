@@ -186,8 +186,8 @@ void BlockFillRandomUniformCopyFromHost(
 
   cutlass::reference::host::BlockFillRandomUniform(buff.data(), capacity, seed, max, min, bits);
 
-  cutlasscompat::memcpy<Element>(ptr, buff.data(), capacity);
-  cutlasscompat::wait();
+  compat::memcpy<Element>(ptr, buff.data(), capacity);
+  compat::wait();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

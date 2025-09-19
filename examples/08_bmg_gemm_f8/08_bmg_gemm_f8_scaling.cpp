@@ -423,7 +423,7 @@ struct ExampleRunner {
     // Run the GEMM
     CUTLASS_CHECK(gemm_op.run());
 
-    cutlasscompat::wait();
+    compat::wait();
 
     // Verify that the result is correct
     bool passed = verify(options);
@@ -437,7 +437,7 @@ struct ExampleRunner {
       for (int i = 0; i < options.iterations; ++i) {
         gemm_op.run();
       }
-      cutlasscompat::wait();
+      compat::wait();
 
       float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;

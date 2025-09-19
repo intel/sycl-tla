@@ -202,7 +202,7 @@ struct ExampleRunner {
           M * N  // batch_stride_D
         );
 
-    cutlasscompat::wait();
+    compat::wait();
 
     using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
     for (int batch = 0, offset = 0; batch < L; batch++, offset += M * N) {
@@ -210,7 +210,7 @@ struct ExampleRunner {
           block_ref_D.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N)));
     }
 
-    cutlasscompat::wait();
+    compat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareEqual(
@@ -265,7 +265,7 @@ struct ExampleRunner {
     // Run the GEMM
     CUTLASS_CHECK(gemm_op.run());
 
-    cutlasscompat::wait();
+    compat::wait();
 
     // Verify that the result is correct
     bool passed = verify(problem_size, options.alpha, options.beta);
@@ -279,7 +279,7 @@ struct ExampleRunner {
       for (int i = 0; i < options.iterations; ++i) {
         gemm_op.run();
       }
-      cutlasscompat::wait();
+      compat::wait();
 
       float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;

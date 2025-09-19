@@ -36,10 +36,10 @@
 #include <stdexcept>
 #include <sycl/sycl.hpp>
 
-#include <cutlasscompat/defs.hpp>
-#include <cutlasscompat/math.hpp>
+#include <compat/defs.hpp>
+#include <compat/math.hpp>
 
-namespace cutlasscompat {
+namespace compat {
 namespace group {
 namespace detail {
 
@@ -64,7 +64,7 @@ constexpr auto __inclusive_scan_over_group(_Args... __args) {
 
 template <typename Item, typename T, class BinaryOperation,
           class GroupPrefixCallbackOperation>
-__cutlasscompat_inline__ T
+__compat_inline__ T
 exclusive_scan(const Item &item, T input, BinaryOperation binary_op,
                GroupPrefixCallbackOperation &prefix_callback_op) {
   T group_aggregate;
@@ -108,7 +108,7 @@ public:
   radix_rank(uint8_t *local_memory) : _local_memory(local_memory) {}
 
   template <typename Item, int VALUES_PER_THREAD>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   rank_keys(const Item &item, uint32_t (&keys)[VALUES_PER_THREAD],
             int (&ranks)[VALUES_PER_THREAD], int current_bit, int num_bits) {
 
@@ -124,7 +124,7 @@ public:
 #pragma unroll
     for (int i = 0; i < VALUES_PER_THREAD; ++i) {
       uint32_t digit =
-          ::cutlasscompat::detail::bfe(keys[i], current_bit, num_bits);
+          ::compat::detail::bfe(keys[i], current_bit, num_bits);
       uint32_t sub_counter = digit >> LOG_COUNTER_LANES;
       uint32_t counter_lane = digit & (COUNTER_LANES - 1);
 
@@ -153,7 +153,7 @@ public:
 
 private:
   template <typename Item>
-  __cutlasscompat_inline__ void reset_local_memory(const Item &item) {
+  __compat_inline__ void reset_local_memory(const Item &item) {
     packed_counter_type *ptr =
         reinterpret_cast<packed_counter_type *>(_local_memory);
 
@@ -164,7 +164,7 @@ private:
   }
 
   template <typename Item>
-  __cutlasscompat_inline__ packed_counter_type upsweep(const Item &item) {
+  __compat_inline__ packed_counter_type upsweep(const Item &item) {
     packed_counter_type sum = 0;
     packed_counter_type *ptr =
         reinterpret_cast<packed_counter_type *>(_local_memory);
@@ -184,7 +184,7 @@ private:
   }
 
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   exclusive_downsweep(const Item &item, packed_counter_type raking_partial) {
     packed_counter_type *ptr =
         reinterpret_cast<packed_counter_type *>(_local_memory);
@@ -205,7 +205,7 @@ private:
   }
 
   struct prefix_callback {
-    __cutlasscompat_inline__ packed_counter_type
+    __compat_inline__ packed_counter_type
     operator()(packed_counter_type block_aggregate) {
       packed_counter_type block_prefix = 0;
 
@@ -220,7 +220,7 @@ private:
   };
 
   template <typename Item>
-  __cutlasscompat_inline__ void scan_counters(const Item &item) {
+  __compat_inline__ void scan_counters(const Item &item) {
     packed_counter_type raking_partial = upsweep(item);
 
     prefix_callback callback;
@@ -245,32 +245,32 @@ private:
 
 template <typename T, typename U> struct base_traits {
 
-  static __cutlasscompat_inline__ U twiddle_in(U key) {
+  static __compat_inline__ U twiddle_in(U key) {
     throw std::runtime_error("Not implemented");
   }
-  static __cutlasscompat_inline__ U twiddle_out(U key) {
+  static __compat_inline__ U twiddle_out(U key) {
     throw std::runtime_error("Not implemented");
   }
 };
 
 template <typename U> struct base_traits<uint32_t, U> {
-  static __cutlasscompat_inline__ U twiddle_in(U key) { return key; }
-  static __cutlasscompat_inline__ U twiddle_out(U key) { return key; }
+  static __compat_inline__ U twiddle_in(U key) { return key; }
+  static __compat_inline__ U twiddle_out(U key) { return key; }
 };
 
 template <typename U> struct base_traits<int, U> {
   static constexpr U HIGH_BIT = U(1) << ((sizeof(U) * 8) - 1);
-  static __cutlasscompat_inline__ U twiddle_in(U key) { return key ^ HIGH_BIT; }
-  static __cutlasscompat_inline__ U twiddle_out(U key) { return key ^ HIGH_BIT; }
+  static __compat_inline__ U twiddle_in(U key) { return key ^ HIGH_BIT; }
+  static __compat_inline__ U twiddle_out(U key) { return key ^ HIGH_BIT; }
 };
 
 template <typename U> struct base_traits<float, U> {
   static constexpr U HIGH_BIT = U(1) << ((sizeof(U) * 8) - 1);
-  static __cutlasscompat_inline__ U twiddle_in(U key) {
+  static __compat_inline__ U twiddle_in(U key) {
     U mask = (key & HIGH_BIT) ? U(-1) : HIGH_BIT;
     return key ^ mask;
   }
-  static __cutlasscompat_inline__ U twiddle_out(U key) {
+  static __compat_inline__ U twiddle_out(U key) {
     U mask = (key & HIGH_BIT) ? HIGH_BIT : U(-1);
     return key ^ mask;
   }
@@ -285,7 +285,7 @@ template <int N> struct power_of_two {
   enum { VALUE = ((N & (N - 1)) == 0) };
 };
 
-__cutlasscompat_inline__ uint32_t shr_add(uint32_t x, uint32_t shift,
+__compat_inline__ uint32_t shr_add(uint32_t x, uint32_t shift,
                                        uint32_t addend) {
   return (x >> shift) + addend;
 }
@@ -362,7 +362,7 @@ public:
   /// \param item The work-item identifier.
   /// \param input The input data of each work-item.
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   blocked_to_striped(Item item, T (&input)[ElementsPerWorkItem]) {
     striped_offset get_striped_offset;
     blocked_offset get_blocked_offset;
@@ -385,7 +385,7 @@ public:
   /// \param item The work-item identifier.
   /// \param input The input data of each work-item.
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   striped_to_blocked(Item item, T (&input)[ElementsPerWorkItem]) {
     blocked_offset get_blocked_offset;
     striped_offset get_striped_offset;
@@ -409,7 +409,7 @@ public:
   /// \param input The input data of each work-item.
   /// \param output The corresponding output data of each work-item.
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   blocked_to_striped(Item item, T (&input)[ElementsPerWorkItem],
                      T (&output)[ElementsPerWorkItem]) {
     striped_offset get_striped_offset;
@@ -435,7 +435,7 @@ public:
   /// \param input The input data of each work-item.
   /// \param output The corresponding output data of each work-item.
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   striped_to_blocked(Item item, T (&input)[ElementsPerWorkItem],
                      T (&output)[ElementsPerWorkItem]) {
     blocked_offset get_blocked_offset;
@@ -465,7 +465,7 @@ public:
   /// \param input The input data of each work-item.
   /// \param ranks The corresponding rank annotation of each work-item.
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   scatter_to_blocked(Item item, T (&input)[ElementsPerWorkItem],
                      int (&ranks)[ElementsPerWorkItem]) {
     scatter_offset<const int *> get_scatter_offset(ranks);
@@ -494,7 +494,7 @@ public:
   /// \param input The input data of each work-item.
   /// \param ranks The corresponding rank annotation of each work-item.
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   scatter_to_striped(Item item, T (&input)[ElementsPerWorkItem],
                      int (&ranks)[ElementsPerWorkItem]) {
     scatter_offset<const int *> get_scatter_offset(ranks);
@@ -505,7 +505,7 @@ public:
 private:
   template <typename Item, typename offsetFunctorTypeFW,
             typename offsetFunctorTypeRV>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   helper_exchange(Item item, T (&input)[ElementsPerWorkItem],
                   T (&output)[ElementsPerWorkItem],
                   offsetFunctorTypeFW &offset_functor_fw,
@@ -556,7 +556,7 @@ public:
 
 private:
   template <typename Item, bool DESCENDING>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   helper_sort(const Item &item, T (&keys)[ElementsPerWorkItem],
               int begin_bit = 0, int end_bit = 8 * sizeof(T),
               bool is_striped = false) {
@@ -620,7 +620,7 @@ public:
   /// \param end_bit The past-the-end (most-significant) bit
   /// index needed for key comparison.
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   sort(const Item &item, T (&input)[ElementsPerWorkItem], int begin_bit = 0,
        int end_bit = 8 * sizeof(T)) {
     helper_sort<Item, /*DESCENDING=*/false>(item, input, begin_bit, end_bit);
@@ -647,7 +647,7 @@ public:
   /// \param end_bit The past-the-end (most-significant) bit
   /// index needed for key comparison.
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   sort_descending(const Item &item, T (&input)[ElementsPerWorkItem],
                   int begin_bit = 0, int end_bit = 8 * sizeof(T)) {
     helper_sort<Item, /*DESCENDING=*/true>(item, input, begin_bit, end_bit);
@@ -675,7 +675,7 @@ public:
   /// \param end_bit The past-the-end (most-significant) bit
   /// index needed for key comparison.
   template <typename Item>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   sort_blocked_to_striped(const Item &item, T (&input)[ElementsPerWorkItem],
                           int begin_bit = 0, int end_bit = 8 * sizeof(T)) {
     helper_sort<Item, /*DESCENDING=*/false>(item, input, begin_bit, end_bit,
@@ -704,7 +704,7 @@ public:
   /// \param end_bit The past-the-end (most-significant) bit
   /// index needed for key comparison.
   template <typename Item>
-  __cutlasscompat_inline__ void sort_descending_blocked_to_striped(
+  __compat_inline__ void sort_descending_blocked_to_striped(
       const Item &item, T (&input)[ElementsPerWorkItem], int begin_bit = 0,
       int end_bit = 8 * sizeof(T)) {
     helper_sort<Item, /*DESCENDING=*/true>(item, input, begin_bit, end_bit,
@@ -732,7 +732,7 @@ enum load_algorithm {
 /// \param data Data to load.
 template <typename T, size_t ElementsPerWorkItem, typename InputIteratorT,
           typename ItemT>
-__cutlasscompat_inline__ void load_direct_blocked(const ItemT &item,
+__compat_inline__ void load_direct_blocked(const ItemT &item,
                                                InputIteratorT input_iter,
                                                T (&data)[ElementsPerWorkItem]) {
   size_t work_item_id = item.get_local_linear_id();
@@ -754,7 +754,7 @@ __cutlasscompat_inline__ void load_direct_blocked(const ItemT &item,
 /// \param data Data to load.
 template <typename T, int ElementsPerWorkItem, typename InputIteratorT,
           typename ItemT>
-__cutlasscompat_inline__ void load_direct_striped(const ItemT &item,
+__compat_inline__ void load_direct_striped(const ItemT &item,
                                                InputIteratorT input_iter,
                                                T (&data)[ElementsPerWorkItem]) {
   size_t work_group_size = item.get_group().get_local_linear_range();
@@ -778,7 +778,7 @@ __cutlasscompat_inline__ void load_direct_striped(const ItemT &item,
 /// \param valid_items Number of valid items to load
 template <typename T, size_t ElementsPerWorkItem, typename InputIteratorT,
           typename ItemT>
-__cutlasscompat_inline__ void
+__compat_inline__ void
 load_direct_blocked(const ItemT &item, InputIteratorT input_iter,
                     T (&data)[ElementsPerWorkItem], int valid_items) {
   size_t work_item_id = item.get_local_linear_id();
@@ -802,7 +802,7 @@ load_direct_blocked(const ItemT &item, InputIteratorT input_iter,
 /// \param valid_items Number of valid items to load
 template <typename T, int ElementsPerWorkItem, typename InputIteratorT,
           typename ItemT>
-__cutlasscompat_inline__ void
+__compat_inline__ void
 load_direct_striped(const ItemT &item, InputIteratorT input_iter,
                     T (&data)[ElementsPerWorkItem], int valid_items) {
   size_t work_group_size = item.get_group().get_local_linear_range();
@@ -827,7 +827,7 @@ load_direct_striped(const ItemT &item, InputIteratorT input_iter,
 /// \param data Data to store.
 template <typename T, size_t ElementsPerWorkItem, typename OutputIteratorT,
           typename ItemT>
-__cutlasscompat_inline__ void
+__compat_inline__ void
 store_direct_blocked(const ItemT &item, OutputIteratorT output_iter,
                      T (&data)[ElementsPerWorkItem]) {
   size_t work_item_id = item.get_local_linear_id();
@@ -852,7 +852,7 @@ store_direct_blocked(const ItemT &item, OutputIteratorT output_iter,
 /// \param items Data to store.
 template <typename T, size_t ElementsPerWorkItem, typename OutputIteratorT,
           typename ItemT>
-__cutlasscompat_inline__ void
+__compat_inline__ void
 store_direct_striped(const ItemT &item, OutputIteratorT output_iter,
                      T (&data)[ElementsPerWorkItem]) {
   size_t work_group_size = item.get_group().get_local_linear_range();
@@ -878,7 +878,7 @@ store_direct_striped(const ItemT &item, OutputIteratorT output_iter,
 /// \param valid_items Number of valid items to load
 template <typename T, size_t ElementsPerWorkItem, typename OutputIteratorT,
           typename ItemT>
-__cutlasscompat_inline__ void
+__compat_inline__ void
 store_direct_blocked(const ItemT &item, OutputIteratorT output_iter,
                      T (&data)[ElementsPerWorkItem], size_t valid_items) {
   size_t work_item_id = item.get_local_linear_id();
@@ -905,7 +905,7 @@ store_direct_blocked(const ItemT &item, OutputIteratorT output_iter,
 /// \param valid_items Number of valid items to load
 template <typename T, size_t ElementsPerWorkItem, typename OutputIteratorT,
           typename ItemT>
-__cutlasscompat_inline__ void
+__compat_inline__ void
 store_direct_striped(const ItemT &item, OutputIteratorT output_iter,
                      T (&data)[ElementsPerWorkItem], size_t valid_items) {
   size_t work_group_size = item.get_group().get_local_linear_range();
@@ -917,7 +917,7 @@ store_direct_striped(const ItemT &item, OutputIteratorT output_iter,
       work_item_iter[i * work_group_size] = data[i];
 }
 
-/// Enumerates alternative algorithms for cutlasscompat::group::group_load to read
+/// Enumerates alternative algorithms for compat::group::group_load to read
 /// a linear segment of data from memory into a blocked arrangement across a
 /// work-group.
 enum class group_load_algorithm {
@@ -967,7 +967,7 @@ public:
   /// \param input_iter The work-group's base input iterator for loading from.
   /// \param data The data to load.
   template <typename ItemT, typename InputIteratorT>
-  __cutlasscompat_inline__ void load(const ItemT &item, InputIteratorT input_iter,
+  __compat_inline__ void load(const ItemT &item, InputIteratorT input_iter,
                                   T (&data)[ElementsPerWorkItem]) {
     if constexpr (LoadAlgorithm == group_load_algorithm::blocked) {
       load_direct_blocked<T, ElementsPerWorkItem, InputIteratorT, ItemT>(
@@ -1002,7 +1002,7 @@ public:
   /// \param data The data to load.
   /// \param valid_items Number of valid items to load
   template <typename ItemT, typename InputIteratorT>
-  __cutlasscompat_inline__ void load(const ItemT &item, InputIteratorT input_iter,
+  __compat_inline__ void load(const ItemT &item, InputIteratorT input_iter,
                                   T (&data)[ElementsPerWorkItem],
                                   int valid_items) {
     if constexpr (LoadAlgorithm == group_load_algorithm::blocked) {
@@ -1015,7 +1015,7 @@ public:
   }
 };
 
-/// Enumerates alternative algorithms for cutlasscompat::group::group_load to write
+/// Enumerates alternative algorithms for compat::group::group_load to write
 /// a blocked arrangement of items across a work-group to a linear segment of
 /// memory.
 enum class group_store_algorithm {
@@ -1065,7 +1065,7 @@ public:
   /// \param input The input data of each work-item.
   /// \param data The data to store.
   template <typename ItemT, typename OutputIteratorT>
-  __cutlasscompat_inline__ void store(const ItemT &item,
+  __compat_inline__ void store(const ItemT &item,
                                    OutputIteratorT output_iter,
                                    T (&data)[ElementsPerWorkItem]) {
     if constexpr (StoreAlgorithm == group_store_algorithm::blocked) {
@@ -1101,7 +1101,7 @@ public:
   /// \param data The data to store.
   /// \param valid_items Number of valid items to load
   template <typename ItemT, typename OutputIteratorT>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   store(const ItemT &item, OutputIteratorT output_iter,
         T (&data)[ElementsPerWorkItem], size_t valid_items) {
     if constexpr (StoreAlgorithm == group_store_algorithm::blocked) {
@@ -1143,7 +1143,7 @@ public:
   /// \param distance The distance of work-items to look ahead or behind in the
   /// work-group.
   template <typename ItemT>
-  __cutlasscompat_inline__ void select(const ItemT &item, T input, T &output,
+  __compat_inline__ void select(const ItemT &item, T input, T &output,
                                     int distance = 1) {
     auto g = item.get_group();
     size_t id = g.get_local_linear_id();
@@ -1167,7 +1167,7 @@ public:
   /// \param distance The number of work-items to look ahead in the
   /// work-group.
   template <typename ItemT>
-  __cutlasscompat_inline__ void select2(const ItemT &item, T input, T &output,
+  __compat_inline__ void select2(const ItemT &item, T input, T &output,
                                      unsigned int distance = 1) {
     auto g = item.get_group();
     size_t id = g.get_local_linear_id();
@@ -1191,7 +1191,7 @@ public:
   /// \param input The input data to be shuffled.
   /// \param output The array that will store the shuffle result.
   template <int ElementsPerWorkItem, typename ItemT>
-  __cutlasscompat_inline__ void shuffle_right(const ItemT &item,
+  __compat_inline__ void shuffle_right(const ItemT &item,
                                            T (&input)[ElementsPerWorkItem],
                                            T (&output)[ElementsPerWorkItem]) {
     auto g = item.get_group();
@@ -1217,7 +1217,7 @@ public:
   /// \param output The array that will store the shuffle result.
   /// \param group_suffix The suffix of the group after the shuffle.
   template <int ElementsPerWorkItem, typename ItemT>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   shuffle_right(const ItemT &item, T (&input)[ElementsPerWorkItem],
                 T (&output)[ElementsPerWorkItem], T &group_suffix) {
     shuffle_right(item, input, output);
@@ -1233,7 +1233,7 @@ public:
   /// \param input The input data to be shuffled.
   /// \param output The array that will store the shuffle result.
   template <int ElementsPerWorkItem, typename ItemT>
-  __cutlasscompat_inline__ void shuffle_left(const ItemT &item,
+  __compat_inline__ void shuffle_left(const ItemT &item,
                                           T (&input)[ElementsPerWorkItem],
                                           T (&output)[ElementsPerWorkItem]) {
     auto g = item.get_group();
@@ -1259,7 +1259,7 @@ public:
   /// \param output The array that will store the shuffle result.
   /// \param group_prefix The prefix of the group before the shuffle.
   template <int ElementsPerWorkItem, typename ItemT>
-  __cutlasscompat_inline__ void
+  __compat_inline__ void
   shuffle_left(const ItemT &item, T (&input)[ElementsPerWorkItem],
                T (&output)[ElementsPerWorkItem], T &group_prefix) {
     shuffle_left(item, input, output);
@@ -1267,4 +1267,4 @@ public:
   }
 };
 } // namespace group
-} // namespace cutlasscompat
+} // namespace compat

@@ -13,12 +13,12 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  *
- *  CUTLASScompat
+ *  Compat
  *
  *  dims.hpp
  *
  *  Description:
- *    dim3 functionality for CUTLASScompat
+ *    dim3 functionality for Compat
  **************************************************************************/
 
 #pragma once
@@ -27,7 +27,7 @@
 
 #include <sycl/range.hpp>
 
-namespace cutlasscompat {
+namespace compat {
 
 class dim3 {
 public:
@@ -71,4 +71,4 @@ inline dim3 operator-(const dim3 &a, const dim3 &b) {
   return dim3{a.x - b.x, a.y - b.y, a.z - b.z};
 }
 
-} // namespace cutlasscompat
+} // namespace compat

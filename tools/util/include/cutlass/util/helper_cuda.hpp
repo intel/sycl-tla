@@ -47,8 +47,8 @@ device_init(int device_id, bool quiet = false)
 
 #if defined(CUTLASS_ENABLE_SYCL)
 
-  cutlasscompat::select_device(device_id);
-  auto &device = cutlasscompat::get_current_device();
+  compat::select_device(device_id);
+  auto &device = compat::get_current_device();
   
   if (!quiet) {
     printf("Using device %d: %s  (%d Compute Units)\n",

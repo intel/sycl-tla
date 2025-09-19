@@ -30,7 +30,7 @@
  **************************************************************************************************/
 
 #include <sycl/sycl.hpp>
-#include <cutlasscompat.hpp>
+#include <compat.hpp>
 
 #include <cute/tensor.hpp>
 
@@ -71,7 +71,7 @@ void copy_if_kernel(TensorS S, TensorD D, BlockShape block_shape, ThreadLayout)
   Tensor P = cute::lazy::transform(C, [&](auto c) { return elem_less(c, shape_S); });
 
   // Tile the input tensor into blocks
-  auto block_coord = make_coord(cutlasscompat::work_group_id::x(), cutlasscompat::work_group_id::y());
+  auto block_coord = make_coord(compat::work_group_id::x(), compat::work_group_id::y());
   Tensor tile_S = local_tile(S, block_shape, block_coord); // (BlockShape_M, BlockShape_N)
   Tensor tile_P = local_tile(P, block_shape, block_coord); // (BlockShape_M, BlockShape_N)
   Tensor tile_D = local_tile(D, block_shape, block_coord); // (BlockShape_M, BlockShape_N)
@@ -79,9 +79,9 @@ void copy_if_kernel(TensorS S, TensorD D, BlockShape block_shape, ThreadLayout)
   // Construct a partitioning of the tile among threads with the given thread arrangement.
 
   // Concept:                         Tensor  ThrLayout       ThrIndex
-  Tensor thr_tile_S = local_partition(tile_S, ThreadLayout{}, cutlasscompat::local_id::x());
-  Tensor thr_tile_P = local_partition(tile_P, ThreadLayout{}, cutlasscompat::local_id::x());
-  Tensor thr_tile_D = local_partition(tile_D, ThreadLayout{}, cutlasscompat::local_id::x());
+  Tensor thr_tile_S = local_partition(tile_S, ThreadLayout{}, compat::local_id::x());
+  Tensor thr_tile_P = local_partition(tile_P, ThreadLayout{}, compat::local_id::x());
+  Tensor thr_tile_D = local_partition(tile_D, ThreadLayout{}, compat::local_id::x());
 
   // Copy from GMEM to GMEM using `thr_tile_P` to guard accesses.
   copy_if(thr_tile_P, thr_tile_S, thr_tile_D);
@@ -107,7 +107,7 @@ void copy_if_kernel_vectorized(TensorS S, TensorD D, BlockShape block_shape, Til
   Tensor P = cute::lazy::transform(C, [&](auto c) { return elem_less(c, shape_S); });
 
   // Tile the input tensor into blocks
-  auto block_coord = make_coord(cutlasscompat::work_group_id::x(), cutlasscompat::work_group_id::y());
+  auto block_coord = make_coord(compat::work_group_id::x(), compat::work_group_id::y());
   Tensor tile_S = local_tile(S, block_shape, block_coord);       // (BlockShape_M, BlockShape_N)
   Tensor tile_D = local_tile(D, block_shape, block_coord);       // (BlockShape_M, BlockShape_N)
   Tensor tile_P = local_tile(P, block_shape, block_coord);       // (BlockShape_M, BlockShape_N)
@@ -115,7 +115,7 @@ void copy_if_kernel_vectorized(TensorS S, TensorD D, BlockShape block_shape, Til
   //
   // Construct a Tensor corresponding to each thread's slice.
   //
-  ThrCopy thr_copy = tiled_copy.get_thread_slice(cutlasscompat::local_id::x());
+  ThrCopy thr_copy = tiled_copy.get_thread_slice(compat::local_id::x());
   Tensor thr_tile_S = thr_copy.partition_S(tile_S);              // (CPY, CPY_M, CPY_N)
   Tensor thr_tile_D = thr_copy.partition_D(tile_D);              // (CPY, CPY_M, CPY_N)
   Tensor thr_tile_P = thr_copy.partition_S(tile_P);              // (CPY, CPY_M, CPY_N)
@@ -153,16 +153,16 @@ int main(int argc, char** argv)
   std::vector<Element> h_S(size(tensor_shape));
   std::vector<Element> h_D(size(tensor_shape));
 
-  auto d_S = cutlasscompat::malloc<Element>(size(tensor_shape));
-  auto d_D = cutlasscompat::malloc<Element>(size(tensor_shape));
-  auto d_Zero = cutlasscompat::malloc<Element>(size(tensor_shape));
+  auto d_S = compat::malloc<Element>(size(tensor_shape));
+  auto d_D = compat::malloc<Element>(size(tensor_shape));
+  auto d_Zero = compat::malloc<Element>(size(tensor_shape));
 
   for (size_t i = 0; i < h_S.size(); ++i) {
     h_S[i] = static_cast<Element>(i);
   }
 
-  cutlasscompat::memcpy<Element>(d_S, h_S.data(), size(tensor_shape));
-  cutlasscompat::memcpy<Element>(d_D, h_D.data(), size(tensor_shape));
+  compat::memcpy<Element>(d_S, h_S.data(), size(tensor_shape));
+  compat::memcpy<Element>(d_D, h_D.data(), size(tensor_shape));
 
   //
   // Make tensors
@@ -188,23 +188,23 @@ int main(int argc, char** argv)
   // Describes the layout of threads which is then replicated to tile 'block_shape.'
   Layout thr_layout = make_layout(make_shape(Int<32>{}, Int< 8>{}));  // (ThrM, ThrN)
 
-  auto gridDim  = cutlasscompat::dim3(size<1>(tiled_tensor_D), size<2>(tiled_tensor_D));
-  auto blockDim = cutlasscompat::dim3(size(thr_layout));
+  auto gridDim  = compat::dim3(size<1>(tiled_tensor_D), size<2>(tiled_tensor_D));
+  auto blockDim = compat::dim3(size(thr_layout));
 
   //
   // Launch the kernel
   //
-  cutlasscompat::launch<copy_if_kernel<decltype(tensor_S), decltype(tensor_D), 
+  compat::launch<copy_if_kernel<decltype(tensor_S), decltype(tensor_D), 
     decltype(block_shape), decltype(thr_layout)>, CopyIfKernelName<decltype(tensor_S), 
     decltype(tensor_D), decltype(block_shape), decltype(thr_layout)>>(
       gridDim, blockDim, tensor_S, tensor_D, block_shape, thr_layout
     );
-  cutlasscompat::wait_and_throw();
+  compat::wait_and_throw();
 
   //
   // Verify
   //
-  cutlasscompat::memcpy<Element>(h_D.data(), d_D, size(tensor_shape));
+  compat::memcpy<Element>(h_D.data(), d_D, size(tensor_shape));
 
   auto verify = [](std::vector<Element> const &S, std::vector<Element> const &D){
 
@@ -235,7 +235,7 @@ int main(int argc, char** argv)
     std::cout << "Success." << std::endl;
   }
 
-  cutlasscompat::memset(d_D, 0, size(tensor_shape));
+  compat::memset(d_D, 0, size(tensor_shape));
   
   // Construct a TiledCopy with a specific access pattern.
   //   This version uses a
@@ -261,17 +261,17 @@ int main(int argc, char** argv)
                                           thr_layout,         // thread layout (e.g. 32x4 Col-Major)
                                           val_layout);        // value layout (e.g. 4x1)
 
-  cutlasscompat::launch<copy_if_kernel_vectorized<decltype(tensor_S), decltype(tensor_D),
+  compat::launch<copy_if_kernel_vectorized<decltype(tensor_S), decltype(tensor_D),
     decltype(block_shape), decltype(tiled_copy)>, CopyIfKernelVectorizedName<decltype(tensor_S), 
     decltype(tensor_D), decltype(block_shape), decltype(tiled_copy)>>(
       gridDim, blockDim, tensor_S, tensor_D, block_shape, tiled_copy
     );
-  cutlasscompat::wait_and_throw();
+  compat::wait_and_throw();
 
   //
   // Verify
   //
-  cutlasscompat::memcpy(h_D.data(), d_D, size(tensor_shape));
+  compat::memcpy(h_D.data(), d_D, size(tensor_shape));
   
   if (verify(h_D, h_S)) {
     return -1;

@@ -39,9 +39,9 @@
 #include <sycl/group_barrier.hpp>
 #include <sycl/kernel_bundle.hpp>
 
-#include <cutlasscompat/math.hpp>
-#include <cutlasscompat/memory.hpp>
-#include <cutlasscompat/dims.hpp>
+#include <compat/math.hpp>
+#include <compat/memory.hpp>
+#include <compat/dims.hpp>
 
 #if defined(__NVPTX__)
 #include <sycl/ext/oneapi/experimental/cuda/masked_shuffles.hpp>
@@ -66,7 +66,7 @@ __SYCL_CONVERGENT__ extern SYCL_EXTERNAL __SYCL_EXPORT
     __spirv_GroupNonUniformShuffleUp(__spv::Scope::Flag, T, unsigned) noexcept;
 #endif
 
-namespace cutlasscompat {
+namespace compat {
 
 namespace detail {
 
@@ -89,7 +89,7 @@ template <typename T> struct DataType<sycl::vec<T, 2>> {
 
 inline void matrix_mem_copy(void *to_ptr, const void *from_ptr, int to_ld,
                             int from_ld, int rows, int cols, int elem_size,
-                            sycl::queue queue = cutlasscompat::get_default_queue(),
+                            sycl::queue queue = compat::get_default_queue(),
                             bool async = false) {
   if (to_ptr == from_ptr && to_ld == from_ld) {
     return;
@@ -454,7 +454,7 @@ T select_from_sub_group(unsigned int member_mask, sycl::sub_group g, T x,
   return cuda_shfl_sync_idx_i32(member_mask, x, remote_local_id, cVal);
 #else
   throw sycl::exception(sycl::errc::runtime,
-                        "[CUTLASScompat] Masked version of select_from_sub_group "
+                        "[Compat] Masked version of select_from_sub_group "
                         "only supports SPIR-V or cuda backends.");
 #endif // __SPIR__
 #else
@@ -465,7 +465,7 @@ T select_from_sub_group(unsigned int member_mask, sycl::sub_group g, T x,
   (void)member_mask;
   throw sycl::exception(
       sycl::errc::runtime,
-      "[CUTLASScompat] Masked version of select_from_sub_group not "
+      "[Compat] Masked version of select_from_sub_group not "
       "supported on host device and non intel compiler.");
 #endif // __SYCL_DEVICE_ONLY__ && __INTEL_LLVM_COMPILER
 }
@@ -502,7 +502,7 @@ T shift_sub_group_left(unsigned int member_mask, sycl::sub_group g, T x,
   return cuda_shfl_sync_down_i32(member_mask, x, delta, cVal);
 #else
   throw sycl::exception(sycl::errc::runtime,
-                        "[CUTLASScompat] Masked version of shift_sub_group_left "
+                        "[Compat] Masked version of shift_sub_group_left "
                         "only supports SPIR-V or cuda backends.");
 #endif // __SPIR__
 #else
@@ -513,7 +513,7 @@ T shift_sub_group_left(unsigned int member_mask, sycl::sub_group g, T x,
   (void)member_mask;
   throw sycl::exception(
       sycl::errc::runtime,
-      "[CUTLASScompat] Masked version of shift_sub_group_left not "
+      "[Compat] Masked version of shift_sub_group_left not "
       "supported on host device and non intel compiler.");
 #endif // __SYCL_DEVICE_ONLY__ && __INTEL_LLVM_COMPILER
 }
@@ -597,7 +597,7 @@ T permute_sub_group_by_xor(unsigned int member_mask, sycl::sub_group g, T x,
 #else
   throw sycl::exception(
       sycl::errc::runtime,
-      "[CUTLASScompat] Masked version of permute_sub_group_by_xor "
+      "[Compat] Masked version of permute_sub_group_by_xor "
       "only supports SPIR-V or cuda backends.");
 #endif // __SPIR__
 #else
@@ -608,7 +608,7 @@ T permute_sub_group_by_xor(unsigned int member_mask, sycl::sub_group g, T x,
   (void)member_mask;
   throw sycl::exception(
       sycl::errc::runtime,
-      "[CUTLASScompat]Masked version of permute_sub_group_by_xor not "
+      "[Compat]Masked version of permute_sub_group_by_xor not "
       "supported on host device and non intel compiler.");
 #endif // __SYCL_DEVICE_ONLY__ && __INTEL_LLVM_COMPILER
 }
@@ -697,7 +697,7 @@ unsigned int match_all_over_sub_group(sycl::sub_group g, unsigned member_mask,
 
 namespace experimental {
 
-// FIXME(@intel/cutlasscompat-lib-reviewers): unify once supported in the CUDA and
+// FIXME(@intel/compat-lib-reviewers): unify once supported in the CUDA and
 // AMD backends.
 #if defined(__AMDGPU__) || defined(__NVPTX__)
 constexpr sycl::memory_order barrier_memory_order = sycl::memory_order::acq_rel;
@@ -874,7 +874,7 @@ inline int calculate_max_active_wg_per_xecore(int *num_wg, int wg_size,
   int ret = 0;
   const int slm_size_per_xe_core = 64 * 1024;
   const int max_barrier_registers = 32;
-  cutlasscompat::device_ext &dev = cutlasscompat::get_current_device();
+  compat::device_ext &dev = compat::get_current_device();
 
   size_t max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
   if (wg_size > max_wg_size) {
@@ -936,7 +936,7 @@ inline int calculate_max_potential_wg(int *num_wg, int *wg_size,
                                       int slm_size = 0, int sg_size = 32,
                                       bool used_barrier = false,
                                       bool used_large_grf = false) {
-  sycl::device &dev = cutlasscompat::get_current_device();
+  sycl::device &dev = compat::get_current_device();
   size_t max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
   if (max_wg_size_for_device_code == 0 ||
       max_wg_size_for_device_code >= max_wg_size)
@@ -1044,8 +1044,8 @@ public:
 // \return size_t representing maximum work-groups per compute unit
 template <class KernelName>
 size_t max_active_work_groups_per_cu(
-    cutlasscompat::dim3 wg_dim3, size_t local_mem_size,
-    sycl::queue queue = cutlasscompat::get_default_queue()) {
+    compat::dim3 wg_dim3, size_t local_mem_size,
+    sycl::queue queue = compat::get_default_queue()) {
   namespace syclex = sycl::ext::oneapi::experimental;
   // max_num_work_groups only supports range<3>
   auto ctx = queue.get_context();
@@ -1071,8 +1071,8 @@ size_t max_active_work_groups_per_cu(
 template <class KernelName, int RangeDim>
 size_t max_active_work_groups_per_cu(
     sycl::range<RangeDim> wg_range, size_t local_mem_size,
-    sycl::queue queue = cutlasscompat::get_default_queue()) {
-  return max_active_work_groups_per_cu<KernelName>(cutlasscompat::dim3(wg_range),
+    sycl::queue queue = compat::get_default_queue()) {
+  return max_active_work_groups_per_cu<KernelName>(compat::dim3(wg_range),
                                                    local_mem_size, queue);
 }
 
@@ -1185,4 +1185,4 @@ public:
   }
 };
 
-} // namespace cutlasscompat
+} // namespace compat

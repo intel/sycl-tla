@@ -242,7 +242,7 @@ void GemmComplex(
   int const kNblock = 4;
 
 #if defined (CUTLASS_ENABLE_SYCL)
-using cutlasscompat::dim3;
+using compat::dim3;
 #endif
 
   dim3 block(16, 8);
@@ -255,7 +255,7 @@ using cutlasscompat::dim3;
   if (grid.y <= std::numeric_limits<uint16_t>::max()) {
 #if defined(CUTLASS_ENABLE_SYCL)
 
-  cutlasscompat::launch<kernel::GemmComplex<
+  compat::launch<kernel::GemmComplex<
                       ElementA,
                       LayoutA,
                       ElementB,
@@ -346,7 +346,7 @@ using cutlasscompat::dim3;
     );
 
 #if defined (CUTLASS_ENABLE_SYCL)
-  cutlasscompat::launch<kernel::GemmComplex<
+  compat::launch<kernel::GemmComplex<
                       ElementA,
                       LayoutA,
                       ElementB,

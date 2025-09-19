@@ -238,7 +238,7 @@ struct ExampleRunner {
           M * N  // batch_stride_D
         );
 
-    cutlasscompat::wait();
+    compat::wait();
 
     for(int batch = 0, offset = 0; batch < L; batch++, offset += M * N) {
       auto D0_view = cutlass::TensorView(block_ref_D0.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N));
@@ -247,7 +247,7 @@ struct ExampleRunner {
         cutlass::reference::device::TensorPerRowBias(D0_view, bias0_view);
       }
 
-      cutlasscompat::wait();
+      compat::wait();
 
       auto D1_view = cutlass::TensorView(block_ref_D1.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N));
       if constexpr (UseBias1) {
@@ -255,13 +255,13 @@ struct ExampleRunner {
         cutlass::reference::device::TensorPerRowBias(D1_view, bias1_view);
       }
 
-      cutlasscompat::wait();
+      compat::wait();
 
       auto D2_view = cutlass::TensorView(block_ref_D2.get() + offset, LayoutD::packed({M, N}), cutlass::make_Coord(M, N));
       cutlass::reference::device::TensorSiLu(D2_view, D0_view, D1_view);
     }
 
-    cutlasscompat::wait();
+    compat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed_D0 = WriteEpilogueOutput0 ? cutlass::reference::device::BlockCompareEqual(
@@ -325,24 +325,24 @@ struct ExampleRunner {
     // configure smem size and carveout
     int smem_size = GemmKernel::SharedStorageSize;
 
-    const auto sycl_block = cutlasscompat::dim3(block.x, block.y, block.z);
-    const auto sycl_grid = cutlasscompat::dim3(grid.x, grid.y, grid.z);
+    const auto sycl_block = compat::dim3(block.x, block.y, block.z);
+    const auto sycl_grid = compat::dim3(grid.x, grid.y, grid.z);
 
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
-    using namespace cutlasscompat::experimental;
+    using namespace compat::experimental;
     auto event = launch<cutlass::device_kernel<GemmKernel>>(
         launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
                       kernel_properties{sycl_exp::sub_group_size<GemmKernel::DispatchPolicy::SubgroupSize>}},
         params);
 #else
-    cutlasscompat::experimental::launch_properties launch_props{
+    compat::experimental::launch_properties launch_props{
       sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size)
     };
-    cutlasscompat::experimental::kernel_properties kernel_props{
+    compat::experimental::kernel_properties kernel_props{
       sycl::ext::oneapi::experimental::sub_group_size<GemmKernel::DispatchPolicy::SubgroupSize>
     };
-    cutlasscompat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
-    auto event = cutlasscompat::experimental::launch<cutlass::device_kernel<GemmKernel>, GemmKernel>(policy, params);
+    compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
+    auto event = compat::experimental::launch<cutlass::device_kernel<GemmKernel>, GemmKernel>(policy, params);
 #endif
 
     EventManager::getInstance().addEvent(event);
@@ -423,7 +423,7 @@ struct ExampleRunner {
     // Run the GEMM
     CUTLASS_CHECK(run(params));
 
-    cutlasscompat::wait();
+    compat::wait();
 
     // Verify that the result is correct
     bool passed = verify<WriteEpilogueOutput0, WriteEpilogueOutput1, UseBias0, UseBias1>(problem_size, options.alpha0, options.alpha1, options.beta0, options.beta1);
@@ -437,7 +437,7 @@ struct ExampleRunner {
       for (int i = 0; i < options.iterations; ++i) {
         run(params);
       }
-      cutlasscompat::wait();
+      compat::wait();
 
       float cute_time = timer.seconds() / options.iterations;
       double tflops = 2 * (2.0 * options.m * options.n * options.k * options.l) * 1e-12;

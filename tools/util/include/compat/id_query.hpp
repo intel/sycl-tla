@@ -26,7 +26,7 @@
 #include <sycl/ext/oneapi/free_function_queries.hpp>
 #include <sycl/nd_item.hpp>
 
-namespace cutlasscompat {
+namespace compat {
 
 using sycl::ext::oneapi::this_work_item::get_nd_item;
 
@@ -68,4 +68,4 @@ inline size_t y() { return get_nd_item<3>().get_global_id(1); }
 inline size_t z() { return get_nd_item<3>().get_global_id(0); }
 } // namespace global_id
 
-} // namespace cutlasscompat
+} // namespace compat
