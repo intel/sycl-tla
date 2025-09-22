@@ -93,16 +93,7 @@ struct XeFlashIndividualTileScheduler {
   CUTLASS_DEVICE
   auto get_block_coord() {
     using namespace cute;
-    // int block_decode = BlockIdxZ(); // batch * num_heads_q
-    // int bidh;
-    // params.divmod_num_heads(block_decode, bidh, block_decode);
-
-    // block_decode = BlockIdxZ / num_heads_q
-    // bidh = BlockIdxZ % num_heads_q
-
-    // return make_coord(BlockIdxX(), BlockIdxY(), BlockIdxZ());
     return make_coord(BlockIdxX(), BlockIdxY(), BlockIdxZ());
-    // return make_coord(BlockIdxX(), BlockIdxY(), block_decode, bidh);
   }
 
   CUTLASS_DEVICE
