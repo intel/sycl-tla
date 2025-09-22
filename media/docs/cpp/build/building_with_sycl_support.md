@@ -30,7 +30,18 @@ Building the tests and the examples requires oneMKL for random number generation
 
 The following instructions show how to use the nightly build to build the cutlass examples
 
+#### Building with oneAPI Basekit
+Download [oneAPI basekit](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html)
+```
+$ . /opt/intel/oneapi/setvars.sh
+$ CC=icx CXX=icpx cmake .. -G Ninja \
+  -DCUTLASS_ENABLE_SYCL=ON \
+  -DDPCPP_SYCL_TARGET=intel_gpu_pvc \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DCMAKE_CXX_FLAGS="-ftemplate-backtrace-limit=0 -fdiagnostics-color=always"
+```
 
+#### Building with release DPCPP compiler
 ```
 # Download the nightly of DPCPP compiler
 $ wget https://github.com/intel/llvm/releases/tag/nightly-2025-01-31
