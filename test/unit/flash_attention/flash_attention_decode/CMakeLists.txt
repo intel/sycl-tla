@@ -58,6 +58,12 @@ cutlass_test_unit_add_executable(
   xe_flash_decode_fp16_fp32_fp32_h192_1024_nonpaged.cpp
 )
 
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_flash_attention_decode_models_xe
+  xe_flash_decode_models_fp16_nonpaged.cpp
+  xe_flash_decode_models_bf16_nonpaged.cpp
+)
+
 add_custom_target(
   cutlass_test_unit_flash_attention_decode
   DEPENDS
@@ -65,6 +71,7 @@ add_custom_target(
   cutlass_test_unit_flash_attention_decode_h96_xe
   cutlass_test_unit_flash_attention_decode_h128_xe
   cutlass_test_unit_flash_attention_decode_h192_xe
+  cutlass_test_unit_flash_attention_decode_models_xe
 )
 
 add_custom_target(
@@ -74,4 +81,5 @@ add_custom_target(
   test_unit_flash_attention_decode_h96_xe
   test_unit_flash_attention_decode_h128_xe
   test_unit_flash_attention_decode_h192_xe
+  test_unit_flash_attention_decode_models_xe
 )
