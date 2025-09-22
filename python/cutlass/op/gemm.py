@@ -131,7 +131,7 @@ from cutlass_cppgen.backend import compiler
 from cutlass_cppgen.backend.evt import EpilogueFunctorVisitor
 from cutlass_cppgen.backend.gemm_operation import GemmArguments, GemmOperationUniversal
 from cutlass_cppgen.backend.library import TensorDescription, TileDescription
-from cutlass.backend.utils.device import default_stream
+from cutlass_cppgen.backend.utils.device import default_stream
 from cutlass_cppgen.op.op import OperationBase
 from cutlass_cppgen.shape import GemmCoord
 from cutlass_cppgen.utils import check, datatypes
