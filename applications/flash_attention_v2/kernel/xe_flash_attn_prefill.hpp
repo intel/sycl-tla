@@ -488,7 +488,7 @@ public:
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
       // 3) Perform GEMM S = Q*K
-      collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
+      collective_mma.mmaQK(tSr, gQ,  gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
       // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
       // prefetching it the same way as cutlass K matrix does not make sense
       for(int i=0; i< size<1>(pVgV); i++) {

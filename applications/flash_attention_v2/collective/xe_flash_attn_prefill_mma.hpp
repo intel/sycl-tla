@@ -38,6 +38,7 @@
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
 #include "fmha_fusion.hpp"
+#include "xe_rotary.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
