@@ -72,6 +72,8 @@ public:
   using ElementAccumulator = typename CollectiveMainloop::ElementAccumulator;
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
+  using traits_load_Q = typename CollectiveMainloop::traits_load_Q;
+  using traits_load_K = typename CollectiveMainloop::traits_load_K;
 
   using CollectiveSoftmaxEpilogue = CollectiveSoftmaxEpilogue_;
   using SoftmaxArguments = typename CollectiveSoftmaxEpilogue::Arguments;
@@ -332,6 +334,108 @@ public:
         }
       }
 
+    if constexpr (rope_enabled) {
+      
+      int block_idx = static_cast<int>(BlockIdxX());
+      int block_idy = static_cast<int>(BlockIdxY());
+      int block_idz = static_cast<int>(BlockIdxZ());
+      int block_dimx = static_cast<int>(BlockDimX());
+      int block_dimy = static_cast<int>(BlockDimY());
+      int block_dimz = static_cast<int>(BlockDimZ());
+      int thread_idx = static_cast<int>(ThreadIdxX());
+      int thread_idy = static_cast<int>(ThreadIdxY());
+      int thread_idz = static_cast<int>(ThreadIdxZ());
+      int grid_dimx = static_cast<int>(GridDimX());
+      int grid_dimy = static_cast<int>(GridDimY());
+      int grid_dimz = static_cast<int>(GridDimZ());
+      int block_id = block_idx + block_idy * grid_dimx + block_idz * grid_dimx * grid_dimy;
+      int thread_id = block_id * block_dimx * block_dimy * block_dimz + thread_idz * block_dimx * block_dimy + thread_idy * block_dimx + thread_idx;
+
+      
+      // calculate the base_ptr and offset for Q, K.
+      // also calculate the layout for Q, K.
+      // then apply RoPE on Q, K accordingly
+      auto [coord_q_x, coord_q_y, coord_q_z] = *gQ.data();
+      auto [coord_k_x, coord_k_y, coord_k_z] = *gK.data();
+      
+      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = params.problem_shape;
+      
+      int offset_q = seq_len_qo*head_size_qk*coord_q_z + head_size_qk*coord_q_x + coord_q_y; // row major
+      // int offset_k = seq_len_kv*head_size_qk*coord_k_z + head_size_qk*coord_k_y + coord_k_x; // col major
+      int offset_k = seq_len_kv*head_size_qk*coord_k_z + head_size_qk*coord_k_x + coord_k_y; // row major
+
+      auto q_traits = static_cast<traits_load_Q const&>(mainloop_params.gmem_tiled_copy_q);
+      ElementQ* base_ptr_q = (ElementQ*)q_traits.base_ptr;
+
+      auto q_traits_cos = static_cast<traits_load_Q const&>(mainloop_params.gmem_tiled_copy_q_cos);
+      ElementQ* base_ptr_q_cos = (ElementQ*)q_traits_cos.base_ptr;
+
+      auto q_traits_sin = static_cast<traits_load_Q const&>(mainloop_params.gmem_tiled_copy_q_sin);
+      ElementQ* base_ptr_q_sin = (ElementQ*)q_traits_sin.base_ptr;
+
+      // auto layout_q = gQ.layout();
+      constexpr auto static_shape_q = make_shape(size<0>(gQ), size<1>(gQ));
+      // constexpr auto layout_q = LayoutQ::packed({size<0>(gQ), size<1>(gQ)});
+      constexpr auto layout_q = make_layout(static_shape_q, LayoutRight{});
+      
+      auto k_traits = static_cast<traits_load_K const&>(mainloop_params.gmem_tiled_copy_k);
+      ElementK* base_ptr_k = (ElementK*)k_traits.base_ptr;
+
+      auto k_traits_cos = static_cast<traits_load_K const&>(mainloop_params.gmem_tiled_copy_k_cos);
+      ElementK* base_ptr_k_cos = (ElementK*)k_traits_cos.base_ptr;
+
+      auto k_traits_sin = static_cast<traits_load_K const&>(mainloop_params.gmem_tiled_copy_k_sin);
+      ElementK* base_ptr_k_sin = (ElementK*)k_traits_sin.base_ptr;
+
+      constexpr auto static_shape_k = make_shape(size<0>(gK), size<1>(gK));
+      constexpr auto layout_k = make_layout(static_shape_k, LayoutRight{});
+      
+      // if (cute::thread(1, 1)){
+      //     #define PRINT(x) print(#x ": "); print(x); print("\n");
+      //   print("before apply_rope_interleaved_gmem\n");
+      //   // PRINT(global_thread_idx);
+      //   PRINT(thread_idx);
+      //   PRINT(thread_idy);
+      //   PRINT(thread_idz);
+      //   PRINT(block_idx);
+      //   PRINT(block_idy);
+      //   PRINT(block_idz);
+      //   PRINT(block_dimx);
+      //   PRINT(block_dimy);
+      //   PRINT(block_dimz);
+      //   PRINT(grid_dimx);
+      //   PRINT(grid_dimy);
+      //   PRINT(grid_dimz);
+      //   PRINT(block_id);
+      //   PRINT(thread_id);
+      //   PRINT(coord_q_x);
+      //   PRINT(coord_q_y);
+      //   PRINT(coord_q_z);
+      //   PRINT(coord_k_x);
+      //   PRINT(coord_k_y);
+      //   PRINT(coord_k_z);
+      //   PRINT(offset_q);
+      //   PRINT(offset_k);
+      // }
+      
+      
+      for (int i =0 ;i< size<2>(gQ); i++){
+        auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
+        auto tensorCosQ = make_tensor(make_gmem_ptr(base_ptr_q_cos+offset_q), layout_q);
+        auto tensorSinQ = make_tensor(make_gmem_ptr(base_ptr_q_sin+offset_q), layout_q);
+        cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorQ, tensorCosQ, tensorSinQ, tensorQ);
+        offset_q += QK_BLK_M*QK_BLK_K;
+      }
+        
+      for (int i =0 ;i< size<2>(gK); i++){
+        auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+offset_k), layout_k);
+        auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+offset_k), layout_k);
+        auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+offset_k), layout_k);
+        cutlass::flash_attention::collective::apply_rope_interleaved_gmem_k(thread_idx, block_id, tensorK, tensorCosK, tensorSinK, tensorK);
+        offset_k += QK_BLK_N*QK_BLK_K;
+      }
+    }
+
       // Allocate the tiled_mma and the accumulators for the (M,N) workgroup_shape
       Tensor out_reg = make_tensor<ElementAccumulator>(AccumeShape{});
       
@@ -358,7 +462,7 @@ public:
         clear(tSr);
 
         // 3) Perform GEMM S = Q*K
-        collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size_qk, QK_BLK_K), gCosQ, gSinQ, gCosK(_, _, nblock, _), gSinK(_, _, nblock, _), mainloop_params, params.problem_shape);
+        collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
 
         // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
         // prefetching it the same way as cutlass K matrix does not make sense
@@ -376,12 +480,6 @@ public:
         for (int j = 0; j < size<4>(pKgK); j++) {
           prefetch(tiled_prefetch_k, pKgK(_, _, _, nblock + DispatchPolicy::Stages, j));
         }
-
-        for (int j = 0; j < size<4>(pKgK); j++) {
-          prefetch(tiled_prefetch_k, pCosKgCosK(_, _, _, nblock + DispatchPolicy::Stages, j));
-          prefetch(tiled_prefetch_k, pSinKgSinK(_, _, _, nblock + DispatchPolicy::Stages, j));
-        }
-
         barrier_wait(barrier_scope);
       }
 
@@ -390,7 +488,7 @@ public:
       Tensor tSr = make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
       clear(tSr);
       // 3) Perform GEMM S = Q*K
-      collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), gCosQ, gSinQ, gCosK(_, _, nblock_limit - 1, _), gSinK(_, _, nblock_limit - 1, _), mainloop_params, params.problem_shape);
+      collective_mma.mmaQK(tSr, gQ, gK(_, _, nblock_limit - 1, _), tSr, ceil_div(head_size_qk, QK_BLK_K), mainloop_params);
       // we only need one block ahead, there is enough gap to prefetch it while doing softmax. because the gap between the two MMA is big,
       // prefetching it the same way as cutlass K matrix does not make sense
       for(int i=0; i< size<1>(pVgV); i++) {

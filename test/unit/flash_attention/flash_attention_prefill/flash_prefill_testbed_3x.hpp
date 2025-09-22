@@ -222,6 +222,8 @@ struct TestbedImpl {
   cutlass::DeviceAllocation<ElementV> block_V;
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
+  cutlass::DeviceAllocation<ElementQ> block_ref_Q;
+  cutlass::DeviceAllocation<ElementK> block_ref_K;
 
   // RoPE support
   cutlass::DeviceAllocation<ElementQ> block_cos;
@@ -294,8 +296,11 @@ struct TestbedImpl {
           auto x = static_cast<float>(tensor[x_idx]);
           auto y = static_cast<float>(tensor[y_idx]);
 
-          tensor[x_idx] = static_cast<Element>(x * cos_val - y * sin_val);
-          tensor[y_idx] = static_cast<Element>(x * sin_val + y * cos_val);
+          auto new_x = x * cos_val - y * sin_val;
+          auto new_y = x * sin_val + y * cos_val;
+
+          tensor[x_idx] = static_cast<Element>(new_x);
+          tensor[y_idx] = static_cast<Element>(new_y);
         }
         
       }
@@ -372,6 +377,8 @@ bool initialize_block_(
     block_V.reset(batch * num_heads_kv * seq_len_kv * head_size_vo);
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
+    block_ref_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
+    block_ref_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
 
     // Initialize RoPE tensors if enabled
     if constexpr (rope_enabled) {
@@ -387,6 +394,11 @@ bool initialize_block_(
     initialize_block_(block_Q, seed + 2023, seq_len_qo, head_size_qk, batch * num_heads_q);
     initialize_block_(block_K, seed + 2022, seq_len_kv, head_size_qk, batch * num_heads_kv);
     initialize_block_(block_V, seed + 2021, head_size_vo, seq_len_kv, batch * num_heads_kv);
+    syclcompat::wait();
+    // reference copy of Q and K for verification
+    syclcompat::memcpy(block_ref_Q.get(), block_Q.get(), block_Q.size() * sizeof(ElementQ));
+    syclcompat::memcpy(block_ref_K.get(), block_K.get(), block_K.size() * sizeof(ElementK));
+    syclcompat::wait();
 
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
@@ -485,8 +497,8 @@ bool initialize_block_(
     auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,5,6>(problem_size);
     int seq_len_qo, seq_len_kv;
 
-    auto block_Q_ = in_memory(block_Q);
-    auto block_K_ = in_memory(block_K);
+    auto block_Q_ = in_memory(block_ref_Q);
+    auto block_K_ = in_memory(block_ref_K);
     auto block_V_ = in_memory(block_V);
     auto block_cos_ = in_memory(block_cos);
     auto block_sin_ = in_memory(block_sin); 
@@ -545,8 +557,9 @@ bool initialize_block_(
           syclcompat::wait();
 
           // apply rope on host then update Q, K accordingly
-          apply_rope_on_host(host_Q, seq_len_qo, head_size_qk, batch, num_heads_q, host_Q_cos, host_Q_sin);
-          apply_rope_on_host(host_K, seq_len_qo, head_size_qk, batch, num_heads_q, host_K_cos, host_K_sin);
+          apply_rope_on_host(host_Q, seq_len_qo, head_size_qk, b, h, host_Q_cos, host_Q_sin);
+          apply_rope_on_host(host_K, seq_len_kv, head_size_qk, b, h, host_Q_cos, host_Q_sin);
+          syclcompat::wait();
 
           cutlass::DeviceAllocation<ElementQ> block_Q_rope;
           cutlass::DeviceAllocation<ElementK> block_K_rope;
@@ -557,30 +570,20 @@ bool initialize_block_(
           syclcompat::memcpy(block_K_rope.get(), host_K.data(), host_K.size() * sizeof(ElementK));
           syclcompat::wait();
           
-          // Update tensor references to use RoPE-transformed tensors
-          cutlass::TensorRef ref_Q_rope(block_Q_rope.get(), LayoutQ::packed({seq_len_qo, head_size_qk}));
-          cutlass::TensorRef ref_K_rope(block_K_rope.get(), LayoutK::packed({seq_len_kv, head_size_qk}));      
-          
-          cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv, head_size_qk}, ElementAccumulator{1}, ref_Q_rope,
-                                                  cutlass::ComplexTransform::kNone, ref_K_rope, cutlass::ComplexTransform::kNone,
-                                                  ElementAccumulator{0}, ref_S, ref_S, ElementAccumulator{0},
-                                                  1,                   // batch_count
-                                                  seq_len_qo * head_size_qk, // batch_stride_Q
-                                                  seq_len_kv * head_size_qk, // batch_stride_K
-                                                  seq_len_qo * seq_len_kv,   // batch_stride_S
-                                                  seq_len_qo * seq_len_kv    // batch_stride_S
-          );
-        } else {
-          cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv, head_size_qk}, ElementAccumulator{1}, ref_Q,
-                                                  cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
-                                                  ElementAccumulator{0}, ref_S, ref_S, ElementAccumulator{0},
-                                                  1,                   // batch_count
-                                                  seq_len_qo * head_size_qk, // batch_stride_Q
-                                                  seq_len_kv * head_size_qk, // batch_stride_K
-                                                  seq_len_qo * seq_len_kv,   // batch_stride_S
-                                                  seq_len_qo * seq_len_kv    // batch_stride_S
-          );
+          // Update tensor references to use RoPE-transformed tensors 
+          syclcompat::memcpy(ref_Q.data(), host_Q.data(), seq_len_qo* head_size_qk * sizeof(ElementQ));
+          syclcompat::memcpy(ref_K.data(), host_K.data(), seq_len_kv* head_size_qk * sizeof(ElementK));
         }
+
+        cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv, head_size_qk}, ElementAccumulator{1}, ref_Q,
+                                                cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
+                                                ElementAccumulator{0}, ref_S, ref_S, ElementAccumulator{0},
+                                                1,                   // batch_count
+                                                seq_len_qo * head_size_qk, // batch_stride_Q
+                                                seq_len_kv * head_size_qk, // batch_stride_K
+                                                seq_len_qo * seq_len_kv,   // batch_stride_S
+                                                seq_len_qo * seq_len_kv    // batch_stride_S
+        );
 
         syclcompat::wait();
 
@@ -695,6 +698,14 @@ bool initialize_block_(
     }
 
     syclcompat::wait();
+    std::vector<ElementOutput> host_ref_o(block_O.size());
+    std::vector<ElementOutput> host_o(block_O.size());
+    syclcompat::memcpy(host_ref_o.data(), block_ref_O.get(), block_ref_O.size() * sizeof(ElementOutput));
+    syclcompat::memcpy(host_o.data(), block_O.get(), block_O.size() * sizeof(ElementOutput));
+    syclcompat::wait();
+    for(int i = 0; i < host_o.size(); i++) {
+      std::cout << "O[" << i << "] = " << host_o[i] << ", ref_O[" << i << "] = " << host_ref_o[i] << ", diff : " << (host_o[i] - host_ref_o[i]) << std::endl;
+    }
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),

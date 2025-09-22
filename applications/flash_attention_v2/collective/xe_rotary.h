@@ -34,7 +34,8 @@
 
 namespace cutlass::flash_attention::collective {
 using namespace cute;
-
+#define BLOCK_ID 0
+#define THREAD_ID 5
 
 template <typename Tensor,
           typename TensorCos, typename TensorSin, typename TensorOut>
@@ -43,47 +44,94 @@ CUTLASS_DEVICE void apply_rope_interleaved_gmem(
     Tensor const &srcTensor,
     TensorCos const &gCos,
     TensorSin const &gSin, TensorOut &destTensor) {
-  
-  // here based on the thread_idx, we will apply RoPE on the srcTensor and store the result in destTensor
-  // we will access row by thread_idx and then access col by loop
-  // we assume the input tensor is in row major format
-  if (cute::thread(1, 0)){
-    print("before apply_rope_interleaved_gmem\n");
-    cute::print_tensor(srcTensor);
-  }
+
+  // if (cute::thread(THREAD_ID, BLOCK_ID)){
+  //   print("before Q apply_rope_interleaved_gmem\n");
+  //   cute::print_tensor(srcTensor);
+  // }
   syncthreads();
   if(thread_idx < size<0>(srcTensor)){
     for (int j = 0; j < size<1>(gCos); j+=2) {
-        float real = static_cast<float>(srcTensor[make_coord(thread_idx, j)]);
-        float imag = static_cast<float>(srcTensor[make_coord(thread_idx, j + 1)]);
+        auto real = static_cast<float>(srcTensor[make_coord(thread_idx, j)]);
+        auto imag = static_cast<float>(srcTensor[make_coord(thread_idx, j + 1)]);
 
 
-        float cos_val = static_cast<float>(gCos[make_coord(thread_idx, j)]);
-        float sin_val = static_cast<float>(gSin[make_coord(thread_idx, j)]);
+        auto cos_val = static_cast<float>(gCos[make_coord(thread_idx, j)]);
+        auto sin_val = static_cast<float>(gSin[make_coord(thread_idx, j)]);
         // syncthreads();
-        float new_real = real * cos_val - imag * sin_val;
-        float new_imag = real * sin_val + imag * cos_val;
+        auto new_real = real * cos_val - imag * sin_val;
+        auto new_imag = real * sin_val + imag * cos_val;
         // syncthreads();
         destTensor[make_coord(thread_idx,j)] = static_cast<typename Tensor::value_type>(new_real);
         destTensor[make_coord(thread_idx,j + 1)] = static_cast<typename Tensor::value_type>(new_imag);
-        
-        if (cute::thread(1, 0)){
-          #define PRINT(x) print(#x ": "); print(x); print("\n");
-          PRINT(thread_idx);
-          PRINT(j);
-          PRINT(real);
-          PRINT(imag);
-          PRINT(cos_val);
-          PRINT(sin_val);
-          PRINT(new_real);
-          PRINT(new_imag);
-        }
+
+        // if (cute::thread(THREAD_ID, BLOCK_ID)){
+        //   #define PRINT(x) print(#x ": "); print(x); print("\n");
+        //   PRINT(thread_idx);
+        //   PRINT(j);
+        //   PRINT(real);
+        //   PRINT(imag);
+        //   PRINT(cos_val);
+        //   PRINT(sin_val);
+        //   PRINT(new_real);
+        //   PRINT(new_imag);
+        // }
     }
   }
-  if (cute::thread(1, 0)){
-    print("after apply_rope_interleaved_gmem\n");
-    cute::print_tensor(destTensor);
-  }
+  syncthreads();
+  // if (cute::thread(THREAD_ID, BLOCK_ID)){
+  //   print("after Q apply_rope_interleaved_gmem\n");
+  //   cute::print_tensor(destTensor);
+  // }
+}
+
+
+template <typename Tensor,
+          typename TensorCos, typename TensorSin, typename TensorOut>
+CUTLASS_DEVICE void apply_rope_interleaved_gmem_k(
+    int thread_idx,
+    int block_id,
+    Tensor const &srcTensor,
+    TensorCos const &gCos,
+    TensorSin const &gSin, TensorOut &destTensor) {
+  // if (cute::thread(THREAD_ID, BLOCK_ID)){
+  //   print("before K apply_rope_interleaved_gmem\n");
+  //   cute::print_tensor(srcTensor);
+  // }
+  syncthreads();
+  if(  thread_idx < size<0>(srcTensor) && block_id % 4 == 0){
+    for (int j = 0; j < size<1>(gCos); j+=2) {
+        auto real = static_cast<float>(srcTensor[make_coord(thread_idx, j)]);
+        auto imag = static_cast<float>(srcTensor[make_coord(thread_idx, j + 1)]);
+
+
+        auto cos_val = static_cast<float>(gCos[make_coord(thread_idx, j)]);
+        auto sin_val = static_cast<float>(gSin[make_coord(thread_idx, j)]);
+        // syncthreads();
+        auto new_real = real * cos_val - imag * sin_val;
+        auto new_imag = real * sin_val + imag * cos_val;
+        // syncthreads();
+        destTensor[make_coord(thread_idx,j)] = static_cast<typename Tensor::value_type>(new_real);
+        destTensor[make_coord(thread_idx,j + 1)] = static_cast<typename Tensor::value_type>(new_imag);
+
+        // if (cute::thread(1, 0)){
+        //   #define PRINT(x) print(#x ": "); print(x); print("\n");
+        //   PRINT(thread_idx);
+        //   PRINT(j);
+        //   PRINT(real);
+        //   PRINT(imag);
+        //   PRINT(cos_val);
+        //   PRINT(sin_val);
+        //   PRINT(new_real);
+        //   PRINT(new_imag);
+        // }
+    } 
+  } 
+  syncthreads();
+  // if (cute::thread(THREAD_ID, BLOCK_ID)){
+  //   print("after K apply_rope_interleaved_gmem\n");
+  //   cute::print_tensor(destTensor);
+  // }
 }
 
 } // namespace cutlass::flash_attention::collective
