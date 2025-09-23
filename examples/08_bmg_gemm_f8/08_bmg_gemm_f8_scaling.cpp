@@ -366,7 +366,7 @@ struct ExampleRunner {
         block_A_dq.get(),
         block_A.size()
     );
-    convert_dtype<ElementA, half_t, ExampleRunner>(
+    convert_dtype<ElementB, half_t, ExampleRunner>(
         block_B.get(),
         block_B_dq.get(),
         block_B.size()
