@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -484,9 +485,11 @@ struct HostCollectiveMainloop {
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     {
       CUTLASS_TRACE_HOST("HostCollectiveMainloop::initialize: Check last error before sync_device()");
+#if !defined(CUTLASS_ENABLE_SYCL)
       cudaError_t error = cudaGetLastError();
       const auto error_str = cudaGetErrorString(error);
       CUTLASS_TRACE_HOST("HostCollectiveMainloop::initialize: cudaGetLastError() is " << error_str);
+#endif
       CUTLASS_TRACE_HOST("HostCollectiveMainloop::initialize: tensor_A.host_data()=" << tensor_A.host_data() << ", tensor_A.device_data()=" << tensor_A.device_data());
       CUTLASS_TRACE_HOST("HostCollectiveMainloop::initialize: tensor_B.host_data()=" << tensor_B.host_data() << ", tensor_B.device_data()=" << tensor_B.device_data());
     }
@@ -819,7 +822,7 @@ struct HostCollectiveMainloopSparse
 
 #if defined(CUTLASS_ENABLE_SYCL)
     try {
-      syclcompat::wait_and_throw();
+      compat::wait_and_throw();
     } catch (std::exception const &e) {
       ADD_FAILURE() << "Error at Kernel Sync.";
       return false;
@@ -1471,7 +1474,7 @@ struct HostCollectiveMainloop<cutlass::gemm::KernelSparseTmaWarpSpecializedBlock
 
 #if (CUTLASS_ENABLE_SYCL)
     try {
-      syclcompat::wait_and_throw();
+      compat::wait_and_throw();
     } catch (std::exception const &e) {
       ADD_FAILURE() << "Error at Kernel Sync.";
       return false;
@@ -2843,7 +2846,7 @@ struct TestbedImpl {
     size_t smem_size = static_cast<size_t>(Gemm::GemmKernel::SharedStorageSize);
     size_t device_smem_size;
 #if defined(CUTLASS_ENABLE_SYCL)
-    syclcompat::device_info info = syclcompat::get_current_device().get_device_info();
+    compat::device_info info = compat::get_current_device().get_device_info();
     this->sm_count = info.get_max_compute_units();
     device_smem_size = info.get_local_mem_size();
 #else
@@ -2902,7 +2905,7 @@ struct TestbedImpl {
 
 #if defined(CUTLASS_ENABLE_SYCL)
     try {
-      syclcompat::wait_and_throw();
+      compat::wait_and_throw();
     } catch (std::exception const &e) {
       ADD_FAILURE() << "Error at Kernel Sync.";
       return false;
@@ -3079,7 +3082,7 @@ struct TestbedImpl {
       status = gemm_op.run();
 #if defined(CUTLASS_ENABLE_SYCL)
       try {
-        syclcompat::wait_and_throw();
+        compat::wait_and_throw();
       } catch (std::exception const &e) {
         ADD_FAILURE() << "Error at Kernel Sync.";
         return false;
