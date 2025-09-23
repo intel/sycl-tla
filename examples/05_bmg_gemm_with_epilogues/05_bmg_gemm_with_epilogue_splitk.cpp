@@ -218,7 +218,10 @@ struct ExampleRunner {
     auto D2 = std::vector<ElementOutput>(size(D2_shape));
     compat::memcpy<ElementOutput>(D.data(), block_ref_D.get(), size(D_shape));
     compat::wait();
-
+    if (N < NUM_HEAD * (NOPE_DIM + ROPE_DIM)) {
+      std::cout << "Error: n < num_head * (nope_dim + rope_dim). Please set a sufficiently large value for n. Skipping the check." << std::endl;
+      return true;
+    }
     for (int l = 0; l < L; l++) {
       for (int i = 0; i < M; i++) {
         for (int j = 0; j < NUM_HEAD; j++) {
