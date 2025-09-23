@@ -4,42 +4,37 @@
 
 # CUTLASS SYCL Developers **
 
+Alejandro Acosta<br />
 Amit Singh Chandel<br />
 Antony Vance<br />
+Atharva Dubey<br />
+Carlos Gonzalez<br />
 Chen Xi<br />
+Finlay Marno<br />
 Jacky Deng<br />
 Ji Yang<br />
 Jiexin Zheng<br />
+Joe Todd<br />
 Leslie Fang<br />
 Liyang Ling<br />
+Lukas Sommer<br />
+Mehdi Goli<br />
 Min Jean Cho<br />
+Muhammad Tanvir<br />
+Ouadie EL FAROUKI<br />
 Peter Caday<br />
 Ratnam Parikh<br />
 Roland Schulz<br />
+Ruyman Reyes<br />
 Sanchit Jain<br />
 Sijia Lou<br />
+Tadej Ciglarič<br />
 Tao Zhang<br />
 Victor Perez<br />
 Yang Ji<br />
 Yuankun Shi<br />
 
 ** _The list is sorted alphabetically by first name._
-
-# Former CUTLASS SYCL Developers ***
-
-Alejandro Acosta<br />
-Atharva Dubey<br />
-Carlos Gonzalez<br />
-Finlay Marno<br />
-Joe Todd<br />
-Lukas Sommer<br />
-Mehdi Goli<br />
-Muhammad Tanvir<br />
-Ouadie EL FAROUKI<br />
-Ruyman Reyes<br />
-Tadej Ciglarič<br />
-
-*** _Former Codeplay engineers who contributed to CUTLASS SYCL development, sorted alphabetically by first name._
 
 # CUTLASS C++ Developers ****
 
