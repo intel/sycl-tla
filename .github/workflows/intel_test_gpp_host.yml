@@ -77,7 +77,7 @@ jobs:
           $CXX --version
           g++-13 --version
           sycl-ls
-      - name: Pre-Build
+      - name: Build
         shell: bash
         run: |
           cmake -G Ninja  \
@@ -85,6 +85,7 @@ jobs:
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
             -DCUTLASS_SYCL_RUNNING_CI=ON \
             -DDPCPP_HOST_COMPILER=g++-13
+          cmake --build .
 
       - name: Unit test
         shell: bash
@@ -97,7 +98,7 @@ jobs:
       - name: Examples
         shell: bash
         run: |
-          ninja test_examples
+          cmake --build . --target test_examples -j 1
 
       - name: Benchmarks
         shell: bash
