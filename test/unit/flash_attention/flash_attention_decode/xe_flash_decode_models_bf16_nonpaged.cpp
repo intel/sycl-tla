@@ -1,10 +1,6 @@
 /****************************************************************************
  * Copyright (C) 2025 Intel Corporation. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
- *
- * COMPLETE BF16 exhaustive tests - ALL 320 combinations non-paged
- * Coverage: 4 heads × 2 KV × 2 causal × 2 varlen × 5 models = 160 BF16 tests
- * Total Matrix: 2×4×2×5×2×2 = 320 combinations (FP16 + BF16)
  ***************************************************************************/
 
 #include "flash_decode_testbed_3x.hpp"
