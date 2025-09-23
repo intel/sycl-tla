@@ -34,8 +34,8 @@
 
 namespace cutlass::flash_attention::collective {
 using namespace cute;
-#define BLOCK_ID 0
-#define THREAD_ID 5
+#define BLOCK_ID 1
+#define THREAD_ID 1
 
 template <typename Tensor,
           typename TensorCos, typename TensorSin, typename TensorOut>
