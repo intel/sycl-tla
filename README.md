@@ -129,7 +129,6 @@ CUTLASS is described in the following documents and the accompanying
 - [Efficient GEMM in CUDA](./media/docs/cpp/efficient_gemm.md) - describes how GEMM kernels may be implemented efficiently in CUDA
 - [CUTLASS 3.x Design](./media/docs/cpp/cutlass_3x_design.md) - describes the CUTLASS 3.x design, its benefits, and how CuTe enables us to write much more composable components
 - [GEMM API 3.x](./media/docs/cpp/gemm_api_3x.md) - describes the CUTLASS 3.x GEMM model and C++ template concepts
-- [GEMM API 2.x](./media/docs/cpp/gemm_api.md) - describes the CUTLASS 2.x GEMM model and C++ template concepts
 - [Implicit GEMM Convolution](./media/docs/cpp/implicit_gemm_convolution.md) - describes 2-D and 3-D convolution in CUTLASS
 - [Code Organization](./media/docs/cpp/code_organization.md) - describes the organization and contents of the CUTLASS project
 - [Terminology](./media/docs/cpp/terminology.md) - describes terms used in the code
@@ -137,51 +136,45 @@ CUTLASS is described in the following documents and the accompanying
 - [Fundamental types](./media/docs/cpp/fundamental_types.md) - describes basic C++ classes used in CUTLASS to represent numeric quantities and arrays
 - [Layouts](./media/docs/cpp/layout.md) - describes layouts of matrices and tensors in memory
 - [Tile Iterators](./media/docs/cpp/tile_iterator_concept.md) - describes C++ concepts for iterating over tiles of matrices in memory
-- [CUTLASS Profiler](./media/docs/cpp/profiler.md) - command-line driven profiling application
 - [CUTLASS Utilities](./media/docs/cpp/utilities.md) - additional templates used to facilitate rapid development
-- [Dependent kernel launch](./media/docs/cpp/dependent_kernel_launch.md) - describes a new feature in Hopper which allows overlapping dependent 
-kernels in the same stream, and how it is used in CUTLASS.
 
 # Resources
-We have also described the structure of an efficient GEMM in our talk at the
-[GPU Technology Conference 2018](http://on-demand.gputechconf.com/gtc/2018/presentation/s8854-cutlass-software-primitives-for-dense-linear-algebra-at-all-levels-and-scales-within-cuda.pdf).
 
-- [CUTLASS: Software Primitives for Dense Linear Algebra at All Levels and Scales within CUDA](https://www.nvidia.com/en-us/on-demand/session/gtcsiliconvalley2018-s8854/)
-- [Developing CUDA Kernels to Push Tensor Cores to the Absolute Limit on NVIDIA A100](https://www.nvidia.com/en-us/on-demand/session/gtcsj20-s21745/)
-- [Accelerating Convolution with Tensor Cores in CUTLASS](https://www.nvidia.com/en-us/on-demand/session/gtcspring21-s31883/)
-- [Accelerating Backward Data Gradient by Increasing Tensor Core Utilization in CUTLASS](https://www.nvidia.com/en-us/on-demand/session/gtcspring22-s41996/)
-- [CUTLASS: Python API, Enhancements, and NVIDIA Hopper](https://www.nvidia.com/en-us/on-demand/session/gtcfall22-a41131/)
 
-# Building CUTLASS
+# Building CUTLASS-SYCL
 
-CUTLASS is a header-only template library and does not need to be built to be used by other
-projects. Client applications should target CUTLASS's `include/` directory in their include
+CUTLASS-SYCL is a header-only template library and does not need to be built to be used by other
+projects. Client applications should target CUTLASS-SYCL's `include/` directory in their include
 paths.
 
-CUTLASS unit tests, examples, and utilities can be build with CMake.
+CUTLASS-SYCL unit tests, examples, and utilities can be built with CMake.
 The minimum version of CMake is given in the [Quickstart guide](./media/docs/cpp/quickstart.md).
-Make sure the `CUDACXX` environment  variable points to NVCC in the CUDA Toolkit installed
-on your system.
+Make sure you have Intel oneAPI DPC++ compiler installed and the environment is properly set up.
 
 ```bash
-$ export CUDACXX=${CUDA_INSTALL_PATH}/bin/nvcc
+$ source /opt/intel/oneapi/setvars.sh
 ```
 
-Create a build directory within the CUTLASS project, then run CMake. By default CUTLASS will build kernels
-for CUDA architecture versions 5.0, 6.0, 6.1, 7.0, 7.5, 8.0, 8.6, 8.9, and 9.0.
-To reduce compile time you can specify
-the architectures to build CUTLASS for by changing the CMake configuration setting
-`CUTLASS_NVCC_ARCHS`.
+Create a build directory within the CUTLASS-SYCL project, then run CMake. You need to specify
+the target Intel GPU architecture using the `DPCPP_SYCL_TARGET` flag.
+For Intel Data Center GPU Max Series (Ponte Vecchio), use `intel_gpu_pvc`.
+For Intel Arc GPU B580 Graphics, use `intel_gpu_bmg_g21`.
 
 ```bash
 $ mkdir build && cd build
 
-$ cmake .. -DCUTLASS_NVCC_ARCHS=80               # compiles for NVIDIA's Ampere Architecture
+$ CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_pvc"     # compiles for Intel Data Center GPU Max Series
 ```
 
-From the `build/` directory, compile and run the CUTLASS unit tests by building the target `test_unit` with make.
+Or for Intel Arc GPU B580 Graphics:
 
-The unit tests are organized as several binaries mirroring the top-level namespaces of CUTLASS,
+```bash
+$  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics
+```
+
+From the `build/` directory, compile and run the CUTLASS-SYCL unit tests by building the target `test_unit` with make.
+
+The unit tests are organized as several binaries mirroring the top-level namespaces of CUTLASS-SYCL,
 and they may be executed in parallel via make's `-j` command line argument.
 
 ```bash
@@ -190,62 +183,60 @@ $ make test_unit -j
 ...
 ...
 [----------] Global test environment tear-down
-[==========] 946 tests from 57 test cases ran. (10812 ms total)
-[  PASSED  ] 946 tests.
+[==========] XXX tests from YY test cases ran. (ZZZZ ms total)
+[  PASSED  ] XXX tests.
 ```
 
-All tests should pass on supported platforms, though the exact number of tests may vary over time.
+All tests should pass on supported Intel GPU platforms, though the exact number of tests may vary over time.
 
 
 # Project Structure
 
-CUTLASS is arranged as a header-only library along with Utilities, Tools, Examples, and unit tests. 
-[Doxygen documentation](https://nvidia.github.io/cutlass) provides a complete list of files, classes, 
-and template concepts defined in the CUTLASS project.
+CUTLASS-SYCL is arranged as a header-only library along with Utilities, Tools, Examples, and unit tests. 
 
 A detailed explanation of the source code organization may be found in the 
-[CUTLASS documentation](./media/docs/cpp/code_organization.md), but several main components are summarized below.
+[CUTLASS-SYCL documentation](./media/docs/cpp/code_organization.md), but several main components are summarized below.
 
-## CUTLASS Template Library
+## CUTLASS-SYCL Template Library
 
 ```
 include/                     # client applications should target this directory in their build's include paths
 
-  cutlass/                   # CUDA Templates for Linear Algebra Subroutines and Solvers - headers only
+  cutlass/                   # SYCL Templates for Linear Algebra Subroutines and Solvers - headers only
 
-    arch/                    # direct exposure of architecture features (including instruction-level GEMMs)
+    arch/                    # direct exposure of Intel GPU architecture features (including instruction-level GEMMs)
 
-    conv/                    # code specialized for convolution
+    conv/                    # code specialized for convolution on Intel GPUs
 
-    epilogue/                # code specialized for the epilogue of gemm/convolution
+    epilogue/                # code specialized for the epilogue of gemm/convolution using SYCL
 
-    gemm/                    # code specialized for general matrix product computations
+    gemm/                    # code specialized for general matrix product computations with SYCL
 
     layout/                  # layout definitions for matrices, tensors, and other mathematical objects in memory
 
-    platform/                # CUDA-capable Standard Library components
+    platform/                # SYCL-capable Standard Library components for Intel GPUs
 
-    reduction/               # bandwidth-limited reduction kernels that do not fit the "gemm" model
+    reduction/               # bandwidth-limited reduction kernels optimized for Intel GPU architectures
 
-    thread/                  # simt code that can be performed within a CUDA thread
+    thread/                  # SYCL workgroup and subgroup code for Intel GPU execution units
     
-    transform/               # code specialized for layout, type, and domain transformations
+    transform/               # code specialized for layout, type, and domain transformations using SYCL
 
     *                        # core vocabulary types, containers, and basic numeric operations
 
-  cute/                      # CuTe Layout, layout algebra, MMA/Copy atoms, tiled MMA/Copy
+  cute/                      # CuTe Layout, layout algebra, MMA/Copy atoms, tiled MMA/Copy for SYCL
 
     algorithm/               # Definitions of core operations such as copy, gemm, and operations on cute::tuples
 
-    arch/                    # Bare bones PTX wrapper structs for copy and math instructions
+    arch/                    # Intel GPU architecture wrapper structs for copy and math instructions
 
-    atom/                    # Meta-information either link to or built from arch/ operators
+    atom/                    # Meta-information for Intel GPU operators and SYCL kernels
 
-      mma_atom.hpp           # cute::Mma_Atom and cute::TiledMma
+      mma_atom.hpp           # cute::Mma_Atom and cute::TiledMma for Intel GPU architectures
 
-      copy_atom.hpp          # cute::Copy_Atom and cute::TiledCopy
+      copy_atom.hpp          # cute::Copy_Atom and cute::TiledCopy optimized for SYCL
 
-      *sm*.hpp               # Arch specific meta-information for copy and math operations
+      *xe*.hpp               # Intel Xe architecture specific meta-information for copy and math operations
 
     *                        # Core library types such as Shape, Stride, Layout, Tensor, and associated operations
 
@@ -259,18 +250,18 @@ include/                     # client applications should target this directory 
 
 ```
 tools/
-  library/                   # CUTLASS Instance Library - contains instantiations of all supported CUTLASS templates
+  library/                   # CUTLASS-SYCL Instance Library - contains instantiations of all supported CUTLASS-SYCL templates
     include/
       cutlass/
         library/
 
-  profiler/                  # CUTLASS Profiler         - command-line utility for executing operations in the
-                             #                            CUTLASS Library
+  profiler/                  # CUTLASS Profiler         - SYCL support not yet available
+                             #                            (command-line utility for executing operations)
   
-  util/                      # CUTLASS Utilities        - contains numerous helper classes for
-    include/                 #                            manging tensors in device memory, reference
-      cutlass/               #                            implementations for GEMM, random initialization
-        util/                #                            of tensors, and I/O.
+  util/                      # CUTLASS-SYCL Utilities   - contains numerous helper classes for
+    include/                 #                            managing tensors in Intel GPU device memory, reference
+      cutlass/               #                            implementations for SYCL GEMM, random initialization
+        util/                #                            of tensors, and I/O for Intel GPU environments.
 ```
 
 ### Test

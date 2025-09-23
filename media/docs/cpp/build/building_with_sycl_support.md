@@ -21,7 +21,7 @@ Only Linux platforms are supported.
 ### Requirements (SYCL for Intel GPU)
 
 To build CUTLASS SYCL support for Intel GPUs, you need the DPC++ compiler;
-you can use the latest [[nightly build](https://github.com/intel/llvm/releases)] 
+you can use the latest open source [[nightly build](https://github.com/intel/llvm/releases)] 
 or a oneAPI toolkit from 2025.1 onwards. Intel Compute Runtime 25.13 (with Intel Graphics Compiler 2.10.10) is required. At the time of the release it can be installed from [intel-graphics-staging](https://launchpad.net/~kobuk-team/+archive/ubuntu/intel-graphics-staging). Installation from [intel-graphics](https://launchpad.net/~kobuk-team/+archive/ubuntu/intel-graphics) is recommended when it is available there.
 
 Building the tests and the examples requires oneMKL for random number generation.
@@ -41,7 +41,7 @@ $ CC=icx CXX=icpx cmake .. -G Ninja \
   -DCMAKE_CXX_FLAGS="-ftemplate-backtrace-limit=0 -fdiagnostics-color=always"
 ```
 
-#### Building with release DPCPP compiler
+#### Building with open source nightly release of DPC++
 ```
 # Download the nightly of DPCPP compiler
 $ wget https://github.com/intel/llvm/releases/tag/nightly-2025-01-31
@@ -61,7 +61,7 @@ $ CC=clang CXX=clang++ cmake .. -G Ninja \
 
 CMake will check that DPC++ compiler is available in the system,
 and it will download the MKL library if it cannot find it.
-To get better performance result we require the following combinations of the environment variables flags to provide better performance hints for generating optimised code. For ahead of time (AOT) compilation, the following options have to be set during compilation and for Just in time (JIT) Compilation  when running
+To get better performance result we require the following combinations of the environment variables flags to provide better performance hints for generating optimised code. For ahead of time (AOT) compilation, the following options have to be set during compilation:
 
 ```
 export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file" 
@@ -69,11 +69,11 @@ export IGC_VISAOptions="-perfmodel"
 export IGC_VectorAliasBBThreshold=10000
 export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"  
 ```
-To build and run a simple PVC gemm example run the commands below.
+To build and run a simple PVC/BMG gemm example run the commands below.
 
 ```
-$ ninja 00_pvc_gemm
-$ ./examples/sycl/00_pvc_gemm/00_pvc_gemm
+$ ninja 00_bmg_gemm
+$ ./examples/00_bmg_gemm/00_bmg_gemm
 Disposition: Passed
 Problem Size: 5120x4096x4096x1
 Cutlass GEMM Performance:     [247.159]TFlop/s  (0.6951)ms
