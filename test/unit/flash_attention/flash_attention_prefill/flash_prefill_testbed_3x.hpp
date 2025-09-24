@@ -276,9 +276,9 @@ struct TestbedImpl {
         }
       }
     }
-    syclcompat::memcpy(block_cos.get(), cos_vals.data(), cos_vals.size() * sizeof(ElementQ));
-    syclcompat::memcpy(block_sin.get(), sin_vals.data(), sin_vals.size() * sizeof(ElementQ));
-    syclcompat::wait();
+    compat::memcpy(block_cos.get(), cos_vals.data(), cos_vals.size() * sizeof(ElementQ));
+    compat::memcpy(block_sin.get(), sin_vals.data(), sin_vals.size() * sizeof(ElementQ));
+    compat::wait();
   }
 
   /// Apply RoPE transformation to a tensor
@@ -339,10 +339,10 @@ bool initialize_block_(
       }
     }
   }
-  syclcompat::wait();
+  compat::wait();
   
-  syclcompat::memcpy(block.get(), matrix.data(), matrix.size() * sizeof(Element));
-  syclcompat::wait();
+  compat::memcpy(block.get(), matrix.data(), matrix.size() * sizeof(Element));
+  compat::wait();
 
   return true;
 }
@@ -395,11 +395,13 @@ bool initialize_block_(
     // initialize_block_(block_Q, seed + 2023, seq_len_qo, head_size_qk, batch * num_heads_q);
     // initialize_block_(block_K, seed + 2022, seq_len_kv, head_size_qk, batch * num_heads_kv);
     // initialize_block_(block_V, seed + 2021, head_size_vo, seq_len_kv, batch * num_heads_kv);
-    syclcompat::wait();
+    compat::wait();
     // reference copy of Q and K for verification
-    syclcompat::memcpy(block_ref_Q.get(), block_Q.get(), block_Q.size() * sizeof(ElementQ));
-    syclcompat::memcpy(block_ref_K.get(), block_K.get(), block_K.size() * sizeof(ElementK));
-    syclcompat::wait();
+    compat::memcpy<ElementQ>(block_ref_Q.get(), block_Q.get(), batch * num_heads_kv * seq_len_kv * head_size_qk);
+    compat::memcpy<ElementK>(block_ref_K.get(), block_K.get(), batch * num_heads_kv * seq_len_kv * head_size_qk);
+    // initialize_block_(block_ref_Q, seed + 2023, seq_len_qo, head_size_qk, batch * num_heads_q);
+    // initialize_block_(block_ref_K, seed + 2022, seq_len_kv, head_size_qk, batch * num_heads_kv);
+    compat::wait();
 
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
@@ -498,8 +500,8 @@ bool initialize_block_(
     auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,5,6>(problem_size);
     int seq_len_qo, seq_len_kv;
 
-    auto block_Q_ = in_memory(block_Q);
-    auto block_K_ = in_memory(block_K);
+    auto block_Q_ = in_memory(block_ref_Q);
+    auto block_K_ = in_memory(block_ref_K);
     auto block_V_ = in_memory(block_V);
     auto block_cos_ = in_memory(block_cos);
     auto block_sin_ = in_memory(block_sin); 
@@ -532,49 +534,79 @@ bool initialize_block_(
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
 
         // Apply RoPE to Q and K if enabled
-        // if constexpr (rope_enabled) {
-        //   cutlass::TensorRef ref_Q_cos(block_cos_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
-        //   cutlass::TensorRef ref_Q_sin(block_sin_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
-        //   cutlass::TensorRef ref_K_cos(block_cos_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
-        //   cutlass::TensorRef ref_K_sin(block_sin_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
-
-        //   std::vector<ElementQ> host_Q_cos(seq_len_qo* head_size_qk);
-        //   std::vector<ElementQ> host_Q_sin(seq_len_qo* head_size_qk);
-
-        //   std::vector<ElementQ> host_K_cos(head_size_qk* seq_len_kv);
-        //   std::vector<ElementQ> host_K_sin(head_size_qk* seq_len_kv);
-
-        //   syclcompat::memcpy(host_Q_cos.data(), ref_Q_cos.data() + offset_q, host_Q_cos.size() * sizeof(ElementQ));
-        //   syclcompat::memcpy(host_Q_sin.data(), ref_Q_sin.data() + offset_q, host_Q_sin.size() * sizeof(ElementQ));
-        //   syclcompat::memcpy(host_K_cos.data(), ref_K_cos.data() + offset_k, host_K_cos.size() * sizeof(ElementQ));
-        //   syclcompat::memcpy(host_K_sin.data(), ref_K_sin.data() + offset_k, host_K_sin.size() * sizeof(ElementQ));
-        //   syclcompat::wait();
-
-        //   std::vector<ElementQ> host_Q(seq_len_qo* head_size_qk);
-        //   std::vector<ElementK> host_K(head_size_qk* seq_len_kv);
-
-        //   syclcompat::memcpy(host_Q.data(), ref_Q.data() , host_Q.size() * sizeof(ElementQ));
-        //   syclcompat::memcpy(host_K.data(), ref_K.data() , host_K.size() * sizeof(ElementK));
-        //   syclcompat::wait();
-
-        //   // apply rope on host then update Q, K accordingly
-        //   apply_rope_on_host(host_Q, seq_len_qo, head_size_qk, b, h, host_Q_cos, host_Q_sin);
-        //   apply_rope_on_host(host_K, seq_len_kv, head_size_qk, b, h, host_Q_cos, host_Q_sin);
-        //   syclcompat::wait();
-
-        //   cutlass::DeviceAllocation<ElementQ> block_Q_rope;
-        //   cutlass::DeviceAllocation<ElementK> block_K_rope;
-        //   block_Q_rope.reset(host_Q.size());
-        //   block_K_rope.reset(host_K.size());
+        if constexpr (rope_enabled) {
+          cutlass::TensorRef ref_Q_cos(block_cos_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
+          cutlass::TensorRef ref_Q_sin(block_sin_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
+          cutlass::TensorRef ref_K_cos(block_cos_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
+          cutlass::TensorRef ref_K_sin(block_sin_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
           
-        //   syclcompat::memcpy(block_Q_rope.get(), host_Q.data(), host_Q.size() * sizeof(ElementQ));
-        //   syclcompat::memcpy(block_K_rope.get(), host_K.data(), host_K.size() * sizeof(ElementK));
-        //   syclcompat::wait();
+          std::vector<ElementQ> host_Q(seq_len_qo* head_size_qk);
+          std::vector<ElementK> host_K(head_size_qk* seq_len_kv);
+          std::vector<ElementQ> host_Q_cos(seq_len_qo* head_size_qk);
+          std::vector<ElementQ> host_Q_sin(seq_len_qo* head_size_qk);
+          std::vector<ElementQ> host_K_cos(head_size_qk* seq_len_kv);
+          std::vector<ElementQ> host_K_sin(head_size_qk* seq_len_kv);
+
+          // host_Q.clear();
+          // host_K.clear();
+          // host_Q_cos.clear();
+          // host_Q_sin.clear();
+          // host_K_cos.clear();
+          // host_K_sin.clear();
+          compat::wait();
+
+          compat::memcpy<ElementQ>(host_Q.data(), ref_Q.data(), seq_len_qo* head_size_qk);
+          compat::memcpy<ElementK>(host_K.data(), ref_K.data(), head_size_qk* seq_len_kv);
+          compat::memcpy<ElementQ>(host_Q_cos.data(), ref_Q_cos.data(), seq_len_qo* head_size_qk);
+          compat::memcpy<ElementQ>(host_Q_sin.data(), ref_Q_sin.data(), seq_len_qo* head_size_qk);
+          compat::memcpy<ElementK>(host_K_cos.data(), ref_K_cos.data(), head_size_qk* seq_len_kv);
+          compat::memcpy<ElementK>(host_K_sin.data(), ref_K_sin.data(), head_size_qk* seq_len_kv);
+          compat::wait();
           
-        //   // Update tensor references to use RoPE-transformed tensors 
-        //   syclcompat::memcpy(ref_Q.data(), host_Q.data(), seq_len_qo* head_size_qk * sizeof(ElementQ));
-        //   syclcompat::memcpy(ref_K.data(), host_K.data(), seq_len_kv* head_size_qk * sizeof(ElementK));
-        // }
+          // if(b == 0 && h == 0 && cute::thread(1,0)){
+          //   std::cout << "Before RoPE\n";
+          //   for(int i=0; i<seq_len_qo* head_size_qk; i++){
+          //     std::cout<<"host_Q["<<i<<"]="<<host_Q[i]<<", host_K["<<i<<"]="<<host_K[i]<<"\n";
+          //   }
+          // }
+          compat::wait();
+          // apply rope on host then update Q, K accordingly
+          apply_rope_on_host(host_Q, seq_len_qo, head_size_qk, b, h, host_Q_cos, host_Q_sin);
+          apply_rope_on_host(host_K, seq_len_kv, head_size_qk, b, h, host_K_cos, host_K_sin);
+          // For K, we need to transpose, apply RoPE, then transpose back
+          // std::vector<ElementK> host_K_transposed(seq_len_kv * head_size_qk);
+          // host_K_transposed.clear();
+          // compat::wait();
+          // for (int kv_seq = 0; kv_seq < seq_len_kv; ++kv_seq) {
+          //   for (int dim = 0; dim < head_size_qk; ++dim) {
+          //     host_K_transposed[kv_seq * head_size_qk + dim] = host_K[dim * seq_len_kv + kv_seq];
+          //   }
+          // }
+          // apply_rope_on_host(host_K_transposed, seq_len_kv, head_size_qk, batch, num_heads_q, host_Q_cos, host_K_sin);
+          // // Transpose back
+          // for (int kv_seq = 0; kv_seq < seq_len_kv; ++kv_seq) {
+          //   for (int dim = 0; dim < head_size_qk; ++dim) {
+          //     host_K[dim * seq_len_kv + kv_seq] = host_K_transposed[kv_seq * head_size_qk + dim];
+          //   }
+          // }
+          compat::wait();
+
+          // cutlass::DeviceAllocation<ElementQ> block_Q_rope;
+          // cutlass::DeviceAllocation<ElementK> block_K_rope;
+          // block_Q_rope.reset(host_Q.size());
+          // block_K_rope.reset(host_K.size());
+          
+          // compat::memcpy(block_Q_rope.get(), host_Q.data(), host_Q.size() * sizeof(ElementQ));
+          // compat::memcpy(block_K_rope.get(), host_K.data(), host_K.size() * sizeof(ElementK));
+          // compat::wait();
+          
+          // Update tensor references to use RoPE-transformed tensors 
+          ref_Q.reset(ref_Q.data() , LayoutQ::packed({seq_len_qo, head_size_qk}));
+          ref_K.reset(ref_K.data() , LayoutK::packed({head_size_qk, seq_len_kv}));
+          compat::memcpy(ref_Q.data(), host_Q.data(), seq_len_qo* head_size_qk * sizeof(ElementQ));
+          compat::memcpy(ref_K.data(), host_K.data(), seq_len_kv* head_size_qk * sizeof(ElementK));
+          compat::wait();
+        }
 
         cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv, head_size_qk}, ElementAccumulator{1}, ref_Q,
                                                 cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
@@ -698,12 +730,13 @@ bool initialize_block_(
       }
     }
 
-    syclcompat::wait();
+    compat::wait();
     std::vector<ElementOutput> host_ref_o(block_O.size());
     std::vector<ElementOutput> host_o(block_O.size());
-    syclcompat::memcpy(host_ref_o.data(), block_ref_O.get(), block_ref_O.size() * sizeof(ElementOutput));
-    syclcompat::memcpy(host_o.data(), block_O.get(), block_O.size() * sizeof(ElementOutput));
-    syclcompat::wait();
+    compat::wait();
+    compat::memcpy<ElementOutput>(host_ref_o.data(), block_ref_O.get(), batch * num_heads_q * seq_len_qo * head_size_vo);
+    compat::memcpy<ElementOutput>(host_o.data(), block_O.get(), batch * num_heads_q * seq_len_qo * head_size_vo);
+    compat::wait();
     for(int i = 0; i < host_o.size(); i++) {
       std::cout << "O[" << i << "] = " << host_o[i] << ", ref_O[" << i << "] = " << host_ref_o[i] << ", diff : " << (host_o[i] - host_ref_o[i]) << std::endl;
     }
