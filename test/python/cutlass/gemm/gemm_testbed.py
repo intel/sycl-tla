@@ -37,8 +37,9 @@ import subprocess
 
 import cutlass_cppgen
 import torch
+import os
 
-if not cutlass_cppgen._use_sycl:
+if not os.getenv("CUTLASS_USE_SYCL"):
     import cuda
 import dpctl
 

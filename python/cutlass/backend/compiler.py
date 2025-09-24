@@ -359,7 +359,7 @@ class ArtifactManager:
                     file.write(source_buffer_device)
 
                 # Compile with DPC++
-                cmd_template = "clang++ ${options} ${srcfile} -o ${outfile} -fsycl-dump-device-code=${tmpdir}"
+                cmd_template = "icpx ${options} ${srcfile} -o ${outfile} -fsycl-dump-device-code=${tmpdir}"
                 values = {
                     "options": compilation_options.get_str(),
                     "srcfile": temp_cpp.name,
@@ -441,7 +441,7 @@ class ArtifactManager:
             cmd.extend(["-shared", "-o", temp_dst.name,
                         temp_src.name, "-lcudart", "-lcuda"])
         else:
-            cmd.append("clang++")
+            cmd.append("icpx")
             # Clang does not support "-fpermissive"
             cmd.extend(["-fsycl", "-w", "-fPIC"])
             cmd.extend(host_compilation_options.get_str().split(" "))
