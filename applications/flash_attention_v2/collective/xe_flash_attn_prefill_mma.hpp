@@ -191,18 +191,18 @@ struct FlashPrefillMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, El
     auto tensorK = make_tensor(make_gmem_ptr(args.ptr_K), make_layout(make_shape(seq_len_kv, head_size_qk, batch * num_heads_kv), args.dK));
     auto tensorV = make_tensor(make_gmem_ptr(args.ptr_V), make_layout(make_shape(head_size_vo, seq_len_kv, batch * num_heads_kv), args.dV));
 
-    auto tensorCos = make_tensor(make_gmem_ptr(args.ptr_cos), make_layout(make_shape(seq_len_qo, head_size_qk, batch * num_heads_q), args.dQ));
-    auto tensorSin = make_tensor(make_gmem_ptr(args.ptr_sin), make_layout(make_shape(seq_len_qo, head_size_qk, batch * num_heads_q), args.dK));
+    auto tensorQCos = make_tensor(make_gmem_ptr(args.ptr_cos), make_layout(make_shape(seq_len_qo, head_size_qk, batch * num_heads_q), args.dQ));
+    auto tensorQSin = make_tensor(make_gmem_ptr(args.ptr_sin), make_layout(make_shape(seq_len_qo, head_size_qk, batch * num_heads_q), args.dQ));
+    auto tensorKCos = make_tensor(make_gmem_ptr(args.ptr_cos), make_layout(make_shape(seq_len_kv, head_size_qk, batch * num_heads_kv), args.dK));
+    auto tensorKSin = make_tensor(make_gmem_ptr(args.ptr_sin), make_layout(make_shape(seq_len_kv, head_size_qk, batch * num_heads_kv), args.dK));
 
     XE_Copy_Q copyQ{XE_Copy_Q{}.with(tensorQ)};
     XE_Copy_K copyK{XE_Copy_K{}.with(tensorK)};
     XE_Copy_V copyV{XE_Copy_V{}.with(tensorV)};
-
-    XE_Copy_Q copyQCos{XE_Copy_Q{}.with(tensorCos)};
-    XE_Copy_Q copyQSin{XE_Copy_Q{}.with(tensorSin)};
-
-    XE_Copy_K copyKCos{XE_Copy_K{}.with(tensorCos)};
-    XE_Copy_K copyKSin{XE_Copy_K{}.with(tensorSin)};
+    XE_Copy_Q copyQCos{XE_Copy_Q{}.with(tensorQCos)};
+    XE_Copy_Q copyQSin{XE_Copy_Q{}.with(tensorQSin)};
+    XE_Copy_K copyKCos{XE_Copy_K{}.with(tensorKCos)};
+    XE_Copy_K copyKSin{XE_Copy_K{}.with(tensorKSin)};
 
     return Params{copyQ, copyK, copyV, copyQCos, copyQSin, copyKCos, copyKSin};
   }
@@ -391,11 +391,32 @@ struct FlashPrefillMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, El
       auto tensorK = make_tensor(make_gmem_ptr(k_ptr + offset_k), make_layout(shape_k, stride_k));
       auto tensorV = make_tensor(make_gmem_ptr(v_ptr + offset_v), make_layout(shape_v, stride_v));
 
+      auto q_traits_cos = static_cast<traits_load_Q const&>(params.gmem_tiled_copy_q_cos);
+      ElementQ* base_ptr_q_cos = (ElementQ*)q_traits_cos.base_ptr;
+
+      auto q_traits_sin = static_cast<traits_load_Q const&>(params.gmem_tiled_copy_q_sin);
+      ElementQ* base_ptr_q_sin = (ElementQ*)q_traits_sin.base_ptr;
+      
+      auto k_traits_cos = static_cast<traits_load_K const&>(params.gmem_tiled_copy_k_cos);
+      ElementK* base_ptr_k_cos = (ElementK*)k_traits_cos.base_ptr;
+
+      auto k_traits_sin = static_cast<traits_load_K const&>(params.gmem_tiled_copy_k_sin);
+      ElementK* base_ptr_k_sin = (ElementK*)k_traits_sin.base_ptr;
+
+      auto tensorQCos = make_tensor(make_gmem_ptr(base_ptr_q_cos + offset_q), make_layout(shape_q, stride_q));
+      auto tensorQSin = make_tensor(make_gmem_ptr(base_ptr_q_sin + offset_q), make_layout(shape_q, stride_q));
+      auto tensorKCos = make_tensor(make_gmem_ptr(base_ptr_k_cos + offset_k), make_layout(shape_k, stride_k));
+      auto tensorKSin = make_tensor(make_gmem_ptr(base_ptr_k_sin + offset_k), make_layout(shape_k, stride_k));
+
       XE_Copy_Q copyQ{XE_Copy_Q{}.with(tensorQ)};
       XE_Copy_K copyK{XE_Copy_K{}.with(tensorK)};
       XE_Copy_V copyV{XE_Copy_V{}.with(tensorV)};
+      XE_Copy_Q copyQCos{XE_Copy_Q{}.with(tensorQCos)};
+      XE_Copy_Q copyQSin{XE_Copy_Q{}.with(tensorQSin)};
+      XE_Copy_K copyKCos{XE_Copy_K{}.with(tensorKCos)};
+      XE_Copy_K copyKSin{XE_Copy_K{}.with(tensorKSin)};
 
-      return Params{copyQ, copyK, copyV};
+      return Params{copyQ, copyK, copyV, copyQCos, copyQSin, copyKCos, copyKSin};
     }
   }
 };
