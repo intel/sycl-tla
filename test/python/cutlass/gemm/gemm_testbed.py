@@ -35,9 +35,11 @@ import os
 import re
 import subprocess
 
+import cutlass_cppgen
 import torch
 
-import cuda
+if not cutlass_cppgen._use_sycl:
+    import cuda
 import dpctl
 
 from cutlass_library import (
