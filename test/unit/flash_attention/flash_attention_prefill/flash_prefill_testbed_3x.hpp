@@ -737,9 +737,9 @@ bool initialize_block_(
     compat::memcpy<ElementOutput>(host_ref_o.data(), block_ref_O.get(), batch * num_heads_q * seq_len_qo * head_size_vo);
     compat::memcpy<ElementOutput>(host_o.data(), block_O.get(), batch * num_heads_q * seq_len_qo * head_size_vo);
     compat::wait();
-    for(int i = 0; i < host_o.size(); i++) {
-      std::cout << "O[" << i << "] = " << host_o[i] << ", ref_O[" << i << "] = " << host_ref_o[i] << ", diff : " << (host_o[i] - host_ref_o[i]) << std::endl;
-    }
+    // for(int i = 0; i < host_o.size(); i++) {
+    //   std::cout << "O[" << i << "] = " << host_o[i] << ", ref_O[" << i << "] = " << host_ref_o[i] << ", diff : " << (host_o[i] - host_ref_o[i]) << std::endl;
+    // }
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),

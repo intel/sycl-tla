@@ -390,42 +390,13 @@ public:
       constexpr auto static_shape_k = make_shape(size<0>(gK), size<1>(gK));
       constexpr auto layout_k = make_layout(static_shape_k, LayoutRight{});
       
-      if (cute::thread(1, 3)){
-          #define PRINT(x) print(#x ": "); print(x); print("\n");
-        print("before apply_rope_interleaved_gmem\n");
-        // PRINT(global_thread_idx);
-        PRINT(thread_idx);
-        PRINT(thread_idy);
-        PRINT(thread_idz);
-        PRINT(block_idx);
-        PRINT(block_idy);
-        PRINT(block_idz);
-        // PRINT(block_dimx);
-        // PRINT(block_dimy);
-        // PRINT(block_dimz);
-        // PRINT(grid_dimx);
-        // PRINT(grid_dimy);
-        // PRINT(grid_dimz);
-        PRINT(block_id);
-        PRINT(thread_id);
-        PRINT(coord_q_x);
-        PRINT(coord_q_y);
-        PRINT(coord_q_z);
-        PRINT(coord_k_x);
-        PRINT(coord_k_y);
-        PRINT(coord_k_z);
-        PRINT(offset_q);
-        PRINT(offset_k);
-      }
-      
-      
-      // for (int i =0 ;i< size<2>(gQ); i++){
+      for (int i =0 ;i< size<2>(gQ); i++){
         auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
         auto tensorCosQ = make_tensor(make_gmem_ptr(base_ptr_q_cos+offset_q), layout_q);
         auto tensorSinQ = make_tensor(make_gmem_ptr(base_ptr_q_sin+offset_q), layout_q);
         cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorQ, tensorCosQ, tensorSinQ, tensorQ);
-        // offset_q += QK_BLK_M*QK_BLK_K;
-      // }
+        offset_q += QK_BLK_M*QK_BLK_K;
+      }
       if (block_id%4==1){
         offset_k += QK_BLK_N*QK_BLK_K;
       } else if (block_id%4==2){
@@ -434,18 +405,19 @@ public:
         offset_k += 3*QK_BLK_N*QK_BLK_K;
       }
       
-      // barrier_arrive(2);
-      for (int i =0 ;i< size<2>(gK); i+=4){
-        auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+offset_k), layout_k);
-        auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+offset_k), layout_k);
-        auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+offset_k), layout_k);
-        cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
-        offset_k += 4*QK_BLK_N*QK_BLK_K;
+      for (int k =0 ;k< size<3>(gK); k++){
+        auto new_offset_k = offset_k;
+        for (int i =0 ;i< size<2>(gK); i+=4){
+          auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+new_offset_k), layout_k);
+          auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+new_offset_k), layout_k);
+          auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+new_offset_k), layout_k);
+          cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
+          new_offset_k += 4*QK_BLK_N*QK_BLK_K;
+        }
+        offset_k += size<2>(gK)*QK_BLK_N*QK_BLK_K;
       }
-      // barrier_wait(2);
-      // for(int i=0; i< 10000;i++){
-      //   cute::print("aaaa\n");
-      // }
+      barrier_arrive(2);
+      barrier_wait(2);
     }
 
       for (int i = 0; i < size<3>(pQgQ); i++) {
