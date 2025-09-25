@@ -111,7 +111,7 @@ We are regularly testing following setup in CI.
 |**Platform**|**Operating System** | **DPC++ Compiler** | **G++** | **Intel Compute Runtime** |**Intel Graphics Compiler** |
 |-----------------|----------|-----------------|--------|---------------------|-----------------------|
 |Xe-HPC| Ubuntu 22.04 |2025.2+ |G++13  | 25.18 | 2.11 |
-|Xe2| Ubuntu 24.04 |2025.2+  |G++13  | 25.35 | 2.18 |
+|Xe2| Ubuntu 25.04 |2025.2+  |G++13  | 25.35 | 2.18 |
 
 
 
