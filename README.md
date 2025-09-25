@@ -52,7 +52,7 @@ Base NVIDIA CUTLASS Versions for CUTLASS-SYCL releases:
   - Requires IGC version [v2.18.5](https://github.com/intel/intel-graphics-compiler/releases/tag/v2.18.5) or later
 
 ### New Features  
-- **G++ Host Compiler Support ([#490](https://github.com/intel/cutlass-sycl/pull/490))**: Added comprehensive support for using G++ as host compiler
+- **G++ Host Compiler Support ([#490](https://github.com/intel/cutlass-sycl/pull/490))**: Support for G++ 13 as host compiler
 - Migrated `syclcompat` to this repository as `cutlasscompat` for better compatibility
   - Fixed compilation issues when using G++ instead of clang++
   - Added new CI workflow for testing G++ host compiler builds
@@ -95,17 +95,7 @@ Minimum requirements:
 - DPC++ Compiler Version: oneAPI 2025.1 and onwards
 - Intel Compute Runtime: 25.13 (with Intel Graphics Compiler 2.10.10)
 
-## Validated Configurations
-
-We are regularly testing following setup in CI.
-
-|**Operating System** | **Compiler** |
-|-----------------|----------|
-| Ubuntu 22.04 | GCC 11.2.0 |
-| Ubuntu 24.04 | GCC 13.3.0 |
-
-
-## Hardware
+## Hardware Support
 
 CUTLASS-SYCL runs successfully on the following Intel GPUs.
 
@@ -113,6 +103,18 @@ CUTLASS-SYCL runs successfully on the following Intel GPUs.
 |---|---|
 |Intel Data Center GPU Max Series            |Xe-HPC|
 |Intel Arc GPU B580 Graphics                       |Xe2|
+
+## Validated Software Configurations
+
+We are regularly testing following setup in CI.
+
+|**Platform**|**Operating System** | **DPC++ Compiler** | **G++** | **Intel Compute Runtime** |**Intel Graphics Compiler** |
+|-----------------|----------|-----------------|--------|---------------------|-----------------------|
+|Xe-HPC| Ubuntu 22.04 |2025.2+ |G++13  | 25.18 | 2.11 |
+|Xe2| Ubuntu 24.04 |2025.2+  |G++13  | 25.35 | 2.18 |
+
+
+
 
 
 ## Target Architecture
@@ -183,6 +185,12 @@ Or for Intel Arc GPU B580 Graphics:
 
 ```bash
 $  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics
+```
+
+To compile with G++ as host compiler, add the flag `-DDPCPP_HOST_COMPILER=g++-13` to the cmake command. Please note that the build system must be able to find `g++-13` in your PATH.
+
+```bash
+$  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_HOST_COMPILER=g++-13 -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics with G++ as host compiler
 ```
 
 From the `build/` directory, compile and run the CUTLASS-SYCL unit tests by building the target `test_unit` with make.
