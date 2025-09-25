@@ -1,6 +1,6 @@
 ![ALT](./media/images/gemm-hierarchy-with-epilogue-no-labels.png "Complete CUDA GEMM decomposition")
 
-# CUTLASS SYCL 0.3 (Base - CUTLASS 3.9.2)
+# CUTLASS SYCL 0.5
 
 **This repository fast-follows NVIDIA CUTLASS repository adding SYCL support for Intel GPUs.**
 
@@ -33,23 +33,36 @@ See the [functionality docs](./media/docs/cpp/functionality.md) for a more compr
 list of kernel level features, data types, instructions, and minimum supported by CUTLASS on each GPU
 architecture.
 
-# What's New in CUTLASS SYCL 0.3 
-- Add support for GEMM FP8 (E5M2 and E4M3)
-- Add example for GEMM FP8 with support for channel-wise and group-wise quantization
-- Add support for Grouped GEMM FP8
-- Improve performance for FP8 to FP16 conversion
-- Add support for epilogue data conversion
-- Add support for FP16 GEMM with FP16 accumulator
-- Add support for BF16 GEMM with BF16 accumulator
-- Add support for mixed dtype GEMM with support for tensor-wise, channel-wise and group-wise quantization
-- Add example of mixed dtype BF16 + INT8 using channel-wise and group-wise quantization
-- Add example of mixed dtype FP16 + INT8 using tensor-wise quantization
-- Add example of mixed dtype FP16 + INT4 using channel-wise and group-wise quantization
-- Add support for zero-point quantization in INT4 and INT8 data types
-- Add support for Flash Attention prefill FP8 with and without KV cache
-- Add support for Flash Attention decode FP8 with and without KV cache
+Base NVIDIA CUTLASS Versions for CUTLASS-SYCL releases:
+| CUTLASS SYCL | NVIDIA CUTLASS |
+|-----------------|----------|
+|0.1| 3.9|
+|0.2 | 3.9.2 |
+|0.3 | 3.9.2 |
+|0.5 | 4.2.0 |
 
-**See the [CHANGELOG](CHANGELOG-SYCL.md) for details of all past releases and updates.**
+# What's New in CUTLASS SYCL 0.5 
+
+### Major Architecture Changes
+- **Xe Rearchitecture ([#477](https://github.com/intel/cutlass-sycl/pull/477))**: Complete redesign of Xe CuTe atoms with new architecture
+  - New MMA atoms for improved performance
+  - Enhanced 2D copy atoms (loads, stores, prefetch with VNNI/transpose support)
+  - New 2D copy helpers (low-level `make_block_2d_copy` and high-level `make_block_2d_copy_{A,B,C}`)
+  - Generic and optimized reorder atoms for {int4, uint4, int8, uint8, e2m1, e4m3, e5m2} -> {half, bfloat16}
+  - Requires IGC version [v2.18.5](https://github.com/intel/intel-graphics-compiler/releases/tag/v2.18.5) or later
+
+### New Features  
+- **G++ Host Compiler Support ([#490](https://github.com/intel/cutlass-sycl/pull/490))**: Added comprehensive support for using G++ as host compiler
+- Migrated `syclcompat` to this repository as `cutlasscompat` for better compatibility
+  - Fixed compilation issues when using G++ instead of clang++
+  - Added new CI workflow for testing G++ host compiler builds
+  - Enhanced build system to support `-DDPCPP_HOST_COMPILER=g++` option
+- **Grouped GEMM for Mixed Dtype ([#457](https://github.com/intel/cutlass-sycl/pull/457))**: Extended grouped GEMM support to mixed precision operations
+  - Added support for BF16 + S8 mixed dtype grouped GEMM
+  - Added support for FP16 + U4 mixed dtype grouped GEMM
+  - New examples: `10_bmg_grouped_gemm_bf16_f16_s8.cpp` and `10_bmg_grouped_gemm_f16_u4.cpp`
+
+  **See the [CHANGELOG](CHANGELOG-SYCL.md) for details of all past releases and updates.**
 
 # CuTe
 
@@ -82,7 +95,7 @@ Minimum requirements:
 - DPC++ Compiler Version: oneAPI 2025.1 and onwards
 - Intel Compute Runtime: 25.13 (with Intel Graphics Compiler 2.10.10)
 
-## Operating Systems
+## Validated Configurations
 
 We are regularly testing following setup in CI.
 
