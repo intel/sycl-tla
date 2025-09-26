@@ -45,6 +45,9 @@
    case they will apply to all GEMMs; otherwise, random values are generated per
    GEMM.
 
+    While a nullptr can be passed for C, in this example, we don't do that,
+   because the reference kernel doesn't accept nullptr for C.
+
     Group GEMM scheduling (cutlass::gemm::GroupScheduler) is more complex than
    standard GEMM, because each GEMM may have a unique size, only known at
    runtime. Thus, the scheduler will distribute an a priori unknown number of
@@ -521,26 +524,25 @@ template <class Gemm> struct ExampleRunner {
     if (host_problem_shapes_available) {
       arguments = typename Gemm::Arguments{
           cutlass::gemm::GemmUniversalMode::kGrouped,
-          {options.groups, problem_sizes.get(),
-           options.problem_sizes_host.data()},
           {ptr_A.get(), stride_A.get(), ptr_B.get(), stride_B.get()},
           {fusion_args, ptr_C.get(), stride_C.get(), ptr_D.get(),
            stride_D.get()},
           hw_info,
           {1, RasterOrderOptions::AlongN},
           options.num_rows_per_expert,
+          options.groups,
           gemm_N,
           gemm_K};
     } else {
       arguments = typename Gemm::Arguments{
           cutlass::gemm::GemmUniversalMode::kGrouped,
-          {options.groups, problem_sizes.get(), nullptr},
           {ptr_A.get(), stride_A.get(), ptr_B.get(), stride_B.get()},
           {fusion_args, ptr_C.get(), stride_C.get(), ptr_D.get(),
            stride_D.get()},
           hw_info,
           {1, RasterOrderOptions::AlongN},
           options.num_rows_per_expert,
+          options.groups,
           gemm_N,
           gemm_K};
     }
@@ -645,11 +647,11 @@ void MoEGEMM(const bfloat16_t *activations, const bfloat16_t *weights,
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x16x32_LD_N;
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
   using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
 
   // Workgroup-level tile
-  using TileShape = Shape<_16, _256, _32>;
+  using TileShape = Shape<_256, _256, _32>;
 /*
   using TiledMma =
       TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
@@ -658,7 +660,7 @@ void MoEGEMM(const bfloat16_t *activations, const bfloat16_t *weights,
 
   using TiledMma =                    // M=8,N=16,K=16, D=f32,A=bf16,B=bf16,C=f32
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_1, _8, _1>, Stride<_8, _1, _0>>>::TiledMMA;
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
   // Dispatch to grouped gemm algorithm
@@ -702,16 +704,11 @@ void MoEGEMM(const bfloat16_t *activations, const bfloat16_t *weights,
 
 
 int main(int argc, const char **argv) {
-  constexpr int num_experts = 128;
+  const int num_experts = 32;
 
-  int total_rows_for_each_expert[128] = {
-      23, 16, 15, 4,  9,  36, 20, 20, 26, 26, 9,  31, 36, 3,  30, 15, 12, 6,
-      28, 18, 3,  12, 16, 9,  18, 17, 38, 14, 36, 16, 24, 34, 22, 4,  27, 21,
-      16, 39, 30, 19, 6,  35, 23, 29, 1,  11, 29, 13, 6,  25, 27, 26, 19, 8,
-      23, 31, 17, 24, 40, 15, 20, 32, 17, 36, 34, 12, 31, 22, 0,  9,  19, 20,
-      2,  26, 9,  6,  15, 27, 22, 8,  18, 14, 36, 12, 19, 19, 36, 20, 2,  27,
-      23, 36, 29, 14, 4,  28, 5,  1,  36, 5,  31, 36, 26, 32, 6,  21, 32, 39,
-      27, 12, 37, 6,  6,  39, 0,  16, 39, 34, 19, 13, 0, 0, 0, 0, 0, 0, 0, 0};
+  int total_rows_for_each_expert[num_experts] = {
+    148, 231, 404, 180, 127, 244, 224, 244, 110, 617, 289, 845, 191, 424, 30, 97, 57, 324,
+  62, 77, 75, 144, 250, 287, 629, 370, 161, 101, 215, 113, 224, 35};
 
   int num_tokens_incl_duplicated = 0;
   for (int i = 0; i < num_experts; i++) {

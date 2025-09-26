@@ -123,14 +123,14 @@ public:
   // Device side arguments
   struct Arguments {
     GemmUniversalMode mode{};
-    ProblemShape problem_shape{};
     MainloopArguments mainloop{};
     EpilogueArguments epilogue{};
     KernelHardwareInfo hw_info{};
     TileSchedulerArguments scheduler{};
     const int *M_per_group{nullptr};
-    int N = 0;
-    int K = 0;
+    int num_experts;
+    int N;
+    int K;
   };
 
   // Kernel entry point API
@@ -143,8 +143,9 @@ public:
     TileSchedulerParams scheduler{};
     void *workspace{nullptr};
     const int *M_per_group{nullptr};
-    int N = 0;
-    int K = 0;
+    int num_experts;
+    int N;
+    int K;
   };
 
   //
@@ -156,7 +157,8 @@ public:
   Params
   to_underlying_arguments(Arguments const& args, void* workspace) {
     CUTLASS_TRACE_HOST("to_underlying_arguments():");
-    auto problem_shape = args.problem_shape;
+    auto dummy_problem_shape = cute::Shape<int, int, int>{256, args.N, args.K};
+    auto dummy_group_problem_shape = ProblemShape{1, &dummy_problem_shape, nullptr};
 
     // Get SM count if needed, otherwise use user supplied SM count
     int sm_count = args.hw_info.sm_count;
@@ -174,19 +176,20 @@ public:
     uint8_t *workspace_ptr = reinterpret_cast<uint8_t *>(workspace);
 
     TileSchedulerParams scheduler = TileScheduler::to_underlying_arguments(
-        problem_shape, TileShape{}, ClusterShape{}, hw_info, args.scheduler,
+        dummy_group_problem_shape, TileShape{}, ClusterShape{}, hw_info, args.scheduler,
         workspace_ptr);
 
     return {args.mode,
-            problem_shape,
+            dummy_group_problem_shape,
             CollectiveMainloop::to_underlying_arguments(
-                args.problem_shape, args.mainloop, workspace_ptr),
+                dummy_group_problem_shape, args.mainloop, workspace_ptr),
             CollectiveEpilogue::to_underlying_arguments(
-                args.problem_shape, args.epilogue, workspace_ptr),
+                dummy_group_problem_shape, args.epilogue, workspace_ptr),
             hw_info,
             scheduler,
             workspace,
             args.M_per_group,
+            args.num_experts,
             args.N,
             args.K};
   }
@@ -199,9 +202,10 @@ public:
           (args.mode == GemmUniversalMode::kBatched && rank(typename ProblemShape::UnderlyingProblemShape{}) == 3));
 
     implementable = implementable && TileScheduler::can_implement(args.scheduler);
-
-    implementable &= CollectiveMainloop::can_implement(args.problem_shape, args.mainloop);
-    implementable &= CollectiveEpilogue::can_implement(args.problem_shape, args.epilogue);
+    auto dummy_problem_shape = cute::Shape<int, int, int>{256, args.N, args.K};
+    auto dummy_group_problem_shape = ProblemShape{1, &dummy_problem_shape, nullptr};
+    implementable &= CollectiveMainloop::can_implement(dummy_group_problem_shape, args.mainloop);
+    implementable &= CollectiveEpilogue::can_implement(dummy_group_problem_shape, args.epilogue);
 
     return implementable;
   }
@@ -255,8 +259,10 @@ public:
     SharedStorage& shared_storage = *reinterpret_cast<SharedStorage*>(smem_buf);
 
     TileScheduler scheduler{params.scheduler};
+    const int32_t N = params.N;
+    const int32_t K = params.K;
     scheduler.configure(
-        const_cast<int32_t *>(params.M_per_group), params.N, params.K);
+        const_cast<int32_t *>(params.M_per_group), params.N, params.K, params.num_experts);
     auto work_tile_info = scheduler.initial_work_tile_info(ClusterShape{});
     constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (BLK_M,BLK_N,BLK_K)
 
@@ -268,12 +274,53 @@ public:
     ProblemShapeMNKL problem_shape_MNKL;
     MainloopTensors AB_tensors;
     EpilogueTensors CD_tensors;
-    const int32_t N = params.N;
-    const int32_t K = params.K;
+
     if (work_tile_info.is_valid()) {
       curr_group = work_tile_info.L_idx;
       problem_shape_MNKL = append<4>(Shape<int, int, int>{params.M_per_group[curr_group], N, K}, 1);
     }
+    /*
+    using LayoutA_tiny = cutlass::layout::RowMajor;
+    using LayoutB_tiny = cutlass::layout::ColumnMajor;
+    using LayoutC_tiny = cutlass::layout::RowMajor;
+    using LayoutD_tiny = cutlass::layout::RowMajor;
+
+    using GmemTiledCopyA_tiny = XE_2D_U16x16x32_LD_N;
+    using GmemTiledCopyB_tiny = XE_2D_U16x16x16_LD_T;
+
+    // Workgroup-level tile
+    using TileShape_tiny = Shape<_16, _256, _32>;
+
+    using TiledMma_tiny =                    // M=8,N=16,K=16, D=f32,A=bf16,B=bf16,C=f32
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+                                      Layout<Shape<_1, _8, _1>, Stride<_8, _1, _0>>>::TiledMMA;
+
+
+    // Dispatch to grouped gemm algorithm
+    using GEMMDispatchPolicy_tiny =
+        cutlass::gemm::MainloopIntelXeXMX16Group<2,
+                                                 cutlass::gemm::KernelXeMoEGEMM>;
+    using EpilogueDispatchPolicy_tiny = cutlass::epilogue::IntelXeXMX16Group;
+
+    using EpilogueOp_tiny =
+        cutlass::epilogue::fusion::LinearCombination<float_t, float_t>;
+
+    using CollectiveEpilogue_tiny =
+        typename cutlass::epilogue::collective::CollectiveBuilder<
+            cutlass::arch::IntelXe, cutlass::arch::OpClassTensorOp, TileShape_tiny,
+            Shape<_1, _1, _1>, cutlass::epilogue::collective::EpilogueTileAuto,
+            float, float, float, LayoutC_tiny, 1, bfloat16_t, LayoutC_tiny, 1,
+            EpilogueDispatchPolicy_tiny, EpilogueOp_tiny>::CollectiveOp;
+
+    // Mainloop
+    using CollectiveMainloop_tiny = cutlass::gemm::collective::CollectiveMma<
+        GEMMDispatchPolicy_tiny, TileShape_tiny, ElementA,
+        cutlass::gemm::TagToStrideA_t<LayoutA_tiny *>, ElementB,
+        cutlass::gemm::TagToStrideB_t<LayoutB_tiny *>, TiledMma_tiny, GmemTiledCopyA_tiny, void,
+        void, cute::identity,                      // A
+        GmemTiledCopyB_tiny, void, void, cute::identity // B
+        >;
+    */
 
     while (work_tile_info.is_valid()) {
       auto M = get<0>(problem_shape_MNKL);

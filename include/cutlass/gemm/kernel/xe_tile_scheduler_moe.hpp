@@ -54,6 +54,7 @@ private:
   int32_t* num_rows_per_expert_ = nullptr;
   int32_t K_ = 0;
   int32_t N_ = 0;
+  int32_t num_experts_ = 0;
 
   // Tracking current group, its starting linear idx and total tiles
   struct GroupInfo {
@@ -112,10 +113,11 @@ public:
   // Methods
   //
 
-  CUTLASS_HOST_DEVICE void configure(int32_t* num_rows_per_expert, int32_t N, int32_t K) {
+  CUTLASS_HOST_DEVICE void configure(int32_t* num_rows_per_expert, int32_t N, int32_t K, int32_t num_experts) {
     num_rows_per_expert_ = num_rows_per_expert;
     N_ = N;
     K_ = K;
+    num_experts_ = num_experts;
   }
 
   // Given the inputs, computes the total number of output blocks this problem will compute over
@@ -277,7 +279,7 @@ public:
 
     bool valid_tile = true;
     uint64_t ctas_along_m, ctas_along_n;
-    int total_problem_groups = problem_shapes.groups();
+    int total_problem_groups = num_experts_;
     ctas_along_m = divmod_cta_shape_m.divide(cute::shape<0>(ProblemShape(num_rows_per_expert_[group_info.group_idx], N_, K_)) +  divmod_cta_shape_m.divisor - 1);
     ctas_along_n = divmod_cta_shape_n.divide(cute::shape<1>(ProblemShape(num_rows_per_expert_[group_info.group_idx], N_, K_)) +  divmod_cta_shape_n.divisor - 1);
 
