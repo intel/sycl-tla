@@ -83,6 +83,58 @@ using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Helper template to check if a type is complete
+template <typename T, size_t = 0>
+struct is_complete : std::false_type {};
+
+template <typename T>
+struct is_complete<T, 0 * sizeof(T)> : std::true_type {};
+
+template <typename T>
+static constexpr bool is_complete_v = is_complete<T>::value;
+
+
+template <typename TA, typename TB, typename TC>
+auto
+choose_mma_op()
+{
+  if constexpr (is_complete_v<XE_DPAS_TT<8, TC, TA, TB>>) 
+    return XE_DPAS_TT<8, TC, TA, TB>{};
+  else if constexpr (is_same_v<std::decay_t<TA>, cute::bfloat16_t>)
+    return XE_DPAS_TT<8, float, cute::bfloat16_t>{};
+  else  /* Use f16 by default as upconversion sequences are typically faster */
+    return XE_DPAS_TT<8, float, cute::half_t>{};
+}
+
+// Helper function to choose tiled MMA based on tensor properties
+template <typename TA, typename TB, typename TC, typename LayoutA, typename LayoutB>
+auto
+choose_tiled_mma() 
+{
+
+  auto op = choose_mma_op<TA,TB,TC>();
+
+  constexpr bool byte = (cute::max(sizeof_bits_v<TA>, sizeof_bits_v<TB>) <= 8);
+
+  constexpr bool is_A_transposed = std::is_same_v<LayoutA, cutlass::layout::ColumnMajor>;
+  constexpr bool is_B_transposed = std::is_same_v<LayoutB, cutlass::layout::ColumnMajor>;
+  constexpr bool use_1x_dpas_per_k = is_A_transposed || (byte && is_B_transposed);
+  
+  
+  using _K = conditional_t<use_1x_dpas_per_k,
+                           C<op.K>, C<op.K*2>>;
+
+  using WGTile = Shape<_256, _256, _K>;                               // 256x256 WG tile size
+  using SGLayout = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>;     // 8x4 SG tiling, n-major
+
+  using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>, Layout<WGTile>, SGLayout>::TiledMMA;
+
+  return MMA{};
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
 // Command line options parsing
 struct Options {
 
@@ -350,24 +402,11 @@ int main(int argc, const char** argv)
   using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
 
   // Workgroup-level tile
-  using TileShape = Shape<_256, _256, _32>;
-
-  // A TiledMMA struct defines a tiling of an MMA atom over M, N and K, combining both additional
-  // hardware (sub-groups for Intel BMG) and iterations by each sub-group.
-  //
-  // The TiledMMAHelper struct defines a specific TiledMMA for a given MMA atom
-  // (XE_8x16x16_F32BF16BF16F32_TT), TileShape (<256, 256, 32>) and sub-group layout (8x4x1). The
-  // TiledMMA constructed using TiledMMAHelper has the property that each sub-group operates on a
-  // single contiguous chunk of the work-group TileShape. For this configuration, this implies that
-  // each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations). See
-  // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 4,1,0) for
-  // performance reasons.
-  using TiledMma =                    // M=8,N=16,K=16, D=f32,A=bf16,B=bf16,C=f32
-      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+  using TiledMma = decltype(choose_tiled_mma<ElementInputA, ElementInputB, ElementOutput, LayoutA, LayoutB>());
+  using TileShape = decltype(TiledMma{}.tile_mnk());
 
   // For Intel BMG, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
-  constexpr int PipelineStages = 3;
+  constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
