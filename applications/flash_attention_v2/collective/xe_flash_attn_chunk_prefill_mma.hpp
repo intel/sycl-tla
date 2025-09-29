@@ -32,6 +32,7 @@
 
 #include "cutlass/cutlass.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
+#include "cutlass/fp8_to_fp16.h"
 
 #include "cute/algorithm/functional.hpp"
 #include "cute/atom/mma_atom.hpp"
@@ -174,6 +175,9 @@ struct FlashChunkPrefillMma<
   using XE_Copy_V = decltype(make_tiled_copy(
       atom_load_V{}, Layout<CopyThreadShape>{}, val_layout_load_V{}));
 
+  template <typename T>
+  static constexpr bool is_fp8_v = cute::is_same_v<T,float_e4m3_t> || cute::is_same_v<T,float_e5m2_t>;
+
   // Host side kernel arguments
   struct Arguments {
     ElementQ const *ptr_Q;
@@ -284,10 +288,10 @@ struct FlashChunkPrefillMma<
 
     // Create fragments
     // TODO(Codeplay): fix this, this is probably not general
-    Tensor tCrQ = make_tensor<ElementQ>(make_fragment_layout(
-        params.gmem_tiled_copy_q, take<0, 3>(tCgQ.shape())));
-    Tensor tCrK = make_tensor<ElementK>(
-        make_fragment_layout(gmem_tiled_copy_k, take<0, 3>(tCgK.shape())));
+    using TCrQ_Type = cute::conditional_t<is_fp8_v<ElementQ>, uint8_t, ElementQ>;
+    using TCrK_Type = cute::conditional_t<is_fp8_v<ElementQ>, uint8_t, ElementK>;
+    Tensor tCrQ = make_tensor<TCrQ_Type>(make_fragment_layout(params.gmem_tiled_copy_q, take<0,3>(tCgQ.shape())));
+    Tensor tCrK = make_tensor<TCrK_Type>(make_fragment_layout(params.gmem_tiled_copy_k, take<0,3>(tCgK.shape())));
 
     // Retile registers for copies
     Tensor tQrQ = thr_copy_Q.retile_D(tCrQ);
@@ -304,7 +308,27 @@ struct FlashChunkPrefillMma<
     for (int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
       copy(params.gmem_tiled_copy_q, tQgQ(_, _, _, k_tile), tQrQ);
       copy(gmem_tiled_copy_k, tKgK(_, _, _, k_tile), tKrK);
-      cute::gemm(tiled_mma, accum, tCrQ, tCrK, frag_src);
+      // cute::gemm(tiled_mma, accum, tCrQ, tCrK, frag_src);
+      //
+      if constexpr (is_fp8_v<ElementQ> && is_fp8_v<ElementK>) {
+        auto tCrQ_ = make_fragment_like<half_t>(tCrQ);
+        convert_FP8_to_FP16<ElementQ>(tCrQ, tCrQ_);
+        auto tCrK_ = make_fragment_like<half_t>(tCrK);
+        convert_FP8_to_FP16<ElementK>(tCrK, tCrK_);
+        cute::gemm(tiled_mma, accum, tCrQ_, tCrK_, frag_src);
+
+      } else if constexpr (is_fp8_v<ElementQ> && !is_fp8_v<ElementK>) {
+        auto tCrQ_ = make_fragment_like<half_t>(tCrQ);
+        convert_FP8_to_FP16<ElementQ>(tCrQ, tCrQ_);
+        cute::gemm(tiled_mma, accum, tCrQ_ , tCrK, frag_src);
+
+      } else if constexpr (!is_fp8_v<ElementQ> && is_fp8_v<ElementK>) {
+         auto tCrK_ = make_fragment_like<half_t>(tCrK);
+        convert_FP8_to_FP16<ElementK>(tCrK, tCrK_);
+        cute::gemm(tiled_mma, accum, tCrQ , tCrK_, frag_src);
+      } else {
+         cute::gemm(tiled_mma, accum, tCrQ , tCrK, frag_src);
+      }
 #if 0
 #define PRINT(x)                                                               \
   print(#x ": ");                                                              \
@@ -366,8 +390,8 @@ struct FlashChunkPrefillMma<
         sg.get_group_id()[0] * DispatchPolicy::SubgroupSize;
     auto thread_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
     Tensor tCgV = thread_mma.partition_B(gV_);
-    Tensor tCrV = make_tensor<ElementV>(
-        make_fragment_layout(gmem_tiled_copy_v, take<0, 3>(tCgV.shape())));
+    using TCrV_Type = cute::conditional_t<is_fp8_v<ElementV>, uint8_t, ElementV>;
+    Tensor tCrV = make_tensor<TCrV_Type>(make_fragment_layout(params.gmem_tiled_copy_v, take<0,3>(tCgV.shape())));
 
     // Partition the copying of A and B tiles across the threads
     auto gmem_thr_copy_V = gmem_tiled_copy_v.get_slice(thread_idx);
@@ -402,7 +426,15 @@ struct FlashChunkPrefillMma<
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < tile_count; i++) {
       copy(gmem_tiled_copy_v, tVgV(_, _, _, i), tVrV);
-      cute::gemm(tiled_mma, accum(_, _, _, i), tPr, tCrV, frag_src(_, _, _, i));
+      // cute::gemm(tiled_mma, accum(_, _, _, i), tPr, tCrV, frag_src(_, _, _, i));
+      //
+      if constexpr (is_fp8_v<ElementV>) {
+        auto tCrV_ = make_fragment_like<half_t>(tCrV);
+        convert_FP8_to_FP16<ElementV>(tCrV, tCrV_);
+        cute::gemm(tiled_mma, accum(_,_,_,i), tPr, tCrV_, frag_src(_,_,_,i));
+      } else {
+        cute::gemm(tiled_mma, accum(_,_,_,i), tPr, tCrV, frag_src(_,_,_,i));
+      }
     }
   }
 
