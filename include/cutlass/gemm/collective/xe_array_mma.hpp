@@ -36,6 +36,7 @@
 #include "cute/algorithm/functional.hpp"
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
+#include "../tools/util/include/cutlass/util/packed_stride.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -314,16 +315,13 @@ template <typename ProblemShape_MNKL>
     ElementB const *ptr_B_curr_batch =
         reinterpret_cast<ElementB const *>(mainloop_params.ptr_B[0]) +
         next_group * K * N;
-    auto a_stride = InternalStrideA{};
-    cute::get<0>(a_stride) = K;
+
     Tensor mA = make_tensor(
         make_gmem_ptr(ptr_A_curr_batch), make_shape(M, K, (int32_t)1),
-        a_stride);
-    auto b_stride = InternalStrideB{};
-    cute::get<0>(b_stride) = K;
+        cutlass::make_cute_packed_stride(InternalStrideA{}, {M, K, 1}));
     Tensor mB = make_tensor(
         make_gmem_ptr(ptr_B_curr_batch), make_shape(N, K, (int32_t)1),
-        b_stride);
+        cutlass::make_cute_packed_stride(InternalStrideB{}, {N, K, 1}));
 
     return cute::make_tuple(mA, mB);
   }
