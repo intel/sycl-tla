@@ -367,7 +367,7 @@ int main(int argc, const char** argv)
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   // For Intel BMG, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
-  constexpr int PipelineStages = 2;
+  constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
