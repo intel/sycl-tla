@@ -464,7 +464,7 @@ public:
       TensorC mC_mnl;
       TensorD mD_mnl;
       if constexpr (is_source_supported) {
-        ElementC const* ptr_C_curr_batch = (params.ptr_C == nullptr) ? nullptr : reinterpret_cast<ElementC const*>(params.ptr_C[next_group]);
+        ElementC const* ptr_C_curr_batch = reinterpret_cast<ElementC const*>(params.ptr_C[next_group]);
         mC_mnl = make_tensor(make_gmem_ptr(ptr_C_curr_batch), make_layout(make_shape(M, N, L), params.dC[next_group]));
       }
 
