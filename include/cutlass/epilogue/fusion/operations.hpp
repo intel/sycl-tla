@@ -111,13 +111,15 @@ template<
   class ElementCompute_,
   class ElementSource_ = ElementOutput_,
   class ElementScalar_ = ElementCompute_,
-  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest,
+  bool supportSource = true
 >
 struct LinearCombination
     : ScaledAcc<ElementOutput_, ElementCompute_, ElementScalar_, RoundStyle_> {
   using ElementSource = ElementSource_;
-  static constexpr bool IsSourceSupported = true;
+  static constexpr bool IsSourceSupported = supportSource;
 };
+
 
 // D = activation(alpha * acc + beta * C)
 template<

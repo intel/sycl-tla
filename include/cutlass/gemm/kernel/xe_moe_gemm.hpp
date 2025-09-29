@@ -36,7 +36,9 @@
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/gemm/dispatch_policy.hpp"
 #include "cutlass/gemm/kernel/tile_scheduler.hpp"
+#include "../tools/util/include/cutlass/util/packed_stride.hpp"
 #include "cute/tensor.hpp"
+
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -123,8 +125,11 @@ public:
   // Device side arguments
   struct Arguments {
     GemmUniversalMode mode{};
-    MainloopArguments mainloop{};
-    EpilogueArguments epilogue{};
+    const ElementA** A_ptr;
+    const ElementB** B_ptr;
+    const ElementC** C_ptr;
+    ElementD** D_ptr;
+    decltype(EpilogueArguments{}.thread) fusion_args;
     KernelHardwareInfo hw_info{};
     TileSchedulerArguments scheduler{};
     const int *M_per_group{nullptr};
@@ -182,9 +187,26 @@ public:
     return {args.mode,
             dummy_group_problem_shape,
             CollectiveMainloop::to_underlying_arguments(
-                dummy_group_problem_shape, args.mainloop, workspace_ptr),
+                dummy_group_problem_shape, 
+                MainloopArguments{
+                  args.A_ptr,
+                  nullptr,
+                  args.B_ptr,
+                  nullptr         
+                },
+                workspace_ptr
+            ),
             CollectiveEpilogue::to_underlying_arguments(
-                dummy_group_problem_shape, args.epilogue, workspace_ptr),
+                dummy_group_problem_shape,
+                EpilogueArguments{
+                  args.fusion_args,
+                  args.C_ptr,
+                  nullptr,
+                  args.D_ptr,
+                  nullptr        
+                },
+                workspace_ptr
+            ),
             hw_info,
             scheduler,
             workspace,
@@ -204,8 +226,21 @@ public:
     implementable = implementable && TileScheduler::can_implement(args.scheduler);
     auto dummy_problem_shape = cute::Shape<int, int, int>{256, args.N, args.K};
     auto dummy_group_problem_shape = ProblemShape{1, &dummy_problem_shape, nullptr};
-    implementable &= CollectiveMainloop::can_implement(dummy_group_problem_shape, args.mainloop);
-    implementable &= CollectiveEpilogue::can_implement(dummy_group_problem_shape, args.epilogue);
+    implementable &= CollectiveMainloop::can_implement(dummy_group_problem_shape, 
+                MainloopArguments{
+                  args.A_ptr,
+                  nullptr,
+                  args.B_ptr,
+                  nullptr
+                });
+    implementable &= CollectiveEpilogue::can_implement(dummy_group_problem_shape,                 
+              EpilogueArguments{
+                  args.fusion_args,
+                  args.C_ptr,
+                  nullptr,
+                  args.D_ptr,
+                  nullptr  
+                });
 
     return implementable;
   }
@@ -279,48 +314,6 @@ public:
       curr_group = work_tile_info.L_idx;
       problem_shape_MNKL = append<4>(Shape<int, int, int>{params.M_per_group[curr_group], N, K}, 1);
     }
-    /*
-    using LayoutA_tiny = cutlass::layout::RowMajor;
-    using LayoutB_tiny = cutlass::layout::ColumnMajor;
-    using LayoutC_tiny = cutlass::layout::RowMajor;
-    using LayoutD_tiny = cutlass::layout::RowMajor;
-
-    using GmemTiledCopyA_tiny = XE_2D_U16x16x32_LD_N;
-    using GmemTiledCopyB_tiny = XE_2D_U16x16x16_LD_T;
-
-    // Workgroup-level tile
-    using TileShape_tiny = Shape<_16, _256, _32>;
-
-    using TiledMma_tiny =                    // M=8,N=16,K=16, D=f32,A=bf16,B=bf16,C=f32
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                      Layout<Shape<_1, _8, _1>, Stride<_8, _1, _0>>>::TiledMMA;
-
-
-    // Dispatch to grouped gemm algorithm
-    using GEMMDispatchPolicy_tiny =
-        cutlass::gemm::MainloopIntelXeXMX16Group<2,
-                                                 cutlass::gemm::KernelXeMoEGEMM>;
-    using EpilogueDispatchPolicy_tiny = cutlass::epilogue::IntelXeXMX16Group;
-
-    using EpilogueOp_tiny =
-        cutlass::epilogue::fusion::LinearCombination<float_t, float_t>;
-
-    using CollectiveEpilogue_tiny =
-        typename cutlass::epilogue::collective::CollectiveBuilder<
-            cutlass::arch::IntelXe, cutlass::arch::OpClassTensorOp, TileShape_tiny,
-            Shape<_1, _1, _1>, cutlass::epilogue::collective::EpilogueTileAuto,
-            float, float, float, LayoutC_tiny, 1, bfloat16_t, LayoutC_tiny, 1,
-            EpilogueDispatchPolicy_tiny, EpilogueOp_tiny>::CollectiveOp;
-
-    // Mainloop
-    using CollectiveMainloop_tiny = cutlass::gemm::collective::CollectiveMma<
-        GEMMDispatchPolicy_tiny, TileShape_tiny, ElementA,
-        cutlass::gemm::TagToStrideA_t<LayoutA_tiny *>, ElementB,
-        cutlass::gemm::TagToStrideB_t<LayoutB_tiny *>, TiledMma_tiny, GmemTiledCopyA_tiny, void,
-        void, cute::identity,                      // A
-        GmemTiledCopyB_tiny, void, void, cute::identity // B
-        >;
-    */
 
     while (work_tile_info.is_valid()) {
       auto M = get<0>(problem_shape_MNKL);

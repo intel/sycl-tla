@@ -348,10 +348,10 @@ template <class Gemm> struct ExampleRunner {
     // Assign pointers
     //
 
-    std::vector<ElementA *> ptr_A_host(options.groups);
-    std::vector<ElementB *> ptr_B_host(options.groups);
-    std::vector<ElementC *> ptr_C_host(options.groups);
-    std::vector<ElementOutput *> ptr_D_host(options.groups);
+    std::vector<ElementA *> ptr_A_host(1);
+    std::vector<ElementB *> ptr_B_host(1);
+    std::vector<ElementC *> ptr_C_host(1);
+    std::vector<ElementOutput *> ptr_D_host(1);
     std::vector<ElementAccumulator *> ptr_alpha_host(options.groups);
     std::vector<ElementAccumulator *> ptr_beta_host(options.groups);
 
@@ -378,17 +378,17 @@ template <class Gemm> struct ExampleRunner {
     }
 
     // Allocate device memory & copy from host
-    ptr_A.reset(options.groups);
+    ptr_A.reset(1);
     // Per-group alpha and beta
     ptr_A.copy_from_host(ptr_A_host.data());
 
-    ptr_B.reset(options.groups);
+    ptr_B.reset(1);
     ptr_B.copy_from_host(ptr_B_host.data());
 
-    ptr_C.reset(options.groups);
+    ptr_C.reset(1);
     ptr_C.copy_from_host(ptr_C_host.data());
 
-    ptr_D.reset(options.groups);
+    ptr_D.reset(1);
     ptr_D.copy_from_host(ptr_D_host.data());
 
     stride_A.reset(options.groups);
@@ -489,7 +489,7 @@ template <class Gemm> struct ExampleRunner {
                     const int gemm_N,
                     const int gemm_K) {
     typename Gemm::Arguments arguments;
-    decltype(arguments.epilogue.thread) fusion_args;
+    decltype(arguments.fusion_args) fusion_args;
     bool host_problem_shapes_available = false;
     if (options.alpha != FLT_MAX && options.beta != FLT_MAX) {
       // If both alpha/beta are provided (via cmd line args) and are scalar,
@@ -524,9 +524,11 @@ template <class Gemm> struct ExampleRunner {
     if (host_problem_shapes_available) {
       arguments = typename Gemm::Arguments{
           cutlass::gemm::GemmUniversalMode::kGrouped,
-          {ptr_A.get(), stride_A.get(), ptr_B.get(), stride_B.get()},
-          {fusion_args, ptr_C.get(), stride_C.get(), ptr_D.get(),
-           stride_D.get()},
+          ptr_A.get(),
+          ptr_B.get(),
+          nullptr,
+          ptr_D.get(),
+          fusion_args,
           hw_info,
           {1, RasterOrderOptions::AlongN},
           options.num_rows_per_expert,
@@ -536,9 +538,11 @@ template <class Gemm> struct ExampleRunner {
     } else {
       arguments = typename Gemm::Arguments{
           cutlass::gemm::GemmUniversalMode::kGrouped,
-          {ptr_A.get(), stride_A.get(), ptr_B.get(), stride_B.get()},
-          {fusion_args, ptr_C.get(), stride_C.get(), ptr_D.get(),
-           stride_D.get()},
+          ptr_A.get(),
+          ptr_B.get(),
+          nullptr,
+          ptr_D.get(),
+          fusion_args,
           hw_info,
           {1, RasterOrderOptions::AlongN},
           options.num_rows_per_expert,
@@ -669,8 +673,10 @@ void MoEGEMM(const bfloat16_t *activations, const bfloat16_t *weights,
                                                cutlass::gemm::KernelXeMoEGEMM>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16Group;
 
+  // ScaledAcc needs to be supported in xe_builder.inl and xe_callbacks.cpp
+  // This is a workaround
   using EpilogueOp =
-      cutlass::epilogue::fusion::LinearCombination<float_t, float_t>;
+      cutlass::epilogue::fusion::LinearCombination<float_t, float_t, float_t, float_t, cutlass::FloatRoundStyle::round_to_nearest, false>;
 
   using CollectiveEpilogue =
       typename cutlass::epilogue::collective::CollectiveBuilder<

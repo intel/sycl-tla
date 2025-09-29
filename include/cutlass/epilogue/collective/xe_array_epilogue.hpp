@@ -43,7 +43,6 @@
 #include "cutlass/epilogue/fusion/sm90_visitor_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/xe_visitor_softmax.hpp"
 #include "cutlass/detail/layout.hpp"
-#include "../tools/util/include/cutlass/util/packed_stride.hpp"
 
 #include "cute/tensor.hpp"
 
@@ -115,8 +114,9 @@ public:
   using ElementScalar = typename FusionCallbacks::ElementScalar;
   static constexpr FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest;
 
-  static_assert(cute::is_same_v<typename FusionCallbacks::Operation, 
-                                fusion::LinearCombination<ElementAccumulator, ElementCompute, ElementSource, ElementScalar, RoundStyle>>,
+  static_assert(cute::is_any_of_v<typename FusionCallbacks::Operation, 
+                                fusion::LinearCombination<ElementAccumulator, ElementCompute, ElementSource, ElementScalar, RoundStyle, false>,
+                                fusion::LinearCombination<ElementAccumulator, ElementCompute, ElementSource, ElementScalar, RoundStyle, true>>,
   "Only Linear Combination Epilogue is supported for Grouped GEMM at the moment.");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
@@ -140,7 +140,7 @@ public:
                                              Layout<CopyThreadShape>{},
                                              make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{}))));
 private:
-  constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
+  constexpr static bool is_source_supported = not cute::is_void_v<ElementC> && FusionCallbacks::Operation::IsSourceSupported;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
 
 public:
@@ -244,7 +244,6 @@ public:
       Arguments const& args) {
     constexpr int copy_alignment_bits = 128;
     constexpr int batch_alignment_bits = 512;
-
     bool implementable = true;
     bool fusion_implementable = true;
 
@@ -465,7 +464,7 @@ public:
       TensorC mC_mnl;
       TensorD mD_mnl;
       if constexpr (is_source_supported) {
-        ElementC const* ptr_C_curr_batch = reinterpret_cast<ElementC const*>(params.ptr_C[next_group]);
+        ElementC const* ptr_C_curr_batch = (params.ptr_C == nullptr) ? nullptr : reinterpret_cast<ElementC const*>(params.ptr_C[next_group]);
         mC_mnl = make_tensor(make_gmem_ptr(ptr_C_curr_batch), make_layout(make_shape(M, N, L), params.dC[next_group]));
       }
 
@@ -494,20 +493,22 @@ template <typename ProblemShape_MNKL>
       ElementC const *ptr_C_curr_batch =
           reinterpret_cast<ElementC const *>(params.ptr_C[0]) +
           cumulative_M * N;
+      auto c_stride = InternalStrideC{};
+      cute::get<0>(c_stride) = N;
       mC_mnl = make_tensor(
           make_gmem_ptr(ptr_C_curr_batch),
-          make_layout(make_shape(M, N, L), cutlass::make_cute_packed_stride(
-                                               InternalStrideC{}, {M, N, 1})));
+          make_layout(make_shape(M, N, L), c_stride));
     }
 
     if constexpr (is_destination_supported) {
       ElementD *ptr_D_curr_batch =
           reinterpret_cast<ElementD *>(params.ptr_D[0]) +
           cumulative_M * N;
+      auto d_stride = InternalStrideD{};
+      cute::get<0>(d_stride) = N;
       mD_mnl = make_tensor(
           make_gmem_ptr(ptr_D_curr_batch),
-          make_layout(make_shape(M, N, L), cutlass::make_cute_packed_stride(
-                                               InternalStrideD{}, {M, N, 1})));
+          make_layout(make_shape(M, N, L), d_stride));
     }
     return cute::make_tuple(mC_mnl, mD_mnl);
   }
