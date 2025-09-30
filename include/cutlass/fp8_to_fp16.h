@@ -39,6 +39,32 @@
 #include <cute/util/sycl_vec.hpp>
 #include <cutlass/detail/helper_macros.hpp>
 #include <cutlass/half.h>
+#include <cutlass/numeric_conversion.h>
+
+template <typename Encoding, typename SrcEngine, typename SrcLayout, typename DstEngine, typename DstLayout>
+CUTLASS_DEVICE void convert_and_descale(
+    cute::Tensor<SrcEngine, SrcLayout> const& src,
+    cute::Tensor<DstEngine, DstLayout>& dst,
+    float scale) {
+
+    // This function assumes SrcEngine::value_type is uint8_t and DstEngine::value_type is a higher precision format.
+    cutlass::NumericConverter<typename DstEngine::value_type, float, cutlass::FloatRoundStyle::round_to_nearest> convert_op;
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < cute::size(src); ++i) {
+        // 1. Reinterpret the source uint8_t as the correct FP8 encoding.
+        Encoding fp8_val = reinterpret_cast<Encoding const*>(&src(i))[0];
+
+        // 2. Convert the FP8 source element to a standard float.
+        float val_fp32 = static_cast<float>(fp8_val);
+
+        // 3. Apply the scale factor.
+        val_fp32 *= scale;
+
+        // 4. Convert the resulting float to the destination type using the converter.
+        dst(i) = convert_op(val_fp32);
+    }
+}
 
 template <typename EncodingType, typename TensorIn, typename TensorOut>
 CUTLASS_DEVICE void
