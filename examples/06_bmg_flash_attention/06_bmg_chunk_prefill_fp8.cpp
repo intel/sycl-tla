@@ -83,6 +83,39 @@ int main(int argc, const char **argv) {
   }
 
   // =================================================================================================
+  // Scale Factor Tensor Creation
+  // =================================================================================================
+  // 1. Create FP32 tensors for the scale factors.
+  // The shape is (batch_size, num_heads_q) as each head can have a different scale.
+  size_t scale_tensor_size = options.batch * options.num_heads_q;
+  std::vector<float> q_scale_host(scale_tensor_size);
+  std::vector<float> k_scale_host(scale_tensor_size);
+  std::vector<float> v_scale_host(scale_tensor_size);
+
+  // 2. Fill host vectors with desired values.
+  std::fill(q_scale_host.begin(), q_scale_host.end(), 1.5f);
+  std::fill(k_scale_host.begin(), k_scale_host.end(), 2.0f);
+  std::fill(v_scale_host.begin(), v_scale_host.end(), 2.5f);
+
+  // 3. Create device allocations and copy data from host to device.
+  cutlass::DeviceAllocation<float> q_scale_dev;
+  cutlass::DeviceAllocation<float> k_scale_dev;
+  cutlass::DeviceAllocation<float> v_scale_dev;
+
+  q_scale_dev.reset(scale_tensor_size);
+  k_scale_dev.reset(scale_tensor_size);
+  v_scale_dev.reset(scale_tensor_size);
+
+  q_scale_dev.copy_from_host(q_scale_host.data());
+  k_scale_dev.copy_from_host(k_scale_host.data());
+  v_scale_dev.copy_from_host(v_scale_host.data());
+
+  // 4. Get the raw float* pointers from the device allocations.
+  const float* q_scale = q_scale_dev.get();
+  const float* k_scale = k_scale_dev.get();
+  const float* v_scale = v_scale_dev.get();
+
+  // =================================================================================================
   // FP8 Type Definitions
   // =================================================================================================
   using ElementInputQ = cutlass::float_e5m2_t;     // <- data type of elements in input matrix A
@@ -125,14 +158,14 @@ int main(int argc, const char **argv) {
   if (options.is_causal) {
     FMHAConfig<true, false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
                                           ElementInputQ, ElementInputKV, MMAOperation, 
-                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options);
+                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options, q_scale, k_scale, v_scale);
   } else if (options.is_local_mask) {
     FMHAConfig<false, true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
                                           ElementInputQ, ElementInputKV, MMAOperation, 
-                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options);
+                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options, q_scale, k_scale, v_scale);
   } else {
     FMHAConfig<false, false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, 
                                           ElementInputQ, ElementInputKV, MMAOperation, 
-                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options);
+                                          GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>::run(options, q_scale, k_scale, v_scale);
   }
 }
