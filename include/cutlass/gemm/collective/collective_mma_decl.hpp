@@ -58,6 +58,26 @@ struct CollectiveMma {
   static_assert(cutlass::detail::dependent_false<ElementA>, "Could not find a mainloop specialization.");
 };
 
+template <
+  class DispatchPolicy,
+  class TileShape,
+  class ElementA,
+  class StrideA,
+  class ElementB,
+  class StrideB,
+  class TiledMma,
+  class GmemTiledCopyA,
+  class SmemLayoutAtomA,
+  class SmemCopyAtomA,
+  class TransformA,
+  class GmemTiledCopyB,
+  class SmemLayoutAtomB,
+  class SmemCopyAtomB,
+  class TransformB
+>
+struct CollectiveMmaNew {
+  static_assert(cutlass::detail::dependent_false<ElementA>, "Could not find a mainloop specialization.");
+};
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace cutlass::gemm::collective
