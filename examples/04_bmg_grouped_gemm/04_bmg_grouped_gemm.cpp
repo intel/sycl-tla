@@ -641,6 +641,8 @@ int main(int argc, const char** argv)
     return -1;
   }
   if (options.beta == 0.f) {
+    // the reference kernel doesn't accept nullptr for C, so we only test for nullptr ptr_C epilogue arg
+    // when beta is 0.
     std::cout << "\n\nUse a nullptr as argument ptr_C of the group GEMM epilogue colective\n\n";
     launcher<true>(options);
     std::cout << "\n\nPass actual ptr_C as an argument to the group GEMM epilogue colective\n\n";
