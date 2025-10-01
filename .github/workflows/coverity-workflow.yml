@@ -1,0 +1,820 @@
+name: "CUTLASS-SYCL Coverity Analysis"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  merge_group:
+    branches: [ "main" ]
+  schedule:
+    # Run Coverity analysis daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      DPCPP_VERSION:
+        description: "DPC++ version to use"
+        type: string
+      coverity_stream:
+        description: 'Coverity stream name'
+        required: false
+        default: 'cutlass-sycl-main'
+      analysis_type:
+        description: 'Analysis type (simple/comprehensive)'
+        required: false
+        default: 'simple'
+        type: choice
+        options:
+        - simple
+        - comprehensive
+
+# Fix: Add required permissions for commenting on PRs
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: read
+
+env:
+  COVERITY_STREAM: ${{ github.event.inputs.coverity_stream || 'cutlass-sycl-main' }}
+  COVERITY_PROJECT: 'CUTLASS-SYCL'
+  # Local Coverity installation paths
+  COVERITY_INSTALL_DIR: /opt/coverity/analysis
+  COVERITY_BUILD_DIR: cutlass_cov-build
+  DPCPP_PATH: ~/dpcpp
+  CUTLASS_BUILD_DIR: build
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Simple Coverity Scan using Intel GPU patterns
+  coverity-simple-scan:
+    name: Simple Coverity Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.analysis_type != 'comprehensive' && github.event_name != 'schedule'
+    
+    strategy:
+      matrix:
+        include:
+          - compiler: RELEASE
+            gpu: BMG
+            intel_graphics: ROLLING
+            sycl_target: intel_gpu_bmg_g21
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          
+      - name: Get Changed Files (PR Only)
+        if: github.event_name == 'pull_request'
+        id: changed-files
+        run: |
+          echo "Getting changed files in PR..."
+          
+          # Get the base and head SHA
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          
+          # Get changed files (only .cpp, .hpp, .cu, .cuh, .h files)
+          CHANGED_FILES=$(git diff --name-only --diff-filter=AMR "$BASE_SHA" "$HEAD_SHA" | grep -E '\.(cpp|hpp|cu|cuh|h|c|cc|cxx)$' || echo "")
+          
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "Changed source files found:"
+            echo "$CHANGED_FILES"
+            echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "No relevant source files changed"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+      # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
+      # for example using the tag: 'nightly-2024-04-22'
+      - name: Install Intel graphics drivers
+        uses: ./.github/actions/install-intel-graphics
+        with:
+          GPU: ${{ matrix.gpu }}
+          IGC: ${{ matrix.intel_graphics }}
+      
+      - name: Install DPC++
+        uses: ./.github/actions/install-dpcpp
+        with:
+          DPCPP_RELEASE: ${{ matrix.compiler }}
+          DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
+          GPU: ${{ matrix.gpu }}
+          IGC: ${{ matrix.intel_graphics }}
+      
+      - name: Skip Analysis for Non-Code Changes
+        if: github.event_name == 'pull_request' && steps.changed-files.outputs.has_changes == 'false'
+        run: |
+          echo "No relevant source code changes detected in PR. Skipping Coverity analysis."
+          echo "Changed files must include: .cpp, .hpp, .cu, .cuh, .h, .c, .cc, .cxx"
+          exit 0
+          
+      - name: Install and Setup Coverity
+        if: github.event_name != 'pull_request' || steps.changed-files.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          echo "Installing Coverity analysis tools..."
+          
+          # Download Coverity installer and license
+          # Note: These URLs may require authentication or VPN access
+          wget --timeout=30 --tries=3 -O cov-analysis-linux64-2025.3.0.sh "https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/cov-analysis-linux64-2025.3.0.sh" || {
+            echo "ERROR: Failed to download Coverity installer. Check network access to Intel Artifactory."
+            exit 1
+          }
+          wget --timeout=30 --tries=3 -O license.dat "https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/license.dat" || {
+            echo "ERROR: Failed to download Coverity license. Check network access to Intel Artifactory."
+            exit 1
+          }
+          
+          # Make installer executable
+          chmod +x cov-analysis-linux64-2025.3.0.sh
+          
+          # Install Coverity
+          sudo ./cov-analysis-linux64-2025.3.0.sh -q \
+            --installation.dir=${{ env.COVERITY_INSTALL_DIR }} \
+            --license.agreement=agree \
+            --license.region=0 \
+            --license.type.choice=0 \
+            --license.cov.path=$(pwd)/license.dat \
+            --component.sdk=false \
+            --component.skip.documentation=true
+          
+          # Add Coverity to PATH
+          echo "${{ env.COVERITY_INSTALL_DIR }}/bin" >> $GITHUB_PATH
+          
+          # Verify installation
+          if [ ! -f "${{ env.COVERITY_INSTALL_DIR }}/bin/cov-build" ]; then
+            echo "ERROR: Coverity installation failed - cov-build not found"
+            exit 1
+          fi
+          sudo ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-build --version
+          
+      - name: Setup Environment and Build
+        if: github.event_name != 'pull_request' || steps.changed-files.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          # Install cmake and ninja if not already available
+          if ! command -v cmake &> /dev/null || ! command -v ninja &> /dev/null; then
+            echo "Installing cmake and/or ninja..."
+            sudo apt update
+            sudo apt install -y cmake ninja-build
+          else
+            echo "cmake and ninja already available"
+          fi
+          
+          # Source DPC++ environment
+          . setvars.sh
+          
+          # Intel GPU optimizations
+          export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
+          export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          export IGC_VectorAliasBBThreshold=100000000000
+          
+          # Configure CMake build
+          cmake -G Ninja \
+            -DCUTLASS_ENABLE_SYCL=ON \
+            -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
+            -DCMAKE_CXX_FLAGS="-Werror" \
+            -DCUTLASS_SYCL_RUNNING_CI=ON
+      
+      - name: Configure Coverity Compiler
+        if: github.event_name != 'pull_request' || steps.changed-files.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          echo "Configuring Coverity for icpx compiler..."
+          
+          # Source DPC++ environment to get icpx
+          . setvars.sh
+          
+          # Configure Coverity for icpx compiler
+          ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-configure \
+            --template \
+            --comptype intel_icpx \
+            --compiler icpx || {
+            echo "ERROR: Failed to configure Coverity for icpx compiler"
+            exit 1
+          }
+          
+          echo "Coverity compiler configuration completed"
+          
+      - name: Run Coverity Build Capture
+        if: github.event_name != 'pull_request' || steps.changed-files.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          echo "Running Coverity build capture..."
+          
+          # Source DPC++ environment
+          . setvars.sh
+          
+          # Create Coverity build directory
+          rm -rf ${{ env.COVERITY_BUILD_DIR }}
+          
+          # Run Coverity build capture
+          ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-build \
+            --dir ${{ env.COVERITY_BUILD_DIR }} \
+            cmake --build .
+          
+          echo "Coverity build capture completed"
+          
+      - name: Run Coverity Analysis
+        if: github.event_name != 'pull_request' || steps.changed-files.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          echo "Running Coverity static analysis..."
+          
+          # Run Coverity analysis with security and other options
+          ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-analyze \
+            --dir ${{ env.COVERITY_BUILD_DIR }} \
+            --concurrency \
+            --security \
+            --rule \
+            --enable-constraint-fpp \
+            --enable-virtual \
+            --strip-path $(pwd)
+          
+          echo "Coverity analysis completed"
+          
+      - name: Generate Coverity Reports
+        if: github.event_name != 'pull_request' || steps.changed-files.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          echo "Generating Coverity reports..."
+          
+          # Generate XML report
+          ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-format-errors \
+            --dir ${{ env.COVERITY_BUILD_DIR }} \
+            --xml-output-v2 coverity-results.xml
+          
+          # Generate HTML report
+          ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-format-errors \
+            --dir ${{ env.COVERITY_BUILD_DIR }} \
+            --html-output coverity-html-report
+          
+          # Generate text summary
+          ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-format-errors \
+            --dir ${{ env.COVERITY_BUILD_DIR }} \
+            --text-output-style multiline > coverity-summary.txt
+          
+          echo "Reports generated successfully"
+          
+          # Display summary
+          echo "=== Coverity Analysis Summary ==="
+          if [ -f coverity-summary.txt ]; then
+            head -20 coverity-summary.txt
+          fi
+          
+          # For PRs, filter results to focus on changed files
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${{ steps.changed-files.outputs.changed_files }}" ]; then
+            echo "=== PR Delta Analysis ==="
+            echo "Changed files in this PR:"
+            echo "${{ steps.changed-files.outputs.changed_files }}"
+            
+            # Create filtered XML for PR delta
+            if [ -f coverity-results.xml ]; then
+              echo "Filtering Coverity results for changed files..."
+              # This is a simple filter - in practice, you might want more sophisticated filtering
+              grep -A 10 -B 5 -E "$(echo '${{ steps.changed-files.outputs.changed_files }}' | tr '\n' '|' | sed 's/|$//')" coverity-results.xml > coverity-results-delta.xml || {
+                echo "No defects found in changed files"
+                echo '<?xml version="1.0"?><results></results>' > coverity-results-delta.xml
+              }
+            fi
+          fi
+          
+      - name: Upload Coverity Reports
+        uses: actions/upload-artifact@v4
+        if: always() && (github.event_name != 'pull_request' || steps.changed-files.outputs.has_changes == 'true')
+        with:
+          name: coverity-reports-simple-${{ matrix.compiler }}-${{ matrix.gpu }}
+          path: |
+            coverity-results.xml
+            coverity-results-delta.xml
+            coverity-html-report/
+            coverity-summary.txt
+            ${{ env.COVERITY_BUILD_DIR }}/build-log.txt
+          retention-days: 30
+          
+      - name: PR Summary Comment
+        if: github.event_name == 'pull_request' && steps.changed-files.outputs.has_changes == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `## Coverity Static Analysis - No Code Changes
+            
+            **No source code changes detected in this PR**
+            
+            This PR only contains changes to:
+            - Documentation files
+            - Configuration files  
+            - Build scripts
+            - Non-source files
+            
+            Coverity analysis was **skipped** as no C/C++/CUDA source files were modified.
+            
+            ---
+            *To trigger analysis, modify files with extensions: .cpp, .hpp, .cu, .cuh, .h, .c, .cc, .cxx*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # Comprehensive Coverity Analysis for Intel GPU hardware
+  coverity-comprehensive:
+    name: Run Coverity ${{ matrix.compiler }} on ${{ matrix.gpu }} with intel-graphics ${{ matrix.intel_graphics }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    if: github.event.inputs.analysis_type == 'comprehensive' || github.event_name == 'schedule'
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: RELEASE
+            gpu: BMG
+            intel_graphics: ROLLING
+            sycl_target: intel_gpu_bmg_g21
+            build_type: Release
+            runner: bmg108629-01
+          - compiler: RELEASE
+            gpu: PVC
+            intel_graphics: ROLLING
+            sycl_target: intel_gpu_pvc
+            build_type: Release
+            runner: pvc146162-01
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
+    # for example using the tag: 'nightly-2024-04-22'
+    - name: Install Intel graphics drivers
+      uses: ./.github/actions/install-intel-graphics
+      with:
+        GPU: ${{ matrix.gpu }}
+        IGC: ${{ matrix.intel_graphics }}
+    
+    - name: Install DPC++
+      uses: ./.github/actions/install-dpcpp
+      with:
+        DPCPP_RELEASE: ${{ matrix.compiler }}
+        DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
+        DPCPP_PATH: ${{ env.DPCPP_PATH }}
+        GPU: ${{ matrix.gpu }}
+        IGC: ${{ matrix.intel_graphics }}
+    
+    - name: Setup Environment
+      shell: bash
+      run: |
+        # Install cmake and ninja if not already available
+        if ! command -v cmake &> /dev/null || ! command -v ninja &> /dev/null; then
+          echo "Installing cmake and/or ninja..."
+          sudo apt update
+          sudo apt install -y cmake ninja-build
+        else
+          echo "cmake and ninja already available"
+        fi
+        
+        # Source DPC++ environment
+        . setvars.sh
+        
+        # Intel GPU optimizations
+        export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
+        export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
+        export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+        export IGC_VectorAliasBBThreshold=100000000000
+        export CUTLASS_SYCL_PROFILING_ENABLED=ON
+        
+        # Persist environment variables to following steps
+        env >> $GITHUB_ENV
+        
+        echo "Compiler verification:"
+        which $CXX
+        $CXX --version
+        sycl-ls
+    
+    - name: Verify Environment
+      shell: bash
+      run: |
+        echo "=== Environment Verification ==="
+        echo "Compiler paths:"
+        which $CXX || echo "DPC++ compiler not found"
+        
+        echo "Compiler versions:"
+        $CXX --version || echo "DPC++ version failed"
+        
+        echo "SYCL devices:"
+        sycl-ls || echo "sycl-ls failed"
+        
+        echo "OpenCL info:"
+        clinfo --list || echo "clinfo failed"
+        
+        echo "Environment variables:"
+        echo "CXX=$CXX"
+        echo "ONEAPI_DEVICE_SELECTOR=$ONEAPI_DEVICE_SELECTOR"
+        echo "IGC_ExtraOCLOptions=$IGC_ExtraOCLOptions"
+    
+    - name: Install and Setup Coverity
+      shell: bash
+      run: |
+        echo "Installing Coverity analysis tools..."
+        
+        # Download Coverity installer and license
+        # Note: These URLs may require authentication or VPN access
+        wget --timeout=30 --tries=3 -O cov-analysis-linux64-2025.3.0.sh "https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/cov-analysis-linux64-2025.3.0.sh" || {
+          echo "ERROR: Failed to download Coverity installer. Check network access to Intel Artifactory."
+          exit 1
+        }
+        wget --timeout=30 --tries=3 -O license.dat "https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/license.dat" || {
+          echo "ERROR: Failed to download Coverity license. Check network access to Intel Artifactory."
+          exit 1
+        }
+        
+        # Make installer executable
+        chmod +x cov-analysis-linux64-2025.3.0.sh
+        
+        # Install Coverity
+        sudo ./cov-analysis-linux64-2025.3.0.sh -q \
+          --installation.dir=${{ env.COVERITY_INSTALL_DIR }} \
+          --license.agreement=agree \
+          --license.region=0 \
+          --license.type.choice=0 \
+          --license.cov.path=$(pwd)/license.dat \
+          --component.sdk=false \
+          --component.skip.documentation=true
+        
+        # Add Coverity tools to PATH
+        echo "${{ env.COVERITY_INSTALL_DIR }}/bin" >> $GITHUB_PATH
+        
+        # Verify Coverity tools
+        sudo ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-build --version
+        sudo ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-analyze --version
+        sudo ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-format-errors --version
+    
+    - name: Configure Coverity Compiler
+      shell: bash
+      run: |
+        echo "Configuring Coverity for SYCL compilers..."
+        
+        # Source DPC++ environment to get icpx
+        . setvars.sh
+        
+        # Configure icpx compiler for SYCL
+        ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-configure \
+          --template \
+          --comptype intel_icpx \
+          --compiler icpx || {
+          echo "ERROR: Failed to configure Coverity for icpx compiler"
+          exit 1
+        }
+        
+        # Also configure DPC++ compiler if different from icpx
+        ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-configure \
+          --template \
+          --comptype clangcxx \
+          --compiler $CXX || echo "DPC++ compiler configuration skipped"
+        
+        # List configured compilers
+        ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-configure --list-compiler-types | grep -E "clang|intel" || echo "Intel SYCL compilers configured"
+    
+    - name: Setup Build Directory
+      shell: bash
+      run: |
+        echo "Setting up build directory..."
+        
+        # Create build directory
+        mkdir -p $CUTLASS_BUILD_DIR
+        cd $CUTLASS_BUILD_DIR
+        
+        # Configure CMake build
+        cmake .. -G Ninja \
+          -DCUTLASS_ENABLE_SYCL=ON \
+          -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
+          -DCMAKE_CXX_FLAGS="-Werror" \
+          -DCUTLASS_SYCL_RUNNING_CI=ON \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        
+        echo "CMake configuration completed"
+    
+    - name: Coverity Build Capture
+      shell: bash
+      run: |
+        echo "Running Coverity build capture..."
+        
+        cd $CUTLASS_BUILD_DIR
+        
+        # Source DPC++ environment
+        if [ -f "../setvars.sh" ]; then
+          . ../setvars.sh
+        elif [ -f "${GITHUB_WORKSPACE}/setvars.sh" ]; then
+          . "${GITHUB_WORKSPACE}/setvars.sh"
+        else
+          echo "ERROR: setvars.sh not found"
+          exit 1
+        fi
+        
+        # Set up Coverity output directory
+        COVERITY_OUTPUT_DIR="${GITHUB_WORKSPACE}/${{ env.COVERITY_BUILD_DIR }}"
+        rm -rf "$COVERITY_OUTPUT_DIR"
+        
+        # Run Coverity build capture with single job for stability
+        ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-build \
+          --dir "$COVERITY_OUTPUT_DIR" \
+          ninja -j1
+        
+        echo "Build capture completed"
+        
+        # Verify capture results
+        echo "=== Coverity Capture Summary ==="
+        find "$COVERITY_OUTPUT_DIR" -name "*.log" -exec echo "Log file: {}" \; -exec head -10 {} \;
+    
+    - name: Coverity Analysis
+      shell: bash
+      run: |
+        echo "Running Coverity static analysis..."
+        
+        COVERITY_OUTPUT_DIR="${GITHUB_WORKSPACE}/${{ env.COVERITY_BUILD_DIR }}"
+        
+        # Run static analysis with security and other options
+        ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-analyze \
+          --dir "$COVERITY_OUTPUT_DIR" \
+          --concurrency \
+          --security \
+          --rule \
+          --enable-constraint-fpp \
+          --enable-virtual \
+          --strip-path $(pwd) \
+          --jobs auto
+        
+        echo "Static analysis completed"
+    
+    - name: Generate Coverity Reports
+      run: |
+        echo "Generating Coverity reports..."
+        
+        COVERITY_OUTPUT_DIR="${GITHUB_WORKSPACE}/${{ env.COVERITY_BUILD_DIR }}"
+        REPORT_DIR="${GITHUB_WORKSPACE}/coverity-reports"
+        
+        mkdir -p "$REPORT_DIR"
+        
+        # Generate HTML report
+        ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-format-errors \
+          --dir "$COVERITY_OUTPUT_DIR" \
+          --html-output "$REPORT_DIR/html"
+        
+        # Generate XML report
+        ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-format-errors \
+          --dir "$COVERITY_OUTPUT_DIR" \
+          --xml-output-v2 "$REPORT_DIR/results.xml"
+        
+        # Generate text summary
+        ${{ env.COVERITY_INSTALL_DIR }}/bin/cov-format-errors \
+          --dir "$COVERITY_OUTPUT_DIR" \
+          --text-output-style multiline > "$REPORT_DIR/summary.txt"
+        
+        echo "Reports generated in $REPORT_DIR"
+    
+    - name: Parse Coverity Results
+      id: parse-results
+      run: |
+        echo "Parsing Coverity analysis results..."
+        
+        REPORT_DIR="${GITHUB_WORKSPACE}/coverity-reports"
+        
+        # Count defects by severity
+        if [ -f "$REPORT_DIR/results.xml" ]; then
+          HIGH_COUNT=$(grep -c 'impact="High"' "$REPORT_DIR/results.xml" || echo "0")
+          MEDIUM_COUNT=$(grep -c 'impact="Medium"' "$REPORT_DIR/results.xml" || echo "0")
+          LOW_COUNT=$(grep -c 'impact="Low"' "$REPORT_DIR/results.xml" || echo "0")
+          
+          echo "high_defects=$HIGH_COUNT" >> $GITHUB_OUTPUT
+          echo "medium_defects=$MEDIUM_COUNT" >> $GITHUB_OUTPUT
+          echo "low_defects=$LOW_COUNT" >> $GITHUB_OUTPUT
+          
+          TOTAL_COUNT=$((HIGH_COUNT + MEDIUM_COUNT + LOW_COUNT))
+          echo "total_defects=$TOTAL_COUNT" >> $GITHUB_OUTPUT
+          
+          echo "=== Coverity Results Summary ==="
+          echo "High Impact Defects: $HIGH_COUNT"
+          echo "Medium Impact Defects: $MEDIUM_COUNT"
+          echo "Low Impact Defects: $LOW_COUNT"
+          echo "Total Defects: $TOTAL_COUNT"
+        else
+          echo "XML results file not found"
+          echo "total_defects=0" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Archive Coverity Results
+      run: |
+        echo "Archiving Coverity results locally..."
+        
+        COVERITY_OUTPUT_DIR="${GITHUB_WORKSPACE}/${{ env.COVERITY_BUILD_DIR }}"
+        
+        # Create tarball for archival
+        tar czf coverity-results-${{ matrix.compiler }}-${{ matrix.gpu }}.tgz -C "${GITHUB_WORKSPACE}" ${{ env.COVERITY_BUILD_DIR }}
+        
+        echo "Results archived to coverity-results-${{ matrix.compiler }}-${{ matrix.gpu }}.tgz"
+    
+    - name: Archive Coverity Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverity-reports-${{ matrix.compiler }}-${{ matrix.gpu }}-${{ matrix.build_type }}
+        path: |
+          coverity-reports/
+          ${{ env.COVERITY_BUILD_DIR }}/build-log.txt
+          ${{ env.COVERITY_BUILD_DIR }}/output/
+          coverity-results-${{ matrix.compiler }}-${{ matrix.gpu }}.tgz
+        retention-days: 30
+    
+    - name: Comment on PR with Results
+      if: github.event_name == 'pull_request' && steps.parse-results.outputs.total_defects != '0'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const totalDefects = '${{ steps.parse-results.outputs.total_defects }}';
+          const highDefects = '${{ steps.parse-results.outputs.high_defects }}';
+          const mediumDefects = '${{ steps.parse-results.outputs.medium_defects }}';
+          const lowDefects = '${{ steps.parse-results.outputs.low_defects }}';
+          
+          const body = `## Coverity Static Analysis Results
+          
+          **Total Defects Found:** ${totalDefects}
+          
+          | Severity | Count |
+          |----------|-------|
+          | High     | ${highDefects} |
+          | Medium   | ${mediumDefects} |
+          | Low      | ${lowDefects} |
+          
+          **Analysis Details:**
+          - **Compiler:** ${{ matrix.compiler }}
+          - **Build Type:** ${{ matrix.build_type }}
+          - **SYCL Target:** ${{ matrix.sycl_target }}
+          - **Analysis Type:** Full codebase analysis (includes pre-existing issues)
+          
+          **Note for PR Review:** 
+          Results include all defects in the codebase, not just changes in this PR. 
+          Focus on defects in files you've modified. Check the \`coverity-results-delta.xml\` 
+          artifact for issues specific to your changes.
+          
+          Detailed reports are available in the workflow artifacts.
+          
+          ${highDefects > 0 ? '**High severity defects found!** Please review and address these issues.' : 'No high severity defects found.'}`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
+    
+    - name: Fail on High Severity Defects
+      if: steps.parse-results.outputs.high_defects > 0
+      run: |
+        echo "High severity defects found: ${{ steps.parse-results.outputs.high_defects }}"
+        echo "Please review and fix high severity issues before merging."
+        exit 1
+    
+    - name: Generate Status Badge Data
+      if: github.ref == 'refs/heads/main'
+      run: |
+        TOTAL_DEFECTS="${{ steps.parse-results.outputs.total_defects }}"
+        HIGH_DEFECTS="${{ steps.parse-results.outputs.high_defects }}"
+        
+        if [ "$HIGH_DEFECTS" -gt 0 ]; then
+          BADGE_COLOR="red"
+          BADGE_MESSAGE="$HIGH_DEFECTS high severity"
+        elif [ "$TOTAL_DEFECTS" -gt 0 ]; then
+          BADGE_COLOR="yellow"  
+          BADGE_MESSAGE="$TOTAL_DEFECTS total defects"
+        else
+          BADGE_COLOR="green"
+          BADGE_MESSAGE="clean"
+        fi
+        
+        echo "BADGE_COLOR=$BADGE_COLOR" >> $GITHUB_ENV
+        echo "BADGE_MESSAGE=$BADGE_MESSAGE" >> $GITHUB_ENV
+        
+        # Create badge JSON
+        cat > coverity-badge.json << EOF
+        {
+          "schemaVersion": 1,
+          "label": "coverity",
+          "message": "$BADGE_MESSAGE",
+          "color": "$BADGE_COLOR"
+        }
+        EOF
+    
+    - name: Cleanup DPC++
+      if: always()
+      shell: bash
+      run: |
+        echo "Cleaning up DPC++ installation..."
+        # Remove DPCPP directory if it exists
+        DPCPP_PATH="${{ env.DPCPP_PATH }}"
+        DPCPP_PATH=$(eval echo $DPCPP_PATH)  # Expand ~ to home directory
+        if [ -d "$DPCPP_PATH" ]; then
+          echo "Removing DPCPP directory: $DPCPP_PATH"
+          sudo rm -rf "$DPCPP_PATH"
+        fi
+        # For RELEASE installs, remove OneAPI packages
+        if [[ "${{ matrix.compiler }}" == "RELEASE" ]]; then
+          echo "Removing OneAPI packages..."
+          sudo apt remove -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp || true
+          sudo rm -f /etc/apt/sources.list.d/oneAPI.list
+          sudo rm -f /usr/share/keyrings/oneapi-archive-keyring.gpg
+        fi
+        # Clean up environment files and build artifacts
+        rm -f setvars.sh
+        rm -rf build/ ${{ env.COVERITY_BUILD_DIR }}/ coverity-reports/ coverity-results-*.tgz || true
+        # Clean up Coverity installation
+        sudo rm -rf ${{ env.COVERITY_INSTALL_DIR }} || true
+        # Reset environment variables that might interfere
+        unset CC CXX CPLUS_INCLUDE_PATH C_INCLUDE_PATH LD_LIBRARY_PATH
+        unset IGC_ExtraOCLOptions SYCL_PROGRAM_COMPILE_OPTIONS ONEAPI_DEVICE_SELECTOR IGC_VectorAliasBBThreshold
+        echo "DPC++ cleanup completed"
+
+  coverity-security-scan:
+    name: Coverity Security Focused Scan
+    runs-on: [self-hosted, linux, intel-gpu]
+    if: github.event_name == 'schedule' || github.event.inputs.analysis_type == 'comprehensive'
+    needs: coverity-comprehensive
+    timeout-minutes: 60
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+    
+    - name: Download Analysis Results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: coverity-reports-RELEASE-*-Release
+        path: coverity-reports
+        merge-multiple: true
+    
+    - name: Security Analysis
+      run: |
+        echo "Running security-focused analysis..."
+        
+        # Extract security-related defects
+        if [ -f "coverity-reports/results.xml" ]; then
+          echo "=== Security Issues Summary ==="
+          
+          # Count security-related categories
+          BUFFER_OVERRUN=$(grep -c "BUFFER_OVERRUN" coverity-reports/results.xml || echo "0")
+          NULL_DEREFERENCE=$(grep -c "NULL_DEREFERENCE" coverity-reports/results.xml || echo "0")
+          MEMORY_LEAK=$(grep -c "MEMORY_LEAK" coverity-reports/results.xml || echo "0")
+          USE_AFTER_FREE=$(grep -c "USE_AFTER_FREE" coverity-reports/results.xml || echo "0")
+          
+          echo "Buffer Overruns: $BUFFER_OVERRUN"
+          echo "Null Dereferences: $NULL_DEREFERENCE" 
+          echo "Memory Leaks: $MEMORY_LEAK"
+          echo "Use After Free: $USE_AFTER_FREE"
+          
+          SECURITY_TOTAL=$((BUFFER_OVERRUN + NULL_DEREFERENCE + MEMORY_LEAK + USE_AFTER_FREE))
+          echo "Total Security Issues: $SECURITY_TOTAL"
+          
+          # Generate security report
+          cat > security-summary.md << EOF
+          # CUTLASS-SYCL Security Analysis Report
+          
+          **Analysis Date:** $(date)
+          **Commit:** $(git rev-parse --short HEAD)
+          
+          ## Security Issues Summary
+          
+          | Category | Count |
+          |----------|-------|
+          | Buffer Overruns | $BUFFER_OVERRUN |
+          | Null Dereferences | $NULL_DEREFERENCE |
+          | Memory Leaks | $MEMORY_LEAK |
+          | Use After Free | $USE_AFTER_FREE |
+          | **Total** | **$SECURITY_TOTAL** |
+          
+          ## Recommendations
+          
+          - Review all buffer operations for bounds checking
+          - Validate pointer usage before dereferencing
+          - Implement proper memory management patterns
+          - Use RAII and smart pointers where applicable
+          
+          ---
+          *Generated by Coverity Security Scan*
+          EOF
+        fi
