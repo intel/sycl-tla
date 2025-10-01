@@ -50,8 +50,8 @@ namespace detail {
     class ElementD,
     class ElementCompute,
     class ElementC,
-    cutlass::FloatRoundStyle RoundStyle_ = cutlass::FloatRoundStyle::round_to_nearest,
-    bool supportSource_ = true
+    cutlass::FloatRoundStyle RoundStyle_,
+    bool supportSource_
   >
   struct FusionOpInfo<cutlass::epilogue::fusion::LinearCombination<
     ElementD, ElementCompute, ElementC, ElementCompute, RoundStyle_, supportSource_
