@@ -494,7 +494,7 @@ template <typename ProblemShape_MNKL>
     TensorD mD_mnl;
     if constexpr (is_source_supported) {
       ElementC const *ptr_C_curr_batch =
-          reinterpret_cast<ElementC const *>(params.ptr_C[0]) +
+          reinterpret_cast<ElementC const *>((void*)(params.ptr_C)) +
           cumulative_M * N;
       mC_mnl = make_tensor(
           make_gmem_ptr(ptr_C_curr_batch),
@@ -504,7 +504,7 @@ template <typename ProblemShape_MNKL>
 
     if constexpr (is_destination_supported) {
       ElementD *ptr_D_curr_batch =
-          reinterpret_cast<ElementD *>(params.ptr_D[0]) +
+          reinterpret_cast<ElementD *>((void*)(params.ptr_D)) +
           cumulative_M * N;
       mD_mnl = make_tensor(
           make_gmem_ptr(ptr_D_curr_batch),
