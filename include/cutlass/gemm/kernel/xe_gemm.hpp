@@ -47,7 +47,7 @@ template <
   class CollectiveEpilogue_,
   class TileScheduler_
 >
-class GemmUniversalNew<
+class GemmUniversal<
   ProblemShape_,
   CollectiveMainloop_,
   CollectiveEpilogue_,
@@ -239,7 +239,7 @@ public:
     constexpr auto subgroup_shape = SubgroupTileShape{};                   
 
     Tensor cA = make_identity_tensor(make_shape(M,K,L));   // (M,K,L)
-    Tensor cB = make_identity_tensor(make_shape(M,K,L));   // (N,K,L)
+    Tensor cB = make_identity_tensor(make_shape(N,K,L));   // (N,K,L)
 
     Tensor gA = local_tile(cA, select<0,2>(blk_shape), make_coord(m_coord,_,l_coord));
     Tensor gB = local_tile(cB, select<1,2>(blk_shape), make_coord(n_coord,_,l_coord));

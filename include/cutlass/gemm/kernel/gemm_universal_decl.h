@@ -56,15 +56,6 @@ template <
 >
 class GemmUniversal;
 
-template <
-  class ProblemShapeOrThreadblockMma_, // (m, n, k) or (m, n, k, l)
-  class CollectiveMainloopOrEpilogue_,
-  class CollectiveEpilogueOrThreadblockSwizzle_,
-  class TileScheduler_ = void,
-  class Enable = void
->
-class GemmUniversalNew;
-
 
 } // namespace cutlass::gemm::kernel
 
