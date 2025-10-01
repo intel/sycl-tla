@@ -311,10 +311,10 @@ template <typename ProblemShape_MNKL>
     const int32_t K = get<2>(problem_shape_mnkl);
 
     ElementA const *ptr_A_curr_batch =
-        reinterpret_cast<ElementA const *>(mainloop_params.ptr_A[0]) +
+        reinterpret_cast<ElementA const *>((void*)(mainloop_params.ptr_A)) +
         cumulative_M * K;
     ElementB const *ptr_B_curr_batch =
-        reinterpret_cast<ElementB const *>(mainloop_params.ptr_B[0]) +
+        reinterpret_cast<ElementB const *>((void*)(mainloop_params.ptr_B)) +
         next_group * K * N;
 
     Tensor mA = make_tensor(
