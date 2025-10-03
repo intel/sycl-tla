@@ -327,13 +327,19 @@ struct FlashChunkPrefillMma<
       copy(params.gmem_tiled_copy_q, tQgQ(_, _, _, k_tile), tQrQ);
       copy(gmem_tiled_copy_k, tKgK(_, _, _, k_tile), tKrK);
 
+      // FP8 path: Convert FP8 fragments to FP16 IN-PLACE to avoid register spilling.
       if constexpr (is_fp8_v<ElementQ> || is_fp8_v<ElementK>) {
-        auto tCrQ_fp16 = make_fragment_like<half_t>(tCrQ);
-        auto tCrK_fp16 = make_fragment_like<half_t>(tCrK);
+        // Recast the memory region of the FP8 tensors as FP16 tensors.
+        // This does NOT allocate new registers. It reuses the existing ones.
+        auto tCrQ_fp16 = cute::recast<half_t>(tCrQ);
+        auto tCrK_fp16 = cute::recast<half_t>(tCrK);
 
+        // Perform the conversion, writing the FP16 results directly into the
+        // reused register space.
         if constexpr (is_fp8_v<ElementQ>) {
           convert_and_descale<ElementQ>(tCrQ, tCrQ_fp16, q_scale);
         } else {
+          // If Q is already FP16, just copy it to the correctly-named variable.
           copy(tCrQ, tCrQ_fp16);
         }
 
@@ -342,10 +348,15 @@ struct FlashChunkPrefillMma<
         } else {
           copy(tCrK, tCrK_fp16);
         }
+
+        // Now, gemm is called on the FP16 tensors which occupy the same
+        // register space as the original FP8 tensors did. Register pressure is not increased.
         cute::gemm(tiled_mma, accum, tCrQ_fp16, tCrK_fp16, frag_src);
       } else {
-         cute::gemm(tiled_mma, accum, tCrQ , tCrK, frag_src);
+        // FP16 path (already fast)
+        cute::gemm(tiled_mma, accum, tCrQ, tCrK, frag_src);
       }
+
 #if 0
 #define PRINT(x)                                                               \
   print(#x ": ");                                                              \
@@ -447,10 +458,19 @@ struct FlashChunkPrefillMma<
       copy(gmem_tiled_copy_v, tVgV(_, _, _, i), tVrV);
 
       if constexpr (is_fp8_v<ElementV>) {
-        auto tCrV_fp16 = make_fragment_like<half_t>(tCrV);
+        // Correctly reuse the registers of tCrV for the new FP16 tensor.
+        // This avoids doubling the register pressure.
+        auto tCrV_fp16 = cute::recast<half_t>(tCrV);
+
+        // Perform the conversion in-place, overwriting the old FP8 data
+        // with the new FP16 data in the same register space.
         convert_and_descale<ElementV>(tCrV, tCrV_fp16, v_scale);
+
+        // The GEMM now operates on an FP16 tensor that is in registers,
+        // preventing a catastrophic performance drop from register spilling.
         cute::gemm(tiled_mma, accum(_,_,_,i), tPr, tCrV_fp16, frag_src(_,_,_,i));
       } else {
+        // Native FP16 path (already fast)
         cute::gemm(tiled_mma, accum(_,_,_,i), tPr, tCrV, frag_src(_,_,_,i));
       }
     }

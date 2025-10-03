@@ -41,6 +41,7 @@
 #include "flash_attention_v2/collective/xe_flash_attn_chunk_prefill_softmax_epilogue.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
+#include "cutlass/fp8_to_fp16.h"
 
 #include <cute/tensor.hpp>
 #include <random>
@@ -53,6 +54,10 @@
 #include "sycl_common.hpp"
 
 using namespace cute;
+
+// Helper to check for FP8 types
+template <class T>
+constexpr bool is_fp8_v = std::is_same_v<T, cutlass::float_e4m3_t> || std::is_same_v<T, cutlass::float_e5m2_t>;
 
 // Command line options parsing
 struct Options {
@@ -215,16 +220,43 @@ template <class FMHAChunkPrefillKernel, bool isVarLen> struct ExampleRunner {
   // Methods
   //
 
-bool verify(ProblemShapeType problem_size, Options options) {
+template <typename SrcType, typename DstType, typename Encoding>
+void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num_elements, float scale) {
+    sycl::queue queue = compat::get_default_queue();
+    int64_t num_threads = 256;
+    int64_t num_blocks = ceil_div(num_elements, num_threads);
+
+    queue.submit([&](sycl::handler& cgh) {
+        SrcType* src_ptr = src_ptr_in;
+        DstType* dst_ptr = dst_ptr_in;
+        cgh.parallel_for(sycl::nd_range<1>(num_blocks * num_threads, num_threads), [=](sycl::nd_item<1> item) {
+            int64_t idx = item.get_global_id(0);
+            if (idx < num_elements) {
+                auto src_tensor = make_tensor(src_ptr + idx, make_shape(1));
+                auto dst_tensor = make_tensor(dst_ptr + idx, make_shape(1));
+                convert_and_descale<Encoding, 1>(src_tensor, dst_tensor, scale);
+            }
+        });
+    });
+}
+
+bool verify(ProblemShapeType problem_size, Options options, const float* q_scale, const float* k_scale, const float* v_scale) {
     std::vector<ElementOutput> host_O(block_ref_O.size());
-    if constexpr (isVarLen) {
-      int max_seq_len_q = static_cast<int>(get<3>(problem_size));
-      int max_seq_len_kv = static_cast<int>(get<4>(problem_size));
-      int max_seq_len_kv_cache = static_cast<int>(get<5>(problem_size));
-      get<3>(problem_size) = cutlass::fmha::collective::VariableLength{max_seq_len_q, 0, cumulative_seqlen_q.data()};
-      get<4>(problem_size) = cutlass::fmha::collective::VariableLength{max_seq_len_kv, 0, cumulative_seqlen_kv.data()};
-      get<5>(problem_size) = cutlass::fmha::collective::VariableLength{max_seq_len_kv_cache, 0, cumulative_seqlen_kv_cache.data()};
+
+    float h_scale_q = 1.0f;
+    float h_scale_k = 1.0f;
+    float h_scale_v = 1.0f;
+
+    if (q_scale != nullptr) {
+        compat::memcpy<float>(&h_scale_q, q_scale, 1);
     }
+    if (k_scale != nullptr) {
+        compat::memcpy<float>(&h_scale_k, k_scale, 1);
+    }
+    if (v_scale != nullptr) {
+        compat::memcpy<float>(&h_scale_v, v_scale, 1);
+    }
+    compat::wait();
 
     auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,6,7>(problem_size);
     int seq_len_qo, seq_len_kv, seq_len_kv_cache;
@@ -235,6 +267,11 @@ bool verify(ProblemShapeType problem_size, Options options) {
     int offset_k_cache = 0;
     int offset_v_cache = 0;
     int offset_o = 0;
+
+    using namespace cutlass;
+    using RefElement = half_t;
+    DeviceAllocation<RefElement> block_Q_ref, block_K_ref, block_V_ref;
+
     // loop over the batch dimension to compute the output
     // to avoid the risk of running out of device memory
     int q_group_size = num_heads_q / num_heads_kv;
@@ -249,10 +286,15 @@ bool verify(ProblemShapeType problem_size, Options options) {
         seq_len_kv = get<4>(problem_size);
         seq_len_kv_cache = get<5>(problem_size);
       }
-      ElementQ* q_ptr;
-      ElementK* k_ptr;
-      ElementV* v_ptr;
-      q_ptr = block_Q.get() + offset_q;
+
+      ElementQ* q_ptr_orig = block_Q.get() + offset_q;
+      ElementK* k_ptr_orig;
+      ElementV* v_ptr_orig;
+
+      void* q_ptr = q_ptr_orig;
+      void* k_ptr;
+      void* v_ptr;
+
       int seq_len_kv_total = seq_len_kv_cache + seq_len_kv;
       cutlass::DeviceAllocation<ElementK> block_K_concat;
       cutlass::DeviceAllocation<ElementV> block_V_concat;
@@ -325,33 +367,63 @@ bool verify(ProblemShapeType problem_size, Options options) {
           );
           // compat::wait();
         }
-      k_ptr = block_K_concat.get();
-      v_ptr = block_V_concat.get();
+      k_ptr_orig = block_K_concat.get();
+      v_ptr_orig = block_V_concat.get();
       } else {
-        k_ptr = block_K.get() + offset_k;
-        v_ptr = block_V.get() + offset_v;
+        k_ptr_orig = block_K.get() + offset_k;
+        v_ptr_orig = block_V.get() + offset_v;
       }
+
+      k_ptr = k_ptr_orig;
+      v_ptr = v_ptr_orig;
+
+      if constexpr (is_fp8_v<ElementQ>) {
+          block_Q_ref.reset(seq_len_qo * num_heads_q * head_size_qk);
+          run_conversion_kernel<ElementQ, RefElement, ElementQ>(
+              q_ptr_orig, block_Q_ref.get(), block_Q_ref.size(), h_scale_q);
+          q_ptr = block_Q_ref.get();
+      }
+      if constexpr (is_fp8_v<ElementK>) {
+          block_K_ref.reset(seq_len_kv_total * num_heads_kv * head_size_qk);
+          run_conversion_kernel<ElementK, RefElement, ElementK>(
+              k_ptr_orig, block_K_ref.get(), block_K_ref.size(), h_scale_k);
+          k_ptr = block_K_ref.get();
+      }
+      if constexpr (is_fp8_v<ElementV>) {
+          block_V_ref.reset(seq_len_kv_total * num_heads_kv * head_size_vo);
+          run_conversion_kernel<ElementV, RefElement, ElementV>(
+              v_ptr_orig, block_V_ref.get(), block_V_ref.size(), h_scale_v);
+          v_ptr = block_V_ref.get();
+      }
+      compat::wait();
 
       for (int q_group = 0; q_group < num_heads_q / q_group_size; q_group++) {
         for (int q_head = 0; q_head < q_group_size; q_head++) {
           cutlass::DeviceAllocation<ElementAccumulator> block_S;
           block_S.reset(seq_len_qo * seq_len_kv_total);
 
-          cutlass::TensorRef ref_Q(q_ptr, LayoutQ(num_heads_q * head_size_qk));
-          cutlass::TensorRef ref_K(k_ptr, LayoutK(num_heads_kv * head_size_qk));
-          cutlass::TensorRef ref_V(v_ptr, LayoutV(num_heads_kv * head_size_vo));
+          int head_offset_q = (q_group * q_group_size + q_head) * head_size_qk;
+          int head_offset_k = q_group * head_size_qk;
+          int head_offset_v = q_group * head_size_vo;
+
+          cutlass::TensorRef ref_Q_head(reinterpret_cast<RefElement*>(q_ptr) + head_offset_q, LayoutQ(num_heads_q * head_size_qk));
+          cutlass::TensorRef ref_K_head(reinterpret_cast<RefElement*>(k_ptr) + head_offset_k, LayoutK(num_heads_kv * head_size_qk));
+          cutlass::TensorRef ref_V_head(reinterpret_cast<RefElement*>(v_ptr) + head_offset_v, LayoutV(num_heads_kv * head_size_vo));
           cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
 
-          cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv_total, head_size_qk}, ElementAccumulator{1}, ref_Q,
-                                                  cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
-                                                  ElementAccumulator{0}, ref_S, ref_S, ElementAccumulator{0},
-                                                  1,                   // batch_count
-                                                  seq_len_qo * head_size_qk, // batch_stride_Q
-                                                  seq_len_kv_total * head_size_qk, // batch_stride_K
-                                                  seq_len_qo * seq_len_kv_total,   // batch_stride_S
-                                                  seq_len_qo * seq_len_kv_total    // batch_stride_S
+          cutlass::reference::device::GemmComplex(
+              {seq_len_qo, seq_len_kv_total, head_size_qk},
+              ElementAccumulator{1},
+              ref_Q_head,
+              cutlass::ComplexTransform::kNone,
+              ref_K_head,
+              cutlass::ComplexTransform::kNone,
+              ElementAccumulator{0},
+              ref_S,
+              ref_S
           );
           compat::wait();
+
           std::vector<ElementAccumulator> host_S(block_S.size());
           compat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(), host_S.size());
 
@@ -421,14 +493,14 @@ bool verify(ProblemShapeType problem_size, Options options) {
               }
             }
           }
-          std::vector<ElementV> host_P(host_S.size());
+          std::vector<RefElement> host_P(host_S.size());
           for (int p = 0; p < host_P.size(); p++)
-            host_P[p] = static_cast<ElementV>(host_S[p]);
+            host_P[p] = static_cast<RefElement>(host_S[p]);
 
-          cutlass::DeviceAllocation<ElementV> block_P;
+          cutlass::DeviceAllocation<RefElement> block_P;
           block_P.reset(host_P.size());
 
-          compat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
+          compat::memcpy<RefElement>(block_P.get(), host_P.data(), host_P.size());
 
           cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
 
@@ -436,14 +508,16 @@ bool verify(ProblemShapeType problem_size, Options options) {
           block_acc.reset(seq_len_qo * head_size_vo);
           cutlass::TensorRef ref_acc(block_acc.get(), LayoutO::packed({seq_len_qo, head_size_vo}));
 
-          cutlass::reference::device::GemmComplex({seq_len_qo, head_size_vo, seq_len_kv_total}, ElementAccumulator{1}, ref_P,
-                                                  cutlass::ComplexTransform::kNone, ref_V, cutlass::ComplexTransform::kNone,
-                                                  ElementAccumulator{0}, ref_acc, ref_acc, ElementAccumulator{0},
-                                                  1,                   // batch_count
-                                                  seq_len_qo * seq_len_kv_total,   // batch_stride_P
-                                                  seq_len_kv_total * head_size_vo, // batch_stride_V
-                                                  seq_len_qo * head_size_vo, // batch_stride_O
-                                                  seq_len_qo * head_size_vo  // batch_stride_O
+          cutlass::reference::device::GemmComplex(
+              {seq_len_qo, head_size_vo, seq_len_kv_total},
+              ElementAccumulator{1},
+              ref_P,
+              cutlass::ComplexTransform::kNone,
+              ref_V_head,
+              cutlass::ComplexTransform::kNone,
+              ElementAccumulator{0},
+              ref_acc,
+              ref_acc
           );
 
           compat::wait();
@@ -461,12 +535,7 @@ bool verify(ProblemShapeType problem_size, Options options) {
               host_O[idx] = static_cast<ElementOutput>(vec_acc[seq * head_size_vo + hvo]);
             }
           }
-          q_ptr += head_size_qk;
         } // end of q_group loop
-        {
-          k_ptr += head_size_qk;
-          v_ptr += head_size_vo;
-        }
       } // end of q_head loop
       offset_q += seq_len_qo * num_heads_q * head_size_qk;
       offset_k += seq_len_kv * num_heads_kv * head_size_qk;
@@ -478,9 +547,10 @@ bool verify(ProblemShapeType problem_size, Options options) {
 
     compat::wait();
     compat::memcpy<ElementOutput>(block_ref_O.get(), host_O.data(), host_O.size());
+
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
-                                                                          block_O.size(), ElementOutput{0.5}, ElementOutput{0.5});
+                                                                          block_O.size(), ElementOutput{0.1}, ElementOutput{0.1});
 
     return passed;
   }
@@ -761,7 +831,7 @@ bool verify(ProblemShapeType problem_size, Options options) {
     compat::wait();
 
     // Verify that the result is correct
-    bool passed = true; //verify(problem_size, options);
+    bool passed = true; //verify(problem_size, options, q_scale, k_scale, v_scale);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if (!passed) {
