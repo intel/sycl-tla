@@ -41,30 +41,209 @@
 #include <cutlass/half.h>
 #include <cutlass/numeric_conversion.h>
 
-template <typename Encoding, typename SrcEngine, typename SrcLayout, typename DstEngine, typename DstLayout>
-CUTLASS_DEVICE void convert_and_descale(
-    cute::Tensor<SrcEngine, SrcLayout> const& src,
-    cute::Tensor<DstEngine, DstLayout>& dst,
+//
+//
+// Helper device function for E4M3 -> FP16 bitwise conversion
+CUTLASS_DEVICE inline uint16_t
+fp8_e4m3_to_fp16_bitwise(uint8_t const& src) {
+    // E4M3 (1-4-3) constants
+    constexpr uint32_t e4m3_exp_bias = 7;
+    // FP16 (1-5-10) constants
+    constexpr uint32_t fp16_exp_bias = 15;
+
+    // Unpack FP8 bits
+    uint16_t sign = static_cast<uint16_t>(src & 0x80);
+    uint16_t exponent = static_cast<uint16_t>(src & 0x78) >> 3;
+    uint16_t mantissa = static_cast<uint16_t>(src & 0x07);
+
+    // Reconstruct FP16 bits
+    uint16_t fp16_sign = sign << 8;
+    // Re-bias exponent and shift to FP16 position
+    uint16_t fp16_exponent = (exponent - e4m3_exp_bias + fp16_exp_bias) << 10;
+    // Shift mantissa to FP16 position
+    uint16_t fp16_mantissa = mantissa << 7;
+
+    return fp16_sign | fp16_exponent | fp16_mantissa;
+}
+
+// Helper device function for E5M2 -> FP16 bitwise conversion
+CUTLASS_DEVICE inline uint16_t
+fp8_e5m2_to_fp16_bitwise(uint8_t const& src) {
+    // E5M2 (1-5-2) constants
+    constexpr uint32_t e5m2_exp_bias = 15;
+    // FP16 (1-5-10) constants
+    constexpr uint32_t fp16_exp_bias = 15;
+
+    // Unpack FP8 bits
+    uint16_t sign = static_cast<uint16_t>(src & 0x80);
+    uint16_t exponent = static_cast<uint16_t>(src & 0x7C) >> 2;
+    uint16_t mantissa = static_cast<uint16_t>(src & 0x03);
+
+    // Reconstruct FP16 bits (Exponent bias is the same, so no re-biasing needed)
+    uint16_t fp16_sign = sign << 8;
+    uint16_t fp16_exponent = exponent << 10;
+    // Shift mantissa to FP16 position
+    uint16_t fp16_mantissa = mantissa << 8;
+
+    return fp16_sign | fp16_exponent | fp16_mantissa;
+}
+
+template <
+    typename Encoding,
+    int VectorizeSize = 8,
+    typename SrcTensor,
+    typename DstTensor
+>
+CUTLASS_DEVICE void
+convert_and_descale(
+    SrcTensor const& src,
+    DstTensor& dst,
     float scale) {
 
-    // This function assumes SrcEngine::value_type is uint8_t and DstEngine::value_type is a higher precision format.
-    cutlass::NumericConverter<typename DstEngine::value_type, float, cutlass::FloatRoundStyle::round_to_nearest> convert_op;
+    using DstElementType = sycl::half;
+    using SrcVec_u8 = sycl::vec<uint8_t, VectorizeSize>;
+    using DstVec_half = sycl::vec<DstElementType, VectorizeSize>;
+    using u16Vec = sycl::vec<uint16_t, VectorizeSize>;
 
-    CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < cute::size(src); ++i) {
-        // 1. Reinterpret the source uint8_t as the correct FP8 encoding.
-        Encoding fp8_val = reinterpret_cast<Encoding const*>(&src(i))[0];
+    auto src_ptr = reinterpret_cast<SrcVec_u8 const*>(src.data());
+    auto dst_ptr = reinterpret_cast<DstVec_half*>(dst.data());
 
-        // 2. Convert the FP8 source element to a standard float.
-        float val_fp32 = static_cast<float>(fp8_val);
+    // Create a sycl::half vector for scaling
+    const DstVec_half scale_vec_half(static_cast<sycl::half>(scale));
 
-        // 3. Apply the scale factor.
-        val_fp32 *= scale;
+    #pragma unroll
+    for (int i = 0; i < cute::size(src) / VectorizeSize; ++i) {
+        SrcVec_u8 const src_vec_u8 = src_ptr[i];
+        u16Vec val_fp16_bits;
 
-        // 4. Convert the resulting float to the destination type using the converter.
-        dst(i) = convert_op(val_fp32);
+        #pragma unroll
+        for (int j = 0; j < VectorizeSize; ++j) {
+            if constexpr (std::is_same_v<Encoding, cutlass::float_e4m3_t>) {
+                val_fp16_bits[j] = fp8_e4m3_to_fp16_bitwise(src_vec_u8[j]);
+            } else {
+                val_fp16_bits[j] = fp8_e5m2_to_fp16_bitwise(src_vec_u8[j]);
+            }
+        }
+
+        // Reinterpret the FP16 bits as a sycl::half vector
+        DstVec_half val_fp16_vec = val_fp16_bits.template as<DstVec_half>();
+
+        // Apply scaling DIRECTLY on the sycl::half vector.
+        // This is the critical change.
+        val_fp16_vec *= scale_vec_half;
+
+        // Store the result. No more conversions needed.
+        dst_ptr[i] = val_fp16_vec;
     }
 }
+
+/*
+template <
+    typename Encoding,
+    int VectorizeSize = 8,
+    typename SrcTensor,
+    typename DstTensor
+>
+CUTLASS_DEVICE void
+convert_and_descale(
+    SrcTensor const& src,
+    DstTensor& dst,
+    float scale) {
+
+    using DstElementType = sycl::half;
+    using SrcVec_u8 = sycl::vec<uint8_t, VectorizeSize>;
+    using DstVec_half = sycl::vec<DstElementType, VectorizeSize>;
+    using Fp32Vec = sycl::vec<float, VectorizeSize>;
+    using u16Vec = sycl::vec<uint16_t, VectorizeSize>;
+
+    auto src_ptr = reinterpret_cast<SrcVec_u8 const*>(src.data());
+    auto dst_ptr = reinterpret_cast<DstVec_half*>(dst.data());
+
+    const Fp32Vec scale_vec(scale);
+
+    #pragma unroll
+    for (int i = 0; i < cute::size(src) / VectorizeSize; ++i) {
+        SrcVec_u8 const src_vec_u8 = src_ptr[i];
+        u16Vec val_fp16_bits;
+
+        // Perform the bitwise conversion in a simple, vectorizable loop
+        #pragma unroll
+        for (int j = 0; j < VectorizeSize; ++j) {
+            if constexpr (std::is_same_v<Encoding, cutlass::float_e4m3_t>) {
+                val_fp16_bits[j] = fp8_e4m3_to_fp16_bitwise(src_vec_u8[j]);
+            } else { // E5M2
+                val_fp16_bits[j] = fp8_e5m2_to_fp16_bitwise(src_vec_u8[j]);
+            }
+        }
+
+        // Reinterpret the FP16 bits as sycl::half and convert to FP32 for scaling
+        Fp32Vec val_fp32_vec = val_fp16_bits.template as<DstVec_half>().template convert<float>();
+
+        // Apply scaling
+        val_fp32_vec *= scale_vec;
+
+        // Convert back to FP16 and store
+        dst_ptr[i] = val_fp32_vec.template convert<DstElementType, sycl::rounding_mode::rte>();
+    }
+}
+*/
+
+/*
+template <
+    typename Encoding,
+    int VectorizeSize = 8,
+    typename SrcTensor,
+    typename DstTensor
+>
+CUTLASS_DEVICE void
+convert_and_descale(
+    SrcTensor const& src,
+    DstTensor& dst,
+    float scale) {
+
+    using DstElementType = sycl::half;
+    static_assert(sizeof(DstElementType) == sizeof(typename DstTensor::value_type));
+
+    // Define SYCL vector types for all stages of the computation
+    using SrcVec_u8 = sycl::vec<uint8_t, VectorizeSize>;
+    using DstVec_half = sycl::vec<DstElementType, VectorizeSize>;
+    using Fp32Vec = sycl::vec<float, VectorizeSize>;
+
+    // Pointers for wide memory access
+    auto src_ptr = reinterpret_cast<SrcVec_u8 const*>(src.data());
+    auto dst_ptr = reinterpret_cast<DstVec_half*>(dst.data());
+
+    // Create a vector of scaling factors
+    const Fp32Vec scale_vec(scale);
+
+    #pragma unroll
+    for (int i = 0; i < cute::size(src) / VectorizeSize; ++i) {
+        // 1. Wide load of FP8 data (as uint8_t)
+        SrcVec_u8 const src_vec_u8 = src_ptr[i];
+
+        // 2. Convert FP8 vector to FP32 vector (MANUAL VECTORIZATION)
+        // This replaces the slow scalar loop.
+        Fp32Vec val_fp32_vec;
+        #pragma unroll
+        for (int j = 0; j < VectorizeSize; ++j) {
+            // This simpler sequence is much easier for the compiler to optimize.
+            val_fp32_vec[j] = static_cast<float>(
+                reinterpret_cast<Encoding const*>(&src_vec_u8[j])[0]
+            );
+        }
+
+        // 3. Perform a vectorized multiplication
+        val_fp32_vec *= scale_vec;
+
+        // 4. Perform a vectorized conversion from FP32 vector to FP16 vector
+        // The .convert() method is highly optimized for this.
+        DstVec_half dst_vec = val_fp32_vec.template convert<DstElementType, sycl::rounding_mode::rte>();
+
+        // 5. Perform a single, wide store
+        dst_ptr[i] = dst_vec;
+    }
+}
+*/
 
 template <typename EncodingType, typename TensorIn, typename TensorOut>
 CUTLASS_DEVICE void
