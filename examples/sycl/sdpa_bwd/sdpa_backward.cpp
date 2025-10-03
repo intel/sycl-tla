@@ -546,49 +546,173 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
     copy(tilesavedK, tdKrdKl, tdKgdK);
 }
 
-template<class T>
+template <typename Layout>
+auto convert_layout_2d_layout(Layout layout) {
+    auto l = make_layout(make_layout(get<0>(layout),
+                                     get<1>(layout)),
+                         get<2>(layout));
+    return l;
+}
+
+template<bool Is_even_M, class T>
 void
-compute_o_dot_do(T & trait, Param<typename T::DType> param) {
-    // The block index for the M dimension.
-    const int m_block = BlockIdxX();
-    // The block index for the batch.
-    const int bidb = BlockIdxZ();
-    // The block index for the head.
-    const int bidh = BlockIdxY();;
-    const int mid = ThreadIdxX() / 16; // 1 row per subgroup
-    const int hid = ThreadIdxX() % 16; // 1 thread per col
-    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+compute_o_dot_do(T &trait, Param<typename T::DType> &param,
+                 const int m_block, const int bidb, const int bidh) {
     // The thread index.
-    // const int tidx = threadIdx.x;
     constexpr int kBlockM = T::kBlockM;
     constexpr int kBlockN = T::kBlockN;
     constexpr int kHeadDim = T::kHeadDim;
     constexpr int kNSGs = T::kNSGs;
     using DType = typename T::DType;
 
+    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto group = syclcompat::get_nd_item<1>().get_group();
+    auto first_thread_in_sg_idx = sg.get_group_linear_id() * trait.SubgroupSize;
     auto bofst = Boffset(param);
 
     const index_t o_offset = bofst.o_offset(bidb, bidh, m_block * kBlockM);
     const index_t dq_offset = bofst.dq_offset(bidb, bidh, m_block * kBlockM);
     const index_t dpsum_offset = bofst.lse_offset(bidb, bidh, m_block * kBlockM);
-    const index_t q_offset = bofst.q_offset(bidb, bidh, m_block * kBlockM);
 
-    const DType *o_ptr = param.o_ptr + o_offset;
-    const DType *do_ptr = param.do_ptr + o_offset;
-    float *dpsum_ptr = param.odo_ptr + dpsum_offset;
-    float *dqaccum_ptr = param.dqaccum_ptr + dq_offset;
+    using ShapeO = Shape<
+        std::conditional_t <Is_even_M, Int<kBlockM>, int>,
+        Int<kHeadDim>, Int<1>>;
+    using ShapeP = Shape<
+        std::conditional_t <Is_even_M, Int<kBlockM>, int>>;
+    ShapeO O_shape;
+    ShapeP dP_shape;
+    if constexpr(Is_even_M) {
+        O_shape = make_shape(Int<kBlockM>{}, Int<kHeadDim>{}, _1{});
+        dP_shape = make_shape(Int<kBlockM>{});
+    } else {
+        O_shape = make_shape(param.tail_m, Int<kHeadDim>{}, _1{});
+        dP_shape = make_shape(param.tail_m);
+    }
+    Shape dQ_shape = make_shape(Int<kBlockM>{}, Int<kHeadDim>{}, _1{});
 
-    int tail_m = param.seq_len_q - m_block * kBlockM;
-    int m = ThreadIdxX();
-    if (m < tail_m) {
-        float dP_sum_cur = 0.0f;
-        for (int h = 0; h < kHeadDim; ++h) {
-            float o_val = static_cast<float>(o_ptr[m * param.o_r_stride + h]);
-            float do_val = static_cast<float>(do_ptr[m * param.o_r_stride + h]);
-            dP_sum_cur += o_val * do_val;
-            dqaccum_ptr[m * param.dq_r_stride + h] = 0.0f;
+    Tensor mdO = make_tensor(make_gmem_ptr(param.do_ptr + o_offset),
+                             make_layout(
+                                 O_shape,
+                                 make_stride(param.o_r_stride, _1{}, _1{})));
+    Tensor mO = make_tensor(make_gmem_ptr(param.o_ptr + o_offset),
+                            make_layout(
+                                O_shape,
+                                make_stride(param.o_r_stride, _1{}, _1{})));
+    Tensor mdQaccum = make_tensor(make_gmem_ptr(param.dqaccum_ptr + dq_offset),
+                                  make_layout(
+                                      dQ_shape,
+                                      make_stride(param.dq_r_stride, _1{})));
+    Tensor mdPsum = make_tensor(make_gmem_ptr(param.odo_ptr + dpsum_offset),
+                                make_layout(
+                                    dP_shape,
+                                    Stride<_1>{}));
+
+    Shape tile_dO = typename T::TileShapedQ{};
+    auto tileloaddO = typename T::TiledLoaddP{mdO};
+    auto tileloadO = typename T::TiledLoaddP{mO};
+    auto tilesavedQ = typename T::TiledSavedQ{mdQaccum};
+
+    typename T::TiledMmadQ tiled_mma_dq;
+    auto thr_mma_do = tiled_mma_dq.get_slice(syclcompat::local_id::x());
+
+    Tensor mO_coord = cute::get_xe_tensor(O_shape);
+    Tensor dQ_coord = cute::get_xe_tensor(dQ_shape);
+
+    Tensor gdO = local_tile(mO_coord, select<0, 1>(tile_dO), make_coord(0, 0, 0));
+    Tensor gdQ = local_tile(dQ_coord, select<0, 1>(tile_dO), make_coord(0, 0, 0));
+
+    Tensor tdOgdO = thr_mma_do.partition_C(gdO);
+    Tensor tdQgdQ = thr_mma_do.partition_C(gdQ);
+
+    Tensor tdQrdQ = partition_fragment_C(tiled_mma_dq, Shape<Int<kBlockM>, Int<kHeadDim>>{});
+    Tensor tdOrdO = make_fragment_like<DType>(tdQrdQ);
+    Tensor tdOrO = make_fragment_like<DType>(tdQrdQ);
+    clear(tdOrdO);
+    clear(tdOrO);
+    clear(tdQrdQ);
+    copy(tilesavedQ, tdQrdQ, tdQgdQ);
+    copy(tileloaddO, tdOgdO, tdOrdO);
+    copy(tileloadO, tdOgdO, tdOrO);
+
+    Tensor dO_reshaped = make_tensor(tdOrdO.data(), convert_layout_2d_layout(tdOrdO.layout()));
+    Tensor O_reshaped = make_tensor(tdOrO.data(), dO_reshaped.layout());
+    constexpr int kGmemThreadsPerRow = kBlockM / size<0>(dO_reshaped);
+    Tensor tdOrdP = make_fragment_like<float>(size<0>(dO_reshaped));
+    constexpr int NUM_ROW_PER_THD = size<0>(dO_reshaped); // 32
+    constexpr int NUM_SG_PER_ROW = kNSGs / (kBlockM / size<0>(dO_reshaped)); // 4
+    constexpr int NUM_SG_PER_BLK_M = kBlockM / NUM_ROW_PER_THD; // 2
+
+    const int sg_local_id = sg.get_local_id();
+    const int sg_group_id = sg.get_group_id();
+    const int sg_group_id_M = sg_group_id % NUM_SG_PER_BLK_M;
+    const int sg_group_id_N = sg_group_id / NUM_SG_PER_BLK_M;
+    auto smem = syclcompat::local_mem<float[kNSGs * NUM_ROW_PER_THD]>();
+    Tensor stensor = make_tensor(make_smem_ptr(smem), make_shape(Int<NUM_ROW_PER_THD>{}, Int<NUM_SG_PER_ROW>{}, Int<NUM_SG_PER_BLK_M>{}));
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int mi = 0; mi < size<0>(dO_reshaped); ++mi) {
+        float dP_sum = 0.0f;
+        CUTLASS_PRAGMA_UNROLL
+        for (int ni = 0; ni < size<1>(dO_reshaped); ++ni) {
+            dP_sum = dP_sum + (float)dO_reshaped(mi, ni) * (float)O_reshaped(mi, ni);
         }
-        dpsum_ptr[m] = dP_sum_cur;
+        tdOrdP(mi) = dP_sum;
+    }
+    /*
+     * reduce within subgroup
+     */
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < size<0>(tdOrdP); ++i) {
+        tdOrdP(i) = reduce_over_group(sg, tdOrdP(i), sycl::plus<>());
+    }
+    /*
+     * store to smem
+     */
+    if (sg_local_id == 0) {
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < size<0>(tdOrdP); ++i) {
+            stensor(i, sg_group_id_N, sg_group_id_M) = tdOrdP(i);
+        }
+    }
+
+    sycl::group_barrier(group);
+    /*
+     * reduce all sgs in the same row
+     */
+    if (sg_local_id == 0 and sg_group_id_N == 0) {
+        for (int i = 0; i < size<0>(tdOrdP); ++i) {
+            tdOrdP(i) = 0.0f;
+            CUTLASS_PRAGMA_UNROLL
+            for (int j = 0; j < NUM_SG_PER_ROW; ++j) {
+                tdOrdP(i) += stensor(i, j, sg_group_id_M);
+            }
+        }
+    }
+    // /*
+    //  * broadcast to all threads in the sg 0
+    //  */
+    // CUTLASS_PRAGMA_UNROLL
+    // for (int i = 0; i < size<0>(tdOrdP); ++i) {
+    //     tdOrdP(i) = sycl::group_broadcast(sg, tdOrdP(i), 0);
+    // }
+    /*
+     * write back to global memory
+     */
+    if constexpr(Is_even_M) {
+        if (sg_local_id == 0 and sg_group_id_N == 0) {
+            const int offset = sg_group_id_M * NUM_ROW_PER_THD;
+            for (int i = 0; i < size<0>(tdOrdP); ++i) {
+                mdPsum(i + offset) = tdOrdP(i);
+            }
+        }
+    } else {
+        if (sg_local_id == 0 and sg_group_id_N == 0) {
+            const int offset = sg_group_id_M * NUM_ROW_PER_THD;
+            int j = offset;
+            for (int i = 0; i < size<0>(tdOrdP) and j < param.tail_m; ++i,++j) {
+                mdPsum(j) = tdOrdP(i);
+            }
+        }
     }
 }
 
@@ -610,7 +734,17 @@ template<class T>
 void
 mha_dot_do_o(T trait,
              Param<typename T::DType> param) {
-    compute_o_dot_do(trait, param);
+    // The block index for the M dimension.
+    const int m_block = BlockIdxX();
+    // The block index for the batch.
+    const int bidb = BlockIdxZ();
+    // The block index for the head.
+    const int bidh = BlockIdxY();;
+    if (m_block == param.m_block - 1 and param.tail_m > 0) {
+        compute_o_dot_do<false>(trait, param, m_block, bidb, bidh);
+    } else {
+        compute_o_dot_do<true>(trait, param, m_block, bidb, bidh);
+    }
 }
 
 template <class T>
