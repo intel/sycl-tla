@@ -124,13 +124,24 @@ jobs:
         run: |
           echo "Installing Coverity analysis tools..."
           
+          # Configure Intel proxy for network access
+          # export http_proxy=http://proxy-dmz.intel.com:912
+          # export https_proxy=http://proxy-dmz.intel.com:912
+          # export ftp_proxy=http://proxy-dmz.intel.com:912
+          # export no_proxy=localhost,127.0.0.1
+          
           # Download Coverity installer and license
-          # Note: These URLs may require authentication or VPN access
-          wget --timeout=30 --tries=3 -O cov-analysis-linux64-2025.3.0.sh "https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/cov-analysis-linux64-2025.3.0.sh" || {
+          COVERITY_INSTALLER_URL="https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/cov-analysis-linux64-2025.3.0.sh"
+          COVERITY_LICENSE_URL="https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/license.dat"
+          
+          echo "Downloading Coverity installer from ${COVERITY_INSTALLER_URL}"
+          sudo wget -q -O cov-analysis-linux64-2025.3.0.sh "$COVERITY_INSTALLER_URL" || {
             echo "ERROR: Failed to download Coverity installer. Check network access to Intel Artifactory."
             exit 1
           }
-          wget --timeout=30 --tries=3 -O license.dat "https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/license.dat" || {
+          
+          echo "Downloading Coverity license from ${COVERITY_LICENSE_URL}"
+          sudo wget -q -O license.dat "$COVERITY_LICENSE_URL" || {
             echo "ERROR: Failed to download Coverity license. Check network access to Intel Artifactory."
             exit 1
           }
@@ -465,13 +476,25 @@ jobs:
       run: |
         echo "Installing Coverity analysis tools..."
         
+        # Configure Intel proxy for network access
+        export http_proxy=http://proxy-dmz.intel.com:912
+        export https_proxy=http://proxy-dmz.intel.com:912
+        export ftp_proxy=http://proxy-dmz.intel.com:912
+        export no_proxy=localhost,127.0.0.1
+        
         # Download Coverity installer and license
         # Note: These URLs may require authentication or VPN access
-        wget --timeout=30 --tries=3 -O cov-analysis-linux64-2025.3.0.sh "https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/cov-analysis-linux64-2025.3.0.sh" || {
+        COVERITY_INSTALLER_URL="https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/cov-analysis-linux64-2025.3.0.sh"
+        COVERITY_LICENSE_URL="https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/license.dat"
+        
+        echo "Downloading Coverity installer from ${COVERITY_INSTALLER_URL}"
+        sudo wget -q -O cov-analysis-linux64-2025.3.0.sh "$COVERITY_INSTALLER_URL" || {
           echo "ERROR: Failed to download Coverity installer. Check network access to Intel Artifactory."
           exit 1
         }
-        wget --timeout=30 --tries=3 -O license.dat "https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/license.dat" || {
+        
+        echo "Downloading Coverity license from ${COVERITY_LICENSE_URL}"
+        sudo wget -q -O license.dat "$COVERITY_LICENSE_URL" || {
           echo "ERROR: Failed to download Coverity license. Check network access to Intel Artifactory."
           exit 1
         }
