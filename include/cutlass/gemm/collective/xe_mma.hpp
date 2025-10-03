@@ -176,23 +176,42 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
-    auto mA_mkl = make_tensor(make_gmem_ptr(mainloop.ptr_A), 
-                              make_layout(make_shape(mainloop.M, mainloop.K, mainloop.L), cute::take<0,2>(mainloop.dA)));
-    auto mB_nkl = make_tensor(make_gmem_ptr(mainloop.ptr_B), 
-                              make_layout(make_shape(mainloop.N, mainloop.K, mainloop.L), cute::take<0,2>(mainloop.dB)));
-    auto copy_a = make_block_2d_copy_A(TiledMma{}, mA_mkl);
-    auto copy_b = make_block_2d_copy_B(TiledMma{}, mB_nkl);
+    auto copy_a = [&]() {
+    if constexpr (!std::is_void_v<GmemTiledCopyA>) {
+      // User provided copy operation - use full stride
+      auto mA_mkl = make_tensor(make_gmem_ptr(mainloop.ptr_A), 
+                                make_layout(make_shape(mainloop.M, mainloop.K, mainloop.L), mainloop.dA));
+      using Copy_A = typename Copy_Traits<GmemTiledCopyA, StrideA>::template DefaultTiledCopy<ElementA>;
+      return Copy_A{}.with(mA_mkl);
+    } else {
+      // Use new 2D copy operations with 2D stride
+      auto mA_mkl = make_tensor(make_gmem_ptr(mainloop.ptr_A), 
+                                make_layout(make_shape(mainloop.M, mainloop.K, mainloop.L), cute::take<0,2>(mainloop.dA)));
+      return make_block_2d_copy_A(TiledMma{}, mA_mkl);
+    }
+  }();
+  
+  auto copy_b = [&]() {
+    if constexpr (!std::is_void_v<GmemTiledCopyB>) {
+      // User provided copy operation - use full stride
+      auto mB_nkl = make_tensor(make_gmem_ptr(mainloop.ptr_B), 
+                                make_layout(make_shape(mainloop.N, mainloop.K, mainloop.L), mainloop.dB));
+      using Copy_B = typename Copy_Traits<GmemTiledCopyB, StrideB>::template DefaultTiledCopy<ElementB>;
+      return Copy_B{}.with(mB_nkl);
+    } else {
+      // Use new 2D copy operations with 2D stride
+      auto mB_nkl = make_tensor(make_gmem_ptr(mainloop.ptr_B), 
+                                make_layout(make_shape(mainloop.N, mainloop.K, mainloop.L), cute::take<0,2>(mainloop.dB)));
+      return make_block_2d_copy_B(TiledMma{}, mB_nkl);
+    }
+  }();
 
     auto thr_copy_a = copy_a.get_slice(thread_idx);
     auto thr_copy_b = copy_b.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
-    // TODO(Codeplay): see if we can make this nicer
-    // To make all work items in a subgroup have the same global tensors pass in the index of work item 0 in each subgroup
-    auto sg = compat::get_nd_item<1>().get_sub_group();
-    auto first_thread_in_sg_idx = sg.get_group_linear_id() * DispatchPolicy::SubgroupSize;
-    auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
+    auto thr_mma = tiled_mma.get_slice(thread_idx);
 
     /* Register fragments for MMA */
     auto tCrA = thr_mma.partition_sg_fragment_A(gA(_,_,0));
@@ -206,11 +225,24 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
     Tensor tAgA = thr_copy_a.partition_S(gA);
     Tensor tBgB = thr_copy_b.partition_S(gB);
     
-    /* Create prefetch TiledCopy instances */
-    auto prefetch_a = make_block_2d_prefetch(copy_a);
-    auto prefetch_b = make_block_2d_prefetch(copy_b);
-    auto thr_prefetch_A = prefetch_a.get_slice(thread_idx);
-    auto thr_prefetch_B = prefetch_b.get_slice(thread_idx);
+  /* Create prefetch TiledCopy instances - different for legacy vs new copy operations */
+  auto [prefetch_a, prefetch_b, thr_prefetch_A, thr_prefetch_B] = [&]() {
+    if constexpr (!std::is_void_v<GmemTiledCopyA> && !std::is_void_v<GmemTiledCopyB>) {
+      // Legacy copy operations - use prefetch_selector
+      auto tiled_prefetch_a = cute::prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(copy_a);
+      auto tiled_prefetch_b = cute::prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(copy_b);
+      auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
+      auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);
+      return std::make_tuple(tiled_prefetch_a, tiled_prefetch_b, thr_prefetch_A, thr_prefetch_B);
+    } else {
+      // New 2D copy operations - use make_block_2d_prefetch
+      auto prefetch_a = make_block_2d_prefetch(copy_a);
+      auto prefetch_b = make_block_2d_prefetch(copy_b);
+      auto thr_prefetch_A = prefetch_a.get_slice(thread_idx);
+      auto thr_prefetch_B = prefetch_b.get_slice(thread_idx);
+      return std::make_tuple(prefetch_a, prefetch_b, thr_prefetch_A, thr_prefetch_B);
+    }
+  }();
 
     /* Partition global tensor (proxies) for prefetch */
     auto pAgA = thr_prefetch_A.partition_S(gA);

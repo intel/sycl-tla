@@ -345,12 +345,19 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  // The 2D block copy operations used for the A and B matrices
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
-
-  // New MMA atom XE_DPAS_TT using workgroup-level tile shape of 256×256×32  
-  using TileShape = Shape<_256, _256, _32>; 
+  // Workgroup-level tile
+  using TileShape = Shape<_256, _256, _32>;
+  
+  // A TiledMMA struct defines a tiling of an MMA atom over M, N and K, combining both additional
+  // hardware (sub-groups for Intel BMG) and iterations by each sub-group.
+  //
+  // The TiledMMAHelper struct defines a specific TiledMMA for a given MMA atom. This example uses
+  // the XE_DPAS_TT<8, float, cute::bfloat16_t> atom, which represents an 8x16x16 DPAS operation with float32 accumulation and bfloat16 inputs, TileShape (<256, 256, 32>) and sub-group layout (8x4x1). 
+  // The TiledMMA constructed using TiledMMAHelper has the property that each sub-group operates on a
+  // single contiguous chunk of the work-group TileShape. For this configuration, this implies that
+  // each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations). See
+  // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 4,1,0) for
+  // performance reasons.
   using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, Layout<TileShape>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   // For Intel BMG, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
@@ -385,6 +392,13 @@ int main(int argc, const char** argv)
           void, void>;
 
   // GEMM Mainloop - iteration over blocks in K dimension
+  // 
+  // Copy operations for A and B matrices:
+  // - Use 'void' (as shown below) to automatically select new 2D block copy operations
+  // - To use legacy copy operations, replace 'void' with specific copy atoms, e.g.:
+  //   using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  //   using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  //   Then replace the first 'void' with GmemTiledCopyA and fifth 'void' with GmemTiledCopyB
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
@@ -393,8 +407,8 @@ int main(int argc, const char** argv)
           ElementInputB,
           cutlass::gemm::TagToStrideB_t<LayoutB>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
           TiledMma,
-          GmemTiledCopyA, void, void, cute::identity,  // A
-          GmemTiledCopyB, void, void, cute::identity   // B
+          void, void, void, cute::identity,  // A
+          void, void, void, cute::identity   // B
   >;
 
   // Define the whole kernel (mainloop and epilogue)
