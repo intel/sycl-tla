@@ -345,6 +345,10 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
+  // [New Copy Atom] Automatically select 2D block copy operations used for the A and B matrices
+  using GmemTiledCopyA = void; // For older version of copy atom, use XE_2D_U16x32x32_LD_N
+  using GmemTiledCopyB = void; // For older version of copy atom, use XE_2D_U16x32x32_LD_V
+
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
   
@@ -392,13 +396,6 @@ int main(int argc, const char** argv)
           void, void>;
 
   // GEMM Mainloop - iteration over blocks in K dimension
-  // 
-  // Copy operations for A and B matrices:
-  // - Use 'void' (as shown below) to automatically select new 2D block copy operations
-  // - To use legacy copy operations, replace 'void' with specific copy atoms, e.g.:
-  //   using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  //   using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
-  //   Then replace the first 'void' with GmemTiledCopyA and fifth 'void' with GmemTiledCopyB
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
@@ -407,8 +404,8 @@ int main(int argc, const char** argv)
           ElementInputB,
           cutlass::gemm::TagToStrideB_t<LayoutB>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
           TiledMma,
-          void, void, void, cute::identity,  // A
-          void, void, void, cute::identity   // B
+          GmemTiledCopyA, void, void, cute::identity,  // A
+          GmemTiledCopyB, void, void, cute::identity   // B
   >;
 
   // Define the whole kernel (mainloop and epilogue)
