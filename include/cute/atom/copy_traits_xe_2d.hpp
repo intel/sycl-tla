@@ -802,7 +802,7 @@ make_block_2d_copy_A(CopyOp                   const& op,    // Copy operation
   // This will pass for new atoms like XE_LOAD_2D<16, 32, 32> 
   // and fail for old atoms like XE_2D_U16x32x32_LD_N
   static_assert(is_new_xe_atom<CopyOp>::value, 
-    "Old XE atom ops not compatible with make_block_2d_copy_A. "
+    "Old XE copy atom ops not compatible with make_block_2d_copy_A. "
     "Please use the new templated atoms: XE_LOAD_2D<Bits, Height, Width> or XE_LOAD_2D_TRANSPOSE<Bits, Height, Width>. "
     "Examples: XE_2D_U16x32x32_LD_N -> XE_LOAD_2D<16, 32, 32>, XE_2D_U16x32x32_LD_V -> XE_LOAD_2D_TRANSPOSE<16, 32, 32>");
   using ValType = typename GEngine::value_type;
@@ -879,7 +879,7 @@ make_block_2d_copy_B(CopyOp                   const& op,    // Copy operation
 {
   // Only accept XE_LOAD_2D_VNNI for copy B
   static_assert(is_new_xe_atom_vnni<CopyOp>::value, 
-    "Old XE atom ops not compatible with make_block_2d_copy_B. "
+    "Old XE copy atom ops not compatible with make_block_2d_copy_B. "
     "Please use the new templated atom: XE_LOAD_2D_VNNI<Bits, Height, Width, BlockWidth>. "
     "Examples: XE_2D_U16x32x32_LD_V -> XE_LOAD_2D_VNNI<16, 32, 32, 32>");
   using ValType = typename GEngine::value_type;
