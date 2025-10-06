@@ -345,9 +345,13 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  // [New Copy Atom] Automatically select 2D block copy operations used for the A and B matrices
-  using GmemTiledCopyA = void; // For older version of copy atom, use XE_2D_U16x32x32_LD_N
-  using GmemTiledCopyB = void; // For older version of copy atom, use XE_2D_U16x32x32_LD_V
+  // [New Copy Atom] When left unspecified (void), make_block_2d_copy_* automatically selects 
+  // appropriate 2D block copy operations for matrices A and B. Alternatively, you can 
+  // explicitly specify new copy atom operations such as XE_LOAD_2D, XE_LOAD_2D_VNNI 
+  // (applicable only to matrix B), or XE_LOAD_2D_TRANSPOSE.
+  // Refer https://github.com/intel/sycl-tla/blob/petercad/rearchitecture/media/docs/cpp/xe_rearchitecture.md
+  using GmemTiledCopyA = void; //XE_LOAD_2D<16, 32, 32>;
+  using GmemTiledCopyB = void; //XE_LOAD_2D_VNNI<16, 32, 32>;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
@@ -366,6 +370,7 @@ int main(int argc, const char** argv)
 
   // For Intel BMG, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
   constexpr int PipelineStages = 2;
+  // For older version of copy/mma atom, use cutlass::gemm::MainloopIntelXeXMX16 as dispatch policy
   using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
