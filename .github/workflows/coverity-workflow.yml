@@ -125,10 +125,10 @@ jobs:
           echo "Installing Coverity analysis tools..."
           
           # Configure Intel proxy for network access
-          # export http_proxy=http://proxy-dmz.intel.com:912
-          # export https_proxy=http://proxy-dmz.intel.com:912
-          # export ftp_proxy=http://proxy-dmz.intel.com:912
-          # export no_proxy=localhost,127.0.0.1
+          export http_proxy=http://proxy-dmz.intel.com:912
+          export https_proxy=http://proxy-dmz.intel.com:912
+          export ftp_proxy=http://proxy-dmz.intel.com:912
+          export no_proxy=localhost,127.0.0.1
           
           # Download Coverity installer and license
           COVERITY_INSTALLER_URL="https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Enterprise/cov-analysis-linux64-2025.3.0.sh"
