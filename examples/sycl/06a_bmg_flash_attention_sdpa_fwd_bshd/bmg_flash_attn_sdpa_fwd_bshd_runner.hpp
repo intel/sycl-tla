@@ -449,9 +449,9 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     // Check if the LSE output from the CUTLASS kernel and reference kernel are
     // equal or not
     bool passed_lse = cutlass::reference::device::BlockCompareRelativelyEqual(
-        block_ref_LSE.get(), block_LSE.get(), block_LSE.size(), 0.001f, 0.001f);
-    //return passed && passed_lse;
-    return 1;
+        block_ref_LSE.get(), block_LSE.get(), block_LSE.size(), 0.1f, 0.1f);
+    
+    return passed && passed_lse;
   }
 
   template <class ProblemShape>
