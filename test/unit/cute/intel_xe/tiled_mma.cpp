@@ -97,3 +97,17 @@ TEST(PVC_CuTe_Xe, tiled_mma_4) {
   check_tiled_mma<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, TileShape,
                   SubgroupLayout, ExpectedTiledMMA>();
 }
+
+TEST(PVC_CuTe_Xe, tiled_mma_5) {
+
+  using TileShape = Shape<_128, _64, _32>;
+  using SubgroupLayout = Layout<Shape<_4, _2, _2>, Stride<_2, _1, _8>>;
+  using ExpectedTiledMMA = TiledMMA<
+      MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>,
+      Layout<Shape<_4, _2, _2>, Stride<_2, _1, _8>>,
+      const Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
+                 Layout<Shape<_16, _2, _2>, Stride<_1, _32, _16>>,
+                 decltype(coalesce(Layout<Shape<_32>, Stride<_1>>{}))>>;
+  check_tiled_mma<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, TileShape,
+                  SubgroupLayout, ExpectedTiledMMA>();
+}
