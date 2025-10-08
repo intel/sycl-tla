@@ -69,3 +69,31 @@ TEST(PVC_CuTe_Xe, tiled_mma_2) {
   check_tiled_mma<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, TileShape,
                   SubgroupLayout, ExpectedTiledMMA>();
 }
+
+TEST(PVC_CuTe_Xe, tiled_mma_3) {
+
+  using TileShape = Shape<_256, _256, _32>;
+  using SubgroupLayout = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>;
+  using ExpectedTiledMMA = TiledMMA<
+      MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>,
+      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
+      const Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
+                 Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>,
+                 decltype(coalesce(Layout<Shape<_32>, Stride<_1>>{}))>>;
+  check_tiled_mma<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, TileShape,
+                  SubgroupLayout, ExpectedTiledMMA>();
+}
+
+TEST(PVC_CuTe_Xe, tiled_mma_4) {
+
+  using TileShape = Shape<_128, _64, _32>;
+  using SubgroupLayout = Layout<Shape<_4, _2, _1>, Stride<_2, _1, _0>>;
+  using ExpectedTiledMMA = TiledMMA<
+      MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>,
+      Layout<Shape<_4, _2, _1>, Stride<_2, _1, _0>>,
+      const Tile<Layout<Shape<_8, _4, _4>, Stride<_1, _32, _8>>,
+                 Layout<Shape<_16, _2, _2>, Stride<_1, _32, _16>>,
+                 decltype(coalesce(Layout<Shape<_32>, Stride<_1>>{}))>>;
+  check_tiled_mma<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, TileShape,
+                  SubgroupLayout, ExpectedTiledMMA>();
+}
