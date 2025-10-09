@@ -38,15 +38,15 @@
     See https://arxiv.org/pdf/2307.08691 for details of Flash Attention V2 algorithm
 
     To run this example:
-      $ ./examples/sycl/06_bmg_flash_attention_cachedKV/06_bmg_prefill_attention_cachedKV --seq_len_qo=512
-        --seq_len_kv=512 --seq_len_kv_cache=512 --head_size_vo=128 --head_size_qk=128
+      $ ./examples/06_bmg_flash_attention/06_bmg_chunk_prefill_hdim64 --seq_len_qo=512
+        --seq_len_kv=512 --seq_len_kv_cache=512 --head_size_vo=64 --head_size_qk=64
 
     Causal masking of the first matrix multiplication is supported (`--is_causal`)
 
     To build & run this example (from your build dir):
 
-      $ ninja 06_bmg_prefill_attention_cachedKV
-      $ ./examples/sycl/06_bmg_flash_attention_cachedKV/06_bmg_prefill_attention_cachedKV
+      $ ninja 06_bmg_chunk_prefill_hdim64
+      $ ./examples/06_bmg_flash_attention/06_bmg_chunk_prefill_hdim64
 
     Call with `--help` for information about available options
 */
