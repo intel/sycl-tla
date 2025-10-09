@@ -1,6 +1,5 @@
 #pragma once
 #include <sycl/sycl.hpp>
-#include <syclcompat.hpp>
 #include <cute/tensor.hpp>
 using namespace cute;
 

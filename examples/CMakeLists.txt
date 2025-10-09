@@ -111,6 +111,7 @@ if(CUTLASS_ENABLE_SYCL)
       08_bmg_gemm_f8
       09_bmg_grouped_gemm_f8
       10_bmg_grouped_gemm_mixed_dtype
+      sdpa_bwd
       )
       add_subdirectory(${EXAMPLE})
     endforeach()
