@@ -117,6 +117,7 @@ if(CUTLASS_ENABLE_SYCL)
       10_bmg_grouped_gemm_mixed_dtype
       11_xe20_cutlass_library
       12_bmg_moe_gemm_cute_interface
+      sdpa_bwd
       )
       add_subdirectory(${EXAMPLE})
     endforeach()
