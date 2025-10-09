@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -70,7 +71,7 @@ TEST(PVC_CuTe_Xe, tiled_mma_2) {
                   SubgroupLayout, ExpectedTiledMMA>();
 }
 
-TEST(PVC_CuTe_Xe, tiled_mma_3) {
+TEST(PVC_CuTe_Xe, tiled_mma_dpas_3) {
 
   using TileShape = Shape<_256, _256, _32>;
   using SubgroupLayout = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>;
@@ -84,7 +85,7 @@ TEST(PVC_CuTe_Xe, tiled_mma_3) {
                   SubgroupLayout, ExpectedTiledMMA>();
 }
 
-TEST(PVC_CuTe_Xe, tiled_mma_4) {
+TEST(PVC_CuTe_Xe, tiled_mma_dpas_4) {
 
   using TileShape = Shape<_128, _64, _32>;
   using SubgroupLayout = Layout<Shape<_4, _2, _1>, Stride<_2, _1, _0>>;
@@ -98,7 +99,7 @@ TEST(PVC_CuTe_Xe, tiled_mma_4) {
                   SubgroupLayout, ExpectedTiledMMA>();
 }
 
-TEST(PVC_CuTe_Xe, tiled_mma_5) {
+TEST(PVC_CuTe_Xe, tiled_mma_dpas_5) {
 
   using TileShape = Shape<_128, _64, _32>;
   using SubgroupLayout = Layout<Shape<_4, _2, _2>, Stride<_2, _1, _8>>;
