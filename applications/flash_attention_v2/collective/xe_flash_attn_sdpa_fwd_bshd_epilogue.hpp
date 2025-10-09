@@ -195,7 +195,7 @@ public:
     constexpr int FragsM = shape<1>(FragOutLayout{});
     constexpr int FragsN = size(select<2, 3>(shape(FragOutLayout{})));
 
-    auto g = syclcompat::get_nd_item<1>().get_sub_group();
+    auto g = compat::get_nd_item<1>().get_sub_group();
     auto out_reg = make_tensor(static_cast<decltype(out) &&>(out).data(),
                                Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
     float tLSE_reg = {-INFINITY};
@@ -260,7 +260,7 @@ public:
     copy(params.xe_store_o, final_out_reg, tOgO);
 
     // Generating the LSE for backward training
-    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto sg = compat::get_nd_item<1>().get_sub_group();
     int lane_id = static_cast<int>(sg.get_local_linear_id());
     int sub_group_id = get_sub_group_id();
     const int BLK_M = size(select<0>(TileShapeOutput{}));

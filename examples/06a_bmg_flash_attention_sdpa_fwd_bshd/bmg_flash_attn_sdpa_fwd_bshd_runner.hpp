@@ -197,7 +197,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
 
   template <typename SrcT, typename DstT>
   void convert_fp8_to_fp16(const SrcT *d_src, DstT *d_dst, size_t size) {
-    syclcompat::get_default_queue()
+    compat::get_default_queue()
         .parallel_for(
             size,
             [=](auto indx) { d_dst[indx] = static_cast<DstT>(d_src[indx]); })
@@ -298,9 +298,9 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
               seq_len_qo * seq_len_kv,   // batch_stride_S
               seq_len_qo * seq_len_kv    // batch_stride_S
           );
-          syclcompat::wait();
+          compat::wait();
           std::vector<ElementAccumulator> host_S(block_S.size());
-          syclcompat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(),
+          compat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(),
                                                  host_S.size());
 
           // delete this memory as it is no longer needed
@@ -378,7 +378,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
           cutlass::DeviceAllocation<ElementV_> block_P;
           block_P.reset(host_P.size());
 
-          syclcompat::memcpy<ElementV_>(block_P.get(), host_P.data(),
+          compat::memcpy<ElementV_>(block_P.get(), host_P.data(),
                                         host_P.size());
 
           cutlass::TensorRef ref_P(block_P.get(),
@@ -401,12 +401,12 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
               seq_len_qo * head_size_vo  // batch_stride_O
           );
 
-          syclcompat::wait();
+          compat::wait();
           // delete this memory as it is no longer needed
           block_P.reset();
 
           std::vector<ElementAccumulator> vec_acc(block_acc.size());
-          syclcompat::memcpy<ElementAccumulator>(
+          compat::memcpy<ElementAccumulator>(
               vec_acc.data(), block_acc.get(), vec_acc.size());
 
           // delete this memory as it is no longer needed
@@ -434,11 +434,11 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
       offset_o += seq_len_qo * num_heads_q * head_size_vo;
     } // end of batch loop
 
-    syclcompat::wait();
-    syclcompat::memcpy<ElementOutput>(block_ref_O.get(), host_O.data(),
+    compat::wait();
+    compat::memcpy<ElementOutput>(block_ref_O.get(), host_O.data(),
                                       host_O.size());
-    syclcompat::wait();
-    syclcompat::memcpy<float>(block_ref_LSE.get(), host_LSE.data(),
+    compat::wait();
+    compat::memcpy<float>(block_ref_LSE.get(), host_LSE.data(),
                               host_LSE.size());
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
@@ -613,13 +613,13 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     // configure smem size and carveout
     int smem_size = FMHAPrefillKernel::SharedStorageSize;
 
-    const auto sycl_block = syclcompat::dim3(block.x, block.y, block.z);
-    const auto sycl_grid = syclcompat::dim3(grid.x, grid.y, grid.z);
+    const auto sycl_block = compat::dim3(block.x, block.y, block.z);
+    const auto sycl_grid = compat::dim3(grid.x, grid.y, grid.z);
 
 // Launch parameters depend on whether SYCL compiler supports work-group scratch
 // memory extension
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
-    using namespace syclcompat::experimental;
+    using namespace compat::experimental;
     auto event = launch<cutlass::device_kernel<FMHAPrefillKernel>>(
         launch_policy{sycl_grid, sycl_block,
                       local_mem_size{static_cast<std::size_t>(smem_size)},
@@ -627,15 +627,15 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
                           FMHAPrefillKernel::DispatchPolicy::SubgroupSize>}},
         params);
 #else
-    syclcompat::experimental::launch_properties launch_props{
+    compat::experimental::launch_properties launch_props{
         sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
     };
-    syclcompat::experimental::kernel_properties kernel_props{
+    compat::experimental::kernel_properties kernel_props{
         sycl::ext::oneapi::experimental::sub_group_size<
             FMHAPrefillKernel::DispatchPolicy::SubgroupSize>};
-    syclcompat::experimental::launch_policy policy{sycl_grid, sycl_block,
+    compat::experimental::launch_policy policy{sycl_grid, sycl_block,
                                                    launch_props, kernel_props};
-    auto event = syclcompat::experimental::launch<
+    auto event = compat::experimental::launch<
         cutlass::device_kernel<FMHAPrefillKernel>>(policy, params);
 #endif
 
@@ -681,7 +681,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     // Run the GEMM
     run(params);
 
-    syclcompat::wait();
+    compat::wait();
 
     // Verify that the result is correct
     bool passed = verify(problem_size, options.is_causal, options.softmax_scale);
@@ -697,7 +697,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
       for (int i = 0; i < options.iterations; ++i) {
         run(params);
       }
-      syclcompat::wait();
+      compat::wait();
       // when seq_len_qo is not equal to seq_len_kv we use bottom up approach
       // for the masking. Following changes will adjust the effective_seq_len_kv
       // when masking applied for such cases
