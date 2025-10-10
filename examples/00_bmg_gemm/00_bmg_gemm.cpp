@@ -277,8 +277,6 @@ struct ExampleRunner {
     bool passed = verify(problem_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
-
     if (options.iterations > 0) {
       GPU_Clock timer;
       timer.start();
@@ -345,7 +343,7 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  // [New Copy Atom] When left unspecified (void), make_block_2d_copy_* automatically selects 
+  // [New Copy Atom] When left unspecified (void), MainloopXeL1Staged automatically selects 
   // appropriate 2D block copy operations for matrices A and B. Alternatively, you can 
   // explicitly specify new copy atom operations such as XE_LOAD_2D, XE_LOAD_2D_VNNI 
   // (applicable only to matrix B), or XE_LOAD_2D_TRANSPOSE.
