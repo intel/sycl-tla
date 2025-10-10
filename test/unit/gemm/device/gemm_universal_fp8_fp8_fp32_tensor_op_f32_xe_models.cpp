@@ -33,7 +33,6 @@
 
 */
 
->>>>>>> d6137b22 (Gemm Universal unit tests for MainloopIntelW8A8 API)
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/kernel/gemm_universal.hpp"
 #include "default_gemm_configuration.hpp"
