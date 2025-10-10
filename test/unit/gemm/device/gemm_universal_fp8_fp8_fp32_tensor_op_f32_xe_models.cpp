@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 /***************************************************************************************************
  * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
