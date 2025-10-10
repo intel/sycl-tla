@@ -277,7 +277,7 @@ struct ExampleRunner {
     bool passed = verify(problem_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if (options.iterations > 0) {
+    if (passed && options.iterations > 0) {
       GPU_Clock timer;
       timer.start();
       for (int i = 0; i < options.iterations; ++i) {
