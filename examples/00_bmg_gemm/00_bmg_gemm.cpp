@@ -368,8 +368,10 @@ int main(int argc, const char** argv)
 
   // For Intel BMG, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+   // For older version of copy/mma atom, use cutlass::gemm::MainloopIntelXeXMX16 as dispatch policy for CollectiveMma
+  // use cutlass::epilogue::IntelXeXMX16 as dispatch policy for CollectiveEpilogue
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeL1Staged;
 
   // This is the 'default' epilogue operation (Linear Combination) which performs everything in:
   // (D = alpha * (A*B) + beta * C)
