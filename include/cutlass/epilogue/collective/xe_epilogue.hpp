@@ -102,9 +102,9 @@ public:
   using CopyOpR2S = CopyOpR2S_;
 
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
-  using GmemTiledCopyC = conditional_t<cute::is_void_v<CopyOpG2R>, XE_2D_U32x8x16_LD_N, CopyOpG2R>;
+  using GmemTiledCopyC = conditional_t<cute::is_void_v<CopyOpG2R>, XE_LOAD_2D<32, 8, 16>, CopyOpG2R>;
   using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
-                                             CopyOpR2G, XE_2D_U32x8x16_ST_N>;
+                                             CopyOpR2G, XE_STORE_2D<32, 8, 16>>;
   using ElementOutput = ElementD;
   using ElementCompute = ElementAccumulator;
 
@@ -118,16 +118,6 @@ public:
   static_assert(std::is_same_v<CopyOpR2S, void>, "Copy operation to shared memory is not supported");
   static_assert(std::is_same_v<SmemLayoutAtomC, void>, "Copy operation to shared memory is not supported");
   static_assert(std::is_same_v<SmemLayoutAtomD, void>, "Copy operation to shared memory is not supported");
-
-  using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
-  
-  using Trait_C = Copy_Traits<GmemTiledCopyC, StrideC>;
-  using val_layout_load_C = decltype(make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
-  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}, Layout<CopyThreadShape>{}, val_layout_load_C{}));
-
-  using Trait_D = Copy_Traits<GmemTiledCopyD, StrideD>;
-  using val_layout_store_D = decltype(make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
-  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}, Layout<CopyThreadShape>{}, val_layout_store_D{}));
 
 private:
   constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
@@ -166,8 +156,11 @@ public:
   // Device side epilogue params
   struct Params {
     typename FusionCallbacks::Params thread{};
-    XE_Copy_C xe_load_c;
-    XE_Copy_D xe_store_d;
+    ElementC const* ptr_C;
+    ElementD* ptr_D;
+    int M, N, K, L; 
+    StrideC dC;
+    StrideD dD;
   };
 
   //
@@ -184,22 +177,13 @@ public:
     auto problem_shape_MNKL = append<4>(problem_shape, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
-    XE_Copy_C xe_load_c = {};
-    if constexpr (is_source_supported) {
-      auto mC = make_tensor(make_gmem_ptr(args.ptr_C), make_layout(make_shape(M, N, L), args.dC));
-      xe_load_c = {xe_load_c.with(mC)};
-    }
-
-    XE_Copy_D xe_store_d = {};
-    if constexpr (is_destination_supported) {
-      auto mD = make_tensor(make_gmem_ptr(args.ptr_D), make_layout(make_shape(M, N, L), args.dD));
-      xe_store_d = {xe_store_d.with(mD)};
-    }
-
     return {
       FusionCallbacks::to_underlying_arguments(problem_shape, args.thread, workspace),
-      xe_load_c,
-      xe_store_d,
+      args.ptr_C,
+      args.ptr_D,
+      M, N, K, L,
+      args.dC,
+      args.dD
     };
   }
 
@@ -296,28 +280,20 @@ public:
     static constexpr auto BLK_M = get<0>(CtaTileMNK{});
     static constexpr auto BLK_N = get<1>(CtaTileMNK{});
     static constexpr auto BLK_K = get<2>(CtaTileMNK{});
-    // Workgroup-level tile dimensions
-    static constexpr auto WG_M = BLK_M; //256
-    static constexpr auto WG_N = BLK_N; //256
-
+  
     // Indexing variables
     auto [M, N, K, L] = problem_shape_mnkl;
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord_mnkl;
-
+    
     // Workgroup coordinates (no subgroup indexing needed)
     auto wg_coord = make_coord(m_coord, n_coord, k_coord, l_coord);
-    if (thread_idx == 0 && m_coord == 0 && n_coord==0){
-      printf("[Block (%d, %d, %d) Batch index (l_coord) is: %d]", m_coord, n_coord, l_coord, l_coord);
-      print("\n");
-    }
 
     bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
     auto mC = make_tensor(make_gmem_ptr(params.ptr_C), make_layout(make_shape(params.M, params.N, params.L),  params.dC));
     auto mD = make_tensor(make_gmem_ptr(params.ptr_D), make_layout(make_shape(params.M, params.N, params.L),  params.dD));
-    using GmemTiledCopynewC = XE_LOAD_2D<32, 8, 16>; //XE_LOAD_2D<16, 32, 32>;
-    using GmemTiledCopynewD = XE_STORE_2D<32, 8, 16>; //XE_LOAD_2D_VNNI<16, 32, 32>;
-    auto copy_c = make_block_2d_copy_C(GmemTiledCopynewC{}, tiled_mma, mC(_,_,l_coord));
-    auto copy_d = make_block_2d_copy_C(GmemTiledCopynewD{}, tiled_mma, mD(_,_,l_coord));
+    auto copy_c = make_block_2d_copy_C(GmemTiledCopyC{}, tiled_mma, mC(_,_,l_coord));
+    auto copy_d = make_block_2d_copy_C(GmemTiledCopyD{}, tiled_mma, mD(_,_,l_coord));
+
 
     // Represent the full output tensor
     Tensor mD_mnl = cute::get_xe_tensor(make_shape(M,N,L));
@@ -332,13 +308,6 @@ public:
     auto thread_xe_store_d = copy_d.get_thread_slice(thread_idx);
     Tensor tCgD = thread_xe_store_d.partition_D(gD);
 
-    // Calculate elements per thread for the workgroup tile
-    constexpr int total_elements = BLK_M * BLK_N;
-    constexpr int total_threads = get<1>(typename TiledMma::ThrLayoutVMNK{}.shape()) *
-                                  get<2>(typename TiledMma::ThrLayoutVMNK{}.shape()) *
-                                  get<3>(typename TiledMma::ThrLayoutVMNK{}.shape());
-    constexpr int elements_per_thread = total_elements / total_threads;
-
     // Create tensors sized for workgroup-level operation
     Tensor trC = make_tensor<typename TiledMma::ValTypeC>(tCgC.shape());
     Tensor trD_compute = make_tensor<ElementCompute>(tCgD.shape());
@@ -348,7 +317,7 @@ public:
 
     auto mn_shape = shape(typename decltype(copy_d)::Tiler_MN{});
 
- // OOB predication for tile quantization "residue"
+    // OOB predication for tile quantization "residue"
     Tensor mD_crd = make_identity_tensor(make_shape(M,N));
     Tensor cD = local_tile(mD_crd, take<0,2>(CtaTileMNK{}), make_coord(m_coord, n_coord));
     Tensor tRS_cD = thread_g2r.partition_S(flat_divide(cD, mn_shape));
@@ -378,7 +347,7 @@ public:
     cst_callbacks.begin();
     // Load C tile if needed (distributed across all threads in workgroup)[web:24][web:27]
     if (is_C_load_needed) {
-         copy(copy_c, tCgC, trC);
+      copy(copy_c, tCgC, trC);
     }
 
     // Single previsit for entire workgroup tile
@@ -394,6 +363,7 @@ public:
       CUTLASS_PRAGMA_UNROLL
       for (int f = 0; f < FragmentSize; ++f) {
         frg_acc[f] = accumulators(epi_v * FragmentSize + f);
+      }
       
       // Process fragment
       auto result_frg = cst_callbacks.visit(frg_acc, epi_v, 0, 0);
@@ -407,39 +377,38 @@ public:
 
     cst_callbacks.reduce(nullptr, synchronize, 0, 0, true, trD_compute);
 
-
-  if constexpr (is_destination_supported) {
-  // Convert fragments using NumericArrayConverter
-  constexpr int num_fragments_trD_compute = size(trD_compute) / FragmentSize;
-  using Converter = cutlass::NumericArrayConverter<ElementOutput, ElementCompute, FragmentSize>;
-  Converter converter{};
-  
-  CUTLASS_PRAGMA_UNROLL
-  for (int epi_v = 0; epi_v < num_fragments_trD_compute; ++epi_v) {
-    // Extract compute fragment
-    Array<ElementCompute, FragmentSize> trD_compute_frag;
-    CUTLASS_PRAGMA_UNROLL
-    for (int f = 0; f < FragmentSize; ++f) {
-      trD_compute_frag[f] = trD_compute(epi_v * FragmentSize + f);
-    }
-    
-    // Convert fragment
-    auto trD_frag = converter(trD_compute_frag);
-    
-    // Store converted fragment
-    CUTLASS_PRAGMA_UNROLL
-    for (int f = 0; f < FragmentSize; ++f) {
-      trD(epi_v * FragmentSize + f) = trD_frag[f];
+    if constexpr (is_destination_supported) {
+      // Convert fragments using NumericArrayConverter
+      constexpr int num_fragments_trD_compute = size(trD_compute) / FragmentSize;
+      using Converter = cutlass::NumericArrayConverter<ElementOutput, ElementCompute, FragmentSize>;
+      Converter converter{};
       
-    }
-  }
-  
-    copy(copy_d, trD, tCgD);
-}
+      CUTLASS_PRAGMA_UNROLL
+      for (int epi_v = 0; epi_v < num_fragments_trD_compute; ++epi_v) {
+        // Extract compute fragment
+        Array<ElementCompute, FragmentSize> trD_compute_frag;
+        CUTLASS_PRAGMA_UNROLL
+        for (int f = 0; f < FragmentSize; ++f) {
+          trD_compute_frag[f] = trD_compute(epi_v * FragmentSize + f);
+        }
+        
+        // Convert fragment
+        auto trD_frag = converter(trD_compute_frag);
+        
+        // Store converted fragment
+        CUTLASS_PRAGMA_UNROLL
+        for (int f = 0; f < FragmentSize; ++f) {
+          trD(epi_v * FragmentSize + f) = trD_frag[f];
+          
+        }
+      }
+      
+      copy(copy_d, trD, tCgD);
+ }
 
   cst_callbacks.end();  
     
-  }
+}
 
 private:
   Params const& params;

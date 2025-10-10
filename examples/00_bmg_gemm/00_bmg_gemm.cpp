@@ -395,9 +395,9 @@ int main(int argc, const char** argv)
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
           FusionCallBacks,
-          XE_2D_U32x8x16_LD_N, // The copy atom used to load matrix C
+          XE_LOAD_2D<32, 8, 16>, // The new copy atom used to load matrix C
           void, void,
-          XE_2D_U32x8x16_ST_N, // The copy atom used to store matrix D
+          XE_STORE_2D<32, 8, 16>, // The new copy atom used to store matrix D
           void, void>;
 
   // GEMM Mainloop - iteration over blocks in K dimension
