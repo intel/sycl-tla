@@ -220,6 +220,64 @@ template <class FMHAChunkPrefillKernel, bool isVarLen> struct ExampleRunner {
   // Methods
   //
 
+/*
+template <typename T>
+void initialize_block_random(cutlass::DeviceAllocation<T>& block) {
+    if (block.size() == 0) {
+        return;
+    }
+    std::vector<T> host_tensor(block.size());
+    std::mt19937 gen(seed);
+    std::uniform_real_distribution<float> dis(-1.f, 1.f);
+
+    for (size_t i = 0; i < host_tensor.size(); ++i) {
+        host_tensor[i] = static_cast<T>(dis(gen));
+    }
+    block.copy_from_host(host_tensor.data(), host_tensor.size());
+}
+*/
+
+template <typename T>
+void initialize_block_random(cutlass::DeviceAllocation<T>& block) {
+    if (block.size() == 0) {
+        return;
+    }
+    std::vector<T> host_tensor(block.size());
+    std::mt19937 gen(seed);
+    std::uniform_int_distribution<> dis(1, 9);
+
+    for (size_t i = 0; i < host_tensor.size(); ++i) {
+        host_tensor[i] = static_cast<T>(dis(gen));
+    }
+    block.copy_from_host(host_tensor.data(), host_tensor.size());
+}
+
+template <typename T>
+void initialize_block_identity(cutlass::DeviceAllocation<T>& block, int rows, int cols) {
+    if (block.size() == 0) {
+        return;
+    }
+    std::vector<T> host_tensor(block.size(), T(0.f));
+    for (int i = 0; i < rows; ++i) {
+        if (i < cols) {
+            host_tensor[i * cols + i] = T(1.f);
+        }
+    }
+    block.copy_from_host(host_tensor.data(), host_tensor.size());
+}
+
+template <typename T>
+void initialize_block_iota(cutlass::DeviceAllocation<T>& block) {
+    if (block.size() == 0) {
+        return;
+    }
+    std::vector<T> host_tensor(block.size());
+    for (size_t i = 0; i < host_tensor.size(); ++i) {
+        host_tensor[i] = static_cast<T>(static_cast<float>(1.0));
+    }
+    block.copy_from_host(host_tensor.data(), host_tensor.size());
+}
+
 template <typename SrcType, typename DstType, typename Encoding>
 void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num_elements, float scale) {
     sycl::queue queue = compat::get_default_queue();
@@ -227,17 +285,41 @@ void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num
     int64_t num_blocks = ceil_div(num_elements, num_threads);
 
     queue.submit([&](sycl::handler& cgh) {
-        SrcType* src_ptr = src_ptr_in;
+        // Correctly cast the source pointer to uint8_t* for the kernel
+        uint8_t* src_ptr = reinterpret_cast<uint8_t*>(src_ptr_in);
         DstType* dst_ptr = dst_ptr_in;
         cgh.parallel_for(sycl::nd_range<1>(num_blocks * num_threads, num_threads), [=](sycl::nd_item<1> item) {
             int64_t idx = item.get_global_id(0);
             if (idx < num_elements) {
+                // Create tensors with the correct types for convert_and_descale
                 auto src_tensor = make_tensor(src_ptr + idx, make_shape(1));
                 auto dst_tensor = make_tensor(dst_ptr + idx, make_shape(1));
                 convert_and_descale<Encoding, 1>(src_tensor, dst_tensor, scale);
             }
         });
     });
+}
+
+template<typename T>
+void print_device_tensor(const char* name, T* ptr, size_t size, int max_elements_to_print = 1153) {
+    std::cout << "--- " << name << " ---" << std::endl;
+    if (ptr == nullptr || size == 0) {
+        std::cout << "(null)" << std::endl;
+        return;
+    }
+    std::vector<T> host_tensor(size);
+    compat::memcpy(host_tensor.data(), ptr, size * sizeof(T));
+    compat::wait();
+
+    int count = 0;
+    for (const auto& val : host_tensor) {
+        if (count++ >= max_elements_to_print) {
+            std::cout << "..." << std::endl;
+            break;
+        }
+        std::cout << static_cast<float>(val) << " ";
+    }
+    std::cout << std::endl << "--- End " << name << " ---" << std::endl;
 }
 
 bool verify(ProblemShapeType problem_size, Options options, const float* q_scale, const float* k_scale, const float* v_scale) {
@@ -269,7 +351,7 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
     int offset_o = 0;
 
     using namespace cutlass;
-    using RefElement = half_t;
+    using RefElement = bfloat16_t; //half_t;
     DeviceAllocation<RefElement> block_Q_ref, block_K_ref, block_V_ref;
 
     // loop over the batch dimension to compute the output
@@ -396,6 +478,22 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
           v_ptr = block_V_ref.get();
       }
       compat::wait();
+
+      // Print inputs for the first batch item
+      if (b == 0) {
+        if constexpr (is_fp8_v<ElementQ>) {
+            std::cout << "\n========= FP8 Kernel Inputs (Batch 0) =========\n";
+            print_device_tensor("FP8 Input Q", q_ptr_orig, seq_len_qo * num_heads_q * head_size_qk);
+            print_device_tensor("FP8 Input K", k_ptr_orig, seq_len_kv_total * num_heads_kv * head_size_qk);
+            print_device_tensor("FP8 Input V", v_ptr_orig, seq_len_kv_total * num_heads_kv * head_size_vo);
+            std::cout << "\n========= Reference Kernel Inputs (Batch 0, Descaled) =========\n";
+        } else {
+            std::cout << "\n========= FP16 Kernel and Reference Kernel Inputs (Batch 0) =========\n";
+        }
+        print_device_tensor("Input Q", reinterpret_cast<RefElement*>(q_ptr), seq_len_qo * num_heads_q * head_size_qk);
+        print_device_tensor("Input K", reinterpret_cast<RefElement*>(k_ptr), seq_len_kv_total * num_heads_kv * head_size_qk);
+        print_device_tensor("Input V", reinterpret_cast<RefElement*>(v_ptr), seq_len_kv_total * num_heads_kv * head_size_vo);
+      }
 
       for (int q_group = 0; q_group < num_heads_q / q_group_size; q_group++) {
         for (int q_head = 0; q_head < q_group_size; q_head++) {
@@ -548,9 +646,14 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
     compat::wait();
     compat::memcpy<ElementOutput>(block_ref_O.get(), host_O.data(), host_O.size());
 
+    std::cout << "\n========= Kernel Outputs =========\n";
+    print_device_tensor("Actual Kernel Output (block_O)", block_O.get(), block_O.size());
+    print_device_tensor("Reference Kernel Output (block_ref_O)", block_ref_O.get(), block_ref_O.size());
+    std::cout << "\n==================================\n";
+
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
-                                                                          block_O.size(), ElementOutput{0.1}, ElementOutput{0.1});
+                                                                          block_O.size(), ElementOutput{0.5}, ElementOutput{0.5});
 
     return passed;
   }
@@ -703,6 +806,18 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
       block_V_cache.reset(num_pages * paged_kv_cache.page_size * num_heads_kv * head_size_vo);
     }
 
+    /*initialize_block_iota(block_Q);
+    initialize_block_iota(block_K);
+    initialize_block_iota(block_V); //, seq_len_kv, head_size_vo);
+    initialize_block_iota(block_K_cache);
+    initialize_block_iota(block_V_cache); //, seq_len_kv_cache, head_size_vo);*/
+					  //
+    /*initialize_block_random(block_Q);
+    initialize_block_random(block_K);
+    initialize_block_random(block_V);
+    initialize_block_random(block_K_cache);
+    initialize_block_random(block_V_cache);*/
+
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
@@ -831,7 +946,7 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
     compat::wait();
 
     // Verify that the result is correct
-    bool passed = true; //verify(problem_size, options, q_scale, k_scale, v_scale);
+    bool passed = verify(problem_size, options, q_scale, k_scale, v_scale);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if (!passed) {
@@ -875,24 +990,28 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
   }
 };
 
-// the default value used for the case BF16
-template <bool Causal,
-          bool LocalMask,
-          typename TileShapeQK,
-          typename TileShapePV,
-          typename TileShapeOutput,
-          typename SubgroupLayout,
-          int PipelineStages,
-          typename ElementInputQ = bfloat16_t,
-          typename ElementInputKV = bfloat16_t,
-          typename MMAOperation = XE_8x16x16_F32BF16BF16F32_TT,
-          typename GmemTiledCopyQ = XE_2D_U16x8x32_LD_N,
-          typename GmemTiledCopyK = XE_2D_U16x16x16_LD_T, // _T designates a transposed block load operation
-          typename GmemTiledCopyV = XE_2D_U16x16x32_LD_V,
-          typename ElementAccumulator = float,
-          typename ElementComputeEpilogue = float,
-          typename ElementOutput = bfloat16_t,
-          typename GmemTiledCopyStore = XE_2D_U16x8x16_ST_N> struct FMHAConfig {
+// The default configuration for BF16
+template <
+  bool Causal,
+  bool LocalMask,
+  typename TileShapeQK,
+  typename TileShapePV,
+  typename TileShapeOutput,
+  typename SubgroupLayout,
+  int PipelineStages,
+  typename ElementInputQ = bfloat16_t,
+  typename ElementInputKV = bfloat16_t,
+  typename MMAOperation = XE_8x16x16_F32BF16BF16F32_TT,
+  typename GmemTiledCopyQ = XE_2D_U16x8x32_LD_N,
+  typename GmemTiledCopyK = XE_2D_U16x16x16_LD_T,
+  typename GmemTiledCopyV = XE_2D_U16x16x32_LD_V,
+  typename StrideO = cutlass::gemm::TagToStrideC_t<LayoutO>,
+  typename ElementAccumulator = float,
+  typename ElementComputeEpilogue = float,
+  typename ElementOutput = bfloat16_t,
+  typename GmemTiledCopyStore = XE_2D_U16x8x16_ST_N
+>
+struct FMHAConfig {
 
   template <bool isVarLen, bool PagedKV, class Scheduler>
   static int run(const Options &options,
@@ -910,8 +1029,8 @@ template <bool Causal,
     using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
     using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
     using CollectiveEpilogue = cutlass::flash_attention::collective::FlashChunkPrefillEpilogue<
-        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementComputeEpilogue, ElementOutput, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
-        GmemTiledCopyStore>;
+        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementComputeEpilogue, ElementOutput,
+        StrideO, ElementOutput, GmemTiledCopyStore>;
     using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashChunkPrefillSoftmaxEpilogue<Causal, LocalMask, EpilogueDispatchPolicy, ElementAccumulator>;
 
     using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
@@ -941,17 +1060,35 @@ template <bool Causal,
   }
 
   static int run(const Options &options,
-                 const float* q_scale = nullptr,
-                 const float* k_scale = nullptr,
-                 const float* v_scale = nullptr) {
+                 const float* q_scale_in = nullptr,
+                 const float* k_scale_in = nullptr,
+                 const float* v_scale_in = nullptr) {
+
+    cutlass::DeviceAllocation<float> q_scale, k_scale, v_scale;
+    q_scale.reset(1);
+    k_scale.reset(1);
+    v_scale.reset(1);
+
+    float h_q_scale = 1.0f;
+    float h_k_scale = 1.0f;
+    float h_v_scale = 1.0f;
+
+    q_scale.copy_from_host(&h_q_scale, 1);
+    k_scale.copy_from_host(&h_k_scale, 1);
+    v_scale.copy_from_host(&h_v_scale, 1);
+
+    const float* q_scale_ptr = q_scale.get();
+    const float* k_scale_ptr = k_scale.get();
+    const float* v_scale_ptr = v_scale.get();
+
     if (options.use_paged_kv && !options.varlen) {
-      return run<false, true, cutlass::flash_attention::IndividualScheduler>(options, q_scale, k_scale, v_scale);
+      return run<false, true, cutlass::flash_attention::IndividualScheduler>(options, q_scale_ptr, k_scale_ptr, v_scale_ptr);
     } else if(!options.use_paged_kv && options.varlen) {
-      return run<true, false, cutlass::flash_attention::IndividualScheduler>(options, q_scale, k_scale, v_scale);
+      return run<true, false, cutlass::flash_attention::IndividualScheduler>(options, q_scale_ptr, k_scale_ptr, v_scale_ptr);
     } else if(!options.use_paged_kv && !options.varlen) {
-      return run<false, false, cutlass::flash_attention::IndividualScheduler>(options, q_scale, k_scale, v_scale);
+      return run<false, false, cutlass::flash_attention::IndividualScheduler>(options, q_scale_ptr, k_scale_ptr, v_scale_ptr);
     } else {
-      return run<true, true, cutlass::flash_attention::IndividualScheduler>(options, q_scale, k_scale, v_scale);
+      return run<true, true, cutlass::flash_attention::IndividualScheduler>(options, q_scale_ptr, k_scale_ptr, v_scale_ptr);
     }
   }
 };

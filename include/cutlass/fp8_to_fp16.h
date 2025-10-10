@@ -38,55 +38,57 @@
 #include <cute/underscore.hpp>
 #include <cute/util/sycl_vec.hpp>
 #include <cutlass/detail/helper_macros.hpp>
-#include <cutlass/half.h>
+#include <cutlass/bfloat16.h>
 #include <cutlass/numeric_conversion.h>
 
 //
 //
-// Helper device function for E4M3 -> FP16 bitwise conversion
+// Helper device function for E4M3 -> BFLOAT16 bitwise conversion
 CUTLASS_DEVICE inline uint16_t
 fp8_e4m3_to_fp16_bitwise(uint8_t const& src) {
     // E4M3 (1-4-3) constants
     constexpr uint32_t e4m3_exp_bias = 7;
-    // FP16 (1-5-10) constants
-    constexpr uint32_t fp16_exp_bias = 15;
+    // BFLOAT16 (1-8-7) constants
+    constexpr uint32_t bf16_exp_bias = 127;
 
     // Unpack FP8 bits
     uint16_t sign = static_cast<uint16_t>(src & 0x80);
     uint16_t exponent = static_cast<uint16_t>(src & 0x78) >> 3;
     uint16_t mantissa = static_cast<uint16_t>(src & 0x07);
 
-    // Reconstruct FP16 bits
-    uint16_t fp16_sign = sign << 8;
-    // Re-bias exponent and shift to FP16 position
-    uint16_t fp16_exponent = (exponent - e4m3_exp_bias + fp16_exp_bias) << 10;
-    // Shift mantissa to FP16 position
-    uint16_t fp16_mantissa = mantissa << 7;
+    // Reconstruct BFLOAT16 bits
+    uint16_t bf16_sign = sign << 8;
+    // Re-bias exponent and shift to BFLOAT16 position
+    uint16_t bf16_exponent = (exponent - e4m3_exp_bias + bf16_exp_bias) << 7;
+    // Shift mantissa to BFLOAT16 position
+    uint16_t bf16_mantissa = mantissa << 4;
 
-    return fp16_sign | fp16_exponent | fp16_mantissa;
+    return bf16_sign | bf16_exponent | bf16_mantissa;
 }
 
-// Helper device function for E5M2 -> FP16 bitwise conversion
+// Helper device function for E5M2 -> BFLOAT16 bitwise conversion
 CUTLASS_DEVICE inline uint16_t
 fp8_e5m2_to_fp16_bitwise(uint8_t const& src) {
     // E5M2 (1-5-2) constants
     constexpr uint32_t e5m2_exp_bias = 15;
-    // FP16 (1-5-10) constants
-    constexpr uint32_t fp16_exp_bias = 15;
+    // BFLOAT16 (1-8-7) constants
+    constexpr uint32_t bf16_exp_bias = 127;
 
     // Unpack FP8 bits
     uint16_t sign = static_cast<uint16_t>(src & 0x80);
     uint16_t exponent = static_cast<uint16_t>(src & 0x7C) >> 2;
     uint16_t mantissa = static_cast<uint16_t>(src & 0x03);
 
-    // Reconstruct FP16 bits (Exponent bias is the same, so no re-biasing needed)
-    uint16_t fp16_sign = sign << 8;
-    uint16_t fp16_exponent = exponent << 10;
-    // Shift mantissa to FP16 position
-    uint16_t fp16_mantissa = mantissa << 8;
+    // Reconstruct BFLOAT16 bits
+    uint16_t bf16_sign = sign << 8;
+    // Re-bias exponent and shift to BFLOAT16 position
+    uint16_t bf16_exponent = (exponent - e5m2_exp_bias + bf16_exp_bias) << 7;
+    // Shift mantissa to BFLOAT16 position
+    uint16_t bf16_mantissa = mantissa << 5;
 
-    return fp16_sign | fp16_exponent | fp16_mantissa;
+    return bf16_sign | bf16_exponent | bf16_mantissa;
 }
+
 
 template <
     typename Encoding,
@@ -100,42 +102,45 @@ convert_and_descale(
     DstTensor& dst,
     float scale) {
 
-    using DstElementType = sycl::half;
     using SrcVec_u8 = sycl::vec<uint8_t, VectorizeSize>;
-    using DstVec_half = sycl::vec<DstElementType, VectorizeSize>;
-    using u16Vec = sycl::vec<uint16_t, VectorizeSize>;
+    using DstVec_u16 = sycl::vec<uint16_t, VectorizeSize>;
 
     auto src_ptr = reinterpret_cast<SrcVec_u8 const*>(src.data());
-    auto dst_ptr = reinterpret_cast<DstVec_half*>(dst.data());
+    auto dst_ptr = reinterpret_cast<DstVec_u16*>(dst.data());
 
-    // Create a sycl::half vector for scaling
-    const DstVec_half scale_vec_half(static_cast<sycl::half>(scale));
+    // Create a SCALAR bfloat16_t for scaling
+    const cutlass::bfloat16_t scale_bf16 = static_cast<cutlass::bfloat16_t>(scale);
 
     #pragma unroll
     for (int i = 0; i < cute::size(src) / VectorizeSize; ++i) {
         SrcVec_u8 const src_vec_u8 = src_ptr[i];
-        u16Vec val_fp16_bits;
+        DstVec_u16 result_vec_u16;
 
         #pragma unroll
         for (int j = 0; j < VectorizeSize; ++j) {
+            // 1. Convert FP8 bits to BFLOAT16 bits
+            uint16_t val_bf16_bits;
             if constexpr (std::is_same_v<Encoding, cutlass::float_e4m3_t>) {
-                val_fp16_bits[j] = fp8_e4m3_to_fp16_bitwise(src_vec_u8[j]);
+                val_bf16_bits = fp8_e4m3_to_fp16_bitwise(src_vec_u8[j]);
             } else {
-                val_fp16_bits[j] = fp8_e5m2_to_fp16_bitwise(src_vec_u8[j]);
+                val_bf16_bits = fp8_e5m2_to_fp16_bitwise(src_vec_u8[j]);
             }
+
+            // 2. Reinterpret bits as bfloat16_t to perform math
+            cutlass::bfloat16_t val_bf16 = reinterpret_cast<cutlass::bfloat16_t const&>(val_bf16_bits);
+
+            // 3. Apply scaling
+            val_bf16 *= scale_bf16;
+
+            // 4. Reinterpret back to bits for storage
+            result_vec_u16[j] = reinterpret_cast<uint16_t const&>(val_bf16);
         }
 
-        // Reinterpret the FP16 bits as a sycl::half vector
-        DstVec_half val_fp16_vec = val_fp16_bits.template as<DstVec_half>();
-
-        // Apply scaling DIRECTLY on the sycl::half vector.
-        // This is the critical change.
-        val_fp16_vec *= scale_vec_half;
-
-        // Store the result. No more conversions needed.
-        dst_ptr[i] = val_fp16_vec;
+        // 5. Store the final vector of bits
+        dst_ptr[i] = result_vec_u16;
     }
 }
+
 
 /*
 template <
@@ -201,7 +206,7 @@ convert_and_descale(
     DstTensor& dst,
     float scale) {
 
-    using DstElementType = sycl::half;
+    using DstElementType = sycl::bfloat16;
     static_assert(sizeof(DstElementType) == sizeof(typename DstTensor::value_type));
 
     // Define SYCL vector types for all stages of the computation
@@ -242,6 +247,45 @@ convert_and_descale(
         // 5. Perform a single, wide store
         dst_ptr[i] = dst_vec;
     }
+}
+*/
+
+/*
+template <typename EncodingType, int VectorizeSize = 8, typename TensorIn, typename TensorOut>
+CUTLASS_DEVICE void
+convert_and_descale(TensorIn const &in,
+                    TensorOut &out, float scale) {
+
+  static_assert(cute::is_rmem<typename TensorIn::engine_type>::value,
+                "Input tensor for A conversion must come from registers");
+  static_assert(cute::is_rmem<typename TensorOut::engine_type>::value,
+                "Output tensor for A conversion must come from registers");
+  static_assert(cute::cosize_v<typename TensorIn::layout_type> == cute::cosize_v<typename TensorOut::layout_type>);
+  static_assert(cute::size_v<typename TensorIn::layout_type> == cute::cosize_v<typename TensorIn::layout_type>);
+  static_assert(cute::size_v<typename TensorOut::layout_type> == cute::cosize_v<typename TensorOut::layout_type>);
+
+  using SrcType = typename TensorIn::value_type;
+  using DstType = typename TensorOut::value_type;
+
+  static_assert(std::is_same_v<SrcType, uint8_t>,
+                "Expected fp8 input as uint8_t");
+  static_assert(cute::is_any_of_v<EncodingType, cute::float_e5m2_t, cute::float_e4m3_t>,
+                "Expected EncodingType to be float_e5m2_t or float_e4m3_t");
+
+  constexpr int num_elements = decltype(size(in))::value;
+  constexpr int fragment_size = std::is_same_v<EncodingType, cute::float_e5m2_t> ? 4 : 8;
+
+  static_assert(num_elements % fragment_size == 0,
+                "Currently, FP8 -> FP16 conversion is only supported when "
+                "each work-item converts a multiple of fragment_size");
+
+  auto in_frag = cute::recast<cutlass::Array<EncodingType, fragment_size>>(in);
+  auto out_frag = cute::recast<cutlass::Array<DstType, fragment_size>>(out);
+
+  CUTLASS_PRAGMA_UNROLL
+  for (int i = 0; i < num_elements / fragment_size; ++i) {
+    out_frag(i) = cutlass::NumericArrayConverter<DstType, EncodingType, fragment_size>{}(in_frag(i));
+  }
 }
 */
 

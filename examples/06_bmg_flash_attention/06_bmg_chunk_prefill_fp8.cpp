@@ -94,8 +94,8 @@ int main(int argc, const char **argv) {
 
   // 2. Fill host vectors with desired values.
   std::fill(q_scale_host.begin(), q_scale_host.end(), 1.5f);
-  std::fill(k_scale_host.begin(), k_scale_host.end(), 2.0f);
-  std::fill(v_scale_host.begin(), v_scale_host.end(), 2.5f);
+  std::fill(k_scale_host.begin(), k_scale_host.end(), 2.5f);
+  std::fill(v_scale_host.begin(), v_scale_host.end(), 1.9f);
 
   // 3. Create device allocations and copy data from host to device.
   cutlass::DeviceAllocation<float> q_scale_dev;
@@ -120,8 +120,8 @@ int main(int argc, const char **argv) {
   // =================================================================================================
   using ElementInputQ = cutlass::float_e5m2_t;     // <- data type of elements in input matrix A
     using ElementInputKV = cutlass::float_e5m2_t;    // <- data type of elements in input matrix B
-    using MMAOperation = XE_8x16x16_F32F16F16F32_TT;
-    using GmemTiledCopyQ = XE_2D_U8x8x32_LD_N;
+    using MMAOperation = XE_8x16x16_F32F16F16F32_TT; //XE_8x16x16_F32BF16BF16F32_TT;
+    using GmemTiledCopyQ = XE_2D_U8x8x32_LD_N; // XE_2D_U8x8x32_LD_N;
     using GmemTiledCopyK = XE_2D_U8x16x16_LD_T; // _T designates a transposed block load operation
     using GmemTiledCopyV = XE_2D_U8x32x32_LD_V;
 
@@ -142,9 +142,9 @@ int main(int argc, const char **argv) {
   using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
 #elif HEAD_DIM == 128
   using ShapeQK = Shape<_128, _64, _64>;
-  using ShapePV = Shape<_128, _32, _64>;
-  using ShapeOutPut = Shape<_128, _128, _64>;
-  using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
+    using ShapePV = Shape<_128, _32, _64>;
+    using ShapeOutPut = Shape<_128, _128, _64>;
+    using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
 #elif HEAD_DIM == 192
   using ShapeQK = Shape<_256, _64, _64>;
   using ShapePV = Shape<_256, _32, _64>;

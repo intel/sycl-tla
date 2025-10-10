@@ -317,8 +317,8 @@ struct FlashChunkPrefillMma<
     Tensor tQgQ = thr_copy_Q.retile_S(tCgQ);
     Tensor tKgK = thr_copy_K.retile_S(tCgK);
 
-    float q_scale = params.ptr_q_scale[q_head_coord];
-    float k_scale = params.ptr_k_scale[kv_head_coord];
+    float q_scale = params.ptr_q_scale[0]; //q_head_coord];
+    float k_scale = params.ptr_k_scale[0]; //kv_head_coord];
 
     //
     // Mainloop
@@ -331,8 +331,11 @@ struct FlashChunkPrefillMma<
       if constexpr (is_fp8_v<ElementQ> || is_fp8_v<ElementK>) {
         // Recast the memory region of the FP8 tensors as FP16 tensors.
         // This does NOT allocate new registers. It reuses the existing ones.
-        auto tCrQ_fp16 = cute::recast<half_t>(tCrQ);
-        auto tCrK_fp16 = cute::recast<half_t>(tCrK);
+        //auto tCrQ_fp16 = cute::recast<half_t>(tCrQ);
+        //auto tCrK_fp16 = cute::recast<half_t>(tCrK);
+
+	auto tCrQ_fp16 = make_fragment_like<bfloat16_t>(tCrQ);
+	auto tCrK_fp16 = make_fragment_like<bfloat16_t>(tCrK);
 
         // Perform the conversion, writing the FP16 results directly into the
         // reused register space.
@@ -406,7 +409,7 @@ struct FlashChunkPrefillMma<
     auto &gmem_tiled_copy_v =
         is_KV_cache ? params.gmem_tiled_copy_v_cache : params.gmem_tiled_copy_v;
 
-    float v_scale = params.ptr_v_scale[kv_head_coord];
+    float v_scale = params.ptr_v_scale[0]; //kv_head_coord];
 
     int thread_idx = static_cast<int>(ThreadIdxX());
     // Instantiate the MMA object
@@ -460,7 +463,8 @@ struct FlashChunkPrefillMma<
       if constexpr (is_fp8_v<ElementV>) {
         // Correctly reuse the registers of tCrV for the new FP16 tensor.
         // This avoids doubling the register pressure.
-        auto tCrV_fp16 = cute::recast<half_t>(tCrV);
+        //auto tCrV_fp16 = cute::recast<half_t>(tCrV);
+	auto tCrV_fp16 = make_fragment_like<bfloat16_t>(tCrV);
 
         // Perform the conversion in-place, overwriting the old FP8 data
         // with the new FP16 data in the same register space.
