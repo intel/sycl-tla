@@ -292,24 +292,24 @@ public:
       auto gSinQ = local_tile(mSinQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
       auto gCosK = local_tile(mCosK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
       auto gSinK = local_tile(mSinK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
-      if(cute::thread(0,0)){
-        #define PRINT(x) print(#x ": "); print(x); print("\n");
-        PRINT(mQ_mkl);
-        PRINT(mK_nkl);
-        PRINT(mV_nkl);
-        PRINT(mQ_mk);
-        PRINT(mK_nk);
-        PRINT(mV_nk);
-        PRINT(gQ);
-        PRINT(gK);
-        PRINT(gV);
-        PRINT(gCosQ);
-        PRINT(gSinQ);
-        PRINT(gCosK);
-        PRINT(gSinK);
-        #undef PRINT
-      }
-      syncthreads();
+      // if(cute::thread(0,0)){
+      //   #define PRINT(x) print(#x ": "); print(x); print("\n");
+      //   PRINT(mQ_mkl);
+      //   PRINT(mK_nkl);
+      //   PRINT(mV_nkl);
+      //   PRINT(mQ_mk);
+      //   PRINT(mK_nk);
+      //   PRINT(mV_nk);
+      //   PRINT(gQ);
+      //   PRINT(gK);
+      //   PRINT(gV);
+      //   PRINT(gCosQ);
+      //   PRINT(gSinQ);
+      //   PRINT(gCosK);
+      //   PRINT(gSinK);
+      //   #undef PRINT
+      // }
+      // syncthreads();
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, sequence_length_shape, batch_coord);
       // we limit the horisontal size to two subgroup, the empirical resutls show that reading the two cacheline side by side in gives better performance and 
@@ -412,53 +412,47 @@ public:
       // auto stride_0 = size<1>(gK) * gK_dim3;  // Runtime calculation
       // auto layout_k = make_layout(static_shape_k, make_stride(stride_0, Int<1>{}));
 
-      // for (int i =0 ;i< size<2>(gQ); i++){
-        auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
-        if(cute::thread(0,0)){
-            #define PRINT(x) print(#x ": "); print(x); print("\n");
-            // print_tensor(tensorQ);
-            PRINT(tensorQ);
-            PRINT(grid_dimx);
-            PRINT(grid_dimy);
-            PRINT(grid_dimz);
-            PRINT(block_dimx);
-            PRINT(block_dimy);
-            PRINT(block_dimz);
-          }
-        syncthreads();
-        auto tensorCosQ = make_tensor(make_gmem_ptr(base_ptr_q_cos+offset_q), layout_q);
-        auto tensorSinQ = make_tensor(make_gmem_ptr(base_ptr_q_sin+offset_q), layout_q);
-        cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorQ, tensorCosQ, tensorSinQ, tensorQ);
-      //   offset_q += QK_BLK_K;
-      // }
-      if (block_id%4==1){
-        offset_k += QK_BLK_N*QK_BLK_K*gK_dim3;
-      } else if (block_id%4==2){
-        offset_k += 2*QK_BLK_N*QK_BLK_K*gK_dim3;
-      } else if (block_id%4==3){
-        offset_k += 3*QK_BLK_N*QK_BLK_K*gK_dim3;
-      }
-      
-      // for (int k =0 ;k< size<3>(gK); k++){
+      // calculating rope for Q
+      auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
+      auto tensorCosQ = make_tensor(make_gmem_ptr(base_ptr_q_cos+offset_q), layout_q);
+      auto tensorSinQ = make_tensor(make_gmem_ptr(base_ptr_q_sin+offset_q), layout_q);
+      cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorQ, tensorCosQ, tensorSinQ, tensorQ);
+
+      //calculating rope for K
+      // need to consider the case when there are multiple blocks in y direction
+      // each block in y direction will handle a different set of K
+      // so need to adjust the base pointer of K accordingly.
+      if(grid_dimy == 4){
+        if (block_id%4==1){
+          offset_k += QK_BLK_N*QK_BLK_K*gK_dim3;
+        } else if (block_id%4==2){
+          offset_k += 2*QK_BLK_N*QK_BLK_K*gK_dim3;
+        } else if (block_id%4==3){
+          offset_k += 3*QK_BLK_N*QK_BLK_K*gK_dim3;
+        }
+        
         auto new_offset_k = offset_k;
         for (int i =0 ;i< size<2>(gK); i+=4){
           auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+new_offset_k), layout_k);
           auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+new_offset_k), layout_k);
           auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+new_offset_k), layout_k);
-          // if(cute::thread(0,0)){
-          //   #define PRINT(x) print(#x ": "); print(x); print("\n");
-          //   // print_tensor(tensorK);
-          //   PRINT(tensorK);
-          //   PRINT(tensorCosK);
-          //   PRINT(tensorSinK);
-          // }
-          // syncthreads();
           cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
           new_offset_k += 4*QK_BLK_N*QK_BLK_K*gK_dim3;
         }
-        // offset_k += size<2>(gK)*QK_BLK_N*QK_BLK_K;
-      //   offset_k += QK_BLK_K;
-      // }
+      } else if (grid_dimy ==2){
+        if (block_id%2==1){
+          offset_k += QK_BLK_N*QK_BLK_K*gK_dim3;
+        }
+        auto new_offset_k = offset_k;
+        for (int i =0 ;i< size<2>(gK); i+=2){
+          auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+new_offset_k), layout_k);
+          auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+new_offset_k), layout_k);
+          auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+new_offset_k), layout_k);
+          cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
+          new_offset_k += 2*QK_BLK_N*QK_BLK_K*gK_dim3;
+        }
+      }
+
       barrier_arrive(2);
       // for (int i = 0;i< 100000; i++);
       barrier_wait(2);
