@@ -397,7 +397,7 @@ bool initialize_block_(
     // initialize_block_(block_V, seed + 2021, head_size_vo, seq_len_kv, batch * num_heads_kv);
     compat::wait();
     // reference copy of Q and K for verification
-    compat::memcpy<ElementQ>(block_ref_Q.get(), block_Q.get(), batch * num_heads_kv * seq_len_kv * head_size_qk);
+    compat::memcpy<ElementQ>(block_ref_Q.get(), block_Q.get(), batch * num_heads_q * seq_len_qo * head_size_qk);
     compat::memcpy<ElementK>(block_ref_K.get(), block_K.get(), batch * num_heads_kv * seq_len_kv * head_size_qk);
     // initialize_block_(block_ref_Q, seed + 2023, seq_len_qo, head_size_qk, batch * num_heads_q);
     // initialize_block_(block_ref_K, seed + 2022, seq_len_kv, head_size_qk, batch * num_heads_kv);
@@ -532,7 +532,7 @@ bool initialize_block_(
         cutlass::TensorRef ref_K(block_K_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
         cutlass::TensorRef ref_V(block_V_.get() + offset_v, LayoutV::packed({seq_len_kv, head_size_vo}));
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
-
+        
         // Apply RoPE to Q and K if enabled
         if constexpr (rope_enabled) {
           cutlass::TensorRef ref_Q_cos(block_cos_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));

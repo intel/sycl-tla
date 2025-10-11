@@ -292,6 +292,24 @@ public:
       auto gSinQ = local_tile(mSinQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
       auto gCosK = local_tile(mCosK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
       auto gSinK = local_tile(mSinK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
+      if(cute::thread(0,0)){
+        #define PRINT(x) print(#x ": "); print(x); print("\n");
+        PRINT(mQ_mkl);
+        PRINT(mK_nkl);
+        PRINT(mV_nkl);
+        PRINT(mQ_mk);
+        PRINT(mK_nk);
+        PRINT(mV_nk);
+        PRINT(gQ);
+        PRINT(gK);
+        PRINT(gV);
+        PRINT(gCosQ);
+        PRINT(gSinQ);
+        PRINT(gCosK);
+        PRINT(gSinK);
+        #undef PRINT
+      }
+      syncthreads();
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, sequence_length_shape, batch_coord);
       // we limit the horisontal size to two subgroup, the empirical resutls show that reading the two cacheline side by side in gives better performance and 
@@ -307,10 +325,10 @@ public:
       auto pVgV = thr_prefetch_V.partition_S(gV);
 
       // RoPE coordinate tensor partitions
-      auto pCosQgCosQ = thr_prefetch_Q.partition_S(gCosQ);
-      auto pSinQgSinQ = thr_prefetch_Q.partition_S(gSinQ);
-      auto pCosKgCosK = thr_prefetch_K.partition_S(gCosK);
-      auto pSinKgSinK = thr_prefetch_K.partition_S(gSinK);
+      // auto pCosQgCosQ = thr_prefetch_Q.partition_S(gCosQ);
+      // auto pSinQgSinQ = thr_prefetch_Q.partition_S(gSinQ);
+      // auto pCosKgCosK = thr_prefetch_K.partition_S(gCosK);
+      // auto pSinKgSinK = thr_prefetch_K.partition_S(gSinK);
 
       // for (int i = 0; i < size<3>(pQgQ); i++) {
       //   prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
@@ -374,10 +392,11 @@ public:
       ElementQ* base_ptr_q_sin = (ElementQ*)q_traits_sin.base_ptr;
 
       // auto layout_q = gQ.layout();
-      constexpr auto static_shape_q = make_shape(size<0>(gQ), size<1>(gQ));
-      // constexpr auto layout_q = LayoutQ::packed({size<0>(gQ), size<1>(gQ)});
-      constexpr auto layout_q = make_layout(static_shape_q, LayoutRight{});
-      
+      auto static_shape_q = make_shape(size<0>(gQ), size<1>(gQ)*size<2>(gQ));
+      // auto gQ_dim3 = size<2>(gQ);  // Runtime value, not constexpr
+      // auto stride_0 = size<1>(gK) * gK_dim3;  // Runtime calculation
+      auto layout_q = make_layout(static_shape_q, LayoutRight{});
+
       auto k_traits = static_cast<traits_load_K const&>(mainloop_params.gmem_tiled_copy_k);
       ElementK* base_ptr_k = (ElementK*)k_traits.base_ptr;
 
@@ -387,36 +406,61 @@ public:
       auto k_traits_sin = static_cast<traits_load_K const&>(mainloop_params.gmem_tiled_copy_k_sin);
       ElementK* base_ptr_k_sin = (ElementK*)k_traits_sin.base_ptr;
 
-      constexpr auto static_shape_k = make_shape(size<0>(gK), size<1>(gK));
-      constexpr auto layout_k = make_layout(static_shape_k, LayoutRight{});
-      
-      for (int i =0 ;i< size<2>(gQ); i++){
+      auto static_shape_k = make_shape(size<0>(gK), size<1>(gK)*size<3>(gK));
+      auto layout_k = make_layout(static_shape_k, LayoutRight{});
+      auto gK_dim3 = size<3>(gK);  // Runtime value, not constexpr
+      // auto stride_0 = size<1>(gK) * gK_dim3;  // Runtime calculation
+      // auto layout_k = make_layout(static_shape_k, make_stride(stride_0, Int<1>{}));
+
+      // for (int i =0 ;i< size<2>(gQ); i++){
         auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
+        if(cute::thread(0,0)){
+            #define PRINT(x) print(#x ": "); print(x); print("\n");
+            // print_tensor(tensorQ);
+            PRINT(tensorQ);
+            PRINT(grid_dimx);
+            PRINT(grid_dimy);
+            PRINT(grid_dimz);
+            PRINT(block_dimx);
+            PRINT(block_dimy);
+            PRINT(block_dimz);
+          }
+        syncthreads();
         auto tensorCosQ = make_tensor(make_gmem_ptr(base_ptr_q_cos+offset_q), layout_q);
         auto tensorSinQ = make_tensor(make_gmem_ptr(base_ptr_q_sin+offset_q), layout_q);
         cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorQ, tensorCosQ, tensorSinQ, tensorQ);
-        offset_q += QK_BLK_M*QK_BLK_K;
-      }
+      //   offset_q += QK_BLK_K;
+      // }
       if (block_id%4==1){
-        offset_k += QK_BLK_N*QK_BLK_K;
+        offset_k += QK_BLK_N*QK_BLK_K*gK_dim3;
       } else if (block_id%4==2){
-        offset_k += 2*QK_BLK_N*QK_BLK_K;
+        offset_k += 2*QK_BLK_N*QK_BLK_K*gK_dim3;
       } else if (block_id%4==3){
-        offset_k += 3*QK_BLK_N*QK_BLK_K;
+        offset_k += 3*QK_BLK_N*QK_BLK_K*gK_dim3;
       }
       
-      for (int k =0 ;k< size<3>(gK); k++){
+      // for (int k =0 ;k< size<3>(gK); k++){
         auto new_offset_k = offset_k;
         for (int i =0 ;i< size<2>(gK); i+=4){
           auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+new_offset_k), layout_k);
           auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+new_offset_k), layout_k);
           auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+new_offset_k), layout_k);
+          // if(cute::thread(0,0)){
+          //   #define PRINT(x) print(#x ": "); print(x); print("\n");
+          //   // print_tensor(tensorK);
+          //   PRINT(tensorK);
+          //   PRINT(tensorCosK);
+          //   PRINT(tensorSinK);
+          // }
+          // syncthreads();
           cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
-          new_offset_k += 4*QK_BLK_N*QK_BLK_K;
+          new_offset_k += 4*QK_BLK_N*QK_BLK_K*gK_dim3;
         }
-        offset_k += size<2>(gK)*QK_BLK_N*QK_BLK_K;
-      }
+        // offset_k += size<2>(gK)*QK_BLK_N*QK_BLK_K;
+      //   offset_k += QK_BLK_K;
+      // }
       barrier_arrive(2);
+      // for (int i = 0;i< 100000; i++);
       barrier_wait(2);
     }
 
