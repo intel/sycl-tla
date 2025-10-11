@@ -49,6 +49,7 @@
 
 #include <cute/tensor.hpp>
 #include <random>
+#include <cmath>
 
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
@@ -141,7 +142,7 @@ struct Shape_h192 {
 
 template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
         typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
-        typename MMAOperation, bool HasCausalMask, bool isVarLen, int PipelineStages>
+        typename MMAOperation, bool HasCausalMask, bool isVarLen, int PipelineStages, bool rope_enabled=false>
 struct XE_Flash_Attention_Prefill {
   using LayoutQ = cutlass::layout::RowMajor;
   using LayoutK = cutlass::layout::ColumnMajor;
@@ -182,7 +183,7 @@ struct XE_Flash_Attention_Prefill {
         GmemTiledCopyQ, // Q
         GmemTiledCopyK, // K
         GmemTiledCopyV, // V,
-        HasCausalMask>;
+        HasCausalMask, rope_enabled>;
 
   using Kernel = cutlass::flash_attention::kernel::FMHAPrefill<ProblemShapeType, CollectiveMainloop,
                                                       CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
@@ -233,6 +234,13 @@ struct TestbedImpl {
   cutlass::DeviceAllocation<ElementV> block_V;
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
+  cutlass::DeviceAllocation<ElementQ> block_ref_Q;
+  cutlass::DeviceAllocation<ElementK> block_ref_K;
+
+  // RoPE support
+  cutlass::DeviceAllocation<ElementQ> block_cos;
+  cutlass::DeviceAllocation<ElementQ> block_sin;
+  static constexpr bool rope_enabled = CollectiveMainloop::rope_enabled;
 
   //
   // Methods
@@ -250,6 +258,97 @@ struct TestbedImpl {
       return in;
     };
   }
+
+  /// Initialize RoPE cos/sin tensors
+  void initialize_rope_tensors(int max_seq_len, int head_dim, int num_heads_q, int batch) {
+    std::vector<ElementQ> cos_vals(max_seq_len * head_dim * num_heads_q * batch);
+    std::vector<ElementQ> sin_vals(max_seq_len * head_dim * num_heads_q * batch);
+
+    // fill data row-major wise
+    for(int b = 0; b< num_heads_q*batch; b++){
+      for (int pos = 0; pos < max_seq_len; ++pos) {
+        for (int i = 0; i < head_dim/2 ; ++i) {
+          int idx = b*max_seq_len*head_dim + pos*head_dim + 2*i;
+          int idx1 = b*max_seq_len*head_dim + pos*head_dim + 2*i + 1;
+          float theta = static_cast<float>(pos / std::pow(10000.0f, (2.0f * i) / head_dim));
+          // float theta = i;
+          cos_vals[idx] = static_cast<ElementQ>(std::cos(theta));
+          cos_vals[idx1] = static_cast<ElementQ>(std::cos(theta));   
+          sin_vals[idx] = static_cast<ElementQ>(std::sin(theta));
+          sin_vals[idx1] = static_cast<ElementQ>(std::sin(theta));
+        }
+      }
+    }
+    compat::memcpy(block_cos.get(), cos_vals.data(), cos_vals.size() * sizeof(ElementQ));
+    compat::memcpy(block_sin.get(), sin_vals.data(), sin_vals.size() * sizeof(ElementQ));
+    compat::wait();
+  }
+
+  /// Apply RoPE transformation to a tensor
+  template<typename Element>
+  void apply_rope_on_host(std::vector<Element>& tensor, int seq_len, int head_dim, int batch, int head,
+                       const std::vector<ElementQ>& cos_vals, const std::vector<ElementQ>& sin_vals) {
+      for (int seq_pos = 0; seq_pos < seq_len; ++seq_pos) {
+        for (int dim_pair = 0; dim_pair < head_dim/2; ++dim_pair) {
+          int cos_sin_idx = seq_pos * head_dim + dim_pair * 2;
+          auto cos_val = static_cast<float>(cos_vals[cos_sin_idx]);
+          auto sin_val = static_cast<float>(sin_vals[cos_sin_idx]);
+
+          int x_idx = seq_pos * head_dim + dim_pair * 2;
+          int y_idx = seq_pos * head_dim + dim_pair * 2 + 1;
+
+          auto x = static_cast<float>(tensor[x_idx]);
+          auto y = static_cast<float>(tensor[y_idx]);
+
+          auto new_x = x * cos_val - y * sin_val;
+          auto new_y = x * sin_val + y * cos_val;
+
+          tensor[x_idx] = static_cast<Element>(new_x);
+          tensor[y_idx] = static_cast<Element>(new_y);
+        }
+        
+      }
+  }
+
+  template <class Element>
+bool initialize_block_(
+        cutlass::DeviceAllocation<Element>& block,
+        uint64_t seed=2023, int seq_len=512, int head_dim=64, int batch_heads=64) {
+  // creating a tensor of shape (batch_heads, seq_len, head_dim)
+  // and filling it with sequential values for easy verification
+  // e.g., for head_dim=4, seq_len=3, batch_heads=2
+  // tensor[0, :, :] = [[0, 1, 2, 3],
+  //                    [4, 5, 6, 7],
+  //                    [8, 9, 10,11]]
+  // tensor[1, :, :] = [[0, 1, 2, 3],
+  //                    [4, 5, 6, 7],
+  //                    [8, 9, 10,11]]
+  // total elements = batch_heads * seq_len * head_dim
+  // total elements = 2 * 3 * 4 = 24
+  std::vector<Element> matrix(seq_len * head_dim*batch_heads);
+  // cutlass::reference::device::BlockFillSequential(
+  //      block.get(), block.size());
+
+  // fill data row-major wise
+  for(int i=0;i<batch_heads;i++){
+    int temp = 0;
+    for (int j = 0; j < seq_len; ++j) {
+      for (int k = 0; k < head_dim ; k++) {
+        
+        int idx = i*seq_len*head_dim + j*head_dim + k;
+        Element theta = static_cast<Element>(temp);
+        matrix[idx] = theta;
+        temp++;
+      }
+    }
+  }
+  compat::wait();
+  
+  compat::memcpy(block.get(), matrix.data(), matrix.size() * sizeof(Element));
+  compat::wait();
+
+  return true;
+}
 
   /// Initializes data structures
   template <class ProblemShape>
@@ -282,10 +381,30 @@ struct TestbedImpl {
     block_V.reset(batch * num_heads_kv * seq_len_kv * head_size_vo);
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
+    block_ref_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
+    block_ref_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
+
+    // Initialize RoPE tensors if enabled
+    if constexpr (rope_enabled) {
+      int max_seq_len = std::max(seq_len_qo, seq_len_kv);
+      block_cos.reset(max_seq_len * head_size_qk * num_heads_q * batch);
+      block_sin.reset(max_seq_len * head_size_qk * num_heads_q * batch);
+      initialize_rope_tensors(max_seq_len, head_size_qk, num_heads_q, batch);
+    }
 
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
+    // initialize_block_(block_Q, seed + 2023, seq_len_qo, head_size_qk, batch * num_heads_q);
+    // initialize_block_(block_K, seed + 2022, seq_len_kv, head_size_qk, batch * num_heads_kv);
+    // initialize_block_(block_V, seed + 2021, head_size_vo, seq_len_kv, batch * num_heads_kv);
+    compat::wait();
+    // reference copy of Q and K for verification
+    compat::memcpy<ElementQ>(block_ref_Q.get(), block_Q.get(), batch * num_heads_q * seq_len_qo * head_size_qk);
+    compat::memcpy<ElementK>(block_ref_K.get(), block_K.get(), batch * num_heads_kv * seq_len_kv * head_size_qk);
+    // initialize_block_(block_ref_Q, seed + 2023, seq_len_qo, head_size_qk, batch * num_heads_q);
+    // initialize_block_(block_ref_K, seed + 2022, seq_len_kv, head_size_qk, batch * num_heads_kv);
+    compat::wait();
 
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
@@ -384,9 +503,11 @@ struct TestbedImpl {
     auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,5,6>(problem_size);
     int seq_len_qo, seq_len_kv;
 
-    auto block_Q_ = in_memory(block_Q);
-    auto block_K_ = in_memory(block_K);
+    auto block_Q_ = in_memory(block_ref_Q);
+    auto block_K_ = in_memory(block_ref_K);
     auto block_V_ = in_memory(block_V);
+    auto block_cos_ = in_memory(block_cos);
+    auto block_sin_ = in_memory(block_sin); 
     using ElementV_ = cute::conditional_t<is_fp8_v<ElementV>, half_t, ElementV>;
 
     int offset_q = 0;
@@ -414,6 +535,81 @@ struct TestbedImpl {
         cutlass::TensorRef ref_K(block_K_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
         cutlass::TensorRef ref_V(block_V_.get() + offset_v, LayoutV::packed({seq_len_kv, head_size_vo}));
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
+        
+        // Apply RoPE to Q and K if enabled
+        if constexpr (rope_enabled) {
+          cutlass::TensorRef ref_Q_cos(block_cos_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
+          cutlass::TensorRef ref_Q_sin(block_sin_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
+          cutlass::TensorRef ref_K_cos(block_cos_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
+          cutlass::TensorRef ref_K_sin(block_sin_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
+          
+          std::vector<ElementQ> host_Q(seq_len_qo* head_size_qk);
+          std::vector<ElementK> host_K(head_size_qk* seq_len_kv);
+          std::vector<ElementQ> host_Q_cos(seq_len_qo* head_size_qk);
+          std::vector<ElementQ> host_Q_sin(seq_len_qo* head_size_qk);
+          std::vector<ElementQ> host_K_cos(head_size_qk* seq_len_kv);
+          std::vector<ElementQ> host_K_sin(head_size_qk* seq_len_kv);
+
+          // host_Q.clear();
+          // host_K.clear();
+          // host_Q_cos.clear();
+          // host_Q_sin.clear();
+          // host_K_cos.clear();
+          // host_K_sin.clear();
+          compat::wait();
+
+          compat::memcpy<ElementQ>(host_Q.data(), ref_Q.data(), seq_len_qo* head_size_qk);
+          compat::memcpy<ElementK>(host_K.data(), ref_K.data(), head_size_qk* seq_len_kv);
+          compat::memcpy<ElementQ>(host_Q_cos.data(), ref_Q_cos.data(), seq_len_qo* head_size_qk);
+          compat::memcpy<ElementQ>(host_Q_sin.data(), ref_Q_sin.data(), seq_len_qo* head_size_qk);
+          compat::memcpy<ElementK>(host_K_cos.data(), ref_K_cos.data(), head_size_qk* seq_len_kv);
+          compat::memcpy<ElementK>(host_K_sin.data(), ref_K_sin.data(), head_size_qk* seq_len_kv);
+          compat::wait();
+          
+          // if(b == 0 && h == 0 && cute::thread(1,0)){
+          //   std::cout << "Before RoPE\n";
+          //   for(int i=0; i<seq_len_qo* head_size_qk; i++){
+          //     std::cout<<"host_Q["<<i<<"]="<<host_Q[i]<<", host_K["<<i<<"]="<<host_K[i]<<"\n";
+          //   }
+          // }
+          compat::wait();
+          // apply rope on host then update Q, K accordingly
+          apply_rope_on_host(host_Q, seq_len_qo, head_size_qk, b, h, host_Q_cos, host_Q_sin);
+          apply_rope_on_host(host_K, seq_len_kv, head_size_qk, b, h, host_K_cos, host_K_sin);
+          // For K, we need to transpose, apply RoPE, then transpose back
+          // std::vector<ElementK> host_K_transposed(seq_len_kv * head_size_qk);
+          // host_K_transposed.clear();
+          // compat::wait();
+          // for (int kv_seq = 0; kv_seq < seq_len_kv; ++kv_seq) {
+          //   for (int dim = 0; dim < head_size_qk; ++dim) {
+          //     host_K_transposed[kv_seq * head_size_qk + dim] = host_K[dim * seq_len_kv + kv_seq];
+          //   }
+          // }
+          // apply_rope_on_host(host_K_transposed, seq_len_kv, head_size_qk, batch, num_heads_q, host_Q_cos, host_K_sin);
+          // // Transpose back
+          // for (int kv_seq = 0; kv_seq < seq_len_kv; ++kv_seq) {
+          //   for (int dim = 0; dim < head_size_qk; ++dim) {
+          //     host_K[dim * seq_len_kv + kv_seq] = host_K_transposed[kv_seq * head_size_qk + dim];
+          //   }
+          // }
+          compat::wait();
+
+          // cutlass::DeviceAllocation<ElementQ> block_Q_rope;
+          // cutlass::DeviceAllocation<ElementK> block_K_rope;
+          // block_Q_rope.reset(host_Q.size());
+          // block_K_rope.reset(host_K.size());
+          
+          // compat::memcpy(block_Q_rope.get(), host_Q.data(), host_Q.size() * sizeof(ElementQ));
+          // compat::memcpy(block_K_rope.get(), host_K.data(), host_K.size() * sizeof(ElementK));
+          // compat::wait();
+          
+          // Update tensor references to use RoPE-transformed tensors 
+          ref_Q.reset(ref_Q.data() , LayoutQ::packed({seq_len_qo, head_size_qk}));
+          ref_K.reset(ref_K.data() , LayoutK::packed({head_size_qk, seq_len_kv}));
+          compat::memcpy(ref_Q.data(), host_Q.data(), seq_len_qo* head_size_qk * sizeof(ElementQ));
+          compat::memcpy(ref_K.data(), host_K.data(), seq_len_kv* head_size_qk * sizeof(ElementK));
+          compat::wait();
+        }
 
         cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv, head_size_qk}, ElementAccumulator{1}, ref_Q,
                                                 cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
@@ -538,6 +734,15 @@ struct TestbedImpl {
     }
 
     compat::wait();
+    std::vector<ElementOutput> host_ref_o(block_O.size());
+    std::vector<ElementOutput> host_o(block_O.size());
+    compat::wait();
+    compat::memcpy<ElementOutput>(host_ref_o.data(), block_ref_O.get(), batch * num_heads_q * seq_len_qo * head_size_vo);
+    compat::memcpy<ElementOutput>(host_o.data(), block_O.get(), batch * num_heads_q * seq_len_qo * head_size_vo);
+    compat::wait();
+    // for(int i = 0; i < host_o.size(); i++) {
+    //   std::cout << "O[" << i << "] = " << host_o[i] << ", ref_O[" << i << "] = " << host_ref_o[i] << ", diff : " << (host_o[i] - host_ref_o[i]) << std::endl;
+    // }
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
@@ -579,10 +784,33 @@ struct TestbedImpl {
     // Initialize the Flash attention operator
     //
     cutlass::KernelHardwareInfo hw_info;
+
+    // Prepare mainloop arguments with RoPE tensors if enabled
+    auto mainloop_args = [&]() {
+      if constexpr (rope_enabled) {
+        return typename FlashAttention::CollectiveMainloop::Arguments{
+          block_Q.get(), stride_Q, 
+          block_K.get(), stride_K, 
+          block_V.get(), stride_V,
+          block_cos.get(),
+          block_sin.get(), 
+          // stride_Q_cs, 
+          // stride_K_cs,
+        };
+      } else {
+        return typename FlashAttention::CollectiveMainloop::Arguments{
+          block_Q.get(), stride_Q, 
+          block_K.get(), stride_K, 
+          block_V.get(), stride_V
+        };
+      }
+    }();
+
+
     typename FlashAttention::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_Q.get(), stride_Q, block_K.get(), stride_K, block_V.get(), stride_V},
+      mainloop_args,
       {softmax_scale},
       {block_O.get(), stride_O},
       hw_info};

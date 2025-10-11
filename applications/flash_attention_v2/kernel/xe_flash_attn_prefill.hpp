@@ -72,6 +72,8 @@ public:
   using ElementAccumulator = typename CollectiveMainloop::ElementAccumulator;
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
+  using traits_load_Q = typename CollectiveMainloop::traits_load_Q;
+  using traits_load_K = typename CollectiveMainloop::traits_load_K;
 
   using CollectiveSoftmaxEpilogue = CollectiveSoftmaxEpilogue_;
   using SoftmaxArguments = typename CollectiveSoftmaxEpilogue::Arguments;
@@ -132,6 +134,7 @@ public:
   using AccumeShape =  decltype(make_shape(Int<Vec>{}, Int<FragsM>{}, get<1>(TileShapePV{})/get<1>(MmaAtomShape()), Int<VSlicer>{}));
 
   static constexpr bool is_var_len = CollectiveMainloop::is_var_len;
+  static constexpr bool rope_enabled = CollectiveMainloop::rope_enabled;
 
   // Kernel level shared memory storage
   struct SharedStorage {
@@ -272,9 +275,41 @@ public:
       Tensor mK_nk = mK_nkl(_, _, blk_l_coord/group_heads_q);                                                    // (n,k)
       Tensor mV_nk = mV_nkl(_, _, blk_l_coord/group_heads_q);                                                    // (n,k)
 
+      Tensor mCosQ_mkl = cute::get_xe_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads_q));  // (m, k, l)
+      Tensor mSinQ_mkl = cute::get_xe_tensor(make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads_q));  // (m, k, l)
+      Tensor mCosK_nkl = cute::get_xe_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_head_kv));  // (n, k, l)
+      Tensor mSinK_nkl = cute::get_xe_tensor(make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_head_kv));  // (n, k, l)
+      Tensor mCosQ_mk = mCosQ_mkl(_, _, blk_l_coord);                                                // (m,k)
+      Tensor mSinQ_mk = mSinQ_mkl(_, _, blk_l_coord);                                                // (m,k)
+      Tensor mCosK_nk = mCosK_nkl(_, _, blk_l_coord/group_heads_q);                                                // (n,k)
+      Tensor mSinK_nk = mSinK_nkl(_, _, blk_l_coord/group_heads_q);
+
       auto gQ = local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
       auto gK = local_tile(mK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
       auto gV = local_tile(mV_nk, TileShapeOutput{}, make_coord(_, blk_n_coord, _), Step<X, _1, _1>{});
+
+      auto gCosQ = local_tile(mCosQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
+      auto gSinQ = local_tile(mSinQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
+      auto gCosK = local_tile(mCosK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
+      auto gSinK = local_tile(mSinK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
+      if(cute::thread(0,0)){
+        #define PRINT(x) print(#x ": "); print(x); print("\n");
+        PRINT(mQ_mkl);
+        PRINT(mK_nkl);
+        PRINT(mV_nkl);
+        PRINT(mQ_mk);
+        PRINT(mK_nk);
+        PRINT(mV_nk);
+        PRINT(gQ);
+        PRINT(gK);
+        PRINT(gV);
+        PRINT(gCosQ);
+        PRINT(gSinQ);
+        PRINT(gCosK);
+        PRINT(gSinK);
+        #undef PRINT
+      }
+      syncthreads();
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, sequence_length_shape, batch_coord);
       // we limit the horisontal size to two subgroup, the empirical resutls show that reading the two cacheline side by side in gives better performance and 
@@ -288,6 +323,146 @@ public:
       auto pQgQ = thr_prefetch_Q.partition_S(gQ);
       auto pKgK = thr_prefetch_K.partition_S(gK);
       auto pVgV = thr_prefetch_V.partition_S(gV);
+
+      // RoPE coordinate tensor partitions
+      // auto pCosQgCosQ = thr_prefetch_Q.partition_S(gCosQ);
+      // auto pSinQgSinQ = thr_prefetch_Q.partition_S(gSinQ);
+      // auto pCosKgCosK = thr_prefetch_K.partition_S(gCosK);
+      // auto pSinKgSinK = thr_prefetch_K.partition_S(gSinK);
+
+      // for (int i = 0; i < size<3>(pQgQ); i++) {
+      //   prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
+      // }
+      // for (int j = 0; j < size<4>(pKgK); j++) {
+      //   CUTLASS_PRAGMA_UNROLL
+      //   for (int i = 0; i < DispatchPolicy::Stages; i++) {
+      //     prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
+      //   }
+      // }
+
+      // for (int i = 0; i < size<3>(pQgQ); i++) {
+      //   prefetch(tiled_prefetch_q, pCosQgCosQ(_, _, _, i));
+      //   prefetch(tiled_prefetch_q, pSinQgSinQ(_, _, _, i));
+      // }
+      // for (int j = 0; j < size<4>(pKgK); j++) {
+      //   CUTLASS_PRAGMA_UNROLL
+      //   for (int i = 0; i < DispatchPolicy::Stages; i++) {
+      //     prefetch(tiled_prefetch_k, pCosKgCosK(_, _, _ , i, j));
+      //     prefetch(tiled_prefetch_k, pSinKgSinK(_, _, _ , i, j));
+      //   }
+      // }
+
+    if constexpr (rope_enabled) {
+      
+      int block_idx = static_cast<int>(BlockIdxX());
+      int block_idy = static_cast<int>(BlockIdxY());
+      int block_idz = static_cast<int>(BlockIdxZ());
+      int block_dimx = static_cast<int>(BlockDimX());
+      int block_dimy = static_cast<int>(BlockDimY());
+      int block_dimz = static_cast<int>(BlockDimZ());
+      int thread_idx = static_cast<int>(ThreadIdxX());
+      int thread_idy = static_cast<int>(ThreadIdxY());
+      int thread_idz = static_cast<int>(ThreadIdxZ());
+      int grid_dimx = static_cast<int>(GridDimX());
+      int grid_dimy = static_cast<int>(GridDimY());
+      int grid_dimz = static_cast<int>(GridDimZ());
+      int block_id = block_idx + block_idy * grid_dimx + block_idz * grid_dimx * grid_dimy;
+      int thread_id = block_id * block_dimx * block_dimy * block_dimz + thread_idz * block_dimx * block_dimy + thread_idy * block_dimx + thread_idx;
+
+      
+      // calculate the base_ptr and offset for Q, K.
+      // also calculate the layout for Q, K.
+      // then apply RoPE on Q, K accordingly
+      auto [coord_q_x, coord_q_y, coord_q_z] = *gQ.data();
+      auto [coord_k_x, coord_k_y, coord_k_z] = *gK.data();
+      
+      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = params.problem_shape;
+      
+      int offset_q = seq_len_qo*head_size_qk*coord_q_z + head_size_qk*coord_q_x + coord_q_y; // row major
+      // int offset_k = seq_len_kv*head_size_qk*coord_k_z + head_size_qk*coord_k_y + coord_k_x; // col major
+      int offset_k = seq_len_kv*head_size_qk*coord_k_z + head_size_qk*coord_k_x + coord_k_y; // row major
+
+      auto q_traits = static_cast<traits_load_Q const&>(mainloop_params.gmem_tiled_copy_q);
+      ElementQ* base_ptr_q = (ElementQ*)q_traits.base_ptr;
+
+      auto q_traits_cos = static_cast<traits_load_Q const&>(mainloop_params.gmem_tiled_copy_q_cos);
+      ElementQ* base_ptr_q_cos = (ElementQ*)q_traits_cos.base_ptr;
+
+      auto q_traits_sin = static_cast<traits_load_Q const&>(mainloop_params.gmem_tiled_copy_q_sin);
+      ElementQ* base_ptr_q_sin = (ElementQ*)q_traits_sin.base_ptr;
+
+      // auto layout_q = gQ.layout();
+      auto static_shape_q = make_shape(size<0>(gQ), size<1>(gQ)*size<2>(gQ));
+      // auto gQ_dim3 = size<2>(gQ);  // Runtime value, not constexpr
+      // auto stride_0 = size<1>(gK) * gK_dim3;  // Runtime calculation
+      auto layout_q = make_layout(static_shape_q, LayoutRight{});
+
+      auto k_traits = static_cast<traits_load_K const&>(mainloop_params.gmem_tiled_copy_k);
+      ElementK* base_ptr_k = (ElementK*)k_traits.base_ptr;
+
+      auto k_traits_cos = static_cast<traits_load_K const&>(mainloop_params.gmem_tiled_copy_k_cos);
+      ElementK* base_ptr_k_cos = (ElementK*)k_traits_cos.base_ptr;
+
+      auto k_traits_sin = static_cast<traits_load_K const&>(mainloop_params.gmem_tiled_copy_k_sin);
+      ElementK* base_ptr_k_sin = (ElementK*)k_traits_sin.base_ptr;
+
+      auto static_shape_k = make_shape(size<0>(gK), size<1>(gK)*size<3>(gK));
+      auto layout_k = make_layout(static_shape_k, LayoutRight{});
+      auto gK_dim3 = size<3>(gK);  // Runtime value, not constexpr
+      // auto stride_0 = size<1>(gK) * gK_dim3;  // Runtime calculation
+      // auto layout_k = make_layout(static_shape_k, make_stride(stride_0, Int<1>{}));
+
+      // for (int i =0 ;i< size<2>(gQ); i++){
+        auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
+        if(cute::thread(0,0)){
+            #define PRINT(x) print(#x ": "); print(x); print("\n");
+            // print_tensor(tensorQ);
+            PRINT(tensorQ);
+            PRINT(grid_dimx);
+            PRINT(grid_dimy);
+            PRINT(grid_dimz);
+            PRINT(block_dimx);
+            PRINT(block_dimy);
+            PRINT(block_dimz);
+          }
+        syncthreads();
+        auto tensorCosQ = make_tensor(make_gmem_ptr(base_ptr_q_cos+offset_q), layout_q);
+        auto tensorSinQ = make_tensor(make_gmem_ptr(base_ptr_q_sin+offset_q), layout_q);
+        cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorQ, tensorCosQ, tensorSinQ, tensorQ);
+      //   offset_q += QK_BLK_K;
+      // }
+      if (block_id%4==1){
+        offset_k += QK_BLK_N*QK_BLK_K*gK_dim3;
+      } else if (block_id%4==2){
+        offset_k += 2*QK_BLK_N*QK_BLK_K*gK_dim3;
+      } else if (block_id%4==3){
+        offset_k += 3*QK_BLK_N*QK_BLK_K*gK_dim3;
+      }
+      
+      // for (int k =0 ;k< size<3>(gK); k++){
+        auto new_offset_k = offset_k;
+        for (int i =0 ;i< size<2>(gK); i+=4){
+          auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+new_offset_k), layout_k);
+          auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+new_offset_k), layout_k);
+          auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+new_offset_k), layout_k);
+          // if(cute::thread(0,0)){
+          //   #define PRINT(x) print(#x ": "); print(x); print("\n");
+          //   // print_tensor(tensorK);
+          //   PRINT(tensorK);
+          //   PRINT(tensorCosK);
+          //   PRINT(tensorSinK);
+          // }
+          // syncthreads();
+          cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
+          new_offset_k += 4*QK_BLK_N*QK_BLK_K*gK_dim3;
+        }
+        // offset_k += size<2>(gK)*QK_BLK_N*QK_BLK_K;
+      //   offset_k += QK_BLK_K;
+      // }
+      barrier_arrive(2);
+      // for (int i = 0;i< 100000; i++);
+      barrier_wait(2);
+    }
 
       for (int i = 0; i < size<3>(pQgQ); i++) {
         prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
