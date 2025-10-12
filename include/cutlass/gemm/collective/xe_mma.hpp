@@ -140,10 +140,6 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
   };
 
   struct Params {
-    ElementA const* ptr_A;
-    StrideA dA;
-    ElementB const* ptr_B;
-    StrideB dB;
     CopyOpA copy_a;
     CopyOpB copy_b;
   };
@@ -182,11 +178,7 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
       }
     }();
 
-    return Params{args.ptr_A,
-    args.dA,
-    args.ptr_B,
-    args.dB,
-    copy_a, copy_b};
+    return Params{copy_a, copy_b};
   }
 
   template<class ProblemShape>
