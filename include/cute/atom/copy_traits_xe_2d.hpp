@@ -756,29 +756,14 @@ make_block_2d_copy_X(CopyOp             const& op,          // Copy operation
   return make_block_2d_copy<ValType>(op, gstride, x_mode, y_mode, atom_shape, sv_layout_t);
 }
 
-// Helper trait to detect new XE copy ops
-template<typename T>
-struct is_new_xe_atom : cute::false_type {};
+// Single trait with specializations
+template<typename T> struct is_xe_atom : std::false_type {};
+template<int B, int H, int W, int BW> struct is_xe_atom<XE_LOAD_2D<B,H,W,BW>> : std::true_type {};
+template<int B, int H, int W> struct is_xe_atom<XE_LOAD_2D_TRANSPOSE<B,H,W>> : std::true_type {};
+template<int B, int H, int W, int BW> struct is_xe_atom<XE_LOAD_2D_VNNI<B,H,W,BW>> : std::true_type {};
+template<int B, int H, int W> struct is_xe_atom<XE_STORE_2D<B,H,W>> : std::true_type {};
 
-// Helper trait specifically for XE_LOAD_2D_VNNI (for copy B)
-template<typename T>
-struct is_new_xe_atom_vnni : cute::false_type {};
-
-// Helper trait specifically for XE_STORE_2D (for copy C)
-template<typename T>
-struct is_new_xe_atom_store : cute::false_type {};
-
-// Check if T is an instantiation of XE_LOAD_2D 
-template<int Bits, int Height, int Width, int BlockWidth>
-struct is_new_xe_atom<XE_LOAD_2D<Bits, Height, Width, BlockWidth>> : cute::true_type {};
-
-// Check if T is an instantiation of XE_LOAD_2D_TRANSPOSE 
-template<int Bits, int Height, int Width>
-struct is_new_xe_atom<XE_LOAD_2D_TRANSPOSE<Bits, Height, Width>> : cute::true_type {};
-
-// Check if T is an instantiation of XE_LOAD_2D_VNNI 
-template<int Bits, int Height, int Width, int BlockWidth>
-struct is_new_xe_atom_vnni<XE_LOAD_2D_VNNI<Bits, Height, Width, BlockWidth>> : cute::true_type {};
+template<typename T> constexpr bool is_xe_atom_v = is_xe_atom<T>::value;
 
 
 // MMA-focused TiledCopy creation functions.
@@ -799,12 +784,7 @@ make_block_2d_copy_A(CopyOp                   const& op,    // Copy operation
                      TiledMMA                 const& mma,   // TiledMMA instance
                      Tensor<GEngine, GLayout> const& gmem)  // Global tensor
 {
-  // This will pass for new atoms like XE_LOAD_2D<16, 32, 32> 
-  // and fail for old atoms like XE_2D_U16x32x32_LD_N
-  static_assert(is_new_xe_atom<CopyOp>::value, 
-    "Legacy XE copy atom ops not compatible with make_block_2d_copy_A. "
-    "Please use the new templated atoms: XE_LOAD_2D<Bits, Height, Width> or XE_LOAD_2D_TRANSPOSE<Bits, Height, Width>. "
-    "Examples: XE_2D_U16x32x32_LD_N -> XE_LOAD_2D<16, 32, 32>, XE_2D_U16x32x32_LD_V -> XE_LOAD_2D_TRANSPOSE<16, 32, 32>");
+  static_assert(is_xe_atom_v<CopyOp>, "Use new XE atoms: XE_LOAD_2D or XE_LOAD_2D_TRANSPOSE");
   using ValType = typename GEngine::value_type;
   return make_block_2d_copy_A<ValType>(op, mma, gmem.stride()).with(gmem);
 }
@@ -877,11 +857,7 @@ make_block_2d_copy_B(CopyOp                   const& op,    // Copy operation
                      TiledMMA                 const& mma,   // TiledMMA instance
                      Tensor<GEngine, GLayout> const& gmem)  // Global tensor
 {
-  // Only accept XE_LOAD_2D_VNNI for copy B
-  static_assert(is_new_xe_atom_vnni<CopyOp>::value, 
-    "Legacy XE copy atom ops not compatible with make_block_2d_copy_B. "
-    "Please use the new templated atom: XE_LOAD_2D_VNNI<Bits, Height, Width, BlockWidth>. "
-    "Examples: XE_2D_U16x32x32_LD_V -> XE_LOAD_2D_VNNI<16, 32, 32, 32>");
+  static_assert(is_xe_atom_v<CopyOp>, "Use new XE atom: XE_LOAD_2D_VNNI");
   using ValType = typename GEngine::value_type;
   return make_block_2d_copy_B<ValType>(op, mma, gmem.stride()).with(gmem);
 }
@@ -954,6 +930,7 @@ make_block_2d_copy_C(CopyOp                   const& op,    // Copy operation
                      TiledMMA                 const& mma,   // TiledMMA instance
                      Tensor<GEngine, GLayout> const& gmem)  // Global tensor
 {
+  static_assert(is_xe_atom_v<CopyOp>, "Use new XE atom: XE_STORE_2D");
   using ValType = typename GEngine::value_type;
   return make_block_2d_copy_C<ValType>(op, mma, gmem.stride()).with(gmem);
 }
