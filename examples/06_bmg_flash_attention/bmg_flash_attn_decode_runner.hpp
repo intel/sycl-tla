@@ -252,8 +252,8 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
     if (sink_attn) {
       host_Sink.resize(block_Sink.size());
-      syclcompat::memcpy<ElementSink>(host_Sink.data(), block_Sink.get(), host_Sink.size());
-      syclcompat::wait();
+      compat::memcpy<ElementSink>(host_Sink.data(), block_Sink.get(), host_Sink.size());
+      compat::wait();
     }
 
     int q_group_size = num_heads_q / num_heads_kv;

@@ -109,7 +109,7 @@ using GmemTiledCopyStoreU16 = cute::XE_2D_U16x1x16_ST_N;
 template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
          typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
          typename MMAOperation, bool HasCausalMask, bool isVarLen, typename TiledCopyQ, typename TiledCopyK,
-         typename TiledCopyV, typename TiledCopyStore, bool PagedKV>
+         typename TiledCopyV, typename TiledCopyStore, bool PagedKV, bool hasSink = false>
 struct XE_Flash_Attention_Decode {
   using LayoutQ = cutlass::layout::RowMajor;
   using LayoutK = cutlass::layout::ColumnMajor;
@@ -121,6 +121,7 @@ struct XE_Flash_Attention_Decode {
   using ElementInputQ = ElementInputType;
   using ElementInputKV = ElementInputType;
   using ElementOutput = ElementOutputType;
+  using ElementInputSink = ElementInputType;
 
   using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
   using ProblemShapeVarlen = cute::tuple<int, int, int, cutlass::fmha::collective::VariableLength,
@@ -140,19 +141,20 @@ struct XE_Flash_Attention_Decode {
         EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, ElementOutput, cutlass::gemm::TagToStrideC_t<LayoutO>,
         ElementOutput, GmemTiledCopyStore>;
   using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashDecodeSoftmaxEpilogue<
-        HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;
+        HasCausalMask, hasSink, EpilogueDispatchPolicy, ElementAccumulator>;
 
   // Mainloop
   using CollectiveMainloop = cutlass::flash_attention::collective::FlashDecodeMma<
         GEMMDispatchPolicy, ProblemShapeType, ElementInputQ,
         cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
         cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV,
-        cutlass::gemm::TagToStrideB_t<LayoutV>, MMAOperation,
+        cutlass::gemm::TagToStrideB_t<LayoutV>, ElementInputSink,
+        MMAOperation,
         TileShapeQK, TileShapePV, SubgroupLayout,
         GmemTiledCopyQ, // Q
         GmemTiledCopyK, // K
         GmemTiledCopyV, // V,
-        HasCausalMask, PagedKV>;
+        HasCausalMask, PagedKV, hasSink>;
 
     using Kernel = cutlass::flash_attention::kernel::FMHADecode<ProblemShapeType, CollectiveMainloop,
                                                        CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
@@ -177,6 +179,7 @@ struct TestbedImpl {
   using ElementQ = typename FlashDecode::ElementQ;
   using ElementK = typename FlashDecode::ElementK;
   using ElementV = typename FlashDecode::ElementV;
+  using ElementSink = typename FlashDecode::ElementQ;
   using ElementAcc = typename FlashDecode::ElementAccumulator;
 
   using CollectiveMainloop = typename FlashDecode::CollectiveMainloop;
@@ -189,6 +192,7 @@ struct TestbedImpl {
   static constexpr bool HasCausalMask = CollectiveMainloop::CausalMask;
   static constexpr bool isVarLen = CollectiveMainloop::is_var_len;
   static constexpr bool PagedKV = CollectiveMainloop::PagedKV;
+  static constexpr bool HasSink = CollectiveMainloop::HasSink;
 
   StrideQ stride_Q;
   StrideK stride_K;
@@ -208,6 +212,7 @@ struct TestbedImpl {
   cutlass::DeviceAllocation<ElementQ> block_Q;
   cutlass::DeviceAllocation<ElementK> block_K;
   cutlass::DeviceAllocation<ElementV> block_V;
+  cutlass::DeviceAllocation<ElementSink> block_Sink;
   cutlass::DeviceAllocation<ElementK> block_K_cache;
   cutlass::DeviceAllocation<ElementV> block_V_cache;
   cutlass::DeviceAllocation<ElementOutput> block_O;
@@ -261,6 +266,7 @@ struct TestbedImpl {
     block_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
     block_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
     block_V.reset(batch * num_heads_kv * seq_len_kv * head_size_vo);
+    block_Sink.reset(num_heads_q);
     block_K_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_qk);
     block_V_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_vo);
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
@@ -300,6 +306,7 @@ struct TestbedImpl {
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
+    initialize_block(block_Sink, seed + 2021);
     initialize_block(block_K_cache, seed + 2024);
     initialize_block(block_V_cache, seed + 2025);
 
@@ -426,6 +433,13 @@ struct TestbedImpl {
     int offset_v_cache = 0;
     int offset_o = 0;
 
+    std::vector<ElementSink> host_Sink;
+    if (HasSink) {
+      host_Sink.resize(block_Sink.size());
+      compat::memcpy<ElementSink>(host_Sink.data(), block_Sink.get(), host_Sink.size());
+      compat::wait();
+    }
+
     int q_group_size = num_heads_q / num_heads_kv;
     // loop over the batch dimension to compute the output
     // to avoid the risk of running out of device memory
@@ -537,6 +551,11 @@ struct TestbedImpl {
             if (max_vec[max_idx] < host_S[idx])
               max_vec[max_idx] = host_S[idx];
           }
+          if (HasSink) {
+            ElementAccumulator sink_val = static_cast<ElementAccumulator>(host_Sink[h]);
+            if (max_vec[max_idx] < sink_val)
+              max_vec[max_idx] = sink_val;
+          }
         }
 
         // compute exp of S
@@ -555,6 +574,12 @@ struct TestbedImpl {
           int sum_idx = row;
           for (int col = 0; col < seq_len_kv_total; col++, idx++) {
             sum_vec[sum_idx] += host_S[idx];
+          }
+
+          if (HasSink) {
+            ElementAccumulator sink_val = static_cast<ElementAccumulator>(host_Sink[h]);
+            auto exp_sink = expf(sink_val - max_vec[row]);
+            sum_vec[sum_idx] += exp_sink;
           }
 
           // scale each row with the sum to compute softmax
@@ -676,7 +701,8 @@ struct TestbedImpl {
       block_V_cache.get(), stride_V_cache,
       PagedKV ? paged_kv_cache.page_table.get() : nullptr,
       PagedKV ? paged_kv_cache.page_size : 0,
-      PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
+      PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr,
+      block_Sink.get()},
       {softmax_scale},
       {block_O.get(), stride_O},
       hw_info};

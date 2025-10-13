@@ -164,7 +164,7 @@ public:
     reduce_max<Num_SGs,FragsNS>(frag_s, shmem_tensor_max, max_val);
 
     if constexpr (HasSink) {
-      if (syclcompat::get_nd_item<3>().get_local_linear_id() == 0) {
+      if (compat::get_nd_item<3>().get_local_linear_id() == 0) {
         Element max_scale{max_val * params.scale};
         sum += sycl::native::exp2((sink_token- max_scale));
       }

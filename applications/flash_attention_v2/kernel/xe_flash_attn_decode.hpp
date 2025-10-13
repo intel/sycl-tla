@@ -345,7 +345,7 @@ public:
       ElementAccumulator sink_token = ElementAccumulator{ 0 };
       auto sum_reg = ElementAccumulator{0};
       if constexpr (HasSink) {
-        if (syclcompat::get_nd_item<3>().get_local_linear_id() == 0) {
+        if (compat::get_nd_item<3>().get_local_linear_id() == 0) {
           max_reg = static_cast<ElementAccumulator>(mainloop_params.ptr_Sink[num_heads_coord]);
           sink_token = max_reg;
         }

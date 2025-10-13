@@ -72,4 +72,11 @@ TEST(XE_Flash_Attention_Decode_bf16_fp32_fp32_NonPaged_KVTile512_h64, varlen_non
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
 }
 
+TEST(XE_Flash_Attention_Decode_bf16_fp32_fp32_NonPaged_KVTile512_h64, sink_attn) {
+  using Kernel = test::flash_attention::XE_Flash_Attention_Decode<bfloat16_t, float, float, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperationBF16, true, false,
+                                            GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, false, true>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
+}
+
 } // namespace cutlass
