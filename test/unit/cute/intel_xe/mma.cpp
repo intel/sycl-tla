@@ -312,6 +312,9 @@ TEST(PVC_CuTe_Xe, MMA_XE_8x16x8_F32TF32TF32F32_TT) {
            tfloat32_t, float>(512, 512, 256);
 }
 
+#if defined(IGC_VERSION_MAJOR) && defined(IGC_VERSION_MINOR)
+#if (IGC_VERSION_MAJOR > 2) || (IGC_VERSION_MAJOR == 2 && IGC_VERSION_MINOR >= 18)
+
 TEST(PVC_CuTe_Xe, MMA_DPAS_S8_8x16) {
   MMA_Test<XE_DPAS_TT<8, int32_t, int8_t>, 64, 64, 8, 16, 32, int8_t, int8_t,
            int32_t>(512, 512, 256);
@@ -411,3 +414,6 @@ TEST(PVC_CuTe_Xe, MMA_DPAS_TF32_1x16) {
   MMA_Test<XE_DPAS_TT<1, float, tfloat32_t>, 64, 64, 8, 16, 16, tfloat32_t,
            tfloat32_t, float>(512, 512, 256);
 }
+
+#endif
+#endif
