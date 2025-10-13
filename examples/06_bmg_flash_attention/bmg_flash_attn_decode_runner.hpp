@@ -394,7 +394,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
           if (sink_attn) {
             ElementAccumulator sink_val = static_cast<ElementAccumulator>(host_Sink[h]);
-            auto exp_sink = expf((sink_val - max_vec[row]) / sqrt(static_cast<ElementAccumulator>((head_size_qk))));
+            auto exp_sink = expf((sink_val - max_vec[row]);
             sum_vec[sum_idx] += exp_sink;
           }
 
@@ -579,7 +579,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
     block_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
     block_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
     block_V.reset(batch * num_heads_kv * seq_len_kv * head_size_vo);
-    block_Sink.reset(num_heads_kv);
+    block_Sink.reset(num_heads_q);
     block_K_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_qk);
     block_V_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_vo);
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
