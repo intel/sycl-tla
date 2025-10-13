@@ -454,8 +454,8 @@ public:
       // Perform the collective scoped MMA
       CollectiveMainloop collective_mma;
 
-      auto q_group_size = num_heads_q / num_heads_kv;
-      auto kv_head_coord = q_head_coord / q_group_size;
+      // auto q_group_size = num_heads_q / num_heads_kv;
+      // auto kv_head_coord = q_head_coord / q_group_size;
 
       // when causal mask is true. It is not possible to set the scope
       // of the barrier to workgroup level as the number n block is
@@ -483,7 +483,7 @@ public:
 
         collective_mma.mmaQK(tSr, gQ, gK_, tSr,
                              ceil_div(head_size_qk, QK_BLK_K), mainloop_params,
-                             is_KV_cache, q_head_coord, kv_head_coord);
+                             is_KV_cache);
 
         if constexpr (LocalMask) {
           // Sliding windows
@@ -577,7 +577,7 @@ public:
 
         // 5) Perform GEMM O = S*V
         collective_mma.template mmaPV<VSlicer>(out_reg, tSr, gV_, out_reg,
-                                               mainloop_params, is_KV_cache, kv_head_coord);
+                                               mainloop_params, is_KV_cache);
 
         // ... prefetch next tile ...
         // Prefetch the next Q tile
@@ -624,7 +624,7 @@ public:
         // 3) Perform GEMM S = Q*K
         collective_mma.mmaQK(tSr, gQ, gK(_, _, kv_splits_new - 1, _), tSr,
                              ceil_div(head_size_qk, QK_BLK_K), mainloop_params,
-                             false, q_head_coord, kv_head_coord);
+                             false);
 
         // we only need one block ahead, there is enough gap to prefetch it
         // while doing softmax. because the gap between the two MMA is big,
@@ -655,7 +655,7 @@ public:
 
         collective_mma.template mmaPV<VSlicer>(out_reg, tSr,
                                                gV(_, _, kv_splits_new - 1),
-                                               out_reg, mainloop_params, false, kv_head_coord);
+                                               out_reg, mainloop_params, false);
       }
 
 

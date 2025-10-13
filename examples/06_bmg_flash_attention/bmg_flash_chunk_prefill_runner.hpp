@@ -28,7 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-
 #pragma once
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
@@ -220,64 +219,6 @@ template <class FMHAChunkPrefillKernel, bool isVarLen> struct ExampleRunner {
   // Methods
   //
 
-/*
-template <typename T>
-void initialize_block_random(cutlass::DeviceAllocation<T>& block) {
-    if (block.size() == 0) {
-        return;
-    }
-    std::vector<T> host_tensor(block.size());
-    std::mt19937 gen(seed);
-    std::uniform_real_distribution<float> dis(-1.f, 1.f);
-
-    for (size_t i = 0; i < host_tensor.size(); ++i) {
-        host_tensor[i] = static_cast<T>(dis(gen));
-    }
-    block.copy_from_host(host_tensor.data(), host_tensor.size());
-}
-*/
-
-template <typename T>
-void initialize_block_random(cutlass::DeviceAllocation<T>& block) {
-    if (block.size() == 0) {
-        return;
-    }
-    std::vector<T> host_tensor(block.size());
-    std::mt19937 gen(seed);
-    std::uniform_int_distribution<> dis(1, 9);
-
-    for (size_t i = 0; i < host_tensor.size(); ++i) {
-        host_tensor[i] = static_cast<T>(dis(gen));
-    }
-    block.copy_from_host(host_tensor.data(), host_tensor.size());
-}
-
-template <typename T>
-void initialize_block_identity(cutlass::DeviceAllocation<T>& block, int rows, int cols) {
-    if (block.size() == 0) {
-        return;
-    }
-    std::vector<T> host_tensor(block.size(), T(0.f));
-    for (int i = 0; i < rows; ++i) {
-        if (i < cols) {
-            host_tensor[i * cols + i] = T(1.f);
-        }
-    }
-    block.copy_from_host(host_tensor.data(), host_tensor.size());
-}
-
-template <typename T>
-void initialize_block_iota(cutlass::DeviceAllocation<T>& block) {
-    if (block.size() == 0) {
-        return;
-    }
-    std::vector<T> host_tensor(block.size());
-    for (size_t i = 0; i < host_tensor.size(); ++i) {
-        host_tensor[i] = static_cast<T>(static_cast<float>(1.0));
-    }
-    block.copy_from_host(host_tensor.data(), host_tensor.size());
-}
-
 template <typename SrcType, typename DstType, typename Encoding>
 void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num_elements, float scale) {
     sycl::queue queue = compat::get_default_queue();
@@ -298,28 +239,6 @@ void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num
             }
         });
     });
-}
-
-template<typename T>
-void print_device_tensor(const char* name, T* ptr, size_t size, int max_elements_to_print = 1153) {
-    std::cout << "--- " << name << " ---" << std::endl;
-    if (ptr == nullptr || size == 0) {
-        std::cout << "(null)" << std::endl;
-        return;
-    }
-    std::vector<T> host_tensor(size);
-    compat::memcpy(host_tensor.data(), ptr, size * sizeof(T));
-    compat::wait();
-
-    int count = 0;
-    for (const auto& val : host_tensor) {
-        if (count++ >= max_elements_to_print) {
-            std::cout << "..." << std::endl;
-            break;
-        }
-        std::cout << static_cast<float>(val) << " ";
-    }
-    std::cout << std::endl << "--- End " << name << " ---" << std::endl;
 }
 
 bool verify(ProblemShapeType problem_size, Options options, const float* q_scale, const float* k_scale, const float* v_scale) {
@@ -351,7 +270,7 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
     int offset_o = 0;
 
     using namespace cutlass;
-    using RefElement = bfloat16_t; //half_t;
+    using RefElement = bfloat16_t;
     DeviceAllocation<RefElement> block_Q_ref, block_K_ref, block_V_ref;
 
     // loop over the batch dimension to compute the output
@@ -478,22 +397,6 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
           v_ptr = block_V_ref.get();
       }
       compat::wait();
-
-      // Print inputs for the first batch item
-      if (b == 0) {
-        if constexpr (is_fp8_v<ElementQ>) {
-            std::cout << "\n========= FP8 Kernel Inputs (Batch 0) =========\n";
-            print_device_tensor("FP8 Input Q", q_ptr_orig, seq_len_qo * num_heads_q * head_size_qk);
-            print_device_tensor("FP8 Input K", k_ptr_orig, seq_len_kv_total * num_heads_kv * head_size_qk);
-            print_device_tensor("FP8 Input V", v_ptr_orig, seq_len_kv_total * num_heads_kv * head_size_vo);
-            std::cout << "\n========= Reference Kernel Inputs (Batch 0, Descaled) =========\n";
-        } else {
-            std::cout << "\n========= FP16 Kernel and Reference Kernel Inputs (Batch 0) =========\n";
-        }
-        print_device_tensor("Input Q", reinterpret_cast<RefElement*>(q_ptr), seq_len_qo * num_heads_q * head_size_qk);
-        print_device_tensor("Input K", reinterpret_cast<RefElement*>(k_ptr), seq_len_kv_total * num_heads_kv * head_size_qk);
-        print_device_tensor("Input V", reinterpret_cast<RefElement*>(v_ptr), seq_len_kv_total * num_heads_kv * head_size_vo);
-      }
 
       for (int q_group = 0; q_group < num_heads_q / q_group_size; q_group++) {
         for (int q_head = 0; q_head < q_group_size; q_head++) {
@@ -645,11 +548,6 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
 
     compat::wait();
     compat::memcpy<ElementOutput>(block_ref_O.get(), host_O.data(), host_O.size());
-
-    std::cout << "\n========= Kernel Outputs =========\n";
-    print_device_tensor("Actual Kernel Output (block_O)", block_O.get(), block_O.size());
-    print_device_tensor("Reference Kernel Output (block_ref_O)", block_ref_O.get(), block_ref_O.size());
-    std::cout << "\n==================================\n";
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
@@ -805,18 +703,6 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
       block_K_cache.reset(num_pages * paged_kv_cache.page_size * num_heads_kv * head_size_qk);
       block_V_cache.reset(num_pages * paged_kv_cache.page_size * num_heads_kv * head_size_vo);
     }
-
-    /*initialize_block_iota(block_Q);
-    initialize_block_iota(block_K);
-    initialize_block_iota(block_V); //, seq_len_kv, head_size_vo);
-    initialize_block_iota(block_K_cache);
-    initialize_block_iota(block_V_cache); //, seq_len_kv_cache, head_size_vo);*/
-					  //
-    /*initialize_block_random(block_Q);
-    initialize_block_random(block_K);
-    initialize_block_random(block_V);
-    initialize_block_random(block_K_cache);
-    initialize_block_random(block_V_cache);*/
 
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);

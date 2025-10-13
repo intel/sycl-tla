@@ -29,24 +29,18 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief Flash Attention V2 Prefill for Intel BMG
+    \brief fp8 Chunk Prefill for Intel BMG
 
-    This example constructs and executes a Flash Attention Prefill with KV cache on Intel BMG. The
+    This example constructs and executes a FP8 Flash Attention Chunk Prefill on Intel BMG. The
     definition of the GEMM, options etc for this example are defined in the associated
-    bmg_flash_attn_cachedKV_runner.hpp header file.
+    bmg_flash_chunk_prefill_runner.hpp header file.
 
     See https://arxiv.org/pdf/2307.08691 for details of Flash Attention V2 algorithm
 
-    To run this example:
-      $ ./examples/sycl/06_bmg_flash_attention_cachedKV/06_bmg_prefill_attention_cachedKV --seq_len_qo=512
-        --seq_len_kv=512 --seq_len_kv_cache=512 --head_size_vo=128 --head_size_qk=128
-
-    Causal masking of the first matrix multiplication is supported (`--is_causal`)
-
     To build & run this example (from your build dir):
 
-      $ ninja 06_bmg_prefill_attention_cachedKV
-      $ ./examples/sycl/06_bmg_flash_attention_cachedKV/06_bmg_prefill_attention_cachedKV
+      $ ninja 06_bmg_chunk_prefill_fp8_hdim128
+      $ ./examples/06_bmg_flash_attention/06_bmg_chunk_prefill_fp8_hdim128
 
     Call with `--help` for information about available options
 */
@@ -54,13 +48,9 @@
 #include "bmg_flash_chunk_prefill_runner.hpp"
 
 int main(int argc, const char **argv) {
-  //
   // Parse options
-  //
 
   Options options;
-  // Override the default data type for this test
-  // options.dtype = "fp8";
   options.parse(argc, argv);
 
   if (options.help) {
@@ -118,12 +108,12 @@ int main(int argc, const char **argv) {
   // =================================================================================================
   // FP8 Type Definitions
   // =================================================================================================
-  using ElementInputQ = cutlass::float_e5m2_t;     // <- data type of elements in input matrix A
-    using ElementInputKV = cutlass::float_e5m2_t;    // <- data type of elements in input matrix B
-    using MMAOperation = XE_8x16x16_F32F16F16F32_TT; //XE_8x16x16_F32BF16BF16F32_TT;
-    using GmemTiledCopyQ = XE_2D_U8x8x32_LD_N; // XE_2D_U8x8x32_LD_N;
-    using GmemTiledCopyK = XE_2D_U8x16x16_LD_T; // _T designates a transposed block load operation
-    using GmemTiledCopyV = XE_2D_U8x32x32_LD_V;
+  using ElementInputQ = cutlass::float_e5m2_t;     // data type of elements in input matrix A
+  using ElementInputKV = cutlass::float_e5m2_t;    // data type of elements in input matrix B
+  using MMAOperation = XE_8x16x16_F32F16F16F32_TT; //XE_8x16x16_F32BF16BF16F32_TT;
+  using GmemTiledCopyQ = XE_2D_U8x8x32_LD_N;       // XE_2D_U8x8x32_LD_N;
+  using GmemTiledCopyK = XE_2D_U8x16x16_LD_T;      // _T designates a transposed block load operation
+  using GmemTiledCopyV = XE_2D_U8x32x32_LD_V;
 
   constexpr int PipelineStages = 2;
 
