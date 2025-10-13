@@ -324,34 +324,6 @@ public:
       auto pKgK = thr_prefetch_K.partition_S(gK);
       auto pVgV = thr_prefetch_V.partition_S(gV);
 
-      // RoPE coordinate tensor partitions
-      // auto pCosQgCosQ = thr_prefetch_Q.partition_S(gCosQ);
-      // auto pSinQgSinQ = thr_prefetch_Q.partition_S(gSinQ);
-      // auto pCosKgCosK = thr_prefetch_K.partition_S(gCosK);
-      // auto pSinKgSinK = thr_prefetch_K.partition_S(gSinK);
-
-      // for (int i = 0; i < size<3>(pQgQ); i++) {
-      //   prefetch(tiled_prefetch_q, pQgQ(_, _, _, i));
-      // }
-      // for (int j = 0; j < size<4>(pKgK); j++) {
-      //   CUTLASS_PRAGMA_UNROLL
-      //   for (int i = 0; i < DispatchPolicy::Stages; i++) {
-      //     prefetch(tiled_prefetch_k, pKgK(_, _, _ , i, j));
-      //   }
-      // }
-
-      // for (int i = 0; i < size<3>(pQgQ); i++) {
-      //   prefetch(tiled_prefetch_q, pCosQgCosQ(_, _, _, i));
-      //   prefetch(tiled_prefetch_q, pSinQgSinQ(_, _, _, i));
-      // }
-      // for (int j = 0; j < size<4>(pKgK); j++) {
-      //   CUTLASS_PRAGMA_UNROLL
-      //   for (int i = 0; i < DispatchPolicy::Stages; i++) {
-      //     prefetch(tiled_prefetch_k, pCosKgCosK(_, _, _ , i, j));
-      //     prefetch(tiled_prefetch_k, pSinKgSinK(_, _, _ , i, j));
-      //   }
-      // }
-
     if constexpr (rope_enabled) {
       
       int block_idx = static_cast<int>(BlockIdxX());
@@ -375,13 +347,12 @@ public:
       // then apply RoPE on Q, K accordingly
       auto [coord_q_x, coord_q_y, coord_q_z] = *gQ.data();
       auto [coord_k_x, coord_k_y, coord_k_z] = *gK.data();
-      
       auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = params.problem_shape;
       
       int offset_q = seq_len_qo*head_size_qk*coord_q_z + head_size_qk*coord_q_x + coord_q_y; // row major
-      // int offset_k = seq_len_kv*head_size_qk*coord_k_z + head_size_qk*coord_k_y + coord_k_x; // col major
       int offset_k = seq_len_kv*head_size_qk*coord_k_z + head_size_qk*coord_k_x + coord_k_y; // row major
 
+      // calculate Q/cosQ/sinQ ptr
       auto q_traits = static_cast<traits_load_Q const&>(mainloop_params.gmem_tiled_copy_q);
       ElementQ* base_ptr_q = (ElementQ*)q_traits.base_ptr;
 
@@ -391,12 +362,10 @@ public:
       auto q_traits_sin = static_cast<traits_load_Q const&>(mainloop_params.gmem_tiled_copy_q_sin);
       ElementQ* base_ptr_q_sin = (ElementQ*)q_traits_sin.base_ptr;
 
-      // auto layout_q = gQ.layout();
       auto static_shape_q = make_shape(size<0>(gQ), size<1>(gQ)*size<2>(gQ));
-      // auto gQ_dim3 = size<2>(gQ);  // Runtime value, not constexpr
-      // auto stride_0 = size<1>(gK) * gK_dim3;  // Runtime calculation
       auto layout_q = make_layout(static_shape_q, LayoutRight{});
 
+      // calculate K/cosK/sinK ptr
       auto k_traits = static_cast<traits_load_K const&>(mainloop_params.gmem_tiled_copy_k);
       ElementK* base_ptr_k = (ElementK*)k_traits.base_ptr;
 
@@ -408,9 +377,7 @@ public:
 
       auto static_shape_k = make_shape(size<0>(gK), size<1>(gK)*size<3>(gK));
       auto layout_k = make_layout(static_shape_k, LayoutRight{});
-      auto gK_dim3 = size<3>(gK);  // Runtime value, not constexpr
-      // auto stride_0 = size<1>(gK) * gK_dim3;  // Runtime calculation
-      // auto layout_k = make_layout(static_shape_k, make_stride(stride_0, Int<1>{}));
+      auto gK_dim3 = size<3>(gK);
 
       // calculating rope for Q
       auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
@@ -454,7 +421,6 @@ public:
       }
 
       barrier_arrive(2);
-      // for (int i = 0;i< 100000; i++);
       barrier_wait(2);
     }
 

@@ -52,7 +52,6 @@ TEST(TEST_NAME, causal_rope) {
   EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
 }
 
-
 TEST(TEST_NAME, noncausal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, false, 2>::Kernel;
@@ -71,24 +70,11 @@ TEST(TEST_NAME, varlen_causal) {
   EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
 }
 
-// TEST(TEST_NAME, varlen_causal_rope) {
-//   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-//                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, true, 2, true>::Kernel;
-//   EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
-// }
-
-
 TEST(TEST_NAME, varlen_noncausal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, true, 2>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
 }
-
-// TEST(TEST_NAME, varlen_noncausal_rope) {
-//   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-//                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, true, 2, true>::Kernel;
-//   EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
-// }
 
 TEST(TEST_NAME, Llama3_70B) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,

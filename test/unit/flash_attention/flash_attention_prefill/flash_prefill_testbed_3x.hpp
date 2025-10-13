@@ -307,46 +307,6 @@ struct TestbedImpl {
       }
   }
 
-  template <class Element>
-bool initialize_block_(
-        cutlass::DeviceAllocation<Element>& block,
-        uint64_t seed=2023, int seq_len=512, int head_dim=64, int batch_heads=64) {
-  // creating a tensor of shape (batch_heads, seq_len, head_dim)
-  // and filling it with sequential values for easy verification
-  // e.g., for head_dim=4, seq_len=3, batch_heads=2
-  // tensor[0, :, :] = [[0, 1, 2, 3],
-  //                    [4, 5, 6, 7],
-  //                    [8, 9, 10,11]]
-  // tensor[1, :, :] = [[0, 1, 2, 3],
-  //                    [4, 5, 6, 7],
-  //                    [8, 9, 10,11]]
-  // total elements = batch_heads * seq_len * head_dim
-  // total elements = 2 * 3 * 4 = 24
-  std::vector<Element> matrix(seq_len * head_dim*batch_heads);
-  // cutlass::reference::device::BlockFillSequential(
-  //      block.get(), block.size());
-
-  // fill data row-major wise
-  for(int i=0;i<batch_heads;i++){
-    int temp = 0;
-    for (int j = 0; j < seq_len; ++j) {
-      for (int k = 0; k < head_dim ; k++) {
-        
-        int idx = i*seq_len*head_dim + j*head_dim + k;
-        Element theta = static_cast<Element>(temp);
-        matrix[idx] = theta;
-        temp++;
-      }
-    }
-  }
-  compat::wait();
-  
-  compat::memcpy(block.get(), matrix.data(), matrix.size() * sizeof(Element));
-  compat::wait();
-
-  return true;
-}
-
   /// Initializes data structures
   template <class ProblemShape>
   ProblemShapeType initialize(ProblemShape problem_shape_in) {
@@ -392,15 +352,10 @@ bool initialize_block_(
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
-    // initialize_block_(block_Q, seed + 2023, seq_len_qo, head_size_qk, batch * num_heads_q);
-    // initialize_block_(block_K, seed + 2022, seq_len_kv, head_size_qk, batch * num_heads_kv);
-    // initialize_block_(block_V, seed + 2021, head_size_vo, seq_len_kv, batch * num_heads_kv);
     compat::wait();
     // reference copy of Q and K for verification
     compat::memcpy<ElementQ>(block_ref_Q.get(), block_Q.get(), batch * num_heads_q * seq_len_qo * head_size_qk);
     compat::memcpy<ElementK>(block_ref_K.get(), block_K.get(), batch * num_heads_kv * seq_len_kv * head_size_qk);
-    // initialize_block_(block_ref_Q, seed + 2023, seq_len_qo, head_size_qk, batch * num_heads_q);
-    // initialize_block_(block_ref_K, seed + 2022, seq_len_kv, head_size_qk, batch * num_heads_kv);
     compat::wait();
 
     if (!cumulative_seqlen_q.empty()) {
@@ -533,7 +488,7 @@ bool initialize_block_(
         cutlass::TensorRef ref_V(block_V_.get() + offset_v, LayoutV::packed({seq_len_kv, head_size_vo}));
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
         
-        // Apply RoPE to Q and K if enabled
+        // Apply RoPE to Q and K if enabled on host
         if constexpr (rope_enabled) {
           cutlass::TensorRef ref_Q_cos(block_cos_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
           cutlass::TensorRef ref_Q_sin(block_sin_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
@@ -547,12 +502,6 @@ bool initialize_block_(
           std::vector<ElementQ> host_K_cos(head_size_qk* seq_len_kv);
           std::vector<ElementQ> host_K_sin(head_size_qk* seq_len_kv);
 
-          // host_Q.clear();
-          // host_K.clear();
-          // host_Q_cos.clear();
-          // host_Q_sin.clear();
-          // host_K_cos.clear();
-          // host_K_sin.clear();
           compat::wait();
 
           compat::memcpy<ElementQ>(host_Q.data(), ref_Q.data(), seq_len_qo* head_size_qk);
@@ -562,49 +511,16 @@ bool initialize_block_(
           compat::memcpy<ElementK>(host_K_cos.data(), ref_K_cos.data(), head_size_qk* seq_len_kv);
           compat::memcpy<ElementK>(host_K_sin.data(), ref_K_sin.data(), head_size_qk* seq_len_kv);
           compat::wait();
-          
-          // if(b == 0 && h == 0 && cute::thread(1,0)){
-          //   std::cout << "Before RoPE\n";
-          //   for(int i=0; i<seq_len_qo* head_size_qk; i++){
-          //     std::cout<<"host_Q["<<i<<"]="<<host_Q[i]<<", host_K["<<i<<"]="<<host_K[i]<<"\n";
-          //   }
-          // }
-          compat::wait();
-          // apply rope on host then update Q, K accordingly
+
           apply_rope_on_host(host_Q, seq_len_qo, head_size_qk, b, h, host_Q_cos, host_Q_sin);
           apply_rope_on_host(host_K, seq_len_kv, head_size_qk, b, h, host_K_cos, host_K_sin);
-          // For K, we need to transpose, apply RoPE, then transpose back
-          // std::vector<ElementK> host_K_transposed(seq_len_kv * head_size_qk);
-          // host_K_transposed.clear();
-          // compat::wait();
-          // for (int kv_seq = 0; kv_seq < seq_len_kv; ++kv_seq) {
-          //   for (int dim = 0; dim < head_size_qk; ++dim) {
-          //     host_K_transposed[kv_seq * head_size_qk + dim] = host_K[dim * seq_len_kv + kv_seq];
-          //   }
-          // }
-          // apply_rope_on_host(host_K_transposed, seq_len_kv, head_size_qk, batch, num_heads_q, host_Q_cos, host_K_sin);
-          // // Transpose back
-          // for (int kv_seq = 0; kv_seq < seq_len_kv; ++kv_seq) {
-          //   for (int dim = 0; dim < head_size_qk; ++dim) {
-          //     host_K[dim * seq_len_kv + kv_seq] = host_K_transposed[kv_seq * head_size_qk + dim];
-          //   }
-          // }
           compat::wait();
 
-          // cutlass::DeviceAllocation<ElementQ> block_Q_rope;
-          // cutlass::DeviceAllocation<ElementK> block_K_rope;
-          // block_Q_rope.reset(host_Q.size());
-          // block_K_rope.reset(host_K.size());
-          
-          // compat::memcpy(block_Q_rope.get(), host_Q.data(), host_Q.size() * sizeof(ElementQ));
-          // compat::memcpy(block_K_rope.get(), host_K.data(), host_K.size() * sizeof(ElementK));
-          // compat::wait();
-          
-          // Update tensor references to use RoPE-transformed tensors 
-          ref_Q.reset(ref_Q.data() , LayoutQ::packed({seq_len_qo, head_size_qk}));
-          ref_K.reset(ref_K.data() , LayoutK::packed({head_size_qk, seq_len_kv}));
-          compat::memcpy(ref_Q.data(), host_Q.data(), seq_len_qo* head_size_qk * sizeof(ElementQ));
-          compat::memcpy(ref_K.data(), host_K.data(), seq_len_kv* head_size_qk * sizeof(ElementK));
+          // Update tensor references to use RoPE-transformed tensors
+          ref_Q.reset(ref_Q.data(), LayoutQ::packed({seq_len_qo, head_size_qk}));
+          ref_K.reset(ref_K.data(), LayoutK::packed({head_size_qk, seq_len_kv}));
+          compat::memcpy(ref_Q.data(), host_Q.data(), seq_len_qo * head_size_qk * sizeof(ElementQ));
+          compat::memcpy(ref_K.data(), host_K.data(), seq_len_kv * head_size_qk * sizeof(ElementK));
           compat::wait();
         }
 

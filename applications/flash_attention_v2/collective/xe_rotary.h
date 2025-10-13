@@ -58,6 +58,4 @@ CUTLASS_DEVICE void apply_rope_interleaved_gmem(
   }
   syncthreads();
 }
-
-
 } // namespace cutlass::flash_attention::collective
