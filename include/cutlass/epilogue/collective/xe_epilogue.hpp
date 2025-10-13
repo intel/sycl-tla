@@ -102,9 +102,6 @@ public:
   using CopyOpR2S = CopyOpR2S_;
 
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
-  using GmemTiledCopyC = conditional_t<cute::is_void_v<CopyOpG2R>, XE_LOAD_2D<32, 8, 16>, CopyOpG2R>;
-  using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
-                                             CopyOpR2G, XE_STORE_2D<32, 8, 16>>;
   using ElementOutput = ElementD;
   using ElementCompute = ElementAccumulator;
 
@@ -291,8 +288,21 @@ public:
     bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
     auto mC = make_tensor(make_gmem_ptr(params.ptr_C), make_layout(make_shape(params.M, params.N, params.L),  params.dC));
     auto mD = make_tensor(make_gmem_ptr(params.ptr_D), make_layout(make_shape(params.M, params.N, params.L),  params.dD));
-    auto copy_c = make_block_2d_copy_C(GmemTiledCopyC{}, tiled_mma, mC(_,_,l_coord));
-    auto copy_d = make_block_2d_copy_C(GmemTiledCopyD{}, tiled_mma, mD(_,_,l_coord));
+
+    auto copy_c = [&]() {
+      if constexpr (!std::is_void_v<CopyOpG2R>) {
+        return make_block_2d_copy_A(CopyOpG2R{}, tiled_mma, mC(_,_,0));
+      } else {
+        return make_block_2d_copy_A(tiled_mma, mC(_,_,0));
+      }
+    }();
+    auto copy_d = [&]() {
+      if constexpr (!std::is_void_v<CopyOpR2G>) {
+        return make_block_2d_copy_C(CopyOpR2G{}, tiled_mma, mD(_,_,0));
+      } else {
+        return make_block_2d_copy_C(tiled_mma, mD(_,_,0));
+      }
+    }();
 
 
     // Represent the full output tensor
@@ -345,7 +355,7 @@ public:
     auto synchronize = [&] () {};
 
     cst_callbacks.begin();
-    // Load C tile if needed (distributed across all threads in workgroup)[web:24][web:27]
+    // Load C tile if needed (distributed across all threads in workgroup)
     if (is_C_load_needed) {
       copy(copy_c, tCgC, trC);
     }
