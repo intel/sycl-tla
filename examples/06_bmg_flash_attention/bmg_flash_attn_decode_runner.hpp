@@ -394,7 +394,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
           if (sink_attn) {
             ElementAccumulator sink_val = static_cast<ElementAccumulator>(host_Sink[h]);
-            auto exp_sink = expf((sink_val - max_vec[row]);
+            auto exp_sink = expf(sink_val - max_vec[row]);
             sum_vec[sum_idx] += exp_sink;
           }
 
