@@ -36,7 +36,7 @@ jobs:
             intel_graphics: ROLLING
             sycl_target: intel_gpu_pvc
             igc_version_major: 2
-            igc_version_minor: 18
+            igc_version_minor: 11
             runner: pvc146162-01
 
 
