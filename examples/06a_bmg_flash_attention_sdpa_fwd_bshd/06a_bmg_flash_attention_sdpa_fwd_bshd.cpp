@@ -98,10 +98,10 @@ int main(int argc, const char **argv) {
     using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
 
 #elif HEAD_DIM == 128
-    using ShapeQK = Shape<_128, _64, _64>;
-    using ShapePV = Shape<_128, _32, _64>;
-    using ShapeOutPut = Shape<_128, _128, _64>;
-    using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
+    using ShapeQK = Shape<_256, _32, _64>;
+    using ShapePV = Shape<_256, _32, _32>;
+    using ShapeOutPut = Shape<_256, _128, _32>;
+    using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
 
 #elif HEAD_DIM == 192
     using ShapeQK = Shape<_256, _64, _64>;
