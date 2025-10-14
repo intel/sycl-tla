@@ -356,13 +356,13 @@ public:
       Tensor mV_cache_nkl = cute::get_xe_tensor(
           make_shape(head_size_vo, seq_len_kv_cache, 1)); // (n_cache,k,l)
       Tensor mCosQ_mkl = cute::get_xe_tensor(
-          make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads_q));  // (m, k, l)
+          make_shape(seq_len_qo, head_size_qk, 1));  // (m, k, l)
       Tensor mSinQ_mkl = cute::get_xe_tensor(
-          make_shape(seq_len_qo, head_size_qk, (is_var_len ? 1 : batch) * num_heads_q));  // (m, k, l)
+          make_shape(seq_len_qo, head_size_qk, 1));  // (m, k, l)
       Tensor mCosK_nkl = cute::get_xe_tensor(
-          make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_head_kv));  // (n, k, l)
+          make_shape(seq_len_kv, head_size_qk, 1));  // (n, k, l)
       Tensor mSinK_nkl = cute::get_xe_tensor(
-          make_shape(seq_len_kv, head_size_qk, (is_var_len ? 1 : batch) * num_head_kv));  // (n, k, l)
+          make_shape(seq_len_kv, head_size_qk, 1));  // (n, k, l)
 
       // block_size and head_size are the same size. So no coord is needed.
       Tensor mQ_mk = mQ_mkl(_, _, 0);
@@ -373,10 +373,10 @@ public:
       Tensor mK_cache_nk = mK_cache_nkl(_, _, 0); // (n_cache, k)
       Tensor mV_cache_nk = mV_cache_nkl(_, _, 0); // (n_cache, k)
 
-      Tensor mCosQ_mk = mCosQ_mkl(_, _, blk_l_coord);                                                // (m,k)
-      Tensor mSinQ_mk = mSinQ_mkl(_, _, blk_l_coord);                                                // (m,k)
-      Tensor mCosK_nk = mCosK_nkl(_, _, blk_l_coord/group_heads_q);                                                // (n,k)
-      Tensor mSinK_nk = mSinK_nkl(_, _, blk_l_coord/group_heads_q);
+      Tensor mCosQ_mk = mCosQ_mkl(_, _, 0);                                                // (m,k)
+      Tensor mSinQ_mk = mSinQ_mkl(_, _, 0);                                                // (m,k)
+      Tensor mCosK_nk = mCosK_nkl(_, _, 0);                                                // (n,k)
+      Tensor mSinK_nk = mSinK_nkl(_, _, 0);
 
       auto gQ = local_tile(mQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _),
                            Step<_1, X, _1>{});
@@ -399,6 +399,10 @@ public:
       auto gSinK = local_tile(mSinK_nk, TileShapeQK{}, 
                               make_coord(_, _ , _), Step<X, _1, _1>{});
       
+      auto mainloop_params = CollectiveMainloop::get_updated_copies(
+          params.mainloop, params.problem_shape, sequence_length_shape,
+          batch_coord, q_head_coord);
+        
       // currently RoPE is not supported for fp8.
     if constexpr (rope_enabled && !is_fp8_v<ElementQ>) {
       int block_idx = static_cast<int>(BlockIdxX());
@@ -501,11 +505,6 @@ public:
       }
       barrier_wait(2);
     }
-
-      auto mainloop_params = CollectiveMainloop::get_updated_copies(
-          params.mainloop, params.problem_shape, sequence_length_shape,
-          batch_coord, q_head_coord);
-
 
       // we limit the horisontal size to two subgroup, the empirical resutls
       // show that reading the two cacheline side by side in gives better

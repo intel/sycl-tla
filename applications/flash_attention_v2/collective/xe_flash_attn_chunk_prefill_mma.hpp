@@ -71,7 +71,7 @@ template <int Stages, class ProblemShapeType_, class ElementQ_, class StrideQ_,
           class MMAOperation_, class TileShapeQK_, class TileShapePV_,
           class SubgroupLayout_, class GmemTiledCopyQ_, class GmemTiledCopyK_,
           class GmemTiledCopyV_, bool CausalMask_, bool LocalMask_, bool PagedKV_,
-          bool RopeMask_ = false>
+          bool RopeMask_>
 struct FlashChunkPrefillMma<
     gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, ElementQ_, StrideQ_,
     ElementK_, StrideK_, ElementV_, StrideV_, MMAOperation_, TileShapeQK_,
@@ -562,6 +562,11 @@ struct FlashChunkPrefillMma<
     XE_Copy_V copyV{XE_Copy_V{}.with(tensorV)};
     XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
     XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
+    XE_Copy_Q copyQCos{XE_Copy_Q{}.with(tensorQCos)};
+    XE_Copy_Q copyQSin{XE_Copy_Q{}.with(tensorQSin)};
+    XE_Copy_K copyKCos{XE_Copy_K{}.with(tensorKCos)};
+    XE_Copy_K copyKSin{XE_Copy_K{}.with(tensorKSin)};
+
     return Params{copyQ,
                   copyK,
                   copyV,
