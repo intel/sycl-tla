@@ -39,12 +39,12 @@ class CMakeBuild(build_ext):
 
         cmake_generator = os.environ.get("CMAKE_GENERATOR", "")
 
-        # Set Python_EXECUTABLE instead if you use PYBIND11_FINDPYTHON
+        # Set Python3_EXECUTABLE instead if you use PYBIND11_FINDPYTHON
         # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
         # from Python.
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}{os.sep}",
-            f"-DPython_EXECUTABLE={sys.executable}",
+            f"-DPython3_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
         build_args = []
@@ -110,7 +110,7 @@ setup(
     name="flash_attn",
     # The version is just a stub, it's not used by the final build artefact.
     version="0.1.0",
-    ext_modules=[CMakeExtension("flash_attn._flash_attn_83e71f7_dirty")],
+    ext_modules=[CMakeExtension("flash_attn._flash_attn_test")],
     cmdclass={"build_ext": CMakeBuild},
     packages=find_packages(where="torch-ext", include=["flash_attn*"]),
     package_dir={"": "torch-ext"},

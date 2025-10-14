@@ -4,9 +4,16 @@ cmake_minimum_required(VERSION 3.26)
 find_program(ICX_COMPILER icx)
 find_program(ICPX_COMPILER icpx)
 if(ICX_COMPILER AND ICPX_COMPILER)
+    execute_process(
+      COMMAND ${ICPX_COMPILER} --version
+      OUTPUT_VARIABLE ICPX_VERSION_OUTPUT
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    string(REGEX MATCH "[0-9]+\\.[0-9]+" DPCPP_VERSION "${ICPX_VERSION_OUTPUT}")
+    set(DPCPP_VERSION "${DPCPP_VERSION}" CACHE STRING "DPCPP major.minor version")
     set(CMAKE_C_COMPILER ${ICX_COMPILER})
     set(CMAKE_CXX_COMPILER ${ICPX_COMPILER})
-    message(STATUS "Using Intel SYCL C++ compiler: ${ICPX_COMPILER} and C compiler: ${ICX_COMPILER}")
+    message(STATUS "Using Intel SYCL C++ compiler: ${ICPX_COMPILER} and C compiler: ${ICX_COMPILER} Version: ${DPCPP_VERSION}")
 else()
     message(FATAL_ERROR "Intel SYCL C++ compiler (icpx) and/or C compiler (icx) not found. Please install Intel oneAPI toolkit.")
 endif()
@@ -20,7 +27,7 @@ message(STATUS "FetchContent base directory: ${FETCHCONTENT_BASE_DIR}")
 include("cmake/utils.cmake")
 
 # Find Python with all necessary components for building extensions
-find_package(Python REQUIRED COMPONENTS Interpreter Development.Module Development.SABIModule)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module Development.SABIModule)
 
 append_cmake_prefix_path("torch" "torch.utils.cmake_prefix_path")
 
@@ -51,15 +58,22 @@ add_compile_definitions(USE_XPU)
 set(sycl_link_flags "-fsycl;--offload-compress;-fsycl-targets=spir64_gen,spir64;-Xs;-device pvc,xe-lpg,ats-m150 -options ' -cl-intel-enable-auto-large-GRF-mode -cl-poison-unsupported-fp64-kernels -cl-intel-greater-than-4GB-buffer-required';")
 set(sycl_flags "-fsycl;-fhonor-nans;-fhonor-infinities;-fno-associative-math;-fno-approx-func;-fno-sycl-instrument-device-code;--offload-compress;-fsycl-targets=spir64_gen,spir64;")
 message(STATUS "Configuring for Intel XPU backend using SYCL")
+
 find_package(CutlassSycl)
+
+if(DPCPP_VERSION STREQUAL "2025.2")
+  set(CUTLASS_SYCL_REVISION "v0.5" CACHE STRING "CUTLASS revision to use")
+elseif(DPCPP_VERSION STREQUAL "2025.1")
+  set(CUTLASS_SYCL_REVISION "v3.9-0.3" CACHE STRING "CUTLASS revision to use")
+elseif(DPCPP_VERSION STREQUAL "2025.0")
+  set(CUTLASS_SYCL_REVISION "v3.9-0.2" CACHE STRING "CUTLASS revision to use")
+else()
+  message(FATAL_ERROR "Unknown DPCPP_VERSION: ${DPCPP_VERSION}")
+endif()
 
 if (NOT CutlassSycl_FOUND)
   set(CUTLASS_ENABLE_HEADERS_ONLY ON CACHE BOOL "Enable only the header library")
   set(CUTLASS_ENABLE_BENCHMARKS OFF CACHE BOOL "Disable CUTLASS Benchmarks")
-
-# Set CUTLASS_REVISION manually -- its revision detection doesn't work in this case.
-  set(CUTLASS_REVISION "v3.9-0.3" CACHE STRING "CUTLASS revision to use")
-
 # Use the specified CUTLASS source directory for compilation if CUTLASS_SYCL_SRC_DIR is provided
   if (DEFINED ENV{CUTLASS_SYCL_SRC_DIR})
     set(CUTLASS_SYCL_SRC_DIR $ENV{CUTLASS_SYCL_SRC_DIR})
@@ -75,7 +89,7 @@ if (NOT CutlassSycl_FOUND)
     FetchContent_Declare(
         cutlass
         GIT_REPOSITORY https://github.com/intel/cutlass-sycl.git
-        GIT_TAG ${CUTLASS_REVISION}
+        GIT_TAG ${CUTLASS_SYCL_REVISION}
         GIT_PROGRESS TRUE
 
         # Speed up CUTLASS download by retrieving only the specified GIT_TAG instead of the history.
@@ -107,9 +121,13 @@ else()
   include_directories(${CUTLASS_INCLUDE_DIR})
   include_directories(${CUTLASS_TOOLS_UTIL_INCLUDE_DIR})
 endif(NOT CutlassSycl_FOUND)
+
 string(REPLACE "-fsycl-targets=spir64_gen,spir64" "-fsycl-targets=intel_gpu_pvc" sycl_link_flags "${sycl_link_flags}")
 string(REPLACE "-device pvc,xe-lpg,ats-m150" "" sycl_link_flags "${sycl_link_flags}")
-string(APPEND sycl_link_flags "-Xspirv-translator;-spirv-ext=+SPV_INTEL_split_barrier;")
+string(APPEND sycl_link_flags "-Xspirv-translator;-spirv-ext=+SPV_INTEL_split_barrier")
+if(CUTLASS_SYCL_REVISION STREQUAL "v0.5")
+  string(APPEND sycl_link_flags ",+SPV_INTEL_2d_block_io,+SPV_INTEL_subgroup_matrix_multiply_accumulate")
+endif()
 string(REPLACE "-fsycl-targets=spir64_gen,spir64" "-fsycl-targets=intel_gpu_pvc" sycl_flags "${sycl_flags}")
 
 
@@ -148,8 +166,8 @@ endforeach()
 
 list(APPEND SRC "${flash_attn_xpu_SRC}")
 define_gpu_extension_target(
-  _flash_attn_83e71f7_dirty
-  DESTINATION _flash_attn_83e71f7_dirty
+  _flash_attn_test
+  DESTINATION _flash_attn_test
   INCLUDE_DIRECTORIES "${ONEDNN_XPU_INCLUDE_DIR}"
   LANGUAGE ${GPU_LANG}
   SOURCES ${SRC}
@@ -158,5 +176,5 @@ define_gpu_extension_target(
   WITH_SOABI)
 
 # Add XPU/SYCL specific linker flags
-target_link_options(_flash_attn_83e71f7_dirty PRIVATE ${sycl_link_flags})
-target_link_libraries(_flash_attn_83e71f7_dirty PRIVATE dnnl)
+target_link_options(_flash_attn_test PRIVATE ${sycl_link_flags})
+target_link_libraries(_flash_attn_test PRIVATE dnnl)
