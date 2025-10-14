@@ -415,4 +415,3 @@ TEST(PVC_CuTe_Xe, MMA_DPAS_TF32_1x16) {
 }
 
 #endif
-#endif
