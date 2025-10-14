@@ -135,6 +135,9 @@ public:
 
   static constexpr bool is_var_len = CollectiveMainloop::is_var_len;
   static constexpr bool rope_enabled = CollectiveMainloop::rope_enabled;
+  
+  template <typename T>
+  static constexpr bool is_fp8_v = cute::is_same_v<T,float_e4m3_t> || cute::is_same_v<T,float_e5m2_t>;
 
   // Kernel level shared memory storage
   struct SharedStorage {
@@ -292,24 +295,6 @@ public:
       auto gSinQ = local_tile(mSinQ_mk, TileShapeQK{}, make_coord(blk_m_coord, _, _), Step<_1,  X, _1>{});
       auto gCosK = local_tile(mCosK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
       auto gSinK = local_tile(mSinK_nk, TileShapeQK{}, make_coord(_, _ , _), Step<X, _1, _1>{});
-      // if(cute::thread(0,0)){
-      //   #define PRINT(x) print(#x ": "); print(x); print("\n");
-      //   PRINT(mQ_mkl);
-      //   PRINT(mK_nkl);
-      //   PRINT(mV_nkl);
-      //   PRINT(mQ_mk);
-      //   PRINT(mK_nk);
-      //   PRINT(mV_nk);
-      //   PRINT(gQ);
-      //   PRINT(gK);
-      //   PRINT(gV);
-      //   PRINT(gCosQ);
-      //   PRINT(gSinQ);
-      //   PRINT(gCosK);
-      //   PRINT(gSinK);
-      //   #undef PRINT
-      // }
-      // syncthreads();
 
       auto mainloop_params = CollectiveMainloop::get_updated_copies(params.mainloop, params.problem_shape, sequence_length_shape, batch_coord);
       // we limit the horisontal size to two subgroup, the empirical resutls show that reading the two cacheline side by side in gives better performance and 
@@ -324,8 +309,8 @@ public:
       auto pKgK = thr_prefetch_K.partition_S(gK);
       auto pVgV = thr_prefetch_V.partition_S(gV);
 
-    if constexpr (rope_enabled) {
-      
+    // currently RoPE is not supported for fp8.
+    if constexpr (rope_enabled && !is_fp8_v<ElementQ>) {
       int block_idx = static_cast<int>(BlockIdxX());
       int block_idy = static_cast<int>(BlockIdxY());
       int block_idz = static_cast<int>(BlockIdxZ());
@@ -421,6 +406,9 @@ public:
       }
 
       barrier_arrive(2);
+      for(int i=0;i< 10000;i++){
+        
+      }
       barrier_wait(2);
     }
 

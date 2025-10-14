@@ -489,7 +489,8 @@ struct TestbedImpl {
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
         
         // Apply RoPE to Q and K if enabled on host
-        if constexpr (rope_enabled) {
+        // Currently RoPE is not supported for fp8.
+        if constexpr (rope_enabled && !is_fp8_v<ElementQ>) {
           cutlass::TensorRef ref_Q_cos(block_cos_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
           cutlass::TensorRef ref_Q_sin(block_sin_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
           cutlass::TensorRef ref_K_cos(block_cos_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
