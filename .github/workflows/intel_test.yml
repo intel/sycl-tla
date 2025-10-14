@@ -57,6 +57,8 @@ jobs:
             gpu: PVC
             intel_graphics: ROLLING
             sycl_target: intel_gpu_pvc
+            igc_version_major: 2
+            igc_version_minor: 18
             runner: pvc146162-01
 
     name: Run Intel ${{ matrix.compiler }} tests on ${{ matrix.gpu }} with intel-graphics ${{ matrix.intel_graphics }}
