@@ -184,9 +184,10 @@ class EmitOperationKindLibrary:
   for min_cc=90 and OperationKind=Gemm), in the file
   all_sm{min_cc}_{operation_kind}_operations.cu
   (e.g., all_sm90_gemm_operations.cu for min_cc=90 and OperationKind=Gemm).
+  For Intel Xe targets, uses xe{min_cc} prefix instead of sm{min_cc}.
   The min_cc variable here indicates the minimum GPU architecture version
   that the things to be initialized require.
-  For example, min_cc=90 indicates sm90.
+  For example, min_cc=90 indicates sm90 for CUDA, min_cc=200 indicates Xe2/BMG for Intel.
 
   That file declares several functions in namespace cutlass::library.
   The functions all have this form,
@@ -207,11 +208,21 @@ class EmitOperationKindLibrary:
   of what happens in each of those subdirectories.
   """
 
+  @staticmethod
+  def get_arch_prefix(min_cc):
+    """Get architecture prefix based on compute capability.
+    Returns 'sm' for CUDA architectures, 'xe' for Intel Xe architectures."""
+    if min_cc >= 200:  # Intel Xe architectures use 200+ range
+      return 'xe'
+    else:
+      return 'sm'
+
   def __init__(self, generated_path, min_cc, kind, args):
     self.generated_path = generated_path
     self.min_cc = min_cc
     self.kind = kind
     self.args = args
+    self.arch_prefix = self.get_arch_prefix(min_cc)
     self.emitters = {
       OperationKind.Gemm: EmitGemmConfigurationLibrary,
       OperationKind.Conv2d: EmitConv2dConfigurationLibrary,
@@ -242,12 +253,12 @@ namespace library {
 //
 // Entry point to construct operations
 //
-void initialize_all_sm${min_cc}_${subclass_name}_${operation_name}_operations(Manifest &manifest) {
+void initialize_all_${arch_prefix}${min_cc}_${subclass_name}_${operation_name}_operations(Manifest &manifest) {
 """
     self.configuration_prototype_template = "void initialize_${configuration_name}(Manifest &manifest);\n"
     self.configuration_template = "  initialize_${configuration_name}(manifest);\n"
-    self.subclass_call_template = "  initialize_all_sm${min_cc}_${subclass_name}_${operation_name}_operations(manifest);\n"
-    self.subclass_prototype_template = "void initialize_all_sm${min_cc}_${subclass_name}_${operation_name}_operations(Manifest &manifest);\n"
+    self.subclass_call_template = "  initialize_all_${arch_prefix}${min_cc}_${subclass_name}_${operation_name}_operations(manifest);\n"
+    self.subclass_prototype_template = "void initialize_all_${arch_prefix}${min_cc}_${subclass_name}_${operation_name}_operations(Manifest &manifest);\n"
     self.epilogue_template ="""}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -268,7 +279,9 @@ void initialize_all_sm${min_cc}_${subclass_name}_${operation_name}_operations(Ma
     _LOGGER.debug(f"***   operation_path (directory to make): {str(self.operation_path)}")
     os.makedirs(self.operation_path)
 
-    self.top_level_path = os.path.join(self.operation_path, f"all_sm{self.min_cc}_{OperationKindNames[self.kind]}_operations.cu")
+    # Use .cpp extension for Intel Xe architectures, .cu for CUDA
+    file_extension = "cpp" if self.min_cc >= 12 else "cu"
+    self.top_level_path = os.path.join(self.operation_path, f"all_{self.arch_prefix}{self.min_cc}_{OperationKindNames[self.kind]}_operations.{file_extension}")
     _LOGGER.debug(f"***   top_level_path (file to write): {str(self.top_level_path)}")
 
     self.top_level_file = open(self.top_level_path, "w")
@@ -307,9 +320,11 @@ void initialize_all_sm${min_cc}_${subclass_name}_${operation_name}_operations(Ma
 
       self.subclass_configurations[extended_name] = []
 
+      # Use .cpp extension for Intel Xe architectures, .cu for CUDA
+      file_extension = "cpp" if self.min_cc >= 12 else "cu"
       # Open a new top-level file for this sub class
       subclass_top_level_path = os.path.join(
-        subclass_path, f"all_sm{self.min_cc}_{extended_name}_{OperationKindNames[self.kind]}_operations.cu")
+        subclass_path, f"all_{self.arch_prefix}{self.min_cc}_{extended_name}_{OperationKindNames[self.kind]}_operations.{file_extension}")
       _LOGGER.debug('***     subclass_top_level_path (min_cc, extended_name, ' +
                     'OperationKind): ' + str(subclass_top_level_path))
 
@@ -337,6 +352,7 @@ void initialize_all_sm${min_cc}_${subclass_name}_${operation_name}_operations(Ma
     _LOGGER.debug("*** EmitOperationKindLibrary::__exit__")    
     for subclass_name, subclass_file in sorted(self.subclass_files.items()):
       subclass_cfg = {
+        'arch_prefix': self.arch_prefix,
         'min_cc': str(self.min_cc),
         'subclass_name': subclass_name,
         'operation_name': OperationKindNames[self.kind]
@@ -345,6 +361,7 @@ void initialize_all_sm${min_cc}_${subclass_name}_${operation_name}_operations(Ma
 
     self.top_level_file.write(
       SubstituteTemplate(self.entry_template, {
+        'arch_prefix': self.arch_prefix,
         'min_cc': str(self.min_cc),
         'subclass_name': '',
         'operation_name': OperationKindNames[self.kind]
@@ -353,6 +370,7 @@ void initialize_all_sm${min_cc}_${subclass_name}_${operation_name}_operations(Ma
     # Finish and close all subclass files
     for subclass_name, subclass_file in sorted(self.subclass_files.items()):
       subclass_cfg = {
+        'arch_prefix': self.arch_prefix,
         'min_cc': str(self.min_cc),
         'subclass_name': subclass_name,
         'operation_name': OperationKindNames[self.kind]
@@ -511,6 +529,7 @@ class Manifest:
     self.compute_capabilities_feature_set = ['50',]
     self.curr_build_dir = '.'
     self.filter_by_cc = True
+    self.is_xe_target = False  # Track if building for Intel Xe
 
     if self.args:
       self.kernel_filter = self.args.kernels
@@ -518,10 +537,31 @@ class Manifest:
 
       # A common user error is to use commas instead of semicolons.
       if ',' in args.architectures:
-        raise RuntimeError("The list of architectures (CMake option CUTLASS_NVCC_ARCHS) must be semicolon-delimited.\nDon't use commas to separate the architectures; use semicolons.\nYou specified the list as: " + args.architectures)
+        raise RuntimeError("The list of architectures (CMake option CUTLASS_NVCC_ARCHS or DPCPP_SYCL_TARGET) must be semicolon-delimited.\nDon't use commas to separate the architectures; use semicolons.\nYou specified the list as: " + args.architectures)
       
       self.compute_capabilities_feature_set = args.architectures.split(';') if len(args.architectures) else ['50',]
-      self.compute_capabilities_baseline = sorted(set(int(arch.split('a')[0].split('f')[0]) for arch in self.compute_capabilities_feature_set))
+      
+      # Parse architecture identifiers - support both CUDA SM and Intel Xe targets
+      baseline_archs = []
+      for arch in self.compute_capabilities_feature_set:
+        # Check if this is an Intel Xe target (pvc, bmg, etc.)
+        if any(xe_target in arch.lower() for xe_target in ['pvc', 'bmg', 'intel_gpu']):
+          self.is_xe_target = True
+          # Map Intel Xe architectures to numeric identifiers for compatibility
+          # PVC (Ponte Vecchio) -> 12
+          # BMG (Battlemage/Xe2) -> 20  
+          if 'pvc' in arch.lower():
+            baseline_archs.append(12)
+          elif 'bmg' in arch.lower() or 'xe2' in arch.lower():
+            baseline_archs.append(20)
+          else:
+            # Generic Intel GPU target
+            baseline_archs.append(20)
+        else:
+          # CUDA SM architecture
+          baseline_archs.append(int(arch.split('a')[0].split('f')[0]))
+      
+      self.compute_capabilities_baseline = sorted(set(baseline_archs))
 
       if args.filter_by_cc in ['false', 'False', '0']:
         self.filter_by_cc = False
@@ -749,9 +789,11 @@ class Manifest:
       for kind in self.operations.keys():
         for min_cc in sorted(self.operations[kind].keys()):
           for subclass in sorted(source_files[kind][min_cc].keys()):
+            # Use appropriate prefix (sm for CUDA, xe for Intel)
+            arch_prefix = 'xe' if min_cc >= 12 else 'sm'
             target_text = SubstituteTemplate("""cutlass_add_cutlass_library(
-      SUFFIX ${kind}_sm${min_cc}_${subclass}
-""", { 'min_cc': str(min_cc), 'kind': OperationKindNames[kind], 'subclass': subclass })
+      SUFFIX ${kind}_${arch_prefix}${min_cc}_${subclass}
+""", { 'arch_prefix': arch_prefix, 'min_cc': str(min_cc), 'kind': OperationKindNames[kind], 'subclass': subclass })
             manifest_file.write(target_text + '\n\n')
 
             for source_file in source_files[kind][min_cc][subclass]:
@@ -759,7 +801,8 @@ class Manifest:
 
             manifest_file.write(")\n")
 
-          if self.disable_full_archs_compilation:
+          # Only apply CUDA-specific arch compilation settings for CUDA targets
+          if self.disable_full_archs_compilation and min_cc < 12:
             self.emit_disable_full_archs_compilation(manifest_file, source_files)
 
   def emit_disable_full_archs_compilation(manifest_file, source_files):

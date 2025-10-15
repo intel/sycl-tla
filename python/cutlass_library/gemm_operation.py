@@ -87,7 +87,8 @@ class GemmOperation:
     self.B = B
     self.C = C
     self.D = D
-    self.is_xe = self.arch == 11
+    # Intel Xe architectures: PVC (12), BMG/Xe2 (20), ACM/DG2 (21)
+    self.is_xe = self.arch >= 12 and self.arch < 50
 
     if is_block_scaled(gemm_kind):
       self.ScaleFactorA = ScaleFactorA
@@ -388,6 +389,7 @@ class GemmOperation:
           l = self.layout_name(),
           a = str(max(self.A.alignment, self.B.alignment)))
     else:
+      # Intel Xe architectures use xe{cc} naming (e.g., xe20 for BMG, xe12 for PVC)
       threadblock = self.tile_description.procedural_name()
       return "cutlass{p}_xe{ar}_{op}_{ex}_{tb}_{l}_align{a}".format(
           p = self.prefix,
@@ -1156,9 +1158,11 @@ using {operation_name_str}_LayoutSFB = decltype({operation_name_str}_ScaleConfig
       'blockwise_prepare_code' : blockwise_prepare_code
     }
 
-    # Overriding values for Intel Xe
+    # Overriding values for Intel Xe architectures
     if operation.is_xe:
-      values['arch'] = "cutlass::arch::IntelXe"
+      # Use specific compute capability for Intel Xe GPUs
+      # e.g., cutlass::arch::Xe20 for BMG, cutlass::arch::Xe12 for PVC
+      values['arch'] = "cutlass::arch::Xe%d" % operation.arch
 
     return SubstituteTemplate(self.gemm_template, values)
 
@@ -1473,7 +1477,12 @@ ${compile_guard_end}
 class EmitGemmConfigurationLibrary:
   def __init__(self, operation_path, configuration_name):
     self.configuration_name = configuration_name
-    self.configuration_path = os.path.join(operation_path, "%s.cu" % configuration_name).replace('\\', '/')
+    
+    # Determine file extension based on architecture
+    # Intel Xe architectures (12, 20) use .cpp, CUDA uses .cu
+    # Check if operation_path contains xe12 or xe20 (or other xe patterns)
+    file_extension = "cpp" if "/xe" in operation_path or "\\xe" in operation_path else "cu"
+    self.configuration_path = os.path.join(operation_path, "%s.%s" % (configuration_name, file_extension)).replace('\\', '/')
 
     self.instance_emitter = {
       GemmKind.Gemm: EmitGemmInstance,

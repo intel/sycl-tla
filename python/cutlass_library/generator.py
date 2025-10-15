@@ -11773,6 +11773,231 @@ def GeneratePVC(manifest, cuda_version):
 
 ###################################################################################################
 
+def GenerateBMG_TensorOp_16b_DPAS_gemm(manifest, cuda_version):
+    """Generate FP16/BF16 GEMM kernels for BMG/Xe2 architecture using DPAS."""
+    layout_list = [
+        [[LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8]],
+        [[LayoutType.RowMajor, 8], [LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 8]],
+        [[LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8]],
+        [[LayoutType.ColumnMajor, 8], [LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 8]],
+    ]
+
+    math_instructions = [
+        MathInstruction(
+            [8, 16, 16],
+            DataType.f16, DataType.f16, DataType.f32,
+            OpcodeClass.TensorOp,
+            MathOperation.multiply_add),
+        MathInstruction(
+            [8, 16, 16],
+            DataType.f16, DataType.f16, DataType.f16,
+            OpcodeClass.TensorOp,
+            MathOperation.multiply_add),
+        MathInstruction(
+            [8, 16, 16],
+            DataType.bf16, DataType.bf16, DataType.f32,
+            OpcodeClass.TensorOp,
+            MathOperation.multiply_add),
+        MathInstruction(
+            [8, 16, 16],
+            DataType.bf16, DataType.bf16, DataType.bf16,
+            OpcodeClass.TensorOp,
+            MathOperation.multiply_add)
+    ]
+
+    min_cc = 20
+    max_cc = 20
+
+    for math_inst in math_instructions:
+        tile_descriptions = [
+            TileDescription([256, 256, 32],
+                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([128, 256, 32],
+                0, [4, 8, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([256, 128, 32],
+                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([128, 128, 32],
+                0, [4, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([64, 128, 32],
+                0, [2, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+        ]
+
+        data_type = {
+            "a_type": math_inst.element_a,
+            "b_type": math_inst.element_b,
+            "c_type": math_inst.element_accumulator,
+            "d_type": math_inst.element_accumulator,
+            "acc_type": math_inst.element_accumulator,
+            "epi_type": math_inst.element_accumulator
+        }
+
+        schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
+
+        CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+
+
+def GenerateBMG_TensorOp_fp8_DPAS_gemm(manifest, cuda_version):
+    """Generate FP8 (E4M3/E5M2) GEMM kernels for BMG/Xe2 architecture using DPAS."""
+    layout_list = [
+        [[LayoutType.RowMajor, 16], [LayoutType.RowMajor, 16], [LayoutType.RowMajor, 8]],
+        [[LayoutType.RowMajor, 16], [LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 8]],
+        [[LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 16], [LayoutType.RowMajor, 8]],
+        [[LayoutType.ColumnMajor, 16], [LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 8]],
+    ]
+
+    # FP8 math instructions for BMG
+    math_instructions = [
+        MathInstruction(
+            [8, 16, 32],
+            DataType.e4m3, DataType.e4m3, DataType.f32,
+            OpcodeClass.TensorOp,
+            MathOperation.multiply_add),
+        MathInstruction(
+            [8, 16, 32],
+            DataType.e5m2, DataType.e5m2, DataType.f32,
+            OpcodeClass.TensorOp,
+            MathOperation.multiply_add),
+        MathInstruction(
+            [8, 16, 32],
+            DataType.e4m3, DataType.e5m2, DataType.f32,
+            OpcodeClass.TensorOp,
+            MathOperation.multiply_add),
+    ]
+
+    min_cc = 20
+    max_cc = 20
+
+    for math_inst in math_instructions:
+        tile_descriptions = [
+            TileDescription([256, 256, 64],
+                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([128, 256, 64],
+                0, [4, 8, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([256, 128, 64],
+                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([128, 128, 64],
+                0, [4, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+        ]
+
+        data_type = {
+            "a_type": math_inst.element_a,
+            "b_type": math_inst.element_b,
+            "c_type": math_inst.element_accumulator,
+            "d_type": math_inst.element_accumulator,
+            "acc_type": math_inst.element_accumulator,
+            "epi_type": math_inst.element_accumulator
+        }
+
+        schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
+
+        CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+
+
+def GenerateBMG_TensorOp_int8_DPAS_gemm(manifest, cuda_version):
+    """Generate INT8 GEMM kernels for BMG/Xe2 architecture using DPAS."""
+    layout_list = [
+        [[LayoutType.RowMajor, 16], [LayoutType.RowMajor, 16], [LayoutType.RowMajor, 4]],
+        [[LayoutType.RowMajor, 16], [LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 4]],
+        [[LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 16], [LayoutType.RowMajor, 4]],
+        [[LayoutType.ColumnMajor, 16], [LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 4]],
+    ]
+
+    math_instructions = [
+        MathInstruction(
+            [8, 16, 32],
+            DataType.s8, DataType.s8, DataType.s32,
+            OpcodeClass.TensorOp,
+            MathOperation.multiply_add),
+    ]
+
+    min_cc = 20
+    max_cc = 20
+
+    for math_inst in math_instructions:
+        tile_descriptions = [
+            TileDescription([256, 256, 64],
+                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([128, 256, 64],
+                0, [4, 8, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([256, 128, 64],
+                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([128, 128, 64],
+                0, [4, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+        ]
+
+        data_type = {
+            "a_type": math_inst.element_a,
+            "b_type": math_inst.element_b,
+            "c_type": math_inst.element_accumulator,
+            "d_type": math_inst.element_accumulator,
+            "acc_type": math_inst.element_accumulator,
+            "epi_type": math_inst.element_accumulator
+        }
+
+        schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
+
+        CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+
+
+def GenerateBMG_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version):
+    """Generate mixed-precision GEMM kernels for BMG/Xe2 architecture using DPAS."""
+    layout_list = [
+        [[LayoutType.RowMajor, 16], [LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8]],
+        [[LayoutType.RowMajor, 16], [LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 8]],
+        [[LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8]],
+        [[LayoutType.ColumnMajor, 16], [LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 8]],
+    ]
+
+    # Mixed precision: INT8 x FP16 -> FP32
+    math_instructions = [
+        MathInstruction(
+            [8, 16, 32],
+            DataType.s8, DataType.f16, DataType.f32,
+            OpcodeClass.TensorOp,
+            MathOperation.multiply_add),
+    ]
+
+    min_cc = 20
+    max_cc = 20
+
+    for math_inst in math_instructions:
+        tile_descriptions = [
+            TileDescription([256, 256, 64],
+                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([128, 256, 64],
+                0, [4, 8, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+            TileDescription([256, 128, 64],
+                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
+        ]
+
+        data_type = {
+            "a_type": math_inst.element_a,
+            "b_type": math_inst.element_b,
+            "c_type": math_inst.element_accumulator,
+            "d_type": math_inst.element_accumulator,
+            "acc_type": math_inst.element_accumulator,
+            "epi_type": math_inst.element_accumulator
+        }
+
+        schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
+
+        CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+
+
+def GenerateBMG(manifest, cuda_version):
+    """
+    Generate CUTLASS kernels for BMG (Battlemage/Xe2) architecture.
+    
+    BMG is Intel's Xe2 GPU architecture with compute capability 20.
+    Supports DPAS operations with FP16, BF16, FP8, and INT8 data types.
+    """
+    GenerateBMG_TensorOp_16b_DPAS_gemm(manifest, cuda_version)
+    GenerateBMG_TensorOp_fp8_DPAS_gemm(manifest, cuda_version)
+    GenerateBMG_TensorOp_int8_DPAS_gemm(manifest, cuda_version)
+    GenerateBMG_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version)
+
+###################################################################################################
+
 def numeric_log_level(log_level: str) -> int:
   """
   Converts the string identifier of the log level
@@ -11864,6 +12089,17 @@ if __name__ == "__main__":
   if blackwell_enabled_arch:
     GenerateSM100(manifest, args.cuda_version)
     GenerateSM120(manifest, args.cuda_version)
+
+  # Intel Xe GPU architectures
+  xe_arch_list = ["20", "bmg", "xe2", "intel_gpu_bmg_g21"]
+  xe_enabled_arch = any(arch.lower() in [x.lower() for x in xe_arch_list] for arch in archs)
+  if xe_enabled_arch:
+    GenerateBMG(manifest, args.cuda_version)
+
+  pvc_arch_list = ["12", "pvc", "intel_gpu_pvc"]
+  pvc_enabled_arch = any(arch.lower() in [x.lower() for x in pvc_arch_list] for arch in archs)
+  if pvc_enabled_arch:
+    GeneratePVC(manifest, args.cuda_version)
 
   if 'library' in args.generator_target.split(','):
     manifest.emit(GeneratorTarget.Library)
