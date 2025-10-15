@@ -572,11 +572,9 @@ void launcher(Options& options) {
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16Group<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16Group;
 
-  using EpilogueOp = cute::conditional_t<use_nullptr_c,
-                          cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
-                              ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest, false>,
-                          cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
-                              ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest, true>>;
+  using EpilogueOp = 
+     cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
+       ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest, !use_nullptr_c>>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
