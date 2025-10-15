@@ -211,8 +211,10 @@ class EmitOperationKindLibrary:
   @staticmethod
   def get_arch_prefix(min_cc):
     """Get architecture prefix based on compute capability.
-    Returns 'sm' for CUDA architectures, 'xe' for Intel Xe architectures."""
-    if min_cc >= 200:  # Intel Xe architectures use 200+ range
+    Returns 'sm' for CUDA architectures, 'xe' for Intel Xe architectures.
+    Intel Xe: 12 (PVC), 20 (BMG) - range 12-49 reserved for Intel Xe
+    CUDA: 50+ for CUDA architectures"""
+    if min_cc >= 12 and min_cc < 50:  # Intel Xe architectures use 12-49 range
       return 'xe'
     else:
       return 'sm'
@@ -545,21 +547,33 @@ class Manifest:
       baseline_archs = []
       for arch in self.compute_capabilities_feature_set:
         # Check if this is an Intel Xe target (pvc, bmg, etc.)
-        if any(xe_target in arch.lower() for xe_target in ['pvc', 'bmg', 'intel_gpu']):
+        # Support both string names ('pvc', 'bmg') and numeric values ('12', '20')
+        arch_lower = arch.lower()
+        is_xe_named = any(xe_target in arch_lower for xe_target in ['pvc', 'bmg', 'intel_gpu'])
+        
+        # Also check if it's a numeric Xe architecture (12 or 20)
+        try:
+          arch_num = int(arch.split('a')[0].split('f')[0])
+          is_xe_numeric = arch_num in [12, 20]
+        except (ValueError, AttributeError):
+          arch_num = None
+          is_xe_numeric = False
+        
+        if is_xe_named or is_xe_numeric:
           self.is_xe_target = True
           # Map Intel Xe architectures to numeric identifiers for compatibility
           # PVC (Ponte Vecchio) -> 12
           # BMG (Battlemage/Xe2) -> 20  
-          if 'pvc' in arch.lower():
+          if 'pvc' in arch_lower or arch_num == 12:
             baseline_archs.append(12)
-          elif 'bmg' in arch.lower() or 'xe2' in arch.lower():
+          elif 'bmg' in arch_lower or 'xe2' in arch_lower or arch_num == 20:
             baseline_archs.append(20)
           else:
             # Generic Intel GPU target
             baseline_archs.append(20)
         else:
           # CUDA SM architecture
-          baseline_archs.append(int(arch.split('a')[0].split('f')[0]))
+          baseline_archs.append(arch_num if arch_num is not None else int(arch.split('a')[0].split('f')[0]))
       
       self.compute_capabilities_baseline = sorted(set(baseline_archs))
 
@@ -790,7 +804,8 @@ class Manifest:
         for min_cc in sorted(self.operations[kind].keys()):
           for subclass in sorted(source_files[kind][min_cc].keys()):
             # Use appropriate prefix (sm for CUDA, xe for Intel)
-            arch_prefix = 'xe' if min_cc >= 12 else 'sm'
+            # Intel Xe: 12 (PVC), 20 (BMG) - range 12-49 reserved for Intel Xe
+            arch_prefix = 'xe' if (min_cc >= 12 and min_cc < 50) else 'sm'
             target_text = SubstituteTemplate("""cutlass_add_cutlass_library(
       SUFFIX ${kind}_${arch_prefix}${min_cc}_${subclass}
 """, { 'arch_prefix': arch_prefix, 'min_cc': str(min_cc), 'kind': OperationKindNames[kind], 'subclass': subclass })

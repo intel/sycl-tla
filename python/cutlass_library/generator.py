@@ -11769,12 +11769,22 @@ def GeneratePVC_TensorOp_16b_gemm(manifest, cuda_version):
       CreateGemmUniversal3xOperator(manifest, layouts, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
 
 def GeneratePVC(manifest, cuda_version):
-    GeneratePVC_TensorOp_16b_gemm(manifest, cuda_version)
+    """
+    Generate CUTLASS kernels for PVC (Ponte Vecchio) architecture.
+    
+    PVC is Intel's Xe-HPC GPU architecture with compute capability 12.
+    
+    This is a legacy wrapper that calls GenerateIntelXe with arch=12.
+    """
+    GenerateIntelXe(manifest, cuda_version, arch=12)
 
 ###################################################################################################
 
-def GenerateBMG_TensorOp_16b_DPAS_gemm(manifest, cuda_version):
-    """Generate FP16/BF16 GEMM kernels for BMG/Xe2 architecture using DPAS."""
+def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
+    """Generate FP16/BF16 GEMM kernels for Intel Xe architecture using DPAS.
+    
+    :param min_cc: Architecture number (12 for PVC, 20 for BMG)
+    """
     layout_list = [
         [[LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8]],
         [[LayoutType.RowMajor, 8], [LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 8]],
@@ -11805,8 +11815,7 @@ def GenerateBMG_TensorOp_16b_DPAS_gemm(manifest, cuda_version):
             MathOperation.multiply_add)
     ]
 
-    min_cc = 20
-    max_cc = 20
+    max_cc = min_cc
 
     for math_inst in math_instructions:
         tile_descriptions = [
@@ -11836,8 +11845,11 @@ def GenerateBMG_TensorOp_16b_DPAS_gemm(manifest, cuda_version):
         CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
 
 
-def GenerateBMG_TensorOp_fp8_DPAS_gemm(manifest, cuda_version):
-    """Generate FP8 (E4M3/E5M2) GEMM kernels for BMG/Xe2 architecture using DPAS."""
+def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
+    """Generate FP8 (E4M3/E5M2) GEMM kernels for Intel Xe architecture using DPAS.
+    
+    :param min_cc: Architecture number (12 for PVC, 20 for BMG)
+    """
     layout_list = [
         [[LayoutType.RowMajor, 16], [LayoutType.RowMajor, 16], [LayoutType.RowMajor, 8]],
         [[LayoutType.RowMajor, 16], [LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 8]],
@@ -11845,7 +11857,7 @@ def GenerateBMG_TensorOp_fp8_DPAS_gemm(manifest, cuda_version):
         [[LayoutType.ColumnMajor, 16], [LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 8]],
     ]
 
-    # FP8 math instructions for BMG
+    # FP8 math instructions for Intel Xe
     math_instructions = [
         MathInstruction(
             [8, 16, 32],
@@ -11864,8 +11876,7 @@ def GenerateBMG_TensorOp_fp8_DPAS_gemm(manifest, cuda_version):
             MathOperation.multiply_add),
     ]
 
-    min_cc = 20
-    max_cc = 20
+    max_cc = min_cc
 
     for math_inst in math_instructions:
         tile_descriptions = [
@@ -11893,8 +11904,11 @@ def GenerateBMG_TensorOp_fp8_DPAS_gemm(manifest, cuda_version):
         CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
 
 
-def GenerateBMG_TensorOp_int8_DPAS_gemm(manifest, cuda_version):
-    """Generate INT8 GEMM kernels for BMG/Xe2 architecture using DPAS."""
+def GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=20):
+    """Generate INT8 GEMM kernels for Intel Xe architecture using DPAS.
+    
+    :param min_cc: Architecture number (12 for PVC, 20 for BMG)
+    """
     layout_list = [
         [[LayoutType.RowMajor, 16], [LayoutType.RowMajor, 16], [LayoutType.RowMajor, 4]],
         [[LayoutType.RowMajor, 16], [LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 4]],
@@ -11910,8 +11924,7 @@ def GenerateBMG_TensorOp_int8_DPAS_gemm(manifest, cuda_version):
             MathOperation.multiply_add),
     ]
 
-    min_cc = 20
-    max_cc = 20
+    max_cc = min_cc
 
     for math_inst in math_instructions:
         tile_descriptions = [
@@ -11939,8 +11952,11 @@ def GenerateBMG_TensorOp_int8_DPAS_gemm(manifest, cuda_version):
         CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
 
 
-def GenerateBMG_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version):
-    """Generate mixed-precision GEMM kernels for BMG/Xe2 architecture using DPAS."""
+def GenerateXe_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version, min_cc=20):
+    """Generate mixed-precision GEMM kernels for Intel Xe architecture using DPAS.
+    
+    :param min_cc: Architecture number (12 for PVC, 20 for BMG)
+    """
     layout_list = [
         [[LayoutType.RowMajor, 16], [LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8]],
         [[LayoutType.RowMajor, 16], [LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 8]],
@@ -11957,8 +11973,7 @@ def GenerateBMG_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version):
             MathOperation.multiply_add),
     ]
 
-    min_cc = 20
-    max_cc = 20
+    max_cc = min_cc
 
     for math_inst in math_instructions:
         tile_descriptions = [
@@ -11990,11 +12005,31 @@ def GenerateBMG(manifest, cuda_version):
     
     BMG is Intel's Xe2 GPU architecture with compute capability 20.
     Supports DPAS operations with FP16, BF16, FP8, and INT8 data types.
+    
+    This is a legacy wrapper that calls GenerateIntelXe with arch=20.
     """
-    GenerateBMG_TensorOp_16b_DPAS_gemm(manifest, cuda_version)
-    GenerateBMG_TensorOp_fp8_DPAS_gemm(manifest, cuda_version)
-    GenerateBMG_TensorOp_int8_DPAS_gemm(manifest, cuda_version)
-    GenerateBMG_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version)
+    GenerateIntelXe(manifest, cuda_version, arch=20)
+
+def GenerateIntelXe(manifest, cuda_version, arch=20):
+    """
+    Unified generator for Intel Xe GPU architectures.
+    
+    Supports both PVC (arch 12) and BMG (arch 20) with the same generation code.
+    The operations are identical, only the architecture number differs.
+    
+    :param manifest: Manifest object to add operations to
+    :param cuda_version: CUDA version string (used for compatibility)
+    :param arch: Architecture number (12 for PVC, 20 for BMG)
+    """
+    if arch not in [12, 20]:
+        raise ValueError(f"Unsupported Intel Xe architecture: {arch}. Supported: 12 (PVC), 20 (BMG)")
+    
+    # All Intel Xe architectures use the same generation functions
+    # Only the min_cc (architecture number) differs
+    GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=arch)
+    GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
+    GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
+    GenerateXe_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version, min_cc=arch)
 
 ###################################################################################################
 
@@ -12090,16 +12125,20 @@ if __name__ == "__main__":
     GenerateSM100(manifest, args.cuda_version)
     GenerateSM120(manifest, args.cuda_version)
 
-  # Intel Xe GPU architectures
+  # Intel Xe GPU architectures - unified handling for PVC and BMG
+  # Both architectures share the same generation code, just different arch numbers
+  
+  # Check for BMG (architecture 20)
   xe_arch_list = ["20", "bmg", "xe2", "intel_gpu_bmg_g21"]
   xe_enabled_arch = any(arch.lower() in [x.lower() for x in xe_arch_list] for arch in archs)
   if xe_enabled_arch:
-    GenerateBMG(manifest, args.cuda_version)
+    GenerateIntelXe(manifest, args.cuda_version, arch=20)
 
+  # Check for PVC (architecture 12)
   pvc_arch_list = ["12", "pvc", "intel_gpu_pvc"]
   pvc_enabled_arch = any(arch.lower() in [x.lower() for x in pvc_arch_list] for arch in archs)
   if pvc_enabled_arch:
-    GeneratePVC(manifest, args.cuda_version)
+    GenerateIntelXe(manifest, args.cuda_version, arch=12)
 
   if 'library' in args.generator_target.split(','):
     manifest.emit(GeneratorTarget.Library)
