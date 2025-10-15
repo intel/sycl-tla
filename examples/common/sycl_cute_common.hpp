@@ -94,6 +94,22 @@ zero_fill(InTensor &X)
     X(i) = T(0);
 }
 
+template <typename T>
+void
+random_fill(std::vector<T> &X) {
+
+  for (int i = 0; i < X.size(); i++)
+    X[i] = random_value<T>();
+}
+
+template <typename T>
+void
+zero_fill(std::vector<T> &X) {
+  for (int i = 0; i < X.size(); i++)
+    X[i] = T(0);
+}
+
+
 // Pack sub-byte types in a gmem tensor.
 // On input, the backing array holds one sub-byte value per byte.
 // On exit, the backing array contains packed values.
