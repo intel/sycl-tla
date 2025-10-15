@@ -274,7 +274,7 @@ template <class Gemm> struct ExampleRunner {
       );
 
       // Wait for kernel to finish
-      syclcompat::wait();
+      compat::wait();
 
       // Check if output from CUTLASS kernel and reference kernel are equal or
       // not
@@ -509,14 +509,14 @@ template <class Gemm> struct ExampleRunner {
     // Run the GEMM
     CUTLASS_CHECK(gemm_op.run());
 
-    syclcompat::wait();
+    compat::wait();
     initialize(options);
     // Verify that the result is correct
     bool passed = verify(options);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
     if (!passed)
       return cutlass::Status::kErrorInternal;
-    syclcompat::wait();
+    compat::wait();
     arguments = args_from_options(options, hw_info, A_ptr, B_ptr, D_ptr, gemm_n, gemm_k);
     CUTLASS_CHECK(gemm_op.can_implement(arguments));
 
@@ -528,7 +528,7 @@ template <class Gemm> struct ExampleRunner {
       for (int iter = 0; iter < options.iterations; ++iter) {
         CUTLASS_CHECK(gemm_op.run());
       }
-      syclcompat::wait();
+      compat::wait();
 
       float cute_time = timer.seconds() * 1000;
       double cute_average_time = double(cute_time) / double(options.iterations);
@@ -718,3 +718,4 @@ int main(int argc, const char **argv) {
 
   return 0;
 }
+
