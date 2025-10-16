@@ -30,7 +30,7 @@
 # Function to check IGC version
 function(check_igc_version)
     execute_process(
-        COMMAND bash -c "dpkg -l | grep igc | grep 'intel-igc-core' | awk '{print $3}' | cut -d'.' -f1,2"
+        COMMAND bash -c "dpkg -l | grep -E 'intel-igc-(core|opencl)(-[0-9]+)?' | awk '{print $3}' | cut -d'.' -f1,2 | head -1"
         OUTPUT_VARIABLE IGC_VER
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
@@ -39,17 +39,25 @@ function(check_igc_version)
     # TEMPORARY: Force lower version for testing
     # set(IGC_VER "2.11")  # Change this to test different versions
 
+    message(STATUS "Found IGC version: ${IGC_VER}")
+
     if(IGC_VER)
         string(REPLACE "." ";" VER_LIST ${IGC_VER})
         list(GET VER_LIST 0 MAJOR)
         list(GET VER_LIST 1 MINOR)
         set(IGC_VERSION_MAJOR ${MAJOR} PARENT_SCOPE)
         set(IGC_VERSION_MINOR ${MINOR} PARENT_SCOPE)
-        set(IGC_SUFFICIENT $<VERSION_GREATER_EQUAL:${IGC_VER},2.18> PARENT_SCOPE)
+        
+        if(IGC_VER VERSION_GREATER_EQUAL "2.18")
+            set(IGC_SUFFICIENT TRUE PARENT_SCOPE)
+        else()
+            set(IGC_SUFFICIENT FALSE PARENT_SCOPE)
+        endif()
     else()
         set(IGC_VERSION_MAJOR 0 PARENT_SCOPE)
         set(IGC_VERSION_MINOR 0 PARENT_SCOPE)
         set(IGC_SUFFICIENT FALSE PARENT_SCOPE)
+        message(WARNING "No IGC packages found")
     endif()
 endfunction()
 
