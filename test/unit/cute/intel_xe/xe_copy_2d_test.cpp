@@ -28,8 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
-// Check IGC version requirement
-#if (IGC_VERSION_MAJOR >= 2 && IGC_VERSION_MINOR >= 18)
 
 #include "cutlass/detail/layout.hpp"
 
@@ -48,6 +46,8 @@ using namespace cutlass;
 using namespace compat::experimental;
 
 #define SUBGROUP_SIZE (16)
+
+#if (IGC_VERSION_MAJOR >= 2 && IGC_VERSION_MINOR >= 18)
 
 // Kernel name for unique identification
 template<class SrcTensor, class DstTensor> 
@@ -286,8 +286,7 @@ TEST(PVC_CuTe_Xe, XE_COPY_2D_char) {
 #include "cutlass_unit_test.h"
 
 TEST(PVC_CuTe_Xe, XE_COPY_2D_SKIPPED) {
-  GTEST_SKIP() << "XE_COPY_2D tests require IGC version 2.18 or higher. "
-               << "Current version: " << IGC_VERSION_MAJOR << "." << IGC_VERSION_MINOR;
+  GTEST_SKIP() << "XE_COPY_2D tests require IGC version 2.18 or higher. skipped";
 }
 
-#endif // IGC version check
+#endif
