@@ -341,19 +341,18 @@ public:
       auto q_group_size = num_heads_q / num_heads_kv;
       auto kv_head_coord = q_head_coord / q_group_size;
 
-      // According to the mha_fwd API, descale tensors are shaped (b, h_k)
-      // So, we index with [batch_coord * num_heads_kv + kv_head_coord]
-      // However, the provided runner seems to only use (b * h)
-      // Using the logic from get_updated_copies, which indexes by head only
+      // Descale tensors are shaped (batch size * # heads)
+      // Each head has a seperate scale factor
+      // Q, K, V tensors have seperate scaling factors
       const float q_scale_val = params.mainloop.ptr_q_scale == nullptr
                                     ? 1.f
-                                    : params.mainloop.ptr_q_scale[0];
+                                    : params.mainloop.ptr_q_scale[batch_coord * num_heads_q + q_head_coord];
       const float k_scale_val = params.mainloop.ptr_k_scale == nullptr
                                     ? 1.f
-                                    : params.mainloop.ptr_k_scale[0];
+                                    : params.mainloop.ptr_k_scale[batch_coord * num_heads_kv + kv_head_coord];
       const float v_scale_val = params.mainloop.ptr_v_scale == nullptr
                                     ? 1.f
-                                    : params.mainloop.ptr_v_scale[0];
+                                    : params.mainloop.ptr_v_scale[batch_coord * num_heads_kv + kv_head_coord];
 
       Tensor mQ_mkl = cute::get_xe_tensor(
           make_shape(seq_len_qo, head_size_qk, 1)); //(m,k,l)

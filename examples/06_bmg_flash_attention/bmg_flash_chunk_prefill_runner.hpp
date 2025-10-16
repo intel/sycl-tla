@@ -72,15 +72,15 @@ struct Options {
   int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations, window_left, window_right;
   float softmax_scale;
 
-  // Add scale factors to options
-  float q_scale;
-  float k_scale;
-  float v_scale;
+  // Add scale factors to options, now per-batch, per-head
+  std::vector<std::vector<float>> q_scale;
+  std::vector<std::vector<float>> k_scale;
+  std::vector<std::vector<float>> v_scale;
 
   Options()
       : help(false), error(false), is_causal(false), is_local_mask(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
         seq_len_kv(512), seq_len_kv_cache(512), page_size(128), head_size_vo(128), iterations(100), window_left(-1), window_right(-1), softmax_scale(1.f),
-        q_scale(1.f), k_scale(1.f), v_scale(1.f), scheduler("Individual") {}
+        scheduler("Individual") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -114,9 +114,27 @@ struct Options {
     cmd.get_cmd_line_argument("iterations", iterations, 100);
 
     // Add command line parsing for scale factors
-    cmd.get_cmd_line_argument("q_scale", q_scale, 1.0f);
-    cmd.get_cmd_line_argument("k_scale", k_scale, 1.0f);
-    cmd.get_cmd_line_argument("v_scale", v_scale, 1.0f);
+    float q_scale_val = 1.0f, k_scale_val = 1.0f, v_scale_val = 1.0f;
+    bool q_scale_provided = cmd.check_cmd_line_flag("q_scale");
+    bool k_scale_provided = cmd.check_cmd_line_flag("k_scale");
+    bool v_scale_provided = cmd.check_cmd_line_flag("v_scale");
+
+    cmd.get_cmd_line_argument("q_scale", q_scale_val, 1.0f);
+    cmd.get_cmd_line_argument("k_scale", k_scale_val, 1.0f);
+    cmd.get_cmd_line_argument("v_scale", v_scale_val, 1.0f);
+
+    // If scale vectors are uninitialized or have the wrong size, resize and assign.
+    // This allows pre-setting them with specific defaults before calling parse.
+    if (q_scale_provided || q_scale.size() != batch || (batch > 0 && q_scale[0].size() != num_heads_q)) {
+        q_scale.assign(batch, std::vector<float>(num_heads_q, q_scale_val));
+    }
+    if (k_scale_provided || k_scale.size() != batch || (batch > 0 && k_scale[0].size() != num_heads_kv)) {
+        k_scale.assign(batch, std::vector<float>(num_heads_kv, k_scale_val));
+    }
+    if (v_scale_provided || v_scale.size() != batch || (batch > 0 && v_scale[0].size() != num_heads_kv)) {
+        v_scale.assign(batch, std::vector<float>(num_heads_kv, v_scale_val));
+    }
+
 
     if (cmd.check_cmd_line_flag("use_paged_kv")) {
         use_paged_kv = true;
@@ -239,7 +257,8 @@ template <class FMHAChunkPrefillKernel, bool isVarLen> struct ExampleRunner {
   //
 
 template <typename SrcType, typename DstType, typename Encoding>
-void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num_elements, float scale) {
+void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num_elements,
+                          const float* scales, int batch, int64_t seq_len, int64_t num_heads, int64_t head_size) {
     sycl::queue queue = compat::get_default_queue();
     int64_t num_threads = 256;
     int64_t num_blocks = ceil_div(num_elements, num_threads);
@@ -251,6 +270,17 @@ void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num
         cgh.parallel_for(sycl::nd_range<1>(num_blocks * num_threads, num_threads), [=](sycl::nd_item<1> item) {
             int64_t idx = item.get_global_id(0);
             if (idx < num_elements) {
+                // Use the appropriate scale for this element based on its head
+                // Assuming tensor layout is [seq_len, num_heads, head_size]
+                int64_t element_offset = idx;
+                int64_t head_size_offset = element_offset % head_size;
+                element_offset /= head_size;
+                int64_t head_offset = element_offset % num_heads;
+                int64_t seq_offset = element_offset / num_heads;
+
+                // Get the correct scale for this head
+                float scale = scales[batch * num_heads + head_offset];
+
                 // Create tensors with the correct types for convert_and_descale
                 auto src_tensor = make_tensor(src_ptr + idx, make_shape(1));
                 auto dst_tensor = make_tensor(dst_ptr + idx, make_shape(1));
@@ -262,11 +292,6 @@ void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num
 
 bool verify(ProblemShapeType problem_size, Options options) {
     std::vector<ElementOutput> host_O(block_ref_O.size());
-
-    // Use scale values from options for verification
-    float h_scale_q = options.q_scale;
-    float h_scale_k = options.k_scale;
-    float h_scale_v = options.v_scale;
 
     auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,6,7>(problem_size);
     int seq_len_qo, seq_len_kv, seq_len_kv_cache;
@@ -390,19 +415,22 @@ bool verify(ProblemShapeType problem_size, Options options) {
       if constexpr (is_fp8_v<ElementQ>) {
           block_Q_ref.reset(seq_len_qo * num_heads_q * head_size_qk);
           run_conversion_kernel<ElementQ, RefElement, ElementQ>(
-              q_ptr_orig, block_Q_ref.get(), block_Q_ref.size(), h_scale_q);
+              q_ptr_orig, block_Q_ref.get(), block_Q_ref.size(),
+              block_q_scale.get(), b, seq_len_qo, num_heads_q, head_size_qk);
           q_ptr = block_Q_ref.get();
       }
       if constexpr (is_fp8_v<ElementK>) {
           block_K_ref.reset(seq_len_kv_total * num_heads_kv * head_size_qk);
           run_conversion_kernel<ElementK, RefElement, ElementK>(
-              k_ptr_orig, block_K_ref.get(), block_K_ref.size(), h_scale_k);
+              k_ptr_orig, block_K_ref.get(), block_K_ref.size(),
+              block_k_scale.get(), b, seq_len_kv_total, num_heads_kv, head_size_qk);
           k_ptr = block_K_ref.get();
       }
       if constexpr (is_fp8_v<ElementV>) {
           block_V_ref.reset(seq_len_kv_total * num_heads_kv * head_size_vo);
           run_conversion_kernel<ElementV, RefElement, ElementV>(
-              v_ptr_orig, block_V_ref.get(), block_V_ref.size(), h_scale_v);
+              v_ptr_orig, block_V_ref.get(), block_V_ref.size(),
+              block_v_scale.get(), b, seq_len_kv_total, num_heads_kv, head_size_vo);
           v_ptr = block_V_ref.get();
       }
       compat::wait();
@@ -681,14 +709,26 @@ bool verify(ProblemShapeType problem_size, Options options) {
 
     // Initialize scale tensors
     if constexpr (is_fp8_v<ElementQ>) {
-        size_t scale_tensor_size = batch * num_heads_q;
-        std::vector<float> q_scale_host(scale_tensor_size, options.q_scale);
-        std::vector<float> k_scale_host(scale_tensor_size, options.k_scale);
-        std::vector<float> v_scale_host(scale_tensor_size, options.v_scale);
+        // Flatten the 2D host vector to a 1D host vector for copying to the device
+        std::vector<float> q_scale_host, k_scale_host, v_scale_host;
+        q_scale_host.reserve(options.q_scale.size() * (options.q_scale.empty() ? 0 : options.q_scale[0].size()));
+        for (const auto& batch_scales : options.q_scale) {
+            q_scale_host.insert(q_scale_host.end(), batch_scales.begin(), batch_scales.end());
+        }
 
-        block_q_scale.reset(scale_tensor_size);
-        block_k_scale.reset(scale_tensor_size);
-        block_v_scale.reset(scale_tensor_size);
+        k_scale_host.reserve(options.k_scale.size() * (options.k_scale.empty() ? 0 : options.k_scale[0].size()));
+        for (const auto& batch_scales : options.k_scale) {
+            k_scale_host.insert(k_scale_host.end(), batch_scales.begin(), batch_scales.end());
+        }
+
+        v_scale_host.reserve(options.v_scale.size() * (options.v_scale.empty() ? 0 : options.v_scale[0].size()));
+        for (const auto& batch_scales : options.v_scale) {
+            v_scale_host.insert(v_scale_host.end(), batch_scales.begin(), batch_scales.end());
+        }
+
+        block_q_scale.reset(q_scale_host.size());
+        block_k_scale.reset(k_scale_host.size());
+        block_v_scale.reset(v_scale_host.size());
 
         block_q_scale.copy_from_host(q_scale_host.data());
         block_k_scale.copy_from_host(k_scale_host.data());

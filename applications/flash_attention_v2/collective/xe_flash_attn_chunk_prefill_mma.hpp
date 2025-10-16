@@ -276,6 +276,8 @@ struct FlashChunkPrefillMma<
                   args.window_right};
   }
 
+  // FP8 Q and FP8 K tensors are converted to BF16 tensors using descale factors
+  // GEMM is computed in BF16 precision (FP8 not supported in BMG)
   template <class FragQccum, class TensorQ, class TensorK, class FragSrc>
   CUTLASS_DEVICE void mmaQK(FragQccum &accum, TensorQ gQ, TensorK gK,
                             FragSrc const &frag_src, int const &k_tile_count,
@@ -341,7 +343,7 @@ struct FlashChunkPrefillMma<
           copy(tCrK, tCrK_fp16);
         }
 
-        // Now, gemm is called on the BF16 tensors
+        // GEMM is computed on the BF16 tensors
         cute::gemm(tiled_mma, accum, tCrQ_fp16, tCrK_fp16, frag_src);
       } else {
         // BF16 path
@@ -388,6 +390,9 @@ struct FlashChunkPrefillMma<
           return make_tensor(make_rmem_ptr<To_type>(&frag), tensor.layout());
   }
 
+  // FP8 V tensor is converted to BF16 tensor using descale factor
+  // P tensor (softmax output) is in FP32 precision (converted to BF16)
+  // GEMM is computed in BF16 precision (FP8 not supported in BMG)
   template <int tile_count, class FragQccum, class FragS, class TensorV,
             class FragSrc>
   CUTLASS_DEVICE void mmaPV(FragQccum &accum, FragS const &tSr, TensorV gV,

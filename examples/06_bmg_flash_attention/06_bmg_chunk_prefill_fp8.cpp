@@ -53,10 +53,23 @@ int main(int argc, const char **argv) {
   //
 
   Options options;
-  // Set default scale values for this test if not provided on command line
-  options.q_scale = 1.5f;
-  options.k_scale = 2.5f;
-  options.v_scale = 1.9f;
+
+  // Pre-parse command line to get batch and head counts for sizing the default vectors.
+  cutlass::CommandLine cmd(argc, argv);
+  int batch = 32;
+  int num_heads_q = 16;
+  int num_heads_kv = 0;
+  cmd.get_cmd_line_argument("batch", batch, 32);
+  cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
+  cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
+
+  // Set default scale values for this specific FP8 test using the correct 2D vector shapes.
+  options.q_scale.assign(batch, std::vector<float>(num_heads_q, 1.5f));
+  options.k_scale.assign(batch, std::vector<float>(num_heads_kv, 2.5f));
+  options.v_scale.assign(batch, std::vector<float>(num_heads_kv, 1.9f));
+
+  // Now, parse all arguments. The defaults we just set will be preserved unless
+  // the user has provided their own scale values via the command line.
   options.parse(argc, argv);
 
   if (options.help) {
