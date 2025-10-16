@@ -1480,8 +1480,8 @@ class EmitGemmConfigurationLibrary:
     
     # Determine file extension based on architecture
     # Intel Xe architectures (12=PVC, 20=BMG) use .cpp, CUDA uses .cu
-    # Check if operation_path contains /12/, /20/, sm12, or sm20
-    is_xe_arch = any(marker in operation_path for marker in ['/12/', '\\12\\', 'sm12', '/20/', '\\20\\', 'sm20'])
+    # Check if operation_path contains /12/, /20/, xe2, or xe20
+    is_xe_arch = any(marker in operation_path for marker in ['/12/', '\\12\\', 'xe12', '/20/', '\\20\\', 'xe20'])
     file_extension = "cpp" if is_xe_arch else "cu"
     self.configuration_path = os.path.join(operation_path, "%s.%s" % (configuration_name, file_extension)).replace('\\', '/')
 

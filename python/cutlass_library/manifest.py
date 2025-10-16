@@ -187,7 +187,7 @@ class EmitOperationKindLibrary:
   For Intel Xe targets, uses xe{min_cc} prefix instead of sm{min_cc}.
   The min_cc variable here indicates the minimum GPU architecture version
   that the things to be initialized require.
-  For example, min_cc=90 indicates sm90 for CUDA, min_cc=200 indicates Xe2/BMG for Intel.
+  For example, min_cc=90 indicates sm90 for CUDA, min_cc=20 indicates Xe2/BMG for Intel.
 
   That file declares several functions in namespace cutlass::library.
   The functions all have this form,

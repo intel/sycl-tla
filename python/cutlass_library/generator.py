@@ -12154,9 +12154,9 @@ if __name__ == "__main__":
   # Both architectures share the same generation code, just different arch numbers
   
   # Check for BMG (architecture 20)
-  xe_arch_list = ["20", "bmg", "xe2", "intel_gpu_bmg_g21"]
-  xe_enabled_arch = any(arch.lower() in [x.lower() for x in xe_arch_list] for arch in archs)
-  if xe_enabled_arch:
+  bmg_arch_list = ["20", "bmg", "xe2", "intel_gpu_bmg_g21"]
+  bmg_enabled_arch = any(arch.lower() in [x.lower() for x in bmg_arch_list] for arch in archs)
+  if bmg_enabled_arch:
     GenerateIntelXe(manifest, args.cuda_version, arch=20)
 
   # Check for PVC (architecture 12)
