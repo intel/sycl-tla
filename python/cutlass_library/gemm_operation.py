@@ -47,8 +47,10 @@ try:
   if hasattr(builtins, "CUTLASS_IGNORE_PACKAGE") and CUTLASS_IGNORE_PACKAGE == True:
     raise ImportError("Disabling attempt to import cutlass_library")
   from cutlass_library.library import *
+  from cutlass_library.arch_constants import INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN
 except ImportError:
   from library import *
+  from arch_constants import INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,8 +89,8 @@ class GemmOperation:
     self.B = B
     self.C = C
     self.D = D
-    # Intel Xe architectures: PVC (12), BMG/Xe2 (20), ACM/DG2 (21)
-    self.is_xe = self.arch >= 12 and self.arch < 50
+    # Intel Xe architectures: PVC (12), BMG/Xe2 (20), etc.
+    self.is_xe = self.arch >= INTEL_XE_ARCH_MIN and self.arch < INTEL_XE_ARCH_MAX
 
     if is_block_scaled(gemm_kind):
       self.ScaleFactorA = ScaleFactorA
@@ -1480,7 +1482,7 @@ class EmitGemmConfigurationLibrary:
     
     # Determine file extension based on architecture
     # Intel Xe architectures (12=PVC, 20=BMG) use .cpp, CUDA uses .cu
-    # Check if operation_path contains /12/, /20/, xe2, or xe20
+    # Check if operation_path contains /12/, /20/, xe12, or xe20
     is_xe_arch = any(marker in operation_path for marker in ['/12/', '\\12\\', 'xe12', '/20/', '\\20\\', 'xe20'])
     file_extension = "cpp" if is_xe_arch else "cu"
     self.configuration_path = os.path.join(operation_path, "%s.%s" % (configuration_name, file_extension)).replace('\\', '/')
