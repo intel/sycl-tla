@@ -1,4 +1,5 @@
 # Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+# Copyright (C) 2025 Intel Corporation, All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,17 +27,33 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-if(NOT DEFINED IGC_VERSION_MAJOR)
-  set(IGC_VERSION_MAJOR 2)
-endif()
-if(NOT DEFINED IGC_VERSION_MINOR)
-  set(IGC_VERSION_MINOR 18)
-endif()
+# Function to check IGC version
+function(check_igc_version)
+    execute_process(
+        COMMAND bash -c "dpkg -l | grep igc | grep 'intel-igc-core' | awk '{print $3}' | cut -d'.' -f1,2"
+        OUTPUT_VARIABLE IGC_VER
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    
+    # TEMPORARY: Force lower version for testing
+    # set(IGC_VER "2.11")  # Change this to test different versions
 
-add_compile_definitions(
-    IGC_VERSION_MAJOR=${IGC_VERSION_MAJOR}
-    IGC_VERSION_MINOR=${IGC_VERSION_MINOR}
-)
+    if(IGC_VER)
+        string(REPLACE "." ";" VER_LIST ${IGC_VER})
+        list(GET VER_LIST 0 MAJOR)
+        list(GET VER_LIST 1 MINOR)
+        set(IGC_VERSION_MAJOR ${MAJOR} PARENT_SCOPE)
+        set(IGC_VERSION_MINOR ${MINOR} PARENT_SCOPE)
+        set(IGC_SUFFICIENT $<VERSION_GREATER_EQUAL:${IGC_VER},2.18> PARENT_SCOPE)
+    else()
+        set(IGC_VERSION_MAJOR 0 PARENT_SCOPE)
+        set(IGC_VERSION_MINOR 0 PARENT_SCOPE)
+        set(IGC_SUFFICIENT FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
+check_igc_version()
 
 if(SYCL_INTEL_TARGET)
 cutlass_test_unit_add_executable(
@@ -47,10 +64,14 @@ cutlass_test_unit_add_executable(
   copy_scatter.cpp
   mma.cpp
   tiled_mma.cpp
-#if (IGC_VERSION_MAJOR >= 2 && IGC_VERSION_MINOR >= 18)
   xe_copy_2d_test.cpp
-#endif
 )
+
+target_compile_definitions(cutlass_test_unit_cute_intel_xe PRIVATE
+    IGC_VERSION_MAJOR=${IGC_VERSION_MAJOR}
+    IGC_VERSION_MINOR=${IGC_VERSION_MINOR}
+)
+
 else()
 cutlass_test_unit_add_executable(
   cutlass_test_unit_cute_intel_xe
