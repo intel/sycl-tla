@@ -137,6 +137,8 @@ PICK_MMA(half_t, half_t, XE_8x16x16_F16F16F16F16_TT);
 // FP8 types use FP16 accumulation, the conversion happens in the collective
 PICK_MMA(float_e4m3_t, float, XE_8x16x16_F32F16F16F32_TT);
 PICK_MMA(float_e5m2_t, float, XE_8x16x16_F32F16F16F32_TT);
+// INT8 types use INT32 accumulation (note: K=32 for INT8, not K=16)
+PICK_MMA(int8_t, int32_t, XE_8x16x32_S32S8S8S32_TT);
 
 #undef PICK_MMA
 }
@@ -178,8 +180,8 @@ struct CollectiveBuilder<
           "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
-      static_assert(cute::is_any_of_v<ElementAccumulator, float, bfloat16_t, half_t>,
-        "Intel multi-stage pipeline requires ElementC to be of type float, bfloat or half");
+      static_assert(cute::is_any_of_v<ElementAccumulator, float, bfloat16_t, half_t, int32_t>,
+        "Intel multi-stage pipeline requires ElementC to be of type float, bfloat, half, or int32");
 
       static constexpr bool isAtypeBig = cute::sizeof_bits_v<ElementA> > cute::sizeof_bits_v<ElementB>;
       using MMAType = std::conditional_t<isAtypeBig, ElementA, ElementB>;

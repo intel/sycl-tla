@@ -11779,7 +11779,6 @@ def GeneratePVC(manifest, cuda_version):
     GenerateIntelXe(manifest, cuda_version, arch=12)
 
 ###################################################################################################
-
 def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate FP16/BF16 GEMM kernels for Intel Xe architecture using DPAS.
     
@@ -11848,6 +11847,13 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
 def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate FP8 (E4M3/E5M2) GEMM kernels for Intel Xe architecture using DPAS.
     
+    Supported combinations for regular GEMM:
+    - [e4m3, e4m3, fp32]: E4M3 x E4M3 -> FP32 (homogeneous)
+    - [e5m2, e5m2, fp32]: E5M2 x E5M2 -> FP32 (homogeneous)
+    
+    Note: Mixed precision (FP16/BF16 x FP8) requires grouped GEMM infrastructure
+    and is NOT supported for regular library generation.
+    
     :param min_cc: Architecture number (12 for PVC, 20 for BMG)
     """
     layout_list = [
@@ -11858,22 +11864,29 @@ def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     ]
 
     # FP8 math instructions for Intel Xe
+    # Only homogeneous types (same A and B type) for regular GEMM
     math_instructions = [
+        # Homogeneous FP8 (same type for A and B) - SUPPORTED
         MathInstruction(
             [8, 16, 32],
-            DataType.e4m3, DataType.e4m3, DataType.f32,
+            DataType.e4m3, DataType.e4m3, DataType.f32,  # E4M3 x E4M3 -> FP32
             OpcodeClass.TensorOp,
             MathOperation.multiply_add),
         MathInstruction(
             [8, 16, 32],
-            DataType.e5m2, DataType.e5m2, DataType.f32,
+            DataType.e5m2, DataType.e5m2, DataType.f32,  # E5M2 x E5M2 -> FP32
             OpcodeClass.TensorOp,
             MathOperation.multiply_add),
-        MathInstruction(
-            [8, 16, 32],
-            DataType.e4m3, DataType.e5m2, DataType.f32,
-            OpcodeClass.TensorOp,
-            MathOperation.multiply_add),
+        
+        # DISABLED: Mixed precision FP16/BF16 x FP8 requires grouped GEMM
+        # These would need MainloopIntelXeXMX16GroupMixedPrecision which is only
+        # activated when IsGroup=true (KernelXePtrArrayCooperative schedule).
+        # Regular library GEMMs use MainloopIntelXeXMX16 which requires ElementA == ElementB.
+        #
+        # MathInstruction([8, 16, 32], DataType.f16, DataType.e5m2, DataType.f32, ...),
+        # MathInstruction([8, 16, 32], DataType.f16, DataType.e4m3, DataType.f32, ...),
+        # MathInstruction([8, 16, 32], DataType.bf16, DataType.e5m2, DataType.f32, ...),
+        # MathInstruction([8, 16, 32], DataType.bf16, DataType.e4m3, DataType.f32, ...),
     ]
 
     max_cc = min_cc
@@ -11903,9 +11916,10 @@ def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
 
         CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
 
-
 def GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate INT8 GEMM kernels for Intel Xe architecture using DPAS.
+    
+    Supported: [int8, int8, int32] -> INT32 accumulator (hardware requirement)
     
     :param min_cc: Architecture number (12 for PVC, 20 for BMG)
     """
@@ -11916,10 +11930,11 @@ def GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=20):
         [[LayoutType.ColumnMajor, 16], [LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 4]],
     ]
 
+    # INT8 x INT8 -> INT32 (hardware requirement for Intel Xe)
     math_instructions = [
         MathInstruction(
             [8, 16, 32],
-            DataType.s8, DataType.s8, DataType.s32,
+            DataType.s8, DataType.s8, DataType.s32,  # Changed from f32 to s32
             OpcodeClass.TensorOp,
             MathOperation.multiply_add),
     ]
@@ -11955,20 +11970,22 @@ def GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=20):
 def GenerateXe_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate mixed-precision GEMM kernels for Intel Xe architecture using DPAS.
     
+    Supported: [fp16, int4, fp32] -> FP16 x INT4 with FP32 accumulator
+    
     :param min_cc: Architecture number (12 for PVC, 20 for BMG)
     """
     layout_list = [
-        [[LayoutType.RowMajor, 16], [LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8]],
-        [[LayoutType.RowMajor, 16], [LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 8]],
-        [[LayoutType.ColumnMajor, 16], [LayoutType.RowMajor, 8], [LayoutType.RowMajor, 8]],
-        [[LayoutType.ColumnMajor, 16], [LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 8]],
+        [[LayoutType.RowMajor, 8], [LayoutType.RowMajor, 32], [LayoutType.RowMajor, 8]],
+        [[LayoutType.RowMajor, 8], [LayoutType.ColumnMajor, 32], [LayoutType.RowMajor, 8]],
+        [[LayoutType.ColumnMajor, 8], [LayoutType.RowMajor, 32], [LayoutType.RowMajor, 8]],
+        [[LayoutType.ColumnMajor, 8], [LayoutType.ColumnMajor, 32], [LayoutType.RowMajor, 8]],
     ]
 
-    # Mixed precision: INT8 x FP16 -> FP32
+    # Mixed precision: FP16 x INT4 -> FP32 (hardware requirement for Intel Xe)
     math_instructions = [
         MathInstruction(
             [8, 16, 32],
-            DataType.s8, DataType.f16, DataType.f32,
+            DataType.f16, DataType.s4, DataType.f32,  # Changed from [s8, f16, f32] to [f16, s4, f32]
             OpcodeClass.TensorOp,
             MathOperation.multiply_add),
     ]
@@ -12017,6 +12034,12 @@ def GenerateIntelXe(manifest, cuda_version, arch=20):
     Supports both PVC (arch 12) and BMG (arch 20) with the same generation code.
     The operations are identical, only the architecture number differs.
     
+    Supported data types:
+    - FP16/BF16: [fp16/bf16, fp16/bf16, fp32]
+    - INT8: [int8, int8, int32]
+    - FP8: [fp8, fp8, fp32] (E4M3 or E5M2, same types only)
+    - Mixed: [fp16, int4, fp32]
+    
     :param manifest: Manifest object to add operations to
     :param cuda_version: CUDA version string (used for compatibility)
     :param arch: Architecture number (12 for PVC, 20 for BMG)
@@ -12029,7 +12052,9 @@ def GenerateIntelXe(manifest, cuda_version, arch=20):
     GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=arch)
     GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
     GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
-    GenerateXe_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version, min_cc=arch)
+    # DISABLED: Mixed precision (FP16 x INT4) requires grouped GEMM infrastructure
+    # Regular library generation uses MainloopIntelXeXMX16 which requires ElementA == ElementB
+    # GenerateXe_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version, min_cc=arch)
 
 ###################################################################################################
 
