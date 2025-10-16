@@ -416,9 +416,11 @@ TEST(PVC_CuTe_Xe, MMA_DPAS_TF32_1x16) {
 
 #else
 
-// Add fallback test to show DPAS tests are skipped
-TEST(PVC_CuTe_Xe, MMA_DPAS_SKIPPED) {
-  GTEST_SKIP() << "MMA_DPAS tests require IGC version 2.18 or higher. "
-               << "Current version: " << IGC_VERSION_MAJOR << "." << IGC_VERSION_MINOR;
+// For the fallback case
+#include "cutlass_unit_test.h"
+
+TEST(PVC_CuTe_Xe, MMA_DPAS_TESTS) {
+  GTEST_SKIP() << "MMA DPAS tests require IGC version 2.18 or higher. skipped";
 }
+
 #endif
