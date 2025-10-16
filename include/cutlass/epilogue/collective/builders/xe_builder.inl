@@ -211,4 +211,110 @@ template <
             CopyOpR2S_
         >;
     };
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Xe12 (PVC) Epilogue CollectiveBuilder - forwards to IntelXe
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <
+  class TileShape_MNK,
+  class EpilogueTileType,
+  class ElementAccumulator,
+  class ElementCompute,
+  class ElementC,
+  class GmemLayoutTagC,
+  int AlignmentC,
+  class ElementD,
+  class GmemLayoutTagD,
+  int AlignmentD,
+  class EpilogueScheduleType,
+  class FusionOpOrCallbacks
+  >
+struct CollectiveBuilder<
+  arch::Xe12,
+  arch::OpClassTensorOp,
+  TileShape_MNK,
+  Shape<_1, _1, _1>,
+  EpilogueTileType,
+  ElementAccumulator,
+  ElementCompute,
+  ElementC,
+  GmemLayoutTagC,
+  AlignmentC,
+  ElementD,
+  GmemLayoutTagD,
+  AlignmentD,
+  EpilogueScheduleType,
+  FusionOpOrCallbacks
+  > : CollectiveBuilder<
+      arch::IntelXe,  // Forward to IntelXe
+      arch::OpClassTensorOp,
+      TileShape_MNK,
+      Shape<_1, _1, _1>,
+      EpilogueTileType,
+      ElementAccumulator,
+      ElementCompute,
+      ElementC,
+      GmemLayoutTagC,
+      AlignmentC,
+      ElementD,
+      GmemLayoutTagD,
+      AlignmentD,
+      EpilogueScheduleType,
+      FusionOpOrCallbacks
+  > {};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Xe20 (BMG) Epilogue CollectiveBuilder - forwards to IntelXe
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <
+  class TileShape_MNK,
+  class EpilogueTileType,
+  class ElementAccumulator,
+  class ElementCompute,
+  class ElementC,
+  class GmemLayoutTagC,
+  int AlignmentC,
+  class ElementD,
+  class GmemLayoutTagD,
+  int AlignmentD,
+  class EpilogueScheduleType,
+  class FusionOpOrCallbacks
+  >
+struct CollectiveBuilder<
+  arch::Xe20,
+  arch::OpClassTensorOp,
+  TileShape_MNK,
+  Shape<_1, _1, _1>,
+  EpilogueTileType,
+  ElementAccumulator,
+  ElementCompute,
+  ElementC,
+  GmemLayoutTagC,
+  AlignmentC,
+  ElementD,
+  GmemLayoutTagD,
+  AlignmentD,
+  EpilogueScheduleType,
+  FusionOpOrCallbacks
+  > : CollectiveBuilder<
+      arch::IntelXe,  // Forward to IntelXe
+      arch::OpClassTensorOp,
+      TileShape_MNK,
+      Shape<_1, _1, _1>,
+      EpilogueTileType,
+      ElementAccumulator,
+      ElementCompute,
+      ElementC,
+      GmemLayoutTagC,
+      AlignmentC,
+      ElementD,
+      GmemLayoutTagD,
+      AlignmentD,
+      EpilogueScheduleType,
+      FusionOpOrCallbacks
+  > {};
+
 } // namespace cutlass::epilogue::collective
+

@@ -441,13 +441,18 @@ public:
 
     uint32_t threads_per_block = Operator::GemmKernel::MaxThreadsPerBlock;
     void const* kernel_ptr = (void*)(device_kernel<typename Operator::GemmKernel>);
+#if !defined(CUTLASS_ENABLE_SYCL)
     args->max_active_clusters = cutlass::KernelHardwareInfo::query_device_max_active_clusters(
       cluster_dims,
       threads_per_block,
       kernel_ptr);
+#else
+    // For SYCL, set a default value
+    args->max_active_clusters = 1;
+#endif
 
     if (args->max_active_clusters == 0) {
-      std::cerr << "Max Active Clusters could not be queried. " 
+      std::cerr << "Max Active Clusters could not be queried. "
                 << "Falling back to heuristics mode (static cluster shape) or preferred cluster mode.\n";
     }
 

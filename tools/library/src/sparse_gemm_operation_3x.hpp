@@ -34,6 +34,9 @@
 
 #pragma once
 
+// Sparse GEMM operations are CUDA-only (not supported in SYCL)
+#if !defined(CUTLASS_ENABLE_SYCL)
+
 #include "cutlass/cutlass.h"
 #include "cutlass/detail/collective.hpp"
 #include "cutlass/array.h"
@@ -500,5 +503,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace cutlass::library
+
+#endif // !defined(CUTLASS_ENABLE_SYCL)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
