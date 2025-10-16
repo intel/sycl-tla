@@ -402,9 +402,51 @@ public:
       auto mainloop_params = CollectiveMainloop::get_updated_copies(
           params.mainloop, params.problem_shape, sequence_length_shape,
           batch_coord, q_head_coord);
+      if(cute::thread(0,0)){
+        #define PRINT(x) print(#x ": "); print(x); print("\n");
+        PRINT(blk_m_coord);
+        PRINT(blk_n_coord);
+        PRINT(batch_coord);
+        PRINT(q_head_coord);
+        PRINT(seq_coord);
+        PRINT(seq_len_qo);
+        PRINT(seq_len_kv);
+        PRINT(seq_len_kv_cache);
+        PRINT(seq_len);
+        PRINT(kv_splits);
+        PRINT(kv_splits_cache);
+        PRINT(mQ_mkl);
+        PRINT(mK_nkl);
+        PRINT(mV_nkl);
+        PRINT(mK_cache_nkl);
+        PRINT(mV_cache_nkl);
+        PRINT(mCosQ_mkl);
+        PRINT(mSinQ_mkl);
+        PRINT(mCosK_nkl);
+        PRINT(mSinK_nkl);
+        PRINT(mQ_mk);
+        PRINT(mK_nk);
+        PRINT(mV_nk);
+        PRINT(mK_cache_nk);
+        PRINT(mV_cache_nk);
+        PRINT(mCosQ_mk);
+        PRINT(mSinQ_mk);  
+        PRINT(gQ);
+        PRINT(gK);
+        PRINT(gV);
+        PRINT(gK_cache);
+        PRINT(gV_cache);
+        PRINT(gCosQ);
+        PRINT(gSinQ);
+        PRINT(gCosK);
+        PRINT(gSinK);
         
+      }
       // currently RoPE is not supported for fp8.
     if constexpr (rope_enabled && !is_fp8_v<ElementQ>) {
+      if(cute::thread(0,0)){
+        print("inside rope in kernel\n");
+      }
       int block_idx = static_cast<int>(BlockIdxX());
       int block_idy = static_cast<int>(BlockIdxY());
       int block_idz = static_cast<int>(BlockIdxZ());
@@ -426,7 +468,7 @@ public:
       // then apply RoPE on Q, K accordingly
       auto [coord_q_x, coord_q_y, coord_q_z] = *gQ.data();
       auto [coord_k_x, coord_k_y, coord_k_z] = *gK.data();
-      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = params.problem_shape;
+      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = params.problem_shape;
       
       int offset_q = seq_len_qo*head_size_qk*coord_q_z + head_size_qk*coord_q_x + coord_q_y; // row major
       int offset_k = seq_len_kv*head_size_qk*coord_k_z + head_size_qk*coord_k_x + coord_k_y; // row major
@@ -468,7 +510,7 @@ public:
       // need to consider the case when there are multiple blocks in y direction
       // each block in y direction will handle a different set of K
       // so need to adjust the base pointer of K accordingly.
-      if(grid_dimy == 4){
+      if(grid_dimx == 4){
         if (block_id%4==1){
           offset_k += QK_BLK_N*QK_BLK_K*gK_dim3;
         } else if (block_id%4==2){
@@ -485,7 +527,7 @@ public:
           cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
           new_offset_k += 4*QK_BLK_N*QK_BLK_K*gK_dim3;
         }
-      } else if (grid_dimy ==2){
+      } else if (grid_dimx ==2){
         if (block_id%2==1){
           offset_k += QK_BLK_N*QK_BLK_K*gK_dim3;
         }
@@ -504,6 +546,9 @@ public:
         
       }
       barrier_wait(2);
+      if(cute::thread(0,0)){
+        print("after rope\n");
+      }
     }
 
       // we limit the horisontal size to two subgroup, the empirical resutls

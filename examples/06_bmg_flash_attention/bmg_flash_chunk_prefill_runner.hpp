@@ -43,6 +43,7 @@
 
 #include <cute/tensor.hpp>
 #include <random>
+#include <cmath>
 
 #include "helper.h"
 #include "cutlass/util/command_line.h"
@@ -53,6 +54,10 @@
 
 using namespace cute;
 
+// Helper to check for FP8 types
+template <class T>
+constexpr bool is_fp8_v = std::is_same_v<T, cutlass::float_e4m3_t> || std::is_same_v<T, cutlass::float_e5m2_t>;
+
 // Command line options parsing
 struct Options {
 
@@ -62,13 +67,14 @@ struct Options {
   bool is_local_mask;
   bool varlen = false;
   bool use_paged_kv = false;
+  bool use_rope = true;
   std::string scheduler;
 
   int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations, window_left, window_right;
   float softmax_scale;
 
   Options()
-      : help(false), error(false), is_causal(false), is_local_mask(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
+      : help(false), error(false), is_causal(false), is_local_mask(false), varlen(false), use_paged_kv(false), use_rope(true), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
         seq_len_kv(512), seq_len_kv_cache(512), page_size(128), head_size_vo(128), iterations(100), window_left(-1), window_right(-1), softmax_scale(1.f), scheduler("Individual") {}
 
   // Parses the command line
@@ -95,12 +101,13 @@ struct Options {
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 512);
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
-    cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 512);
+    cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("window_left", window_left, -1);
     cmd.get_cmd_line_argument("window_right", window_right, -1);
-    cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("iterations", iterations, 1);
+    cmd.get_cmd_line_argument("use_rope", use_rope, true);
 
     if (cmd.check_cmd_line_flag("use_paged_kv")) {
         use_paged_kv = true;
@@ -128,6 +135,7 @@ struct Options {
         << "Options:\n\n"
         << "  --help                      If specified, displays this usage statement\n\n"
         << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
+        << "  --use_rope                  Enable Rotary Positional Encoding\n"
         << "  --window_left=<int>         Set the left borders of the window, If set to -1, calculate all seq_len\n"
         << "  --window_right=<int>        Set the left borders of the window, If set to -1, calculate all seq_len\n"
         << "  --varlen                    Enable variable sequence length\n"
@@ -174,6 +182,7 @@ template <class FMHAChunkPrefillKernel, bool isVarLen> struct ExampleRunner {
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
   using ProblemShapeType = typename FMHAChunkPrefillKernel::ProblemShape;
+  using CollectiveMainloop = typename FMHAChunkPrefillKernel::CollectiveMainloop;
 
   //
   // Data members
@@ -195,6 +204,12 @@ template <class FMHAChunkPrefillKernel, bool isVarLen> struct ExampleRunner {
   cutlass::DeviceAllocation<ElementV> block_V_cache;
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
+  cutlass::DeviceAllocation<ElementQ> block_ref_Q;
+  cutlass::DeviceAllocation<ElementK> block_ref_K;
+  // RoPE support
+  cutlass::DeviceAllocation<ElementQ> block_cos;
+  cutlass::DeviceAllocation<ElementQ> block_sin;
+  static constexpr bool rope_enabled = CollectiveMainloop::rope_enabled;
 
   std::vector<int> cumulative_seqlen_q;
   std::vector<int> cumulative_seqlen_kv;
@@ -226,6 +241,10 @@ bool verify(ProblemShapeType problem_size, Options options) {
     }
 
     auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,6,7>(problem_size);
+    auto seq_len_qo1 = get<3>(problem_size);
+    auto seq_len_kv1 = get<4>(problem_size);
+    auto seq_len_kv_cache1 = get<5>(problem_size);
+
     int seq_len_qo, seq_len_kv, seq_len_kv_cache;
 
     int offset_q = 0;
@@ -251,14 +270,22 @@ bool verify(ProblemShapeType problem_size, Options options) {
       ElementQ* q_ptr;
       ElementK* k_ptr;
       ElementV* v_ptr;
-      q_ptr = block_Q.get() + offset_q;
+      q_ptr = block_ref_Q.get() + offset_q;
       int seq_len_kv_total = seq_len_kv_cache + seq_len_kv;
+
       cutlass::DeviceAllocation<ElementK> block_K_concat;
       cutlass::DeviceAllocation<ElementV> block_V_concat;
 
       if (seq_len_kv_cache > 0) { // use_kv_cache
+      if(cute::thread(0,0)){
+        print("Using KV Cache\n");
+      }
         if (options.use_paged_kv) {
+          if(cute::thread(0,0)){
+            print("Using paged KV Cache\n");
+          }
           int num_pages = paged_kv_cache.page_table.size();
+          int num_pages_per_seq = paged_kv_cache.num_pages_per_seq.size();
           std::vector<int> host_page_table(paged_kv_cache.page_table.size());
           std::vector<int> host_num_pages_per_seq(paged_kv_cache.num_pages_per_seq.size());
           compat::memcpy<int>(host_page_table.data(), paged_kv_cache.page_table.get(), paged_kv_cache.page_table.size());
@@ -269,6 +296,13 @@ bool verify(ProblemShapeType problem_size, Options options) {
           block_K_concat.reset((seq_len_kv + curr_batch_pages * paged_kv_cache.page_size) * num_heads_kv * head_size_qk);
           block_V_concat.reset((seq_len_kv + curr_batch_pages * paged_kv_cache.page_size) * num_heads_kv * head_size_vo);
           
+          if(cute::thread(0,0)){
+            #define PRINT(x) print(#x ": "); print(x); print("\n");
+            PRINT(num_pages);
+            PRINT(curr_batch_pages);
+            PRINT(batch_offset);
+            PRINT(num_pages_per_seq);
+          }
           for (int p = 0; p < curr_batch_pages; p++) {
             int page_idx = host_page_table[batch_offset + p];
             // copy the page from KV cache to the concatenated buffer
@@ -298,6 +332,9 @@ bool verify(ProblemShapeType problem_size, Options options) {
           }
           compat::wait();
         } else {
+          if(cute::thread(0,0)){
+            print("no paged KV Cache\n");
+          }
           block_K_concat.reset(seq_len_kv_total * num_heads_kv * head_size_qk);
           block_V_concat.reset(seq_len_kv_total * num_heads_kv * head_size_vo);
           // Concatenate K_cache and K
@@ -327,7 +364,10 @@ bool verify(ProblemShapeType problem_size, Options options) {
       k_ptr = block_K_concat.get();
       v_ptr = block_V_concat.get();
       } else {
-        k_ptr = block_K.get() + offset_k;
+        if(cute::thread(0,0)){
+          print("Not using KV Cache\n");
+        }
+        k_ptr = block_ref_K.get() + offset_k;
         v_ptr = block_V.get() + offset_v;
       }
       
@@ -480,6 +520,27 @@ bool verify(ProblemShapeType problem_size, Options options) {
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
                                                                           block_O.size(), ElementOutput{0.5}, ElementOutput{0.5});
+     
+    if (cute::thread(0,0)){
+      std::vector<ElementQ> host_output(batch * num_heads_q * seq_len_qo * head_size_vo);
+      std::vector<ElementQ> host_output_ref(batch * num_heads_q * seq_len_qo * head_size_vo);
+      // host_output.clear();
+      // host_output_ref.clear();
+      compat::wait();
+      compat::memcpy<ElementOutput>(host_output.data(), block_O.get(), block_O.size());
+      compat::memcpy<ElementOutput>(host_output_ref.data(), block_ref_O.get(), block_ref_O.size());
+      compat::wait();
+      print("Verifying results...\n");
+      for (size_t i = 0; i < 1000; i++) {
+        print("actual : ");
+        print(host_output[i]);
+        print(", expected : ");
+        print(host_output_ref[i]);
+        print(", diff : ");
+        print(host_output[i] - host_output_ref[i]);
+        print("\n");
+      }
+    }
 
     return passed;
   }
@@ -560,6 +621,115 @@ bool verify(ProblemShapeType problem_size, Options options) {
     return cute::make_tuple(problem_size_for_init, problem_size_for_launch);
   }
 
+  // Initialize RoPE cos/sin tensors
+  void initialize_rope_tensors(int max_seq_len, int head_dim, int num_heads, int batch) {
+    std::vector<ElementQ> cos_vals(max_seq_len * head_dim * num_heads * batch);
+    std::vector<ElementQ> sin_vals(max_seq_len * head_dim * num_heads * batch);
+
+    // fill data row-major wise
+    for(int b = 0; b< num_heads*batch; b++){
+      for (int pos = 0; pos < max_seq_len; ++pos) {
+        for (int i = 0; i < head_dim/2 ; ++i) {
+          int idx = b*max_seq_len*head_dim + pos*head_dim + 2*i;
+          int idx1 = b*max_seq_len*head_dim + pos*head_dim + 2*i + 1;
+          float theta = static_cast<float>(pos / std::pow(10000.0f, (2.0f * i) / head_dim));
+          // float theta = i;
+          cos_vals[idx] = static_cast<ElementQ>(std::cos(theta));
+          cos_vals[idx1] = static_cast<ElementQ>(std::cos(theta));   
+          sin_vals[idx] = static_cast<ElementQ>(std::sin(theta));
+          sin_vals[idx1] = static_cast<ElementQ>(std::sin(theta));
+        }
+      }
+    }
+    compat::memcpy(block_cos.get(), cos_vals.data(), cos_vals.size() * sizeof(ElementQ));
+    compat::memcpy(block_sin.get(), sin_vals.data(), sin_vals.size() * sizeof(ElementQ));
+    compat::wait();
+  }
+
+  /// Apply RoPE transformation to a tensor
+  // template<typename Element>
+  // void apply_rope_on_host(std::vector<Element>& tensor, int seq_len, int head_dim,
+  //                      const std::vector<ElementQ>& cos_vals, const std::vector<ElementQ>& sin_vals) {
+  //     for (int seq_pos = 0; seq_pos < seq_len; ++seq_pos) {
+  //       for (int dim_pair = 0; dim_pair < head_dim/2; ++dim_pair) {
+  //         int cos_sin_idx = seq_pos * head_dim + dim_pair * 2;
+  //         auto cos_val = static_cast<float>(cos_vals[cos_sin_idx]);
+  //         auto sin_val = static_cast<float>(sin_vals[cos_sin_idx]);
+
+  //         int x_idx = seq_pos * head_dim + dim_pair * 2;
+  //         int y_idx = seq_pos * head_dim + dim_pair * 2 + 1;
+
+  //         auto x = static_cast<float>(tensor[x_idx]);
+  //         auto y = static_cast<float>(tensor[y_idx]);
+
+  //         auto new_x = x * cos_val - y * sin_val;
+  //         auto new_y = x * sin_val + y * cos_val;
+
+  //         tensor[x_idx] = static_cast<Element>(new_x);
+  //         tensor[y_idx] = static_cast<Element>(new_y);
+  //       }
+        
+  //     }
+  // }
+  /// Apply RoPE transformation to a tensor
+  template<typename ElementQ, typename ElementK>
+  void calculate_rope_on_host(int batch, int num_heads_q, int num_heads_kv, int seq_len_qo, int seq_len_kv, int head_size_qk) {
+      std::vector<ElementQ> ref_q(batch * num_heads_q * seq_len_qo * head_size_qk);
+      std::vector<ElementK> ref_k(batch * num_heads_kv * seq_len_kv * head_size_qk);
+      compat::memcpy<ElementQ>(ref_q.data(), block_ref_Q.get(), block_ref_Q.size());
+      compat::memcpy<ElementK>(ref_k.data(), block_ref_K.get(), block_ref_K.size());
+      compat::wait();
+
+      int max_seq_len = std::max(seq_len_qo, seq_len_kv);
+      std::vector<ElementQ> cos_vals(max_seq_len * head_size_qk * num_heads_q * batch);
+      std::vector<ElementQ> sin_vals(max_seq_len * head_size_qk * num_heads_q * batch);
+      compat::memcpy<ElementQ>(cos_vals.data(), block_cos.get(), block_cos.size());
+      compat::memcpy<ElementQ>(sin_vals.data(), block_sin.get(), block_sin.size());
+      compat::wait();
+
+      // compute Q with RoPE
+      for(int b = 0; b< batch * num_heads_q; b++){
+        for (int pos = 0; pos < seq_len_qo; ++pos) {
+          for (int i = 0; i < head_size_qk/2 ; ++i) {
+            int idx = b*seq_len_qo*head_size_qk + pos*head_size_qk + 2*i;
+            int idx1 = b*seq_len_qo*head_size_qk + pos*head_size_qk + 2*i + 1;
+            float cos_val = static_cast<float>(cos_vals[idx]);
+            float sin_val = static_cast<float>(sin_vals[idx]);
+            float x = static_cast<float>(ref_q[idx]);
+            float y = static_cast<float>(ref_q[idx1]);
+            float new_x = x * cos_val - y * sin_val;
+            float new_y = x * sin_val + y * cos_val;
+            ref_q[idx] = static_cast<ElementQ>(new_x);
+            ref_q[idx1] = static_cast<ElementQ>(new_y);
+          }
+        }
+      }
+      
+      // compute K with RoPE
+      for(int b = 0; b< batch * num_heads_kv; b++){
+        for (int pos = 0; pos < seq_len_kv; ++pos) {
+          for (int i = 0; i < head_size_qk/2 ; ++i) {
+            int idx = b*seq_len_kv*head_size_qk + pos*head_size_qk + 2*i;
+            int idx1 = b*seq_len_kv*head_size_qk + pos*head_size_qk + 2*i + 1;
+            float cos_val = static_cast<float>(cos_vals[idx]);
+            float sin_val = static_cast<float>(sin_vals[idx]);
+            float x = static_cast<float>(ref_k[idx]);
+            float y = static_cast<float>(ref_k[idx1]);
+            float new_x = x * cos_val - y * sin_val;
+            float new_y = x * sin_val + y * cos_val;
+            ref_k[idx] = static_cast<ElementQ>(new_x);
+            ref_k[idx1] = static_cast<ElementQ>(new_y);
+          }
+        }
+      }
+      
+      
+      compat::memcpy(block_ref_Q.get(), ref_q.data(), ref_q.size() * sizeof(ElementQ));
+      compat::memcpy(block_ref_K.get(), ref_k.data(), ref_k.size() * sizeof(ElementQ));
+
+      compat::wait();
+  }
+
   /// Initialize operands to be used in the GEMM and reference GEMM
   ProblemShapeType initialize(const Options &options) {
     auto problem_shape_in =
@@ -591,6 +761,17 @@ bool verify(ProblemShapeType problem_size, Options options) {
     block_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
     block_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
     block_V.reset(batch * num_heads_kv * seq_len_kv * head_size_vo);
+    block_ref_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
+    block_ref_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
+
+    // Initialize RoPE tensors if enabled
+    if constexpr (rope_enabled) {
+      // int max_seq_len = std::max(seq_len_qo, seq_len_kv);
+      // block_cos.reset(max_seq_len * head_size_qk * num_heads_q * batch);
+      // block_sin.reset(max_seq_len * head_size_qk * num_heads_q * batch);
+      // initialize_rope_tensors(max_seq_len, head_size_qk, num_heads_q, batch);
+    }
+
     if (!options.use_paged_kv) {
       block_K_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_qk);
       block_V_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_vo);
@@ -637,6 +818,11 @@ bool verify(ProblemShapeType problem_size, Options options) {
     initialize_block(block_V, seed + 2021);
     initialize_block(block_K_cache, seed + 2024);
     initialize_block(block_V_cache, seed + 2025);
+    compat::wait();
+    // reference copy of Q and K for verification
+    compat::memcpy<ElementQ>(block_ref_Q.get(), block_Q.get(), batch * num_heads_q * seq_len_qo * head_size_qk);
+    compat::memcpy<ElementK>(block_ref_K.get(), block_K.get(), batch * num_heads_kv * seq_len_kv * head_size_qk);
+    compat::wait();
 
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
@@ -670,7 +856,16 @@ bool verify(ProblemShapeType problem_size, Options options) {
       get<4>(problem_shape).cumulative_length = device_cumulative_seqlen_kv.get();
       
     }
-
+    if constexpr (rope_enabled) {
+      // initialize and calculate RoPE tensors
+      int max_seq_len = std::max(seq_len_qo, seq_len_kv);
+      block_cos.reset(max_seq_len * head_size_qk * num_heads_q * batch);
+      block_sin.reset(max_seq_len * head_size_qk * num_heads_q * batch);
+      initialize_rope_tensors(max_seq_len, head_size_qk, num_heads_q, batch);
+      compat::wait();
+      calculate_rope_on_host<ElementQ, ElementK>(batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk);
+      compat::wait();
+    }
     return problem_shape;
   }
 
@@ -723,7 +918,9 @@ bool verify(ProblemShapeType problem_size, Options options) {
         options.use_paged_kv ? paged_kv_cache.page_size : 0,
         options.use_paged_kv ? paged_kv_cache.num_pages_per_seq.get() : nullptr,
         options.window_left,
-        options.window_right},
+        options.window_right,
+        rope_enabled ? block_cos.get() : nullptr,
+        rope_enabled ? block_sin.get() : nullptr},
         {options.softmax_scale},
         {block_O.get(), stride_O},
         hw_info};
@@ -803,6 +1000,7 @@ template <bool Causal,
           typename TileShapeOutput, 
           typename SubgroupLayout, 
           int PipelineStages,
+          bool rope_enabled = false, 
           typename ElementInputQ = bfloat16_t, 
           typename ElementInputKV = bfloat16_t, 
           typename MMAOperation = XE_8x16x16_F32BF16BF16F32_TT,
@@ -816,6 +1014,46 @@ template <bool Causal,
 
   template <bool isVarLen, bool PagedKV, class Scheduler>
   static int run(const Options &options) {
+    //  << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
+    //     << "  --use_rope                  Enable Rotary Positional Encoding\n"
+    //     << "  --window_left=<int>         Set the left borders of the window, If set to -1, calculate all seq_len\n"
+    //     << "  --window_right=<int>        Set the left borders of the window, If set to -1, calculate all seq_len\n"
+    //     << "  --varlen                    Enable variable sequence length\n"
+    //     << "  --scheduler=\"Value\"       Choose between Individual or Persistent Scheduler\n"
+    //     << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
+    //     << "  --num_heads_q=<int>         Sets the Number of Attention Heads for Key-Value pair the Multi-Head Self Attention module\n"
+    //     << "  --num_heads_kv=<int>        Sets the Number of Attention Heads for Query input in the Multi-Head Self Attention module\n"
+    //     << "  --seq_len_qo=<int>          Sets the Sequence length of the Query input in Multi-Head Self Attention module\n"
+    //     << "  --seq_len_kv=<int>          Sets the Sequence length of the Key-Value pair in Multi-Head Self Attention module\n"
+    //     << "  --seq_len_kv_cache=<int>    Sets the Sequence length of the cached Key-Value pair in Multi-Head Self Attention module\n"
+    //     << "  --use_paged_kv              Use paged (non-contiguous) KV cache. Default is contiguous KV Cache\n"
+    //     << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
+    //     << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
+    //     << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
+    //     << "  --iterations=<int>          Iterations\n\n";
+    if(cute::thread(0,0)){
+      print("Running Flash Attention Chunk Prefill with the following options:\n");
+        #define PRINT(x) print(#x ": "); print(x); print("\n");
+        PRINT(options.is_causal);
+        PRINT(options.is_local_mask);
+        PRINT(options.window_left);
+        PRINT(options.window_right);
+        PRINT(rope_enabled);
+        PRINT(isVarLen);
+        PRINT(options.batch);
+        PRINT(options.num_heads_q);
+        PRINT(options.num_heads_kv);
+        PRINT(options.seq_len_qo);
+        PRINT(options.seq_len_kv);
+        PRINT(options.seq_len_kv_cache);
+        PRINT(PagedKV);
+        PRINT(options.page_size);
+        PRINT(options.head_size_qk);
+        PRINT(options.head_size_vo);
+        PRINT(options.iterations);
+        PRINT(options.softmax_scale);
+        #undef PRINT
+      }
     //
     // Run examples
     //
@@ -845,7 +1083,8 @@ template <bool Causal,
         GmemTiledCopyV, // V,
         Causal,
         LocalMask,
-        PagedKV>;
+        PagedKV,
+        rope_enabled>;
 
     using FMHAChunkPrefillKernel = cutlass::flash_attention::kernel::FMHAPrefillChunk<ProblemShapeType, CollectiveMainloop,
                                                                      CollectiveSoftmaxEpilogue, CollectiveEpilogue, Scheduler>;

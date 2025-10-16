@@ -110,6 +110,8 @@ int main(int argc, const char **argv) {
     FMHAConfig<true, false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options);
   } else if (options.is_local_mask) {
     FMHAConfig<false, true, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options);
+  } else if (options.use_rope) {
+    FMHAConfig<false, false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages, true>::run(options);
   } else {
     FMHAConfig<false, false, ShapeQK, ShapePV, ShapeOutPut, SubgroupLayout, PipelineStages>::run(options);
   }
