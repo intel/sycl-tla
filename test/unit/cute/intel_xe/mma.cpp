@@ -414,4 +414,11 @@ TEST(PVC_CuTe_Xe, MMA_DPAS_TF32_1x16) {
            tfloat32_t, float>(512, 512, 256);
 }
 
+#else
+
+// Add fallback test to show DPAS tests are skipped
+TEST(PVC_CuTe_Xe, MMA_DPAS_SKIPPED) {
+  GTEST_SKIP() << "MMA_DPAS tests require IGC version 2.18 or higher. "
+               << "Current version: " << IGC_VERSION_MAJOR << "." << IGC_VERSION_MINOR;
+}
 #endif
