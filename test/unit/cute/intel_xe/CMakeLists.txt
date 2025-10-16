@@ -47,7 +47,9 @@ cutlass_test_unit_add_executable(
   copy_scatter.cpp
   mma.cpp
   tiled_mma.cpp
-  xe_load_2d_test.cpp
+#if (IGC_VERSION_MAJOR >= 2 && IGC_VERSION_MINOR >= 18)
+  xe_copy_2d_test.cpp
+#endif
 )
 else()
 cutlass_test_unit_add_executable(
