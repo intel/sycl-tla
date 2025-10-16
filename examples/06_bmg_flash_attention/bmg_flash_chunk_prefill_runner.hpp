@@ -72,9 +72,15 @@ struct Options {
   int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations, window_left, window_right;
   float softmax_scale;
 
+  // Add scale factors to options
+  float q_scale;
+  float k_scale;
+  float v_scale;
+
   Options()
       : help(false), error(false), is_causal(false), is_local_mask(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
-        seq_len_kv(512), seq_len_kv_cache(512), page_size(128), head_size_vo(128), iterations(100), window_left(-1), window_right(-1), softmax_scale(1.f), scheduler("Individual") {}
+        seq_len_kv(512), seq_len_kv_cache(512), page_size(128), head_size_vo(128), iterations(100), window_left(-1), window_right(-1), softmax_scale(1.f),
+        q_scale(1.f), k_scale(1.f), v_scale(1.f), scheduler("Individual") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -106,6 +112,11 @@ struct Options {
     cmd.get_cmd_line_argument("window_left", window_left, -1);
     cmd.get_cmd_line_argument("window_right", window_right, -1);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+
+    // Add command line parsing for scale factors
+    cmd.get_cmd_line_argument("q_scale", q_scale, 1.0f);
+    cmd.get_cmd_line_argument("k_scale", k_scale, 1.0f);
+    cmd.get_cmd_line_argument("v_scale", v_scale, 1.0f);
 
     if (cmd.check_cmd_line_flag("use_paged_kv")) {
         use_paged_kv = true;
@@ -147,7 +158,10 @@ struct Options {
         << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
         << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
         << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
-        << "  --iterations=<int>          Iterations\n\n";
+        << "  --iterations=<int>          Iterations\n\n"
+        << "  --q_scale=<float>           FP8 quantization scale for Q\n"
+        << "  --k_scale=<float>           FP8 quantization scale for K\n"
+        << "  --v_scale=<float>           FP8 quantization scale for V\n\n";
 
     return out;
   }
@@ -201,6 +215,11 @@ template <class FMHAChunkPrefillKernel, bool isVarLen> struct ExampleRunner {
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
 
+  // Add device allocations for scale factors
+  cutlass::DeviceAllocation<float> block_q_scale;
+  cutlass::DeviceAllocation<float> block_k_scale;
+  cutlass::DeviceAllocation<float> block_v_scale;
+
   std::vector<int> cumulative_seqlen_q;
   std::vector<int> cumulative_seqlen_kv;
   std::vector<int> cumulative_seqlen_kv_cache;
@@ -241,23 +260,13 @@ void run_conversion_kernel(SrcType* src_ptr_in, DstType* dst_ptr_in, int64_t num
     });
 }
 
-bool verify(ProblemShapeType problem_size, Options options, const float* q_scale, const float* k_scale, const float* v_scale) {
+bool verify(ProblemShapeType problem_size, Options options) {
     std::vector<ElementOutput> host_O(block_ref_O.size());
 
-    float h_scale_q = 1.0f;
-    float h_scale_k = 1.0f;
-    float h_scale_v = 1.0f;
-
-    if (q_scale != nullptr) {
-        compat::memcpy<float>(&h_scale_q, q_scale, 1);
-    }
-    if (k_scale != nullptr) {
-        compat::memcpy<float>(&h_scale_k, k_scale, 1);
-    }
-    if (v_scale != nullptr) {
-        compat::memcpy<float>(&h_scale_v, v_scale, 1);
-    }
-    compat::wait();
+    // Use scale values from options for verification
+    float h_scale_q = options.q_scale;
+    float h_scale_k = options.k_scale;
+    float h_scale_v = options.v_scale;
 
     auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,6,7>(problem_size);
     int seq_len_qo, seq_len_kv, seq_len_kv_cache;
@@ -670,6 +679,22 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
 
+    // Initialize scale tensors
+    if constexpr (is_fp8_v<ElementQ>) {
+        size_t scale_tensor_size = batch * num_heads_q;
+        std::vector<float> q_scale_host(scale_tensor_size, options.q_scale);
+        std::vector<float> k_scale_host(scale_tensor_size, options.k_scale);
+        std::vector<float> v_scale_host(scale_tensor_size, options.v_scale);
+
+        block_q_scale.reset(scale_tensor_size);
+        block_k_scale.reset(scale_tensor_size);
+        block_v_scale.reset(scale_tensor_size);
+
+        block_q_scale.copy_from_host(q_scale_host.data());
+        block_k_scale.copy_from_host(k_scale_host.data());
+        block_v_scale.copy_from_host(v_scale_host.data());
+    }
+
     if (options.use_paged_kv) {
       paged_kv_cache.page_size = options.page_size;
       std::vector<int> num_pages_per_seq{0};
@@ -773,7 +798,7 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
       sycl::ext::oneapi::experimental::sub_group_size<FMHAChunkPrefillKernel::DispatchPolicy::SubgroupSize>
     };
     compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
-    auto event = compat::experimental::launch<cutlass::device_kernel<FMHAChunkPrefillKernel>, FMHAChunkPrefillKernel>(policy, params);
+    auto event = compat::experimental::launch<cutlass::device_kernel<FMHAChunkPrefillKernel>>(policy, params);
 #endif
 
     EventManager::getInstance().addEvent(event);
@@ -781,10 +806,7 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
 
   cutlass::Status run(
       const Options &options,
-      const cutlass::KernelHardwareInfo &hw_info,
-      const float* q_scale,
-      const float* k_scale,
-      const float* v_scale
+      const cutlass::KernelHardwareInfo &hw_info
   ) {
 
     ProblemShapeType problem_size = initialize(options);
@@ -795,9 +817,9 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
         {block_Q.get(), stride_Q,
         block_K.get(), stride_K,
         block_V.get(), stride_V,
-        q_scale,
-        k_scale,
-        v_scale,
+        is_fp8_v<ElementQ> ? block_q_scale.get() : nullptr,
+        is_fp8_v<ElementQ> ? block_k_scale.get() : nullptr,
+        is_fp8_v<ElementQ> ? block_v_scale.get() : nullptr,
         block_K_cache.get(), stride_K_cache,
         block_V_cache.get(), stride_V_cache,
         options.use_paged_kv ? paged_kv_cache.page_table.get() : nullptr,
@@ -832,7 +854,7 @@ bool verify(ProblemShapeType problem_size, Options options, const float* q_scale
     compat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options, q_scale, k_scale, v_scale);
+    bool passed = verify(problem_size, options);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if (!passed) {
@@ -900,10 +922,7 @@ template <
 struct FMHAConfig {
 
   template <bool isVarLen, bool PagedKV, class Scheduler>
-  static int run(const Options &options,
-                 const float* q_scale,
-                 const float* k_scale,
-                 const float* v_scale) {
+  static int run(const Options &options) {
     //
     // Run examples
     //
@@ -940,41 +959,21 @@ struct FMHAConfig {
 
     ExampleRunner<FMHAChunkPrefillKernel, isVarLen> runner;
 
-    CUTLASS_CHECK(runner.run(options, hw_info, q_scale, k_scale, v_scale));
-    // runner.run(options, hw_info, q_scale, k_scale, v_scale);
+    CUTLASS_CHECK(runner.run(options, hw_info));
+    // runner.run(options, hw_info);
     return 0;
   }
 
-  static int run(const Options &options,
-                 const float* q_scale_in = nullptr,
-                 const float* k_scale_in = nullptr,
-                 const float* v_scale_in = nullptr) {
-
-    cutlass::DeviceAllocation<float> q_scale, k_scale, v_scale;
-    q_scale.reset(1);
-    k_scale.reset(1);
-    v_scale.reset(1);
-
-    float h_q_scale = 1.0f;
-    float h_k_scale = 1.0f;
-    float h_v_scale = 1.0f;
-
-    q_scale.copy_from_host(&h_q_scale, 1);
-    k_scale.copy_from_host(&h_k_scale, 1);
-    v_scale.copy_from_host(&h_v_scale, 1);
-
-    const float* q_scale_ptr = q_scale.get();
-    const float* k_scale_ptr = k_scale.get();
-    const float* v_scale_ptr = v_scale.get();
+  static int run(const Options &options) {
 
     if (options.use_paged_kv && !options.varlen) {
-      return run<false, true, cutlass::flash_attention::IndividualScheduler>(options, q_scale_ptr, k_scale_ptr, v_scale_ptr);
+      return run<false, true, cutlass::flash_attention::IndividualScheduler>(options);
     } else if(!options.use_paged_kv && options.varlen) {
-      return run<true, false, cutlass::flash_attention::IndividualScheduler>(options, q_scale_ptr, k_scale_ptr, v_scale_ptr);
+      return run<true, false, cutlass::flash_attention::IndividualScheduler>(options);
     } else if(!options.use_paged_kv && !options.varlen) {
-      return run<false, false, cutlass::flash_attention::IndividualScheduler>(options, q_scale_ptr, k_scale_ptr, v_scale_ptr);
+      return run<false, false, cutlass::flash_attention::IndividualScheduler>(options);
     } else {
-      return run<true, true, cutlass::flash_attention::IndividualScheduler>(options, q_scale_ptr, k_scale_ptr, v_scale_ptr);
+      return run<true, true, cutlass::flash_attention::IndividualScheduler>(options);
     }
   }
 };

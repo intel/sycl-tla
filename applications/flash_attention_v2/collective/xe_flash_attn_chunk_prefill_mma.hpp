@@ -44,7 +44,7 @@
 namespace {
 
 }
-    
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::flash_attention::collective {
@@ -279,7 +279,8 @@ struct FlashChunkPrefillMma<
   template <class FragQccum, class TensorQ, class TensorK, class FragSrc>
   CUTLASS_DEVICE void mmaQK(FragQccum &accum, TensorQ gQ, TensorK gK,
                             FragSrc const &frag_src, int const &k_tile_count,
-                            Params const &params, bool is_KV_cache) {
+                            Params const &params, bool is_KV_cache,
+                            float q_scale, float k_scale) {
 
     auto &gmem_tiled_copy_k =
         is_KV_cache ? params.gmem_tiled_copy_k_cache : params.gmem_tiled_copy_k;
@@ -314,10 +315,6 @@ struct FlashChunkPrefillMma<
     // Retile global tile for copies
     Tensor tQgQ = thr_copy_Q.retile_S(tCgQ);
     Tensor tKgK = thr_copy_K.retile_S(tCgK);
-
-    // Currently, supporting per-tensor scaling
-    float q_scale = params.ptr_q_scale[0];
-    float k_scale = params.ptr_k_scale[0];
 
     //
     // Mainloop
@@ -395,12 +392,10 @@ struct FlashChunkPrefillMma<
             class FragSrc>
   CUTLASS_DEVICE void mmaPV(FragQccum &accum, FragS const &tSr, TensorV gV,
                             FragSrc const &frag_src, Params const &params,
-                            bool is_KV_cache) {
+                            bool is_KV_cache, float v_scale) {
 
     auto &gmem_tiled_copy_v =
         is_KV_cache ? params.gmem_tiled_copy_v_cache : params.gmem_tiled_copy_v;
-
-    float v_scale = params.ptr_v_scale[0];
 
     int thread_idx = static_cast<int>(ThreadIdxX());
     // Instantiate the MMA object
@@ -519,7 +514,7 @@ struct FlashChunkPrefillMma<
                 : num_heads_kv * head_size_qk * seq_len_kv_cache * l_coord + kv_head_coord * head_size_qk;
       offset_v_cache =
           seq_len_kv_cache == 0
-              ? 0 : 
+              ? 0 :
               PagedKV?
                kv_head_coord * head_size_vo
                : num_heads_kv * head_size_vo * seq_len_kv_cache * l_coord + kv_head_coord * head_size_vo;

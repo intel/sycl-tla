@@ -338,6 +338,23 @@ public:
         continue;
       }
 
+      auto q_group_size = num_heads_q / num_heads_kv;
+      auto kv_head_coord = q_head_coord / q_group_size;
+
+      // According to the mha_fwd API, descale tensors are shaped (b, h_k)
+      // So, we index with [batch_coord * num_heads_kv + kv_head_coord]
+      // However, the provided runner seems to only use (b * h)
+      // Using the logic from get_updated_copies, which indexes by head only
+      const float q_scale_val = params.mainloop.ptr_q_scale == nullptr
+                                    ? 1.f
+                                    : params.mainloop.ptr_q_scale[0];
+      const float k_scale_val = params.mainloop.ptr_k_scale == nullptr
+                                    ? 1.f
+                                    : params.mainloop.ptr_k_scale[0];
+      const float v_scale_val = params.mainloop.ptr_v_scale == nullptr
+                                    ? 1.f
+                                    : params.mainloop.ptr_v_scale[0];
+
       Tensor mQ_mkl = cute::get_xe_tensor(
           make_shape(seq_len_qo, head_size_qk, 1)); //(m,k,l)
 
@@ -453,10 +470,6 @@ public:
       clear(out_reg);
       // Perform the collective scoped MMA
       CollectiveMainloop collective_mma;
-
-      // auto q_group_size = num_heads_q / num_heads_kv;
-      // auto kv_head_coord = q_head_coord / q_group_size;
-
       // when causal mask is true. It is not possible to set the scope
       // of the barrier to workgroup level as the number n block is
       // different for each subgroup due to triangular nature of causal based
@@ -474,16 +487,15 @@ public:
                                : gV(_, _, split - kv_splits_cache);
         // 2) Create Tensor S
         Tensor tSr = make_tensor<ElementAccumulator>(
-            Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{}); 
+            Shape<Int<Vec>, Int<FragsM>, Int<FragsN>>{});
         clear(tSr);
         // 3) Perform GEMM S = Q*K
         // Then modify layout to LayoutQ = ((seq_leq_q, group_head_q),
         // head_size_qk, batch* num_heads_q / group_head_q), which can be merged
         // into one gemm for (int i = 0; i < q_group_size; ++i) {
-
         collective_mma.mmaQK(tSr, gQ, gK_, tSr,
                              ceil_div(head_size_qk, QK_BLK_K), mainloop_params,
-                             is_KV_cache);
+                             is_KV_cache, q_scale_val, k_scale_val);
 
         if constexpr (LocalMask) {
           // Sliding windows
@@ -577,8 +589,7 @@ public:
 
         // 5) Perform GEMM O = S*V
         collective_mma.template mmaPV<VSlicer>(out_reg, tSr, gV_, out_reg,
-                                               mainloop_params, is_KV_cache);
-
+                                               mainloop_params, is_KV_cache, v_scale_val);
         // ... prefetch next tile ...
         // Prefetch the next Q tile
         CUTLASS_PRAGMA_UNROLL
@@ -624,8 +635,7 @@ public:
         // 3) Perform GEMM S = Q*K
         collective_mma.mmaQK(tSr, gQ, gK(_, _, kv_splits_new - 1, _), tSr,
                              ceil_div(head_size_qk, QK_BLK_K), mainloop_params,
-                             false);
-
+                             false, q_scale_val, k_scale_val);
         // we only need one block ahead, there is enough gap to prefetch it
         // while doing softmax. because the gap between the two MMA is big,
         // prefetching it the same way as cutlass K matrix does not make sense
@@ -652,10 +662,9 @@ public:
 
         CollectiveSoftmaxEpilogue softmax(params.softmax);
         softmax((kv_splits - 1) == 0, tSr, max_reg, sum_reg, out_reg);
-
         collective_mma.template mmaPV<VSlicer>(out_reg, tSr,
                                                gV(_, _, kv_splits_new - 1),
-                                               out_reg, mainloop_params, false);
+                                               out_reg, mainloop_params, false, v_scale_val);
       }
 
 
