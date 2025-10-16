@@ -50,11 +50,11 @@ using namespace compat::experimental;
 
 // Kernel name for unique identification
 template<class SrcTensor, class DstTensor> 
-class XELoad2DKernelName;
+class XECopy2DKernelName;
 
 // Device kernel for XE_LOAD_2D testing  
 template <class SrcTensor, class DstTensor, int Bits, int Height, int Width>
-void xe_load_2d_kernel(SrcTensor src, DstTensor dst) {
+void xe_copy_2d_kernel(SrcTensor src, DstTensor dst) {
   using namespace cute;
   using Element = typename SrcTensor::value_type;
 
@@ -103,7 +103,7 @@ void xe_load_2d_kernel(SrcTensor src, DstTensor dst) {
 
 // Host test function template
 template <typename Element, int Bits, int Height, int Width, int BlockWidth = Width>
-void test_xe_load_2d() {
+void test_xe_copy_2d() {
   using namespace cute;
   
   // Matrix dimensions - must be compatible with block 2D constraints
@@ -153,8 +153,8 @@ void test_xe_load_2d() {
   auto blockDim = compat::dim3(SUBGROUP_SIZE);
   auto gridDim = compat::dim3(1);
   
-  launch<xe_load_2d_kernel<decltype(tensor_src), decltype(tensor_dst), Bits, Height, Width>,
-         XELoad2DKernelName<decltype(tensor_src), decltype(tensor_dst)>>(
+  launch<xe_copy_2d_kernel<decltype(tensor_src), decltype(tensor_dst), Bits, Height, Width>,
+         XECopy2DKernelName<decltype(tensor_src), decltype(tensor_dst)>>(
     launch_policy{
       gridDim, blockDim,
       kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}
@@ -169,112 +169,112 @@ void test_xe_load_2d() {
     }
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_uint8) {
-  test_xe_load_2d<uint8_t, 8, 2, 64>();
-  test_xe_load_2d<uint8_t, 8, 3, 64>();
-  test_xe_load_2d<uint8_t, 8, 4, 64>();
-  test_xe_load_2d<uint8_t, 8, 5, 64>();
-  test_xe_load_2d<uint8_t, 8, 6, 64>();
-  test_xe_load_2d<uint8_t, 8, 7, 64>();
-  test_xe_load_2d<uint8_t, 8, 8, 64>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_uint8) {
+  test_xe_copy_2d<uint8_t, 8, 2, 64>();
+  test_xe_copy_2d<uint8_t, 8, 3, 64>();
+  test_xe_copy_2d<uint8_t, 8, 4, 64>();
+  test_xe_copy_2d<uint8_t, 8, 5, 64>();
+  test_xe_copy_2d<uint8_t, 8, 6, 64>();
+  test_xe_copy_2d<uint8_t, 8, 7, 64>();
+  test_xe_copy_2d<uint8_t, 8, 8, 64>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_int8) {
-  test_xe_load_2d<int8_t, 8, 2, 64>();
-  test_xe_load_2d<int8_t, 8, 3, 64>();
-  test_xe_load_2d<int8_t, 8, 4, 64>();
-  test_xe_load_2d<int8_t, 8, 5, 64>();
-  test_xe_load_2d<int8_t, 8, 6, 64>();
-  test_xe_load_2d<int8_t, 8, 7, 64>();
-  test_xe_load_2d<int8_t, 8, 8, 64>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_int8) {
+  test_xe_copy_2d<int8_t, 8, 2, 64>();
+  test_xe_copy_2d<int8_t, 8, 3, 64>();
+  test_xe_copy_2d<int8_t, 8, 4, 64>();
+  test_xe_copy_2d<int8_t, 8, 5, 64>();
+  test_xe_copy_2d<int8_t, 8, 6, 64>();
+  test_xe_copy_2d<int8_t, 8, 7, 64>();
+  test_xe_copy_2d<int8_t, 8, 8, 64>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_uint16) {
-  test_xe_load_2d<uint16_t, 16, 2, 32>();
-  test_xe_load_2d<uint16_t, 16, 3, 32>();
-  test_xe_load_2d<uint16_t, 16, 4, 32>();
-  test_xe_load_2d<uint16_t, 16, 5, 32>();
-  test_xe_load_2d<uint16_t, 16, 6, 32>();
-  test_xe_load_2d<uint16_t, 16, 7, 32>();
-  test_xe_load_2d<uint16_t, 16, 8, 32>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_uint16) {
+  test_xe_copy_2d<uint16_t, 16, 2, 32>();
+  test_xe_copy_2d<uint16_t, 16, 3, 32>();
+  test_xe_copy_2d<uint16_t, 16, 4, 32>();
+  test_xe_copy_2d<uint16_t, 16, 5, 32>();
+  test_xe_copy_2d<uint16_t, 16, 6, 32>();
+  test_xe_copy_2d<uint16_t, 16, 7, 32>();
+  test_xe_copy_2d<uint16_t, 16, 8, 32>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_int16) {
-  test_xe_load_2d<int16_t, 16, 2, 32>();
-  test_xe_load_2d<int16_t, 16, 3, 32>();
-  test_xe_load_2d<int16_t, 16, 4, 32>();
-  test_xe_load_2d<int16_t, 16, 5, 32>();
-  test_xe_load_2d<int16_t, 16, 6, 32>();
-  test_xe_load_2d<int16_t, 16, 7, 32>();
-  test_xe_load_2d<int16_t, 16, 8, 32>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_int16) {
+  test_xe_copy_2d<int16_t, 16, 2, 32>();
+  test_xe_copy_2d<int16_t, 16, 3, 32>();
+  test_xe_copy_2d<int16_t, 16, 4, 32>();
+  test_xe_copy_2d<int16_t, 16, 5, 32>();
+  test_xe_copy_2d<int16_t, 16, 6, 32>();
+  test_xe_copy_2d<int16_t, 16, 7, 32>();
+  test_xe_copy_2d<int16_t, 16, 8, 32>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_half) {
-  test_xe_load_2d<half_t, 16, 2, 32>();
-  test_xe_load_2d<half_t, 16, 3, 32>();
-  test_xe_load_2d<half_t, 16, 4, 32>();
-  test_xe_load_2d<half_t, 16, 5, 32>();
-  test_xe_load_2d<half_t, 16, 6, 32>();
-  test_xe_load_2d<half_t, 16, 7, 32>();
-  test_xe_load_2d<half_t, 16, 8, 32>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_half) {
+  test_xe_copy_2d<half_t, 16, 2, 32>();
+  test_xe_copy_2d<half_t, 16, 3, 32>();
+  test_xe_copy_2d<half_t, 16, 4, 32>();
+  test_xe_copy_2d<half_t, 16, 5, 32>();
+  test_xe_copy_2d<half_t, 16, 6, 32>();
+  test_xe_copy_2d<half_t, 16, 7, 32>();
+  test_xe_copy_2d<half_t, 16, 8, 32>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_bfloat16) {
-  test_xe_load_2d<bfloat16_t, 16, 2, 32>();
-  test_xe_load_2d<bfloat16_t, 16, 3, 32>();
-  test_xe_load_2d<bfloat16_t, 16, 4, 32>();
-  test_xe_load_2d<bfloat16_t, 16, 5, 32>();
-  test_xe_load_2d<bfloat16_t, 16, 6, 32>();
-  test_xe_load_2d<bfloat16_t, 16, 7, 32>();
-  test_xe_load_2d<bfloat16_t, 16, 8, 32>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_bfloat16) {
+  test_xe_copy_2d<bfloat16_t, 16, 2, 32>();
+  test_xe_copy_2d<bfloat16_t, 16, 3, 32>();
+  test_xe_copy_2d<bfloat16_t, 16, 4, 32>();
+  test_xe_copy_2d<bfloat16_t, 16, 5, 32>();
+  test_xe_copy_2d<bfloat16_t, 16, 6, 32>();
+  test_xe_copy_2d<bfloat16_t, 16, 7, 32>();
+  test_xe_copy_2d<bfloat16_t, 16, 8, 32>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_uint32) {
-  test_xe_load_2d<uint32_t, 32, 2, 16>();
-  test_xe_load_2d<uint32_t, 32, 3, 16>();
-  test_xe_load_2d<uint32_t, 32, 4, 16>();
-  test_xe_load_2d<uint32_t, 32, 5, 16>();
-  test_xe_load_2d<uint32_t, 32, 6, 16>();
-  test_xe_load_2d<uint32_t, 32, 7, 16>();
-  test_xe_load_2d<uint32_t, 32, 8, 16>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_uint32) {
+  test_xe_copy_2d<uint32_t, 32, 2, 16>();
+  test_xe_copy_2d<uint32_t, 32, 3, 16>();
+  test_xe_copy_2d<uint32_t, 32, 4, 16>();
+  test_xe_copy_2d<uint32_t, 32, 5, 16>();
+  test_xe_copy_2d<uint32_t, 32, 6, 16>();
+  test_xe_copy_2d<uint32_t, 32, 7, 16>();
+  test_xe_copy_2d<uint32_t, 32, 8, 16>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_int32) {
-  test_xe_load_2d<uint32_t, 32, 2, 16>();
-  test_xe_load_2d<uint32_t, 32, 3, 16>();
-  test_xe_load_2d<uint32_t, 32, 4, 16>();
-  test_xe_load_2d<uint32_t, 32, 5, 16>();
-  test_xe_load_2d<uint32_t, 32, 6, 16>();
-  test_xe_load_2d<uint32_t, 32, 7, 16>();
-  test_xe_load_2d<uint32_t, 32, 8, 16>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_int32) {
+  test_xe_copy_2d<uint32_t, 32, 2, 16>();
+  test_xe_copy_2d<uint32_t, 32, 3, 16>();
+  test_xe_copy_2d<uint32_t, 32, 4, 16>();
+  test_xe_copy_2d<uint32_t, 32, 5, 16>();
+  test_xe_copy_2d<uint32_t, 32, 6, 16>();
+  test_xe_copy_2d<uint32_t, 32, 7, 16>();
+  test_xe_copy_2d<uint32_t, 32, 8, 16>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_float) {
-  test_xe_load_2d<float, 32, 2, 16>();
-  test_xe_load_2d<float, 32, 3, 16>();
-  test_xe_load_2d<float, 32, 4, 16>();
-  test_xe_load_2d<float, 32, 5, 16>();
-  test_xe_load_2d<float, 32, 6, 16>();
-  test_xe_load_2d<float, 32, 7, 16>();
-  test_xe_load_2d<float, 32, 8, 16>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_float) {
+  test_xe_copy_2d<float, 32, 2, 16>();
+  test_xe_copy_2d<float, 32, 3, 16>();
+  test_xe_copy_2d<float, 32, 4, 16>();
+  test_xe_copy_2d<float, 32, 5, 16>();
+  test_xe_copy_2d<float, 32, 6, 16>();
+  test_xe_copy_2d<float, 32, 7, 16>();
+  test_xe_copy_2d<float, 32, 8, 16>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_tfloat32) {
-  test_xe_load_2d<tfloat32_t, 32, 2, 16>();
-  test_xe_load_2d<tfloat32_t, 32, 3, 16>();
-  test_xe_load_2d<tfloat32_t, 32, 4, 16>();
-  test_xe_load_2d<tfloat32_t, 32, 5, 16>();
-  test_xe_load_2d<tfloat32_t, 32, 6, 16>();
-  test_xe_load_2d<tfloat32_t, 32, 7, 16>();
-  test_xe_load_2d<tfloat32_t, 32, 8, 16>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_tfloat32) {
+  test_xe_copy_2d<tfloat32_t, 32, 2, 16>();
+  test_xe_copy_2d<tfloat32_t, 32, 3, 16>();
+  test_xe_copy_2d<tfloat32_t, 32, 4, 16>();
+  test_xe_copy_2d<tfloat32_t, 32, 5, 16>();
+  test_xe_copy_2d<tfloat32_t, 32, 6, 16>();
+  test_xe_copy_2d<tfloat32_t, 32, 7, 16>();
+  test_xe_copy_2d<tfloat32_t, 32, 8, 16>();
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_char) {
-  test_xe_load_2d<char, 8, 2, 64>();
-  test_xe_load_2d<char, 8, 3, 64>();
-  test_xe_load_2d<char, 8, 4, 64>();
-  test_xe_load_2d<char, 8, 5, 64>();
-  test_xe_load_2d<char, 8, 6, 64>();
-  test_xe_load_2d<char, 8, 7, 64>();
-  test_xe_load_2d<char, 8, 8, 64>();
+TEST(PVC_CuTe_Xe, XE_COPY_2D_char) {
+  test_xe_copy_2d<char, 8, 2, 64>();
+  test_xe_copy_2d<char, 8, 3, 64>();
+  test_xe_copy_2d<char, 8, 4, 64>();
+  test_xe_copy_2d<char, 8, 5, 64>();
+  test_xe_copy_2d<char, 8, 6, 64>();
+  test_xe_copy_2d<char, 8, 7, 64>();
+  test_xe_copy_2d<char, 8, 8, 64>();
 }
