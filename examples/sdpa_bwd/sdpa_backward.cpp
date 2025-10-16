@@ -903,6 +903,10 @@ mhd_convert_dq(T trait,
     }
 }
 
+template<class...> class mhaodoDeviceName;
+template<class...> class mhabwdDeviceName;
+template<class...> class mhacvtDeviceName;
+
 template<typename T, class ProblemShape, int kBlockM, int kBlockN, int kHeadDim, bool is_bhsd>
 void launch_mha_backward_headdim(ProblemShape problem_shape,
                                  const T *do_d,
@@ -963,9 +967,10 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
         sycl::ext::oneapi::experimental::sub_group_size<trait.SubgroupSize>};
     compat::experimental::launch_policy policy0{dimGrid0, dimBlock0, launch_props0, kernel_props0};
     auto event0 = compat::experimental::launch<
-        mha_dot_do_o<decltype(trait)>>(policy0,
-                                       trait,
-                                       param);
+        mha_dot_do_o<decltype(trait)>,
+        mhaodoDeviceName<decltype(trait)>>(policy0,
+                                           trait,
+                                           param);
     EventManager::getInstance().addEvent(event0);
 
     auto dimGrid1 = compat::dim3(size(1), size(param.num_head_q), size(param.batch));
@@ -981,9 +986,10 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
         sycl::ext::oneapi::experimental::sub_group_size<trait.SubgroupSize>};
     compat::experimental::launch_policy policy1{dimGrid1, dimBlock1, launch_props1, kernel_props1};
     auto event1 = compat::experimental::launch<
-        mha_backward<decltype(trait)>>(policy1,
-                                       trait,
-                                       param);
+        mha_backward<decltype(trait)>,
+        mhabwdDeviceName<decltype(trait)>>(policy1,
+                                           trait,
+                                           param);
     EventManager::getInstance().addEvent(event1);
 
     auto dimGrid2 = compat::dim3(size(M_BLOCK), size(param.num_head_q), size(param.batch));
@@ -995,9 +1001,10 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
         sycl::ext::oneapi::experimental::sub_group_size<trait.SubgroupSize>};
     compat::experimental::launch_policy policy2{dimGrid2, dimBlock2, launch_props2, kernel_props2};
     auto event2 = compat::experimental::launch<
-        mhd_convert_dq<decltype(trait)>>(policy2,
-                                         trait,
-                                         param);
+        mhd_convert_dq<decltype(trait)>,
+        mhacvtDeviceName<decltype(trait)>>(policy2,
+                                           trait,
+                                           param);
     EventManager::getInstance().addEvent(event2);
 }
 
