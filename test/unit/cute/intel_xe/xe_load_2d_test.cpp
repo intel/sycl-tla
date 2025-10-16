@@ -269,7 +269,6 @@ TEST(PVC_CuTe_Xe, XE_LOAD_2D_tfloat32) {
   test_xe_load_2d<tfloat32_t, 32, 8, 16>();
 }
 
-// char tests (8-bit, similar to int8_t/uint8_t)
 TEST(PVC_CuTe_Xe, XE_LOAD_2D_char) {
   test_xe_load_2d<char, 8, 2, 64>();
   test_xe_load_2d<char, 8, 3, 64>();
