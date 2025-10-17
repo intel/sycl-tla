@@ -49,10 +49,12 @@ namespace detail {
   template <
     class ElementD,
     class ElementCompute,
-    class ElementC
+    class ElementC,
+    cutlass::FloatRoundStyle RoundStyle_,
+    bool supportSource_
   >
   struct FusionOpInfo<cutlass::epilogue::fusion::LinearCombination<
-    ElementD, ElementCompute, ElementC, ElementCompute
+    ElementD, ElementCompute, ElementC, ElementCompute, RoundStyle_, supportSource_
   >> {
       constexpr static bool HasBuilder = true;
 
@@ -63,7 +65,7 @@ namespace detail {
         class>
       using FusionCallbacks = cutlass::epilogue::fusion::FusionCallbacks<
         DispatchPolicy,
-        cutlass::epilogue::fusion::LinearCombination<ElementD, ElementCompute, ElementC, ElementCompute>,
+        cutlass::epilogue::fusion::LinearCombination<ElementD, ElementCompute, ElementC, ElementCompute, RoundStyle_, supportSource_>,
         TileShape_MNK,
         EpilogueTile
       >;
