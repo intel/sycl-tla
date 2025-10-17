@@ -70,6 +70,7 @@ struct StaticPersistentScheduler { };
 #if defined (SYCL_INTEL_TARGET)
 #include "cutlass/gemm/kernel/xe_tile_scheduler_streamk.hpp"
 #include "cutlass/gemm/kernel/xe_tile_scheduler_group.hpp"
+#include "cutlass/gemm/kernel/xe_tile_scheduler_moe.hpp"
 #endif
 ////////////////////////////////////////////////////////////////////////////////
 

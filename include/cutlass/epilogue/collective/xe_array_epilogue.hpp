@@ -43,6 +43,7 @@
 #include "cutlass/epilogue/fusion/sm90_visitor_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/xe_visitor_softmax.hpp"
 #include "cutlass/detail/layout.hpp"
+#include "../tools/util/include/cutlass/util/packed_stride.hpp"
 
 #include "cute/tensor.hpp"
 
@@ -114,8 +115,10 @@ public:
   using ElementScalar = typename FusionCallbacks::ElementScalar;
   static constexpr FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest;
 
-  static_assert(cute::is_same_v<typename FusionCallbacks::Operation, 
-                                fusion::LinearCombination<ElementAccumulator, ElementCompute, ElementSource, ElementScalar, RoundStyle>>,
+
+  static_assert(cute::is_any_of_v<typename FusionCallbacks::Operation, 
+                                fusion::LinearCombination<ElementAccumulator, ElementCompute, ElementSource, ElementScalar, RoundStyle, false>,
+                                fusion::LinearCombination<ElementAccumulator, ElementCompute, ElementSource, ElementScalar, RoundStyle, true>>,
   "Only Linear Combination Epilogue is supported for Grouped GEMM at the moment.");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
@@ -139,7 +142,7 @@ public:
                                              Layout<CopyThreadShape>{},
                                              make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{}))));
 private:
-  constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
+  constexpr static bool is_source_supported = not cute::is_void_v<ElementC> && FusionCallbacks::Operation::IsSourceSupported;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
 
 public:
@@ -474,6 +477,42 @@ public:
       }
       return cute::make_tuple(mC_mnl, mD_mnl);
     }
+
+template <typename ProblemShape_MNKL>
+  CUTLASS_DEVICE auto
+  update_tensor_shape_stride(int32_t const &next_group,
+                             ProblemShape_MNKL const &problem_shape_mnkl,
+                             const int32_t *num_rows_per_expert) {
+    auto [M, N, K, L] = problem_shape_mnkl;
+    int32_t cumulative_M = 0;
+    for (int i = 0; i < next_group; i++) {
+      cumulative_M += num_rows_per_expert[i];
+    }
+    M = num_rows_per_expert[next_group];
+
+    TensorC mC_mnl;
+    TensorD mD_mnl;
+    if constexpr (is_source_supported) {
+      ElementC const *ptr_C_curr_batch =
+          reinterpret_cast<ElementC const *>((void*)(params.ptr_C)) +
+          cumulative_M * N;
+      mC_mnl = make_tensor(
+          make_gmem_ptr(ptr_C_curr_batch),
+          make_layout(make_shape(M, N, L), cutlass::make_cute_packed_stride(
+                                               InternalStrideC{}, {M, N, 1})));
+    }
+
+    if constexpr (is_destination_supported) {
+      ElementD *ptr_D_curr_batch =
+          reinterpret_cast<ElementD *>((void*)(params.ptr_D)) +
+          cumulative_M * N;
+      mD_mnl = make_tensor(
+          make_gmem_ptr(ptr_D_curr_batch),
+          make_layout(make_shape(M, N, L), cutlass::make_cute_packed_stride(
+                                               InternalStrideD{}, {M, N, 1})));
+    }
+    return cute::make_tuple(mC_mnl, mD_mnl);
+  }
 
 private:
   Params const& params;
