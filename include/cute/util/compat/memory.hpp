@@ -146,40 +146,6 @@ private:
   size_t _pitch, _x, _y;
 };
 
-namespace experimental {
-#ifdef SYCL_EXT_ONEAPI_BINDLESS_IMAGES
-class image_mem_wrapper;
-namespace detail {
-static sycl::event memcpy(const image_mem_wrapper *src,
-                          const sycl::id<3> &src_id, pitched_data &dest,
-                          const sycl::id<3> &dest_id,
-                          const sycl::range<3> &copy_extend, sycl::queue q);
-static sycl::event memcpy(const pitched_data src, const sycl::id<3> &src_id,
-                          image_mem_wrapper *dest, const sycl::id<3> &dest_id,
-                          const sycl::range<3> &copy_extend, sycl::queue q);
-} // namespace detail
-#endif
-class image_matrix;
-namespace detail {
-static pitched_data to_pitched_data(image_matrix *image);
-}
-
-/// Memory copy parameters for 2D/3D memory data.
-struct memcpy_parameter {
-  struct data_wrapper {
-    pitched_data pitched{};
-    sycl::id<3> pos{};
-#ifdef SYCL_EXT_ONEAPI_BINDLESS_IMAGES
-    experimental::image_mem_wrapper *image_bindless{nullptr};
-#endif
-    image_matrix *image{nullptr};
-  };
-  data_wrapper from{};
-  data_wrapper to{};
-  sycl::range<3> size{};
-};
-} // namespace experimental
-
 namespace detail {
 class mem_mgr {
   mem_mgr() {
@@ -856,56 +822,6 @@ static sycl::accessor<byte_t, 1, accessMode> get_access(const void *ptr,
   }
 }
 
-namespace experimental {
-namespace detail {
-static inline std::vector<sycl::event>
-memcpy(sycl::queue q, const experimental::memcpy_parameter &param) {
-  auto to = param.to.pitched;
-  auto from = param.from.pitched;
-#ifdef SYCL_EXT_ONEAPI_BINDLESS_IMAGES
-  if (param.to.image_bindless != nullptr &&
-      param.from.image_bindless != nullptr) {
-    throw std::runtime_error(
-        "[Compat] memcpy: Unsupported bindless_image API.");
-    // TODO: Need change logic when sycl support image_mem to image_mem copy.
-    std::vector<sycl::event> event_list;
-    compat::detail::host_buffer buf(param.size.size(), q, event_list);
-    to.set_data_ptr(buf.get_ptr());
-    experimental::detail::memcpy(param.from.image_bindless, param.from.pos, to,
-                                 sycl::id<3>(0, 0, 0), param.size, q);
-    from.set_data_ptr(buf.get_ptr());
-    event_list.push_back(experimental::detail::memcpy(
-        from, sycl::id<3>(0, 0, 0), param.to.image_bindless, param.to.pos,
-        param.size, q));
-    return event_list;
-  } else if (param.to.image_bindless != nullptr) {
-    throw std::runtime_error(
-        "[Compat] memcpy: Unsupported bindless_image API.");
-    return {experimental::detail::memcpy(from, param.from.pos,
-                                         param.to.image_bindless, param.to.pos,
-                                         param.size, q)};
-  } else if (param.from.image_bindless != nullptr) {
-    throw std::runtime_error(
-        "[Compat] memcpy: Unsupported bindless_image API.");
-    return {experimental::detail::memcpy(param.from.image_bindless,
-                                         param.from.pos, to, param.to.pos,
-                                         param.size, q)};
-  }
-#endif
-  if (param.to.image != nullptr) {
-    throw std::runtime_error("[Compat] memcpy: Unsupported image API.");
-    to = experimental::detail::to_pitched_data(param.to.image);
-  }
-  if (param.from.image != nullptr) {
-    throw std::runtime_error("[Compat] memcpy: Unsupported image API.");
-    from = experimental::detail::to_pitched_data(param.from.image);
-  }
-  return compat::detail::memcpy(q, to, param.to.pos, from, param.from.pos,
-                                    param.size);
-}
-} // namespace detail
-} // namespace experimental
-
 /// Allocate memory block on the device.
 /// \param num_bytes Number of bytes to allocate.
 /// \param q Queue to execute the allocate task.
@@ -1239,31 +1155,6 @@ static sycl::event inline fill_async(void *dev_ptr, const T &pattern,
                                      sycl::queue q = get_default_queue()) {
   return detail::fill(q, dev_ptr, pattern, count);
 }
-
-namespace experimental {
-
-/// [UNSUPPORTED] Synchronously copies 2D/3D memory data specified by \p param .
-/// The function will return after the copy is completed.
-///
-/// \param param Memory copy parameters.
-/// \param q Queue to execute the copy task.
-/// \returns no return value.
-static inline void memcpy(const memcpy_parameter &param,
-                          sycl::queue q = get_default_queue()) {
-  sycl::event::wait(compat::experimental::detail::memcpy(q, param));
-}
-
-/// [UNSUPPORTED] Asynchronously copies 2D/3D memory data specified by \p param
-/// . The return of the function does NOT guarantee the copy is completed.
-///
-/// \param param Memory copy parameters.
-/// \param q Queue to execute the copy task.
-/// \returns no return value.
-static inline void memcpy_async(const memcpy_parameter &param,
-                                sycl::queue q = get_default_queue()) {
-  compat::experimental::detail::memcpy(q, param);
-}
-} // namespace experimental
 
 namespace {
 /// Synchronously sets \p value to the first \p size bytes starting from \p
