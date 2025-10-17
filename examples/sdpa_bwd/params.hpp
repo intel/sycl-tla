@@ -3,7 +3,8 @@
 #include <cute/tensor.hpp>
 using namespace cute;
 
-template <class T_, int kHeadDim_, int kBlockM_, int kBlockN_, int kBlockK_, int kNSGs_>
+template <class T_, int kHeadDim_, int kBlockM_, int kBlockN_, int kBlockK_, int kNSGs_,
+          int AtomLayoutMSdP_ = 2, int AtomLayoutNdKV_ = 2, int AtomLayoutMdQ_ = 2>
 struct FAKernel {
     /*
       Q BATCH,NUM_HEAD_Q,SEQ_LEN_QO,HEAD_SIZE_QK
@@ -24,13 +25,10 @@ struct FAKernel {
     static constexpr int kBlockK = kBlockK_;
     static constexpr int kNSGs = kNSGs_;
     // using SubgroupLayout = Layout<Shape<Int<kNSGs>, _1, _1>, Stride<_1, _1, _1>>;
-    static constexpr int AtomLayoutMSdP = 16 *kNSGs / kBlockN;
+    static constexpr int AtomLayoutMSdP = AtomLayoutMSdP_;
     // static constexpr int AtomLayoutNdKV = 16 *kNSGs / kHeadDim;
-    static constexpr int AtomLayoutNdKV = 2;
-    static constexpr int AtomLayoutMdQ = kBlockM / 16;
-    // static constexpr int AtomLayoutMSdP = 4;
-    // static constexpr int AtomLayoutNdKV = 2;
-    // static constexpr int AtomLayoutMdQ = 2;
+    static constexpr int AtomLayoutNdKV = AtomLayoutNdKV_;
+    static constexpr int AtomLayoutMdQ = AtomLayoutMdQ_;
     using SubgroupLayoutSdP = Layout<Shape<Int<AtomLayoutMSdP>, Int<kNSGs / AtomLayoutMSdP>, _1>>;
     using SubgroupLayoutdKV = Layout<Shape<Int<AtomLayoutNdKV>, Int<kNSGs / AtomLayoutNdKV>, _1>>;
     using SubgroupLayoutdQ = Layout<Shape<Int<AtomLayoutMdQ>, Int<kNSGs / AtomLayoutMdQ>, _1>>;
@@ -157,105 +155,6 @@ struct FAKernel {
     static constexpr int smem_size = 0;
 
     FAKernel() {}
-};
-template<typename DType, typename VType, bool is_even_n>
-struct COPY_Trait {
-    using StrideR = cute::tuple<long, cute::C<1>>;
-    using StrideC = cute::tuple<cute::C<1>, long>;
-    // using VEC_COPY = Copy_Atom<UniversalCopy<uint128_t>, DType>;
-    // using LOAD_2D_16x16_N_R = std::conditional_t<
-    //     is_even_n,
-    //     Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_N, StrideR>, DType>,
-    //     VEC_COPY>;
-    // using LOAD_2D_16x16_T_R = std::conditional_t<
-    //     is_even_n,
-    //     Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_T, StrideR>, DType>,
-    //     VEC_COPY>;
-    // using SAVE_2D_8x16_N_R = std::conditional_t<
-    //     is_even_n,
-    //     Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N, StrideR>, DType>,
-    //     VEC_COPY>;
-    // for load Q and Kt in S=QKt
-    using TiledLoadQ = decltype(make_tiled_copy(
-                                    Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_N, StrideR>, DType>{},
-                                    Layout<Shape<_1,_16>>{}, // Thr layout 1x16 k-major
-                                    Layout<Shape<_16,_1>>{}));              // Val layout  16x1
-    using TiledLoadKt = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_T, StrideR>, DType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                     Layout<Shape<_16,_1>>{}));              // Val layout  16x1
-
-    // for load dO and Vt in dP=dO*Vt
-    using TiledLoaddO = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_N, StrideR>, DType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 k-major
-                                     Layout<Shape<_16,_1>>{}));              // Val layout  16x1
-
-    using TiledLoadV = decltype(make_tiled_copy(
-                                    Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_T, StrideR>, DType>{},
-                                    Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                    Layout<Shape<_16,_1>>{}));              // Val layout  16x1
-
-    // for load Pt and dO in dV=Pt*dO
-    using TiledLoadPt = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_T, StrideC>, DType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 m-major
-                                     Layout<Shape<_16,_1>>{})); // // Val layout  8x1
-    using TiledLoaddOt = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_V, StrideC>, DType>{}, // should be V here
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                     Layout<Shape<_16,_1>>{})); // val layout 16x1
-
-    // for load dP, K and dQ in dQ=dP*K
-    using TiledLoaddP = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U16x8x16_LD_N, StrideR>, DType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 k-major
-                                     Layout<Shape<_8,_1>>{})); // val layout 16x1
-    using TiledLoadK = decltype(make_tiled_copy(
-                                    Copy_Atom<Copy_Traits<XE_2D_U16x8x16_LD_N, StrideC>, DType>{},
-                                    Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                    Layout<Shape<_8,_1>>{})); // val layout 16x1
-
-    using TiledLoaddQ = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U32x8x16_LD_N, StrideR>, VType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                     Layout<Shape<_8,_1>>{})); // val layout 8x1
-
-    //  for load dPt, Q in dK=dPt*Q
-    using TiledLoaddPt = decltype(make_tiled_copy(
-                                      Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_T, StrideC>, DType>{},
-                                      Layout<Shape<_1,_16>>{}, // Thr layout 1x16 k-major
-                                      Layout<Shape<_16,_1>>{}));              // Val layout  16x1
-    using TiledLoadQt = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U16x16x16_LD_N, StrideC>, DType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                     Layout<Shape<_16,_1>>{}));              // Val layout  16x1
-
-    // for save S in S=QKt and P
-    using TiledSaveS = decltype(make_tiled_copy(
-                                    Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N, StrideR>, DType>{},
-                                    Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                    Layout<Shape<_8,_1>>{}));              // Val layout  8x1
-    // for save dP in dP=dO*Vt
-    using TiledSavedP = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N, StrideR>, DType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                     Layout<Shape<_8,_1>>{}));              // Val layout  8x1
-    // for save dV in dV=Pt*dO
-    using TiledSavedV = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N, StrideR>, DType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                     Layout<Shape<_8,_1>>{})); // Val layout  8x1
-    // for save dQ in dQ=dP*K
-    using TiledSavedQ = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U32x8x16_ST_N, StrideR>, VType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                     Layout<Shape<_8,_1>>{})); // val layout 8x1
-    // for save dK=dPt*Q
-    using TiledSavedK = decltype(make_tiled_copy(
-                                     Copy_Atom<Copy_Traits<XE_2D_U16x8x16_ST_N, StrideR>, DType>{},
-                                     Layout<Shape<_1,_16>>{}, // Thr layout 1x16 n-major
-                                     Layout<Shape<_8,_1>>{})); // Val layout  8x1
 };
 
 using index_t = uint64_t;
