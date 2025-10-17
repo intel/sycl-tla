@@ -69,6 +69,7 @@ public:
   using StrideK = typename CollectiveMainloop::StrideK;
   using ElementV = typename CollectiveMainloop::ElementV;
   using StrideV = typename CollectiveMainloop::StrideV;
+  using ElementSink = typename CollectiveMainloop::ElementSink;
   using DispatchPolicy = typename CollectiveMainloop::DispatchPolicy;
   using ElementAccumulator = typename CollectiveMainloop::ElementAccumulator;
   using MainloopArguments = typename CollectiveMainloop::Arguments;
@@ -101,6 +102,7 @@ public:
 
   static constexpr bool CausalMask = CollectiveMainloop::CausalMask;
   static constexpr bool PagedKV = CollectiveMainloop::PagedKV;
+  static constexpr bool HasSink = CollectiveMainloop::HasSink;
   static constexpr int SubgroupSize = CollectiveMainloop::SubgroupSize; // sub_group size
   static constexpr uint32_t MaxThreadsPerBlock = CollectiveMainloop::MaxThreadsPerBlock;
   using MmaAtomShape = typename CollectiveMainloop::MmaAtomShape;           // 8,16,16
@@ -340,7 +342,14 @@ public:
       CollectiveMainloop collective_mma;
 
       ElementAccumulator max_reg = ElementAccumulator{-INFINITY};
+      ElementAccumulator sink_token = ElementAccumulator{ 0 };
       auto sum_reg = ElementAccumulator{0};
+      if constexpr (HasSink) {
+        if (compat::get_nd_item<3>().get_local_linear_id() == 0) {
+          max_reg = static_cast<ElementAccumulator>(mainloop_params.ptr_Sink[num_heads_coord]);
+          sink_token = max_reg;
+        }
+      }
       Tensor out_reg = make_tensor<ElementAccumulator>(AccumShape{});
       clear(out_reg);
 
@@ -391,7 +400,7 @@ public:
         }
 
         CollectiveSoftmaxEpilogue softmax(params.softmax);
-        softmax.template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
+        softmax.template operator()<Num_SGs>(split == 0, tSr, max_reg, sum_reg, sink_token, shmem_max_tensor, out_reg);
 
         collective_mma.template mmaPV<VSlicer>(out_reg, tSr, gV, out_reg, mainloop_params, is_KV_cache, curr_kv_tile_idx);
 
@@ -455,7 +464,7 @@ public:
       }
 
       CollectiveSoftmaxEpilogue softmax(params.softmax);
-      softmax.template operator()<Num_SGs>((kv_splits - 1) == 0, tSr, max_reg, sum_reg, shmem_max_tensor, out_reg);
+      softmax.template operator()<Num_SGs>((kv_splits - 1) == 0, tSr, max_reg, sum_reg, sink_token, shmem_max_tensor, out_reg);
 
       collective_mma.template mmaPV<VSlicer>(out_reg, tSr, gV, out_reg, mainloop_params, false, curr_kv_tile_idx);
 

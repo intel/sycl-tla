@@ -60,6 +60,7 @@ struct Options {
   bool help;
   bool error;
   bool is_causal;
+  bool use_sink_attn;
   bool varlen = false;
   bool use_paged_kv = false;
   std::string scheduler;
@@ -68,7 +69,7 @@ struct Options {
   float softmax_scale;
 
   Options()
-      : help(false), error(false), is_causal(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
+      : help(false), error(false), is_causal(false), use_sink_attn(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
         seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
 
   // Parses the command line
@@ -82,6 +83,10 @@ struct Options {
 
     if (cmd.check_cmd_line_flag("is_causal")) {
       is_causal = true;
+    }
+
+    if (cmd.check_cmd_line_flag("use_sink_attn")) {
+      use_sink_attn = true;
     }
 
     if (cmd.check_cmd_line_flag("varlen")) {
@@ -120,6 +125,7 @@ struct Options {
         << "Options:\n\n"
         << "  --help                      If specified, displays this usage statement\n\n"
         << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
+        << "  --use_sink_attn             Apply Attention Sink\n"
         << "  --varlen                    Enable variable sequence length\n"
         << "  --scheduler                 Only Individual Scheduler supported\n"
         << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
@@ -155,6 +161,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
   using ElementQ = typename FMHAKernel::ElementQ;
   using ElementK = typename FMHAKernel::ElementK;
   using ElementV = typename FMHAKernel::ElementV;
+  using ElementSink = typename FMHAKernel::ElementSink;
   using ElementAcc = typename FMHAKernel::ElementAccumulator;
 
   using CollectiveEpilogue = typename FMHAKernel::CollectiveEpilogue;
@@ -181,6 +188,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
   cutlass::DeviceAllocation<ElementQ> block_Q;
   cutlass::DeviceAllocation<ElementK> block_K;
   cutlass::DeviceAllocation<ElementV> block_V;
+  cutlass::DeviceAllocation<ElementSink> block_Sink;
   cutlass::DeviceAllocation<ElementK> block_K_cache;
   cutlass::DeviceAllocation<ElementV> block_V_cache;
   cutlass::DeviceAllocation<ElementOutput> block_O;
@@ -216,7 +224,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
   //
   // Methods
   //
-  bool verify(ProblemShapeType problem_size, bool is_causal, bool use_kv_cache) {
+  bool verify(ProblemShapeType problem_size, bool is_causal, bool use_kv_cache, bool sink_attn) {
 
     if constexpr (isVarLen) {
       int max_seq_len_q = static_cast<int>(get<3>(problem_size));
@@ -240,6 +248,13 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
     int offset_k_cache = 0;
     int offset_v_cache = 0;
     int offset_o = 0;
+    std::vector<ElementSink> host_Sink;
+
+    if (sink_attn) {
+      host_Sink.resize(block_Sink.size());
+      compat::memcpy<ElementSink>(host_Sink.data(), block_Sink.get(), host_Sink.size());
+      compat::wait();
+    }
 
     int q_group_size = num_heads_q / num_heads_kv;
     // loop over the batch dimension to compute the output
@@ -352,6 +367,11 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
             if (max_vec[max_idx] < host_S[idx])
               max_vec[max_idx] = host_S[idx];
           }
+          if (sink_attn) {
+            ElementAccumulator sink_val = static_cast<ElementAccumulator>(host_Sink[h]);
+            if (max_vec[max_idx] < sink_val)
+              max_vec[max_idx] = sink_val;
+          }
         }
 
         // compute exp of S
@@ -370,6 +390,12 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
           int sum_idx = row;
           for (int col = 0; col < seq_len_kv_total; col++, idx++) {
             sum_vec[sum_idx] += host_S[idx];
+          }
+
+          if (sink_attn) {
+            ElementAccumulator sink_val = static_cast<ElementAccumulator>(host_Sink[h]);
+            auto exp_sink = expf(sink_val - max_vec[row]);
+            sum_vec[sum_idx] += exp_sink;
           }
 
           // scale each row with the sum to compute softmax
@@ -553,6 +579,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
     block_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
     block_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
     block_V.reset(batch * num_heads_kv * seq_len_kv * head_size_vo);
+    block_Sink.reset(num_heads_q);
     block_K_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_qk);
     block_V_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_vo);
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
@@ -592,6 +619,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
     initialize_block(block_Q, seed + 2021);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2023);
+    initialize_block(block_Sink, seed + 2021);
     initialize_block(block_K_cache, seed + 2024);
     initialize_block(block_V_cache, seed + 2025);
 
@@ -664,7 +692,8 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
         block_V_cache.get(), stride_V_cache,
         options.use_paged_kv ? paged_kv_cache.page_table.get() : nullptr,
         options.use_paged_kv ? paged_kv_cache.page_size : 0,
-        options.use_paged_kv ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
+        options.use_paged_kv ? paged_kv_cache.num_pages_per_seq.get() : nullptr,
+        block_Sink.get()},
         {options.softmax_scale},
         {block_O.get(), stride_O},
         hw_info};
@@ -691,7 +720,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
     // Verify that the result is correct
     bool use_kv_cache = options.seq_len_kv_cache > 0;
-    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
+    bool passed = verify(problem_size, options.is_causal, use_kv_cache, options.use_sink_attn);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if (!passed) {
@@ -742,9 +771,11 @@ template <bool Causal,
           typename TileShapeOutput, 
           typename SubgroupLayout, 
           bool isVarLen,
+          bool hasSink,
           int PipelineStages = 2,
           typename ElementInputQ = bfloat16_t, 
           typename ElementInputKV = bfloat16_t, 
+          typename ElementInputSink = bfloat16_t,
           typename MMAOperation = XE_1x16x16_F32BF16BF16F32_TT,
           typename GmemTiledCopyQ = XE_2D_U16x1x16_LD_N,
           typename GmemTiledCopyK = XE_2D_U16x16x16_LD_T, // _T designates a transposed block load operation
@@ -768,7 +799,7 @@ template <bool Causal,
     using CollectiveEpilogue = cutlass::flash_attention::collective::FlashDecodeEpilogue<
         EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementComputeEpilogue, ElementOutput, cutlass::gemm::TagToStrideC_t<LayoutO>,
         ElementOutput, GmemTiledCopyStore>;
-    using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashDecodeSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
+    using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashDecodeSoftmaxEpilogue<Causal, hasSink, EpilogueDispatchPolicy, ElementAccumulator>;
 
     using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
     using namespace cutlass::fmha::collective;
@@ -778,9 +809,9 @@ template <bool Causal,
     // Mainloop
     using CollectiveMainloop = cutlass::flash_attention::collective::FlashDecodeMma<
         GEMMDispatchPolicy, ProblemShapeType, ElementInputQ, cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
-        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV, cutlass::gemm::TagToStrideB_t<LayoutV>, MMAOperation,
+        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV, cutlass::gemm::TagToStrideB_t<LayoutV>, ElementInputSink, MMAOperation,
         TileShapeQK, TileShapePV, SubgroupLayout, GmemTiledCopyQ/* Q */, GmemTiledCopyK/* K */,
-        GmemTiledCopyV/* V */, Causal, PagedKV>;
+        GmemTiledCopyV/* V */, Causal, PagedKV, hasSink>;
 
     using FMHAKernel = cutlass::flash_attention::kernel::FMHADecode<ProblemShapeType, CollectiveMainloop,
                                                                      CollectiveSoftmaxEpilogue, CollectiveEpilogue, Scheduler>;
