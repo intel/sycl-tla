@@ -43,7 +43,27 @@ namespace library {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifndef CUTLASS_ENABLE_SYCL
+// For CUDA builds, reference operations are defined in initialize_reference_operations.cu
 void initialize_reference_operations(Manifest &manifest);
+#else
+// For SYCL builds, provide a stub implementation since reference ops are not yet supported
+inline void initialize_reference_operations(Manifest &manifest) {
+  // Reference operations not yet implemented for SYCL
+  // This is a stub to allow the library to compile
+}
+#endif
+
+#ifndef CUTLASS_ENABLE_SYCL
+// For CUDA builds, reduction operations are defined in init_reduction_operations.cu
+// Declaration is in manifest.h
+#else
+// For SYCL builds, provide a stub implementation since reduction ops are not yet supported
+inline void initialize_all_reduction_op(Manifest &manifest) {
+  // Reduction operations not yet implemented for SYCL
+  // This is a stub to allow the library to compile
+}
+#endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
