@@ -389,7 +389,7 @@ public:
     cst_callbacks.begin();
 
     auto acc_frag = recast<Array<ElementCompute, FragmentSize>>(accumulators);
-    auto trD_compute_frag = recast<Array<ElementCompute, FragmentSize>>(trD_compute);
+    auto trD_compute_frag = recast<Array<ElementOutput, FragmentSize>>(trD_compute);
 
     Tensor trD = make_tensor<ElementOutput>(Shape<Int<FragmentSize>>{});
     auto trD_frag = recast<Array<ElementOutput, FragmentSize>>(trD);
@@ -423,7 +423,7 @@ public:
         if constexpr (is_destination_supported) {
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < size(trD_compute_frag); ++i) {
-            trD_frag(i) = cutlass::NumericArrayConverter<ElementOutput, ElementCompute, FragmentSize>{}(trD_compute_frag(i));
+            trD_frag(i) = cutlass::NumericArrayConverter<ElementOutput, ElementOutput, FragmentSize>{}(trD_compute_frag(i));
           }
           copy(params.xe_store_d, trD, tCgD(_, epi_m, epi_n));
         }
