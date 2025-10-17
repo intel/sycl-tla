@@ -348,6 +348,8 @@ int main(int argc, const char** argv)
   // The 2D block copy operations used for the A and B matrices
   using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
   using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopyC = void; //XE_LOAD_2D<32, 8, 16>;
+  using GmemTiledCopyD = void; //XE_STORE_2D<32, 8, 16>;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
@@ -368,8 +370,11 @@ int main(int argc, const char** argv)
 
   // For Intel BMG, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
   constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+   // For older version of copy/mma atom, use cutlass::gemm::MainloopIntelXeXMX16 as dispatch policy for CollectiveMma 
+   // and use cutlass::epilogue::IntelXeXMX16 as dispatch policy for CollectiveEpilogue
+  // use cutlass::epilogue::IntelXeXMX16 as dispatch policy for CollectiveEpilogue
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeL1Staged;
 
   // This is the 'default' epilogue operation (Linear Combination) which performs everything in:
   // (D = alpha * (A*B) + beta * C)
@@ -392,9 +397,9 @@ int main(int argc, const char** argv)
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
           FusionCallBacks,
-          XE_2D_U32x8x16_LD_N, // The copy atom used to load matrix C
+          GmemTiledCopyC, // The new copy atom used to load matrix C
           void, void,
-          XE_2D_U32x8x16_ST_N, // The copy atom used to store matrix D
+          GmemTiledCopyD, // The new copy atom used to store matrix D
           void, void>;
 
   // GEMM Mainloop - iteration over blocks in K dimension
