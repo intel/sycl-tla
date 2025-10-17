@@ -241,13 +241,13 @@ TEST(PVC_CuTe_Xe, XE_COPY_2D_uint32) {
 }
 
 TEST(PVC_CuTe_Xe, XE_COPY_2D_int32) {
-  test_xe_copy_2d<uint32_t, 32, 2, 16>();
-  test_xe_copy_2d<uint32_t, 32, 3, 16>();
-  test_xe_copy_2d<uint32_t, 32, 4, 16>();
-  test_xe_copy_2d<uint32_t, 32, 5, 16>();
-  test_xe_copy_2d<uint32_t, 32, 6, 16>();
-  test_xe_copy_2d<uint32_t, 32, 7, 16>();
-  test_xe_copy_2d<uint32_t, 32, 8, 16>();
+  test_xe_copy_2d<int32_t, 32, 2, 16>();
+  test_xe_copy_2d<int32_t, 32, 3, 16>();
+  test_xe_copy_2d<int32_t, 32, 4, 16>();
+  test_xe_copy_2d<int32_t, 32, 5, 16>();
+  test_xe_copy_2d<int32_t, 32, 6, 16>();
+  test_xe_copy_2d<int32_t, 32, 7, 16>();
+  test_xe_copy_2d<int32_t, 32, 8, 16>();
 }
 
 TEST(PVC_CuTe_Xe, XE_COPY_2D_float) {
