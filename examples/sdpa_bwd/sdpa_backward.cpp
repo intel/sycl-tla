@@ -848,11 +848,42 @@ mhd_convert_dq(T trait,
     }
 }
 
+template<class T>
+void
+mha_backward_seq(T trait,
+                 Param<typename T::DType> param) {
+    const int bidb = BlockIdxZ();
+    const int bidh = BlockIdxY();
+    CUTLASS_PRAGMA_UNROLL
+    for (int m_block = 0; m_block < param.m_block - 1; ++m_block)
+        compute_o_dot_do<true>(trait, param, m_block, bidb, bidh);
+    if (param.tail_m > 0) {
+        compute_o_dot_do<false>(trait, param, param.m_block - 1, bidb, bidh);
+    } else {
+        compute_o_dot_do<true>(trait, param, param.m_block - 1, bidb, bidh);
+    }
+    CUTLASS_PRAGMA_UNROLL
+    for (int n_block = 0; n_block < param.n_block; ++n_block)
+        dq_dk_dv_1colblock<true>(trait, param, bidb, bidh, n_block);
+    if (param.tail_n > 0)
+        dq_dk_dv_1colblock<false>(trait, param, bidb, bidh, param.n_block, param.tail_n);
+    CUTLASS_PRAGMA_UNROLL
+    for (int m_block = 0; m_block < param.m_block - 1; ++m_block)
+        convert_dq<true>(trait, param, m_block, bidb, bidh);
+    if (param.tail_m > 0) {
+        convert_dq<false>(trait, param, param.m_block - 1, bidb, bidh);
+    } else {
+        convert_dq<true>(trait, param, param.m_block - 1, bidb, bidh);
+    }
+}
+
 template<class...> class mhaodoDeviceName;
 template<class...> class mhabwdDeviceName;
 template<class...> class mhacvtDeviceName;
 
-template<typename T, class ProblemShape, int kBlockM, int kBlockN, int kHeadDim, bool is_bhsd>
+template<typename T, class ProblemShape, int kBlockM, int kBlockN, int kBlockK,
+         int kHeadDim, int kNSGs, int AtomLayoutMSdP, int AtomLayoutNdKV,
+         int AtomLayoutMdQ, bool is_bhsd>
 void launch_mha_backward_headdim(ProblemShape problem_shape,
                                  const T *do_d,
                                  const T *o_d,
@@ -869,9 +900,8 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
                                  T *dp_d,
                                  const int seq_len_q_pad,
                                  const int seq_len_kv_pad) {
-    constexpr int numSGs = 8;
-    constexpr int kBlockK = 32;
-    auto trait = FAKernel<T, kHeadDim, kBlockM, kBlockN, kBlockK, numSGs>{};
+    auto trait = FAKernel<T, kHeadDim, kBlockM, kBlockN, kBlockK, kNSGs,
+                          AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ>{};
 
     const int BATCH = get<0>(problem_shape);
     const int NUM_HEAD_Q = get<1>(problem_shape);
@@ -905,7 +935,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     }
 
     auto dimGrid0 = compat::dim3(size(M_BLOCK), size(param.num_head_q), size(param.batch));
-    auto dimBlock0 = compat::dim3(size(numSGs * trait.SubgroupSize), size(1), size(1));
+    auto dimBlock0 = compat::dim3(size(kNSGs * trait.SubgroupSize), size(1), size(1));
     compat::experimental::launch_properties launch_props0{
         // sycl::ext::oneapi::experimental::work_group_scratch_size(0),
     };
@@ -923,7 +953,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     auto dimGrid1 = compat::dim3(size(1), size(param.num_head_q), size(param.batch));
     assert((trait.num_head_q % trait.num_head_kv == 0) && "num_head_q must be dividable by num_head_kv");
     assert((trait.num_head_q >= trait.num_head_kv) && "num_head_q must be bigger than or equal to num_head_kv");
-    auto dimBlock1 = compat::dim3(size(numSGs * trait.SubgroupSize), size(1), size(1));
+    auto dimBlock1 = compat::dim3(size(kNSGs * trait.SubgroupSize), size(1), size(1));
     // auto dimBlock = compat::dim3(size(trait.tiled_mma_sdp));
 
     compat::experimental::launch_properties launch_props1{
@@ -941,7 +971,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     compat::wait_and_throw();
 
     auto dimGrid2 = compat::dim3(size(M_BLOCK), size(param.num_head_q), size(param.batch));
-    auto dimBlock2 = compat::dim3(size(numSGs * trait.SubgroupSize), size(1), size(1));
+    auto dimBlock2 = compat::dim3(size(kNSGs * trait.SubgroupSize), size(1), size(1));
     compat::experimental::launch_properties launch_props2{
         // sycl::ext::oneapi::experimental::work_group_scratch_size(0),
     };
@@ -978,8 +1008,16 @@ void launch_mha_backward(ProblemShape problem_shape,
     if (headdim == 64) {
         constexpr int kBlockM = 64;
         constexpr int kBlockN = 32;
+        constexpr int kBlockK = 32;
         constexpr int kHeadDim = 64;
-        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN, kHeadDim, is_bhsd>(
+        constexpr int kNSGs = 8;
+        constexpr int AtomLayoutMSdP = 4;
+        constexpr int AtomLayoutNdKV = 2;
+        constexpr int AtomLayoutMdQ = 2;
+        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
+                                    kBlockK, kHeadDim, kNSGs,
+                                    AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
+                                    is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
@@ -989,8 +1027,16 @@ void launch_mha_backward(ProblemShape problem_shape,
     } else if (headdim == 96) {
         constexpr int kBlockM = 64;
         constexpr int kBlockN = 64;
+        constexpr int kBlockK = 16;
         constexpr int kHeadDim = 96;
-        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN, kHeadDim, is_bhsd>(
+        constexpr int kNSGs = 8;
+        constexpr int AtomLayoutMSdP = 4;
+        constexpr int AtomLayoutNdKV = 4;
+        constexpr int AtomLayoutMdQ = 2;
+        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
+                                    kBlockK, kHeadDim, kNSGs,
+                                    AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
+                                    is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
@@ -1000,8 +1046,16 @@ void launch_mha_backward(ProblemShape problem_shape,
     } else if (headdim == 128) {
         constexpr int kBlockM = 64;
         constexpr int kBlockN = 32;
+        constexpr int kBlockK = 32;
         constexpr int kHeadDim = 128;
-        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN, kHeadDim, is_bhsd>(
+        constexpr int kNSGs = 8;
+        constexpr int AtomLayoutMSdP = 4;
+        constexpr int AtomLayoutNdKV = 2;
+        constexpr int AtomLayoutMdQ = 2;
+        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
+                                    kBlockK, kHeadDim, kNSGs,
+                                    AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
+                                    is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
@@ -1011,8 +1065,16 @@ void launch_mha_backward(ProblemShape problem_shape,
     } else if (headdim == 192) {
         constexpr int kBlockM = 64;
         constexpr int kBlockN = 32;
+        constexpr int kBlockK = 32;
         constexpr int kHeadDim = 192;
-        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN, kHeadDim, is_bhsd>(
+        constexpr int kNSGs = 8;
+        constexpr int AtomLayoutMSdP = 4;
+        constexpr int AtomLayoutNdKV = 2;
+        constexpr int AtomLayoutMdQ = 2;
+        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
+                                    kBlockK, kHeadDim, kNSGs,
+                                    AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
+                                    is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
@@ -1022,8 +1084,16 @@ void launch_mha_backward(ProblemShape problem_shape,
     } else if (headdim == 256) {
         constexpr int kBlockM = 64;
         constexpr int kBlockN = 32;
+        constexpr int kBlockK = 32;
         constexpr int kHeadDim = 256;
-        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN, kHeadDim, is_bhsd>(
+        constexpr int kNSGs = 8;
+        constexpr int AtomLayoutMSdP = 4;
+        constexpr int AtomLayoutNdKV = 2;
+        constexpr int AtomLayoutMdQ = 2;
+        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
+                                    kBlockK, kHeadDim, kNSGs,
+                                    AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
+                                    is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
