@@ -101,35 +101,35 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
   // Helper struct to deduce CopyOpA type
-  template<class EA, class SA, class TM, class GTCA>
+  template<class ElementA, class StrideA, class TiledMMA, class GmemTiledCopyA>
   struct CopyOpAHelper {
     static auto get() {
-      auto tmp = make_tensor(make_gmem_ptr(static_cast<EA const*>(nullptr)),
-                             make_layout(make_shape(Int<BLK_M>{}, Int<BLK_K>{}, Int<1>{}), SA{}));
-      if constexpr (!std::is_void_v<GTCA>) {
-        return make_block_2d_copy_A(GTCA{}, TM{}, tmp(_,_,0));
+      auto tmp = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)),
+                             make_layout(make_shape(Int<BLK_M>{}, Int<BLK_K>{}, Int<1>{}), StrideA{}));
+      if constexpr (!std::is_void_v<GmemTiledCopyA>) {
+        return make_block_2d_copy_A(GmemTiledCopyA{}, TiledMMA{}, tmp(_,_,0));
       } else {
-        return make_block_2d_copy_A(TM{}, tmp(_,_,0));
+        return make_block_2d_copy_A(TiledMMA{}, tmp(_,_,0));
       }
     }
   };
 
   // Helper struct to deduce CopyOpB type
-  template<class EB, class SB, class TM, class GTCB>
+  template<class ElementB, class StrideB, class TiledMMA, class GmemTiledCopyB>
   struct CopyOpBHelper {
     static auto get() {
-      auto tmp = make_tensor(make_gmem_ptr(static_cast<EB const*>(nullptr)),
-                             make_layout(make_shape(Int<BLK_N>{}, Int<BLK_K>{}, Int<1>{}), SB{}));
-      if constexpr (!std::is_void_v<GTCB>) {
-        return make_block_2d_copy_B(GTCB{}, TM{}, tmp(_,_,0));
+      auto tmp = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)),
+                             make_layout(make_shape(Int<BLK_N>{}, Int<BLK_K>{}, Int<1>{}), StrideB{}));
+      if constexpr (!std::is_void_v<GmemTiledCopyB>) {
+        return make_block_2d_copy_B(GmemTiledCopyB{}, TiledMMA{}, tmp(_,_,0));
       } else {
-        return make_block_2d_copy_B(TM{}, tmp(_,_,0));
+        return make_block_2d_copy_B(TiledMMA{}, tmp(_,_,0));
       }
     }
   };
 
-  using CopyOpA = decltype(CopyOpAHelper<ElementA, StrideA, TiledMma, GmemTiledCopyA>::get());
-  using CopyOpB = decltype(CopyOpBHelper<ElementB, StrideB, TiledMma, GmemTiledCopyB>::get());
+  using TiledCopyA = decltype(CopyOpAHelper<ElementA, StrideA, TiledMma, GmemTiledCopyA>::get());
+  using TiledCopyB = decltype(CopyOpBHelper<ElementB, StrideB, TiledMma, GmemTiledCopyB>::get());
 
   // Host side kernel arguments
   struct Arguments {
@@ -140,8 +140,8 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
   };
 
   struct Params {
-    CopyOpA copy_a;
-    CopyOpB copy_b;
+    TiledCopyA copy_a;
+    TiledCopyB copy_b;
   };
 
   //
@@ -162,7 +162,7 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
     auto mB_nkl = make_tensor(make_gmem_ptr(args.ptr_B),
                                 make_layout(make_shape(N, K, L), args.dB));
 
-    CopyOpA copy_a = [&]() {
+    TiledCopyA copy_a = [&]() {
       if constexpr (!std::is_void_v<GmemTiledCopyA>) {
         return make_block_2d_copy_A(GmemTiledCopyA{}, TiledMma{}, mA_mkl(_,_,0));
       } else {
@@ -170,7 +170,7 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
       }
     }();
 
-    CopyOpB copy_b = [&]() {
+    TiledCopyB copy_b = [&]() {
       if constexpr (!std::is_void_v<GmemTiledCopyB>) {
         return make_block_2d_copy_B(GmemTiledCopyB{}, TiledMma{}, mB_nkl(_,_,0));
       } else {
@@ -220,6 +220,9 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
     (void)blk_coord;
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
+
+    mainloop.copy_a.device_init();
+    mainloop.copy_b.device_init();
 
     auto thr_copy_a = mainloop.copy_a.get_slice(thread_idx);
     auto thr_copy_b = mainloop.copy_b.get_slice(thread_idx);

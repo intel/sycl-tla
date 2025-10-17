@@ -125,7 +125,7 @@ struct Xe2DTraitsBase
     assert((height <= 0xFFFFFF) && "CuTe runtime error: block 2D tensor height exceeds 2^24");
     assert((pitch <= 0xFFFFFF) && "CuTe runtime error: block 2D tensor pitch exceeds 2^24");
 #endif
-    init_payload();
+    device_init();
   }
 
   template <class Op2, typename ValType2>
@@ -134,7 +134,7 @@ struct Xe2DTraitsBase
     : base_ptr(other.base_ptr), width(other.width), height(other.height), pitch(other.pitch),
       tiled_strides(other.tiled_strides)
   {
-    init_payload();
+    device_init();
   }
 
   // Initialize a previously-uninitialized atom.
@@ -145,7 +145,7 @@ struct Xe2DTraitsBase
   }
 
   CUTE_DEVICE
-  void init_payload() {
+  void device_init() const {
 #ifdef __SYCL_DEVICE_ONLY__
     payload = __builtin_IB_subgroup_createBlock2DAddressPayload(
       base_ptr,
@@ -757,13 +757,13 @@ make_block_2d_copy_X(CopyOp             const& op,          // Copy operation
 }
 
 // Single trait with specializations
-template<typename T> struct is_xe_atom : std::false_type {};
-template<int B, int H, int W, int BW> struct is_xe_atom<XE_LOAD_2D<B,H,W,BW>> : std::true_type {};
-template<int B, int H, int W> struct is_xe_atom<XE_LOAD_2D_TRANSPOSE<B,H,W>> : std::true_type {};
-template<int B, int H, int W, int BW> struct is_xe_atom<XE_LOAD_2D_VNNI<B,H,W,BW>> : std::true_type {};
-template<int B, int H, int W> struct is_xe_atom<XE_STORE_2D<B,H,W>> : std::true_type {};
+template<typename T> struct is_xe_block_2d_atom : std::false_type {};
+template<int B, int H, int W, int BW> struct is_xe_block_2d_atom<XE_LOAD_2D<B,H,W,BW>> : std::true_type {};
+template<int B, int H, int W> struct is_xe_block_2d_atom<XE_LOAD_2D_TRANSPOSE<B,H,W>> : std::true_type {};
+template<int B, int H, int W, int BW> struct is_xe_block_2d_atom<XE_LOAD_2D_VNNI<B,H,W,BW>> : std::true_type {};
+template<int B, int H, int W> struct is_xe_block_2d_atom<XE_STORE_2D<B,H,W>> : std::true_type {};
 
-template<typename T> constexpr bool is_xe_atom_v = is_xe_atom<T>::value;
+template<typename T> constexpr bool is_xe_block_2d_atom_v = is_xe_block_2d_atom<T>::value;
 
 
 // MMA-focused TiledCopy creation functions.
@@ -784,7 +784,7 @@ make_block_2d_copy_A(CopyOp                   const& op,    // Copy operation
                      TiledMMA                 const& mma,   // TiledMMA instance
                      Tensor<GEngine, GLayout> const& gmem)  // Global tensor
 {
-  static_assert(is_xe_atom_v<CopyOp>, "Use new XE atoms: XE_LOAD_2D or XE_LOAD_2D_TRANSPOSE");
+  static_assert(is_xe_block_2d_atom_v<CopyOp>, "Expected a block 2D atom");
   using ValType = typename GEngine::value_type;
   return make_block_2d_copy_A<ValType>(op, mma, gmem.stride()).with(gmem);
 }
@@ -857,7 +857,7 @@ make_block_2d_copy_B(CopyOp                   const& op,    // Copy operation
                      TiledMMA                 const& mma,   // TiledMMA instance
                      Tensor<GEngine, GLayout> const& gmem)  // Global tensor
 {
-  static_assert(is_xe_atom_v<CopyOp>, "Use new XE atom: XE_LOAD_2D_VNNI");
+  static_assert(is_xe_block_2d_atom_v<CopyOp>, "Expected a block 2D atom");
   using ValType = typename GEngine::value_type;
   return make_block_2d_copy_B<ValType>(op, mma, gmem.stride()).with(gmem);
 }
@@ -930,7 +930,7 @@ make_block_2d_copy_C(CopyOp                   const& op,    // Copy operation
                      TiledMMA                 const& mma,   // TiledMMA instance
                      Tensor<GEngine, GLayout> const& gmem)  // Global tensor
 {
-  static_assert(is_xe_atom_v<CopyOp>, "Use new XE atom: XE_STORE_2D");
+  static_assert(is_xe_block_2d_atom_v<CopyOp>, "Expected a block 2D atom");
   using ValType = typename GEngine::value_type;
   return make_block_2d_copy_C<ValType>(op, mma, gmem.stride()).with(gmem);
 }
