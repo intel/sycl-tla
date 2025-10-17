@@ -47,7 +47,7 @@ using namespace compat::experimental;
 
 #define SUBGROUP_SIZE (16)
 
-#if (IGC_VERSION_MAJOR >= 2 && IGC_VERSION_MINOR >= 18)
+#if (IGC_VERSION_MAJOR > 2) || (IGC_VERSION_MAJOR == 2 && IGC_VERSION_MINOR >= 18) 
 
 // Kernel name for unique identification
 template<class SrcTensor, class DstTensor> 
