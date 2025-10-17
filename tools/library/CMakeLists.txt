@@ -162,8 +162,21 @@ function(cutlass_add_cutlass_library)
       PRIVATE $<BUILD_INTERFACE:${__NAME}_objs>
       )
     
-    # Only link with cuda_driver for CUDA builds
-    if (NOT CUTLASS_ENABLE_SYCL)
+    # Link with appropriate runtime library
+    if (CUTLASS_ENABLE_SYCL)
+      # For SYCL builds, explicitly link with libsycl.so
+      # We use find_library to locate it in the oneAPI installation
+      find_library(SYCL_LIBRARY NAMES sycl sycl8 PATHS ENV LD_LIBRARY_PATH NO_DEFAULT_PATH)
+      if(NOT SYCL_LIBRARY)
+        find_library(SYCL_LIBRARY NAMES sycl sycl8)
+      endif()
+      if(SYCL_LIBRARY)
+        target_link_libraries(${__NAME} PRIVATE ${SYCL_LIBRARY})
+      else()
+        message(WARNING "libsycl.so not found - runtime may fail to load")
+      endif()
+    else()
+      # For CUDA builds, link with cuda_driver
       target_link_libraries(${__NAME} PRIVATE cuda_driver)
     endif()
     
@@ -197,8 +210,15 @@ function(cutlass_add_cutlass_library)
       PRIVATE $<BUILD_INTERFACE:${__NAME}_objs>
       )
     
-    # Only link with cuda_driver for CUDA builds
-    if (NOT CUTLASS_ENABLE_SYCL)
+    # Link with appropriate runtime library
+    if (CUTLASS_ENABLE_SYCL)
+      # For SYCL builds, explicitly link with libsycl.so
+      # Note: SYCL_LIBRARY should already be found from shared library linking above
+      if(SYCL_LIBRARY)
+        target_link_libraries(${__NAME}_static PRIVATE ${SYCL_LIBRARY})
+      endif()
+    else()
+      # For CUDA builds, link with cuda_driver
       target_link_libraries(${__NAME}_static PRIVATE cuda_driver)
     endif()
     
