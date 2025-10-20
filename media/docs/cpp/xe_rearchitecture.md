@@ -290,24 +290,37 @@ Now that we have the basic thread mapping rule, let's apply it to a simple block
 An individual DPAS atom's A matrix follows the same pattern, with height ranging from 1 to 8, and width equal to 8 (tf32), 16 (f16/bf16), or 32 (s8/u8). The DPAS C matrix is also organized this way, except that its width is always 16.
 
 As a more complicated example, let's consider a 16-bit VNNI load, with height = 4, width = 16:
+
 ```math
     \begin{array}{c}
-    \text{Subgroup view}\\
+    \text{Subgroup view of data in global memory}\\
     \begin{array}{cccccc}
-    0 & 2 & 4 & 6 & \cdots & 30\\
-    1 & 3 & 5 & 7 & \cdots & 31\\
-    32 & 34 & 36 & 38 & \cdots & 62\\
-    33 & 35 & 37 & 39 & \cdots & 63
+    0 & 1 & 2 & 3 & \cdots & 15\\
+    16 & 17 & 18 & 19 & \cdots & 31\\
+    32 & 33 & 34 & 35 & \cdots & 47\\
+    48 & 49 & 50 & 51 & \cdots & 63
+    \end{array}
+    \end{array}
+```    
+
+```math
+    \begin{array}{c}
+    \text{Subgroup view of data in registers after VNNI transformation that happened during the load}\\
+    \begin{array}{cccccc}
+    0 & 16 & 1 & 17 & \cdots & 7 & 23\\
+    8 & 24 & 9 & 25 & \cdots & 15 & 31\\
+    32 & 48 & 33 & 49 & \cdots & 39 & 55\\
+    40 & 56 & 41 & 57 & \cdots & 47 & 63
     \end{array}
     \end{array}
     \rightarrow
     \begin{array}{c}
     \text{Thread view}\\
     \begin{array}{cccc}
-    \text{T0V0} & \text{T2V0} & \text{T4V0} & \cdots & \text{T14V0} & \text{T0V1} & \cdots & \text{T14V1}\\
-    \text{T1V0} & \text{T3V0} & \text{T5V0} & \cdots & \text{T15V0} & \text{T1V1} & \cdots & \text{T15V1}\\
-    \text{T0V2} & \text{T2V2} & \text{T4V2} & \cdots & \text{T14V2} & \text{T0V3} & \cdots & \text{T14V3}\\
-    \text{T1V2} & \text{T3V2} & \text{T5V2} & \cdots & \text{T15V2} & \text{T1V3} & \cdots & \text{T15V3}
+    \text{T0V0} & \text{T1V0} & \text{T2V0} & \cdots & \text{T15V0}\\
+    \text{T0V1} & \text{T1V1} & \text{T2V1} & \cdots & \text{T15V1}\\
+    \text{T0V2} & \text{T1V2} & \text{T2V2} & \cdots & \text{T15V2}\\
+    \text{T0V3} & \text{T1V3} & \text{T2V3} & \cdots & \text{T15V3}
     \end{array}
     \end{array}
 ```
@@ -503,7 +516,6 @@ gemm_device(ATensor   const& A,         // (M,K)
   copy(copy_c, tCrC, tCgC);
 }
 ```
-
 
 ## New Collective MMAs
 
