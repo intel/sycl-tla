@@ -178,6 +178,20 @@ struct CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
+    // Current implementation - Batch indexing
+    // Extract the batch index and slice the tensor before passing to make_block_2d_copy_*
+    // This is required because the current compiler doesn't properly handle full tensors
+    // in the make_block_2d_copy_* functions which makes it little slow.
+    //
+    // Future implementation - Full tensor support
+    // Once there is necessary compiler support, switch to:
+    //
+    // auto copy_a = get_block_2d_copy_A<GmemTiledCopyA>(TiledMma{}, mainloop.mA_mkl);
+    // auto copy_b = get_block_2d_copy_B<GmemTiledCopyB>(TiledMma{}, mainloop.mB_nkl);
+    //
+    // Required changes in copy_traits_xe_2d.hpp under make_block_2d_copy():
+    // 1. tuple_repeat<rank(strides)>(_1{}) → make_tile(_1{}, _1{})
+    // 2. Remove x_atom_shape, use elem_scale(ShapeTiler_MN{}, atom_shape) directly
     auto batch_idx = get<3>(blk_coord);
     auto copy_a = get_block_2d_copy_A<GmemTiledCopyA>(TiledMma{}, mainloop.mA_mkl(_,_,batch_idx));
     auto copy_b = get_block_2d_copy_B<GmemTiledCopyB>(TiledMma{}, mainloop.mB_nkl(_,_,batch_idx));
