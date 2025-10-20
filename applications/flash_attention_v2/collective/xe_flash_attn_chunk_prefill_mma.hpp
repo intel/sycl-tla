@@ -37,6 +37,7 @@
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
 #include "fmha_fusion.hpp"
+#include "xe_rotary.h"
 
 
 ////////////////////////////////////////////////////////////
@@ -57,7 +58,7 @@ template <class DispatchPolicy, class ProblemShapeType_, class ElementQ_,
           class StrideV_, class MMAOperation_, class TileShapeQK_,
           class TileShapePV_, class SubgroupLayout_, class GmemTiledCopyQ_,
           class GmemTiledCopyK_, class GmemTiledCopyV_, bool CausalMask_,
-          bool LocalMask_, bool PagedKV_>
+          bool LocalMask_, bool PagedKV_,  bool RopeMask_ = false>
 struct FlashChunkPrefillMma {
   static_assert(cutlass::detail::dependent_false<ElementQ_>,
                 "Could not find a mainloop specialization.");
@@ -69,12 +70,13 @@ template <int Stages, class ProblemShapeType_, class ElementQ_, class StrideQ_,
           class ElementK_, class StrideK_, class ElementV_, class StrideV_,
           class MMAOperation_, class TileShapeQK_, class TileShapePV_,
           class SubgroupLayout_, class GmemTiledCopyQ_, class GmemTiledCopyK_,
-          class GmemTiledCopyV_, bool CausalMask_, bool LocalMask_, bool PagedKV_>
+          class GmemTiledCopyV_, bool CausalMask_, bool LocalMask_, bool PagedKV_,
+          bool RopeMask_>
 struct FlashChunkPrefillMma<
     gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, ElementQ_, StrideQ_,
     ElementK_, StrideK_, ElementV_, StrideV_, MMAOperation_, TileShapeQK_,
     TileShapePV_, SubgroupLayout_, GmemTiledCopyQ_, GmemTiledCopyK_,
-    GmemTiledCopyV_, CausalMask_, LocalMask_, PagedKV_> {
+    GmemTiledCopyV_, CausalMask_, LocalMask_, PagedKV_, RopeMask_> {
   //
   // Type Aliases
   //
@@ -104,6 +106,7 @@ struct FlashChunkPrefillMma<
   static constexpr bool CausalMask = CausalMask_;
   static constexpr bool LocalMask = LocalMask_;
   static constexpr bool PagedKV = PagedKV_;
+  static constexpr bool rope_enabled = RopeMask_;
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -192,6 +195,9 @@ struct FlashChunkPrefillMma<
     int const *num_pages_per_seq;
     int window_left;
     int window_right;
+    // for RoPE case
+    ElementQ const *ptr_cos = nullptr;
+    ElementQ const *ptr_sin = nullptr;
   };
 
   struct Params {
@@ -206,6 +212,11 @@ struct FlashChunkPrefillMma<
     int const *num_pages_per_seq;
     int window_left;
     int window_right;
+    // RoPE
+    XE_Copy_Q gmem_tiled_copy_q_cos;
+    XE_Copy_Q gmem_tiled_copy_q_sin;
+    XE_Copy_K gmem_tiled_copy_k_cos;
+    XE_Copy_K gmem_tiled_copy_k_sin;
   };
 
   //
@@ -244,18 +255,28 @@ struct FlashChunkPrefillMma<
         make_layout(
             make_shape(num_heads_kv * head_size_vo, seq_len_kv_cache, batch),
             args.dV_cache));
+    auto tensorQCos = make_tensor(make_gmem_ptr(args.ptr_cos), make_layout(make_shape(seq_len_qo, head_size_qk, batch * num_heads_q), args.dQ));
+    auto tensorQSin = make_tensor(make_gmem_ptr(args.ptr_sin), make_layout(make_shape(seq_len_qo, head_size_qk, batch * num_heads_q), args.dQ));
+    auto tensorKCos = make_tensor(make_gmem_ptr(args.ptr_cos), make_layout(make_shape(seq_len_kv, head_size_qk, batch * num_heads_kv), args.dK));
+    auto tensorKSin = make_tensor(make_gmem_ptr(args.ptr_sin), make_layout(make_shape(seq_len_kv, head_size_qk, batch * num_heads_kv), args.dK));
 
     XE_Copy_Q copyQ{XE_Copy_Q{}.with(tensorQ)};
     XE_Copy_K copyK{XE_Copy_K{}.with(tensorK)};
     XE_Copy_V copyV{XE_Copy_V{}.with(tensorV)};
     XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
     XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
+    XE_Copy_Q copyQCos{XE_Copy_Q{}.with(tensorQCos)};
+    XE_Copy_Q copyQSin{XE_Copy_Q{}.with(tensorQSin)};
+    XE_Copy_K copyKCos{XE_Copy_K{}.with(tensorKCos)};
+    XE_Copy_K copyKSin{XE_Copy_K{}.with(tensorKSin)};
 
     return Params{copyQ,            copyK,
                   copyV,            copyK_cache,
                   copyV_cache,      args.ptr_page_table,
                   args.page_size,   args.num_pages_per_seq,
-                  args.window_left, args.window_right};
+                  args.window_left, args.window_right,
+                  copyQCos,         copyQSin, 
+                  copyKCos,         copyKSin};
   }
 
   template <class FragQccum, class TensorQ, class TensorK, class FragSrc>
@@ -518,11 +539,34 @@ struct FlashChunkPrefillMma<
     auto tensorV_cache =
         make_tensor(make_gmem_ptr(v_cache_ptr + offset_v_cache),
                     make_layout(shape_v_cache, stride_v_cache));
+    // for RoPE
+    auto q_traits_cos = static_cast<traits_load_Q const&>(params.gmem_tiled_copy_q_cos);
+    ElementQ* base_ptr_q_cos = (ElementQ*)q_traits_cos.base_ptr;
+
+    auto q_traits_sin = static_cast<traits_load_Q const&>(params.gmem_tiled_copy_q_sin);
+    ElementQ* base_ptr_q_sin = (ElementQ*)q_traits_sin.base_ptr;
+    
+    auto k_traits_cos = static_cast<traits_load_K const&>(params.gmem_tiled_copy_k_cos);
+    ElementK* base_ptr_k_cos = (ElementK*)k_traits_cos.base_ptr;
+
+    auto k_traits_sin = static_cast<traits_load_K const&>(params.gmem_tiled_copy_k_sin);
+    ElementK* base_ptr_k_sin = (ElementK*)k_traits_sin.base_ptr;
+
+    auto tensorQCos = make_tensor(make_gmem_ptr(base_ptr_q_cos + offset_q), make_layout(shape_q, stride_q));
+    auto tensorQSin = make_tensor(make_gmem_ptr(base_ptr_q_sin + offset_q), make_layout(shape_q, stride_q));
+    auto tensorKCos = make_tensor(make_gmem_ptr(base_ptr_k_cos + offset_k), make_layout(shape_k, stride_k));
+    auto tensorKSin = make_tensor(make_gmem_ptr(base_ptr_k_sin + offset_k), make_layout(shape_k, stride_k));
+
     XE_Copy_Q copyQ{XE_Copy_Q{}.with(tensorQ)};
     XE_Copy_K copyK{XE_Copy_K{}.with(tensorK)};
     XE_Copy_V copyV{XE_Copy_V{}.with(tensorV)};
     XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
     XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
+    XE_Copy_Q copyQCos{XE_Copy_Q{}.with(tensorQCos)};
+    XE_Copy_Q copyQSin{XE_Copy_Q{}.with(tensorQSin)};
+    XE_Copy_K copyKCos{XE_Copy_K{}.with(tensorKCos)};
+    XE_Copy_K copyKSin{XE_Copy_K{}.with(tensorKSin)};
+
     return Params{copyQ,
                   copyK,
                   copyV,
@@ -532,7 +576,11 @@ struct FlashChunkPrefillMma<
                   params.page_size,
                   params.num_pages_per_seq,
                   params.window_left,
-                  params.window_right};
+                  params.window_right,
+                  copyQCos,
+                  copyQSin,
+                  copyKCos,
+                  copyKSin};
   }
 };
 
