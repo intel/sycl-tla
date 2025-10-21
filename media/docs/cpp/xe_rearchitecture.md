@@ -293,6 +293,31 @@ As a more complicated example, let's consider a 16-bit VNNI load, with height = 
 
 ```math
     \begin{array}{c}
+    \text{Subgroup view}\\
+    \begin{array}{cccccc}
+    0 & 2 & 4 & 6 & \cdots & 30\\
+    1 & 3 & 5 & 7 & \cdots & 31\\
+    32 & 34 & 36 & 38 & \cdots & 62\\
+    33 & 35 & 37 & 39 & \cdots & 63
+    \end{array}
+    \end{array}
+    \rightarrow
+    \begin{array}{c}
+    \text{Thread view}\\
+    \begin{array}{cccc}
+    \text{T0V0} & \text{T2V0} & \text{T4V0} & \cdots & \text{T14V0} & \text{T0V1} & \cdots & \text{T14V1}\\
+    \text{T1V0} & \text{T3V0} & \text{T5V0} & \cdots & \text{T15V0} & \text{T1V1} & \cdots & \text{T15V1}\\
+    \text{T0V2} & \text{T2V2} & \text{T4V2} & \cdots & \text{T14V2} & \text{T0V3} & \cdots & \text{T14V3}\\
+    \text{T1V2} & \text{T3V2} & \text{T5V2} & \cdots & \text{T15V2} & \text{T1V3} & \cdots & \text{T15V3}
+    \end{array}
+    \end{array}
+```
+
+If we instead assume that the values in the VNNI-transformed matrix below refer to the corresponding indices of the original plain layout matrix,
+then we can view the 16-bit VNNI load from a different perspective.
+
+```math
+    \begin{array}{c}
     \text{Subgroup view of data in global memory}\\
     \begin{array}{cccccc}
     0 & 1 & 2 & 3 & \cdots & 15\\
