@@ -2,7 +2,7 @@
 
 ## Limitations of Current Intel CuTe Architecture
 
-* VNNI layout used by DPAS and block 2D VNNI loads is hidden from CuTe/CUTLASS.
+* [VNNI layout](https://github.com/intel/llvm/blob/sycl/sycl/doc/extensions/experimental/sycl_ext_matrix/sycl_ext_intel_matrix.asciidoc#packed-layout-format) used by DPAS and block 2D VNNI loads is hidden from CuTe/CUTLASS.
   - Compiler inserts extra interleave/deinterleave operations if there is any computation between VNNI load and DPAS.
   - Additionally, any such computation using the native B data type (instead of int) can lead to private memory traffic.
 * MMA and copy fragments must be carefully set up to match layouts
@@ -289,7 +289,10 @@ Now that we have the basic thread mapping rule, let's apply it to a simple block
 
 An individual DPAS atom's A matrix follows the same pattern, with height ranging from 1 to 8, and width equal to 8 (tf32), 16 (f16/bf16), or 32 (s8/u8). The DPAS C matrix is also organized this way, except that its width is always 16.
 
-As a more complicated example, let's consider a 16-bit VNNI load, with height = 4, width = 16:
+As a more complicated example, let's consider a 16-bit [VNNI](https://github.com/intel/llvm/blob/sycl/sycl/doc/extensions/experimental/sycl_ext_matrix/sycl_ext_intel_matrix.asciidoc#packed-layout-format) load, with height = 4, width = 16:
+
+Please note that the numbers in the subgroup-view below do not correspond to the logical indices of the original (pre-VNNI-transformation) plain-layout matrix.
+They represent the order of the elements in the Xe general register file.
 
 ```math
     \begin{array}{c}
@@ -313,8 +316,8 @@ As a more complicated example, let's consider a 16-bit VNNI load, with height = 
     \end{array}
 ```
 
-If we instead assume that the values in the VNNI-transformed matrix below refer to the corresponding indices of the original plain layout matrix,
-then we can view the 16-bit VNNI load from a different perspective.
+If we instead assume that the values in the subgroup views below refer to the indices of the original plain layout matrix,
+then we can view the 16-bit VNNI load from the perspective of where the plain layout matrix's elements end up after transformation.
 
 ```math
     \begin{array}{c}
