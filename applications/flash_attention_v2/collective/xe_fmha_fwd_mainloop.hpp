@@ -261,7 +261,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
       }
 
       clear(tArA);
-      fill(tA_max, ElementA(-INFINITY));
+      fill(tA_max, ElementA(-1000.0f));
       clear(tA_sum);
     }
 
