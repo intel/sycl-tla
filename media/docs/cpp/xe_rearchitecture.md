@@ -316,8 +316,9 @@ They represent the order of the elements in the Xe general register file.
     \end{array}
 ```
 
-If we instead assume that the values in the subgroup views below refer to the indices of the original plain layout matrix,
+If we instead assume that the numbers in the subgroup views below refer to the indices of the original plain layout matrix,
 then we can view the 16-bit VNNI load from the perspective of where the plain layout matrix's elements end up after transformation.
+e.g. after VNNI-transform, the number at (row 1, col 0) in the subgroup view is 8, which implies that the value at logical linear index 8 in the original plain-layout subgroup view would move to (row 1, col 0) after VNNI-transform.
 
 ```math
     \begin{array}{c}
