@@ -142,6 +142,15 @@ public:
   };
   using TensorStorage = typename SharedStorage::TensorStorage;
 
+  // Helper to get tensor types
+  template<class Element, class Stride>
+  using TensorTypeC = decltype(make_tensor(make_gmem_ptr(static_cast<Element const*>(nullptr)),
+                                           make_layout(make_shape(int{}, int{}, int{}), Stride{})));
+
+  template<class Element, class Stride>  
+  using TensorTypeD = decltype(make_tensor(make_gmem_ptr(static_cast<Element*>(nullptr)),
+                                      make_layout(make_shape(int{}, int{}, int{}), Stride{})));
+
   // Host side epilogue arguments
   struct Arguments {
     typename FusionCallbacks::Arguments thread{};
@@ -154,11 +163,8 @@ public:
   // Device side epilogue params
   struct Params {
     typename FusionCallbacks::Params thread{};
-    ElementC const* ptr_C;
-    ElementD* ptr_D;
-    int M, N, K, L; 
-    StrideC dC;
-    StrideD dD;
+    TensorTypeC<ElementC, StrideC> mC;
+    TensorTypeD<ElementD, StrideD> mD;
   };
 
   //
@@ -174,14 +180,13 @@ public:
     // Optionally append 1s until problem shape is rank-4 in case its is only rank-3 (MNK)
     auto problem_shape_MNKL = append<4>(problem_shape, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
+    auto mC = make_tensor(make_gmem_ptr(args.ptr_C), make_layout(make_shape(M, N, L),  args.dC));
+    auto mD = make_tensor(make_gmem_ptr(args.ptr_D), make_layout(make_shape(M, N, L),  args.dD));
 
     return {
       FusionCallbacks::to_underlying_arguments(problem_shape, args.thread, workspace),
-      args.ptr_C,
-      args.ptr_D,
-      M, N, K, L,
-      args.dC,
-      args.dD
+      mC,
+      mD
     };
   }
 
@@ -285,27 +290,12 @@ public:
     
     // Workgroup coordinates (no subgroup indexing needed)
     auto wg_coord = make_coord(m_coord, n_coord, k_coord, l_coord);
-    auto batch_idx = get<3>(wg_coord);
 
     bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
-    auto mC = make_tensor(make_gmem_ptr(params.ptr_C), make_layout(make_shape(params.M, params.N, params.L),  params.dC));
-    auto mD = make_tensor(make_gmem_ptr(params.ptr_D), make_layout(make_shape(params.M, params.N, params.L),  params.dD));
 
-    auto copy_c = [&]() {
-      if constexpr (!std::is_void_v<CopyOpG2R>) {
-        return make_block_2d_copy_CD(CopyOpG2R{}, tiled_mma, mC(_,_,batch_idx));
-      } else {
-        return make_block_2d_copy_C(tiled_mma, mC(_,_,batch_idx));
-      }
-    }();
-    auto copy_d = [&]() {
-      if constexpr (!std::is_void_v<CopyOpR2G>) {
-        return make_block_2d_copy_CD(CopyOpR2G{}, tiled_mma, mD(_,_,batch_idx));
-      } else {
-        return make_block_2d_copy_D(tiled_mma, mD(_,_,batch_idx));
-      }
-    }();
-
+    auto batch_idx = get<3>(wg_coord);
+    auto copy_c = get_block_2d_copy_C<CopyOpG2R>(tiled_mma, params.mC(_,_,batch_idx));
+    auto copy_d = get_block_2d_copy_D<CopyOpR2G>(tiled_mma, params.mD(_,_,batch_idx));
 
     // Represent the full output tensor
     Tensor mD_mnl = cute::get_xe_tensor(make_shape(M,N,L));

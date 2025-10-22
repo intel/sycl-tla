@@ -1079,6 +1079,48 @@ make_block_2d_prefetch(PrefetchOp         const& op,
   return make_block_2d_copy<ValType>(op, stride, x_mode, y_mode, atom_shape, sv_layout);
 }
 
+//
+// Block 2D Copy Utilities - Helper functions for conditional copy operation selection
+//
+template <class CopyOp, class TiledMMA, class ATensor>
+auto get_block_2d_copy_A(TiledMMA const& tiled_mma, ATensor const& a_tensor)
+{
+  if constexpr (!std::is_void_v<CopyOp>) {
+    return make_block_2d_copy_A(CopyOp{}, tiled_mma, a_tensor);
+  } else {
+    return make_block_2d_copy_A(tiled_mma, a_tensor);
+  }
+}
+
+template <class CopyOp, class TiledMMA, class BTensor>
+auto get_block_2d_copy_B(TiledMMA const& tiled_mma, BTensor const& b_tensor)
+{
+  if constexpr (!std::is_void_v<CopyOp>) {
+    return make_block_2d_copy_B(CopyOp{}, tiled_mma, b_tensor);
+  } else {
+    return make_block_2d_copy_B(tiled_mma, b_tensor);
+  }
+}
+
+template <class CopyOp, class TiledMMA, class CTensor>
+auto get_block_2d_copy_C(TiledMMA const& tiled_mma, CTensor const& c_tensor)
+{
+  if constexpr (!std::is_void_v<CopyOp>) {
+    return make_block_2d_copy_CD(CopyOp{}, tiled_mma, c_tensor);
+  } else {
+    return make_block_2d_copy_C(tiled_mma, c_tensor);
+  }
+}
+
+template <class CopyOp, class TiledMMA, class DTensor>
+auto get_block_2d_copy_D(TiledMMA const& tiled_mma, DTensor const& d_tensor)
+{
+  if constexpr (!std::is_void_v<CopyOp>) {
+    return make_block_2d_copy_CD(CopyOp{}, tiled_mma, d_tensor);
+  } else {
+    return make_block_2d_copy_D(tiled_mma, d_tensor);
+  }
+}
 
 
 //
