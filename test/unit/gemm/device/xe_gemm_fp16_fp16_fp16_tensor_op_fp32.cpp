@@ -51,7 +51,7 @@ struct XE_Device_Gemm_fp16_fp16_f16_tensor_op_f32 {
     cute::half_t, LayoutA,
     cute::half_t, LayoutB,
     float, layout::RowMajor,
-    float>;
+    cute::half_t>;
 
   using Gemm = gemm::device::GemmUniversalAdapter<gemm::kernel::GemmUniversal<
     cute::Shape<int,int,int,int>,
