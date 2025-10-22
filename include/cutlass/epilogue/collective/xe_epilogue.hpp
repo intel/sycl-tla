@@ -293,16 +293,16 @@ public:
 
     auto copy_c = [&]() {
       if constexpr (!std::is_void_v<CopyOpG2R>) {
-        return make_block_2d_copy_A(CopyOpG2R{}, tiled_mma, mC(_,_,batch_idx));
+        return make_block_2d_copy_CD(CopyOpG2R{}, tiled_mma, mC(_,_,batch_idx));
       } else {
-        return make_block_2d_copy_A(tiled_mma, mC(_,_,batch_idx));
+        return make_block_2d_copy_C(tiled_mma, mC(_,_,batch_idx));
       }
     }();
     auto copy_d = [&]() {
       if constexpr (!std::is_void_v<CopyOpR2G>) {
-        return make_block_2d_copy_C(CopyOpR2G{}, tiled_mma, mD(_,_,batch_idx));
+        return make_block_2d_copy_CD(CopyOpR2G{}, tiled_mma, mD(_,_,batch_idx));
       } else {
-        return make_block_2d_copy_C(tiled_mma, mD(_,_,batch_idx));
+        return make_block_2d_copy_D(tiled_mma, mD(_,_,batch_idx));
       }
     }();
 
