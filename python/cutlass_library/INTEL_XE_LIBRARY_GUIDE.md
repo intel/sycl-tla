@@ -26,6 +26,7 @@ cd build
 cmake .. -GNinja \
     -DCUTLASS_NVCC_ARCHS="" \
     -DCUTLASS_ENABLE_SYCL=ON \
+    -DSYCL_INTEL_TARGET \
     -DCUTLASS_LIBRARY_GENERATOR_ARCHS="20"
 
 # Build all libraries
