@@ -77,27 +77,6 @@ jobs:
           $CXX --version
           g++-13 --version
           sycl-ls
-      - name: Detect IGC Version
-        id: igc-version
-        shell: bash
-        run: |
-          # Get IGC version from installed driver and extract first two parts
-          IGC_VERSION=$(dpkg -l | grep intel-igc-core | awk '{print $3}' | cut -d'-' -f1)
-          echo "Full IGC Version detected: $IGC_VERSION"
-          
-          # Extract major and minor versions (first two parts only)
-          IGC_MAJOR=$(echo $IGC_VERSION | cut -d'.' -f1)
-          IGC_MINOR=$(echo $IGC_VERSION | cut -d'.' -f2)
-          
-          # Verify we got the versions
-          if [ -z "$IGC_MAJOR" ] || [ -z "$IGC_MINOR" ]; then
-            echo "Error: Failed to extract IGC version numbers"
-            exit 1
-          fi
-          
-          echo "IGC_VERSION_MAJOR=$IGC_MAJOR" >> $GITHUB_ENV
-          echo "IGC_VERSION_MINOR=$IGC_MINOR" >> $GITHUB_ENV
-          echo "Using IGC Version: $IGC_MAJOR.$IGC_MINOR (from $IGC_VERSION)"
 
       - name: Build
         shell: bash
@@ -105,8 +84,6 @@ jobs:
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
-            -DIGC_VERSION_MAJOR=${{ env.IGC_VERSION_MAJOR }} \
-            -DIGC_VERSION_MINOR=${{ env.IGC_VERSION_MINOR }} \
             -DCUTLASS_SYCL_RUNNING_CI=ON \
             -DCMAKE_CXX_FLAGS="-Werror" \
             -DDPCPP_HOST_COMPILER=g++-13
