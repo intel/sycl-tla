@@ -1,11 +1,35 @@
-/* 
-Debug
-cd /home/avance/bmg-public/sycl-tla-antony/sycl-tla/python/cutlass_library && source /opt/intel/oneapi/setvars.sh --force > /dev/null 2>&1 && icpx -fPIC -shared -g -O0 -std=c++17 -fsycl -Xspirv-translator -spirv-ext=+SPV_INTEL_split_barrier,+SPV_INTEL_2d_block_io,+SPV_INTEL_subgroup_matrix_multiply_accumulate -DCUTLASS_ENABLE_SYCL -DSYCL_INTEL_TARGET -DDPCPP_SYCL_TARGET=intel_gpu_bmg_g21 -I/home/avance/bmg-public/sycl-tla-antony/sycl-tla/include -I/home/avance/bmg-public/sycl-tla-antony/sycl-tla/build/include -I/home/avance/bmg-public/sycl-tla-antony/sycl-tla/tools/util/include -I/home/avance/bmg-public/sycl-tla-antony/sycl-tla/tools/library/include -L/home/avance/bmg-public/sycl-tla-antony/sycl-tla/build/tools/library -lcutlass.debug -lcutlass_gemm_xe20_gemm.debug -Wl,-rpath,/home/avance/bmg-public/sycl-tla-antony/sycl-tla/build/tools/library -o generated_test_wrapper.so generated_test_wrapper.cpp && echo "✓ Successfully compiled generated_test_wrapper.cpp!" && ls -lh generated_test_wrapper.so
+/***************************************************************************************************
+ * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ * list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ ***************************************************************************************************/
 
-Release
-cd /home/avance/bmg-public/sycl-tla-antony/sycl-tla/python/cutlass_library && source /opt/intel/oneapi/setvars.sh --force > /dev/null 2>&1 && icpx -fPIC -shared -g -O3 -std=c++17 -fsycl -Xspirv-translator -spirv-ext=+SPV_INTEL_split_barrier,+SPV_INTEL_2d_block_io,+SPV_INTEL_subgroup_matrix_multiply_accumulate -DCUTLASS_ENABLE_SYCL  -DSYCL_INTEL_TARGET  -DDPCPP_SYCL_TARGET=intel_gpu_bmg_g21 -I/home/avance/bmg-public/sycl-tla-antony/sycl-tla/include -I/home/avance/bmg-public/sycl-tla-antony/sycl-tla/build/include -I/home/avance/bmg-public/sycl-tla-antony/sycl-tla/tools/util/include -I/home/avance/bmg-public/sycl-tla-antony/sycl-tla/tools/library/include -L/home/avance/bmg-public/sycl-tla-antony/sycl-tla/build/tools/library -lcutlass -lcutlass_gemm_xe20_gemm -Wl,-rpath,/home/avance/bmg-public/sycl-tla-antony/sycl-tla/build/tools/library -o generated_test_wrapper.so generated_test_wrapper.cpp && echo "✓ Successfully compiled generated_test_wrapper.cpp!" && ls -lh generated_test_wrapper.so
 
-*/
 
 #include <exception>
 #include <iostream>
