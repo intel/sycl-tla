@@ -32,7 +32,7 @@ set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
 set(TEST_NO_PAGED "")
 set(TEST_PAGED "--use_paged_kv")
 
-foreach(HEAD_DIM 16 64 96 128 192)
+foreach(HEAD_DIM 64 96 128 192)
 
   cutlass_example_add_executable(
     06_xe_fmha_fwd_prefill_hdim${HEAD_DIM}
