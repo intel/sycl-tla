@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,32 +55,36 @@ constexpr auto get_num_atoms(T_m tile_m, T_n tile_n){
 
 template<bool is_t, bool is_v, typename T_m, typename T_n>
 constexpr auto select_copy_atom_16b(T_m tile_m, T_n tile_n){
+  // Extract compile-time constant values from cute::Int<> types
+  constexpr int tile_m_val = decltype(tile_m)::value;
+  constexpr int tile_n_val = decltype(tile_n)::value;
+  
   #define RETURN_ATOM(WIDTH, HEIGHT, LETTER) \
     return XE_2D_U16x##WIDTH##x##HEIGHT##_LD_##LETTER {};
 
   if constexpr(is_t){
     // tile_m and tile_n have swapped role in case of _T
-    static_assert(tile_n % 16 == 0 && "Invalid tile_m");
-    if constexpr(tile_m == 8){
+    static_assert(tile_n_val % 16 == 0 && "Invalid tile_m");
+    if constexpr(tile_m_val == 8){
       RETURN_ATOM(16, 8, T)
-    } else if constexpr(tile_m % 16 == 0){
+    } else if constexpr(tile_m_val % 16 == 0){
       RETURN_ATOM(16, 16, T)
     } else{
       static_assert(dependent_false<T_m> && "Invalid tile_n");
     }
   } else if constexpr(is_v){
     #define SELECT_HEIGHT_V(WIDTH) \
-      if constexpr(tile_n == 16){ \
+      if constexpr(tile_n_val == 16){ \
         RETURN_ATOM(WIDTH, 16, V) \
-      } else if constexpr(tile_n % 32 == 0){ \
+      } else if constexpr(tile_n_val % 32 == 0){ \
         RETURN_ATOM(WIDTH, 32, V) \
       } else{ \
         static_assert(dependent_false<T_n> && "Invalid tile_n"); \
       }
 
-    if constexpr(tile_m == 16){
+    if constexpr(tile_m_val == 16){
       SELECT_HEIGHT_V(16)
-    } else if constexpr(tile_m % 32 == 0){
+    } else if constexpr(tile_m_val % 32 == 0){
       SELECT_HEIGHT_V(32)
     } else{
       static_assert(dependent_false<T_m> && "Invalid tile_m");
@@ -87,25 +92,25 @@ constexpr auto select_copy_atom_16b(T_m tile_m, T_n tile_n){
     #undef SELECT_HEIGHT_V
   } else{ // _N
     #define SELECT_WIDTH_N(HEIGHT) \
-      if constexpr(tile_m == 1){ \
+      if constexpr(tile_m_val == 1){ \
         RETURN_ATOM(1, HEIGHT, N) \
-      } else if constexpr(tile_m == 2){ \
+      } else if constexpr(tile_m_val == 2){ \
         RETURN_ATOM(2, HEIGHT, N) \
-      } else if constexpr(tile_m == 4){ \
+      } else if constexpr(tile_m_val == 4){ \
         RETURN_ATOM(4, HEIGHT, N) \
-      } else if constexpr(tile_m == 8){ \
+      } else if constexpr(tile_m_val == 8){ \
         RETURN_ATOM(8, HEIGHT, N) \
-      } else if constexpr(tile_m == 16){ \
+      } else if constexpr(tile_m_val == 16){ \
         RETURN_ATOM(16, HEIGHT, N) \
-      } else if constexpr(tile_m % 32 == 0){ \
+      } else if constexpr(tile_m_val % 32 == 0){ \
         RETURN_ATOM(32, HEIGHT, N) \
       } else { \
         static_assert(dependent_false<T_m> && "Invalid tile_m"); \
       }
 
-    if constexpr(tile_n == 16){
+    if constexpr(tile_n_val == 16){
       SELECT_WIDTH_N(16)
-    } else if constexpr(tile_n % 32 == 0){
+    } else if constexpr(tile_n_val % 32 == 0){
       SELECT_WIDTH_N(32)
     } else {
       static_assert(dependent_false<T_n> && "Invalid tile_n");
@@ -130,6 +135,11 @@ PICK_MMA(bfloat16_t, float, XE_8x16x16_F32BF16BF16F32_TT);
 PICK_MMA(bfloat16_t, bfloat16_t, XE_8x16x16_BF16BF16BF16BF16_TT);
 PICK_MMA(half_t, float, XE_8x16x16_F32F16F16F32_TT);
 PICK_MMA(half_t, half_t, XE_8x16x16_F16F16F16F16_TT);
+// FP8 types use FP16 accumulation, the conversion happens in the collective
+PICK_MMA(float_e4m3_t, float, XE_8x16x16_F32F16F16F32_TT);
+PICK_MMA(float_e5m2_t, float, XE_8x16x16_F32F16F16F32_TT);
+// INT8 types use INT32 accumulation (note: K=32 for INT8, not K=16)
+PICK_MMA(int8_t, int32_t, XE_8x16x32_S32S8S8S32_TT);
 
 #undef PICK_MMA
 }
@@ -171,8 +181,8 @@ struct CollectiveBuilder<
           "Trying to use Intel pipeline on Non Intel hardware");
       #endif
       static_assert(is_static<TileShape_MNK>::value);
-      static_assert(cute::is_any_of_v<ElementAccumulator, float, bfloat16_t, half_t>,
-        "Intel multi-stage pipeline requires ElementC to be of type float, bfloat or half");
+      static_assert(cute::is_any_of_v<ElementAccumulator, float, bfloat16_t, half_t, int32_t>,
+        "Intel multi-stage pipeline requires ElementC to be of type float, bfloat, half, or int32");
 
       static constexpr bool isAtypeBig = cute::sizeof_bits_v<ElementA> > cute::sizeof_bits_v<ElementB>;
       using MMAType = std::conditional_t<isAtypeBig, ElementA, ElementB>;
@@ -218,6 +228,7 @@ struct CollectiveBuilder<
       using ElementA_ = std::conditional_t<cute::sizeof_bits_v<ElementA> <= 8, cute::tuple<ElementA>, ElementA>;
       using ElementB_ = std::conditional_t<cute::sizeof_bits_v<ElementB> <= 8, cute::tuple<ElementB>, ElementB>;
 
+
       using CollectiveOp = cutlass::gemm::collective::CollectiveMma<
               DispatchPolicy,
               TileShape_MNK,
@@ -236,4 +247,96 @@ struct CollectiveBuilder<
               TransformB
           >;
     };
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Xe12 (PVC) CollectiveBuilder - forwards to IntelXe
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <
+  class ElementA,
+  class GmemLayoutATag,
+  int AlignmentA,
+  class ElementB,
+  class GmemLayoutBTag,
+  int AlignmentB,
+  class ElementAccumulator,
+  class TileShape_MNK,
+  class KernelScheduleType
+  >
+struct CollectiveBuilder<
+  arch::Xe12,
+  arch::OpClassTensorOp,
+  ElementA,
+  GmemLayoutATag,
+  AlignmentA,
+  ElementB,
+  GmemLayoutBTag,
+  AlignmentB,
+  ElementAccumulator,
+  TileShape_MNK,
+  Shape<_1, _1, _1>,    
+  cutlass::gemm::collective::StageCountAuto,
+  KernelScheduleType
+  > : CollectiveBuilder<
+      arch::IntelXe,  // Forward to IntelXe
+      arch::OpClassTensorOp,
+      ElementA,
+      GmemLayoutATag,
+      AlignmentA,
+      ElementB,
+      GmemLayoutBTag,
+      AlignmentB,
+      ElementAccumulator,
+      TileShape_MNK,
+      Shape<_1, _1, _1>,
+      cutlass::gemm::collective::StageCountAuto,
+      KernelScheduleType
+  > {};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Xe20 (BMG) CollectiveBuilder - forwards to IntelXe
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <
+  class ElementA,
+  class GmemLayoutATag,
+  int AlignmentA,
+  class ElementB,
+  class GmemLayoutBTag,
+  int AlignmentB,
+  class ElementAccumulator,
+  class TileShape_MNK,
+  class KernelScheduleType
+  >
+struct CollectiveBuilder<
+  arch::Xe20,
+  arch::OpClassTensorOp,
+  ElementA,
+  GmemLayoutATag,
+  AlignmentA,
+  ElementB,
+  GmemLayoutBTag,
+  AlignmentB,
+  ElementAccumulator,
+  TileShape_MNK,
+  Shape<_1, _1, _1>,    
+  cutlass::gemm::collective::StageCountAuto,
+  KernelScheduleType
+  > : CollectiveBuilder<
+      arch::IntelXe,  // Forward to IntelXe
+      arch::OpClassTensorOp,
+      ElementA,
+      GmemLayoutATag,
+      AlignmentA,
+      ElementB,
+      GmemLayoutBTag,
+      AlignmentB,
+      ElementAccumulator,
+      TileShape_MNK,
+      Shape<_1, _1, _1>,
+      cutlass::gemm::collective::StageCountAuto,
+      KernelScheduleType
+  > {};
+
 }
+
