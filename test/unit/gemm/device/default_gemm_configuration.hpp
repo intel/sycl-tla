@@ -1465,7 +1465,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
       cutlass::gemm::collective::KernelScheduleAuto
     >::CollectiveOp;
 
-  using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
+  using EpilogueOp = epilogue::fusion::LinearCombination<ElementOutput, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
     epilogue::IntelXeXMX16,
@@ -1567,7 +1567,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
     cutlass::gemm::collective::KernelScheduleAuto
   >::CollectiveOp;
 
-  using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
+  using EpilogueOp = epilogue::fusion::LinearCombination<ElementOutput, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
     epilogue::IntelXeXMX16,

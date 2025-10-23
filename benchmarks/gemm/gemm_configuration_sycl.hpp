@@ -70,6 +70,7 @@ template<
   class ArchTag,
   class ElementA, class LayoutA,
   class ElementB, class LayoutB, class ElementC, typename LayoutC,
+  class ElementD, typename LayoutD,
   class ElementScale, typename StrideS,
   class ElementZero, typename StrideZ,
   class TileShape, Scheduler TileScheduler,
@@ -175,6 +176,7 @@ struct GemmConfiguration<
 template<class ElementA, class LayoutA,
   class ElementB, class LayoutB,
   class ElementC, typename LayoutC,
+  class ElementD, typename LayoutD,
   class ElementScale, typename StrideS,
   class ElementZero, typename StrideZ,
   class TileShape, Scheduler TileScheduler,
@@ -185,13 +187,13 @@ struct MixedPrecisionGemmConfiguration<
       ElementA, LayoutA,
       ElementB, LayoutB,
       ElementC, LayoutC,
+      ElementD, LayoutD,
       ElementScale, StrideS,
       ElementZero, StrideZ,
       TileShape, TileScheduler, TiledMma,
       GmemTiledCopyA, GmemTiledCopyB,
       GmemTiledCopyC, EpilogueOp, Stages>
 {
-  using LayoutD = LayoutC;
 
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<Stages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
@@ -205,7 +207,7 @@ struct MixedPrecisionGemmConfiguration<
           TileShape,
           ElementAccumulator,
           cutlass::gemm::TagToStrideC_t<LayoutC>,
-          ElementC,
+          ElementD,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
