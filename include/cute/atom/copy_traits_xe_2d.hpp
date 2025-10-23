@@ -981,6 +981,7 @@ make_block_2d_copy_CD(CopyOp             const& op,          // Copy operation
                       TiledMMA           const& mma,         // TiledMMA instance
                       Stride<Strides...> const& gstride)     // Global memory strides
 {
+  static_assert(is_xe_block_2d_atom_v<CopyOp>, "Expected a block 2D atom");
   return make_block_2d_copy_CD<ValType>(op, mma, gstride, find_x_mode(gstride), find_y_mode(gstride));
 }
 
@@ -993,6 +994,7 @@ make_block_2d_copy_CD(CopyOp             const& op,          // Copy operation
                       XMode              const& x_mode,      // x, y modes
                       YMode              const& y_mode)
 {
+  static_assert(is_xe_block_2d_atom_v<CopyOp>, "Expected a block 2D atom");
   // Retrieve MMA atom's (subgroup, value) -> (M,N) layout
   auto tile_mn = select<0,1>(mma.tile_mnk());
 
