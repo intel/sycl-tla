@@ -1,5 +1,3 @@
-# Manifest and Kernel Generation System
-
 <!--
 Copyright (C) 2025 Intel Corporation, All rights reserved.
 SPDX-License-Identifier: BSD-3-Clause
@@ -30,7 +28,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -->
 
-# Manifest and Kernel Generation System
+# Kernel Generation and Manifest
 
 This is a code/kernel generation system that creates a searchable catalog of CUTLASS kernel operations, bridging build-time generation and runtime selection.
 

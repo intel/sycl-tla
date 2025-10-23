@@ -31,7 +31,6 @@
 
 """
 Test the generated CUTLASS GEMM kernel (sycl_tla_gemm_xe20_bf16)
-Based on the Runner class pattern from test.py
 """
 
 import ctypes

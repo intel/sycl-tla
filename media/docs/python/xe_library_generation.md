@@ -1,5 +1,3 @@
-# Intel SYCL*TLA Library Generation Guide
-
 <!--
 Copyright (C) 2025 Intel Corporation, All rights reserved.
 SPDX-License-Identifier: BSD-3-Clause
@@ -85,7 +83,7 @@ python3 test_simple_generation.py --build-dir ./test_build --arch 20
 
 ### ❌ Mixed Precision (A ≠ B)
 
-Mixed precision requires **Grouped GEMM** infrastructure, not supported in regular library:
+Mixed precision infrastructure is not supported now:
 - FP16 × E4M3/E5M2 → FP32
 - BF16 × E4M3/E5M2 → FP32  
 - FP16 × INT4 → FP32
@@ -149,29 +147,6 @@ cd build
 python3 ../python/cutlass_library/generator.py --operations=gemm --architectures=20 --build-dir=.
 ```
 
-### Library Usage
-
-```cpp
-#include "cutlass/library/library.h"
-
-cutlass::library::initialize();  // Initialize all operations
-
-cutlass::library::Operation const *operation = 
-    cutlass::library::find_gemm_operation(
-        cutlass::library::Provider::kCUTLASS,
-        cutlass::library::GemmKind::Gemm,
-        cutlass::library::NumericTypeID::kBF16,  // Element A
-        cutlass::library::LayoutTypeID::kRowMajor,
-        cutlass::library::NumericTypeID::kBF16,  // Element B  
-        cutlass::library::LayoutTypeID::kColumnMajor,
-        cutlass::library::NumericTypeID::kF32,   // Element C
-        cutlass::library::LayoutTypeID::kRowMajor,
-        cutlass::library::NumericTypeID::kF32    // Compute type
-    );
-
-cutlass::Status status = operation->run(&arguments, host_workspace, device_workspace, stream);
-```
-
 ### Python Integration Example
 
 For Python integration via ctypes, see:
@@ -188,55 +163,7 @@ cd examples/python/cutlass_library
 python3 xe20_gemm_bf16.py
 ```
 
----
-
-## Implementation Details
-
-### Key Generator Functions
-
-**Added to `generator.py` (~230 lines):**
-- `GenerateXe_TensorOp_16b_DPAS_gemm()` - FP16/BF16 kernels
-- `GenerateXe_TensorOp_fp8_DPAS_gemm()` - FP8 E4M3/E5M2 kernels  
-- `GenerateXe_TensorOp_int8_DPAS_gemm()` - INT8 kernels
-- `GenerateIntelXe()` - Unified orchestrator
-
-### MMA Atom Mapping
-
-```cpp
-// xe_mma_builder.inl
-PICK_MMA(bfloat16_t, float, XE_8x16x16_F32BF16BF16F32_TT);
-PICK_MMA(half_t, float, XE_8x16x16_F32F16F16F32_TT);
-PICK_MMA(float_e4m3_t, float, XE_8x16x16_F32F16F16F32_TT);  // FP8→FP16 conversion
-PICK_MMA(int8_t, int32_t, XE_8x16x32_S32S8S8S32_TT);        // K=32 for INT8
-```
-
-### Architecture Detection
-
-```cpp
-// Compute capability 12-50 → Intel Xe → .cpp files
-if (12 <= cc <= 50):
-    file_extension = ".cpp"
-    architecture_prefix = "xe"
-```
-
----
-
 ## Troubleshooting
-
-### Mixed Precision Compile Error
-```
-error: no type named 'ElementA' in 'cutlass3x_xe20_tensorop_gemm_f16_e4m3_...'
-```
-**Solution:** Use grouped GEMM examples instead of regular library.
-
-### Wrong File Extension (.cu instead of .cpp)
-```bash
-# Wrong: Generates .cu files
-cmake .. -DCUTLASS_LIBRARY_GENERATOR_ARCHS="90"  # CUDA SM90
-
-# Correct: Generates .cpp files  
-cmake .. -DCUTLASS_LIBRARY_GENERATOR_ARCHS="20"  # Intel XE20
-```
 
 ### No Operations Generated
 **Check:** `GenerateIntelXe()` called for arch in [12, 20] in `generator.py`
@@ -246,30 +173,6 @@ cmake .. -DCUTLASS_LIBRARY_GENERATOR_ARCHS="20"  # Intel XE20
 undefined reference to `initialize_all_xe20_gemm_bf16_gemm_operations()`
 ```
 **Solution:** Build and link the specific library: `-lcutlass_gemm_xe20_gemm_bf16`
-
----
-
-## Performance Tips
-
-### Optimal Tile Sizes
-| Matrix Size | Tile | Reason |
-|-------------|------|--------|
-| Large (4096+) | 256×256×K | Best occupancy |
-| Medium (1024-4096) | 128×256×K | Balanced |
-| Small (<1024) | 128×128×K | Lower resources |
-
-### Memory Alignment
-- **FP16/BF16:** 8-element (16 bytes)
-- **FP8/INT8:** 16-element (16 bytes)  
-- **Output:** 4-8 element alignment
-
-### Layout Preferences
-- **NN:** Both RowMajor (fastest)
-- **NT:** Standard GEMM (B transposed)
-- **TN:** A transposed  
-- **TT:** Both transposed
-
----
 
 ## Summary
 
@@ -319,11 +222,4 @@ cd examples/python/cutlass_library
 python3 xe20_gemm_bf16.py
 ```
 
-### Other Related Examples
-- **`examples/09_bmg_grouped_gemm_f8/`** - Mixed precision FP8 kernels (grouped GEMM)
-- **`examples/00_bmg_gemm/`** - Basic GEMM examples for different data types
-
 ---
-
-**Copyright © 2025 Intel Corporation. All rights reserved.**  
-**Last Updated:** October 23, 2025
