@@ -115,7 +115,11 @@ CUTE_HOST_DEVICE
 constexpr auto
 make_subgroup_tensor(Layout<Shape,Stride> const& sg_layout)
 {
-  return make_subgroup_tensor(make_fragment_like<T>(sg_layout(0,_)), sg_layout);
+  using _SG = intel::_SGSize;
+  auto ilayout = make_layout(make_shape(_SG{}, size(sg_layout) / _SG{}),
+                             make_stride(_1{}, _16{}));
+  auto sv_layout = sg_layout.compose(ilayout);
+  return make_subgroup_tensor(make_fragment_like<T>(sv_layout(0,_)), sv_layout);
 }
 
 template <typename T, class... Args>
