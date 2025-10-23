@@ -50,8 +50,7 @@ using namespace compat::experimental;
 #if (IGC_VERSION_MAJOR > 2) || (IGC_VERSION_MAJOR == 2 && IGC_VERSION_MINOR >= 18) 
 
 // Kernel name for unique identification
-template<class SrcTensor, class DstTensor> 
-class XECopy2DKernelName;
+template<class...> class XECopy2DKernelName;
 
 // Device kernel for XE_LOAD_2D testing  
 template <class SrcTensor, class DstTensor, int Bits, int Height, int Width>
