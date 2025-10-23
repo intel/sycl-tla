@@ -866,6 +866,8 @@ struct numeric_limits<float> {
   CUTLASS_HOST_DEVICE
   static constexpr float infinity() noexcept { return bit_cast<float, int32_t>(0x7f800000);}
   CUTLASS_HOST_DEVICE
+  static constexpr float lowest() noexcept { return -bit_cast<float, int32_t>(0x7f7fffff) - 1;}
+  CUTLASS_HOST_DEVICE
   static constexpr float max() noexcept { return bit_cast<float, int32_t>(0x7f7fffff);}
   static constexpr bool is_integer = false;
   static constexpr bool has_infinity = true;
