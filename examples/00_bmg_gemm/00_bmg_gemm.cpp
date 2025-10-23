@@ -350,8 +350,8 @@ int main(int argc, const char** argv)
   // Refer https://github.com/intel/sycl-tla/blob/main/media/docs/cpp/xe_rearchitecture.md
   using GmemTiledCopyA = void; //XE_LOAD_2D<16, 32, 32>;
   using GmemTiledCopyB = void; //XE_LOAD_2D_VNNI<16, 32, 32>;
-  using GmemTiledCopyC = void; //XE_LOAD_2D<32, 8, 16>;
-  using GmemTiledCopyD = void; //XE_STORE_2D<32, 8, 16>;
+  using GmemTiledCopyC = XE_LOAD_2D<32, 8, 16>; 
+  using GmemTiledCopyD = XE_STORE_2D<32, 8, 16>; 
   
  
 
