@@ -120,7 +120,7 @@ public cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_base { };
 // When workspace_size is not a nullptr, populates requested workspace_size and returns.
 // Otherwise, computes the Gemm kernel using the given workspace ptr.
 extern "C" {
-PT_EXPORT int cutlass_eaf99376(const uint16_t* X, const uint16_t* W, uint16_t* Y, const int M, const int N, const int K, const int B, const int lda, const int ldb, const int ldc, const int ldd, const int X_offset, const int W_offset, const int Y_offset, const uint8_t swizzle, size_t* workspace_size, uint8_t* workspace, sycl::queue* stream) {
+PT_EXPORT int sycl_tla_gemm_xe20_bf16(const uint16_t* X, const uint16_t* W, uint16_t* Y, const int M, const int N, const int K, const int B, const int lda, const int ldb, const int ldc, const int ldd, const int X_offset, const int W_offset, const int Y_offset, const uint8_t swizzle, size_t* workspace_size, uint8_t* workspace, sycl::queue* stream) {
   try {
   using ElementComputeEpilogue = cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_device_type::ElementAccumulator;
   using coord_t = cutlass::gemm::GemmCoord::Index;

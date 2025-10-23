@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test the generated CUTLASS GEMM kernel (cutlass_eaf99376)
+Test the generated CUTLASS GEMM kernel (sycl_tla_gemm_xe20_bf16)
 Based on the Runner class pattern from test.py
 """
 
@@ -11,8 +11,8 @@ import time
 from pathlib import Path
 
 
-def test_cutlass_eaf99376():
-    """Test the compiled cutlass_eaf99376 function"""
+def test_sycl_tla_gemm_xe20_bf16():
+    """Test the compiled sycl_tla_gemm_xe20_bf16 function"""
     
     # Load the shared library
     lib_path = Path(__file__).parent / '../../../build/examples/11_xe20_cutlass_library/libxe20_cutlass_library_bf16.so'
@@ -24,14 +24,14 @@ def test_cutlass_eaf99376():
     lib = ctypes.CDLL(str(lib_path))
     
     # Define function signature
-    # int cutlass_eaf99376(
+    # int sycl_tla_gemm_xe20_bf16(
     #   const uint16_t* X, const uint16_t* W, uint16_t* Y,
     #   const int M, const int N, const int K, const int B,
     #   const int lda, const int ldb, const int ldc, const int ldd,
     #   const int X_offset, const int W_offset, const int Y_offset,
     #   const uint8_t swizzle,
     #   size_t* workspace_size, uint8_t* workspace, sycl::queue* stream)
-    lib.cutlass_eaf99376.argtypes = [
+    lib.sycl_tla_gemm_xe20_bf16.argtypes = [
         c_void_p,  # X (input A)
         c_void_p,  # W (input B)
         c_void_p,  # Y (output)
@@ -51,10 +51,10 @@ def test_cutlass_eaf99376():
         c_void_p,  # workspace
         c_void_p,  # stream (sycl::queue*)
     ]
-    lib.cutlass_eaf99376.restype = c_int
+    lib.sycl_tla_gemm_xe20_bf16.restype = c_int
     
     print("="*80)
-    print("Testing cutlass_eaf99376 (BF16 256x256x32 GEMM)")
+    print("Testing sycl_tla_gemm_xe20_bf16 (BF16 256x256x32 GEMM)")
     print("="*80)
     
     # Problem dimensions (matching the kernel tile: 256x256x32)
@@ -90,7 +90,7 @@ def test_cutlass_eaf99376():
     # Query workspace size
     print("\n1. Querying workspace size...")
     workspace_size = c_size_t(0)
-    result = lib.cutlass_eaf99376(
+    result = lib.sycl_tla_gemm_xe20_bf16(
         c_void_p(),  # X (not needed for workspace query)
         c_void_p(),  # W
         c_void_p(),  # Y
@@ -125,7 +125,7 @@ def test_cutlass_eaf99376():
     Y_ptr = Y.ctypes.data_as(c_void_p)
     
     # Warmup run
-    result = lib.cutlass_eaf99376(
+    result = lib.sycl_tla_gemm_xe20_bf16(
         X_ptr, W_ptr, Y_ptr,
         M, N, K, B,
         lda, ldb, ldc, ldd,
@@ -149,7 +149,7 @@ def test_cutlass_eaf99376():
     
     for i in range(num_runs):
         start = time.time()
-        result = lib.cutlass_eaf99376(
+        result = lib.sycl_tla_gemm_xe20_bf16(
             X_ptr, W_ptr, Y_ptr,
             M, N, K, B,
             lda, ldb, ldc, ldd,
@@ -227,7 +227,7 @@ def benchmark_multiple_sizes():
 
 if __name__ == "__main__":
     try:
-        gflops = test_cutlass_eaf99376()
+        gflops = test_sycl_tla_gemm_xe20_bf16()
         if gflops:
             print(f"\n✓ Test completed successfully!")
             print(f"  Average performance: {gflops:.2f} GFLOPS")
