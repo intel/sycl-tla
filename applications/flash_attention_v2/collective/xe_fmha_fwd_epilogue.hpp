@@ -74,9 +74,15 @@ public:
   // Assumption: the A tile is contiguous.
   using ReduceK = decltype(size<3>(typename TiledMMAPV::ThrLayoutVMNK{}));
 
+  static auto reduce_sg_v_helper() {
+    constexpr auto v_total_sg = get<1>(SGTileShapeA{}) / intel::_SGSize{};
+    constexpr auto v_avail_sg = ReduceK{} / ReduceSGQ{};
+    return Int<(v_total_sg > v_avail_sg) ? cute::gcd(v_total_sg, v_avail_sg) : v_total_sg>{};
+  }
+
   using SGTileShapeA = decltype(atuple_coshape(FragA{}.tv_layout()));
   using ReduceSGQ = decltype(cute::gcd(get<0>(SGTileShapeA{}), ReduceK{}));
-  using ReduceSGV = decltype(cute::min(get<1>(SGTileShapeA{}) / intel::_SGSize{}, ReduceK{} / ReduceSGQ{}));
+  using ReduceSGV = decltype(reduce_sg_v_helper());
   using ReduceSGLayout = decltype(make_identity_layout(Shape<ReduceSGQ, ReduceSGV>{}));
 
   using SGTileShapeO = decltype(shape_div(take<0,2>(SGTileShapeA{}), shape(ReduceSGLayout{})));
