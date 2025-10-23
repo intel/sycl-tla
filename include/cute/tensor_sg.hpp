@@ -32,6 +32,7 @@
 #pragma once
 
 #include <cute/tensor_impl.hpp>                // cute::Tensor
+#include <cute/util/sycl_vec.hpp>              // intel::_SGSize
 
 namespace cute
 {
