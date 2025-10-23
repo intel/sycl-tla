@@ -316,7 +316,7 @@ reduce(SubgroupTensor<Engine,FragLayout,SubgroupTVLayout> const& src, BinaryOp o
   Tensor src_r = make_tensor(src.data(), rcoord_to_v);
 
   /* Create output tensor */
-  Shape rshape = replace<Mode>(shape, _1{});
+  auto rshape = replace<Mode>(shape, _1{});
   Tensor out = make_subgroup_tensor(make_tensor<T>(ceil_div(size(rshape), intel::_SGSize{})),
                                     make_identity_layout(rshape));
 
