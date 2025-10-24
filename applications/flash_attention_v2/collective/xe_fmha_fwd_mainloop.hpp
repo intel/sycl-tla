@@ -118,12 +118,12 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
                            make_identity_tensor(select<0,1>(TiledMMA{}.tile_mnk()))));
 
   using FragS = FragC<TiledMMAQK>;
-  using FragSRow = decltype(reduce<1>(FragS{}, sycl::plus{}));
+  using FragSRow = decltype(reduce<1>(FragS{}, sycl::plus<void>{}));
   using ElementS = typename TiledMMAQK::ValTypeD;
 
   using SingleFragA = FragC<TiledMMAPV>;                          // (atom val,q',v')
   using FragA = expand_sg_fragment_t<SingleFragA, 1, VTiles>;     // (atom val,q',v',VV)
-  using FragARow = decltype(reduce<1>(FragA{}, sycl::plus{}));
+  using FragARow = decltype(reduce<1>(FragA{}, sycl::plus<void>{}));
   using ElementA = typename TiledMMAPV::ValTypeD;
 
   static constexpr bool CausalMask = CausalMask_;
@@ -293,9 +293,11 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
       if (check_remainder_k && K == blk_k1 - 1) {
         FragSRow k_rem_mask;
         int k = get<0>(tKgK(0,0,0,K,0)) + get_sub_group().get_local_id()[0];
+        CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < k_rem_mask.size(); i++, k += intel::sg_size) {
           k_rem_mask(i) = (k < shape<0>(K_2D)) ? ElementS(sycl::nan(0u)) : ElementS(-INFINITY);
         }
+        CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < tSrS.size(); i++) {
           tSrS(i) = sycl::fmin(tSrS(i), broadcast<1>(k_rem_mask, tSrS, i));
         }
@@ -309,7 +311,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
 #if 0
       reorder(tSrS, tArP);
 #else
-      for (int i = 0; i < tArP.size(); i++)
+      for (int i = 0; i < tArP.size(); i++)   // SYCL compiler currently is not correctly handling the above reorder.
         tArP(i) = static_cast<typename TiledMMAPV::ValTypeA>(tSrS(i));
 #endif
 
@@ -370,7 +372,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
     }
 
     /* Update sums */
-    auto tS_bsum = reduce<1>(tS, sycl::plus{});
+    auto tS_bsum = reduce<1>(tS, sycl::plus<void>{});
     for (int i = 0; i < tS_sum.size(); i++)
       tS_sum(i) += tS_bsum(i);
   }

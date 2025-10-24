@@ -91,7 +91,7 @@ public:
     make_layout(select<1,0>(SGTileShapeO{}),
                 Stride<E<1>, E<0>>{})
   ));
-  using ReduceFragARow = decltype(reduce<1>(ReduceFragA{}, sycl::plus{}));
+  using ReduceFragARow = decltype(reduce<1>(ReduceFragA{}, sycl::plus<void>{}));
 
   static auto default_tiled_copy_O_helper() {
     if constexpr (ReduceK{} == _1{})
