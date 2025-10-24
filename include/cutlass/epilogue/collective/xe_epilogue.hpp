@@ -258,21 +258,34 @@ public:
   }
 
   template<typename Tensor>
-   CUTLASS_DEVICE auto reshape_into_smaller_fragments(Tensor&& tensor) {
+  CUTLASS_DEVICE auto reshape_with_unit_insertion(Tensor&& tensor) {
     using namespace cute;
     
+    auto orig_layout = tensor.layout();
+    auto orig_shape = orig_layout.shape();
+    auto orig_stride = orig_layout.stride();
+    
+    auto first_dim = get<0>(orig_shape);
+    auto outer_part = get<0>(first_dim); 
+    auto inner_part = get<1>(first_dim);
+    
+    auto first_stride = get<0>(orig_stride); 
+    auto outer_stride = get<0>(first_stride); 
+    auto inner_stride = get<1>(first_stride); 
+    
+    auto target_shape = make_shape(
+        make_shape(outer_part, _1{}), 
+        get<0>(inner_part),              
+        get<1>(inner_part)  
+    );
+    
     auto target_stride = make_stride(
-        make_stride(cute::ScaledBasis<cute::Int<1>, 0>{}, _0{}),  
-        cute::ScaledBasis<cute::Int<8>, 0>{},                     
-        cute::ScaledBasis<cute::Int<16>, 1>{}                     
+        make_stride(outer_stride, _0{}),  
+        get<0>(inner_stride), 
+        get<1>(inner_stride) 
     );
     
-    auto target_layout = make_layout(
-        make_shape(make_shape(_8{}, _1{}), _4{}, _4{}),
-        target_stride
-    );
-    
-    return make_tensor(tensor.data(), target_layout);
+    return make_tensor(tensor.data(), make_layout(target_shape, target_stride));
 }
 
   template<
@@ -350,13 +363,10 @@ public:
 
     // Get thread-level partitioning across the entire workgroup tile
     auto thread_xe_load_c = copy_c.get_thread_slice(thread_idx);
-    Tensor tCgC = thread_xe_load_c.partition_S(gD);
+    Tensor tCgC = reshape_with_unit_insertion(thread_xe_load_c.partition_S(gD));
 
     auto thread_xe_store_d = copy_d.get_thread_slice(thread_idx);
-    Tensor tCgD = thread_xe_store_d.partition_D(gD);
-
-    auto tCgC_frag = reshape_into_smaller_fragments(tCgC);
-    auto tCgD_frag = reshape_into_smaller_fragments(tCgD);
+    Tensor tCgD = reshape_with_unit_insertion(thread_xe_store_d.partition_D(gD));
 
     Tensor trC = make_tensor<typename TiledMma::ValTypeC>(Shape<Int<FragmentSize>>{});
     Tensor trD_compute = make_tensor<ElementCompute>(Shape<Int<FragmentSize>>{});
@@ -414,7 +424,7 @@ public:
         cst_callbacks.begin_loop(epi_m, epi_n);
 
         if (is_C_load_needed) {
-          copy(copy_c, tCgC_frag(_, epi_m, epi_n), trC);
+          copy(copy_c, tCgC(_, epi_m, epi_n), trC);
         }
 
         cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);
@@ -432,7 +442,7 @@ public:
           for (int i = 0; i < size(trD_compute_frag); ++i) {
             trD_frag(i) = cutlass::NumericArrayConverter<ElementOutput, ElementCompute, FragmentSize>{}(trD_compute_frag(i));
           }
-          copy(copy_d, trD, tCgD_frag(_, epi_m, epi_n));
+          copy(copy_d, trD, tCgD(_, epi_m, epi_n));
         }
         
         cst_callbacks.end_loop(epi_m, epi_n);
