@@ -576,22 +576,19 @@ int launcher(Options& options)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = void;
-  using GmemTiledCopyB = void;
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
   using TiledMma =
-    typename TiledMMAHelper<
-        MMA_Atom<XE_DPAS_TT<8, ElementAccumulator, ElementA>>,
-        Layout<TileShape>,
-        Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>
-    >::TiledMMA;
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
+      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
   // Dispatch to grouped gemm algorithm
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1StagedGroup<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16GroupFP8<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16Group;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
