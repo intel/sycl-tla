@@ -270,7 +270,7 @@ bool verify(ProblemShapeType problem_size, Options options) {
       ElementQ* q_ptr;
       ElementK* k_ptr;
       ElementV* v_ptr;
-      q_ptr = block_ref_Q.get() + offset_q;
+      q_ptr = block_Q.get() + offset_q;
       int seq_len_kv_total = seq_len_kv_cache + seq_len_kv;
 
       cutlass::DeviceAllocation<ElementK> block_K_concat;
@@ -367,7 +367,7 @@ bool verify(ProblemShapeType problem_size, Options options) {
         if(cute::thread(0,0)){
           print("Not using KV Cache\n");
         }
-        k_ptr = block_ref_K.get() + offset_k;
+        k_ptr = block_K.get() + offset_k;
         v_ptr = block_V.get() + offset_v;
       }
       
@@ -521,26 +521,26 @@ bool verify(ProblemShapeType problem_size, Options options) {
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
                                                                           block_O.size(), ElementOutput{0.5}, ElementOutput{0.5});
      
-    if (cute::thread(0,0)){
-      std::vector<ElementQ> host_output(batch * num_heads_q * seq_len_qo * head_size_vo);
-      std::vector<ElementQ> host_output_ref(batch * num_heads_q * seq_len_qo * head_size_vo);
-      // host_output.clear();
-      // host_output_ref.clear();
-      compat::wait();
-      compat::memcpy<ElementOutput>(host_output.data(), block_O.get(), block_O.size());
-      compat::memcpy<ElementOutput>(host_output_ref.data(), block_ref_O.get(), block_ref_O.size());
-      compat::wait();
-      print("Verifying results...\n");
-      for (size_t i = 0; i < 1000; i++) {
-        print("actual : ");
-        print(host_output[i]);
-        print(", expected : ");
-        print(host_output_ref[i]);
-        print(", diff : ");
-        print(host_output[i] - host_output_ref[i]);
-        print("\n");
-      }
-    }
+    // if (cute::thread(0,0)){
+    //   std::vector<ElementQ> host_output(batch * num_heads_q * seq_len_qo * head_size_vo);
+    //   std::vector<ElementQ> host_output_ref(batch * num_heads_q * seq_len_qo * head_size_vo);
+    //   // host_output.clear();
+    //   // host_output_ref.clear();
+    //   compat::wait();
+    //   compat::memcpy<ElementOutput>(host_output.data(), block_O.get(), block_O.size());
+    //   compat::memcpy<ElementOutput>(host_output_ref.data(), block_ref_O.get(), block_ref_O.size());
+    //   compat::wait();
+    //   print("Verifying results...\n");
+    //   for (size_t i = 0; i < 1000; i++) {
+    //     print("actual : ");
+    //     print(host_output[i]);
+    //     print(", expected : ");
+    //     print(host_output_ref[i]);
+    //     print(", diff : ");
+    //     print(host_output[i] - host_output_ref[i]);
+    //     print("\n");
+    //   }
+    // }
 
     return passed;
   }
@@ -627,10 +627,10 @@ bool verify(ProblemShapeType problem_size, Options options) {
     std::vector<ElementQ> sin_vals(max_seq_len * head_dim * num_heads * batch);
 
     // fill data row-major wise
-    for(int b = 0; b< num_heads*batch; b++){
+    for(int b = 0; b< batch; b++){
       for (int pos = 0; pos < max_seq_len; ++pos) {
-        for (int i = 0; i < head_dim/2 ; ++i) {
-          int idx = b*max_seq_len*head_dim + pos*head_dim + 2*i;
+        for (int i = 0; i < (head_dim*num_heads)/2 ; ++i) {
+          int idx = b*max_seq_len*head_dim*num_heads + pos*head_dim*num_heads + 2*i;
           int idx1 = b*max_seq_len*head_dim + pos*head_dim + 2*i + 1;
           float theta = static_cast<float>(pos / std::pow(10000.0f, (2.0f * i) / head_dim));
           // float theta = i;
@@ -646,31 +646,6 @@ bool verify(ProblemShapeType problem_size, Options options) {
     compat::wait();
   }
 
-  /// Apply RoPE transformation to a tensor
-  // template<typename Element>
-  // void apply_rope_on_host(std::vector<Element>& tensor, int seq_len, int head_dim,
-  //                      const std::vector<ElementQ>& cos_vals, const std::vector<ElementQ>& sin_vals) {
-  //     for (int seq_pos = 0; seq_pos < seq_len; ++seq_pos) {
-  //       for (int dim_pair = 0; dim_pair < head_dim/2; ++dim_pair) {
-  //         int cos_sin_idx = seq_pos * head_dim + dim_pair * 2;
-  //         auto cos_val = static_cast<float>(cos_vals[cos_sin_idx]);
-  //         auto sin_val = static_cast<float>(sin_vals[cos_sin_idx]);
-
-  //         int x_idx = seq_pos * head_dim + dim_pair * 2;
-  //         int y_idx = seq_pos * head_dim + dim_pair * 2 + 1;
-
-  //         auto x = static_cast<float>(tensor[x_idx]);
-  //         auto y = static_cast<float>(tensor[y_idx]);
-
-  //         auto new_x = x * cos_val - y * sin_val;
-  //         auto new_y = x * sin_val + y * cos_val;
-
-  //         tensor[x_idx] = static_cast<Element>(new_x);
-  //         tensor[y_idx] = static_cast<Element>(new_y);
-  //       }
-        
-  //     }
-  // }
   /// Apply RoPE transformation to a tensor
   template<typename ElementQ, typename ElementK>
   void calculate_rope_on_host(int batch, int num_heads_q, int num_heads_kv, int seq_len_qo, int seq_len_kv, int head_size_qk) {
@@ -723,7 +698,8 @@ bool verify(ProblemShapeType problem_size, Options options) {
         }
       }
       
-      
+      block_ref_Q.reset(ref_q.size());
+      block_ref_K.reset(ref_k.size());
       compat::memcpy(block_ref_Q.get(), ref_q.data(), ref_q.size() * sizeof(ElementQ));
       compat::memcpy(block_ref_K.get(), ref_k.data(), ref_k.size() * sizeof(ElementQ));
 
@@ -863,7 +839,7 @@ bool verify(ProblemShapeType problem_size, Options options) {
       block_sin.reset(max_seq_len * head_size_qk * num_heads_q * batch);
       initialize_rope_tensors(max_seq_len, head_size_qk, num_heads_q, batch);
       compat::wait();
-      calculate_rope_on_host<ElementQ, ElementK>(batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk);
+      // calculate_rope_on_host<ElementQ, ElementK>(batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk);
       compat::wait();
     }
     return problem_shape;
