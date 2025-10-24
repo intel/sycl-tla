@@ -111,6 +111,7 @@ if(CUTLASS_ENABLE_SYCL)
       07_bmg_dual_gemm
       08_bmg_gemm_f8
       09_bmg_grouped_gemm_f8
+      09_bmg_grouped_gemm_f8/legacy
       10_bmg_grouped_gemm_mixed_dtype
       )
       add_subdirectory(${EXAMPLE})

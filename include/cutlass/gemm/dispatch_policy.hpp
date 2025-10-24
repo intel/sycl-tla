@@ -1259,6 +1259,10 @@ struct MainloopXeL1Staged {
   using Schedule = KernelSchedule;
   using ClusterShape = Shape<_1,_1,_1>;
 };
+
+template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
+struct MainloopXeL1StagedGroup : MainloopIntelXeXMX16<Stages_, KernelScheduler> {
+};
 #endif
 
 // n-buffer in smem, pipelined with Blackwell UMMA and TMA, Warp specialized dynamic schedule
