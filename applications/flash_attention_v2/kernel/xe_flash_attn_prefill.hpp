@@ -364,13 +364,8 @@ public:
       auto layout_k = make_layout(static_shape_k, LayoutRight{});
       auto gK_dim3 = size<3>(gK);
 
-      // calculating rope for Q
-      auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
-      auto tensorCosQ = make_tensor(make_gmem_ptr(base_ptr_q_cos+offset_q), layout_q);
-      auto tensorSinQ = make_tensor(make_gmem_ptr(base_ptr_q_sin+offset_q), layout_q);
-      cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorQ, tensorCosQ, tensorSinQ, tensorQ);
-
-      //calculating rope for K
+      // Note we need to first calculate RoPE for K then Q.
+      // calculating rope for K
       // need to consider the case when there are multiple blocks in y direction
       // each block in y direction will handle a different set of K
       // so need to adjust the base pointer of K accordingly.
@@ -405,11 +400,12 @@ public:
         }
       }
 
-      barrier_arrive(2);
-      for(int i=0;i< 10000;i++){
-        
-      }
-      barrier_wait(2);
+      // calculating rope for Q
+      auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
+      auto tensorCosQ = make_tensor(make_gmem_ptr(base_ptr_q_cos+offset_q), layout_q);
+      auto tensorSinQ = make_tensor(make_gmem_ptr(base_ptr_q_sin+offset_q), layout_q);
+      cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorQ, tensorCosQ, tensorSinQ, tensorQ);
+      syncthreads();
     }
 
       for (int i = 0; i < size<3>(pQgQ); i++) {
