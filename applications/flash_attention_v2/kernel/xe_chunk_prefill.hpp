@@ -37,7 +37,7 @@
 
 #include "flash_attention_v2/collective/xe_flash_attn_chunk_prefill_mma.hpp"
 #define THREAD_ID 0
-#define BLOCK_ID 0
+#define BLOCK_ID 6
 
 namespace cutlass::flash_attention::kernel {
 
@@ -473,7 +473,7 @@ public:
       
       int offset_q = num_heads_q * head_size_qk * seq_len_qo * batch_coord +  // Jump to the correct batch
                  q_head_coord * head_size_qk +  // Jump to the correct head
-                 (blk_m_coord*QK_BLK_M*head_size_qk); // Jump to the correct seq_len_qo block
+                 (seq_coord * head_size_qk * num_heads_q); // Jump to the correct seq_len_qo block
 
       auto q_group_size = num_heads_q / num_heads_kv;
       auto kv_head_coord = q_head_coord / q_group_size;

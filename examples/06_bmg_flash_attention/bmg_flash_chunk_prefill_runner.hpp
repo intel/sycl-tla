@@ -641,8 +641,8 @@ bool verify(ProblemShapeType problem_size, Options options) {
         }
       }
     }
-    compat::memcpy(block_cos.get(), cos_vals.data(), cos_vals.size() * sizeof(ElementQ));
-    compat::memcpy(block_sin.get(), sin_vals.data(), sin_vals.size() * sizeof(ElementQ));
+    compat::memcpy<ElementQ>(block_cos.get(), cos_vals.data(), max_seq_len * head_dim * num_heads * batch);
+    compat::memcpy<ElementQ>(block_sin.get(), sin_vals.data(), max_seq_len * head_dim * num_heads * batch);
     compat::wait();
   }
 
