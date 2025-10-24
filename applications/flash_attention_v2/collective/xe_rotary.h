@@ -1,6 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (c) 2025 Intel Corporation. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,66 +31,31 @@
 #pragma once
 
 #include "cutlass/cutlass.h"
-#include <cute/tensor.hpp>
 
-namespace cutlass::fmha::collective {
-
+namespace cutlass::flash_attention::collective {
 using namespace cute;
 
-struct VariableLength {
-  int max_length;
-  int total_length = 0;
-  int* cumulative_length = nullptr;
+template <typename Tensor,
+          typename TensorCos, typename TensorSin, typename TensorOut>
+CUTLASS_DEVICE void apply_rope_interleaved_gmem(
+    int thread_idx,
+    Tensor const &srcTensor,
+    TensorCos const &gCos,
+    TensorSin const &gSin, TensorOut &destTensor) {
+  if(thread_idx < size<0>(srcTensor)){
+    for (int j = 0; j < size<1>(gCos); j+=2) {
+        auto real = static_cast<float>(srcTensor[make_coord(thread_idx, j)]);
+        auto imag = static_cast<float>(srcTensor[make_coord(thread_idx, j + 1)]);
+        auto cos_val = static_cast<float>(gCos[make_coord(thread_idx, j)]);
+        auto sin_val = static_cast<float>(gSin[make_coord(thread_idx, j)]);
 
-  CUTE_HOST_DEVICE operator int() const {
-    return max_length;
+        auto new_real = real * cos_val - imag * sin_val;
+        auto new_imag = real * sin_val + imag * cos_val;
+
+        destTensor[make_coord(thread_idx,j)] = static_cast<typename Tensor::value_type>(new_real);
+        destTensor[make_coord(thread_idx,j + 1)] = static_cast<typename Tensor::value_type>(new_imag);
+    }
   }
-};
-
-template<class T> struct is_variable_length : std::false_type {};
-template<> struct is_variable_length<VariableLength> : std::true_type {};
-template<class T> constexpr bool is_variable_length_v = is_variable_length<T>::value;
-
-template<class Shape, class Idx>
-CUTE_HOST_DEVICE
-constexpr auto
-apply_variable_length(Shape const& shape, Idx const& idx) {
-  return transform_leaf(shape, [&](auto const& s) {
-    if constexpr (is_variable_length_v<remove_cvref_t<decltype(s)>>) {
-      return s.cumulative_length[idx+1] - s.cumulative_length[idx];
-    }
-    else {
-      return s;
-    }
-  });
+  syncthreads();
 }
-
-template<class Shape, class Coord, class Idx>
-CUTE_HOST_DEVICE
-constexpr auto
-apply_variable_length(Shape const& shape, Coord const& coord, Idx const& idx) {
-  auto new_shape = apply_variable_length(shape, idx);
-  auto new_coord = transform_leaf(shape, coord, [&](auto const& s, auto const& c) {
-    if constexpr (is_variable_length_v<remove_cvref_t<decltype(s)>>) {
-      return cute::make_tuple(c, s.cumulative_length[idx]);
-    }
-    else {
-      return c;
-    }
-  });
-  return cute::make_tuple(new_shape, new_coord);
-}
-
-}  // namespace cutlass::fmha::collective
-
-namespace cute {
-
-template<>
-struct is_integral<cutlass::fmha::collective::VariableLength> : true_type {};
-
-CUTE_HOST_DEVICE
-void print(cutlass::fmha::collective::VariableLength a) {
-  printf("Varlen<%d, %p>", a.max_length, a.cumulative_length);
-}
-
-}
+} // namespace cutlass::flash_attention::collective
