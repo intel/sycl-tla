@@ -39,7 +39,8 @@
 #include "fmha_fusion.hpp"
 #include "xe_rotary.h"
 
-
+#define THREAD_ID 0
+#define BLOCK_ID 1
 ////////////////////////////////////////////////////////////
 namespace {
 
@@ -269,7 +270,12 @@ struct FlashChunkPrefillMma<
     XE_Copy_Q copyQSin{XE_Copy_Q{}.with(tensorQSin)};
     XE_Copy_K copyKCos{XE_Copy_K{}.with(tensorKCos)};
     XE_Copy_K copyKSin{XE_Copy_K{}.with(tensorKSin)};
-
+    // if(cute::thread(THREAD_ID, BLOCK_ID)){
+    //     auto lay =  make_layout(make_shape(seq_len_qo, num_heads_q * head_size_qk, batch),
+    //                 args.dQ);
+    //     print(lay.shape);
+        
+    // }
     return Params{copyQ,            copyK,
                   copyV,            copyK_cache,
                   copyV_cache,      args.ptr_page_table,

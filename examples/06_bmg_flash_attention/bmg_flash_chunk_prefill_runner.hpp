@@ -96,17 +96,17 @@ struct Options {
 
     cmd.get_cmd_line_argument("scheduler", scheduler, std::string("Individual"));
 
-    cmd.get_cmd_line_argument("batch", batch, 32);
-    cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
+    cmd.get_cmd_line_argument("batch", batch, 1);
+    cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 1);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
-    cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 512);
+    cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 256);
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
     cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("window_left", window_left, -1);
     cmd.get_cmd_line_argument("window_right", window_right, -1);
-    cmd.get_cmd_line_argument("iterations", iterations, 1);
+    cmd.get_cmd_line_argument("iterations", iterations, 0);
     cmd.get_cmd_line_argument("use_rope", use_rope, true);
 
     if (cmd.check_cmd_line_flag("use_paged_kv")) {
@@ -706,6 +706,44 @@ bool verify(ProblemShapeType problem_size, Options options) {
       compat::wait();
   }
 
+  template <class Element>
+bool initialize_block_(
+        cutlass::DeviceAllocation<Element>& block,
+        uint64_t seed=2023, int seq_len=512, int head_dim=64, int batch_heads=64) {
+  // creating a tensor of shape (batch_heads, seq_len, head_dim)
+  // and filling it with sequential values for easy verification
+  // e.g., for head_dim=4, seq_len=3, batch_heads=2
+  // tensor[0, :, :] = [[0, 1, 2, 3],
+  //                    [4, 5, 6, 7],
+  //                    [8, 9, 10,11]]
+  // tensor[1, :, :] = [[0, 1, 2, 3],
+  //                    [4, 5, 6, 7],
+  //                    [8, 9, 10,11]]
+  // total elements = batch_heads * seq_len * head_dim
+  // total elements = 2 * 3 * 4 = 24
+  std::vector<Element> matrix(seq_len * head_dim*batch_heads);
+  // cutlass::reference::device::BlockFillSequential(
+  //      block.get(), block.size());
+  // fill data row-major wise
+  for(int i=0;i<batch_heads;i++){
+    int temp = 0;
+    for (int j = 0; j < seq_len; ++j) {
+      for (int k = 0; k < head_dim ; k++) {
+        
+        int idx = i*seq_len*head_dim + j*head_dim + k;
+        Element theta = static_cast<Element>(temp);
+        matrix[idx] = theta;
+        temp++;
+      }
+    }
+  }
+  compat::wait();
+  
+  compat::memcpy(block.get(), matrix.data(), matrix.size() * sizeof(Element));
+  compat::wait();
+  return true;
+}
+
   /// Initialize operands to be used in the GEMM and reference GEMM
   ProblemShapeType initialize(const Options &options) {
     auto problem_shape_in =
@@ -789,8 +827,10 @@ bool verify(ProblemShapeType problem_size, Options options) {
       block_V_cache.reset(num_pages * paged_kv_cache.page_size * num_heads_kv * head_size_vo);
     }
 
-    initialize_block(block_Q, seed + 2023);
-    initialize_block(block_K, seed + 2022);
+    initialize_block_(block_Q, seed + 2023, seq_len_qo, head_size_qk* num_heads_q, batch);
+    initialize_block_(block_K, seed + 2022, seq_len_kv, head_size_qk* num_heads_kv, batch);
+    // initialize_block(block_Q, seed + 2023);
+    // initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
     initialize_block(block_K_cache, seed + 2024);
     initialize_block(block_V_cache, seed + 2025);
@@ -917,6 +957,13 @@ bool verify(ProblemShapeType problem_size, Options options) {
 
     // Convert host-side arguments to device-side arguments to be passed to the kernel
     auto params = FMHAChunkPrefillKernel::to_underlying_arguments(arguments, workspace.get());
+    // if(cute::thread(0,0)){
+    //  print(params.mainloop.gmem_tiled_copy_q);
+    //  print("\n");
+    //       auto lay =  make_layout(make_shape(options.seq_len_qo, options.num_heads_q * options.head_size_qk, options.batch),
+    //                 stride_Q);
+    //     print(lay);
+    // }
 
     // Run the Flash Attention implementation.
     run(params);

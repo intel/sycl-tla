@@ -37,7 +37,7 @@
 
 #include "flash_attention_v2/collective/xe_flash_attn_chunk_prefill_mma.hpp"
 #define THREAD_ID 0
-#define BLOCK_ID 6
+#define BLOCK_ID 0
 
 namespace cutlass::flash_attention::kernel {
 
@@ -244,6 +244,9 @@ public:
 
   CUTLASS_DEVICE
   void operator()(Params const &params, char *smem_buf) {
+    if(cute::thread(THREAD_ID,BLOCK_ID)){
+      print("FMHAPrefillChunk kernel started\n");
+    }
     SharedStorage &shared_storage =
         *reinterpret_cast<SharedStorage *>(smem_buf);
     // Preconditions
@@ -276,6 +279,9 @@ public:
     TileScheduler tile_scheduler{params.scheduler};
     CUTLASS_PRAGMA_NO_UNROLL
     for (; tile_scheduler.is_valid(); ++tile_scheduler) {
+      if(cute::thread(THREAD_ID,BLOCK_ID)){
+        print("New tile_scheduler iteration\n");
+      }
       auto blk_coord =
           tile_scheduler
               .get_block_coord(); // head_size_blk_idx, seq_len_blk_idx,
@@ -443,13 +449,15 @@ public:
         PRINT(gSinQ);
         PRINT(gCosK);
         PRINT(gSinK);
+        PRINT(QK_BLK_M);
+        PRINT(QK_BLK_N);
+        PRINT(QK_BLK_K);
+        PRINT(QK_SG_M);
         
       }
       // currently RoPE is not supported for fp8.
     if constexpr (rope_enabled && !is_fp8_v<ElementQ>) {
-      if(cute::thread(THREAD_ID,BLOCK_ID)){
-        print("inside rope in kernel\n");
-      }
+      
       int block_idx = static_cast<int>(BlockIdxX());
       int block_idy = static_cast<int>(BlockIdxY());
       int block_idz = static_cast<int>(BlockIdxZ());
@@ -464,21 +472,36 @@ public:
       int grid_dimz = static_cast<int>(GridDimZ());
       int block_id = block_idx + block_idy * grid_dimx + block_idz * grid_dimx * grid_dimy;
       int thread_id = block_id * block_dimx * block_dimy * block_dimz + thread_idz * block_dimx * block_dimy + thread_idy * block_dimx + thread_idx;
-
+      if(cute::thread(THREAD_ID,BLOCK_ID)){
+        #define PRINT(x) print(#x ": "); print(x); print("\n");
+        PRINT(block_idx);
+        PRINT(block_idy);
+        PRINT(block_idz);
+        PRINT(block_dimx);
+        PRINT(block_dimy);
+        PRINT(block_dimz);
+        PRINT(grid_dimx);
+        PRINT(grid_dimy);
+        PRINT(grid_dimz);
+        print("inside rope in kernel\n");
+      }
       
       // calculate the base_ptr and offset for Q, K.
       // also calculate the layout for Q, K.
       // then apply RoPE on Q, K accordingly
+      auto [coord_q_x, coord_q_y, coord_q_z] = *gQ.data();
+      auto [coord_k_x, coord_k_y, coord_k_z] = *gK.data();
       auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = params.problem_shape;
       
-      int offset_q = num_heads_q * head_size_qk * seq_len_qo * batch_coord +  // Jump to the correct batch
-                 q_head_coord * head_size_qk +  // Jump to the correct head
-                 (seq_coord * head_size_qk * num_heads_q); // Jump to the correct seq_len_qo block
+      int offset_q = (num_heads_q * head_size_qk * seq_len_qo) * batch_coord +  // Jump to the correct batch
+                  (head_size_qk * num_heads_q) * coord_q_x + // Jump to the correct seq_len_qo block
+                  head_size_qk * q_head_coord;  // Jump to the correct head
 
       auto q_group_size = num_heads_q / num_heads_kv;
       auto kv_head_coord = q_head_coord / q_group_size;
-      int offset_k = num_heads_kv * head_size_qk * seq_len_kv * batch_coord +
-                 kv_head_coord * head_size_qk;
+      int offset_k = (num_heads_kv * head_size_qk * seq_len_kv) * batch_coord + // Jump to the correct batch
+                  (head_size_qk * num_heads_kv) * coord_k_x + // Jump to the correct seq_len_kv block 
+                 head_size_qk * kv_head_coord; // Jump to the correct head
 
       // calculate Q/cosQ/sinQ ptr
       auto q_traits = static_cast<traits_load_Q const&>(mainloop_params.gmem_tiled_copy_q);
@@ -491,8 +514,8 @@ public:
       ElementQ* base_ptr_q_sin = (ElementQ*)q_traits_sin.base_ptr;
 
       auto static_shape_q = make_shape(size<0>(gQ), size<1>(gQ)*size<2>(gQ));
-      int s = head_size_qk * num_heads_q;
-      auto stride_q = make_stride(s, Int<1>{});
+      int s_q = head_size_qk * num_heads_q;
+      auto stride_q = make_stride(s_q, Int<1>{});
       auto layout_q = make_layout(static_shape_q, stride_q);
 
       // calculate K/cosK/sinK ptr
@@ -506,18 +529,30 @@ public:
       ElementK* base_ptr_k_sin = (ElementK*)k_traits_sin.base_ptr;
 
       auto static_shape_k = make_shape(size<0>(gK), size<1>(gK)*size<3>(gK));
-      auto layout_k = make_layout(static_shape_k, LayoutRight{});
+      auto s_k = head_size_qk * num_heads_kv;
+      auto stride_k = make_stride(s_k, Int<1>{});
+      auto layout_k = make_layout(static_shape_k, stride_k);
       auto gK_dim3 = size<3>(gK);
 
       // calculating rope for Q
       auto tensorQ = make_tensor(make_gmem_ptr(base_ptr_q+offset_q), layout_q);
+      if(cute::thread(THREAD_ID,BLOCK_ID)){
+        print("before rope\n");
+        print_tensor(tensorQ);
+      }
+      syncthreads();
       auto tensorCosQ = make_tensor(make_gmem_ptr(base_ptr_q_cos+offset_q), layout_q);
       auto tensorSinQ = make_tensor(make_gmem_ptr(base_ptr_q_sin+offset_q), layout_q);
       cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorQ, tensorCosQ, tensorSinQ, tensorQ);
-
+      syncthreads();
+      if(cute::thread(THREAD_ID,BLOCK_ID)){
+        print("after rope\n");
+        print_tensor(tensorQ);
+      }
+      syncthreads();
       //calculating rope for K
-      // need to consider the case when there are multiple blocks in y direction
-      // each block in y direction will handle a different set of K
+      // need to consider the case when there are multiple blocks in x direction
+      // each block in x direction will handle a different set of K
       // so need to adjust the base pointer of K accordingly.
       if(grid_dimx == 4){
         if (block_id%4==1){
@@ -531,24 +566,62 @@ public:
         auto new_offset_k = offset_k;
         for (int i =0 ;i< size<2>(gK); i+=4){
           auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+new_offset_k), layout_k);
+          // if(cute::thread(THREAD_ID,BLOCK_ID)){
+          //   print("before rope\n");
+          //   print_tensor(tensorK);
+          // }
+          syncthreads();
           auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+new_offset_k), layout_k);
           auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+new_offset_k), layout_k);
           // fix next
-          // cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK); 
+          cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK); 
           new_offset_k += 4*QK_BLK_N*QK_BLK_K*gK_dim3;
+          // if(cute::thread(THREAD_ID,BLOCK_ID)){
+          //   print("before rope\n");
+          //   print_tensor(tensorK);
+          // }
+          // syncthreads();
         }
       } else if (grid_dimx ==2){
         if (block_id%2==1){
-          offset_k += QK_BLK_N*QK_BLK_K*gK_dim3;
+          offset_k += num_heads_kv*QK_BLK_N*QK_BLK_K*gK_dim3;
         }
         auto new_offset_k = offset_k;
         for (int i =0 ;i< size<2>(gK); i+=2){
           auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+new_offset_k), layout_k);
+           if(cute::thread(THREAD_ID,BLOCK_ID)){
+            print("before rope for K (gridx=2)\n");
+            print_tensor(tensorK);
+          }
           auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+new_offset_k), layout_k);
           auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+new_offset_k), layout_k);
           // fix next
-          // cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
-          new_offset_k += 2*QK_BLK_N*QK_BLK_K*gK_dim3;
+          cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
+          new_offset_k += 2*num_heads_kv*QK_BLK_N*QK_BLK_K*gK_dim3;
+           if(cute::thread(THREAD_ID,BLOCK_ID)){
+            print("after rope for K\n");
+            print_tensor(tensorK);
+          }
+        }
+      } else if (grid_dimx == 1){
+        auto new_offset_k = offset_k;
+        for (int i =0 ;i< size<2>(gK); i++){
+          auto tensorK = make_tensor(make_gmem_ptr(base_ptr_k+new_offset_k), layout_k);
+          if(cute::thread(THREAD_ID,BLOCK_ID)){
+            print("before rope for K (gridx=1)\n");
+            print_tensor(tensorK);
+          }
+          syncthreads();
+          auto tensorCosK = make_tensor(make_gmem_ptr(base_ptr_k_cos+new_offset_k), layout_k);
+          auto tensorSinK = make_tensor(make_gmem_ptr(base_ptr_k_sin+new_offset_k), layout_k);
+          // fix next
+          cutlass::flash_attention::collective::apply_rope_interleaved_gmem(thread_idx, tensorK, tensorCosK, tensorSinK, tensorK);
+          new_offset_k += num_heads_kv*QK_BLK_N*QK_BLK_K*gK_dim3;
+          if(cute::thread(THREAD_ID,BLOCK_ID)){
+            print("after rope for K\n");
+            print_tensor(tensorK);
+          }
+          syncthreads();
         }
       }
 
