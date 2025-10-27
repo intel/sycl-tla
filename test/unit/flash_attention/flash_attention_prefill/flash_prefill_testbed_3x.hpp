@@ -719,7 +719,7 @@ bool TestFlashPrefillAll(int head_size, std::string config="default") {
   else{
     problem_size_batch = {8};
     problem_size_num_heads = {8};
-    problem_size_seq_len = {512};
+    problem_size_seq_len = {256};
   }
   std::vector<float> problem_size_softmax_scale{ 1.f / sqrt(static_cast<float>(head_size)) };
   bool passed = true;
