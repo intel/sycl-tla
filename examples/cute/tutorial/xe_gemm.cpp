@@ -86,7 +86,7 @@ gemm_device(ATensor   const& A,         // (M,K)
   /* Create block 2D TiledCopies */
   auto copy_a = make_block_2d_copy_A(mma, A);
   auto copy_b = make_block_2d_copy_B(mma, B);
-  auto copy_c = make_block_2d_copy_C(mma, C);
+  auto copy_c = make_block_2d_copy_D(mma, C);
 
   /* Slice TiledCopy/TiledMMA operations to thread (work-item) level */
   auto thr_mma    =    mma.get_slice(local_id);
@@ -391,7 +391,7 @@ int main(int argc, char** argv)
   auto n = parse_size();
   auto k = parse_size();
 
-  sycl::queue Q;
+  sycl::queue Q = compat::get_default_queue();
 
   // Native compute
   test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, m, n, k);

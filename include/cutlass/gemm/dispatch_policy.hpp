@@ -1219,6 +1219,10 @@ struct MainloopIntelXeXMX16Group : MainloopIntelXeXMX16<Stages_, KernelScheduler
 };
 
 template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
+struct MainloopXeL1StagedGroup : MainloopIntelXeXMX16<Stages_, KernelScheduler> {
+};
+
+template<int Stages_, class KernelScheduler = KernelXePtrArrayCooperative>
 struct MainloopIntelXeXMX16GroupMixedPrecision : MainloopIntelXeXMX16<Stages_, KernelScheduler> {
 };
 
@@ -1247,6 +1251,20 @@ struct MainloopDeviceAgnostic {
   using Schedule = KernelMultistage;
 };
 #endif
+
+#if defined(CUTLASS_ENABLE_SYCL) 
+// Note: This dispatch policy is specifically added for CollectiveMma to support
+// the integration of new MMA atoms (XE_DPAS_TT) and copy atoms for Intel XE architecture
+template<int Stages_, class KernelSchedule = KernelXe>
+struct MainloopXeL1Staged {
+  constexpr static int Stages = Stages_;
+  constexpr static int SubgroupSize = 16;
+  using ArchTag = arch::IntelXe;
+  using Schedule = KernelSchedule;
+  using ClusterShape = Shape<_1,_1,_1>;
+};
+#endif
+
 // n-buffer in smem, pipelined with Blackwell UMMA and TMA, Warp specialized dynamic schedule
 template<
   int LoadABPipelineStageCount_,
