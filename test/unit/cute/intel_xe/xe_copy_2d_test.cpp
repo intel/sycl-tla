@@ -138,7 +138,7 @@ void test_xe_copy_2d() {
 
   // Copy to device
   cutlass::device_vector<Element> device_src = host_src;
-  cutlass::device_vector<Element> device_dst(M * aligned_N, Element{0});
+  cutlass::device_vector<Element> device_dst(M * aligned_N);
   
   // Create tensors with proper layout
   Tensor tensor_src = 
