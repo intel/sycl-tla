@@ -30,6 +30,11 @@ cmake_policy(SET CMP0112 NEW)
 
 include(GNUInstallDirs)
 
+# Include oneMKL support for SYCL builds
+if (CUTLASS_ENABLE_SYCL)
+  include(${CMAKE_SOURCE_DIR}/cmake/onemkl.cmake)
+endif()
+
 ################################################################################
 
 set(CUTLASS_BUILD_MONO_LIBRARY OFF CACHE BOOL 
@@ -47,6 +52,16 @@ target_include_directories(
   $<INSTALL_INTERFACE:include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   )
+
+# Add oneMKL include directories for SYCL builds
+if (CUTLASS_ENABLE_SYCL)
+  if (CUTLASS_USING_SYSTEM_ONEMKL)
+    target_link_libraries(cutlass_library_includes INTERFACE MKL::MKL)
+  else()
+    target_include_directories(cutlass_library_includes INTERFACE 
+      $<BUILD_INTERFACE:${ONEMKL_INCLUDE_DIR}>)
+  endif()
+endif()
 
 target_link_libraries(
   cutlass_library_includes 
