@@ -737,8 +737,7 @@ compute_o_dot_do(T &trait, Param<typename T::DType> &param,
 
     Tensor cO = make_identity_tensor(dQ_shape);
     Tensor tcO = thr_load_odo.partition_S(cO);
-    Tensor tcO_row = logical_divide(tcO, Shape<_1>{})(make_coord(0, 0, ), _, 0);
-    Tensor tcO_col = logical_divide(tcO, Shape<_1>{})(make_coord(0, 0, ), 0, _);
+    Tensor tcO_row = logical_divide(tcO, Shape<_1>{})(make_coord(0, 0), _, 0);
     Tensor rdO_2d = make_tensor(rdO.data(),
                                 convert_layout_2d_layout(rdO.layout()));
     Tensor rO_2d = make_tensor(rO.data(),
@@ -1022,8 +1021,8 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     compat::wait_and_throw();
 
     auto dimGrid1 = compat::dim3(size(1), size(param.num_head_q), size(param.batch));
-    assert((trait.num_head_q % trait.num_head_kv == 0) && "num_head_q must be dividable by num_head_kv");
-    assert((trait.num_head_q >= trait.num_head_kv) && "num_head_q must be bigger than or equal to num_head_kv");
+    assert((param.num_head_q % param.num_head_kv == 0) && "num_head_q must be dividable by num_head_kv");
+    assert((param.num_head_q >= param.num_head_kv) && "num_head_q must be bigger than or equal to num_head_kv");
     auto dimBlock1 = compat::dim3(size(kNSGs * trait.SubgroupSize), size(1), size(1));
     // auto dimBlock = compat::dim3(size(trait.tiled_mma_sdp));
 
