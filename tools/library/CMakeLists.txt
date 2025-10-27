@@ -46,6 +46,7 @@ target_include_directories(
   INTERFACE
   $<INSTALL_INTERFACE:include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../deps/oneMKL/include>
   )
 
 target_link_libraries(
