@@ -175,6 +175,9 @@ function(cutlass_add_cutlass_library)
       else()
         message(WARNING "libsycl.so not found - runtime may fail to load")
       endif()
+      
+      # Add oneMKL for SYCL builds (needed for sycl_tensor_fill.h runtime)
+      add_onemkl_to_target(TARGET ${__NAME})
     else()
       # For CUDA builds, link with cuda_driver
       target_link_libraries(${__NAME} PRIVATE cuda_driver)
