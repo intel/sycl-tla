@@ -92,3 +92,9 @@ TEST(PVC_CuTe_Xe, XE_LOAD_2D_TRANSPOSE_Constraints) {
 }
 
 #else
+
+TEST(PVC_CuTe_Xe, XE_LOAD_2D_TRANSPOSE_SKIPPED) {
+  GTEST_SKIP() << "XE_LOAD_2D_TRANSPOSE tests require IGC version 2.18 or higher. skipped";
+}
+
+#endif
