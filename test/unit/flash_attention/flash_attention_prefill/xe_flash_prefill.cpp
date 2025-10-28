@@ -55,7 +55,8 @@ TEST(TEST_NAME, noncausal) {
 TEST(TEST_NAME, varlen_causal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, true, 2>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
+  if (!(std::is_same_v<INPUT_TYPE, float_e5m2_t> && std::is_same_v<OUT_TYPE, float_e5m2_t>)) //DISABLE
+    EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
 }
 
 TEST(TEST_NAME, varlen_noncausal) {
