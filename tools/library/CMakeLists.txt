@@ -125,6 +125,18 @@ function(cutlass_add_cutlass_library)
     PRIVATE cutlass_library_internal_interface
     )
 
+  # If oneMKL is provided via the downloaded ExternalProject (onemkl_project),
+  # ensure the generated object target depends on that project. Otherwise
+  # compilation of object files can run before the onemkl headers are available
+  # and cause "oneapi/mkl/rng/device.hpp file not found" errors.
+  if (CUTLASS_ENABLE_SYCL)
+    if (NOT CUTLASS_USING_SYSTEM_ONEMKL)
+      if (TARGET onemkl_project)
+        add_dependencies(${__NAME}_objs onemkl_project)
+      endif()
+    endif()
+  endif()
+
   # Add SYCL-specific compile options when building for SYCL
   if (CUTLASS_ENABLE_SYCL)
     target_compile_options(${__NAME}_objs PRIVATE -fsycl)
