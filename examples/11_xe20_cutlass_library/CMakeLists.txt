@@ -64,9 +64,9 @@ target_compile_definitions(xe20_cutlass_library_bf16 PRIVATE
   DPCPP_SYCL_TARGET=intel_gpu_bmg_g21
 )
 
-# Add Intel-specific SYCL compiler flags for XE20 optimization
+# Add Intel-specific SYCL link flags for XE20 optimization
 if(CUTLASS_ENABLE_SYCL AND SYCL_INTEL_TARGET)
-  target_compile_options(xe20_cutlass_library_bf16 PRIVATE
+  target_link_options(xe20_cutlass_library_bf16 PRIVATE
     -Xspirv-translator
     -spirv-ext=+SPV_INTEL_split_barrier,+SPV_INTEL_2d_block_io,+SPV_INTEL_subgroup_matrix_multiply_accumulate
   )
