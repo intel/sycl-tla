@@ -37,6 +37,7 @@
 #include "cute/algorithm/functional.hpp"
 #include "cute/atom/mma_atom.hpp"
 #include "cute/algorithm/gemm.hpp"
+#include "../tools/util/include/cutlass/util/packed_stride.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -294,6 +295,38 @@ struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, Elem
 
       return cute::make_tuple(mA, mB);
     }
+
+template <typename ProblemShape_MNKL>
+  CUTLASS_DEVICE auto
+  update_tensor_shape_stride(Params const &mainloop_params,
+                             int32_t const &next_group,
+                             ProblemShape_MNKL const &problem_shape_mnkl,
+                             const int *num_rows_per_expert) {
+    int32_t cumulative_M = 0;
+    for (int i = 0; i < next_group; i++) {
+      cumulative_M += num_rows_per_expert[i];
+    }
+
+    const int32_t M = num_rows_per_expert[next_group];
+    const int32_t N = get<1>(problem_shape_mnkl);
+    const int32_t K = get<2>(problem_shape_mnkl);
+
+    ElementA const *ptr_A_curr_batch =
+        reinterpret_cast<ElementA const *>((void*)(mainloop_params.ptr_A)) +
+        cumulative_M * K;
+    ElementB const *ptr_B_curr_batch =
+        reinterpret_cast<ElementB const *>((void*)(mainloop_params.ptr_B)) +
+        next_group * K * N;
+
+    Tensor mA = make_tensor(
+        make_gmem_ptr(ptr_A_curr_batch), make_shape(M, K, (int32_t)1),
+        cutlass::make_cute_packed_stride(InternalStrideA{}, {M, K, 1}));
+    Tensor mB = make_tensor(
+        make_gmem_ptr(ptr_B_curr_batch), make_shape(N, K, (int32_t)1),
+        cutlass::make_cute_packed_stride(InternalStrideB{}, {N, K, 1}));
+
+    return cute::make_tuple(mA, mB);
+  }
 };
 
 } // namespace cutlass::gemm::collective

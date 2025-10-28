@@ -63,11 +63,12 @@ template <
   class ElementScalar_,
   FloatRoundStyle RoundStyle_,
   class CtaTileShapeMNK_,
-  class EpilogueTile_
+  class EpilogueTile_,
+  bool supportSource_
 >
 struct FusionCallbacks<
     epilogue::IntelXeXMX16,
-    fusion::LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_>,
+    fusion::LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_, supportSource_>,
     CtaTileShapeMNK_,
     EpilogueTile_
 > : Sm90LinearCombination<typename cutlass::detail::get_unpacked_element_type<ElementOutput_>::type, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
@@ -77,7 +78,7 @@ struct FusionCallbacks<
   using ElementCompute = ElementCompute_;
   using ElementSource = ElementSource_;
   using ElementScalar = ElementScalar_;
-  using Operation = fusion::LinearCombination<ElementOutput, ElementCompute, ElementSource_, ElementScalar, RoundStyle_>;
+  using Operation = fusion::LinearCombination<ElementOutput, ElementCompute, ElementSource_, ElementScalar, RoundStyle_, supportSource_>;
 
   struct Arguments {
     ElementScalar alpha = ElementScalar(1);
@@ -730,11 +731,12 @@ template <
   class ElementScalar_,
   FloatRoundStyle RoundStyle_,
   class CtaTileShapeMNK_,
-  class EpilogueTile_
+  class EpilogueTile_,
+  bool supportSource_
 >
 struct FusionCallbacks<
     epilogue::IntelXeXMX16Group,
-    fusion::LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_>,
+    fusion::LinearCombination<ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_, supportSource_>,
     CtaTileShapeMNK_,
     EpilogueTile_
 > : Sm90LinearCombinationPtrArray<typename cutlass::detail::get_unpacked_element_type<ElementOutput_>::type, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
@@ -744,7 +746,7 @@ struct FusionCallbacks<
   using ElementCompute = ElementCompute_;
   using ElementSource = ElementSource_;
   using ElementScalar = ElementScalar_;
-  using Operation = fusion::LinearCombination<ElementOutput, ElementCompute, ElementSource, ElementScalar, RoundStyle_>;
+  using Operation = fusion::LinearCombination<ElementOutput, ElementCompute, ElementSource, ElementScalar, RoundStyle_, supportSource_>;
 
   struct Arguments {
     ElementScalar alpha = ElementScalar(1);
