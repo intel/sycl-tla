@@ -25,7 +25,7 @@
  * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
  * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF POSSIBILITY OF SUCH DAMAGE.
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF POSSIBILITY OF SUCH DAMAGE.Expand commentComment on line R28ResolvedCode has comments. Press enter to view.
  *
  **************************************************************************************************/
 
@@ -96,7 +96,7 @@ void test_xe_prefetch_2d() {
   
   // Matrix dimensions - must be compatible with block 2D constraints
   constexpr int M = Height;
-  constexpr int N = Width * sizeof_bits_v<Element> / Bits;
+  constexpr int N = Width * sizeof_bits_v<Element> / Bits;Expand commentComment on line R99ResolvedCode has comments. Press enter to view.
   
   // Ensure proper alignment (required for block 2D operations)
   constexpr int elem_alignment = 16 / sizeof(Element);  
@@ -152,3 +152,12 @@ TEST(PVC_CuTe_Xe, XE_PREFETCH_2D_float) {
 }
 
 #else
+
+// For the fallback case
+#include "cutlass_unit_test.h"
+
+TEST(PVC_CuTe_Xe, XE_PREFETCH_2D_SKIPPED) {
+  GTEST_SKIP() << "XE_PREFETCH_2D tests require IGC version 2.18 or higher. skipped";
+}
+
+#endif
