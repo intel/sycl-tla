@@ -102,6 +102,9 @@ public:
   using CopyOpR2S = CopyOpR2S_;
 
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
+  using GmemTiledCopyC = conditional_t<cute::is_void_v<CopyOpG2R>, XE_LOAD_2D<32, 8, 16>, CopyOpG2R>;
+  using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
+                                             CopyOpR2G, XE_STORE_2D<32, 8, 16>>;
   using ElementOutput = ElementD;
   using ElementCompute = ElementAccumulator;
 
@@ -116,10 +119,9 @@ public:
   static_assert(std::is_same_v<SmemLayoutAtomC, void>, "Copy operation to shared memory is not supported");
   static_assert(std::is_same_v<SmemLayoutAtomD, void>, "Copy operation to shared memory is not supported");
 
-//remember this PR https://github.com/intel/sycl-tla/pull/565/files
 private:
-  constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
-  constexpr static bool is_destination_supported = not cute::is_void_v<ElementD>;
+  constexpr static bool is_source_supported = not cute::is_void_v<ElementC> && not cute::is_void_v<CopyOpG2R>;
+  constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
 
   constexpr static bool is_m_major_C = detail::is_m_major<StrideC>();
   constexpr static bool is_m_major_D = detail::is_m_major<StrideD>();
@@ -336,8 +338,6 @@ public:
     // Indexing variables
     auto [M, N, K, L] = problem_shape_mnkl;
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord_mnkl;
-    auto m_sg = get_sub_group_id() / ATOM_N;
-    auto n_sg = get_sub_group_id() % ATOM_N;
 
     auto sg_local_m_coord = get_sub_group_id() / ATOM_N;
     auto sg_local_n_coord = get_sub_group_id() % ATOM_N;
@@ -349,11 +349,17 @@ public:
     auto wg_coord = make_coord(m_coord, n_coord, k_coord, l_coord);
     bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
 
+    /*
+    * NOTE: Automatic selection of load/store operations using make_block_2d_copy_C/make_block_2d_copy_D
+    * is currently not supported. The current implementation is restricted to specific load/store 
+    * operations with dimensions 16x8, which are tightly coupled to the MMA atom size requirements.
+    * 
+    * TODO: Future enhancement will include automatic selection of load/store operations 
+    * in collectiveEpilogue to provide more flexible dimension support.
+    */
     auto batch_idx = get<3>(wg_coord);
-    auto copy_c = get_block_2d_copy_C<CopyOpG2R>(tiled_mma, params.mC(_,_,batch_idx));
-    auto copy_d = get_block_2d_copy_D<CopyOpR2G>(tiled_mma, params.mD(_,_,batch_idx));
-
-
+    auto copy_c = make_block_2d_copy_CD(GmemTiledCopyC{}, tiled_mma, params.mC(_,_,batch_idx));
+    auto copy_d = make_block_2d_copy_CD(GmemTiledCopyD{}, tiled_mma, params.mD(_,_,batch_idx));
 
     // Represent the full output tensor
     Tensor mD_mnl = cute::get_xe_tensor(make_shape(M,N,L));
@@ -361,7 +367,6 @@ public:
     // Tile the output tensor for the current workgroup
     Tensor gD = local_tile(mD_mnl, take<0,2>(CtaTileMNK{}), remove<2>(wg_coord));  // (BLK_M,BLK_N) 
 
-    // Get thread-level partitioning across the entire workgroup tile
     auto thread_xe_load_c = copy_c.get_thread_slice(thread_idx);
     Tensor tCgC = reshape_with_unit_insertion(thread_xe_load_c.partition_S(gD));
 
@@ -370,6 +375,10 @@ public:
 
     Tensor trC = make_tensor<typename TiledMma::ValTypeC>(Shape<Int<FragmentSize>>{});
     Tensor trD_compute = make_tensor<ElementCompute>(Shape<Int<FragmentSize>>{});
+
+    // Because Sm90 uses shared memory, they are not tied to using the same accumulator values
+    // for MMA and Epilogue. But because we are operating directly in the accumulators, we need to be
+    // sure that we are operating on the same values.
     ThrCopy thread_g2r = copy_c.get_slice(thread_idx);
     auto mn_shape = shape(typename decltype(copy_d)::Tiler_MN{});
 
