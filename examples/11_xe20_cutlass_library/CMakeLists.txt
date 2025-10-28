@@ -35,13 +35,14 @@ add_library(xe20_cutlass_library_bf16 SHARED
   xe_20_cutlass_library_b16.cpp
 )
 
-# Set library properties
+# Set library properties (this creates shared library for python example to link)
 set_target_properties(xe20_cutlass_library_bf16 PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED ON
   VERSION 1.0
   SOVERSION 1
   OUTPUT_NAME "xe20_cutlass_library_bf16"
+  POSITION_INDEPENDENT_CODE ON
 )
 
 # Include directories
@@ -70,8 +71,9 @@ if(CUTLASS_ENABLE_SYCL AND SYCL_INTEL_TARGET)
     -Xspirv-translator
     -spirv-ext=+SPV_INTEL_split_barrier,+SPV_INTEL_2d_block_io,+SPV_INTEL_subgroup_matrix_multiply_accumulate
   )
-  add_onemkl_to_target(TARGET xe20_cutlass_library_bf16)
+  
   add_sycl_to_target(TARGET xe20_cutlass_library_bf16)
+  add_onemkl_to_target(TARGET xe20_cutlass_library_bf16)
 endif()
 
 # Link against CUTLASS XE20 GEMM library if available
