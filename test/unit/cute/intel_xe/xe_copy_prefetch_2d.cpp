@@ -96,7 +96,7 @@ void test_xe_prefetch_2d() {
   
   // Matrix dimensions - must be compatible with block 2D constraints
   constexpr int M = Height;
-  constexpr int N = Width * sizeof_bits_v<Element> / Bits;Expand commentComment on line R99ResolvedCode has comments. Press enter to view.
+  constexpr int N = (Width * sizeof_bits_v<Element>) / Bits;
   
   // Ensure proper alignment (required for block 2D operations)
   constexpr int elem_alignment = 16 / sizeof(Element);  
