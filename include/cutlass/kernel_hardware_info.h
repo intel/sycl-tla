@@ -72,6 +72,17 @@ struct KernelHardwareInfo {
 #endif
     return multiprocessor_count;
   }
+    // Query maximum number of active clusters that could co-exist on the target device
+  // based on kernel properties such as cluster dims and threadblock dims
+  static inline int
+  query_device_max_active_clusters(
+      dim3 cluster_dims,
+      uint32_t threads_per_block,
+      void const* kernel_ptr) {
+    CUTLASS_TRACE_HOST("Returning Max Active Clusters = 0 for SYCL build\n");
+    return 0;
+  }
+
 
 #elif !defined(__CUDACC_RTC__)
   static inline int

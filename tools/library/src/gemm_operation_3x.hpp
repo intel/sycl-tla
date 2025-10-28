@@ -195,16 +195,10 @@ public:
         cute::size<2>(typename Operator::GemmKernel::ClusterShape{}));
       uint32_t threads_per_block = Operator::GemmKernel::MaxThreadsPerBlock;
       void const* kernel_ptr = (void*)(device_kernel<typename Operator::GemmKernel>);
-#if !defined(CUTLASS_ENABLE_SYCL)
-      // query_device_max_active_clusters is CUDA-specific
       max_active_clusters = cutlass::KernelHardwareInfo::query_device_max_active_clusters(
         cluster_dims,
         threads_per_block,
         kernel_ptr);
-#else
-      // For SYCL, set a default value (will be overridden if needed)
-      max_active_clusters = 1;
-#endif
     }
   }
 
