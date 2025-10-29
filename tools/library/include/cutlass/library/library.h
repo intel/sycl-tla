@@ -395,9 +395,10 @@ struct BlockScaledGemmArguments {
 
   library::RuntimeDatatype runtime_input_datatype_a{library::RuntimeDatatype::kStatic}; 
   library::RuntimeDatatype runtime_input_datatype_b{library::RuntimeDatatype::kStatic}; 
-
+  int device_index{0};
   bool use_pdl{false};
 };
+
 
 /// Blockwise GEMM
 //
