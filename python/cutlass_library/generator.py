@@ -11756,18 +11756,26 @@ def GeneratePVC_TensorOp_16b_gemm(manifest, cuda_version):
             0, [1, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
       ]
 
-      data_type = {
-        "a_type" : math_inst.element_a,
-        "b_type" : math_inst.element_b,
-        "c_type" : math_inst.element_accumulator,
-        "d_type" : math_inst.element_accumulator,
-        "acc_type" : math_inst.element_accumulator,
-        "epi_type" : math_inst.element_accumulator
-      }
+      # Generate kernels for different output (D) types
+      # Default: accumulator type (FP32 for mixed precision, same as input for native precision)
+      # For mixed precision (a_type != accumulator): also generate output in input precision
+      valid_d_types = [math_inst.element_accumulator]
+      if math_inst.element_a != math_inst.element_accumulator:
+          valid_d_types.append(math_inst.element_a)
+      
+      for d_type in valid_d_types:
+          data_type = {
+            "a_type" : math_inst.element_a,
+            "b_type" : math_inst.element_b,
+            "c_type" : math_inst.element_accumulator,
+            "d_type" : d_type,
+            "acc_type" : math_inst.element_accumulator,
+            "epi_type" : math_inst.element_accumulator
+          }
 
-      schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
+          schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
-      CreateGemmUniversal3xOperator(manifest, layouts, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+          CreateGemmUniversal3xOperator(manifest, layouts, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
 
 def GeneratePVC(manifest, cuda_version):
     """
@@ -11831,18 +11839,26 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
                 0, [2, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
         ]
 
-        data_type = {
-            "a_type": math_inst.element_a,
-            "b_type": math_inst.element_b,
-            "c_type": math_inst.element_accumulator,
-            "d_type": math_inst.element_accumulator,
-            "acc_type": math_inst.element_accumulator,
-            "epi_type": math_inst.element_accumulator
-        }
+        # Generate kernels for different output (D) types
+        # Default: accumulator type (FP32 for mixed precision, same as input for native precision)
+        # For mixed precision (a_type != accumulator): also generate output in input precision
+        valid_d_types = [math_inst.element_accumulator]
+        if math_inst.element_a != math_inst.element_accumulator:
+            valid_d_types.append(math_inst.element_a)
+        
+        for d_type in valid_d_types:
+            data_type = {
+                "a_type": math_inst.element_a,
+                "b_type": math_inst.element_b,
+                "c_type": math_inst.element_accumulator,
+                "d_type": d_type,
+                "acc_type": math_inst.element_accumulator,
+                "epi_type": math_inst.element_accumulator
+            }
 
-        schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
+            schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
-        CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+            CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
 
 
 def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
@@ -11904,18 +11920,23 @@ def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
                 0, [4, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
         ]
 
-        data_type = {
-            "a_type": math_inst.element_a,
-            "b_type": math_inst.element_b,
-            "c_type": math_inst.element_accumulator,
-            "d_type": math_inst.element_accumulator,
-            "acc_type": math_inst.element_accumulator,
-            "epi_type": math_inst.element_accumulator
-        }
+        # Generate kernels for different output (D) types
+        # Valid D types for FP8: fp32 (accumulator), bf16, fp16, e4m3, e5m2
+        valid_d_types = [DataType.f32, DataType.bf16, DataType.f16, DataType.e4m3, DataType.e5m2]
+        
+        for d_type in valid_d_types:
+            data_type = {
+                "a_type": math_inst.element_a,
+                "b_type": math_inst.element_b,
+                "c_type": math_inst.element_accumulator,
+                "d_type": d_type,
+                "acc_type": math_inst.element_accumulator,
+                "epi_type": math_inst.element_accumulator
+            }
 
-        schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
+            schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
-        CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+            CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
 
 def GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate INT8 GEMM kernels for Intel Xe architecture using DPAS.
@@ -11954,18 +11975,24 @@ def GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=20):
                 0, [4, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
         ]
 
-        data_type = {
-            "a_type": math_inst.element_a,
-            "b_type": math_inst.element_b,
-            "c_type": math_inst.element_accumulator,
-            "d_type": math_inst.element_accumulator,
-            "acc_type": math_inst.element_accumulator,
-            "epi_type": math_inst.element_accumulator
-        }
+        # Generate kernels for different output (D) types
+        # Default: accumulator type (INT32)
+        # Also generate output in input precision (INT8) for quantized workflows
+        valid_d_types = [math_inst.element_accumulator, math_inst.element_a]
+        
+        for d_type in valid_d_types:
+            data_type = {
+                "a_type": math_inst.element_a,
+                "b_type": math_inst.element_b,
+                "c_type": math_inst.element_accumulator,
+                "d_type": d_type,
+                "acc_type": math_inst.element_accumulator,
+                "epi_type": math_inst.element_accumulator
+            }
 
-        schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
+            schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
-        CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+            CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
 
 
 def GenerateXe_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version, min_cc=20):
