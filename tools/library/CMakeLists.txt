@@ -167,6 +167,7 @@ function(cutlass_add_cutlass_library)
         EXPORT_NAME ${__EXPORT_NAME}
         ""
       )
+    endif()
 
     target_compile_features(${__NAME} INTERFACE cxx_std_17)
     
