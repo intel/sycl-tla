@@ -90,7 +90,6 @@ public:
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
   using ElementC = ElementC_;
-  using ElementAccumulator = ElementC_;
   using StrideC = StrideC_;
   using ElementD = ElementD_;
   using StrideD = StrideD_;
@@ -106,8 +105,8 @@ public:
   using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
                                              CopyOpR2G, XE_STORE_2D<32, 8, 16>>;
   using ElementOutput = ElementD;
-  using ElementCompute = ElementAccumulator;
-
+  using ElementCompute = typename ThreadEpilogueOp::ElementCompute;
+  using ElementAccumulator = ElementCompute;
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
   static_assert(cute::rank(CtaTileMNK{}) == 3, "CtaTileMNK must be rank-3: [CTA_M, CTA_N, CTA_K]");
@@ -373,7 +372,7 @@ public:
     auto thread_xe_store_d = copy_d.get_thread_slice(thread_idx);
     Tensor tCgD = reshape_with_unit_insertion(thread_xe_store_d.partition_D(gD));
 
-    Tensor trC = make_tensor<typename TiledMma::ValTypeC>(Shape<Int<FragmentSize>>{});
+    Tensor trC = make_tensor<ElementC>(Shape<Int<FragmentSize>>{});
     Tensor trD_compute = make_tensor<ElementCompute>(Shape<Int<FragmentSize>>{});
 
     // Because Sm90 uses shared memory, they are not tied to using the same accumulator values
@@ -414,7 +413,10 @@ public:
     cst_callbacks.begin();
 
     auto acc_frag = recast<Array<ElementCompute, FragmentSize>>(accumulators);
-    auto trD_compute_frag = recast<Array<ElementCompute, FragmentSize>>(trD_compute);
+    using FragmentVisit = decltype(cst_callbacks.visit(acc_frag(0), 0, 0, 0));
+    constexpr bool IsDirectR2S = cute::is_same_v<FragmentVisit, Array<ElementD, FragmentSize>>;
+    using RegisterElementD = cute::conditional_t<!IsDirectR2S, ElementCompute, ElementD>;
+    auto trD_compute_frag = recast<Array<RegisterElementD, FragmentSize>>(trD_compute);
 
     Tensor trD = make_tensor<ElementOutput>(Shape<Int<FragmentSize>>{});
     auto trD_frag = recast<Array<ElementOutput, FragmentSize>>(trD);
@@ -449,7 +451,7 @@ public:
         if constexpr (is_destination_supported) {
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < size(trD_compute_frag); ++i) {
-            trD_frag(i) = cutlass::NumericArrayConverter<ElementOutput, ElementCompute, FragmentSize>{}(trD_compute_frag(i));
+            trD_frag(i) = cutlass::NumericArrayConverter<ElementOutput, RegisterElementD, FragmentSize>{}(trD_compute_frag(i));
           }
           copy(copy_d, trD, tCgD(_, epi_m, epi_n));
         }
