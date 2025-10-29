@@ -47,7 +47,7 @@ if (CUTLASS_ENABLE_SYCL)
 
   cutlass_example_add_executable(
     cute_tutorial_tiled_transpose
-    transpose/tiled_transpose_sycl.cpp
+    transpose/main.cpp
   )
 
   cutlass_example_add_executable(

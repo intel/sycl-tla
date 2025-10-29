@@ -51,6 +51,22 @@ void copy_kernel(TensorS S, TensorD D, ThreadLayout) {
   using namespace cute;
 
   // Slice the tiled tensors
+  // This line slices the tiled tensor S to get the tile for the current work
+  // group. S is a 3D tensor with layout ((M, N), m', n') where:
+  //   - (M, N) is the block/tile shape (first mode)
+  //   - m' is the number of tiles in the M dimension (second mode)
+  //   - n' is the number of tiles in the N dimension (third mode)
+  //
+  // The indexing S(make_coord(_, _), x, y) selects:
+  //   - make_coord(_, _): Takes all elements from the first mode (M, N), i.e.,
+  //   the entire tile
+  //   - compat::work_group_id::x(): Selects the x-th tile along the m'
+  //   dimension
+  //   - compat::work_group_id::y(): Selects the y-th tile along the n'
+  //   dimension
+  //
+  // Result: A 2D tensor of shape (BlockShape_M, BlockShape_N) corresponding to
+  // the tile assigned to the current work group.
   Tensor tile_S = S(make_coord(_, _), compat::work_group_id::x(),
                     compat::work_group_id::y()); // (BlockShape_M, BlockShape_N)
   Tensor tile_D = D(make_coord(_, _), compat::work_group_id::x(),
@@ -64,78 +80,78 @@ void copy_kernel(TensorS S, TensorD D, ThreadLayout) {
       tile_S, ThreadLayout{}, compat::local_id::x()); // (ThrValM, ThrValN)
   Tensor thr_tile_D = local_partition(
       tile_D, ThreadLayout{}, compat::local_id::x()); // (ThrValM, ThrValN)
-                                                      //
 
-  // Construct a register-backed Tensor with the same shape as each thread's
-  // partition Use make_tensor to try to match the layout of thr_tile_S
-  Tensor fragment = make_tensor_like(thr_tile_S); // (ThrValM, ThrValN)
+    // Construct a register-backed Tensor with the same shape as each thread's
+    // partition Use make_tensor to try to match the layout of thr_tile_S
+    Tensor fragment = make_tensor_like(thr_tile_S); // (ThrValM, ThrValN)
 
-  // Copy from GMEM to RMEM and from RMEM to GMEM
-  copy(thr_tile_S, fragment);
-  copy(fragment, thr_tile_D);
-}
-
-template <typename Element> void copy_direct(TransposeParams<Element> params) {
-  //
-  // Given a 2D shape, perform an efficient copy
-  //
-
-  using namespace cute;
-
-  //
-  // Make tensors
-  //
-  auto tensor_shape = make_shape(params.M, params.N);
-  auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
-  auto gmemLayoutD = make_layout(tensor_shape, LayoutRight{});
-  Tensor tensor_S = make_tensor(make_gmem_ptr(params.input), gmemLayoutS);
-  Tensor tensor_D = make_tensor(make_gmem_ptr(params.output), gmemLayoutD);
-
-  //
-  // Tile tensors
-  //
-
-  // Define a statically sized block (M, N).
-  // Note, by convention, capital letters are used to represent static modes.
-  auto block_shape = make_shape(Int<1>{}, Int<16384>{});
-
-  if ((size<0>(tensor_shape) % size<0>(block_shape)) ||
-      (size<1>(tensor_shape) % size<1>(block_shape))) {
-    std::cerr << "The tensor shape must be divisible by the block shape."
-              << std::endl;
-  }
-  // Equivalent check to the above
-  if (not evenly_divides(tensor_shape, block_shape)) {
-    std::cerr << "Expected the block_shape to evenly divide the tensor shape."
-              << std::endl;
+    // Copy from GMEM to RMEM and from RMEM to GMEM
+    copy(thr_tile_S, fragment);
+    copy(fragment, thr_tile_D);
   }
 
-  // Tile the tensor (m, n) ==> ((M, N), m', n') where (M, N) is the static tile
-  // shape, and modes (m', n') correspond to the number of tiles.
-  //
-  // These will be used to determine the CUDA kernel grid dimensions.
-  Tensor tiled_tensor_S =
-      tiled_divide(tensor_S, block_shape); // ((M, N), m', n')
-  Tensor tiled_tensor_D =
-      tiled_divide(tensor_D, block_shape); // ((M, N), m', n')
+  template <typename Element>
+  void copy_direct(TransposeParams<Element> params) {
+    //
+    // Given a 2D shape, perform an efficient copy
+    //
 
-  // Thread arrangement
-  Layout thr_layout =
-      make_layout(make_shape(Int<1>{}, Int<1024>{}), LayoutRight{});
+    using namespace cute;
 
-  //
-  // Determine grid and block dimensions
-  //
+    //
+    // Make tensors
+    //
+    auto tensor_shape = make_shape(params.M, params.N);
+    auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
+    auto gmemLayoutD = make_layout(tensor_shape, LayoutRight{});
+    Tensor tensor_S = make_tensor(make_gmem_ptr(params.input), gmemLayoutS);
+    Tensor tensor_D = make_tensor(make_gmem_ptr(params.output), gmemLayoutD);
 
-  auto gridDim = compat::dim3(
-      size<1>(tiled_tensor_S),
-      size<2>(tiled_tensor_S)); // Grid shape corresponds to modes m' and n'
-  auto blockDim = compat::dim3(size(thr_layout));
+    //
+    // Tile tensors
+    //
 
-  //
-  // Launch the kernel
-  //
-  compat::launch<copy_kernel<decltype(tiled_tensor_S), decltype(tiled_tensor_D),
-                             decltype(thr_layout)>>(
-      gridDim, blockDim, tiled_tensor_S, tiled_tensor_D, thr_layout);
-}
+    // Define a statically sized block (M, N).
+    // Note, by convention, capital letters are used to represent static modes.
+    auto block_shape = make_shape(Int<1>{}, Int<16384>{});
+
+    if ((size<0>(tensor_shape) % size<0>(block_shape)) ||
+        (size<1>(tensor_shape) % size<1>(block_shape))) {
+      std::cerr << "The tensor shape must be divisible by the block shape."
+                << std::endl;
+    }
+    // Equivalent check to the above
+    if (not evenly_divides(tensor_shape, block_shape)) {
+      std::cerr << "Expected the block_shape to evenly divide the tensor shape."
+                << std::endl;
+    }
+
+    // Tile the tensor (m, n) ==> ((M, N), m', n') where (M, N) is the static
+    // tile shape, and modes (m', n') correspond to the number of tiles.
+    //
+    // These will be used to determine the CUDA kernel grid dimensions.
+    Tensor tiled_tensor_S =
+        tiled_divide(tensor_S, block_shape); // ((M, N), m', n')
+    Tensor tiled_tensor_D =
+        tiled_divide(tensor_D, block_shape); // ((M, N), m', n')
+
+    // Thread arrangement
+    Layout thr_layout =
+        make_layout(make_shape(Int<1>{}, Int<1024>{}), LayoutRight{});
+
+    //
+    // Determine grid and block dimensions
+    //
+
+    auto gridDim = compat::dim3(
+        size<1>(tiled_tensor_S),
+        size<2>(tiled_tensor_S)); // Grid shape corresponds to modes m' and n'
+    auto blockDim = compat::dim3(size(thr_layout));
+
+    //
+    // Launch the kernel
+    //
+    compat::launch<copy_kernel<decltype(tiled_tensor_S),
+                               decltype(tiled_tensor_D), decltype(thr_layout)>>(
+        gridDim, blockDim, tiled_tensor_S, tiled_tensor_D, thr_layout);
+  }

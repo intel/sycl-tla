@@ -44,9 +44,7 @@
 
 // Shared Storage for aligned addresses
 template <class Element, class SmemLayout> struct SharedStorageTranspose {
-  cute::array_aligned<Element, cute::cosize_v<SmemLayout>,
-                      cutlass::detail::alignment_for_swizzle(SmemLayout{})>
-      smem;
+  cute::array_aligned<Element, cute::cosize_v<SmemLayout>> smem;
 };
 
 template <class TensorS, class TensorD, class SmemLayoutS, class ThreadLayoutS,
@@ -123,7 +121,15 @@ void transpose_smem(TransposeParams<Element> params) {
   auto tileShapeS = make_layout(block_shape, LayoutRight{});
   auto tileShapeD = make_layout(block_shape_trans, LayoutRight{});
 
+  // smemLayoutS uses the same layout as tileShapeS (row-major layout of shape (bM, bN))
+  // This represents how data from the source tile is stored in shared memory
   auto smemLayoutS = tileShapeS;
+
+  // smemLayoutD composes smemLayoutS with tileShapeD to create the transposed layout
+  // composition(smemLayoutS, tileShapeD) means: apply tileShapeD's coordinate mapping first,
+  // then apply smemLayoutS's layout. Since tileShapeD has shape (bN, bM), this effectively
+  // creates a layout that maps (bN, bM) coordinates through the (bM, bN) storage, achieving
+  // the transpose operation when reading from shared memory in the opposite dimension order
   auto smemLayoutD = composition(smemLayoutS, tileShapeD);
   auto smemLayoutS_swizzle = composition(Swizzle<5, 0, 5>{}, tileShapeS);
   auto smemLayoutD_swizzle = composition(smemLayoutS_swizzle, tileShapeD);

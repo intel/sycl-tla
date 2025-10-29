@@ -69,11 +69,8 @@ void transpose_naive(TransposeParams<Element> params) {
   // Make Tensors
   //
   auto tensor_shape = make_shape(params.M, params.N);
-  auto tensor_shape_trans = make_shape(params.N, params.M);
   auto gmemLayoutS = make_layout(tensor_shape, LayoutRight{});
-  auto gmemLayoutD = make_layout(tensor_shape_trans, LayoutRight{});
   Tensor tensor_S = make_tensor(make_gmem_ptr(params.input), gmemLayoutS);
-  Tensor tensor_D = make_tensor(make_gmem_ptr(params.output), gmemLayoutD);
 
   // Make a transposed view of the output
   auto gmemLayoutDT = make_layout(tensor_shape, GenColMajor{});
@@ -87,7 +84,6 @@ void transpose_naive(TransposeParams<Element> params) {
   using bN = Int<512>;
 
   auto block_shape = make_shape(bM{}, bN{});       // (bM, bN)
-  auto block_shape_trans = make_shape(bN{}, bM{}); // (bN, bM)
 
   Tensor tiled_tensor_S =
       tiled_divide(tensor_S, block_shape); // ((bM, bN), m', n')

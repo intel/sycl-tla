@@ -1,3 +1,4 @@
+#include "block_2d_transposed_copy.h"
 #include "copy_direct.h"
 #include "copy_smem.h"
 #include "transpose_naive.h"
@@ -24,6 +25,10 @@ int main(int argc, char const **argv) {
 
   printf("\nTranspose through SMEM.:\n");
   benchmark<Element>(transpose_smem<Element>, M, N, iterations);
+
+  printf("Block 2d Transposed load\n");
+  benchmark<Element, true, false, false>(block_2d_transposed_copy<Element>, M,
+                                          N, iterations);
 
   return 0;
 }

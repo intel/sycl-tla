@@ -62,10 +62,10 @@ void copySmemKernel(TensorS const S, TensorD const D, ThreadLayout,
   Tensor gS = S(make_coord(_, _), compat::work_group_id::x(),
                 compat::work_group_id::y()); // (bM, bN)
   Tensor gD = D(make_coord(_, _), compat::work_group_id::x(),
-                compat::work_group_id::y()); // (bN, bM)
+                compat::work_group_id::y()); // (bM, bN)
 
   Tensor sS = make_tensor(make_smem_ptr(shared_storage.smem.data()),
-                          SmemLayout{}); // (bN, bM)
+                          SmemLayout{}); // (bM, bN)
 
   auto tiled_copy_load = make_tiled_copy(
       Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, Element>{},
@@ -83,7 +83,7 @@ void copySmemKernel(TensorS const S, TensorD const D, ThreadLayout,
   Tensor tSgS = thr_copy_load.partition_S(gS);
   Tensor tSsS = thr_copy_load.partition_D(sS);
   //
-  Tensor tDsS = thr_copy_store.partition_D(sS);
+  Tensor tDsD = thr_copy_store.partition_S(sS);
   Tensor tDgD = thr_copy_store.partition_D(gD);
 
   copy(tiled_copy_load, tSgS, tSsS);
@@ -92,7 +92,7 @@ void copySmemKernel(TensorS const S, TensorD const D, ThreadLayout,
   cp_async_wait<0>();
   syncthreads();
   //
-  copy(tiled_copy_store, tDsS, tDgD);
+  copy(tiled_copy_store, tDsD, tDgD);
 }
 
 template <typename Element> void copy_smem(TransposeParams<Element> params) {
