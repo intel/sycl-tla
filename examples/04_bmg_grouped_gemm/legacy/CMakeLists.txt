@@ -1,7 +1,4 @@
-#################################################################################################
-#
-# Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# Copyright (C) 2025 Intel Corporation, All rights reserved.
+# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,20 +25,18 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-#################################################################################################
 
-from setuptools import setup
+set(TEST_GROUPS_2 --groups=2)
+set(TEST_GROUPS_4 --groups=4)
 
-
-def perform_setup():
-    setup(
-        name='cutlass_library_xe',
-        version='4.1.0',
-        description='SYL*TLA library generation scripts',
-        packages=['cutlass_library']
-    )
-
-
-if __name__ == '__main__':
-    perform_setup()
+cutlass_example_add_executable(
+  04_bmg_grouped_gemm_legacy
+  04_bmg_grouped_gemm.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_GROUPS_2
+  TEST_GROUPS_4
+)
+if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
+  # TODO(codeplay): Remove these once IGC VectorAliasThreshold issue is fixed
+  target_link_options( 04_bmg_grouped_gemm PRIVATE -Xs "-options \"-igc_opts 'VectorAliasBBThreshold=10000'\"" )
+endif()

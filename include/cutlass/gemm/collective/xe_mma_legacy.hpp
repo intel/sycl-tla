@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
@@ -47,20 +47,18 @@ using namespace cute;
 template <int Stages, class Schedule, class TileShape_, class ElementA_, class StrideA_, class ElementB_, class StrideB_,
           class TiledMma_, class GmemTiledCopyA_, class SmemLayoutAtomA_, class SmemCopyAtomA_, class TransformA_,
           class GmemTiledCopyB_, class SmemLayoutAtomB_, class SmemCopyAtomB_, class TransformB_>
-struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
+struct CollectiveMma<MainloopIntelXeXMX16<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
                      GmemTiledCopyA_, SmemLayoutAtomA_, SmemCopyAtomA_, TransformA_, GmemTiledCopyB_, SmemLayoutAtomB_,
                      SmemCopyAtomB_, TransformB_> {
   //
   // Type Aliases
   //
-  using DispatchPolicy = MainloopXeL1StagedGroup<Stages, Schedule>;
+  using DispatchPolicy = MainloopIntelXeXMX16<Stages, Schedule>;
   using WorkgroupTileShape = TileShape_;
   using ElementA = ElementA_;
   using StrideA = StrideA_;
-  using InternalStrideA = cute::remove_pointer_t<StrideA>;
   using ElementB = ElementB_;
   using StrideB = StrideB_;
-  using InternalStrideB = cute::remove_pointer_t<StrideB>;
   using TiledMma = TiledMma_;
   using ElementAccumulator = typename TiledMma::ValTypeC;
   using GmemTiledCopyA = GmemTiledCopyA_;
@@ -73,8 +71,7 @@ struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, Elem
   using TransformB = TransformB_;
   using ArchTag = typename DispatchPolicy::ArchTag;
 
-  static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopXeL1StagedGroup requires that A and B have same type.");
-
+  static_assert(platform::is_same<ElementA, ElementB>::value, "MainloopIntelXeXMX16 requires that A and B have same type.");
   static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
   static_assert(std::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
 
@@ -90,33 +87,33 @@ struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, Elem
   static constexpr int ATOM_N = get<2>(typename TiledMma::ThrLayoutVMNK{}.shape());
   static constexpr int ATOM_K = get<3>(typename TiledMma::ThrLayoutVMNK{}.shape());
 
+  static_assert(BLK_M % TiledMma{}.template tile_size_mnk<0>() == 0, "TiledMma permutation size must match block size.");
+  static_assert(BLK_N % TiledMma{}.template tile_size_mnk<1>() == 0, "TiledMma permutation size must match block size.");
+  static_assert(BLK_K % TiledMma{}.template tile_size_mnk<2>() == 0, "TiledMma permutation size must match block size.");
+
   static constexpr int SG_M = ceil_div(BLK_M, ATOM_M);
   static constexpr int SG_N = ceil_div(BLK_N, ATOM_N);
   static constexpr int SG_K = ceil_div(BLK_K, ATOM_K);
   using SubgroupTileShape = Shape<C<SG_M>, C<SG_N>, C<SG_K>>;
 
-  static constexpr int Num_SGs = ATOM_N * ATOM_M * ATOM_K;
+  // 32
+  static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
-  // using Copy_A = typename Copy_Traits<GmemTiledCopyA, InternalStrideA>::template DefaultTiledCopy<ElementA>;
-  // using Copy_B = typename Copy_Traits<GmemTiledCopyB, InternalStrideB>::template DefaultTiledCopy<ElementB>;
+  using Copy_A = typename Copy_Traits<GmemTiledCopyA, StrideA>::template DefaultTiledCopy<ElementA>;
+  using Copy_B = typename Copy_Traits<GmemTiledCopyB, StrideB>::template DefaultTiledCopy<ElementB>;
 
-  using TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), InternalStrideA{}));   //(m, k)
-  using TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), InternalStrideB{}));   //(n, k)
-  using MainloopTensors = cute::tuple<TensorMKL, TensorNKL>;
   // Host side kernel arguments
   struct Arguments {
-    ElementA const** ptr_A;
+    ElementA const* ptr_A;
     StrideA dA;
-    ElementB const** ptr_B;
+    ElementB const* ptr_B;
     StrideB dB;
   };
 
   struct Params {
-    ElementA const** ptr_A;
-    StrideA dA;
-    ElementB const** ptr_B;
-    StrideB dB;
+    Copy_A tiled_copy_a;
+    Copy_B tiled_copy_b;
   };
 
   //
@@ -130,17 +127,14 @@ struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, Elem
   to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
     (void) workspace;
 
-    auto problem_shape_MNK = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, int32_t(1));;
-    auto init_M = get<0>(problem_shape_MNK);
-    auto init_N = get<1>(problem_shape_MNK);
-    auto init_K = get<2>(problem_shape_MNK);
+    auto [M,N,K,L] = problem_shape;
 
-    return Params{
-      args.ptr_A,
-      args.dA,
-      args.ptr_B,
-      args.dB
-    };
+    auto mA_mkl = make_tensor(make_gmem_ptr(args.ptr_A), make_layout(make_shape(M, K, L), args.dA));
+    auto mB_nkl = make_tensor(make_gmem_ptr(args.ptr_B), make_layout(make_shape(N, K, L), args.dB));
+    Copy_A tiled_copy_a{Copy_A{}.with(mA_mkl)};
+    Copy_B tiled_copy_b{Copy_B{}.with(mB_nkl)};
+    
+    return Params{tiled_copy_a, tiled_copy_b};
   }
 
   template<class ProblemShape>
@@ -156,20 +150,15 @@ struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, Elem
     bool implementable = true;
 
     constexpr int min_aligned_elements_A = copy_alignment_bits / sizeof_bits<ElementA>::value;
+    implementable &= cutlass::detail::check_alignment<min_aligned_elements_A>(cute::make_shape(M,K,L), args.dA);
     constexpr int min_aligned_elements_B = copy_alignment_bits / sizeof_bits<ElementB>::value;
-    constexpr int min_batch_aligned_elements_A = batch_alignment_bits / sizeof_bits<ElementA>::value;
-    constexpr int min_batch_aligned_elements_B = batch_alignment_bits / sizeof_bits<ElementB>::value;
-    for (int i = 0; i < problem_shapes.groups(); i++) {
-      auto problem_shape_MNKL = append<4>(problem_shapes.get_host_problem_shape(i), 1);
-      auto [M,N,K,L] = problem_shape_MNKL;
+    implementable &= cutlass::detail::check_alignment<min_aligned_elements_B>(cute::make_shape(N,K,L), args.dB);
 
-      implementable &= cutlass::detail::check_alignment<min_aligned_elements_A>(cute::make_shape(M,K,L), InternalStrideA{});
-      implementable &= cutlass::detail::check_alignment<min_aligned_elements_B>(cute::make_shape(N,K,L), InternalStrideB{});
-
-      if (L > 1) {
-        implementable &= get<2>(InternalStrideA{}) % min_batch_aligned_elements_A == 0;
-        implementable &= get<2>(InternalStrideB{}) % min_batch_aligned_elements_B == 0;
-      }
+    if (L > 1) {
+      constexpr int min_batch_aligned_elements_A = batch_alignment_bits / sizeof_bits<ElementA>::value;
+      implementable &= get<2>(args.dA) % min_batch_aligned_elements_A == 0;
+      constexpr int min_batch_aligned_elements_B = batch_alignment_bits / sizeof_bits<ElementB>::value;
+      implementable &= get<2>(args.dB) % min_batch_aligned_elements_B == 0;
     }
 
     if (!implementable) {
@@ -180,47 +169,46 @@ struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, Elem
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
-  template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator,
-            class BlkCoord, class LoadTensors>
+  template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator, class BlkCoord>
   CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,
-                                 KTileIterator k_tile_iter, int const& k_tile_count,
-                                 BlkCoord const &blk_coord, int const &K_start, int const& thread_idx,
-                                 Params const &mainloop, LoadTensors const& load_tensors) {
+                                 KTileIterator k_tile_iter, int k_tile_count, BlkCoord const &blk_coord, int const &K_start, int thread_idx,
+                                 Params const &mainloop) {
+    (void)blk_coord;
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
-    (void)thread_idx;
+    auto thr_copy_A = mainloop.tiled_copy_a.get_slice(thread_idx);
+    auto thr_copy_B = mainloop.tiled_copy_b.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
-    auto thr_mma = tiled_mma.get_slice(thread_idx);
+    // TODO(Codeplay): see if we can make this nicer
+    // To make all work items in a subgroup have the same global tensors pass in the index of work item 0 in each subgroup
+    auto sg = compat::get_nd_item<1>().get_sub_group();
+    auto first_thread_in_sg_idx = sg.get_group_linear_id() * DispatchPolicy::SubgroupSize;
+    auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
 
-    auto tiled_copy_a = get_block_2d_copy_A<GmemTiledCopyA>(TiledMma{}, get<0>(load_tensors)(_, _, 0));
-    auto tiled_copy_b = get_block_2d_copy_B<GmemTiledCopyB>(TiledMma{}, get<1>(load_tensors)(_, _, 0));
+    // Partition global counting tensors for MMA
+    Tensor tCgA = thr_mma.partition_A(gA);
+    Tensor tCgB = thr_mma.partition_B(gB);
 
-    auto thr_copy_a = tiled_copy_a.get_slice(thread_idx);
-    auto thr_copy_b = tiled_copy_b.get_slice(thread_idx);
+    Tensor tCrA = make_tensor<ElementA>(make_fragment_layout(mainloop.tiled_copy_a, tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementB>(make_fragment_layout(mainloop.tiled_copy_b, tCgB(_,_,_,0).shape()));
 
-    /* Register fragments for MMA */
-    auto tCrA = thr_mma.partition_sg_fragment_A(gA(_,_,0));
-    auto tCrB = thr_mma.partition_sg_fragment_B(gB(_,_,0));
-
-    /* Register fragments for copies */
-    auto tArA = thr_copy_a.partition_sg_fragment_D(gA(_,_,0));
-    auto tBrB = thr_copy_b.partition_sg_fragment_D(gB(_,_,0));
-
-    /* Partition global tensor (proxies) for copies */
-    Tensor tAgA = thr_copy_a.partition_S(gA);
-    Tensor tBgB = thr_copy_b.partition_S(gB);
+    // Retile registers for copies
+    Tensor tArA = thr_copy_A.retile_D(tCrA);
+    Tensor tBrB = thr_copy_B.retile_D(tCrB);
     
-    /* Create prefetch TiledCopy instances */
-    auto prefetch_a = make_block_2d_prefetch(tiled_copy_a);
-    auto prefetch_b = make_block_2d_prefetch(tiled_copy_b);
-      
-    auto thr_prefetch_A = prefetch_a.get_slice(thread_idx);
-    auto thr_prefetch_B = prefetch_b.get_slice(thread_idx);
-
-    /* Partition global tensor (proxies) for prefetch */
+    // Retile global counting tensors for copies
+    Tensor tAgA = thr_copy_A.retile_S(tCgA);
+    Tensor tBgB = thr_copy_B.retile_S(tCgB);
+    
+    auto tiled_prefetch_a = cute::prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.tiled_copy_a);
+    auto tiled_prefetch_b = cute::prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(mainloop.tiled_copy_b);
+    auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
+    auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);
+    
+    // Partition global tile for prefetch
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);
 
@@ -228,18 +216,20 @@ struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, Elem
 #define PRINT(x) print(#x ": "); print(x); print("\n");
     if (cute::thread(LOG_THREAD, LOG_GROUP)) {
       print("======================= A: \n");
+      PRINT(tCgA);
       PRINT(tAgA);
 
       PRINT(tCrA);
       PRINT(tArA);
-      PRINT(mainloop.copy_a);
+      PRINT(mainloop.tiled_copy_a);
 
       print("======================= B: \n");
+      PRINT(tCgB);
       PRINT(tBgB);
 
       PRINT(tCrB);
       PRINT(tBrB);
-      PRINT(mainloop.copy_b);
+      PRINT(mainloop.tiled_copy_b);
       }
 #undef PRINT
 #endif
@@ -253,47 +243,25 @@ struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, Elem
 
     CUTLASS_PRAGMA_UNROLL
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
-      prefetch(prefetch_a, pAgA(_, _, _, prefetch_k));
-      prefetch(prefetch_b, pBgB(_, _, _, prefetch_k));
+      prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+      prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
     }
 
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
-      copy(tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
-      copy(tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
+      copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
+      copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
 
       if (prefetch_k < k_tile_count) {
-        prefetch(prefetch_a, pAgA(_, _, _, prefetch_k));
-        prefetch(prefetch_b, pBgB(_, _, _, prefetch_k));
+        prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+        prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
       }
-
-      /* Shuffle data from copy fragments to MMA fragments */
-      reorder(tArA, tCrA);
-      reorder(tBrB, tCrB);
 
       cute::gemm(tiled_mma, tCrA, tCrB, accum);
       barrier_wait(barrier_scope);
     }
   }
-
-  template <typename ProblemShape_MNKL>
-  CUTLASS_DEVICE auto update_tensor_shape_stride(
-    Params const& mainloop_params,
-    int32_t const& next_group,
-    ProblemShape_MNKL const& problem_shape_mnkl) {
-      const int32_t M = get<0>(problem_shape_mnkl);
-      const int32_t N = get<1>(problem_shape_mnkl);
-      const int32_t K = get<2>(problem_shape_mnkl);
-
-      ElementA const* ptr_A_curr_batch = reinterpret_cast<ElementA const*>(mainloop_params.ptr_A[next_group]);
-      ElementB const* ptr_B_curr_batch = reinterpret_cast<ElementB const*>(mainloop_params.ptr_B[next_group]);
-
-      Tensor mA = make_tensor(make_gmem_ptr(ptr_A_curr_batch), make_shape(M, K,(int32_t)1), mainloop_params.dA[next_group]);
-      Tensor mB = make_tensor(make_gmem_ptr(ptr_B_curr_batch), make_shape(N, K,(int32_t)1), mainloop_params.dB[next_group]);
-
-      return cute::make_tuple(mA, mB);
-    }
 };
 
 } // namespace cutlass::gemm::collective

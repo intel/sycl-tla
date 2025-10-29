@@ -1,7 +1,4 @@
-#################################################################################################
-#
-# Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# Copyright (C) 2025 Intel Corporation, All rights reserved.
+# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,20 +25,17 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-#################################################################################################
 
-from setuptools import setup
-
-
-def perform_setup():
-    setup(
-        name='cutlass_library_xe',
-        version='4.1.0',
-        description='SYL*TLA library generation scripts',
-        packages=['cutlass_library']
-    )
+set(TEST_BATCHES --l=2)
+set(TEST_LARGE "--l=513 --m=8 --n=16384 --k=512") # B matrix capacity > uint32_max
+set(TEST_SMALL_SHAPE --m=4 --n=8 --k=8 --l=2)
 
 
-if __name__ == '__main__':
-    perform_setup()
+cutlass_example_add_executable(
+  00_bmg_gemm_legacy
+  00_bmg_gemm.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+  TEST_LARGE
+  TEST_SMALL_SHAPE
+)
