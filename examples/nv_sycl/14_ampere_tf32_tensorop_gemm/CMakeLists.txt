@@ -39,3 +39,4 @@ if (NOT SYCL_INTEL_TARGET)
     14_ampere_tf32_tensorop_gemm_cute
     ampere_tf32_tensorop_gemm_cute.cu
   )
+endif()
