@@ -90,6 +90,7 @@ public:
   using DispatchPolicy = IntelXeXMX16Group;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
+  using ElementC = ElementC_;
   using StrideC = StrideC_;
   using InternalStrideC = cute::remove_pointer_t<StrideC>;
   using ElementD = ElementD_;
@@ -109,7 +110,6 @@ public:
   using ElementOutput = ElementD;
   using ElementCompute = typename ThreadEpilogueOp::ElementCompute;
   using ElementAccumulator = ElementCompute;
-  using ElementC = conditional_t<cute::is_void_v<CopyOpG2R>, ElementAccumulator, ElementC_>;
   using ElementSource = typename FusionCallbacks::ElementSource;
   using ElementScalar = typename FusionCallbacks::ElementScalar;
   static constexpr FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest;
@@ -130,10 +130,7 @@ public:
   static_assert(std::is_same_v<SmemLayoutAtomD, void>, "Copy operation to shared memory is not supported");
 
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
-  using Trait_C = Copy_Traits<GmemTiledCopyC, InternalStrideC>;
-  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{},
-                                             Layout<CopyThreadShape>{},
-                                             make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{}))));
+  
   using Trait_D = Copy_Traits<GmemTiledCopyD, InternalStrideD>;
   using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{},
                                              Layout<CopyThreadShape>{},
@@ -141,7 +138,13 @@ public:
 private:
   constexpr static bool is_source_supported = not cute::is_void_v<ElementC_>;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
-
+  
+  using NonVoidElementC = conditional_t<is_source_supported, ElementC, ElementD>;
+  using Trait_C = Copy_Traits<GmemTiledCopyC, InternalStrideC>;
+  using NonVoidTrait_C = conditional_t<is_source_supported, Trait_C, Trait_D>;
+  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<NonVoidTrait_C, NonVoidElementC>{},
+                                             Layout<CopyThreadShape>{},
+                                             make_layout(shape_div(typename NonVoidTrait_C::BlockShape{}, CopyThreadShape{}))));
 public:
 
   using EmptyType = cute::tuple<>;
@@ -428,8 +431,10 @@ public:
       for (int epi_m = 0; epi_m < FragsM; epi_m++) {
 
         if (is_C_load_needed) {
-          //cordinates for C and D are the same
-          copy(params.xe_load_c.with(get<0>(load_store_tensors)), tCgD(_, epi_m, epi_n), trC);
+          if constexpr (is_source_supported) {
+            //cordinates for C and D are the same
+            copy(params.xe_load_c.with(get<0>(load_store_tensors)), tCgD(_, epi_m, epi_n), trC);
+          }
         }
 
         cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);
