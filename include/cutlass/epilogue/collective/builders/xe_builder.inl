@@ -195,7 +195,7 @@ template <
       //TODO(Codeplay): Should FusionCallbacks use DispatchPolicy IntelXeGroupEpilogue for group gemm? That does not work.
       using FusionCallbacks = typename detail::FusionOpInfo<FusionOpOrCallbacks>::template FusionCallbacks<
                                   IntelXeXMX16, TileShape_MNK, TileShape_MNK, CopyOpG2R>;
-
+      static_assert(cute::is_same_v<ElementAccumulator, ElementCompute>, "Assumption is that in Epilogue, ElementAccumulator and ElementCompute are same");
       using CollectiveOp = cutlass::epilogue::collective::CollectiveEpilogue<
             DispatchPolicy,
             TileShape_MNK,

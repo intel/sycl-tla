@@ -90,7 +90,6 @@ public:
   using DispatchPolicy = IntelXeXMX16Group;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
-  using ElementC = ElementC_;
   using StrideC = StrideC_;
   using InternalStrideC = cute::remove_pointer_t<StrideC>;
   using ElementD = ElementD_;
@@ -110,6 +109,7 @@ public:
   using ElementOutput = ElementD;
   using ElementCompute = typename ThreadEpilogueOp::ElementCompute;
   using ElementAccumulator = ElementCompute;
+  using ElementC = conditional_t<cute::is_void_v<CopyOpG2R>, ElementAccumulator, ElementC_>;
   using ElementSource = typename FusionCallbacks::ElementSource;
   using ElementScalar = typename FusionCallbacks::ElementScalar;
   static constexpr FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest;
@@ -139,7 +139,7 @@ public:
                                              Layout<CopyThreadShape>{},
                                              make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{}))));
 private:
-  constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
+  constexpr static bool is_source_supported = not cute::is_void_v<ElementC_>;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
 
 public:

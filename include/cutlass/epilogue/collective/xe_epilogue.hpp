@@ -89,7 +89,6 @@ public:
   using DispatchPolicy = IntelXeXMX16;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
-  using ElementC = ElementC_;
   using StrideC = StrideC_;
   using ElementD = ElementD_;
   using StrideD = StrideD_;
@@ -107,6 +106,7 @@ public:
   using ElementOutput = ElementD;
   using ElementCompute = typename ThreadEpilogueOp::ElementCompute;
   using ElementAccumulator = ElementCompute;
+  using ElementC = conditional_t<cute::is_void_v<CopyOpG2R>, ElementAccumulator, ElementC_>;
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
   static_assert(cute::rank(CtaTileMNK{}) == 3, "CtaTileMNK must be rank-3: [CTA_M, CTA_N, CTA_K]");
@@ -129,7 +129,7 @@ public:
   using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}, Layout<CopyThreadShape>{}, val_layout_store_D{}));
 
 private:
-  constexpr static bool is_source_supported = not cute::is_void_v<ElementC> && not cute::is_void_v<CopyOpG2R>;
+  constexpr static bool is_source_supported = not cute::is_void_v<ElementC_> && not cute::is_void_v<CopyOpG2R>;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
 
   constexpr static bool is_m_major_C = detail::is_m_major<StrideC>();
