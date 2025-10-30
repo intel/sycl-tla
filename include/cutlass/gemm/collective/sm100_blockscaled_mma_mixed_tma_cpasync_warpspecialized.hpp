@@ -644,7 +644,7 @@ struct CollectiveMma<
 
     GmemTiledCopyB gmem_to_smem_b_tiled_copy;
 
-    int thread_idx = threadIdx.x % NumLoadThreadsCpAsync;
+    int thread_idx = ThreadIdxX() % NumLoadThreadsCpAsync;
     auto thr_copy_b = gmem_to_smem_b_tiled_copy.get_slice(thread_idx);
 
     return cute::make_tuple(

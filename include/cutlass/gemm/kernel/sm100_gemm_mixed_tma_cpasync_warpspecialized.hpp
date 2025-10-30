@@ -702,7 +702,7 @@ public:
         mainloop_pipe_tma_producer_state = mainloop_producer_state_next_;
 
         // Sync warp to prevent non-participating threads entering next wave early
-        __syncwarp();
+        syncwarp();
 
         auto [next_work_tile_info, increment_pipe] = scheduler.fetch_next_work(
           work_tile_info,
@@ -748,7 +748,7 @@ public:
         mainloop_pipe_cpasync_producer_state = mainloop_producer_state_next;
 
         // Sync warp to prevent non-participating threads entering next wave early
-        __syncwarp();
+        syncwarp();
 
         auto [next_work_tile_info, increment_pipe] = scheduler.fetch_next_work(
           work_tile_info,
