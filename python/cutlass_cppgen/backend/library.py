@@ -473,7 +473,7 @@ def api_version(arch, opclass, dtype):
     :return: API version to be used in code emission
     :rtype: ApiVersion
     """
-    if opclass == OpcodeClass.TensorOp and arch == 11:
+    if opclass == OpcodeClass.TensorOp and arch >= 12 and arch <= 20:
         return ApiVersion.v3x
 
     if (arch >= 90 and

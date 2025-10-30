@@ -88,8 +88,9 @@ class GemmUniversalLauncher:
             raise Exception(f"Unexpected compiler string {compiler_mode}")
 
         op_list = [operation]
-        if operation.arch < 90 and operation.arch > 11:
+        if operation.arch < 90 and operation.arch > 11 and not (operation.arch >= 12 and operation.arch <= 20):
             # Split K via Python is currently only supported for pre-SM90 kernels
+            # Exclude Intel Xe architectures (12-20) as reduction is not implemented for Intel Xe
             self.reduction_operation: ReductionOperation = ReductionOperation(
                 shape=MatrixCoord(4, 32 * operation.C.alignment),
                 C=operation.C,
@@ -99,6 +100,9 @@ class GemmUniversalLauncher:
                 count=operation.C.alignment,
             )
             op_list.append(self.reduction_operation)
+        else:
+            # No reduction operation for Intel Xe architectures or SM90+
+            self.reduction_operation = None
 
         compiler.add_module(op_list, bypass_cache=False)
 
@@ -277,6 +281,8 @@ class GemmUniversalLauncher:
         )
 
         if mode == GemmUniversalMode.GemmSplitKParallel:
+            if self.reduction_operation is None:
+                raise RuntimeError("GemmSplitKParallel mode is not supported for Intel Xe architectures (reduction operation not implemented)")
             reduction_arguments = ReductionArguments(
                 self.reduction_operation,
                 problem_size=[problem_size.m, problem_size.n],
@@ -290,7 +296,8 @@ class GemmUniversalLauncher:
         self.operation.run(arguments)
 
         if mode == GemmUniversalMode.GemmSplitKParallel:
-            self.reduction_operation.run(reduction_arguments)
+            if self.reduction_operation is not None:
+                self.reduction_operation.run(reduction_arguments)
 
         passed = True
 

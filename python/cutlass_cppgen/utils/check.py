@@ -118,7 +118,7 @@ def valid_stage_count(
                 "stage count, and shared memory requirement of the epilogue exceeds "
                 "the available shared memory per SM.")
 
-    if kernel_cc == 11:
+    if kernel_cc >= 12 and kernel_cc <= 12:
         if (td.stages is None or td.stages == 0):
             # Support for Intel PVC GPU currently does not allow explicit
             # specification of the stage count. With None or 0, the 

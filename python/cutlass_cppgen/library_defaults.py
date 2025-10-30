@@ -48,7 +48,7 @@ from cutlass_cppgen.utils.datatypes import td_from_profiler_td, td_from_profiler
 
 # Intel Xe architectures: 12 (PVC/Xe-HPC), 20 (BMG/Xe2)
 # NVIDIA architectures: 50, 60, 61, 70, 75, 80, 90
-_generator_ccs = [12, 20, 50, 60, 61, 70, 75, 80, 90]
+_generator_ccs = [12, 20 ] #50, 60, 61, 70, 75, 80, 90]
 
 class KernelsForDataType:
     """

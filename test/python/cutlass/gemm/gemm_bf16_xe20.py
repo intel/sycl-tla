@@ -31,10 +31,8 @@
 #################################################################################################
 
 """
-Low-level functionality tests for GEMM with BF16 operands on PVC
+Low-level functionality tests for GEMM with BF16 operands on Xe20 (BMG)
 """
-import pdb; pdb.set_trace()  # Python 3.6-
-breakpoint()  # Python 3.7+
 
 from functools import partial
 import logging
@@ -47,31 +45,31 @@ from utils import LayoutCombination, add_test_gemm
 
 
 cutlass_cppgen.set_log_level(logging.WARNING)
-cc = 12  # PVC architecture is 12 (Xe-HPC)
+cc = 20  # BMG architecture is 20 (Xe2)
 dtype = cutlass_cppgen.DataType.bf16
 
 
-@unittest.skipIf(device_cc() < 11 and device_cc() > 20, 'Device compute capability is insufficient for PVC tests.')
+@unittest.skipIf(device_cc() >= 11 and device_cc() <= 20, 'Device compute capability is insufficient for Xe12/20/11 tests.')
 @unittest.skipIf(cutlass_cppgen.utils.datatypes.torch_type(dtype) is None, f'Version of torch installed does not contain a datatype match for {dtype}')
-class GemmBF16PVC(unittest.TestCase):
+class GemmBF16Xe20(unittest.TestCase):
     """
     Wrapper class to which tests will be added dynamically in __main__
     """
     pass
 
 
-add_test_pvc_bf16 = partial(add_test_gemm, cls=GemmBF16PVC, cc=12,
+add_test_xe20_bf16 = partial(add_test_gemm, cls=GemmBF16Xe20, cc=20,
                             element=dtype,
                             compilation_modes=["dpcpp"],
                             opclass=cutlass_cppgen.OpcodeClass.TensorOp,
                             stages=0,
                             cluster_shape=[1, 1, 1])
 
-add_test_f32_acc = partial(add_test_pvc_bf16, alignments=[2, 2, 4],
+add_test_f32_acc = partial(add_test_xe20_bf16, alignments=[2, 2, 4],
                            element_C=cutlass_cppgen.DataType.f32,
                            element_output=cutlass_cppgen.DataType.f32,
                            element_accumulator=cutlass_cppgen.DataType.f32)
-add_test_bf16_acc = partial(add_test_pvc_bf16, alignments=[2, 2, 2],
+add_test_bf16_acc = partial(add_test_xe20_bf16, alignments=[2, 2, 2],
                             element_C=cutlass_cppgen.DataType.bf16,
                             element_output=cutlass_cppgen.DataType.bf16,
                             element_accumulator=cutlass_cppgen.DataType.bf16)

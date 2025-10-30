@@ -200,7 +200,13 @@ def CreateGemmUniversal3xOperator(
   operations = []
 
   # by default, only generate the largest tile and largest alignment
+  # but generate all tiles when --kernels=all is specified
   if manifest.kernel_filter == '':
+    if len(tile_descriptions) == 0:
+      return operations
+    tile_descriptions = [tile_descriptions[0]]
+  elif manifest.kernel_filter != 'all':
+    # For specific kernel filters, still only use first tile to limit generation
     if len(tile_descriptions) == 0:
       return operations
     tile_descriptions = [tile_descriptions[0]]
@@ -11850,33 +11856,35 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
 
         
         for d_type in valid_d_types:
-            # print(f"=== BF16 Generator: Creating operations with D type = {d_type}")
-            data_type = {
-                "a_type": math_inst.element_a,
-                "b_type": math_inst.element_b,
-                "c_type": math_inst.element_accumulator,
-                "d_type": d_type,
-                "acc_type": math_inst.element_accumulator,
-                "epi_type": math_inst.element_accumulator
-            }
-            
-            # print(f"=== BF16 Generator: data_type dict = {data_type}")
+            # Generate operations both with and without bias (ElementC)
+            for c_type in [math_inst.element_accumulator, DataType.void]:
+                # print(f"=== BF16 Generator: Creating operations with D type = {d_type}, C type = {c_type}")
+                data_type = {
+                    "a_type": math_inst.element_a,
+                    "b_type": math_inst.element_b,
+                    "c_type": c_type,
+                    "d_type": d_type,
+                    "acc_type": math_inst.element_accumulator,
+                    "epi_type": math_inst.element_accumulator
+                }
+                
+                # print(f"=== BF16 Generator: data_type dict = {data_type}")
 
-            schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
+                schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
-            CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
-    #         print(f"=== BF16 Generator: Finished creating operations for D type = {d_type}")
+                CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+                print(f"=== BF16 Generator: Finished creating operations for D type = {d_type}, C type = {c_type}")
             
     #         # Debug: Check what was just added to manifest
     #         if OperationKind.Gemm in manifest.operations:
     #             for cc in manifest.operations[OperationKind.Gemm].keys():
-    #                 print(f"  After D={d_type}: CC {cc} has {sum(len(ops) for ops in manifest.operations[OperationKind.Gemm][cc].values())} total operations")
-    #                 # Show first few operation D types
+    #                 print(f"  After D={d_type}, C={c_type}: CC {cc} has {sum(len(ops) for ops in manifest.operations[OperationKind.Gemm][cc].values())} total operations")
+    #                 # Show first few operation C and D types
     #                 count = 0
     #                 for name, op_list in manifest.operations[OperationKind.Gemm][cc].items():
     #                     if op_list and count < 3:
     #                         op = op_list[0]
-    #                         print(f"    Sample: {name} -> D={op.D.element}")
+    #                         print(f"    Sample: {name} -> C={op.C.element}, D={op.D.element}")
     #                         count += 1
 
     # # Debug: Print all operations in manifest at end of function
