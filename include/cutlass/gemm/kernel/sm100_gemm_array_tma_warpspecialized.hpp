@@ -893,8 +893,6 @@ public:
         // When problem shapes are only on device, the grid launched may be larger than the total number of blocks across groups
         return;
       }
-      // In case user wants to engage less SMs than available on device
-      sm_id = BlockIdxX() + (BlockIdxY() * GridDimX());
     }
     // Optionally append 1s until problem shape is rank-4 in case it is only rank-3 (MNK)
     auto problem_shape_MNKL = append<4>(problem_shape.get_problem_shape(work_tile_info.L_idx), 1);
@@ -1009,7 +1007,7 @@ public:
         mainloop_pipe_producer_state = mainloop_producer_state_next_;
 
         // Sync warp to prevent non-participating threads entering next wave early
-        syncwarp();
+        __syncwarp();
 
         auto [next_work_tile_info, increment_pipe] = scheduler.fetch_next_work(
           work_tile_info,
@@ -1213,7 +1211,7 @@ public:
 
       // Tmem allocation sequence
       tmem_allocator.allocate(TmemAllocator::Sm100TmemCapacityColumns, &shared_storage.tmem_base_ptr);
-      syncwarp();
+      __syncwarp();
       tmem_allocation_result_barrier.arrive();
       uint32_t tmem_base_ptr = shared_storage.tmem_base_ptr;
       collective_mainloop.set_tmem_offsets(tmem_storage, tmem_base_ptr);
@@ -1225,27 +1223,6 @@ public:
       }
 
       do {
-    else if (is_participant.mma) {
-      // Tmem allocation sequence
-      tmem_allocator.allocate(TmemAllocator::Sm100TmemCapacityColumns, &shared_storage.tmem_base_ptr);
-      syncwarp();
-      tmem_allocation_result_barrier.arrive();
-      uint32_t tmem_base_ptr = shared_storage.tmem_base_ptr;
-      collective_mainloop.set_tmem_offsets(tmem_storage, tmem_base_ptr);
-      auto mma_inputs = collective_mainloop.mma_init(tmem_storage, shared_storage.tensors.mainloop);
-
-      do {
-
-        // Fetch next work tile
-        auto [next_work_tile_info, increment_pipe] = scheduler.fetch_next_work(
-          work_tile_info,
-          clc_pipeline,
-          clc_pipe_consumer_state
-        );
-
-        if (increment_pipe) {
-          ++clc_pipe_consumer_state;
-        }
 
         if constexpr (IsGroupedGemmKernel) {
           problem_shape_MNKL = append<4>(problem_shape.get_problem_shape(work_tile_info.L_idx), 1);
