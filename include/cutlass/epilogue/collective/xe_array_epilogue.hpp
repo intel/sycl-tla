@@ -374,7 +374,7 @@ public:
     auto thread_xe_store_d = params.xe_store_d.get_thread_slice(thread_idx);
     Tensor tCgD = thread_xe_store_d.partition_D(gD);
 
-    Tensor trC = make_tensor<ElementC>(Shape<Int<FragmentSize>>{});
+    Tensor trC = make_tensor<NonVoidElementC>(Shape<Int<FragmentSize>>{});
     Tensor trD_compute = make_tensor<ElementCompute>(Shape<Int<FragmentSize>>{});
 
     // Because Sm90 uses shared memory, they are not tied to using the same accumulator values
