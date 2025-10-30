@@ -11845,8 +11845,12 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
         valid_d_types = [math_inst.element_accumulator]
         if math_inst.element_a != math_inst.element_accumulator:
             valid_d_types.append(math_inst.element_a)
+            # print(f"=== BF16 Generator: Math inst A={math_inst.element_a}, B={math_inst.element_b}, Acc={math_inst.element_accumulator}")
+            # print(f"=== BF16 Generator: Will generate for D types: {valid_d_types}")
+
         
         for d_type in valid_d_types:
+            # print(f"=== BF16 Generator: Creating operations with D type = {d_type}")
             data_type = {
                 "a_type": math_inst.element_a,
                 "b_type": math_inst.element_b,
@@ -11855,10 +11859,40 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
                 "acc_type": math_inst.element_accumulator,
                 "epi_type": math_inst.element_accumulator
             }
+            
+            # print(f"=== BF16 Generator: data_type dict = {data_type}")
 
             schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
             CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+    #         print(f"=== BF16 Generator: Finished creating operations for D type = {d_type}")
+            
+    #         # Debug: Check what was just added to manifest
+    #         if OperationKind.Gemm in manifest.operations:
+    #             for cc in manifest.operations[OperationKind.Gemm].keys():
+    #                 print(f"  After D={d_type}: CC {cc} has {sum(len(ops) for ops in manifest.operations[OperationKind.Gemm][cc].values())} total operations")
+    #                 # Show first few operation D types
+    #                 count = 0
+    #                 for name, op_list in manifest.operations[OperationKind.Gemm][cc].items():
+    #                     if op_list and count < 3:
+    #                         op = op_list[0]
+    #                         print(f"    Sample: {name} -> D={op.D.element}")
+    #                         count += 1
+
+    # # Debug: Print all operations in manifest at end of function
+    # print(f"\n=== BF16 Generator: Final manifest contents ===")
+    # if OperationKind.Gemm in manifest.operations:
+    #     for cc in manifest.operations[OperationKind.Gemm].keys():
+    #         print(f"  CC {cc}:")
+    #         total_ops = 0
+    #         for name, op_list in manifest.operations[OperationKind.Gemm][cc].items():
+    #             total_ops += len(op_list)
+    #             # Show first operation details for each name
+    #             if op_list:
+    #                 op = op_list[0]
+    #                 print(f"    {name}: {len(op_list)} ops - A={op.A.element}, B={op.B.element}, C={op.C.element}, D={op.D.element}")
+    #         print(f"  Total: {total_ops} operations for CC {cc}")
+    # print(f"=== End BF16 Generator manifest contents ===\n")
 
 
 def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
@@ -12078,8 +12112,8 @@ def GenerateIntelXe(manifest, cuda_version, arch=20):
     # All Intel Xe architectures use the same generation functions
     # Only the min_cc (architecture number) differs
     GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=arch)
-    GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
-    GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
+    #GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
+    #GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
     # DISABLED: Mixed precision (FP16 x INT4) requires grouped GEMM infrastructure
     # Regular library generation uses MainloopIntelXeXMX16 which requires ElementA == ElementB
     # GenerateXe_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version, min_cc=arch)
