@@ -590,7 +590,7 @@ public:
     int32_t sm_id = static_cast<int32_t>(cutlass::arch::SmId());
     if constexpr (IsGroupedGemmKernel) {
       // In case user wants to engage less SMs than available on device
-      sm_id = blockIdx.x + (blockIdx.y * gridDim.x);
+      sm_id = BlockIdxX() + (BlockIdxY() * GridDimX());
     }
     auto tensormaps_init_main_load = [&] () {
       if constexpr (IsTensorMapUpdateAsync) {
