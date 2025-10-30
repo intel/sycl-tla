@@ -343,6 +343,7 @@ gemm_nt(int m, int n, int k,
   print_latex(mmaC);
 #endif
 
+<<<<<<< HEAD:examples/cute/tutorial/sgemm_sm80_sycl.cpp
   auto dimBlock = compat::dim3(size(mmaC));
   auto dimGrid  = compat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
   auto event = compat::launch<
@@ -356,6 +357,18 @@ gemm_nt(int m, int n, int k,
                     C, dC, sC, mmaC,
                     alpha, beta);
   EventManager::getInstance().addEvent(event);
+=======
+  int smem_size = int(sizeof(SharedStorage<TA, TB, decltype(sA), decltype(sB)>));
+  dim3 dimBlock(size(mmaC));
+  dim3 dimGrid(size(ceil_div(M, bM)),
+               size(ceil_div(N, bN)));
+  gemm_device<<<dimGrid, dimBlock, smem_size, stream>>>
+      (prob_shape, cta_tiler,
+       A, dA, sA, copyA, Copy_Atom<AutoVectorizingCopy, TA>{},
+       B, dB, sB, copyB, Copy_Atom<AutoVectorizingCopy, TB>{},
+       C, dC, sC, mmaC,
+       alpha, beta);
+>>>>>>> v4.2.1:examples/cute/tutorial/sgemm_sm80.cu
 }
 
 // Setup params for a NT GEMM
@@ -422,6 +435,7 @@ gemm_tn(int m, int n, int k,
   print_latex(mmaC);
 #endif
 
+<<<<<<< HEAD:examples/cute/tutorial/sgemm_sm80_sycl.cpp
   auto dimBlock = compat::dim3(size(mmaC));
   auto dimGrid  = compat::dim3(size(ceil_div(M, bM)), size(ceil_div(N, bN)));
   auto event = compat::launch<
@@ -435,6 +449,18 @@ gemm_tn(int m, int n, int k,
                     C, dC, sC, mmaC,
                     alpha, beta);
   EventManager::getInstance().addEvent(event);
+=======
+  int smem_size = int(sizeof(SharedStorage<TA, TB, decltype(sA), decltype(sB)>));
+  dim3 dimBlock(size(mmaC));
+  dim3 dimGrid(size(ceil_div(M, bM)),
+               size(ceil_div(N, bN)));
+  gemm_device<<<dimGrid, dimBlock, smem_size, stream>>>
+      (prob_shape, cta_tiler,
+       A, dA, sA, copyA, Copy_Atom<AutoVectorizingCopy, TA>{},
+       B, dB, sB, copyB, Copy_Atom<AutoVectorizingCopy, TB>{},
+       C, dC, sC, mmaC,
+       alpha, beta);
+>>>>>>> v4.2.1:examples/cute/tutorial/sgemm_sm80.cu
 }
 
 template <class TA, class TB, class TC,
