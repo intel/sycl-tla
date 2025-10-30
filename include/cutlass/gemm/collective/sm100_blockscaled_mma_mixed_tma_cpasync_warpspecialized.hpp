@@ -582,7 +582,7 @@ struct CollectiveMma<
 
     Tensor sA = make_tensor(make_smem_ptr(shared_tensors.smem_A.begin()), SmemLayoutA{});  // (MMA,MMA_M,MMA_K,PIPE)
 
-    ThrMMA cta_mma_sfb = TiledMma_SF{}.get_slice(blockIdx.x % size(typename TiledMma_SF::AtomThrID{}));
+    ThrMMA cta_mma_sfb = TiledMma_SF{}.get_slice(BlockIdxX() % size(typename TiledMma_SF::AtomThrID{}));
     Tensor tCgSFA_mkl = cta_mma.partition_A(gSFA_mkl);          // (MMA, MMA_M, MMA_K, m, k, l)
     Tensor tCgSFB_nkl = cta_mma_sfb.partition_B(gSFB_nkl);          // (MMA, MMA_N, MMA_K, n, k, l)
 

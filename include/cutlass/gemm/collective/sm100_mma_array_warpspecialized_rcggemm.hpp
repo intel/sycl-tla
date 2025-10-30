@@ -516,7 +516,7 @@ struct CollectiveMma<
     Tensor gB_nkl = local_tile(mB_nkl, TileShape{}, make_coord(_,_,_), Step< X,_1,_1>{});    // (BLK_N, BLK_K, n, k, l)
 
     // Partition for this CTA
-    ThrMMA cta_mma = TiledMma{}.get_slice(blockIdx.x % size(typename TiledMma::AtomThrID{}));
+    ThrMMA cta_mma = TiledMma{}.get_slice(BlockIdxX() % size(typename TiledMma::AtomThrID{}));
 
     Tensor tCgA_mkl = cta_mma.partition_A(gA_mkl);          // (MMA, MMA_M, MMA_K, m, k, l)
     Tensor tCgB_nkl = cta_mma.partition_B(gB_nkl);          // (MMA, MMA_N, MMA_K, n, k, l)
@@ -757,7 +757,7 @@ struct CollectiveMma<
 
       copy(recast<uint128_t>(pB_tensormap), recast<uint128_t>(sB_tensormap));
     }
-    __syncwarp();
+    syncwarp();
 
     struct TensorMapArray {
       cute::TmaDescriptor* tma_desc_b;
@@ -848,7 +848,7 @@ struct CollectiveMma<
         mainloop_params, next_batch, problem_shape_MNKL);
     }
     // Ensure warp is converged before issuing tensormap fence release
-    __syncwarp();
+    syncwarp();
     // Entire warp must do this (ie its aligned)
     tensormaps_cp_fence_release<WaitForInflightTmaRequests>(
       shared_tensormaps,
