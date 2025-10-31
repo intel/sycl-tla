@@ -40,6 +40,7 @@ import unittest
 
 import cutlass_cppgen
 from cutlass_cppgen.backend.utils.device import device_cc
+from cutlass_library.arch_constants import ( INTEL_XE12_PVC, is_intel_xe_arch)
 
 from utils import LayoutCombination, add_test_gemm
 
@@ -49,7 +50,7 @@ cc = 20  # BMG architecture is 20 (Xe2)
 dtype = cutlass_cppgen.DataType.bf16
 
 
-@unittest.skipIf(device_cc() >= 11 and device_cc() <= 20, 'Device compute capability is insufficient for Xe12/20/11 tests.')
+@unittest.skipIf(not is_intel_xe_arch(device_cc()), 'Device compute capability is insufficient for Xe20 tests.')
 @unittest.skipIf(cutlass_cppgen.utils.datatypes.torch_type(dtype) is None, f'Version of torch installed does not contain a datatype match for {dtype}')
 class GemmBF16Xe20(unittest.TestCase):
     """
@@ -58,7 +59,7 @@ class GemmBF16Xe20(unittest.TestCase):
     pass
 
 
-add_test_xe20_bf16 = partial(add_test_gemm, cls=GemmBF16Xe20, cc=20,
+add_test_xe20_bf16 = partial(add_test_gemm, cls=GemmBF16Xe20, cc=INTEL_XE20_BMG,
                             element=dtype,
                             compilation_modes=["dpcpp"],
                             opclass=cutlass_cppgen.OpcodeClass.TensorOp,
