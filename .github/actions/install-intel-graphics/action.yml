@@ -18,8 +18,20 @@ runs:
         shopt -s expand_aliases
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" || "${{ inputs.GPU }}" == "PVC" ]]; then
-          sudo add-apt-repository ppa:kobuk-team/intel-graphics
-          sudo apt update
+          # sudo add-apt-repository ppa:kobuk-team/intel-graphics
+          # sudo apt update
+          mkdir neo
+          cd neo
+          wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.18.5/intel-igc-core-2_2.18.5+19820_amd64.deb
+          wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.18.5/intel-igc-opencl-2_2.18.5+19820_amd64.deb
+          wget https://github.com/intel/compute-runtime/releases/download/25.35.35096.9/intel-ocloc-dbgsym_25.35.35096.9-0_amd64.ddeb
+          wget https://github.com/intel/compute-runtime/releases/download/25.35.35096.9/intel-ocloc_25.35.35096.9-0_amd64.deb
+          wget https://github.com/intel/compute-runtime/releases/download/25.35.35096.9/intel-opencl-icd-dbgsym_25.35.35096.9-0_amd64.ddeb
+          wget https://github.com/intel/compute-runtime/releases/download/25.35.35096.9/intel-opencl-icd_25.35.35096.9-0_amd64.deb
+          wget https://github.com/intel/compute-runtime/releases/download/25.35.35096.9/libigdgmm12_22.8.1_amd64.deb
+          wget https://github.com/intel/compute-runtime/releases/download/25.35.35096.9/libze-intel-gpu1-dbgsym_25.35.35096.9-0_amd64.ddeb
+          wget https://github.com/intel/compute-runtime/releases/download/25.35.35096.9/libze-intel-gpu1_25.35.35096.9-0_amd64.deb
+          sudo dpkg -i *.deb
         else
           # LTS PVC drivers
           # . /etc/os-release
@@ -34,7 +46,7 @@ runs:
           #   libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev hwinfo
           exit 1
         fi
-        sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+        # sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
           intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
         dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
     - name: Install Intel graphics drivers
