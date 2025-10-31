@@ -93,6 +93,7 @@ try:
   from cutlass_library.manifest import *
   from cutlass_library.heuristics import *
   from cutlass_library.emit_kernel_listing import emit_gemm_kernel_testlist 
+  from cutlass_library.arch_constants import INTEL_XE12_PVC, INTEL_XE20_BMG, INTEL_XE30
 except ImportError:
   from library import *
   from manifest import *
@@ -11789,9 +11790,9 @@ def GeneratePVC(manifest, cuda_version):
     
     PVC is Intel's Xe-HPC GPU architecture with compute capability 12.
     
-    This is a legacy wrapper that calls GenerateIntelXe with arch=12.
+    This is a legacy wrapper that calls GenerateIntelXe with arch=INTEL_XE12_PVC.
     """
-    GenerateIntelXe(manifest, cuda_version, arch=12)
+    GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE12_PVC)
 
 ###################################################################################################
 def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
@@ -11851,14 +11852,11 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
         valid_d_types = [math_inst.element_accumulator]
         if math_inst.element_a != math_inst.element_accumulator:
             valid_d_types.append(math_inst.element_a)
-            # print(f"=== BF16 Generator: Math inst A={math_inst.element_a}, B={math_inst.element_b}, Acc={math_inst.element_accumulator}")
-            # print(f"=== BF16 Generator: Will generate for D types: {valid_d_types}")
-
-        
+       
         for d_type in valid_d_types:
             # Generate operations both with and without bias (ElementC)
-            for c_type in [math_inst.element_accumulator, DataType.void]:
-                # print(f"=== BF16 Generator: Creating operations with D type = {d_type}, C type = {c_type}")
+            for c_type in [math_inst.element_accumulator]:
+            #for c_type in [math_inst.element_accumulator, DataType.void]: #Disable void type for now
                 data_type = {
                     "a_type": math_inst.element_a,
                     "b_type": math_inst.element_b,
@@ -11868,41 +11866,10 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
                     "epi_type": math_inst.element_accumulator
                 }
                 
-                # print(f"=== BF16 Generator: data_type dict = {data_type}")
-
                 schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
                 CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
-                print(f"=== BF16 Generator: Finished creating operations for D type = {d_type}, C type = {c_type}")
-            
-    #         # Debug: Check what was just added to manifest
-    #         if OperationKind.Gemm in manifest.operations:
-    #             for cc in manifest.operations[OperationKind.Gemm].keys():
-    #                 print(f"  After D={d_type}, C={c_type}: CC {cc} has {sum(len(ops) for ops in manifest.operations[OperationKind.Gemm][cc].values())} total operations")
-    #                 # Show first few operation C and D types
-    #                 count = 0
-    #                 for name, op_list in manifest.operations[OperationKind.Gemm][cc].items():
-    #                     if op_list and count < 3:
-    #                         op = op_list[0]
-    #                         print(f"    Sample: {name} -> C={op.C.element}, D={op.D.element}")
-    #                         count += 1
-
-    # # Debug: Print all operations in manifest at end of function
-    # print(f"\n=== BF16 Generator: Final manifest contents ===")
-    # if OperationKind.Gemm in manifest.operations:
-    #     for cc in manifest.operations[OperationKind.Gemm].keys():
-    #         print(f"  CC {cc}:")
-    #         total_ops = 0
-    #         for name, op_list in manifest.operations[OperationKind.Gemm][cc].items():
-    #             total_ops += len(op_list)
-    #             # Show first operation details for each name
-    #             if op_list:
-    #                 op = op_list[0]
-    #                 print(f"    {name}: {len(op_list)} ops - A={op.A.element}, B={op.B.element}, C={op.C.element}, D={op.D.element}")
-    #         print(f"  Total: {total_ops} operations for CC {cc}")
-    # print(f"=== End BF16 Generator manifest contents ===\n")
-
-
+   
 def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate FP8 (E4M3/E5M2) GEMM kernels for Intel Xe architecture using DPAS.
     
@@ -12093,11 +12060,11 @@ def GenerateBMG(manifest, cuda_version):
     BMG is Intel's Xe2 GPU architecture with compute capability 20.
     Supports DPAS operations with FP16, BF16, FP8, and INT8 data types.
     
-    This is a legacy wrapper that calls GenerateIntelXe with arch=20.
+    This is a legacy wrapper that calls GenerateIntelXe with arch=INTEL_XE20_BMG.
     """
-    GenerateIntelXe(manifest, cuda_version, arch=20)
+    GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE20_BMG)
 
-def GenerateIntelXe(manifest, cuda_version, arch=20):
+def GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE20_BMG):
     """
     Unified generator for Intel Xe GPU architectures.
     
@@ -12114,8 +12081,8 @@ def GenerateIntelXe(manifest, cuda_version, arch=20):
     :param cuda_version: CUDA version string (used for compatibility)
     :param arch: Architecture number (12 for PVC, 20 for BMG)
     """
-    if arch not in [12, 20]:
-        raise ValueError(f"Unsupported Intel Xe architecture: {arch}. Supported: 12 (PVC), 20 (BMG)")
+    if arch not in [INTEL_XE12_PVC, INTEL_XE20_BMG]:
+        raise ValueError(f"Unsupported Intel Xe architecture: {arch}. Supported: {INTEL_XE12_PVC} (PVC), {INTEL_XE20_BMG} (BMG)")
     
     # All Intel Xe architectures use the same generation functions
     # Only the min_cc (architecture number) differs
@@ -12223,17 +12190,17 @@ if __name__ == "__main__":
   # Intel Xe GPU architectures - unified handling for PVC and BMG
   # Both architectures share the same generation code, just different arch numbers
   
-  # Check for BMG (architecture 20)
-  bmg_arch_list = ["20", "bmg", "xe2", "intel_gpu_bmg_g21"]
+  # Check for BMG (architecture INTEL_XE20_BMG)
+  bmg_arch_list = [str(INTEL_XE20_BMG), "bmg", "xe2", "intel_gpu_bmg_g21"]
   bmg_enabled_arch = any(arch.lower() in [x.lower() for x in bmg_arch_list] for arch in archs)
   if bmg_enabled_arch:
-    GenerateIntelXe(manifest, args.cuda_version, arch=20)
+    GenerateIntelXe(manifest, args.cuda_version, arch=INTEL_XE20_BMG)
 
-  # Check for PVC (architecture 12)
-  pvc_arch_list = ["12", "pvc", "intel_gpu_pvc"]
+  # Check for PVC (architecture INTEL_XE12_PVC)
+  pvc_arch_list = [str(INTEL_XE12_PVC), "pvc", "intel_gpu_pvc"]
   pvc_enabled_arch = any(arch.lower() in [x.lower() for x in pvc_arch_list] for arch in archs)
   if pvc_enabled_arch:
-    GenerateIntelXe(manifest, args.cuda_version, arch=12)
+    GenerateIntelXe(manifest, args.cuda_version, arch=INTEL_XE12_PVC)
 
   if 'library' in args.generator_target.split(','):
     manifest.emit(GeneratorTarget.Library)

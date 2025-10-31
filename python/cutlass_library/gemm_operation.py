@@ -48,10 +48,16 @@ try:
   if hasattr(builtins, "CUTLASS_IGNORE_PACKAGE") and CUTLASS_IGNORE_PACKAGE == True:
     raise ImportError("Disabling attempt to import cutlass_library")
   from cutlass_library.library import *
-  from cutlass_library.arch_constants import INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN
+  from cutlass_library.arch_constants import (
+    INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN,
+    INTEL_XE12_PVC, INTEL_XE20_BMG, INTEL_XE30
+  )
 except ImportError:
   from library import *
-  from arch_constants import INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN
+  from arch_constants import (
+    INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN,
+    INTEL_XE12_PVC, INTEL_XE20_BMG, INTEL_XE30
+  )
 
 _LOGGER = logging.getLogger(__name__)
 

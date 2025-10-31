@@ -40,15 +40,24 @@ import os
 
 import cutlass_library
 from cutlass_library.library import ConvKind, IteratorAlgorithm, StrideSupport, GroupMode
+from cutlass_library.arch_constants import (
+    INTEL_XE_ARCH_MIN, 
+    INTEL_XE_ARCH_MAX, 
+    INTEL_XE12_PVC, 
+    INTEL_XE20_BMG, 
+    INTEL_XE30,
+    is_intel_xe_arch
+)
 
 import cutlass_cppgen
 from cutlass_cppgen.utils.check import valid_stage_count
 from cutlass_cppgen.utils.datatypes import td_from_profiler_td, td_from_profiler_op
 
 
-# Intel Xe architectures: 12 (PVC/Xe-HPC), 20 (BMG/Xe2)
+# Intel Xe architectures and supported NVIDIA architectures  
+# Intel Xe: 12 (PVC/Xe-HPC), 20 (BMG/Xe2), 30 (future)
 # NVIDIA architectures: 50, 60, 61, 70, 75, 80, 90
-_generator_ccs = [12, 20 ] #50, 60, 61, 70, 75, 80, 90]
+_generator_ccs = [INTEL_XE12_PVC, INTEL_XE20_BMG] #50, 60, 61, 70, 75, 80, 90]
 
 class KernelsForDataType:
     """
@@ -263,7 +272,7 @@ class ArchOptions:
         # Identify the method within CUTLASS generator script that generates kernel
         # descriptions for the target CC
         # Intel Xe architectures use GenerateIntelXe, NVIDIA uses GenerateSM{cc}
-        if kernel_cc >= 12 and kernel_cc <= 20:
+        if is_intel_xe_arch(kernel_cc):
             generate_function_name = "GenerateIntelXe"
         else:
             generate_function_name = "GenerateSM" + str(kernel_cc)
@@ -280,7 +289,7 @@ class ArchOptions:
             f"--log-level={logging.getLevelName(cutlass_cppgen.logger.level)}"
         ]
         # For Intel Xe architectures, specify the architecture number
-        if kernel_cc >= 12 and kernel_cc <= 20:
+        if is_intel_xe_arch(kernel_cc):
             args.append(f"--architectures={kernel_cc}")
 
         manifest_args = cutlass_library.generator.define_parser().parse_args(args)
@@ -338,34 +347,19 @@ class ArchOptions:
 
         # Iterate through the available operations for this operation kind and
         # find available opclasses and data types
-        # if(kernel_cc == 12):
-        #     print(f"\n=== Registering operations for CC {kernel_cc} ===")
-        # registered_count = 0
-        # filtered_gemm_kind = 0
-        # filtered_math_op = 0
-        # filtered_stage_count = 0
-        
         for name, op_list in manifest.operations[operation_kind][kernel_cc].items():
             for op in op_list:
                 if operation_kind == cutlass_library.OperationKind.Gemm:
-                    # if(kernel_cc == 12):
-                    #     print(f"  Checking {name}: gemm_kind={op.gemm_kind}, allowed={gemm_kinds}")
                     if op.gemm_kind not in gemm_kinds:
-                        # filtered_gemm_kind += 1
-                        # if(kernel_cc == 12):
-                        #     print(f"    FILTERED: {op.gemm_kind} not in {gemm_kinds}")
                         continue
 
                 mi = op.tile_description.math_instruction
                 if mi.math_operation not in self.allowed_math_operations:
-                    # filtered_math_op += 1
-                    # print(f"  Filtered {name}: math_operation {mi.math_operation} not in allowed {self.allowed_math_operations}")
                     continue
 
                 # Prune operations that don't fit in shared memory
                 td = td_from_profiler_op(op)
                 if not valid_stage_count(target_cc, kernel_cc, td, verbose=False)[0]:
-                    # filtered_stage_count += 1
                     continue
 
                 if mi.opcode_class not in self.operations_by_opclass:
@@ -373,16 +367,6 @@ class ArchOptions:
 
                 datatype_comb = (mi.element_a, mi.element_b, mi.element_accumulator)
                 layout_comb = (op.A.layout, op.B.layout)
-                # registered_count += 1
-                
-                # # Print operation details for debugging
-                # if(kernel_cc == 12):
-                #     if registered_count <= 10 or 'bf16' in name.lower():
-                #         print(f"  Registering {name}:")
-                #         print(f"    A={op.A.element}, B={op.B.element}, C={op.C.element}, D={op.D.element}")
-                #         print(f"    Math: A={mi.element_a}, B={mi.element_b}, Acc={mi.element_accumulator}")
-                #         print(f"    Layout: A={op.A.layout}, B={op.B.layout}")
-                #         print(f"    Opcode class: {mi.opcode_class}")
 
                 # Register TF32 kernels as F32 to enable F32 -> TF32 conversion + TF32 Tensor Core operations
                 if datatype_comb == (cutlass_library.DataType.tf32, cutlass_library.DataType.tf32, cutlass_library.DataType.f32):
@@ -402,19 +386,6 @@ class ArchOptions:
                 if key not in opclass_dict:
                     opclass_dict[key] = KernelsForDataType(datatype_comb, layout_comb)
                 opclass_dict[key].add(op)
-        
-        # if(kernel_cc == 12):
-        #     print(f"Registration summary for CC {kernel_cc}:")
-        #     print(f"  Total registered: {registered_count}")
-        #     print(f"  Filtered by gemm_kind: {filtered_gemm_kind}")
-        #     print(f"  Filtered by math_operation: {filtered_math_op}")
-        #     print(f"  Filtered by stage_count: {filtered_stage_count}")
-        #     print(f"  Operations by opclass: {list(self.operations_by_opclass.keys())}")
-        #     for opclass, opclass_dict in self.operations_by_opclass.items():
-        #         print(f"    {opclass}: {len(opclass_dict)} datatype combinations")
-        #         for (dt_comb, layout_comb), kernels in opclass_dict.items():
-        #             print(f"      {dt_comb} x {layout_comb}: {len(kernels.alignments('A'))} alignments")
-        #     print(f"=== END Registration ===\n")
 
         # Set the default opclass to TensorOp, if available. Otherwise default to SIMT
         if cutlass_library.OpcodeClass.TensorOp in self.operations_by_opclass:
@@ -638,7 +609,7 @@ class OptionRegistry:
 
         # Intel Xe architectures: 12-20 (PVC, BMG, etc.)
         # NVIDIA architectures: 50-90
-        if target_cc > 90 and (target_cc < 12 or target_cc > 20):
+        if target_cc > 90 and (is_intel_xe_arch(target_cc)):
             raise Exception(f"Unsupported compute capability {target_cc}. Supported: NVIDIA SM 50-90, Intel Xe 12-20.")
 
         gemm_kinds = [cutlass_library.GemmKind.Universal, cutlass_library.GemmKind.Universal3x]

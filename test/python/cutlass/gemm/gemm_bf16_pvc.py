@@ -33,8 +33,6 @@
 """
 Low-level functionality tests for GEMM with BF16 operands on PVC
 """
-import pdb; pdb.set_trace()  # Python 3.6-
-breakpoint()  # Python 3.7+
 
 from functools import partial
 import logging
@@ -42,16 +40,16 @@ import unittest
 
 import cutlass_cppgen
 from cutlass_cppgen.backend.utils.device import device_cc
-
+from cutlass_library.arch_constants import ( INTEL_XE12_PVC, is_intel_xe_arch)
 from utils import LayoutCombination, add_test_gemm
 
 
 cutlass_cppgen.set_log_level(logging.WARNING)
-cc = 12  # PVC architecture is 12 (Xe-HPC)
+cc = INTEL_XE12_PVC  # PVC architecture is 12 (Xe-HPC)
 dtype = cutlass_cppgen.DataType.bf16
 
 
-@unittest.skipIf(device_cc() < 11 and device_cc() > 20, 'Device compute capability is insufficient for PVC tests.')
+@unittest.skipIf(not is_intel_xe_arch(device_cc()), 'Device compute capability is insufficient for PVC tests.')
 @unittest.skipIf(cutlass_cppgen.utils.datatypes.torch_type(dtype) is None, f'Version of torch installed does not contain a datatype match for {dtype}')
 class GemmBF16PVC(unittest.TestCase):
     """
@@ -60,7 +58,7 @@ class GemmBF16PVC(unittest.TestCase):
     pass
 
 
-add_test_pvc_bf16 = partial(add_test_gemm, cls=GemmBF16PVC, cc=12,
+add_test_pvc_bf16 = partial(add_test_gemm, cls=GemmBF16PVC, cc=INTEL_XE12_PVC,
                             element=dtype,
                             compilation_modes=["dpcpp"],
                             opclass=cutlass_cppgen.OpcodeClass.TensorOp,

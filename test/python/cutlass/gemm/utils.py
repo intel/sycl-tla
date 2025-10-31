@@ -31,6 +31,14 @@
 #################################################################################################
 
 from cutlass_library import SubstituteTemplate
+from cutlass_library.arch_constants import (
+    INTEL_XE_ARCH_MIN, 
+    INTEL_XE_ARCH_MAX, 
+    INTEL_XE12_PVC, 
+    INTEL_XE20_BMG, 
+    INTEL_XE30,
+    is_intel_xe_arch
+)
 
 import cutlass_cppgen
 from cutlass_library import (
@@ -117,19 +125,18 @@ def get_name(
 
     :return: str
     """
-    name_format = "test_SM${arch}_Device_Gemm_${eA}${lA}_${eB}${lB}_${eC}${lC}_${opclass}_${acc}_${tbM}x${tbN}x${tbK}_${cM}x${cN}x${cK}_${stages}_align${aA}-${aB}-${aC}${k}${e}${suffix}"
+    name_format = "test_${arch}_Device_Gemm_${eA}${lA}_${eB}${lB}_${eC}${lC}_${opclass}_${acc}_${tbM}x${tbN}x${tbK}_${cM}x${cN}x${cK}_${stages}_align${aA}-${aB}-${aC}${k}${e}${suffix}"
     
     # Map Intel Xe architectures to names
-
-    # if arch >= 12 and arch <= 20:
-    #     arch_name = f"Xe{arch}"  # Generic Xe naming
-    # else:
-    #     arch_name = f"SM{str(arch)}"  # NVIDIA SM naming
+    if is_intel_xe_arch(arch):
+        arch_name = f"Xe{str(arch)}"  # Generic Xe naming
+    else:
+        arch_name = f"SM{str(arch)}"  # NVIDIA SM naming
     
     return SubstituteTemplate(
         name_format,
         {
-            "arch": str(arch),
+            "arch": arch_name,
             "eA": DataTypeNames[element_a],
             "eB": DataTypeNames[element_b],
             "eC": DataTypeNames[element_c],
@@ -256,8 +263,8 @@ def add_test_gemm(
             td.stages = stages
             td.cluster_shape = cluster_shape
             
-            # For Intel Xe architectures (12-20), ensure we use auto schedules and default tile scheduler
-            if cc >= 12 and cc <= 20:
+            # For Intel Xe architectures, ensure we use auto schedules and default tile scheduler
+            if is_intel_xe_arch(cc):
                 td.kernel_schedule = cutlass_cppgen.KernelScheduleType.ScheduleAuto
                 td.epilogue_schedule = cutlass_cppgen.EpilogueScheduleType.ScheduleAuto
                 td.tile_scheduler = cutlass_cppgen.TileSchedulerType.Default
