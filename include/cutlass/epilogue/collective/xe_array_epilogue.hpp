@@ -132,9 +132,10 @@ public:
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
   
   using Trait_D = Copy_Traits<GmemTiledCopyD, InternalStrideD>;
+  using val_layout_store_D = decltype(make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
   using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{},
                                              Layout<CopyThreadShape>{},
-                                             make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{}))));
+                                             val_layout_store_D{}));
 private:
   constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
@@ -142,9 +143,11 @@ private:
   using NonVoidElementC = conditional_t<is_source_supported, ElementC, ElementD>;
   using Trait_C = Copy_Traits<GmemTiledCopyC, InternalStrideC>;
   using NonVoidTrait_C = conditional_t<is_source_supported, Trait_C, Trait_D>;
+  using val_layout_load_C = decltype(make_layout(shape_div(typename NonVoidTrait_C::BlockShape{}, CopyThreadShape{})));
+  using NonVoidValLayoutLoad_C = conditional_t<is_source_supported, val_layout_load_C, val_layout_store_D>;
   using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<NonVoidTrait_C, NonVoidElementC>{},
                                              Layout<CopyThreadShape>{},
-                                             make_layout(shape_div(typename NonVoidTrait_C::BlockShape{}, CopyThreadShape{}))));
+                                             NonVoidValLayoutLoad_C{}));
 public:
 
   using EmptyType = cute::tuple<>;
