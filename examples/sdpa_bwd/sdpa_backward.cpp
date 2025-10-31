@@ -62,6 +62,17 @@ void print_d(T t) {
     print("\n");
 }
 
+template<class T>
+void print_c(T t) {
+    print(t);
+    for (int i = 0; i < size(t); ++i) {
+        if (i % 8 == 0)
+            print("\n(%03d): ", i / 8);
+        print(t(i));
+    }
+    print("\n");
+}
+
 using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int>; // batch, num_head_q,num_head_kv,seq_len_qo,seq_len_kv,head_size_qk,head_size_vo
 
 template <typename T>
@@ -168,6 +179,33 @@ auto convert_layout_2d_layout(Layout layout) {
                                      get<1>(layout)),
                          get<2>(layout));
     return l;
+}
+
+template <typename Engine0, typename Layout0,
+          typename Engine1, typename Layout1>
+CUTLASS_DEVICE void
+apply_mask_causal(Tensor<Engine0, Layout0> &tensor,
+                  Tensor<Engine1, Layout1> &rC,
+                  int m_offset, int n_offset) {
+    auto sg = compat::get_nd_item<1>().get_sub_group();
+    auto group = compat::get_nd_item<1>().get_group();
+    int sg_local_id = sg.get_local_id();
+    int sg_group_id = sg.get_group_id();
+    Tensor rC_2d = make_tensor(
+        rC.data(),
+        convert_layout_2d_layout(rC.layout()));
+    CUTLASS_PRAGMA_UNROLL
+    for (int n = 0; n < size<1>(tensor); ++n) {
+        CUTLASS_PRAGMA_UNROLL
+        for (int m = 0; m < size<0>(tensor); ++m) {
+            int x = n_offset + get<1>(rC_2d(m, n)) + sg_local_id;
+            int y = m_offset + get<0>(rC_2d(m, n));
+            if (x > y) {
+                tensor(m, n) = -INFINITY;
+            }
+        }
+    }
+    return;
 }
 
 template <bool Is_even_MN, class TileCopy,
@@ -288,6 +326,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
     constexpr int kHeadDim = Trait::kHeadDim;
     constexpr int kBlockM = Trait::kBlockM;
     constexpr int kBlockN = Trait::kBlockN;
+    constexpr bool is_causal = Trait::is_causal;
     constexpr int kNSGs = Trait::kNSGs;
     constexpr int SubgroupSize = Trait::SubgroupSize;
     auto sg = compat::get_nd_item<1>().get_sub_group();
@@ -558,6 +597,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
     Tensor caccS = make_identity_tensor(Shape<Int<kBlockM>, Int<kBlockN>>{}); // same buffer as accS
     Tensor taccScS = thr_mma_sdp.partition_C(caccS);
     static_assert(decltype(size<0>(taccScS))::value == 8);
+    Tensor taccScS_rc = logical_divide(taccScS, Shape<_1>{});
     Tensor taccScS_row = logical_divide(taccScS, Shape<_1>{})(make_coord(0, _), _, 0);
     Tensor lse = make_tensor<V>(Shape<Int<decltype(size(taccScS_row))::value>>{});
     // static_assert(size<0>(tSrS) * size<1>(tSrS) == size<0>(lse) && "row of acc and lse not match");
@@ -606,6 +646,8 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         gemm_ker(tSrS, tSrQ, tSrKt, tQgQ, tQrQ, gQ, tKtgKt, tKtrKt, gKtV,
                  tiled_mma_sdp, tile_sdp, tileloadQ, tileloadKt);
         Tensor scores = make_tensor(tSrS.data(), convert_layout_acc_layout(tSrS.layout()));
+        if constexpr(is_causal)
+            apply_mask_causal(scores, taccScS_rc, m_block * kBlockM, n_block * kBlockN);
 
         if (Is_even_M) {
             load_1colvec<true>(lse, mLSE, taccScS_row);
@@ -976,7 +1018,7 @@ template<class...> class mhacvtDeviceName;
 
 template<typename T, class ProblemShape, int kBlockM, int kBlockN,
          int kHeadDim, int kNSGs, int AtomLayoutMSdP, int AtomLayoutNdKV,
-         int AtomLayoutMdQ, bool is_bhsd>
+         int AtomLayoutMdQ, bool is_causal, bool is_bhsd>
 void launch_mha_backward_headdim(ProblemShape problem_shape,
                                  const T *do_d,
                                  const T *o_d,
@@ -994,7 +1036,8 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
                                  const int seq_len_q_pad,
                                  const int seq_len_kv_pad) {
     auto trait = FAKernel<T, kHeadDim, kBlockM, kBlockN, kNSGs,
-                          AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ>{};
+                          AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
+                          is_causal>{};
 
     const int BATCH = get<0>(problem_shape);
     const int NUM_HEAD_Q = get<1>(problem_shape);
@@ -1080,7 +1123,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     compat::wait_and_throw();
 }
 
-template<typename T, class ProblemShape, int kMPad, int kNPad, bool is_bhsd>
+template<typename T, class ProblemShape, int kMPad, int kNPad, bool is_causal, bool is_bhsd>
 void launch_mha_backward(ProblemShape problem_shape,
                          const T *do_d,
                          const T *o_d,
@@ -1111,7 +1154,7 @@ void launch_mha_backward(ProblemShape problem_shape,
         launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
                                     kHeadDim, kNSGs,
                                     AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
-                                    is_bhsd>(
+                                    is_causal, is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
@@ -1131,7 +1174,7 @@ void launch_mha_backward(ProblemShape problem_shape,
         launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
                                     kHeadDim, kNSGs,
                                     AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
-                                    is_bhsd>(
+                                    is_causal, is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
@@ -1151,7 +1194,7 @@ void launch_mha_backward(ProblemShape problem_shape,
         launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
                                     kHeadDim, kNSGs,
                                     AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
-                                    is_bhsd>(
+                                    is_causal, is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
@@ -1171,7 +1214,7 @@ void launch_mha_backward(ProblemShape problem_shape,
         launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
                                     kHeadDim, kNSGs,
                                     AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
-                                    is_bhsd>(
+                                    is_causal, is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
@@ -1191,7 +1234,7 @@ void launch_mha_backward(ProblemShape problem_shape,
         launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
                                     kHeadDim, kNSGs,
                                     AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
-                                    is_bhsd>(
+                                    is_causal, is_bhsd>(
             problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
@@ -1293,26 +1336,50 @@ int main(int argc, char**argv) {
     // copy odo
     // compat::memcpy<V>(odo_d, odo_npy.data<V>(), odo_npy.num_vals);
 
-    auto problem_shape = ProblemShapeRegular(BATCH, NUM_HEAD_Q, NUM_HEAD_KV, SEQ_LEN_QO, SEQ_LEN_KV, HEAD_SIZE_QK, HEAD_SIZE_VO);
+    auto problem_shape = ProblemShapeRegular(BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
+                                             SEQ_LEN_QO, SEQ_LEN_KV, HEAD_SIZE_QK, HEAD_SIZE_VO);
     if (is_bhsd) {
-        launch_mha_backward<T, decltype(problem_shape), kBlockM, kBlockN, true>(
-            problem_shape,
-            do_d, o_d,
-            q_d, k_d, v_d,
-            lse_d, odo_d,
-            dqaccum_d, dq_d, dk_d, dv_d,
-            s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
+        if (is_causal)
+            launch_mha_backward<T, decltype(problem_shape),
+                                kBlockM, kBlockN, true, true>(
+                problem_shape,
+                do_d, o_d,
+                q_d, k_d, v_d,
+                lse_d, odo_d,
+                dqaccum_d, dq_d, dk_d, dv_d,
+                s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
+        else
+            launch_mha_backward<T, decltype(problem_shape),
+                                kBlockM, kBlockN, false, true>(
+                problem_shape,
+                do_d, o_d,
+                q_d, k_d, v_d,
+                lse_d, odo_d,
+                dqaccum_d, dq_d, dk_d, dv_d,
+                s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
     } else {
-        launch_mha_backward<T, decltype(problem_shape), kBlockM, kBlockN, false>(
-            problem_shape,
-            do_d, o_d,
-            q_d, k_d, v_d,
-            lse_d, odo_d,
-            dqaccum_d, dq_d, dk_d, dv_d,
-            s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
+        if (is_causal) {
+            launch_mha_backward<T, decltype(problem_shape),
+                                kBlockM, kBlockN, true, false>(
+                problem_shape,
+                do_d, o_d,
+                q_d, k_d, v_d,
+                lse_d, odo_d,
+                dqaccum_d, dq_d, dk_d, dv_d,
+                s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
+        } else {
+            launch_mha_backward<T, decltype(problem_shape),
+                                kBlockM, kBlockN, false, false>(
+                problem_shape,
+                do_d, o_d,
+                q_d, k_d, v_d,
+                lse_d, odo_d,
+                dqaccum_d, dq_d, dk_d, dv_d,
+                s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
+        }
     }
-    float atol = 5e-2f;
-    float rtol = 1e-2f;
+    float atol = 5e-3f;
+    float rtol = 5e-3f;
 
     std::vector<V> odo_test(odo_npy.num_vals);
     compat::memcpy<V>(odo_test.data(), odo_d, odo_test.size());
