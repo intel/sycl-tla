@@ -47,7 +47,7 @@ from cutlass_cppgen.utils.datatypes import td_from_profiler_td, td_from_profiler
 
 
 # The value '11' is used to encode Intel PVC GPU in the expected format.
-_generator_ccs = [11, 50, 60, 61, 70, 75, 80, 90]
+_generator_ccs = [11, 50, 60, 61, 70, 75, 80, 90, 100]
 
 class KernelsForDataType:
     """
@@ -259,6 +259,9 @@ class ArchOptions:
         self.op_class = None
         self.allowed_math_operations = allowed_math_operations
 
+        if target_cc == 100 and kernel_cc == 90 or target_cc == 90 and kernel_cc == 100:
+            return
+
         # Identify the method within CUTLASS generator script that generates kernel
         # descriptions for the target CC
         generate_function_name = "GeneratePVC" if kernel_cc == 11 else "GenerateSM" + str(kernel_cc)
@@ -296,6 +299,7 @@ class ArchOptions:
         # find available opclasses and data types
         for name, op_list in manifest.operations[operation_kind][kernel_cc].items():
             for op in op_list:
+
                 if operation_kind == cutlass_library.OperationKind.Gemm:
                     if op.gemm_kind not in gemm_kinds:
                         continue
@@ -320,7 +324,7 @@ class ArchOptions:
                     # TF32 kernels only supported on SM80 and beyond
                     if self.cc < 80:
                         continue
-                    elif self.cc == 90:
+                    elif self.cc == 90 or self.cc == 100:
                         if (op.A.element != cutlass_library.DataType.f32
                             or op.B.element != cutlass_library.DataType.f32
                             or op.C.element != cutlass_library.DataType.f32):
@@ -554,8 +558,8 @@ class OptionRegistry:
     def __init__(self, target_cc: int):
         self.registry = {}
 
-        if target_cc > 90:
-            raise Exception(f"Unsupported compute capability {target_cc}. The CUTLASS Python interface only supports compute capabilities up to 90.")
+        if target_cc > 100 and (target_cc not in [101, 103, 120, 121]):
+            raise Exception(f"Unsupported compute capability {target_cc}. The CUTLASS Python interface only supports compute capabilities up to the Blackwell architecture.")
 
         gemm_kinds = [cutlass_library.GemmKind.Universal, cutlass_library.GemmKind.Universal3x]
         operation_kinds = [cutlass_library.OperationKind.Gemm, cutlass_library.OperationKind.Conv2d]
