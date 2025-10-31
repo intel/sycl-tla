@@ -4,7 +4,8 @@
 using namespace cute;
 
 template <class T_, int kHeadDim_, int kBlockM_, int kBlockN_, int kNSGs_,
-          int AtomLayoutMSdP_ = 2, int AtomLayoutNdKV_ = 2, int AtomLayoutMdQ_ = 2>
+          int AtomLayoutMSdP_ = 2, int AtomLayoutNdKV_ = 2, int AtomLayoutMdQ_ = 2,
+          bool is_causal_ = false>
 struct FAKernel {
     /*
       Q BATCH,NUM_HEAD_Q,SEQ_LEN_QO,HEAD_SIZE_QK
@@ -26,6 +27,7 @@ struct FAKernel {
     static constexpr int AtomLayoutMSdP = AtomLayoutMSdP_;
     static constexpr int AtomLayoutNdKV = AtomLayoutNdKV_;
     static constexpr int AtomLayoutMdQ = AtomLayoutMdQ_;
+    static constexpr bool is_causal = is_causal_;
     using SubgroupLayoutSdP = Layout<Shape<Int<AtomLayoutMSdP>, Int<kNSGs / AtomLayoutMSdP>, _1>>;
     using SubgroupLayoutdKV = Layout<Shape<Int<AtomLayoutNdKV>, Int<kNSGs / AtomLayoutNdKV>, _1>>;
     using SubgroupLayoutdQ = Layout<Shape<Int<AtomLayoutMdQ>, Int<kNSGs / AtomLayoutMdQ>, _1>>;

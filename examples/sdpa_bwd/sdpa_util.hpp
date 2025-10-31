@@ -111,6 +111,10 @@ bool allclose(T *refe, V *test, int L, int M, int N, float atol, float rtol) {
                     printf("(%d, %d, %d) expect: %f value: %f ratio %f\n", l, m, n, expect, value, value / expect);
                     err++;
                 }
+                if (isnan(value) or isinf(value)) {
+                    printf("\x1B[31m %f detected \x1B[0m at (%d, %d, %d)\n", value, l, m, n);
+                    exit(1);
+                }
             }
         }
     }
@@ -136,6 +140,10 @@ bool allclose(T *refe, V *test, int L, int M, int M_PAD, int N, int N_PAD, float
                 if (not isclose(expect, value, atol, rtol)) {
                     printf("(%d, %d, %d) expect: %f value: %f ratio %f\n", l, m, n, expect, value, value / expect);
                     err++;
+                }
+                if (isnan(value) or isinf(value)) {
+                    printf("\x1B[31m %f detected \x1B[0m at (%d, %d, %d)\n", value, l, m, n);
+                    exit(1);
                 }
             }
         }
@@ -164,6 +172,10 @@ bool allclose(T *refe, V *test, int B, int H, int S, int S_PAD, int D, float ato
                             printf("(%d, %d, %d, %d) expect: %f value: %f ratio %f\n", b, h, s, d, expect, value, value / expect);
                             err++;
                         }
+                        if (isnan(value) or isinf(value)) {
+                            printf("\x1B[31m %f detected\x1B[0m at (%d, %d, %d, %d)\n", value, b, h, s, d);
+                            exit(1);
+                        }
                     }
                 }
             }
@@ -173,14 +185,18 @@ bool allclose(T *refe, V *test, int B, int H, int S, int S_PAD, int D, float ato
             for (int s = 0; s < S; ++s) {
                 for (int h = 0; h < H; ++h) {
                     for (int d = 0; d < D; ++d) {
-                    int i = b * S * H * D + s * H * D + h * D + d;
-                    int j = b * S_PAD * H * D + s * H * D + h * D + d;
-                    float expect = (float)refe[i];
-                    float value = (float)test[j];
-                    if (not isclose(expect, value, atol, rtol)) {
-                        printf("(%d, %d, %d, %d) expect: %f value: %f ratio %f\n", b, s, h, d, expect, value, value / expect);
-                        err++;
-                    }
+                        int i = b * S * H * D + s * H * D + h * D + d;
+                        int j = b * S_PAD * H * D + s * H * D + h * D + d;
+                        float expect = (float)refe[i];
+                        float value = (float)test[j];
+                        if (not isclose(expect, value, atol, rtol)) {
+                            printf("(%d, %d, %d, %d) expect: %f value: %f ratio %f\n", b, s, h, d, expect, value, value / expect);
+                            err++;
+                        }
+                        if (isnan(value) or isinf(value)) {
+                            printf("\x1B[31m %f detected\x1B[0m at (%d, %d, %d, %d)\n", value, b, s, h, d);
+                            exit(1);
+                        }
                     }
                 }
             }
