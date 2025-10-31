@@ -41,12 +41,12 @@ import unittest
 
 import cutlass_cppgen
 from cutlass_cppgen.backend.utils.device import device_cc
-from cutlass_library.arch_constants import ( INTEL_XE12_PVC, is_intel_xe_arch)
+from cutlass_library.arch_constants import ( INTEL_XE12, is_intel_xe_arch)
 from utils import LayoutCombination, add_test_gemm
 
 
 cutlass_cppgen.set_log_level(logging.WARNING)
-cc = INTEL_XE12_PVC  # PVC architecture is 12 (Xe-HPC)
+cc = INTEL_XE12  # PVC architecture is 12 (Xe-HPC)
 dtype = cutlass_cppgen.DataType.bf16
 
 
@@ -59,7 +59,7 @@ class GemmBF16PVC(unittest.TestCase):
     pass
 
 
-add_test_pvc_bf16 = partial(add_test_gemm, cls=GemmBF16PVC, cc=INTEL_XE12_PVC,
+add_test_pvc_bf16 = partial(add_test_gemm, cls=GemmBF16PVC, cc=INTEL_XE12,
                             element=dtype,
                             compilation_modes=["dpcpp"],
                             opclass=cutlass_cppgen.OpcodeClass.TensorOp,

@@ -40,7 +40,7 @@ import unittest
 
 import cutlass_cppgen
 from cutlass_cppgen.backend.utils.device import device_cc
-from cutlass_library.arch_constants import ( INTEL_XE12_PVC, is_intel_xe_arch)
+from cutlass_library.arch_constants import ( INTEL_XE12, is_intel_xe_arch)
 
 from utils import LayoutCombination, add_test_gemm
 
@@ -59,18 +59,18 @@ class GemmBF16Xe20(unittest.TestCase):
     pass
 
 
-add_test_xe20_bf16 = partial(add_test_gemm, cls=GemmBF16Xe20, cc=INTEL_XE20_BMG,
+add_test_xe20_bf16 = partial(add_test_gemm, cls=GemmBF16Xe20, cc=INTEL_XE20,
                             element=dtype,
                             compilation_modes=["dpcpp"],
                             opclass=cutlass_cppgen.OpcodeClass.TensorOp,
                             stages=0,
                             cluster_shape=[1, 1, 1])
 
-add_test_f32_acc = partial(add_test_xe20_bf16, alignments=[2, 2, 4],
+add_test_f32_acc = partial(add_test_xe20_bf16, alignments=[16, 16, 4],
                            element_C=cutlass_cppgen.DataType.f32,
                            element_output=cutlass_cppgen.DataType.f32,
                            element_accumulator=cutlass_cppgen.DataType.f32)
-add_test_bf16_acc = partial(add_test_xe20_bf16, alignments=[2, 2, 2],
+add_test_bf16_acc = partial(add_test_xe20_bf16, alignments=[16, 16, 2],
                             element_C=cutlass_cppgen.DataType.bf16,
                             element_output=cutlass_cppgen.DataType.bf16,
                             element_accumulator=cutlass_cppgen.DataType.bf16)

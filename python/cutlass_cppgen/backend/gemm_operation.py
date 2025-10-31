@@ -1341,7 +1341,7 @@ using DeviceKernel = cutlass::gemm::device::GemmUniversalAdapter<${operation_nam
         if operation.tile_description.tile_scheduler is not None:
             tschedule = operation.tile_description.tile_scheduler
 
-        arch = f"cutlass::arch::Xe{operation.arch}" if operation.arch >= 12 and operation.arch <= 20 else f"cutlass::arch::Sm{operation.arch}"
+        arch = f"cutlass::arch::Xe{operation.arch}" if is_intel_xe_arch(operation.arch) else f"cutlass::arch::Sm{operation.arch}"
         values = {
             "operation_name": operation.procedural_name(),
             "operation_suffix": self.operation_suffix,
@@ -1720,14 +1720,14 @@ class GemmOperationBase:
         """The full procedural name indicates architecture, extended name, tile size, and layout."""
         opcode_class_name = OpcodeClassNames[self.tile_description.math_instruction.opcode_class]
         if self.api == ApiVersion.v3x and (self.arch >= 90 or is_intel_xe_arch(self.arch)):
-            prefix="sm"
+            arch_prefix="sm"
             if is_intel_xe_arch(self.arch):
-                prefix="Xe"
+                arch_prefix="Xe"
             
-            kernel_name_template = "cutlass{p}_{prefix}{ar}_{op}_{ex}_{tbm}x{tbn}x{tbk}_{cm}x{cn}x{ck}_{l}_{s}_align{al}{k}{e}"
+            kernel_name_template = "cutlass{p}_{sm_or_xe}{ar}_{op}_{ex}_{tbm}x{tbn}x{tbk}_{cm}x{cn}x{ck}_{l}_{s}_align{al}{k}{e}"
             return kernel_name_template.format(
                 p=self.prefix,
-                prefix=prefix,
+                sm_or_xe=arch_prefix,
                 ar=self.arch,
                 op=opcode_class_name,
                 ex=self.extended_name_3x(),

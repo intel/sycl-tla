@@ -50,13 +50,13 @@ try:
   from cutlass_library.library import *
   from cutlass_library.arch_constants import (
     INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN,
-    INTEL_XE12_PVC, INTEL_XE20_BMG, INTEL_XE30
+    INTEL_XE12, INTEL_XE20, INTEL_XE35
   )
 except ImportError:
   from library import *
   from arch_constants import (
     INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN,
-    INTEL_XE12_PVC, INTEL_XE20_BMG, INTEL_XE30
+    INTEL_XE12, INTEL_XE20, INTEL_XE35
   )
 
 _LOGGER = logging.getLogger(__name__)
@@ -400,7 +400,7 @@ class GemmOperation:
     else:
       # Intel Xe architectures use xe{cc} naming with similar detail level as NVIDIA
       # Format: cutlass{p}_xe{ar}_{op}_{ex}{ct}{cs}_{l}_{s}_align{al}{t}{k}{e}
-      if self.is_xe:
+      if self.is_3x:
         # Use 3x naming convention with full details like NVIDIA SM90+
         tile_shape = self.get_collective_tile_shape()
         extended = self.extended_name_3x()

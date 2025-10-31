@@ -34,9 +34,9 @@ from cutlass_library import SubstituteTemplate
 from cutlass_library.arch_constants import (
     INTEL_XE_ARCH_MIN, 
     INTEL_XE_ARCH_MAX, 
-    INTEL_XE12_PVC, 
-    INTEL_XE20_BMG, 
-    INTEL_XE30,
+    INTEL_XE12, 
+    INTEL_XE20, 
+    INTEL_XE35,
     is_intel_xe_arch
 )
 

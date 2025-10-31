@@ -43,9 +43,9 @@ from cutlass_library.library import ConvKind, IteratorAlgorithm, StrideSupport, 
 from cutlass_library.arch_constants import (
     INTEL_XE_ARCH_MIN, 
     INTEL_XE_ARCH_MAX, 
-    INTEL_XE12_PVC, 
-    INTEL_XE20_BMG, 
-    INTEL_XE30,
+    INTEL_XE12, 
+    INTEL_XE20, 
+    INTEL_XE35,
     is_intel_xe_arch
 )
 
@@ -57,7 +57,7 @@ from cutlass_cppgen.utils.datatypes import td_from_profiler_td, td_from_profiler
 # Intel Xe architectures and supported NVIDIA architectures  
 # Intel Xe: 12 (PVC/Xe-HPC), 20 (BMG/Xe2), 30 (future)
 # NVIDIA architectures: 50, 60, 61, 70, 75, 80, 90
-_generator_ccs = [INTEL_XE12_PVC, INTEL_XE20_BMG] #50, 60, 61, 70, 75, 80, 90]
+_generator_ccs = [INTEL_XE12, INTEL_XE20] #50, 60, 61, 70, 75, 80, 90]
 
 class KernelsForDataType:
     """

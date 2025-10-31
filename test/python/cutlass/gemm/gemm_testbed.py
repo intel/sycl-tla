@@ -38,7 +38,7 @@ import subprocess
 import cutlass_cppgen
 import torch
 import os
-from cutlass_library.arch_constants import ( INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, INTEL_XE12_PVC, INTEL_XE20_BMG, is_intel_xe_arch)
+from cutlass_library.arch_constants import ( INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, INTEL_XE12, INTEL_XE20, is_intel_xe_arch)
 
 if not os.getenv("CUTLASS_USE_SYCL"):
     import cuda
@@ -89,7 +89,7 @@ class GemmUniversalLauncher:
             raise Exception(f"Unexpected compiler string {compiler_mode}")
 
         op_list = [operation]
-        if operation.arch < 90 and operation.arch > 11 and not is_intel_xe_arch(operation.arch):
+        if operation.arch < 90 and not is_intel_xe_arch(operation.arch):
             # Split K via Python is currently only supported for pre-SM90 kernels
             # Exclude Intel Xe architectures as reduction is not implemented for Intel Xe
             self.reduction_operation: ReductionOperation = ReductionOperation(

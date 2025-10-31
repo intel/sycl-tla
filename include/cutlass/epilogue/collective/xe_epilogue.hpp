@@ -89,8 +89,8 @@ public:
   using DispatchPolicy = IntelXeXMX16;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
-  using StrideC = StrideC_;
   using ElementC = ElementC_;
+  using StrideC = StrideC_;
   using ElementD = ElementD_;
   using StrideD = StrideD_;
   using CopyOpG2R = CopyOpG2R_;
@@ -107,7 +107,6 @@ public:
   using ElementOutput = ElementD;
   using ElementCompute = typename ThreadEpilogueOp::ElementCompute;
   using ElementAccumulator = ElementCompute;
-
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
   static_assert(cute::rank(CtaTileMNK{}) == 3, "CtaTileMNK must be rank-3: [CTA_M, CTA_N, CTA_K]");
@@ -413,7 +412,7 @@ public:
         cst_callbacks.begin_loop(epi_m, epi_n);
         
         //Instead of calling is_C_load_needed. We do heirachical check 
-        //so that runtime check not there when ElementC is void 
+        //so that we avoid evaluating xe_load_c when ElementC is void during compilation
         if constexpr (is_source_supported) {
           if (fusion_callbacks.is_C_load_needed()) {
             copy(params.xe_load_c, tCgC(_, epi_m, epi_n), trC);

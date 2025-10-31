@@ -93,7 +93,7 @@ try:
   from cutlass_library.manifest import *
   from cutlass_library.heuristics import *
   from cutlass_library.emit_kernel_listing import emit_gemm_kernel_testlist 
-  from cutlass_library.arch_constants import INTEL_XE12_PVC, INTEL_XE20_BMG, INTEL_XE30
+  from cutlass_library.arch_constants import INTEL_XE12, INTEL_XE20, INTEL_XE35
 except ImportError:
   from library import *
   from manifest import *
@@ -202,16 +202,11 @@ def CreateGemmUniversal3xOperator(
 
   # by default, only generate the largest tile and largest alignment
   # but generate all tiles when --kernels=all is specified
-  if manifest.kernel_filter == '':
+  if manifest.kernel_filter == '' or manifest.kernel_filter == 'all':
     if len(tile_descriptions) == 0:
       return operations
     tile_descriptions = [tile_descriptions[0]]
-  elif manifest.kernel_filter != 'all':
-    # For specific kernel filters, still only use first tile to limit generation
-    if len(tile_descriptions) == 0:
-      return operations
-    tile_descriptions = [tile_descriptions[0]]
-
+  
   combinations = product(layouts, tile_descriptions, data_types, complex_transforms, schedules, tile_schedulers)
   for layout, tile_description, data_type, complex_transform, schedules, tile_scheduler in combinations:
     kernel_schedule, epilogue_schedule = schedules
@@ -11717,82 +11712,15 @@ def GenerateSM90(manifest, cuda_version):
 
 ###################################################################################################
 
-def GeneratePVC_TensorOp_16b_gemm(manifest, cuda_version):
-    layout_list = [
-      [
-        [[LayoutType.RowMajor, 2], [LayoutType.RowMajor, 2], [LayoutType.RowMajor, 4]],
-        [[LayoutType.RowMajor, 2], [LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 4]],
-        [[LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 2], [LayoutType.RowMajor, 4]],
-        [[LayoutType.ColumnMajor, 2], [LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 4]],
-      ],
-      [
-        [[LayoutType.RowMajor, 2], [LayoutType.RowMajor, 2], [LayoutType.RowMajor, 2]],
-        [[LayoutType.RowMajor, 2], [LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 2]],
-        [[LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 2], [LayoutType.RowMajor, 2]],
-        [[LayoutType.ColumnMajor, 2], [LayoutType.ColumnMajor, 2], [LayoutType.RowMajor, 2]],
-      ]
-    ]
-
-    math_instructions = [
-      MathInstruction(
-          [8, 16, 16],
-          DataType.bf16, DataType.bf16, DataType.f32,
-          OpcodeClass.TensorOp,
-          MathOperation.multiply_add),
-      MathInstruction(
-          [8, 16, 16],
-          DataType.bf16, DataType.bf16, DataType.bf16,
-          OpcodeClass.TensorOp,
-          MathOperation.multiply_add)
-    ]
-
-    min_cc = 11
-    max_cc = 11
-
-    for math_inst, layouts in zip(math_instructions, layout_list):
-      tile_descriptions = [
-        TileDescription([256, 256, 32],
-            0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-        TileDescription([128, 512, 32],
-            0, [4, 8, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-        TileDescription([256, 128, 32],
-            0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-        TileDescription([128, 256, 16],
-            0, [4, 8, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-        TileDescription([8, 128, 32],
-            0, [1, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-      ]
-
-      # Generate kernels for different output (D) types
-      # Default: accumulator type (FP32 for mixed precision, same as input for native precision)
-      # For mixed precision (a_type != accumulator): also generate output in input precision
-      valid_d_types = [math_inst.element_accumulator]
-      if math_inst.element_a != math_inst.element_accumulator:
-          valid_d_types.append(math_inst.element_a)
-      
-      for d_type in valid_d_types:
-          data_type = {
-            "a_type" : math_inst.element_a,
-            "b_type" : math_inst.element_b,
-            "c_type" : math_inst.element_accumulator,
-            "d_type" : d_type,
-            "acc_type" : math_inst.element_accumulator,
-            "epi_type" : math_inst.element_accumulator
-          }
-
-          schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
-
-          CreateGemmUniversal3xOperator(manifest, layouts, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
-
 def GeneratePVC(manifest, cuda_version):
     """
     Generate CUTLASS kernels for PVC (Ponte Vecchio) architecture.
     
     PVC is Intel's Xe-HPC GPU architecture with compute capability 12.
     
-    This is a legacy wrapper that calls GenerateIntelXe with arch=INTEL_XE12_PVC.
+    This is a legacy wrapper that calls GenerateIntelXe with arch=INTEL_XE12.
     """
-    GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE12_PVC)
+    GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE12)
 
 ###################################################################################################
 def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
@@ -11855,8 +11783,7 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
        
         for d_type in valid_d_types:
             # Generate operations both with and without bias (ElementC)
-            #for c_type in [math_inst.element_accumulator]:
-            for c_type in [math_inst.element_accumulator, DataType.void]: #Disable void type for now
+            for c_type in [math_inst.element_accumulator, DataType.void]: 
                 data_type = {
                     "a_type": math_inst.element_a,
                     "b_type": math_inst.element_b,
@@ -12060,11 +11987,11 @@ def GenerateBMG(manifest, cuda_version):
     BMG is Intel's Xe2 GPU architecture with compute capability 20.
     Supports DPAS operations with FP16, BF16, FP8, and INT8 data types.
     
-    This is a legacy wrapper that calls GenerateIntelXe with arch=INTEL_XE20_BMG.
+    This is a legacy wrapper that calls GenerateIntelXe with arch=INTEL_XE20.
     """
-    GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE20_BMG)
+    GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE20)
 
-def GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE20_BMG):
+def GenerateIntelXe(manifest, cuda_version, arch):
     """
     Unified generator for Intel Xe GPU architectures.
     
@@ -12081,12 +12008,13 @@ def GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE20_BMG):
     :param cuda_version: CUDA version string (used for compatibility)
     :param arch: Architecture number (12 for PVC, 20 for BMG)
     """
-    if arch not in [INTEL_XE12_PVC, INTEL_XE20_BMG]:
-        raise ValueError(f"Unsupported Intel Xe architecture: {arch}. Supported: {INTEL_XE12_PVC} (PVC), {INTEL_XE20_BMG} (BMG)")
+    if arch not in [INTEL_XE12, INTEL_XE20]:
+        raise ValueError(f"Unsupported Intel Xe architecture: {arch}. Supported: {INTEL_XE12} (PVC), {INTEL_XE20} (BMG)")
     
     # All Intel Xe architectures use the same generation functions
     # Only the min_cc (architecture number) differs
     GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=arch)
+    #DISABLED: FP8 GEMMs are not yet ready. Will be enabled once the tests are ready
     #GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
     #GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
     # DISABLED: Mixed precision (FP16 x INT4) requires grouped GEMM infrastructure
@@ -12190,17 +12118,17 @@ if __name__ == "__main__":
   # Intel Xe GPU architectures - unified handling for PVC and BMG
   # Both architectures share the same generation code, just different arch numbers
   
-  # Check for BMG (architecture INTEL_XE20_BMG)
-  bmg_arch_list = [str(INTEL_XE20_BMG), "bmg", "xe2", "intel_gpu_bmg_g21"]
+  # Check for BMG (architecture INTEL_XE20)
+  bmg_arch_list = [str(INTEL_XE20), "bmg", "xe2", "intel_gpu_bmg_g21"]
   bmg_enabled_arch = any(arch.lower() in [x.lower() for x in bmg_arch_list] for arch in archs)
   if bmg_enabled_arch:
-    GenerateIntelXe(manifest, args.cuda_version, arch=INTEL_XE20_BMG)
+    GenerateIntelXe(manifest, args.cuda_version, arch=INTEL_XE20)
 
-  # Check for PVC (architecture INTEL_XE12_PVC)
-  pvc_arch_list = [str(INTEL_XE12_PVC), "pvc", "intel_gpu_pvc"]
+  # Check for PVC (architecture INTEL_XE12)
+  pvc_arch_list = [str(INTEL_XE12), "pvc", "intel_gpu_pvc"]
   pvc_enabled_arch = any(arch.lower() in [x.lower() for x in pvc_arch_list] for arch in archs)
   if pvc_enabled_arch:
-    GenerateIntelXe(manifest, args.cuda_version, arch=INTEL_XE12_PVC)
+    GenerateIntelXe(manifest, args.cuda_version, arch=INTEL_XE12)
 
   if 'library' in args.generator_target.split(','):
     manifest.emit(GeneratorTarget.Library)
