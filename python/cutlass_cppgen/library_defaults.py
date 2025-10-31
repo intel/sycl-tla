@@ -296,42 +296,11 @@ class ArchOptions:
         manifest = cutlass_library.manifest.Manifest(manifest_args)
         
         # For Intel Xe architectures, pass the architecture number to the generator
-        if kernel_cc >= 12 and kernel_cc <= 20:
+        if is_intel_xe_arch(kernel_cc):
             print(f"Calling {generate_function_name} with arch={kernel_cc}")
             generate_function(manifest, cutlass_cppgen._nvcc_version, arch=kernel_cc)
         else:
             generate_function(manifest, cutlass_cppgen._nvcc_version)
-
-        # # DEBUG: Print what was generated
-        # print(f"\n=== Generated operations for CC {kernel_cc} ===")
-        # if operation_kind in manifest.operations:
-        #     print(f"  Operation kind {operation_kind} found")
-        #     for cc_key in manifest.operations[operation_kind].keys():
-        #         op_count = sum(len(ops) for ops in manifest.operations[operation_kind][cc_key].values())
-        #         print(f"    CC {cc_key}: {op_count} total operations")
-        #         if(cc_key == 12):
-        #             # Count and show BF16 vs FP16 operations
-        #             bf16_count = 0
-        #             fp16_count = 0
-        #             op_names = list(manifest.operations[operation_kind][cc_key].keys())
-        #             for name in op_names:
-        #                 num_ops = len(manifest.operations[operation_kind][cc_key][name])
-        #                 if 'bf16' in name.lower():
-        #                     bf16_count += num_ops
-        #                 if 'f16' in name.lower():
-        #                     fp16_count += num_ops
-        #                 print(f"      {name}: {num_ops} ops")
-                        
-        #                 # Print ABCD types for each operation
-        #                 for op in manifest.operations[operation_kind][cc_key][name]:
-        #                     print(f"        -> A={op.A.element}, B={op.B.element}, C={op.C.element}, D={op.D.element}")
-        #                     print(f"           Math: A={op.tile_description.math_instruction.element_a}, B={op.tile_description.math_instruction.element_b}, Acc={op.tile_description.math_instruction.element_accumulator}")
-        #                     break  # Just show first op of each name
-                    
-        #             print(f"    Summary: {fp16_count} FP16 ops, {bf16_count} BF16 ops")
-        # else:
-        #     print(f"  No operations of kind {operation_kind}")
-        # print(f"=== END DEBUG ===\n")
         
         if operation_kind not in manifest.operations:
             # No kernels generated for this architecture, this could be because the CUDA
@@ -609,7 +578,7 @@ class OptionRegistry:
 
         # Intel Xe architectures: 12-20 (PVC, BMG, etc.)
         # NVIDIA architectures: 50-90
-        if target_cc > 90 and (is_intel_xe_arch(target_cc)):
+        if target_cc > 90 or (not is_intel_xe_arch(target_cc)):
             raise Exception(f"Unsupported compute capability {target_cc}. Supported: NVIDIA SM 50-90, Intel Xe 12-20.")
 
         gemm_kinds = [cutlass_library.GemmKind.Universal, cutlass_library.GemmKind.Universal3x]

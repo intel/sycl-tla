@@ -290,19 +290,6 @@ class Gemm(OperationBase):
             self._element_a, self._element_b, self._element_accumulator,
             self._layout_a, self._layout_b, self._math_operation)
 
-        # # DEBUG: Print available operations
-        # print(f"\n=== DEBUG: Looking for kernels ===")
-        # print(f"Requested: element_a={self._element_a}, element_b={self._element_b}, element_acc={self._element_accumulator}")
-        # print(f"Layouts: layout_a={self._layout_a}, layout_b={self._layout_b}")
-        # print(f"Architecture: kernel_cc={self.current_cc}")
-        # print(f"Available op classes: {self.possible_op_classes}")
-        
-        # # Print all available operations in the registry
-        # if hasattr(self.options, 'kernels_by_type'):
-        #     print(f"\nAvailable data type combinations:")
-        #     for dt_comb in self.options.kernels_by_type.keys():
-        #         print(f"  {dt_comb}")
-        
         if cutlass_cppgen.OpcodeClass.TensorOp in self.possible_op_classes:
             self.opclass = cutlass_cppgen.OpcodeClass.TensorOp
         elif cutlass_cppgen.OpcodeClass.Simt in self.possible_op_classes:
@@ -313,8 +300,6 @@ class Gemm(OperationBase):
             else:
                 math_op_str = ''
 
-            # print(f"\n=== ERROR: No kernels found! ===")
-            # print(f"Searched for: {datatype_comb}x{layout_comb}{math_op_str}")
             raise Exception(f'No kernel configuration found for supported data type and layout '
                             f'combination {datatype_comb}x{layout_comb}{math_op_str}')
 
