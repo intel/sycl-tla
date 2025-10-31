@@ -11855,8 +11855,8 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
        
         for d_type in valid_d_types:
             # Generate operations both with and without bias (ElementC)
-            for c_type in [math_inst.element_accumulator]:
-            #for c_type in [math_inst.element_accumulator, DataType.void]: #Disable void type for now
+            #for c_type in [math_inst.element_accumulator]:
+            for c_type in [math_inst.element_accumulator, DataType.void]: #Disable void type for now
                 data_type = {
                     "a_type": math_inst.element_a,
                     "b_type": math_inst.element_b,

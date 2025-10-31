@@ -65,8 +65,11 @@ GeneratorTargetNames = {
 
 ###################################################################################################
 
-#
-from cutlass_library.arch_constants import INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN, INTEL_XE12_PVC, INTEL_XE20_BMG
+# Architecture constants import with fallback for relative imports
+try:
+  from cutlass_library.arch_constants import INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN, INTEL_XE12_PVC, INTEL_XE20_BMG
+except ImportError:
+  from arch_constants import INTEL_XE_ARCH_MIN, INTEL_XE_ARCH_MAX, CUDA_ARCH_MIN, INTEL_XE12_PVC, INTEL_XE20_BMG
 
 
 class DataType(enum.Enum):
