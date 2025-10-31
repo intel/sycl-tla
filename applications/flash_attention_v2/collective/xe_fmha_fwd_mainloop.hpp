@@ -40,6 +40,11 @@
 #include "cute/atom/mma_atom.hpp"
 #include "fmha_fusion.hpp"
 
+#include <cute/util/print_tensor.hpp>
+#define PRINT(x) if (cute::thread(LOG_THREAD, LOG_GROUP)) { print(#x ": "); print(x); print("\n"); }
+static constexpr int LOG_THREAD = 0;
+static constexpr int LOG_GROUP = 0;
+
 namespace cutlass::fmha {
 
 template <int Stages> class XeDefault {};   // Default FMHA mainloop, P in registers.
@@ -285,6 +290,8 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
         cute::gemm(mma_qk, tSrQ, tSrK, tSrS);
       }
 
+      PRINT(tSrS);  // Print S after Q*K GEMM
+
       /* V prefetch for GEMM 2 */
       prefetch(prefetch_v, pVgV(_,_,_,K));
 
@@ -302,17 +309,23 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
         }
       }
 
+      PRINT(tSrS);  // Print S after masking
+
       /* TODO: causal masking */
       static_assert(!CausalMask, "Causal mask unimplemented");
 
       /* Apply softmax and scaling */
       softmax(K == 0, tSrS, tA_max, tA_sum, tArA);
+      PRINT(tSrS);  // Pre-softmax
 #if 0
       reorder(tSrS, tArP);
 #else
       for (int i = 0; i < tArP.size(); i++)   // SYCL compiler currently is not correctly handling the above reorder.
         tArP(i) = static_cast<typename TiledMMAPV::ValTypeA>(tSrS(i));
 #endif
+      PRINT(tSrS);  // Post-softmax (now P)
+      PRINT(tA_max);
+      PRINT(tA_sum);
 
       /* GEMM 2: A += P * V, split in v dimension */
       CUTLASS_PRAGMA_UNROLL
@@ -321,6 +334,8 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
         reorder(tVrV, tArV);
         cute::gemm(mma_pv, tArP, tArV, tArA(_,_,_,VV));
       }
+
+      PRINT(tArA);  // Accumulated O after P*V
 
       /* K prefetch */
       for (int D = 0; D < size<4>(pKgK); D++) {

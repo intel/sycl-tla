@@ -514,9 +514,9 @@ template <bool Causal,
           typename SubgroupLayoutQK,
           typename SubgroupLayoutPV_,      /* void -> default */
           int PipelineStages,
-          typename ElementQ = bfloat16_t,
-          typename ElementK = bfloat16_t,
-          typename ElementV = bfloat16_t,
+          typename ElementQ = float_e5m2_t,
+          typename ElementK = float_e5m2_t,
+          typename ElementV = float_e5m2_t,
           typename ElementO = float,
           typename MMAOperation_ = void,    /* void -> default */
           typename StrideQ = Stride<int, _1, int, int>,

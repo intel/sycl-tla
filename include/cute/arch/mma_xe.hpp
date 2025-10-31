@@ -72,6 +72,8 @@ using u8 = uint8_t;
 using s8 = int8_t;
 using u4 = uint4_t;
 using s4 = int4_t;
+using bf8 = float_e5m2_t;
+using hf8 = float_e4m3_t;
 
 }; /* namespace dpas_type */
 
@@ -167,6 +169,15 @@ CUTE_DECLARE_XE_DPAS_TT(d,   u4,   u4,   d)
 CUTE_DECLARE_XE_DPAS_TT(d,   u4,   s4,   d)
 CUTE_DECLARE_XE_DPAS_TT(d,   s4,   u4,   d)
 CUTE_DECLARE_XE_DPAS_TT(d,   s4,   s4,   d)
+
+CUTE_DECLARE_XE_DPAS_TT(f,   bf8,   bf8,   f)
+CUTE_DECLARE_XE_DPAS_TT(bf,  bf8,   bf8,   bf)
+CUTE_DECLARE_XE_DPAS_TT(f,   hf8,   hf8,   f)
+CUTE_DECLARE_XE_DPAS_TT(bf,  hf8,   hf8,   bf)
+CUTE_DECLARE_XE_DPAS_TT(bf,  hf8,   bf8,   bf)
+CUTE_DECLARE_XE_DPAS_TT(bf,  bf8,   hf8,   bf)
+CUTE_DECLARE_XE_DPAS_TT(f,  hf8,   bf8,   f)
+CUTE_DECLARE_XE_DPAS_TT(f,  bf8,   hf8,   f)
 
 #undef CUTE_DECLARE_XE_DPAS_TT
 
