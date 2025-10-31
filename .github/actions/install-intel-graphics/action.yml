@@ -19,7 +19,7 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" || "${{ inputs.GPU }}" == "PVC" ]]; then
           # sudo add-apt-repository ppa:kobuk-team/intel-graphics
-          # sudo apt update
+          sudo apt update
           mkdir neo
           cd neo
           wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.18.5/intel-igc-core-2_2.18.5+19820_amd64.deb
@@ -46,8 +46,8 @@ runs:
           #   libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev hwinfo
           exit 1
         fi
-        # sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
-          intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
+          sudo apt-get install -y intel-metrics-discovery \
+            clinfo intel-gsc g++
         dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
     - name: Install Intel graphics drivers
       if: inputs.IGC == 'STAGING'
