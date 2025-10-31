@@ -104,6 +104,10 @@ public:
   using GmemTiledCopyC = conditional_t<cute::is_void_v<CopyOpG2R>, XE_LOAD_2D<32, 8, 16>, CopyOpG2R>;
   using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
                                              CopyOpR2G, XE_STORE_2D<32, 8, 16>>;
+  static_assert(std::is_same_v<GmemTiledCopyC, XE_LOAD_2D<32, 8, 16>>, 
+              "Current epilogue implementation only support load op XE_LOAD_2D<32, 8, 16>");
+  static_assert(std::is_same_v<GmemTiledCopyD, XE_STORE_2D<32, 8, 16>>, 
+              "Current epilogue implementation only support store op XE_STORE_2D<32, 8, 16>");
   using ElementOutput = ElementD;
   using ElementCompute = typename ThreadEpilogueOp::ElementCompute;
   using ElementAccumulator = ElementCompute;
