@@ -45,7 +45,7 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
           sudo rm -f /etc/apt/sources.list.d/ppa_kobuk_team_intel_graphics_oracular.list
-          sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
+          sudo add-apt-repository ppa:kobuk-team/intel-graphics
           sudo apt update
           sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
             intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
