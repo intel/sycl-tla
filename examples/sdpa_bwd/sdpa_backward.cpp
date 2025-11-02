@@ -319,7 +319,7 @@ CUTLASS_DEVICE auto convert_type(Tensor<Engine, Layout> const &tensor) {
 template<bool Is_even_N, class Trait>
 void
 dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
-                   const int bidb, const int bidh, const int n_block,
+                   const int bidb, const int bidh, const int bidhkv, const int n_block,
                    const int tail_n = 0) {
     using T = typename Trait::DType;
     using V = typename Trait::VType;
@@ -335,10 +335,11 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
     auto bofst = Boffset(param);
 
     const index_t q_offset = bofst.q_offset(bidb, bidh, 0);
-    const index_t k_offset = bofst.k_offset(bidb, bidh, n_block * kBlockN);
-    const index_t v_offset = bofst.v_offset(bidb, bidh, n_block * kBlockN);
+    const index_t k_offset = bofst.k_offset(bidb, bidhkv, n_block * kBlockN);
+    const index_t v_offset = bofst.v_offset(bidb, bidhkv, n_block * kBlockN);
+    const index_t dk_offset = bofst.dk_offset(bidb, bidh, n_block * kBlockN);
+    const index_t dv_offset = bofst.dv_offset(bidb, bidh, n_block * kBlockN);
     const index_t o_offset = bofst.o_offset(bidb, bidh, 0);
-    const index_t dv_offset = bofst.v_offset(bidb, bidh, n_block * kBlockN);
     const index_t dq_offset = bofst.dq_offset(bidb, bidh, 0);
     const index_t lse_offset = bofst.lse_offset(bidb, bidh, 0);
     // buff offset
@@ -428,7 +429,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
     Tensor mdV = make_tensor(make_gmem_ptr(param.dv_ptr + dv_offset),
                              make_layout(
                                  shapeKtV,
-                                 make_stride(param.v_r_stride, _1{}, _1{})));
+                                 make_stride(param.dv_r_stride, _1{}, _1{})));
     Tensor mdP = make_tensor(make_gmem_ptr(param.pb_ptr + pb_offset),
                              make_layout(
                                  shapeSP,
@@ -437,10 +438,10 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
                                   make_layout(
                                       shapedQ,
                                       make_stride(param.dq_r_stride, _1{}, _1{})));
-    Tensor mdK = make_tensor(make_gmem_ptr(param.dk_ptr+k_offset),
+    Tensor mdK = make_tensor(make_gmem_ptr(param.dk_ptr + dk_offset),
                              make_layout(
                                  shapeKtV,
-                                 make_stride(param.k_r_stride, _1{}, _1{})));
+                                 make_stride(param.dk_r_stride, _1{}, _1{})));
 
     Tensor mS = make_tensor(make_gmem_ptr(param.s_ptr + s_offset), make_layout(
                                 shapeSP,
@@ -646,8 +647,9 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         gemm_ker(tSrS, tSrQ, tSrKt, tQgQ, tQrQ, gQ, tKtgKt, tKtrKt, gKtV,
                  tiled_mma_sdp, tile_sdp, tileloadQ, tileloadKt);
         Tensor scores = make_tensor(tSrS.data(), convert_layout_acc_layout(tSrS.layout()));
-        if constexpr(is_causal)
+        if constexpr(is_causal) {
             apply_mask_causal(scores, taccScS_rc, m_block * kBlockM, n_block * kBlockN);
+        }
 
         if (Is_even_M) {
             load_1colvec<true>(lse, mLSE, taccScS_row);
@@ -848,11 +850,12 @@ void
 mha_backward(T trait,
              Param<typename T::DType> param) {
     const int bidb = BlockIdxZ();
-    const int bidh = BlockIdxY();
+    const int bidhq = BlockIdxY();
+    const int bidhkv = bidhq / param.num_qh_per_kvh;
     for (int n_block = 0; n_block < param.n_block; ++n_block)
-        dq_dk_dv_1colblock<true>(trait, param, bidb, bidh, n_block);
+        dq_dk_dv_1colblock<true>(trait, param, bidb, bidhq, bidhkv, n_block);
     if (param.tail_n > 0)
-        dq_dk_dv_1colblock<false>(trait, param, bidb, bidh, param.n_block, param.tail_n);
+        dq_dk_dv_1colblock<false>(trait, param, bidb, bidhq, bidhkv, param.n_block, param.tail_n);
 }
 
 template<class T>
@@ -1055,6 +1058,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     param.batch = BATCH;
     param.num_head_q = NUM_HEAD_Q;
     param.num_head_kv = NUM_HEAD_KV;
+    param.num_qh_per_kvh = NUM_HEAD_Q / NUM_HEAD_KV;
     param.seq_len_q = SEQ_LEN_Q;
     param.seq_len_kv = SEQ_LEN_KV;
     param.head_dim = kHeadDim;
@@ -1388,17 +1392,17 @@ int main(int argc, char**argv) {
     verify(odo_npy.data<V>(), odo_test.data(), BATCH, NUM_HEAD_Q, SEQ_LEN_QO, atol, rtol);
 
     compat::wait_and_throw();
-    std::vector<T> dv_test(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_VO);
+    std::vector<T> dv_test(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_VO);
     compat::memcpy<T>(dv_test.data(), dv_d, dv_test.size());
     compat::wait_and_throw();
     printf("dV val: ");
-    verify(dv_npy.data<T>(), dv_test.data(), BATCH * NUM_HEAD_KV, SEQ_LEN_KV, HEAD_SIZE_VO, atol, rtol);
+    verify(dv_npy.data<T>(), dv_test.data(), BATCH * NUM_HEAD_Q, SEQ_LEN_KV, HEAD_SIZE_VO, atol, rtol);
 
-    std::vector<T> dk_test(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_QK);
+    std::vector<T> dk_test(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_QK);
     compat::memcpy<T>(dk_test.data(), dk_d, dk_test.size());
     compat::wait_and_throw();
     printf("dK val: ");
-    verify(dk_npy.data<T>(), dk_test.data(), BATCH * NUM_HEAD_KV, SEQ_LEN_KV, HEAD_SIZE_QK, atol, rtol);
+    verify(dk_npy.data<T>(), dk_test.data(), BATCH * NUM_HEAD_Q, SEQ_LEN_KV, HEAD_SIZE_QK, atol, rtol);
 
     std::vector<T> dq_test(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
     compat::memcpy<T>(dq_test.data(), dq_d, dq_test.size());
