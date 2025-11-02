@@ -56,8 +56,8 @@ from cutlass_cppgen.utils.datatypes import td_from_profiler_td, td_from_profiler
 
 # Intel Xe architectures and supported NVIDIA architectures  
 # Intel Xe: 12 (PVC/Xe-HPC), 20 (BMG/Xe2), 30 (future)
-# NVIDIA architectures: 50, 60, 61, 70, 75, 80, 90
-_generator_ccs = [INTEL_XE12, INTEL_XE20] #50, 60, 61, 70, 75, 80, 90]
+# NVIDIA architectures: 50, 60, 61, 70, 75, 80, 90, 100
+_generator_ccs = [INTEL_XE12, INTEL_XE20] #50, 60, 61, 70, 75, 80, 90, 100]
 
 class KernelsForDataType:
     """
@@ -581,9 +581,9 @@ class OptionRegistry:
         self.registry = {}
 
         # Intel Xe architectures: 12-20 (PVC, BMG, etc.)
-        # NVIDIA architectures: 50-90
-        if target_cc > 90 or (not is_intel_xe_arch(target_cc)):
-            raise Exception(f"Unsupported compute capability {target_cc}. Supported: NVIDIA SM 50-90, Intel Xe 12-20.")
+        # NVIDIA architectures: 50-121
+        if (target_cc > 100 and (target_cc not in [101, 103, 120, 121])) or (not is_intel_xe_arch(target_cc)):
+            raise Exception(f"Unsupported compute capability {target_cc}. Supported: NVIDIA SM 50-121, Intel Xe 12-20.")
 
         gemm_kinds = [cutlass_library.GemmKind.Universal, cutlass_library.GemmKind.Universal3x]
         operation_kinds = [cutlass_library.OperationKind.Gemm, cutlass_library.OperationKind.Conv2d]
