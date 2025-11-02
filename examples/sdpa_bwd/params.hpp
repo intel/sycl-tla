@@ -222,6 +222,7 @@ struct Param {
     int tail_n;
     int m_block;
     int tail_m;
+    int num_qh_per_kvh;
     int q_r_stride;
     int q_h_stride;
     int q_b_stride;
@@ -230,9 +231,17 @@ struct Param {
     int k_h_stride;
     int k_b_stride;
 
+    int dk_r_stride;
+    int dk_h_stride;
+    int dk_b_stride;
+
     int v_r_stride;
     int v_h_stride;
     int v_b_stride;
+
+    int dv_r_stride;
+    int dv_h_stride;
+    int dv_b_stride;
 
     int o_r_stride;
     int o_h_stride;
@@ -264,6 +273,12 @@ struct Boffset {
     }
     index_t v_offset(const index_t b_id, const index_t h_id, const index_t s_id) {
         return b_id * param.v_b_stride + h_id * param.v_h_stride + s_id * param.v_r_stride;
+    }
+    index_t dk_offset(const index_t b_id, const index_t h_id, const index_t s_id) {
+        return b_id * param.dk_b_stride + h_id * param.dk_h_stride + s_id * param.dk_r_stride;
+    }
+    index_t dv_offset(const index_t b_id, const index_t h_id, const index_t s_id) {
+        return b_id * param.dv_b_stride + h_id * param.dv_h_stride + s_id * param.dv_r_stride;
     }
     index_t ps_offset(const index_t b_id, const index_t h_id,
                       const index_t sq_id, const index_t sk_id) {
@@ -300,17 +315,17 @@ void setup_bhsd_stride(Param<T> &param) {
     param.k_h_stride = param.seq_len_kv * param.head_dim;
     param.k_b_stride = param.num_head_kv * param.seq_len_kv * param.head_dim;
 
-    // param.dk_r_stride = param.head_dim;
-    // param.dk_h_stride = param.seq_len_kv * param.head_dim;
-    // param.dk_b_stride = param.num_head_kv * param.seq_len_kv * param.head_dim;
+    param.dk_r_stride = param.head_dim;
+    param.dk_h_stride = param.seq_len_kv * param.head_dim;
+    param.dk_b_stride = param.num_head_q * param.seq_len_kv * param.head_dim;
 
     param.v_r_stride = param.head_dim;
     param.v_h_stride = param.seq_len_kv * param.head_dim;
     param.v_b_stride = param.num_head_kv * param.seq_len_kv * param.head_dim;
 
-    // param.dv_r_stride = param.head_dim;
-    // param.dv_h_stride = param.seq_len_kv * param.head_dim;
-    // param.dv_b_stride = param.num_head_kv * param.seq_len_kv * param.head_dim;
+    param.dv_r_stride = param.head_dim;
+    param.dv_h_stride = param.seq_len_kv * param.head_dim;
+    param.dv_b_stride = param.num_head_q * param.seq_len_kv * param.head_dim;
 
     param.o_r_stride = param.head_dim;
     param.o_h_stride = param.seq_len_q * param.head_dim;
@@ -342,17 +357,17 @@ void setup_bshd_stride(Param<T> &param) {
     param.k_h_stride = param.head_dim;
     param.k_b_stride = param.num_head_kv * param.seq_len_kv * param.head_dim;
 
-    // param.dk_r_stride = param.head_dim;
-    // param.dk_h_stride = param.seq_len_kv * param.head_dim;
-    // param.dk_b_stride = param.num_head_kv * param.seq_len_kv * param.head_dim;
+    param.dk_r_stride = param.num_head_q * param.head_dim;
+    param.dk_h_stride = param.head_dim;
+    param.dk_b_stride = param.num_head_q * param.seq_len_kv * param.head_dim;
 
     param.v_r_stride = param.num_head_kv * param.head_dim;
     param.v_h_stride = param.head_dim;
     param.v_b_stride = param.num_head_kv * param.seq_len_kv * param.head_dim;
 
-    // param.dv_r_stride = param.head_dim;
-    // param.dv_h_stride = param.seq_len_kv * param.head_dim;
-    // param.dv_b_stride = param.num_head_kv * param.seq_len_kv * param.head_dim;
+    param.dv_r_stride = param.num_head_q * param.head_dim;
+    param.dv_h_stride = param.head_dim;
+    param.dv_b_stride = param.num_head_q * param.seq_len_kv * param.head_dim;
 
     param.o_r_stride = param.num_head_q * param.head_dim;
     param.o_h_stride = param.head_dim;
