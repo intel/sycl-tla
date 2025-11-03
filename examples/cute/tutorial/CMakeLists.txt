@@ -58,6 +58,11 @@ if (CUTLASS_ENABLE_SYCL)
     )
 
     cutlass_example_add_executable(
+      cute_tutorial_moe_gemm
+      moe/moe_example.cpp
+    )
+
+    cutlass_example_add_executable(
       cute_tutorial_xe_gemm
       xe_gemm.cpp
     )
