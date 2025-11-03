@@ -1,6 +1,6 @@
 ![ALT](/media/images/gemm-hierarchy-with-epilogue-no-labels.png "Complete Intel Xe GEMM decomposition")
 
-# Python packages associated with SYCL*TLA (with CUTLASS compatiblity)
+# Python packages associated with SYCL*TLA (with CUTLASS compatibility)
 
 This directory contains Python packages that are associated with SYCL*TLA (Intel Xe CUTLASS backend):
 
@@ -166,16 +166,6 @@ The SYCL*TLA Python interface provides utilities for exporting a CUTLASS kernel 
 
 Currently, the following operations can be exported to a PyTorch XPU extension:
 * GEMM for Intel Xe
-
-
-### Examples
-
-Jupyter notebook examples of using the SYCL*TLA Python interface are located in [examples/python](/examples/python).
-
-To launch these notebooks from this directory, run:
-```bash
-jupyter-lab ../examples/python
-```
 
 
 ## SYCL*TLA library package (with CUTLASS compatibility)
