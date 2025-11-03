@@ -164,10 +164,15 @@ template <typename T> struct is_complete<T, 0 * sizeof(T)> : std::true_type {};
 template <typename T>
 static constexpr bool is_complete_v = is_complete<T>::value;
 
-// Some of this code has been authored by Peter caday
+// Some of this code has been authored by Peter Caday
 template <typename TA, typename TB, typename TC> auto choose_mma_op() {
-  if constexpr (is_complete_v<XE_DPAS_TT<8, TC, TA, TB>>)
-    return XE_DPAS_TT<8, TC, TA, TB>{};
+  if constexpr (is_complete_v<XE_DPAS_TT<8, TC, TA, TB>>) {
+    if constexpr (cute::is_same<TA, cute::bfloat16_t> && cute::is_same<TB, cute::bfloat16_t>) {
+      return XE_DPAS_TT<8, float, TA, TB>{};
+    } else {
+      return XE_DPAS_TT<8, TC, TA, TB>{};
+    }
+  }
   else if constexpr (is_same_v<TA, cute::bfloat16_t>)
     return XE_DPAS_TT<8, float, cute::bfloat16_t>{};
   else /* Use f16 by default as upconversion sequences are typically faster */
@@ -290,11 +295,6 @@ void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
                             static_cast<void *>(nullptr), output_data.get(),
                             n_moe, k_moe, num_rows_per_expert_device.get(),
                             num_experts);
-
-  activations_data.release();
-  weights_data.release();
-  output_data.release();
-  num_rows_per_expert_device.release();
 }
 
 int main(int argc, const char **argv) {
@@ -373,3 +373,4 @@ int main(int argc, const char **argv) {
 
   return 0;
 }
+
