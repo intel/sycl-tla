@@ -160,7 +160,7 @@ public:
       Element exp_scale{
           sycl::native::exp2(max_prev * params.scale - max_scale)};
       CUTLASS_PRAGMA_UNROLL
-      for (int indx = 0; indx < Vec * FragsM; indx++) {
+      for (int indx = 0; indx < Vec * FragsM; indx++) { // 16 rows in total
         auto max_scale_bcast = group_broadcast(g, max_scale, indx);
         auto exp_scale_bcast = group_broadcast(g, exp_scale, indx);
         sum(indx) *= exp_scale_bcast;
@@ -173,7 +173,7 @@ public:
         }
         CUTLASS_PRAGMA_UNROLL
         for (int z = 0; z < FragsNOut; z++) {
-          auto base_indx = indx + (z * Vec * FragsM);
+          auto base_indx = indx + (z * Vec * FragsM); // z * 16 rows - 
           out(base_indx) *= exp_scale_bcast;
         }
       }

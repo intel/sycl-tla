@@ -163,6 +163,7 @@ public:
     SoftmaxArguments softmax{};
     EpilogueArguments epilogue{};
     KernelHardwareInfo hw_info{};
+    float softmax_scale;
   };
 
   // Kernel entry point API
@@ -173,6 +174,7 @@ public:
     SoftmaxParams softmax;
     EpilogueParams epilogue;
     TileSchedulerParams scheduler;
+    float softmax_scale;
   };
 
   //
@@ -184,6 +186,7 @@ public:
   static Params to_underlying_arguments(Arguments const &args,
                                         void *workspace) {
     (void)workspace;
+
     return {args.mode,
             args.problem_shape,
             CollectiveMainloop::to_underlying_arguments(
@@ -192,7 +195,8 @@ public:
             CollectiveEpilogue::to_underlying_arguments(
                 args.problem_shape, args.epilogue, workspace),
             TileScheduler::to_underlying_arguments(
-                args.problem_shape, args.hw_info, TileShapeOutput{})};
+                args.problem_shape, args.hw_info, TileShapeOutput{}),
+            args.softmax_scale};
   }
 
   static bool can_implement(Arguments const &args) {
@@ -242,6 +246,8 @@ public:
     auto group_heads_q = num_heads_q / num_head_kv;
     auto &head_size_qk = get<5>(params.problem_shape);
     auto &head_size_vo = get<6>(params.problem_shape);
+    auto &softmax_scale = params.softmax_scale;
+
     // Preconditions
     static_assert(cute::rank(StrideQ{}) == 3,
                   "StrideQ must be rank-3: [seq_len_qo, head_size_qk, batch * "
@@ -374,13 +380,15 @@ public:
       // There are 16 workitem and 16 max per subgroup, each worktime containt 1
       // max and cumulatively, they calculate the max per subgroup
       ElementAccumulator max_reg{-INFINITY};
+      
       // The sum reg each contains a 2d tesnor for 8 x 2 This is number of
       // sequence lenght process per subgroup
       Tensor sum_reg =
           make_tensor<ElementAccumulator>(Shape<Int<Vec>, Int<FragsM>>{});
-
+          
       clear(sum_reg);
       clear(out_reg);
+      
       // Perform the collective scoped MMA
       CollectiveMainloop collective_mma;
       // when causal mask is true. It is not possible to set the scope
@@ -473,7 +481,8 @@ public:
       CollectiveEpilogue epilogue{epilogue_params, shared_storage.epilogue};
       auto blk_coord_mnkl = make_coord(blk_m_coord, blk_n_coord, batch_coord, 0);
       epilogue(params.problem_shape, sequence_length_shape, blk_coord_mnkl,
-               out_reg, max_reg, sum_reg, q_head_coord);
+               //out_reg, max_reg, sum_reg, q_head_coord, 0.125);
+               out_reg, max_reg, sum_reg, q_head_coord, softmax_scale);
     }
   }
 };

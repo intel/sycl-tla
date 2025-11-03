@@ -181,7 +181,7 @@ public:
   CUTLASS_DEVICE void operator()(ProblemShape problem_shape,
                                  SequenceLengthShape sequence_length_shape,
                                  TileCoord tile_coord, FragOut &out,
-                                 FragMax const &max, FragSum &sum, int const &q_head_coord
+                                 FragMax const &max, FragSum &sum, int const &q_head_coord, float softmax_scale
                                  ) {
 
     using namespace cute;
@@ -287,7 +287,7 @@ public:
     // Check that if this is within the seq_len_qo
     if (seq_coord < seq_len_qo){
       auto cur_sum = rowsum[lane_id];
-      tLSE_reg = cur_sum == 0.f ? -INFINITY : max + logf(cur_sum);
+      tLSE_reg = cur_sum == 0.f ? -INFINITY : max * softmax_scale + logf(cur_sum);
       *(params.ptr_LSE + lse_offset + localtile_seq_coord) = tLSE_reg;
     }
   }

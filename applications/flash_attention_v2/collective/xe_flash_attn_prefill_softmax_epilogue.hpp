@@ -157,20 +157,23 @@ public:
       Element max_scale{max * params.scale};
       Element exp_scale{sycl::native::exp2(max_prev * params.scale - max_scale)};
       CUTLASS_PRAGMA_UNROLL
+      //Along the sequence length q
       for (int indx = 0; indx < Vec * FragsM; indx++) {
         auto max_scale_bcast = group_broadcast(g, max_scale, indx);
         auto exp_scale_bcast = group_broadcast(g, exp_scale, indx);
         sum(indx) *= exp_scale_bcast;
+
+        // Along the seq_len_kv
         CUTLASS_PRAGMA_UNROLL
-        for (int z = 0; z < FragsNAcc; z++) {
+        for (int z = 0; z < FragsNAcc; z++) { // FragsNAcc == 4 when hdim64 , 8 when hdim128 
           auto base_indx = indx + (z * Vec * FragsM);
           frag_s(base_indx) = sycl::native::exp2((frag_s(base_indx) - max_scale_bcast));
           sum(indx) += frag_s(base_indx);  
         }
         CUTLASS_PRAGMA_UNROLL
-        for (int z = 0; z < FragsNOut; z++) {
+        for (int z = 0; z < FragsNOut; z++) { // FragsNOut == 4
           auto base_indx = indx + (z * Vec * FragsM);
-          out(base_indx ) *= exp_scale_bcast;     
+          out(base_indx) *= exp_scale_bcast;     
         }
       }
     } else {

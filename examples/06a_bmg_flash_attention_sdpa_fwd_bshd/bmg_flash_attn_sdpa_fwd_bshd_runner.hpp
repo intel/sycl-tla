@@ -333,6 +333,43 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
             }
           }
 
+          // calculate scaled qk score for LSE
+          std::vector<ElementAccumulator> qkscore_scaled(host_S.size(), ElementAccumulator{0});
+          for (int row = 0; row < seq_len_qo; row++){
+            for (int col = 0; col < seq_len_kv; col++) {
+              qkscore_scaled[col + row * seq_len_kv] = host_S[col + row * seq_len_kv] * softmax_scale; // (qkscore * scale) - max_row
+            }
+          }
+
+          // compute max element per row of scaled qk
+          std::vector<ElementAccumulator> max_scaled_lse_vec(
+              seq_len_qo, ElementAccumulator{-INFINITY});
+          for (int row = 0; row < seq_len_qo; row++) {
+            int idx = row * seq_len_kv;
+            int max_idx = row;
+            max_scaled_lse_vec[max_idx] = qkscore_scaled[idx++];
+            for (int col = 1; col < seq_len_kv; col++, idx++) {
+              if (max_scaled_lse_vec[max_idx] < qkscore_scaled[idx])
+                max_scaled_lse_vec[max_idx] = qkscore_scaled[idx];
+            }
+          }
+
+          // subtract scaled qk by max_row
+          for (int row = 0; row < seq_len_qo; row++){
+            for (int col = 0; col < seq_len_kv; col++) {
+              qkscore_scaled[col + row * seq_len_kv] = qkscore_scaled[col + row * seq_len_kv] - max_scaled_lse_vec[row]; // (qkscore * scale) - max_row
+            }
+          }
+
+          // calculate LSE
+          for (int row = 0; row < seq_len_qo; row++){
+            ElementAccumulator sum_exp = 0;
+            for (int col = 0; col < seq_len_kv; col++) {
+              sum_exp += expf(qkscore_scaled[col + row * seq_len_kv]);
+            }
+            host_LSE[row + offset_lse] = max_scaled_lse_vec[row] + logf(sum_exp); //max + logsumexp
+          }
+
           // compute exp of S
           for (int row = 0; row < seq_len_qo; row++) {
             int idx = row * seq_len_kv;
@@ -362,13 +399,6 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
                 host_S[idx] /= sum_vec[sum_idx];
               }
             }
-          }
-
-          // compute the LSE
-          std::vector<float> lse_vec(seq_len_qo, ElementAccumulator{0.0f});
-          for (int row = 0; row < seq_len_qo; row++) {
-            lse_vec[row] = max_vec[row] + logf(sum_vec[row]);
-            host_LSE[row + offset_lse] = lse_vec[row];
           }
 
           std::vector<ElementV_> host_P(host_S.size());
@@ -450,7 +480,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     // equal or not
     bool passed_lse = cutlass::reference::device::BlockCompareRelativelyEqual(
         block_ref_LSE.get(), block_LSE.get(), block_LSE.size(), 0.1f, 0.1f);
-    
+
     return passed && passed_lse;
   }
 
@@ -654,8 +684,9 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
          stride_V},
         {options.softmax_scale},
         {block_O.get(), stride_O, block_LSE.get()},
-        hw_info};
-
+        hw_info,
+        options.softmax_scale};
+    
     // Define device-global scratch memory
     size_t workspace_size = FMHAPrefillKernel::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
