@@ -414,7 +414,7 @@ public:
         //Instead of calling is_C_load_needed. We do heirachical check 
         //so that runtime check not there when ElementC is void
         if constexpr (is_source_supported) {
-          if (fusion_callbacks.is_C_load_needed()) {
+          if (is_C_load_needed) {
             copy(params.xe_load_c, tCgC(_, epi_m, epi_n), trC);
           }
         }
