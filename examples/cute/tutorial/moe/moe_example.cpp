@@ -164,19 +164,20 @@ template <typename T> struct is_complete<T, 0 * sizeof(T)> : std::true_type {};
 template <typename T>
 static constexpr bool is_complete_v = is_complete<T>::value;
 
-// Some of this code has been authored by Peter Caday
+// Some of this code has been authored by Peter caday
 template <typename TA, typename TB, typename TC> auto choose_mma_op() {
   if constexpr (is_complete_v<XE_DPAS_TT<8, TC, TA, TB>>) {
-    if constexpr (cute::is_same<TA, cute::bfloat16_t> && cute::is_same<TB, cute::bfloat16_t>) {
+    if constexpr (cute::is_same_v<TA, cute::bfloat16_t> && cute::is_same_v<TB, cute::bfloat16_t>) {
       return XE_DPAS_TT<8, float, TA, TB>{};
     } else {
       return XE_DPAS_TT<8, TC, TA, TB>{};
     }
-  }
-  else if constexpr (is_same_v<TA, cute::bfloat16_t>)
+  } else if constexpr (is_same_v<TA, cute::bfloat16_t>) {
     return XE_DPAS_TT<8, float, cute::bfloat16_t>{};
-  else /* Use f16 by default as upconversion sequences are typically faster */
+  } else {
+    /* Use f16 by default as upconversion sequences are typically faster */
     return XE_DPAS_TT<8, float, cute::half_t>{};
+  }
 }
 
 template <class TA, class TB, class TD>
@@ -373,4 +374,3 @@ int main(int argc, const char **argv) {
 
   return 0;
 }
-
