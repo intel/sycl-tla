@@ -147,6 +147,7 @@ int main(int argc, const char **argv) {
 #else
   constexpr int PipelineStages = 2;
 #endif
+
 #ifdef IS_FLOAT_E5M2
   using ElementQ = cutlass::float_e5m2_t;
   using ElementK = cutlass::float_e5m2_t;
@@ -160,5 +161,8 @@ int main(int argc, const char **argv) {
   using ElementK = bfloat16_t;
   using ElementV = bfloat16_t;
 #endif
-  return FMHAConfig<false, ShapeQK, ShapePV, ShapeOut, SubgroupLayoutQK, void, PipelineStages, ElementQ, ElementK, ElementV>::run(options);
+
+  return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOut, SubgroupLayoutQK, void, PipelineStages,  ElementQ, ElementK, ElementV>::run(options)
+  : FMHAConfig<false, ShapeQK, ShapePV, ShapeOut, SubgroupLayoutQK, void, PipelineStages,  ElementQ, ElementK, ElementV>::run(options);
+
 }

@@ -62,7 +62,8 @@ template <class DispatchPolicy_,
           class TensorV_,
           class TiledCopyQ_ = void,   // Optional TiledCopy for loading Q
           class TiledCopyK_ = void,   // Optional TiledCopy for loading K
-          class TiledCopyV_ = void>   // Optional TiledCopy for loading V
+          class TiledCopyV_ = void,   // Optional TiledCopy for loading V
+          class SubgroupLayoutQK_ = void>   // Optional SubgroupLayout for QK
 struct FMHAFwdMainloop {
   static_assert(cutlass::detail::dependent_false<DispatchPolicy_>, "Could not find a mainloop specialization.");
 };
@@ -73,11 +74,13 @@ template <int Stages,
           bool CausalMask_,
           class TiledMMAQK_, class TiledMMAPV_, int VTiles_,
           class TensorQ_, class TensorK_, class TensorV_,
-          class TiledCopyQ_, class TiledCopyK_, class TiledCopyV_>
+          class TiledCopyQ_, class TiledCopyK_, class TiledCopyV_,
+          class SubgroupLayoutQK_>
 struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
                        TiledMMAQK_, TiledMMAPV_, VTiles_,
                        TensorQ_, TensorK_, TensorV_,
-                       TiledCopyQ_, TiledCopyK_, TiledCopyV_> {
+                       TiledCopyQ_, TiledCopyK_, TiledCopyV_,
+                       SubgroupLayoutQK_> {
   //
   // Type Aliases
   //
@@ -86,7 +89,8 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
   using TileShapeQK = decltype(TiledMMAQK{}.tile_mnk());
   using TileShapePV = decltype(TiledMMAPV{}.tile_mnk());
   static constexpr int VTiles = VTiles_;
-
+  using MmaAtomShapeQK = typename TiledMMAQK::AtomShape_MNK;
+  using SubgroupLayoutQK = SubgroupLayoutQK_;
   using SGPerWG = decltype(product(take<1,4>(shape(typename TiledMMAQK::ThrLayoutVMNK{}))));
 
   using TensorQ = TensorQ_;
@@ -171,8 +175,11 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
              QVCoord          blk_qv,   // WG tile indices: (Q,V)
              int              blk_k0,   // K block range: [K0,K1)
              int              blk_k1,
-             int              thr_id) { // Work-item ID
-
+             int              thr_id,
+             int              seq_len,
+             int              seq_coord,
+             int              full_tile_offset,
+             int              discard_seq_coord) {
     using namespace sycl::ext::oneapi::this_work_item;
 
     // Short dimension names:
@@ -266,7 +273,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
     }
 
     /* Check if */
-    bool check_remainder_k = (shape<0>(K_2D) % get<1>(TileShapeQK{}) != 0);
+    bool check_remainder_k = (seq_len % get<1>(TileShapeQK{}) != 0);
 
     /* Main loop, blocked in k. */
     for (int K = blk_k0; K < blk_k1; K++) {
@@ -288,22 +295,37 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
       /* V prefetch for GEMM 2 */
       prefetch(prefetch_v, pVgV(_,_,_,K));
 
+      /* Causal masking */
+      if constexpr (CausalMask) {
+        if (K == blk_k1 - 1) {
+          int item_id = get_sub_group().get_local_id()[0];
+          int base_col = item_id + K * get<1>(TileShapeQK{});
+          CUTLASS_PRAGMA_UNROLL
+          for (int n = 0; n < shape<2>(tSrS.shape()); ++n) {
+            int col_idx = base_col + n * get<1>(MmaAtomShapeQK());
+            CUTLASS_PRAGMA_UNROLL
+            for (int m = 0; m < shape<0>(tSrS.shape()); ++m) {
+              int row_idx = seq_coord + m;
+              if (col_idx - full_tile_offset > row_idx - discard_seq_coord) {
+                tSrS(m, 0, n) = ElementS(-INFINITY);
+              }
+            }
+          }
+        }
+      }
       /* k masking for remainder tiles */
       if (check_remainder_k && K == blk_k1 - 1) {
         FragSRow k_rem_mask;
         int k = get<0>(tKgK(0,0,0,K,0)) + get_sub_group().get_local_id()[0];
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < k_rem_mask.size(); i++, k += intel::sg_size) {
-          k_rem_mask(i) = (k < shape<0>(K_2D)) ? ElementS(sycl::nan(0u)) : ElementS(-INFINITY);
+          k_rem_mask(i) = (k < seq_len) ? ElementS(sycl::nan(0u)) : ElementS(-INFINITY);
         }
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < tSrS.size(); i++) {
           tSrS(i) = sycl::fmin(tSrS(i), broadcast<1>(k_rem_mask, tSrS, i));
         }
       }
-
-      /* TODO: causal masking */
-      static_assert(!CausalMask, "Causal mask unimplemented");
 
       /* Apply softmax and scaling */
       softmax(K == 0, tSrS, tA_max, tA_sum, tArA);

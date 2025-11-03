@@ -72,7 +72,7 @@ public:
   using TiledMMAPV = typename CollectiveMainloop::TiledMMAPV;
   using TileShapeQK = typename CollectiveMainloop::TileShapeQK;
   using TileShapePV = typename CollectiveMainloop::TileShapePV;
-
+  using SubgroupLayoutQK = typename CollectiveMainloop::SubgroupLayoutQK;
   using ElementQ = typename CollectiveMainloop::TensorQ::element_type;
   using ElementK = typename CollectiveMainloop::TensorK::element_type;
   using ElementV = typename CollectiveMainloop::TensorV::element_type;
@@ -181,7 +181,8 @@ public:
     int head_group_q = s.num_heads_q / s.num_heads_kv;
 
     int thr_id = int(ThreadIdxX());
-
+    int sub_group_id = thr_id / intel::sg_size;
+    int SGTileQ = get<0>(shape_div(TileShapeQK{}, shape(SubgroupLayoutQK{})));
     TileScheduler tile_scheduler{params.scheduler};
 
     CUTLASS_PRAGMA_NO_UNROLL
@@ -190,7 +191,16 @@ public:
       auto blk_qv = make_coord(blk_q, blk_v);
       int head = head_q / head_group_q;
 
-      const int k_blocks = cute::ceil_div(s.seq_len_kv, get<1>(TileShapeQK{}));
+      auto offset = cute::min(s.seq_len_qo, s.seq_len_kv);
+      auto discard_seq_coord = s.seq_len_qo - offset;
+      auto full_tile_offset = s.seq_len_kv - offset;
+
+      int seq_coord = cute::min(s.seq_len_qo, (blk_q * get<0>(TileShapeQK{}) + (sub_group_id / get<1>(shape(SubgroupLayoutQK{}))) * SGTileQ));
+
+      if (CollectiveMainloop::CausalMask && seq_coord < discard_seq_coord) continue;
+      
+      const int seq_len = CollectiveMainloop::CausalMask ? full_tile_offset + cute::min(s.seq_len_kv, seq_coord - discard_seq_coord) + SGTileQ : s.seq_len_kv;
+      const int k_blocks = cute::ceil_div(seq_len, get<1>(TileShapeQK{}));
 
       auto shape_Q = make_shape(s.seq_len_qo, s.head_size_qk, s.num_heads_q,  s.batch);
       auto shape_K = make_shape(s.seq_len_kv, s.head_size_qk, s.num_heads_kv, s.batch);
@@ -217,8 +227,8 @@ public:
                V(_,_,head,idx_b),
                tArA, tA_max, tA_sum,
                blk_qv, 0, k_blocks,
-               thr_id);
-
+               thr_id, seq_len,
+               seq_coord, full_tile_offset, discard_seq_coord);
       if constexpr (!is_empty_v<MainloopSharedStorage> && !is_empty_v<EpilogueSharedStorage>) {
         sycl::group_barrier(get_work_group<3>());
       }
