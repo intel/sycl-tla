@@ -127,11 +127,6 @@ private:
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
 
   using NonVoidElementC = conditional_t<is_source_supported, ElementC, ElementD>;
-  using Trait_C = Copy_Traits<GmemTiledCopyC, StrideC>;
-  using NonVoidTrait_C = conditional_t<is_source_supported, Trait_C, Trait_D>;
-  using val_layout_load_C = decltype(make_layout(shape_div(typename NonVoidTrait_C::BlockShape{}, CopyThreadShape{})));
-  using NonVoidValLayoutLoad_C = conditional_t<is_source_supported, val_layout_load_C, val_layout_store_D>;
-  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<NonVoidTrait_C, NonVoidElementC>{}, Layout<CopyThreadShape>{}, NonVoidValLayoutLoad_C{}));
 
   constexpr static bool is_m_major_C = detail::is_m_major<StrideC>();
   constexpr static bool is_m_major_D = detail::is_m_major<StrideD>();
@@ -445,9 +440,11 @@ public:
       for (int epi_m = 0; epi_m < FragsM; epi_m++) {
         cst_callbacks.begin_loop(epi_m, epi_n);
         
-        //avoid evaluating xe_load_c when ElementC is void during compilation
+        //avoid evaluating copy_c when ElementC is void during compilation
         if (is_C_load_needed) {
-          copy(copy_c, tCgC(_, epi_m, epi_n), trC);
+          if constexpr (is_source_supported) {
+            copy(copy_c, tCgC(_, epi_m, epi_n), trC);
+          }
         }
 
         cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);
