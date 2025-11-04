@@ -101,9 +101,15 @@ struct XeFHMAIndividualPersistentTileScheduler {
 
   bool valid_ = true;
   Params params;
+  int kv_tile_size_;
+  // num of kv blocks for each head
+  int local_num_kv_blocks_;
+  int num_batch_heads_;
 
   CUTLASS_DEVICE
-  XeFHMAIndividualPersistentTileScheduler(Params const& params) : params(params) {}
+  XeFHMAIndividualPersistentTileScheduler(Params const& params, int kv_tile_size,
+    int local_num_kv_blocks, int num_batch_heads)
+    : params(params), kv_tile_size_(kv_tile_size), local_num_kv_blocks_(local_num_kv_blocks), num_batch_heads_(num_batch_heads) {}
 
   template <class ProblemShape, class TileShape>
   static Params to_underlying_arguments(
@@ -116,31 +122,8 @@ struct XeFHMAIndividualPersistentTileScheduler {
               size(ceil_div(shape.seq_len_qo,   get<0>(tile_shape))),     // Q
               size(shape.batch * shape.num_heads_q));                     // (h,b) -- split later
     int num_heads = shape.num_heads_q;
-
-    auto total_wg = grid.x * grid.y * grid.z;
-    // FIXME: replace with runtime check
-    assert(shape.batch == 1);
-    assert((grid.z <= hw_info.sm_count / 2)  && "XeFHMAIndividualPersistentTileScheduler only enabled for decode case where num batch heads samller than SM count");
-
-    // how many partitions each KV seq is split into
-    int num_partitions = hw_info.sm_count / grid.z;
-    // this is for the case where sm_count cannot be divisible by num_batch_heads,
-    // for some head/work group, the KV seq need to split into `num_partitions+1`
-    // partitions to occupy all xecores, here we assme first `tail_wg` work groups
-    // will handle one more partition
-    // for eample, num head is 8, sm_count is 20, so first 20%8=4 work groups
-    // will handle 3 partitions, the rest 4 work groups will handle 2 partitions
-    int num_tail_wg = hw_info.sm_count % grid.z;
-
-    // assume grid shape (1, 1, hw_info.sm_count) to use all xecores
     grid.z = hw_info.sm_count;
-    // int num_partitions = 4; // for 5/1
-    // grid.z *= num_partitions;
-    // num_heads *= num_partitions;
 
-    // FIXME: add fallback mechanism if given problem size doesn't meet requirement
-
-    std::cout << "Debug>> grid shape [" << grid.x << ", " << grid.y << ", " << grid.z << "]\n";
     return Params{grid, {num_heads}};
   }
 
@@ -157,10 +140,18 @@ struct XeFHMAIndividualPersistentTileScheduler {
   CUTLASS_DEVICE
   auto get_block_coord() {
     using namespace cute;
-    int idx_b = BlockIdxZ();
+    int wg_id = BlockIdxZ();
     int head;
-    params.divmod_num_heads(idx_b, head, idx_b);
-    return make_coord(BlockIdxY(), BlockIdxX(), head, idx_b);
+
+    // total number of blocks need to be processed across all wgs
+    int total_num_kv_blocks = local_num_kv_blocks_ * num_batch_heads_;
+    // guarantee all wg process similar number of blocks of KV (load balance)
+    int num_blocks_per_wg = cute::ceil_div(total_num_kv_blocks, GridDimZ());
+
+    // compute start batch head id for current wg
+    int start_batch_head_id = wg_id * num_blocks_per_wg / local_num_kv_blocks_;
+
+    return make_coord(BlockIdxY(), BlockIdxX(), start_batch_head_id);
   }
 
   CUTLASS_DEVICE

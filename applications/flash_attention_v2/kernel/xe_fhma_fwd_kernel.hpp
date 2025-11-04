@@ -349,6 +349,14 @@ public:
   }
 
   static bool can_implement(Arguments const &args) {
+    // current kernel only support decode
+    if (args.kernel.shape.seq_len_qo > 1) {
+      return false;
+    }
+    // current kernel only support num batch heads less than total XeCore count
+    if (args.kernel.shape.batch * args.kernel.shape.num_heads_q > args.hw_info.sm_count) {
+      return false;
+    }
     return CollectiveMainloop::can_implement(args.mainloop)
         && CollectiveEpilogue::can_implement(args.epilogue);
   }
@@ -436,8 +444,6 @@ public:
       out1(i) = out1(i) * broadcast<0>(rescale1, out1, i) + out2(i) * broadcast<0>(rescale2, out2, i);
   }
 
-  #define DEBUG_PRINT 0
-
   CUTLASS_DEVICE
   void operator()(Params const &params, char *smem_buf)
   {
@@ -456,25 +462,19 @@ public:
     int tid_in_sg = thr_id % intel::sg_size;
     int num_batch_heads = s.batch * s.num_heads_q;
 
-    TileScheduler tile_scheduler{params.scheduler};
-
     int local_k_blocks = cute::ceil_div(s.seq_len_kv, get<1>(TileShapeQK{}));
     // total number of blocks need to be processed across all wgs
     int total_k_blocks = local_k_blocks * num_batch_heads;
     // to guarantee all wg process similar number of blocks of KV
     int num_blocks_per_wg = cute::ceil_div(total_k_blocks, GridDimZ());
 
-#if DEBUG_PRINT
-    if (thr_id == 0 && wg_id == 0) {
-      cute::print("Debug>> total_k_blocks: %d, num_blocks_per_wg: %d, local_k_blocks: %d, num_batch_heads: %d\n",
-             total_k_blocks, num_blocks_per_wg, local_k_blocks, num_batch_heads);
-    }
-#endif
+    TileScheduler tile_scheduler{params.scheduler, get<1>(TileShapeQK{}), local_k_blocks, num_batch_heads};
 
     CUTLASS_PRAGMA_NO_UNROLL
     for (; tile_scheduler.is_valid(); ++tile_scheduler) {
       // head_q, idx_b from tile scheduler will not be used
-      auto [blk_q, blk_v, head_q_unused, idx_b_unused] = tile_scheduler.get_block_coord(); // (Q,V,h,b)
+      // auto [blk_q, blk_v, head_q_unused, idx_b_unused] = tile_scheduler.get_block_coord(); // (Q,V,h,b)
+      auto [blk_q, blk_v, start_batch_head_id] = tile_scheduler.get_block_coord(); // (Q,V, batch_head_idx)
       auto blk_qv = make_coord(blk_q, blk_v);
 
       auto shape_Q = make_shape(s.seq_len_qo, s.head_size_qk, s.num_heads_q,  s.batch);
@@ -495,22 +495,12 @@ public:
       FragA tArA;
       FragARow tA_max, tA_sum;
 
-      // compute start/end batch head id for current wg
-      int start_batch_head_id = wg_id * num_blocks_per_wg / local_k_blocks;
-
       // compute num computed blocks for start batch head id
       int num_computed_blocks = (start_batch_head_id == 0) ? (wg_id * num_blocks_per_wg) : (wg_id * num_blocks_per_wg - start_batch_head_id * local_k_blocks);
       int start_blk, end_blk, head_q, idx_b, head_kv;
       // leader wg is also responsible for reducing partial results, while other
       // worker wg only to compute partial results
       bool is_leader_wg = wg_id < num_batch_heads;
-
-#if DEBUG_PRINT
-    if (thr_id == 0) {
-      cute::print("Debug>> wg id %d, start_batch_head_id: %d, num_computed_blocks: %d\n",
-             wg_id, start_batch_head_id, num_computed_blocks);
-    }
-#endif
 
       if (thr_id == 0 && is_leader_wg) {
         // reset atomic counter before computation
@@ -558,13 +548,6 @@ public:
         // partition id of start batch head id in current wg
         int partition_id = get_partition_id(wg_id, batch_head_id, num_blocks_per_wg, local_k_blocks);
 
-#if DEBUG_PRINT
-    if (thr_id == 0) {
-      cute::print("Debug>> wg id %d, batch_head_id: %d, partition_id: %d\n",
-             wg_id, batch_head_id, partition_id);
-    }
-#endif
-
         // store partial result: tArA, tA_max and tA_sum
         int offset = batch_head_id * max_num_partitions * num_elem_per_thead * SGPerWG::value * intel::sg_size 
                     + partition_id * num_elem_per_thead * SGPerWG::value * intel::sg_size
@@ -600,12 +583,6 @@ public:
 
       if (is_leader_wg) {
         int num_partitions = get_num_partitions(wg_id, num_blocks_per_wg, local_k_blocks);
-
-#if DEBUG_PRINT
-    if (thr_id == 0) {
-      cute::print("Debug>> wg id %d, num_partitions: %d\n", wg_id, num_partitions);
-    }
-#endif
 
         // check atomic to wait for partial results ready
         while(atomicLoad(params.atomic_reduce_cnt_ptr + wg_id) != num_partitions) {}

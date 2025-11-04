@@ -113,6 +113,7 @@ int main(int argc, const char **argv) {
 #define KV_TILE_SIZE _256
 #else
 #define NUM_SG _16
+#define KV_TILE_SIZE _512
 #endif
 
 #if HEAD_DIM == 16
