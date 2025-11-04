@@ -514,6 +514,7 @@ template <bool Causal,
           typename SubgroupLayoutQK,
           typename SubgroupLayoutPV_,      /* void -> default */
           int PipelineStages,
+          bool persistent,
           typename ElementQ = bfloat16_t,
           typename ElementK = bfloat16_t,
           typename ElementV = bfloat16_t,
@@ -546,6 +547,7 @@ struct FMHAConfig {
     // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
     // information is used by the underlying kernel.
     cutlass::KernelHardwareInfo hw_info;
+    hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
     using ProblemShapeType = cutlass::fmha::kernel::FMHAProblemShape;
 
@@ -583,9 +585,12 @@ struct FMHAConfig {
         GmemTiledCopyO
     >;
 
-    using FMHAKernel = cutlass::fmha::kernel::XeFMHAFwdKernel<
-        ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler
-    >;
+    using FMHAKernel = conditional_t<is_same_v<Scheduler, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>,
+      cutlass::fmha::kernel::XeFMHAFwdDynamicSplitKernel<
+        ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>,
+        cutlass::fmha::kernel::XeFMHAFwdKernel<
+        ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>
+        >;
 
     ExampleRunner<FMHAKernel> runner;
 
@@ -594,6 +599,7 @@ struct FMHAConfig {
   }
 
   static int run(const Options &options) {
-    return run<false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+    return persistent ? run<false, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>(options) : 
+                       run<false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
   }
 };
