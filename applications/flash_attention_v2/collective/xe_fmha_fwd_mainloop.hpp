@@ -279,21 +279,8 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
         copy(copy_q, tQgQ(_,_,_,D),   tQrQ);
         copy(copy_k, tKgK(_,_,_,K,D), tKrK);
 
-        // TODO: remove the static_cast after the reorder is supported
-        if constexpr (std::is_same_v<decltype(tQrQ(0)), typename TiledMMAQK::ValTypeA>) {
-          reorder(tQrQ, tSrQ);
-        } else {
-          for (int i = 0; i < tSrQ.size(); i++) {
-            tSrQ(i) = static_cast<typename TiledMMAQK::ValTypeA>(tQrQ(i));
-          }
-        }
-        if constexpr (std::is_same_v<decltype(tKrK(0)), typename TiledMMAQK::ValTypeB>) {
-          reorder(tKrK, tSrK);
-        } else {
-          for (int i = 0; i < tSrK.size(); i++) {
-            tSrK(i) = static_cast<typename TiledMMAQK::ValTypeB>(tKrK(i));
-          }
-        }
+        reorder(tQrQ, tSrQ);
+        reorder(tKrK, tSrK);
 
         cute::gemm(mma_qk, tSrQ, tSrK, tSrS);
       }
@@ -331,14 +318,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
       CUTLASS_PRAGMA_UNROLL
       for (int VV = 0; VV < VTiles; VV++) {
         copy(copy_v, tVgV(_,_,_,VV,K), tVrV);
-        // TODO: remove the static_cast after the reorder is supported
-        if constexpr (std::is_same_v<decltype(tVrV(0)), typename TiledMMAPV::ValTypeA>) {
-          reorder(tVrV, tArV);
-        } else {
-          for (int i = 0; i < tArV.size(); i++) {
-            tArV(i) = static_cast<typename TiledMMAPV::ValTypeA>(tVrV(i));
-          }
-        }
+        reorder(tVrV, tArV);
         cute::gemm(mma_pv, tArP, tArV, tArA(_,_,_,VV));
       }
 
