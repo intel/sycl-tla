@@ -158,7 +158,6 @@ if (CUTLASS_ENABLE_SYCL)
     add_compile_definitions(CUTLASS_SYCL_BUILTIN_ENABLE)
   endif()
 
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/onemkl.cmake)
 endif()
 find_package(Doxygen QUIET)
 
