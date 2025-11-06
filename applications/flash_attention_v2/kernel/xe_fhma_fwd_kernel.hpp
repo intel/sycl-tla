@@ -295,7 +295,7 @@ public:
 
   // Important: make sure multiple of 16 element for each copy
   // this is for storing partial results from different KV partitions
-  static constexpr int num_elem_per_thead = (size(FragA{}.shape()) + 2 * size(FragARow{}.shape()) + 15) / 16 * 16;
+  static constexpr int num_elem_per_thread = (size(FragA{}.shape()) + 2 * size(FragARow{}.shape()) + 15) / 16 * 16;
   // FIXME: maybe exceed more than 4 paritions???
   static const int max_num_partitions = 8;
 
@@ -367,7 +367,7 @@ public:
     const int wg_size = SGPerWG::value * intel::sg_size;
 
     // partial attn outputs, exp sum and max logits
-    ws_size += (max_num_partitions * num_batch_heads) * wg_size * num_elem_per_thead * sizeof(ElementA);
+    ws_size += (max_num_partitions * num_batch_heads) * wg_size * num_elem_per_thread * sizeof(ElementA);
     // atomic counter
     ws_size += num_batch_heads * sizeof(int32_t);
     return ws_size;
@@ -549,12 +549,12 @@ public:
         int partition_id = get_partition_id(wg_id, batch_head_id, num_blocks_per_wg, local_k_blocks);
 
         // store partial result: tArA, tA_max and tA_sum
-        int offset = batch_head_id * max_num_partitions * num_elem_per_thead * SGPerWG::value * intel::sg_size 
-                    + partition_id * num_elem_per_thead * SGPerWG::value * intel::sg_size
-                    + sg_id * intel::sg_size * num_elem_per_thead
-                    + tid_in_sg * num_elem_per_thead;
-        Tensor tPartial = make_tensor(params.partial_results_ptr + offset, make_shape(Int<num_elem_per_thead>{}));
-        Tensor merged_res = make_tensor<ElementA>(Int<num_elem_per_thead>{});
+        int offset = batch_head_id * max_num_partitions * num_elem_per_thread * SGPerWG::value * intel::sg_size
+                    + partition_id * num_elem_per_thread * SGPerWG::value * intel::sg_size
+                    + sg_id * intel::sg_size * num_elem_per_thread
+                    + tid_in_sg * num_elem_per_thread;
+        Tensor tPartial = make_tensor(params.partial_results_ptr + offset, make_shape(Int<num_elem_per_thread>{}));
+        Tensor merged_res = make_tensor<ElementA>(Int<num_elem_per_thread>{});
 
         CUTLASS_PRAGMA_UNROLL
         for(int i = 0; i < size(FragA{}.shape()); ++i) {
@@ -562,8 +562,8 @@ public:
         }
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < size(FragARow{}.shape()); ++i) {
-          merged_res(i + size(FragA{}.shape())) = tA_max(i);
-          merged_res(i + 1 + size(FragA{}.shape())) = tA_sum(i);
+          merged_res(2 * i + size(FragA{}.shape())) = tA_max(i);
+          merged_res(2 * i + 1 + size(FragA{}.shape())) = tA_sum(i);
         }
         copy(merged_res, tPartial);
 
@@ -592,12 +592,12 @@ public:
         clear(tA_sum);
 
         for (int i = 0; i < num_partitions; ++i) {
-          int offset = wg_id * max_num_partitions * SGPerWG::value * intel::sg_size * num_elem_per_thead 
-                     + i * SGPerWG::value * intel::sg_size * num_elem_per_thead
-                     + sg_id * intel::sg_size * num_elem_per_thead
-                     + tid_in_sg * num_elem_per_thead;
-          Tensor tPartial = make_tensor(params.partial_results_ptr + offset, make_shape(Int<num_elem_per_thead>{}));
-          Tensor merged_res = make_tensor<ElementA>(Int<num_elem_per_thead>{});
+          int offset = wg_id * max_num_partitions * SGPerWG::value * intel::sg_size * num_elem_per_thread
+                     + i * SGPerWG::value * intel::sg_size * num_elem_per_thread
+                     + sg_id * intel::sg_size * num_elem_per_thread
+                     + tid_in_sg * num_elem_per_thread;
+          Tensor tPartial = make_tensor(params.partial_results_ptr + offset, make_shape(Int<num_elem_per_thread>{}));
+          Tensor merged_res = make_tensor<ElementA>(Int<num_elem_per_thread>{});
           copy(tPartial, merged_res);
 
           if (i == 0) {
@@ -608,8 +608,8 @@ public:
 
             CUTLASS_PRAGMA_UNROLL
             for (int i = 0; i < size(FragARow{}.shape()); ++i) {
-              tA_max(i) = merged_res(i + size(FragA{}.shape()));
-              tA_sum(i) = merged_res(i + 1 + size(FragA{}.shape()));
+              tA_max(i) = merged_res(2 * i + size(FragA{}.shape()));
+              tA_sum(i) = merged_res(2 * i + 1 + size(FragA{}.shape()));
             }
 
             continue;
@@ -624,8 +624,8 @@ public:
 
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < size(FragARow{}.shape()); ++i) {
-            tA_max_2(i) = merged_res(i + size(FragA{}.shape()));
-            tA_sum_2(i) = merged_res(i + 1 + size(FragA{}.shape()));
+            tA_max_2(i) = merged_res(2 * i + size(FragA{}.shape()));
+            tA_sum_2(i) = merged_res(2 * i + 1 + size(FragA{}.shape()));
           }
 
           reduce_split2(params, tArA, tA_max, tA_sum, tArA_2, tA_max_2, tA_sum_2);
