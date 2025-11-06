@@ -283,6 +283,10 @@ struct TestbedImpl {
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
 
+    // Zero-initialize output memory to prevent uninitialized values from USM reuse
+    compat::memset(block_O.get(), 0, block_O.size() * sizeof(ElementOutput));
+    compat::memset(block_ref_O.get(), 0, block_ref_O.size() * sizeof(ElementOutput));
+
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
@@ -595,6 +599,11 @@ struct TestbedImpl {
     CUTLASS_TRACE_HOST("TestbedImpl::run: Allocating workspace of size " << workspace_size);
 #endif
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
+    
+    // Zero-initialize workspace to prevent uninitialized memory issues
+    if (workspace_size > 0) {
+      compat::memset(workspace.get(), 0, workspace_size);
+    }
 
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: Calling FlashAttention::can_implement");

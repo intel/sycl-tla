@@ -220,6 +220,11 @@ struct TestbedImpl {
     block_V_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_vo);
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
+    
+    // Zero-initialize output buffers to prevent uninitialized memory issues
+    if (block_O.size() > 0) {
+      compat::memset(block_O.get(), 0, block_O.size() * sizeof(ElementOutput));
+    }
 
     if constexpr (UsePagedKV) {
       std::vector<int> num_pages_per_seq{0};
@@ -632,6 +637,11 @@ struct TestbedImpl {
     CUTLASS_TRACE_HOST("TestbedImpl::run: Allocating workspace of size " << workspace_size);
 #endif
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
+    
+    // Zero-initialize workspace to prevent uninitialized memory issues
+    if (workspace_size > 0) {
+      compat::memset(workspace.get(), 0, workspace_size);
+    }
 
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: Calling FlashPrefillCachedKV::can_implement");
