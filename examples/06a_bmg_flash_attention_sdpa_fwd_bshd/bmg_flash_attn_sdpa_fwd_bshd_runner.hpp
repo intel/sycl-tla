@@ -313,9 +313,19 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
           if (is_causal) {
             for (int row = 0; row < seq_len_qo; row++) {
               for (int col = 0; col < seq_len_kv; col++) {
-                if ((col - full_tile_offset) > (row - discard_seq_coord))
-                  host_S[col + row * seq_len_kv] =
-                      ElementAccumulator{-INFINITY};
+                // Apply bottom right masking
+                if (seq_len_qo > seq_len_kv){
+                  int first_non_masked_sequence = seq_len_qo - seq_len_kv;
+                  if (col > row - first_non_masked_sequence)
+                    host_S[col + row * seq_len_kv] =
+                        ElementAccumulator{-INFINITY};
+                }
+                else{
+                  // Symmetric masking
+                  if ((col - full_tile_offset) > (row - discard_seq_coord))
+                    host_S[col + row * seq_len_kv] =
+                        ElementAccumulator{-INFINITY};
+                }
               }
             }
           }
@@ -367,7 +377,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
             for (int col = 0; col < seq_len_kv; col++) {
               sum_exp += expf(qkscore_scaled[col + row * seq_len_kv]);
             }
-            host_LSE[row + offset_lse] = max_scaled_lse_vec[row] + logf(sum_exp); //max + logsumexp
+            host_LSE[row + offset_lse]  = std::isnan(max_scaled_lse_vec[row] + logf(sum_exp)) ? 0 : host_LSE[row + offset_lse] = max_scaled_lse_vec[row] + logf(sum_exp);
           }
 
           // compute exp of S
@@ -612,6 +622,27 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
 
+    //debug
+    // std::vector<ElementQ> block_Q_host(block_Q.size());
+    // for (int i = 0; i < block_Q.size(); i++){
+    //   block_Q_host[i] = static_cast<ElementQ>(i % 4);
+    // }
+    // std::vector<ElementK> block_K_host(block_K.size());
+    // for (int i = 0; i < block_K.size(); i++){
+    //   block_K_host[i] = static_cast<ElementK>(i % 3);
+    // }
+    // std::vector<ElementV> block_V_host(block_V.size());
+    // for (int i = 0; i < block_V.size(); i++){
+    //   block_V_host[i] = static_cast<ElementV>(i % 2);
+    // }
+
+    // compat::wait();
+    // compat::memcpy<ElementQ>(block_Q.get(), block_Q_host.data(), block_Q.size());
+    // compat::wait();
+    // compat::memcpy<ElementK>(block_K.get(), block_K_host.data(), block_K.size());
+    // compat::wait();
+    // compat::memcpy<ElementV>(block_V.get(), block_V_host.data(), block_V.size());
+    
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
       device_cumulative_seqlen_q.copy_from_host(cumulative_seqlen_q.data(),

@@ -213,7 +213,14 @@ public:
         rowsum(indx) = cur_sum;
         CUTLASS_PRAGMA_UNROLL
         for (int z = 0; z < FragsN; z++) {
-          out_reg(x, y, z) *= cur_scale;
+          // Handle -nan for bottom right masking. 
+          // It will generate -nan when the whole sequence is masked. We need to manually assign 0 to the output
+          if (std::isnan(out_reg(x, y, z))){
+            out_reg(x, y, z) = 0;
+          }
+          else{
+            out_reg(x, y, z) *= cur_scale;
+          }
         }
       }
     }
@@ -288,7 +295,7 @@ public:
     if (seq_coord < seq_len_qo){
       auto cur_sum = rowsum[lane_id];
       tLSE_reg = cur_sum == 0.f ? -INFINITY : max * softmax_scale + logf(cur_sum);
-      *(params.ptr_LSE + lse_offset + localtile_seq_coord) = tLSE_reg;
+      *(params.ptr_LSE + lse_offset + localtile_seq_coord) = std::isnan(tLSE_reg) ? 0 : tLSE_reg;
     }
   }
 
