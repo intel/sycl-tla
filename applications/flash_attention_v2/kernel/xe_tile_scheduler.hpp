@@ -141,7 +141,6 @@ struct XeFHMAIndividualPersistentTileScheduler {
   auto get_block_coord() {
     using namespace cute;
     int wg_id = BlockIdxZ();
-    int head;
 
     // total number of blocks need to be processed across all wgs
     int total_num_kv_blocks = local_num_kv_blocks_ * num_batch_heads_;

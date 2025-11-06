@@ -296,7 +296,6 @@ public:
   // Important: make sure multiple of 16 element for each copy
   // this is for storing partial results from different KV partitions
   static constexpr int num_elem_per_thread = (size(FragA{}.shape()) + 2 * size(FragARow{}.shape()) + 15) / 16 * 16;
-  // FIXME: maybe exceed more than 4 paritions???
   static const int max_num_partitions = 8;
 
   // Device side arguments
@@ -472,8 +471,6 @@ public:
 
     CUTLASS_PRAGMA_NO_UNROLL
     for (; tile_scheduler.is_valid(); ++tile_scheduler) {
-      // head_q, idx_b from tile scheduler will not be used
-      // auto [blk_q, blk_v, head_q_unused, idx_b_unused] = tile_scheduler.get_block_coord(); // (Q,V,h,b)
       auto [blk_q, blk_v, start_batch_head_id] = tile_scheduler.get_block_coord(); // (Q,V, batch_head_idx)
       auto blk_qv = make_coord(blk_q, blk_v);
 
