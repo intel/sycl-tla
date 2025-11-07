@@ -104,10 +104,6 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
 
   while (work_tile_info.is_valid()) {
     auto M = get<0>(problem_shape_MNKL);
-    // TODO
-    // The current MMA collective for grouped GEMM currently seems to be missing
-    // batching Ask Ji Yang
-    auto L = get<3>(problem_shape_MNKL);
 
     auto m_coord = work_tile_info.M_idx;
     auto n_coord = work_tile_info.N_idx;
@@ -159,3 +155,4 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
 }
 
 } // namespace MoE
+
