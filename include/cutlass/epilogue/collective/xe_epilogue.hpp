@@ -440,9 +440,10 @@ public:
       for (int epi_m = 0; epi_m < FragsM; epi_m++) {
         cst_callbacks.begin_loop(epi_m, epi_n);
         
-        //avoid evaluating copy_c when ElementC is void during compilation
-        if (is_C_load_needed) {
-          if constexpr (is_source_supported) {
+        //Instead of calling is_C_load_needed. We do heirachical check 
+        //so that runtime check not there when ElementC is void
+        if constexpr (is_source_supported) {
+          if (is_C_load_needed) {
             copy(copy_c, tCgC(_, epi_m, epi_n), trC);
           }
         }
