@@ -300,7 +300,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
       GemmCuteName<ElementA, ElementB, ElementD, layoutA, layoutB>>(
       sycl::nd_range<3>(global, local), kernel_props, [=](auto) {
         MoE::MoEGEMM<XE_LOAD_2D<16, 32, 32, 16>,
-                     XE_LOAD_2D_VNNI<16, 32, 16, 16>, XE_STORE_2D<16, 8, 16>,
+                     XE_LOAD_2D_VNNI<16, 32, 16, 16>, XE_STORE_2D<16, 8, 32>,
                      'R', 'R', 'R'>(activations, weights, scales, outputs, mma,
                                     num_rows_per_expert_device, num_experts,
                                     gemm_n, gemm_k, scheduler_params);
@@ -446,3 +446,4 @@ int main(int argc, const char **argv) {
 
   return 0;
 }
+
