@@ -62,8 +62,6 @@
 #pragma clang diagnostic ignored "-Wpass-failed"
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
-#if defined(__INTEL_LLVM_COMPILER) || defined(__clang__)  // SYCL build
-
 using namespace cute;
 using namespace MoE;
 
@@ -437,13 +435,3 @@ int main(int argc, const char **argv) {
 
   return 0;
 }
-
-#else // gcc compiler
-int main(int argc, const char **argv) {
-  std::cout << std::endl
-            << "Skip if DPCPP is not used as host compiler" << std::endl
-            << std::endl;
-  return 0;
-}
-
-#endif
