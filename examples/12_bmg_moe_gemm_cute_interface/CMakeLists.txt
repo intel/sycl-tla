@@ -26,10 +26,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-cutlass_example_add_executable(
-  12_bmg_moe_gemm_cute_interface
-  12_bmg_moe_gemm_cute_interface.cpp
-)
-if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
-  target_link_options( 12_bmg_moe_gemm_cute_interface PRIVATE -Xs "-options \"-igc_opts 'VectorAliasBBThreshold=10000'\"" )
+if(NOT "${DPCPP_HOST_COMPILER}" MATCHES "g\\+\\+")
+  cutlass_example_add_executable(
+    12_bmg_moe_gemm_cute_interface
+    12_bmg_moe_gemm_cute_interface.cpp
+  )
+  if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
+    target_link_options( 12_bmg_moe_gemm_cute_interface PRIVATE -Xs "-options \"-igc_opts 'VectorAliasBBThreshold=10000'\"" )
+  endif()
 endif()
