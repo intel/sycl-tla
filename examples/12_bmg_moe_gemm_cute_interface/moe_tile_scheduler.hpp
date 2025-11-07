@@ -31,7 +31,6 @@
  **************************************************************************************************/
 #pragma once
 
-#include "../../../common/sycl_cute_common.hpp"
 #include "cute/layout.hpp"
 #include "cute/tensor.hpp"
 #include "cutlass/fast_math.h"

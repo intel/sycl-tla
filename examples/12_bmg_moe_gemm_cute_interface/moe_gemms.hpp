@@ -45,8 +45,6 @@
 #include "cutlass/util/reference/host/tensor_fill.h"
 #include "cutlass/util/sycl_event_manager.hpp"
 
-#include "../../../common/sycl_cute_common.hpp"
-
 #pragma clang diagnostic ignored "-Wpass-failed"
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 

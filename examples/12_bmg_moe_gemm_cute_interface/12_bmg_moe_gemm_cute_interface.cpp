@@ -56,7 +56,6 @@
 #include "cutlass/util/reference/host/tensor_fill.h"
 #include "cutlass/util/sycl_event_manager.hpp"
 
-#include "../../../common/sycl_cute_common.hpp"
 #include "moe_grouped_gemm.hpp"
 #include "moe_tile_scheduler.hpp"
 
@@ -69,15 +68,7 @@ using namespace cute;
 using namespace MoE;
 
 using ElementAccumulator = float; // <- data type of accumulator
-using ElementA = bfloat16_t;      // <- data type of elements in input matrix A
-using ElementB = bfloat16_t;      // <- data type of elements in input matrix B
-using ElementOutput = bfloat16_t; // <- data type of elements in output matrix D
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#define CUTLASS_SYCL_PROFILING_ENABLED
-
-// Command line options parsing
 struct VerificationHelper {
 
   bool error = false;
@@ -446,4 +437,3 @@ int main(int argc, const char **argv) {
 
   return 0;
 }
-
