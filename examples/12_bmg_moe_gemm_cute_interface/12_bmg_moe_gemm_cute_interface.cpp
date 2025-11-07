@@ -62,7 +62,7 @@
 #pragma clang diagnostic ignored "-Wpass-failed"
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
-#include <cfloat>
+#if defined(__INTEL_LLVM_COMPILER) || defined(__clang__)  // SYCL build
 
 using namespace cute;
 using namespace MoE;
@@ -287,6 +287,8 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
   syclex::properties kernel_props{syclex::sub_group_size<16>,
                                   intelex::grf_size<256>};
   sycl::queue Q = compat::get_default_queue();
+  GPU_Clock timer;
+  timer.start();
   auto event = Q.parallel_for<
       GemmCuteName<ElementA, ElementB, ElementD, layoutA, layoutB>>(
       sycl::nd_range<3>(global, local), kernel_props, [=](auto) {
@@ -298,14 +300,13 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
       });
   EventManager::getInstance().addEvent(event);
   Q.wait_and_throw();
-  VerificationHelper helper;
-  helper.parse(num_experts, num_tokens_per_expert_host, gemm_n, gemm_k);
-  GPU_Clock timer;
-  timer.start();
-  EventManager::getInstance().addEvent(event);
-  Q.wait_and_throw();
   float cute_time = timer.seconds() * 1000;
   double cute_average_time = double(cute_time);
+
+  VerificationHelper helper;
+  helper.parse(num_experts, num_tokens_per_expert_host, gemm_n, gemm_k);
+  assert(helper.verify(activations, weights, outputs));
+
   auto [gflops, mem_bw_util, projected_time] =
       helper.gflops(cute_average_time / 1000.0, helper.problem_sizes_host);
 
@@ -318,7 +319,6 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
   std::cout << "  GFLOPS      : " << gflops << std::endl;
   std::cout << "  Memory BW utilization : " << mem_bw_util << "  GBPs"
             << std::endl;
-  assert(helper.verify(activations, weights, outputs));
 }
 
 void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
@@ -437,3 +437,13 @@ int main(int argc, const char **argv) {
 
   return 0;
 }
+
+#else // gcc compiler
+int main(int argc, const char **argv) {
+  std::cout << std::endl
+            << "Skip if DPCPP is not used as host compiler" << std::endl
+            << std::endl;
+  return 0;
+}
+
+#endif
