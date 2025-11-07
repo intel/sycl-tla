@@ -90,8 +90,7 @@ jobs:
             -DIGC_VERSION_MAJOR=${{ matrix.igc_version_major }} \
             -DIGC_VERSION_MINOR=${{ matrix.igc_version_minor }} \
             -DCUTLASS_SYCL_RUNNING_CI=ON \
-            -DCMAKE_CXX_FLAGS="-Werror" \
-            -DDPCPP_HOST_COMPILER=g++-13
+            -DCMAKE_CXX_FLAGS="-Werror -ftemplate-backtrace-limit=0"
           cmake --build .
 
       - name: Unit test
