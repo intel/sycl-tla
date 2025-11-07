@@ -68,8 +68,7 @@
 using namespace cute;
 using namespace MoE;
 
-using ElementAccumulator = float;     // <- data type of accumulator
-using ElementComputeEpilogue = float; // <- data type of epilogue operations
+using ElementAccumulator = float; // <- data type of accumulator
 using ElementA = bfloat16_t;      // <- data type of elements in input matrix A
 using ElementB = bfloat16_t;      // <- data type of elements in input matrix B
 using ElementOutput = bfloat16_t; // <- data type of elements in output matrix D
@@ -79,7 +78,7 @@ using ElementOutput = bfloat16_t; // <- data type of elements in output matrix D
 #define CUTLASS_SYCL_PROFILING_ENABLED
 
 // Command line options parsing
-struct GroupGEMMOptions {
+struct VerificationHelper {
 
   bool error = false;
   bool help = false;
@@ -92,7 +91,7 @@ struct GroupGEMMOptions {
   std::vector<typename MoE::ProblemShape::UnderlyingProblemShape>
       problem_sizes_host;
 
-  GroupGEMMOptions()
+  VerificationHelper()
       : error(false), help(false), alpha(1.f), beta(0.f), iterations(100) {}
 
   void parse(const int num_experts, const int *num_tokens_per_expert_host,
@@ -108,6 +107,7 @@ struct GroupGEMMOptions {
     problem_sizes_host.reserve(groups);
     for (int i = 0; i < groups; i++) {
       problem_sizes_host.push_back({num_tokens_per_expert_host[i], n, k});
+      m += num_tokens_per_expert_host[i];
     }
   }
 
@@ -142,20 +142,67 @@ struct GroupGEMMOptions {
                                runtime_s,
                            projected_time * 1000);
   }
+
+  template <class ElementA, class ElementB, class ElementD,
+            class = std::enable_if_t<
+                is_any_of_v<ElementA, cute::bfloat16_t, cute::half_t> &&
+                is_any_of_v<ElementB, cute::bfloat16_t, cute::half_t> &&
+                is_any_of_v<ElementD, cute::bfloat16_t, cute::half_t>>>
+  bool verify(const ElementA *activations, const ElementB *weights,
+              ElementD *outputs) {
+    cutlass::DeviceAllocation<ElementD> output_ref;
+    cutlass::DeviceAllocation<ElementD> unused_c_matrix;
+    output_ref.reset(m * n);
+    unused_c_matrix.reset(m * n);
+    using LayoutA = cutlass::layout::RowMajor;
+    using LayoutB = cutlass::layout::RowMajor;
+    using LayoutC = cutlass::layout::RowMajor;
+    using LayoutD = cutlass::layout::RowMajor;
+    bool passed = true;
+    // Verify against individual reference GEMMs
+    int cumulative_sum = 0;
+    for (int32_t i = 0; i < groups; ++i) {
+      auto problem = problem_sizes_host.at(i);
+      auto M = get<0>(problem);
+      cutlass::TensorRef ref_A(activations + cumulative_sum * k,
+                               LayoutA::packed({M, k}));
+      cutlass::TensorRef ref_B(weights + i * n * k, LayoutB::packed({k, n}));
+      cutlass::TensorRef ref_C(unused_c_matrix.get() + cumulative_sum * n,
+                               LayoutC::packed({M, n}));
+      cutlass::TensorRef ref_D(output_ref.get() + cumulative_sum * n,
+                               LayoutD::packed({M, n}));
+
+      //
+      // Compute reference output
+      //
+      cutlass::reference::device::GemmComplex(
+          {M, n, k}, 1.0, ref_A, cutlass::ComplexTransform::kNone, ref_B,
+          cutlass::ComplexTransform::kNone, 0.0, ref_C, ref_D,
+          ElementAccumulator(0),
+          1,     // batch_count
+          M * k, // batch_stride_A
+          k * n, // batch_stride_B
+          M * n, // batch_stride_C
+          M * n  // batch_stride_D
+      );
+
+      // Wait for kernel to finish
+      compat::wait();
+
+      // Check if output from CUTLASS kernel and reference kernel are equal or
+      // not
+      passed &= cutlass::reference::device::BlockCompareEqual(
+          output_ref.get() + cumulative_sum * n, outputs + cumulative_sum * n,
+          M * n);
+      if (!passed) {
+        break;
+      }
+      cumulative_sum += M;
+    }
+    return passed;
+  }
 };
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-template <typename T, char LayoutKind>
-auto make_device_tensor(sycl::queue &Q, int r, int c) {
-  using namespace cute;
-  auto ptr = make_gmem_ptr(sycl::malloc_device<T>(r * c, Q));
-  auto shape = make_shape(r, c);
-  if constexpr (LayoutKind == 'C')
-    return make_tensor(ptr, make_layout(shape, make_stride(_1{}, r)));
-  else
-    return make_tensor(ptr, make_layout(shape, make_stride(c, _1{})));
-}
 
 template <typename T, size_t = 0> struct is_complete : std::false_type {};
 
@@ -164,15 +211,18 @@ template <typename T> struct is_complete<T, 0 * sizeof(T)> : std::true_type {};
 template <typename T>
 static constexpr bool is_complete_v = is_complete<T>::value;
 
-// Some of this code has been authored by Peter caday
+// Some of this code has been authored by Peter Caday
 template <typename TA, typename TB, typename TC> auto choose_mma_op() {
-  if constexpr (is_complete_v<XE_DPAS_TT<8, TC, TA, TB>>) {
-    if constexpr (cute::is_same_v<TA, cute::bfloat16_t> && cute::is_same_v<TB, cute::bfloat16_t>) {
-      return XE_DPAS_TT<8, float, TA, TB>{};
+  using TA_non_CV = cutlass::platform::remove_cv_t<TA>;
+  using TB_non_CV = cutlass::platform::remove_cv_t<TB>;
+  if constexpr (is_complete_v<XE_DPAS_TT<8, TC, TA_non_CV, TB_non_CV>>) {
+    if constexpr (is_same_v<TA_non_CV, cute::bfloat16_t> &&
+                  is_same_v<TB_non_CV, cute::bfloat16_t>) {
+      return XE_DPAS_TT<8, float, TA_non_CV, TB_non_CV>{};
     } else {
-      return XE_DPAS_TT<8, TC, TA, TB>{};
+      return XE_DPAS_TT<8, TC, TA_non_CV, TB_non_CV>{};
     }
-  } else if constexpr (is_same_v<TA, cute::bfloat16_t>) {
+  } else if constexpr (is_same_v<TA_non_CV, cute::bfloat16_t>) {
     return XE_DPAS_TT<8, float, cute::bfloat16_t>{};
   } else {
     /* Use f16 by default as upconversion sequences are typically faster */
@@ -204,6 +254,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
                      const ElementS *scales, ElementD *outputs,
                      const int gemm_n, const int gemm_k,
                      const int *num_rows_per_expert_device,
+                     const int *num_tokens_per_expert_host,
                      const int num_experts) {
   // Change device_id to another value if you are running on a machine with
   // multiple GPUs and wish to use a GPU other than that with device ID 0.
@@ -256,6 +307,27 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
       });
   EventManager::getInstance().addEvent(event);
   Q.wait_and_throw();
+  VerificationHelper helper;
+  helper.parse(num_experts, num_tokens_per_expert_host, gemm_n, gemm_k);
+  GPU_Clock timer;
+  timer.start();
+  EventManager::getInstance().addEvent(event);
+  Q.wait_and_throw();
+  float cute_time = timer.seconds() * 1000;
+  double cute_average_time = double(cute_time);
+  auto [gflops, mem_bw_util, projected_time] =
+      helper.gflops(cute_average_time / 1000.0, helper.problem_sizes_host);
+
+  std::cout << "  Problem Sizes" << std::endl;
+  for (int32_t i = 0; i < num_experts; ++i) {
+    std::cout << "    " << num_tokens_per_expert_host[i] << std::endl;
+  }
+  std::cout << "  Groups      : " << num_experts << std::endl;
+  std::cout << "  Avg runtime : " << cute_average_time << " ms" << std::endl;
+  std::cout << "  GFLOPS      : " << gflops << std::endl;
+  std::cout << "  Memory BW utilization : " << mem_bw_util << "  GBPs"
+            << std::endl;
+  assert(helper.verify(activations, weights, outputs));
 }
 
 void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
@@ -295,7 +367,7 @@ void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
   MoEGEMMLauncher<'R', 'R'>(activations_data.get(), weights_data.get(),
                             static_cast<void *>(nullptr), output_data.get(),
                             n_moe, k_moe, num_rows_per_expert_device.get(),
-                            num_experts);
+                            M_per_expert, num_experts);
 }
 
 int main(int argc, const char **argv) {
