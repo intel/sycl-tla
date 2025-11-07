@@ -84,11 +84,13 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
   constexpr char actual_layout_of_B = LayoutKindB ^ ('R' ^ 'C');
   bool did_group_change = true;
   int32_t curr_group = -1;
-
+  int prev_group = curr_group;
+  int32_t cumulative_M = 0;
   ProblemShapeMNKL problem_shape_MNKL;
 
   if (work_tile_info.is_valid()) {
     curr_group = work_tile_info.L_idx;
+    prev_group = curr_group;
     problem_shape_MNKL =
         append<4>(Shape<int, int, int>{M_per_group[curr_group], N, K}, 1);
   }
@@ -114,11 +116,10 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
 
     if (did_group_change) {
       // recompute each time because the groups don't necessarily increment by 1
-      int32_t cumulative_M = 0;
-      for (int i = 0; i < curr_group; i++) {
+      for (int i = prev_group; i < curr_group; i++) {
         cumulative_M += M_per_group[i];
       }
-
+      prev_group = curr_group;
       const int32_t M = M_per_group[curr_group];
 
       ElementA *ptr_A_curr_batch =
@@ -135,13 +136,13 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
       did_group_change = false;
     }
 
-    if constexpr (!cute::is_void_v<ElementS>) {
-      moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
-          A_tensor, B_tensor, Scales, D_tensor, tile_coord, mma);
-    } else {
-      moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
-          A_tensor, B_tensor, D_tensor, tile_coord, mma);
-    }
+    // After adding scaledMM mainloops, add something like
+    // if constexpr (!cute::is_void_v<ElementS>) {
+    //   moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
+    //      A_tensor, B_tensor, Scales, D_tensor, tile_coord, mma);
+    // } else {
+    moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
+        A_tensor, B_tensor, D_tensor, tile_coord, mma);
 
     // Get next work tile
     auto [next_work_tile_info, temp] =
