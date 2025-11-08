@@ -57,7 +57,6 @@ template <class T>
 inline constexpr bool is_16_bit_fp_v =
     is_16_bit_fp<std::remove_cv_t<std::remove_reference_t<T>>>::value;
 
-// Making sure I got this right
 static_assert(is_16_bit_fp_v<cutlass::bfloat16_t>);
 static_assert(is_16_bit_fp_v<cutlass::half_t>);
 

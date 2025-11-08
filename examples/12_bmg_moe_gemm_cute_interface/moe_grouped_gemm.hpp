@@ -99,12 +99,9 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
       const_cast<ElementA *>(Activations), M, K);
   auto B_tensor = make_moe_tensor<ElementB, actual_layout_of_B>(
       const_cast<ElementB *>(Weights), N, K);
-  auto D_tensor = make_moe_tensor<ElementD, LayoutKindD>(
-      const_cast<ElementD *>(Outputs), M, N);
+  auto D_tensor = make_moe_tensor<ElementD, LayoutKindD>(Outputs, M, N);
 
   while (work_tile_info.is_valid()) {
-    auto M = get<0>(problem_shape_MNKL);
-
     auto m_coord = work_tile_info.M_idx;
     auto n_coord = work_tile_info.N_idx;
     auto tile_coord = make_coord(m_coord, n_coord, _, 0);
@@ -115,14 +112,12 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
         cumulative_M += M_per_group[i];
       }
       prev_group = curr_group;
-      const int32_t M = M_per_group[curr_group];
 
       ElementA *ptr_A_curr_batch =
           const_cast<ElementA *>(Activations) + cumulative_M * K;
       ElementB *ptr_B_curr_batch =
           const_cast<ElementB *>(Weights) + curr_group * K * N;
-      ElementD *ptr_D_curr_batch =
-          reinterpret_cast<ElementD *>((void *)(Outputs)) + cumulative_M * N;
+      ElementD *ptr_D_curr_batch = Outputs + cumulative_M * N;
 
       A_tensor = make_moe_tensor<ElementA, LayoutKindA>(ptr_A_curr_batch, M, K);
       B_tensor =
@@ -150,9 +145,9 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
       curr_group = work_tile_info.L_idx;
       problem_shape_MNKL =
           append<4>(Shape<int, int, int>{M_per_group[curr_group], N, K}, 1);
+      M = get<0>(problem_shape_MNKL);
     }
   } // end while loop
 }
 
 } // namespace MoE
-

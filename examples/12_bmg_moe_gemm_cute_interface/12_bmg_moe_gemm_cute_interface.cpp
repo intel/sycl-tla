@@ -200,29 +200,10 @@ template <typename T> struct is_complete<T, 0 * sizeof(T)> : std::true_type {};
 template <typename T>
 static constexpr bool is_complete_v = is_complete<T>::value;
 
-// Some of this code has been authored by Peter Caday
-template <typename TA, typename TB, typename TC> auto choose_mma_op() {
+template <class TA, class TB> auto choose_tiled_mma(TA *A, TB *B) {
   using TA_non_CV = cutlass::platform::remove_cv_t<TA>;
   using TB_non_CV = cutlass::platform::remove_cv_t<TB>;
-  if constexpr (is_complete_v<XE_DPAS_TT<8, TC, TA_non_CV, TB_non_CV>>) {
-    if constexpr (is_same_v<TA_non_CV, cute::bfloat16_t> &&
-                  is_same_v<TB_non_CV, cute::bfloat16_t>) {
-      return XE_DPAS_TT<8, float, TA_non_CV, TB_non_CV>{};
-    } else {
-      return XE_DPAS_TT<8, TC, TA_non_CV, TB_non_CV>{};
-    }
-  } else if constexpr (is_same_v<TA_non_CV, cute::bfloat16_t>) {
-    return XE_DPAS_TT<8, float, cute::bfloat16_t>{};
-  } else {
-    /* Use f16 by default as upconversion sequences are typically faster */
-    return XE_DPAS_TT<8, float, cute::half_t>{};
-  }
-}
-
-template <class TA, class TB, class TD>
-auto choose_tiled_mma(TA *A, TB *B, TD *D) {
-
-  auto op = choose_mma_op<TA, TB, TD>();
+  auto op = XE_DPAS_TT<8, float, TA_non_CV, TB_non_CV>{};
 
   using WGTile = Shape<_256, _256, _32>; // 256x256 WG tile size
   using SGLayout =
@@ -235,10 +216,10 @@ auto choose_tiled_mma(TA *A, TB *B, TD *D) {
 }
 
 // type tag to define a unique sycl kernel name
-template <class, class, class, char, char> class GemmCuteName;
+template <typename, typename, typename, char, char> class GemmCuteName;
 
-template <char layoutA, char layoutB, class ElementA, class ElementB,
-          class ElementS, class ElementD>
+template <char layoutA, char layoutB, typename ElementA, typename ElementB,
+          typename ElementS, typename ElementD>
 void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
                      const ElementS *scales, ElementD *outputs,
                      const int gemm_n, const int gemm_k,
@@ -252,7 +233,13 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
       cutlass::KernelHardwareInfo::query_device_multiprocessor_count(0);
   cutlass::KernelHardwareInfo hw_info{0, sm_count};
   auto dummy_problem_shape = cute::Shape<int, int, int>{1, gemm_k, gemm_n};
-  // I forgot why I used this hack
+  // The GroupedGEMM API requires creation of  a vector of ProblemShape objects
+  // for each GEMM problem, which is used in the GroupedGEMM tile-scheduler. If
+  // there are 32 groups, then a vector of 32 `ProblemShape` objects is created.
+  // Since these would not be known at compile time for a framework, they would
+  // have to be created at run-time instead. However, for MoEGEMM, I just
+  // provide one dummy shape, and then the custom code in tile scheduler can
+  // derive the shape of each GEMM problem.
   auto dummy_group_problem_shape =
       cutlass::gemm::GroupProblemShape<Shape<int, int, int>>{
           1, &dummy_problem_shape, nullptr};
@@ -269,7 +256,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
           ClusterShape{}, hw_info,
           PersistentTileSchedulerXeMoE<ProblemShape>::Arguments{
               1, RasterOrderOptions::AlongN});
-  auto mma = choose_tiled_mma(activations, weights, outputs);
+  auto mma = choose_tiled_mma(activations, weights);
   auto MaxThreadsPerWorkgroup = size(mma);
   dim3 local_range{MaxThreadsPerWorkgroup, 1, 1};
 
