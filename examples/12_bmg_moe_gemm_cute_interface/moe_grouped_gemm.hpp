@@ -105,6 +105,8 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
     auto tile_coord = make_coord(m_coord, n_coord, _, 0);
 
     if (did_group_change) {
+      curr_group = work_tile_info.L_idx;
+      M = M_per_group[curr_group];
       // recompute each time because the groups don't necessarily increment by 1
       for (int i = prev_group; i < curr_group; i++) {
         cumulative_M += M_per_group[i];
@@ -136,13 +138,7 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
     auto [next_work_tile_info, temp] =
         scheduler.fetch_next_work(work_tile_info);
     work_tile_info = next_work_tile_info;
-
     did_group_change = curr_group != work_tile_info.L_idx;
-
-    if (did_group_change && work_tile_info.is_valid()) {
-      curr_group = work_tile_info.L_idx;
-      M = M_per_group[curr_group];
-    }
   } // end while loop
 }
 
