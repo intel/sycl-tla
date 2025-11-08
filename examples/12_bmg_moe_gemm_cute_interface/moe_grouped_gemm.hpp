@@ -82,14 +82,16 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
   auto work_tile_info = scheduler.initial_work_tile_info(Shape<_1, _1, _1>{});
   constexpr char actual_layout_of_B = LayoutKindB ^ ('R' ^ 'C');
   bool did_group_change = true;
-  int32_t curr_group = -1;
-  int32_t prev_group = curr_group;
+  int32_t curr_group = 0;
+  int32_t prev_group = 0;
   int32_t cumulative_M = 0;
   int32_t M = 0;
 
   if (work_tile_info.is_valid()) {
+    // We don't really need this conditional outside the while loop.
+    // It simply helps initialize tensors. If using nullptr would be
+    // fine for their initialization, then we can remove this conditional.
     curr_group = work_tile_info.L_idx;
-    prev_group = curr_group;
     M = M_per_group[curr_group];
   }
 
