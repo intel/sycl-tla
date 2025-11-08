@@ -83,17 +83,15 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
   constexpr char actual_layout_of_B = LayoutKindB ^ ('R' ^ 'C');
   bool did_group_change = true;
   int32_t curr_group = -1;
-  int prev_group = curr_group;
+  int32_t prev_group = curr_group;
   int32_t cumulative_M = 0;
-  ProblemShapeMNKL problem_shape_MNKL;
+  int32_t M = 0;
 
   if (work_tile_info.is_valid()) {
     curr_group = work_tile_info.L_idx;
     prev_group = curr_group;
-    problem_shape_MNKL =
-        append<4>(Shape<int, int, int>{M_per_group[curr_group], N, K}, 1);
+    M = M_per_group[curr_group];
   }
-  auto M = get<0>(problem_shape_MNKL);
 
   auto A_tensor = make_moe_tensor<ElementA, LayoutKindA>(
       const_cast<ElementA *>(Activations), M, K);
@@ -144,8 +142,6 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
     if (did_group_change && work_tile_info.is_valid()) {
       curr_group = work_tile_info.L_idx;
       M = M_per_group[curr_group];
-      problem_shape_MNKL =
-          append<4>(Shape<int, int, int>{M, N, K}, 1);
     }
   } // end while loop
 }
