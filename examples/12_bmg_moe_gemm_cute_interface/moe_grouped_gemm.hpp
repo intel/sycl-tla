@@ -77,7 +77,7 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
 
   TileScheduler scheduler{scheduler_params};
 
-  // Modify tile-scheduler to not require configure
+  // TODO : Modify tile-scheduler to not require configure
   scheduler.configure(const_cast<int32_t *>(M_per_group), N, K, num_experts);
   auto work_tile_info = scheduler.initial_work_tile_info(Shape<_1, _1, _1>{});
   constexpr char actual_layout_of_B = LayoutKindB ^ ('R' ^ 'C');
@@ -143,9 +143,9 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
 
     if (did_group_change && work_tile_info.is_valid()) {
       curr_group = work_tile_info.L_idx;
+      M = M_per_group[curr_group];
       problem_shape_MNKL =
-          append<4>(Shape<int, int, int>{M_per_group[curr_group], N, K}, 1);
-      M = get<0>(problem_shape_MNKL);
+          append<4>(Shape<int, int, int>{M, N, K}, 1);
     }
   } // end while loop
 }
