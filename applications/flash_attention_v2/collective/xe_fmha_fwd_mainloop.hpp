@@ -62,8 +62,7 @@ template <class DispatchPolicy_,
           class TensorV_,
           class TiledCopyQ_ = void,   // Optional TiledCopy for loading Q
           class TiledCopyK_ = void,   // Optional TiledCopy for loading K
-          class TiledCopyV_ = void,   // Optional TiledCopy for loading V
-          class SubgroupLayoutQK_ = void>   // Optional SubgroupLayout for QK
+          class TiledCopyV_ = void>   // Optional TiledCopy for loading V
 struct FMHAFwdMainloop {
   static_assert(cutlass::detail::dependent_false<DispatchPolicy_>, "Could not find a mainloop specialization.");
 };
@@ -195,7 +194,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
     Tensor cK = make_identity_tensor(K_2D.shape());             // (k,d)
     Tensor cV = make_identity_tensor(V_2D.shape());             // (v,k)
     Tensor cP = make_identity_tensor(take<0,2>(TileShapeQK{})); // (q,k)
-    
+
     /* Partition global tensors into workgroup tiles */
     Tensor gQ       = local_tile(cQ, TileShapeQK{}, append(blk_qv,_),             Step<_1,X,_1>{});   // (q,d,D)
     Tensor gK       = local_tile(cK, TileShapeQK{}, make_coord(_,_,_),            Step<X,_1,_1>{});   // (k,d,K,D)

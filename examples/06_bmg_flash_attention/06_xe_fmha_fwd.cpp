@@ -147,7 +147,6 @@ int main(int argc, const char **argv) {
 #else
   constexpr int PipelineStages = 2;
 #endif
-
 #ifdef IS_FLOAT_E5M2
   using ElementQ = cutlass::float_e5m2_t;
   using ElementK = cutlass::float_e5m2_t;
