@@ -576,9 +576,7 @@ struct FMHAConfig {
         MainloopDispatchPolicy, Causal,
         TiledMMAQK, TiledMMAPV, VTiles,
         TensorQ, TensorK, TensorV,
-        GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV,
-        SubgroupLayoutQK
-    >;
+        GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV>;
 
     // Epilogue
     using CollectiveEpilogue = cutlass::fmha::collective::FMHAFwdEpilogue<

@@ -74,13 +74,11 @@ template <int Stages,
           bool CausalMask_,
           class TiledMMAQK_, class TiledMMAPV_, int VTiles_,
           class TensorQ_, class TensorK_, class TensorV_,
-          class TiledCopyQ_, class TiledCopyK_, class TiledCopyV_,
-          class SubgroupLayoutQK_>
+          class TiledCopyQ_, class TiledCopyK_, class TiledCopyV_>
 struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
                        TiledMMAQK_, TiledMMAPV_, VTiles_,
                        TensorQ_, TensorK_, TensorV_,
-                       TiledCopyQ_, TiledCopyK_, TiledCopyV_,
-                       SubgroupLayoutQK_> {
+                       TiledCopyQ_, TiledCopyK_, TiledCopyV_> {
   //
   // Type Aliases
   //
@@ -90,7 +88,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
   using TileShapePV = decltype(TiledMMAPV{}.tile_mnk());
   static constexpr int VTiles = VTiles_;
   using MmaAtomShapeQK = typename TiledMMAQK::AtomShape_MNK;
-  using SubgroupLayoutQK = SubgroupLayoutQK_;
+  using SubgroupLayoutQK = decltype(TiledMMAQK{}.get_atom_layout_mnk());
   using SGPerWG = decltype(product(take<1,4>(shape(typename TiledMMAQK::ThrLayoutVMNK{}))));
 
   using TensorQ = TensorQ_;
@@ -177,7 +175,6 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
              int              blk_k1,
              int              thr_id,
              int              seq_len,
-             int              seq_coord,
              int              full_tile_offset,
              int              discard_seq_coord) {
     using namespace sycl::ext::oneapi::this_work_item;
@@ -198,7 +195,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
     Tensor cK = make_identity_tensor(K_2D.shape());             // (k,d)
     Tensor cV = make_identity_tensor(V_2D.shape());             // (v,k)
     Tensor cP = make_identity_tensor(take<0,2>(TileShapeQK{})); // (q,k)
-
+    
     /* Partition global tensors into workgroup tiles */
     Tensor gQ       = local_tile(cQ, TileShapeQK{}, append(blk_qv,_),             Step<_1,X,_1>{});   // (q,d,D)
     Tensor gK       = local_tile(cK, TileShapeQK{}, make_coord(_,_,_),            Step<X,_1,_1>{});   // (k,d,K,D)
@@ -225,6 +222,8 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
     auto tQgQ = thr_copy_q.partition_S(gQ);                // (atom_val,q',d',D)
     auto tKgK = thr_copy_k.partition_S(gK);                // (atom_val,k',d',K,D)
     auto tVgV = thr_copy_v.partition_S(gV_split);          // (atom_val,v',k',VV,K)
+
+    auto cS_thread = thr_mma_qk.partition_C(cP);
 
     /* Create register fragments for MMA and copies */
     auto tQrQ = thr_copy_q.partition_sg_fragment_D(gQ(_,_,0));
@@ -298,17 +297,13 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
       /* Causal masking */
       if constexpr (CausalMask) {
         if (K == blk_k1 - 1) {
-          int item_id = get_sub_group().get_local_id()[0];
-          int base_col = item_id + K * get<1>(TileShapeQK{});
           CUTLASS_PRAGMA_UNROLL
-          for (int n = 0; n < shape<2>(tSrS.shape()); ++n) {
-            int col_idx = base_col + n * get<1>(MmaAtomShapeQK());
-            CUTLASS_PRAGMA_UNROLL
-            for (int m = 0; m < shape<0>(tSrS.shape()); ++m) {
-              int row_idx = seq_coord + m;
-              if (col_idx - full_tile_offset > row_idx - discard_seq_coord) {
-                tSrS(m, 0, n) = ElementS(-INFINITY);
-              }
+          for (int i = 0; i < tSrS.size(); ++i) {
+            // Need to get global col and row indices to mask the elements
+            int row_idx = get<0>(cS_thread(i)) + get<0>(blk_qv) * get<0>(TileShapeQK{});
+            int col_idx = get<1>(cS_thread(i)) + K * get<1>(TileShapeQK{});
+            if (col_idx - full_tile_offset > row_idx - discard_seq_coord) {
+              tSrS(i) = ElementS(-INFINITY);
             }
           }
         }

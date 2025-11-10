@@ -228,7 +228,7 @@ public:
                tArA, tA_max, tA_sum,
                blk_qv, 0, k_blocks,
                thr_id, seq_len,
-               seq_coord, full_tile_offset, discard_seq_coord);
+               full_tile_offset, discard_seq_coord);
       if constexpr (!is_empty_v<MainloopSharedStorage> && !is_empty_v<EpilogueSharedStorage>) {
         sycl::group_barrier(get_work_group<3>());
       }
