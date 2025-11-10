@@ -299,8 +299,8 @@ Now that we have the basic thread mapping rule, let's apply it to a simple block
     \end{array}
     \end{array}
 ```
-The Subgroup View shows all the data that the entire subgroup owns. The idea here is that the subgroup owns 32 values, enumerated in the order shown. These indices represent the order of elements in registers.
-Recall that Intel GPUs have no notion of a "register owned by a thread". Registers belong to subgroups, because it is a SIMD architecture.
+The subgroup view shows the data that the entire subgroup owns. The idea here is that the subgroup owns 32 values, enumerated in the order shown. These indices represent the order of elements in registers.
+Recall that Intel GPUs have no notion of a "register owned by a thread." Registers belong to subgroups, because it is a SIMD architecture.
 
 (Following CuTe convention, `TxVy` means thread `x`, value `y`.)
 
