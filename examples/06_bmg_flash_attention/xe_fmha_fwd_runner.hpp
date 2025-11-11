@@ -427,7 +427,27 @@ template <class FMHAKernel> struct ExampleRunner {
     block_O.reset(static_cast<std::size_t>(batch) * seq_len_qo * num_heads_q * head_size_vo);
     block_ref_O.reset(static_cast<std::size_t>(batch) * seq_len_qo * num_heads_q * head_size_vo);
 
-    initialize_block(block_Q, seed + 2023);
+    // initialize_block(block_Q, seed + 2023);
+    std::vector<ElementQ> host_q(block_Q.size());
+    for (int b =0; b < batch; b++) {
+      for (int s =0; s < seq_len_qo; s++) {
+        for (int h =0; h < num_heads_q; h++) {
+          for (int d =0; d < head_size_qk; d++) {
+            size_t index = 0;
+            if (options.layout == "NHD") {
+              index = b * seq_len_qo * num_heads_q * head_size_qk + s * num_heads_q * head_size_qk + h * head_size_qk + d;
+            } else if (options.layout == "HND") {
+              index = b * num_heads_q * seq_len_qo * head_size_qk + h * seq_len_qo * head_size_qk + s * head_size_qk + d;
+            }
+            // host_q[index] = static_cast<ElementQ>(13.f);
+            host_q[index] = static_cast<ElementQ>(h / 100 + s * 1000 + d);
+          }
+        }
+      }
+    }
+    compat::memcpy<ElementQ>(block_Q.get(), host_q.data(), host_q.size());
+    compat::wait();
+
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
 

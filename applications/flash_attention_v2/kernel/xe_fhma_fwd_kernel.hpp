@@ -179,19 +179,17 @@ public:
     auto &p = params.kernel;
     ProblemShape const& s = p.shape;
     int head_group_q = s.num_heads_q / s.num_heads_kv;
-
     int thr_id = int(ThreadIdxX());
 
     TileScheduler tile_scheduler{params.scheduler};
 
     CUTLASS_PRAGMA_NO_UNROLL
     for (; tile_scheduler.is_valid(); ++tile_scheduler) {
-      auto [blk_q, blk_v, head_q, idx_b] = tile_scheduler.get_block_coord(); // (Q,V,h,b)
+      auto [blk_q, blk_v, head_kv, idx_b] = tile_scheduler.get_block_coord(); // (Q,V,h,b)
       auto blk_qv = make_coord(blk_q, blk_v);
-      int head = head_q / head_group_q;
+      int head_q = head_kv * head_group_q;
 
       const int k_blocks = cute::ceil_div(s.seq_len_kv, get<1>(TileShapeQK{}));
-
       auto shape_Q = make_shape(s.seq_len_qo, s.head_size_qk, s.num_heads_q,  s.batch);
       auto shape_K = make_shape(s.seq_len_kv, s.head_size_qk, s.num_heads_kv, s.batch);
       auto shape_V = make_shape(s.head_size_vo, s.seq_len_kv, s.num_heads_kv, s.batch);
@@ -212,12 +210,12 @@ public:
 
       // Main loop
       CollectiveMainloop mainloop(params.mainloop, shared_storage.mainloop);
-      mainloop(Q(_,_,head_q,idx_b),
-               K(_,_,head,idx_b),
-               V(_,_,head,idx_b),
+      mainloop(Q(_,_,_,idx_b),
+               K(_,_,head_kv,idx_b),
+               V(_,_,head_kv,idx_b),
                tArA, tA_max, tA_sum,
                blk_qv, 0, k_blocks,
-               thr_id);
+               head_kv, thr_id);
 
       if constexpr (!is_empty_v<MainloopSharedStorage> && !is_empty_v<EpilogueSharedStorage>) {
         sycl::group_barrier(get_work_group<3>());
