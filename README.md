@@ -67,6 +67,7 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
   - New `make_block_2d_copy_{C,D}` variants with subtiling support ([#48d82e8](https://github.com/intel/sycl-tla/commit/48d82e87))
   - Support for size-1 fragments in block 2D copies ([#2212f1b](https://github.com/intel/sycl-tla/commit/2212f1b9))
 - **4-bit VNNI Reorders ([#593](https://github.com/intel/sycl-tla/pull/593))**: New 4-bit unit stride to VNNI reorder operations
+- **Batch GEMM with new APIs ([#540](https://github.com/intel/sycl-tla/pull/540))**: Enhanced Batch GEMM with new streamlined APIs
 - **Grouped GEMM with new APIs ([#574](https://github.com/intel/sycl-tla/pull/574))**: Enhanced grouped GEMM with new streamlined APIs
 
   **See the [CHANGELOG](CHANGELOG-SYCL.md) for details of all past releases and updates.**
@@ -307,6 +308,34 @@ SYCL*TLA is released by INTEL Corporation as Open Source software under the
 # Contributors
 
 The official list of SYCL*TLA developers and contributors is available here: [CONTRIBUTORS](CONTRIBUTORS.md).
+
+# Contributing
+
+## Pull Request Templates
+
+We provide concise PR templates to streamline documentation:
+
+### Quick Start
+
+**GitHub CLI:**
+```bash
+gh pr create --template .github/PULL_REQUEST_TEMPLATE/bug_fix.md
+gh pr create --template .github/PULL_REQUEST_TEMPLATE/performance.md
+gh pr create --template .github/PULL_REQUEST_TEMPLATE/feature.md
+gh pr create --template .github/PULL_REQUEST_TEMPLATE/refactoring.md
+```
+
+**GitHub Web:** Add `?template=<name>.md` to PR URL (e.g., `?template=bug_fix.md`)
+
+### Which Template?
+
+- 🐛 **Bug fixes** → `bug_fix.md` - Root cause + verification
+- ⚡ **Performance** → `performance.md` - Profiling data + benchmarks
+- ✨ **Features** → `feature.md` - API design + examples
+- 🔨 **Refactoring** → `refactoring.md` - Refactored/Redesigned code
+- 📝 **Mixed/Other** → Default template
+
+See [`.github/PULL_REQUEST_TEMPLATE/README.md`](.github/PULL_REQUEST_TEMPLATE/README.md) for details.
 
 # Copyright
 
