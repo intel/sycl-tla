@@ -182,7 +182,13 @@ public:
 
     int thr_id = int(ThreadIdxX());
     int sub_group_id = thr_id / intel::sg_size;
-    int SGTileQ = get<0>(shape_div(TileShapeQK{}, shape(SubgroupLayoutQK{})));
+    int q_sg_tile = get<0>(shape_div(TileShapeQK{}, shape(SubgroupLayoutQK{})));
+
+    auto cS = make_identity_tensor(take<0,2>(TiledMMAQK{}.tile_mnk()));
+    auto tScS = TiledMMAQK{}.get_slice(thr_id).partition_C(cS);
+    auto q_offset_wi = get<0>(tScS(0));
+    auto q_offset_sg = group_broadcast(sycl::ext::oneapi::this_work_item::get_sub_group(), q_offset_wi, 0);
+
     TileScheduler tile_scheduler{params.scheduler};
 
     CUTLASS_PRAGMA_NO_UNROLL
@@ -195,11 +201,11 @@ public:
       auto discard_seq_coord = s.seq_len_qo - offset;
       auto full_tile_offset = s.seq_len_kv - offset;
 
-      int seq_coord = cute::min(s.seq_len_qo, (blk_q * get<0>(TileShapeQK{}) + (sub_group_id / get<1>(shape(SubgroupLayoutQK{}))) * SGTileQ));
+      int seq_coord = cute::min(s.seq_len_qo, (blk_q * get<0>(TileShapeQK{}) + q_offset_sg));
 
       if (CollectiveMainloop::CausalMask && seq_coord < discard_seq_coord) continue;
       
-      const int seq_len = CollectiveMainloop::CausalMask ? full_tile_offset + cute::min(s.seq_len_kv, seq_coord - discard_seq_coord) + SGTileQ : s.seq_len_kv;
+      const int seq_len = CollectiveMainloop::CausalMask ? full_tile_offset + cute::min(s.seq_len_kv, seq_coord - discard_seq_coord) + q_sg_tile : s.seq_len_kv;
       const int k_blocks = cute::ceil_div(seq_len, get<1>(TileShapeQK{}));
 
       auto shape_Q = make_shape(s.seq_len_qo, s.head_size_qk, s.num_heads_q,  s.batch);

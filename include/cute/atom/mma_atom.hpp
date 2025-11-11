@@ -225,13 +225,11 @@ struct TiledMMA : MMA_Atom
 
   using ThrLayoutVMNK = decltype(tiled_product(AtomThrID{}, AtomLayoutMNK{}));
   ThrLayoutVMNK thr_layout_vmnk_;
-  AtomLayoutMNK atom_layout_mnk_;
 
   CUTE_HOST_DEVICE constexpr
   TiledMMA(MMA_Atom const& mma_atom = {}, AtomLayoutMNK const& thr_layout_mnk = {})
     : MMA_Atom(mma_atom),
-      thr_layout_vmnk_(tiled_product(AtomThrID{}, thr_layout_mnk)),
-      atom_layout_mnk_(thr_layout_mnk) {}
+      thr_layout_vmnk_(tiled_product(AtomThrID{}, thr_layout_mnk)) {}
 
   CUTE_HOST_DEVICE constexpr auto
   get_thr_layout_vmnk() const {
@@ -240,7 +238,7 @@ struct TiledMMA : MMA_Atom
 
   CUTE_HOST_DEVICE constexpr auto
   get_atom_layout_mnk() const {
-    return atom_layout_mnk_;
+    return AtomLayoutMNK{};
   }
 
   // Tile a tensor or a layout from shape

@@ -86,7 +86,6 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
   using TileShapeQK = decltype(TiledMMAQK{}.tile_mnk());
   using TileShapePV = decltype(TiledMMAPV{}.tile_mnk());
   static constexpr int VTiles = VTiles_;
-  using MmaAtomShapeQK = typename TiledMMAQK::AtomShape_MNK;
   using SubgroupLayoutQK = decltype(TiledMMAQK{}.get_atom_layout_mnk());
   using SGPerWG = decltype(product(take<1,4>(shape(typename TiledMMAQK::ThrLayoutVMNK{}))));
 
@@ -195,6 +194,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
     Tensor cV = make_identity_tensor(V_2D.shape());             // (v,k)
     Tensor cP = make_identity_tensor(take<0,2>(TileShapeQK{})); // (q,k)
 
+
     /* Partition global tensors into workgroup tiles */
     Tensor gQ       = local_tile(cQ, TileShapeQK{}, append(blk_qv,_),             Step<_1,X,_1>{});   // (q,d,D)
     Tensor gK       = local_tile(cK, TileShapeQK{}, make_coord(_,_,_),            Step<X,_1,_1>{});   // (k,d,K,D)
@@ -221,8 +221,6 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
     auto tQgQ = thr_copy_q.partition_S(gQ);                // (atom_val,q',d',D)
     auto tKgK = thr_copy_k.partition_S(gK);                // (atom_val,k',d',K,D)
     auto tVgV = thr_copy_v.partition_S(gV_split);          // (atom_val,v',k',VV,K)
-
-    auto cS_thread = thr_mma_qk.partition_C(cP);
 
     /* Create register fragments for MMA and copies */
     auto tQrQ = thr_copy_q.partition_sg_fragment_D(gQ(_,_,0));
@@ -296,11 +294,14 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
       /* Causal masking */
       if constexpr (CausalMask) {
         if (K == blk_k1 - 1) {
+          // Need to get global col and row indices to mask the elements
+          Tensor cPgP = make_identity_tensor(make_shape(seq_len, seq_len));
+          Tensor gP = local_tile(cPgP, take<0,2>(TileShapeQK{}), make_coord(get<0>(blk_qv), K));
+          auto cS_thread = thr_mma_qk.partition_C(gP);
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < tSrS.size(); ++i) {
-            // Need to get global col and row indices to mask the elements
-            int row_idx = get<0>(cS_thread(i)) + get<0>(blk_qv) * get<0>(TileShapeQK{});
-            int col_idx = get<1>(cS_thread(i)) + K * get<1>(TileShapeQK{});
+            int row_idx = get<0>(cS_thread(i));
+            int col_idx = get<1>(cS_thread(i));
             if (col_idx - full_tile_offset > row_idx - discard_seq_coord) {
               tSrS(i) = ElementS(-INFINITY);
             }

@@ -577,7 +577,7 @@ struct FMHAConfig {
         TiledMMAQK, TiledMMAPV, VTiles,
         TensorQ, TensorK, TensorV,
         GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV
-        >;
+    >;
 
     // Epilogue
     using CollectiveEpilogue = cutlass::fmha::collective::FMHAFwdEpilogue<
