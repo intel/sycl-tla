@@ -569,6 +569,8 @@ int main(int argc, const char** argv)
 
   using GmemTiledCopyA = void; //XE_LOAD_2D<16, 32, 32>;
   using GmemTiledCopyB = void; //XE_LOAD_2D_VNNI<16, 32, 32>;
+  using GmemTiledCopyC = XE_LOAD_2D<32, 8, 16>;
+  using GmemTiledCopyD = XE_STORE_2D<32, 8, 16>;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
@@ -578,7 +580,7 @@ int main(int argc, const char** argv)
   constexpr int PipelineStages = 2;
   // Dispatch to grouped gemm algorithm
   using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1StagedGroup<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16Group;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGroupGeneric;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
           ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
@@ -593,9 +595,9 @@ int main(int argc, const char** argv)
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD*>,
           FusionCallBacks,
-          XE_2D_U32x8x16_LD_N,
+          GmemTiledCopyC,
           void, void,
-          XE_2D_U32x8x16_ST_N,
+          GmemTiledCopyD,
           void, void>;
 
 // Mainloop

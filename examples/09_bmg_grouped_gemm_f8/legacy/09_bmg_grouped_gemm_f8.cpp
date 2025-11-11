@@ -68,7 +68,7 @@
       $ export IGC_VectorAliasBBThreshold=10000
 */
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
-#include "cutlass/epilogue/collective/xe_array_epilogue.hpp"
+#include "cutlass/epilogue/collective/xe_array_epilogue_legacy.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
 #include "cutlass/gemm/group_array_problem_shape.hpp"
 #include "cutlass/gemm/device/gemm_universal.h"

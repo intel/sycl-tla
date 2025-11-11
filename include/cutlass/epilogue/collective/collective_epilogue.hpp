@@ -72,6 +72,8 @@ class CollectiveEpilogue {
 #if defined (SYCL_INTEL_TARGET)
 #include "xe_epilogue.hpp"
 #include "xe_array_epilogue.hpp"
+#include "xe_array_epilogue_legacy.hpp"
+
 #endif
 //
 // Conv

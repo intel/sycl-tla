@@ -69,7 +69,7 @@ template <
   class CopyOpR2S_
 >
 class CollectiveEpilogue<
-    IntelXeGroupGeneric,
+    IntelXeXMX16Group,
     CtaTileMNK_,
     ElementC_,
     StrideC_,
@@ -87,7 +87,7 @@ public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = IntelXeGroupGeneric;
+  using DispatchPolicy = IntelXeXMX16Group;
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
   using ElementC = ElementC_;
@@ -106,11 +106,7 @@ public:
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
   using GmemTiledCopyC = CopyOpG2R;
   using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
-                                             CopyOpR2G, XE_STORE_2D<32, 8, 16>>;
-  static_assert(std::is_same_v<GmemTiledCopyC, XE_LOAD_2D<32, 8, 16>>,
-              "Current epilogue implementation only support load op XE_LOAD_2D<32, 8, 16>");
-  static_assert(std::is_same_v<GmemTiledCopyD, XE_STORE_2D<32, 8, 16>>,
-              "Current epilogue implementation only support store op XE_STORE_2D<32, 8, 16>");
+                                             CopyOpR2G, XE_2D_U32x8x16_ST_N>;
   using ElementOutput = ElementD;
   using ElementCompute = typename ThreadEpilogueOp::ElementCompute;
   using ElementAccumulator = ElementCompute;
@@ -133,12 +129,25 @@ public:
   static_assert(std::is_same_v<SmemLayoutAtomC, void>, "Copy operation to shared memory is not supported");
   static_assert(std::is_same_v<SmemLayoutAtomD, void>, "Copy operation to shared memory is not supported");
 
+  using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
+  
+  using Trait_D = Copy_Traits<GmemTiledCopyD, InternalStrideD>;
+  using val_layout_store_D = decltype(make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
+  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{},
+                                             Layout<CopyThreadShape>{},
+                                             val_layout_store_D{}));
 private:
   constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
   
   using NonVoidElementC = conditional_t<is_source_supported, ElementC, ElementD>;
-
+  using Trait_C = Copy_Traits<GmemTiledCopyC, InternalStrideC>;
+  using NonVoidTrait_C = conditional_t<is_source_supported, Trait_C, Trait_D>;
+  using val_layout_load_C = decltype(make_layout(shape_div(typename NonVoidTrait_C::BlockShape{}, CopyThreadShape{})));
+  using NonVoidValLayoutLoad_C = conditional_t<is_source_supported, val_layout_load_C, val_layout_store_D>;
+  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<NonVoidTrait_C, NonVoidElementC>{},
+                                             Layout<CopyThreadShape>{},
+                                             NonVoidValLayoutLoad_C{}));
 public:
 
   using EmptyType = cute::tuple<>;
@@ -173,12 +182,12 @@ public:
   // Device side epilogue params
   struct Params {
     typename FusionCallbacks::Params thread{};
+    XE_Copy_C xe_load_c;
+    XE_Copy_D xe_store_d;
     ElementC const** ptr_C;
     StrideC dC;
     ElementD** ptr_D;
     StrideD dD;
-    TensorC mC_mnl;
-    TensorD mD_mnl;
   };
 
   //
@@ -195,52 +204,30 @@ public:
     auto problem_shape_MNL = repeat_like(typename ProblemShape::UnderlyingProblemShape{}, int32_t(1));
     auto [M, N, L] = problem_shape_MNL;
 
-    ElementC const* ptr_C_first_batch = reinterpret_cast<ElementC const*>(args.ptr_C);
-    auto mC_mnl = make_tensor(make_gmem_ptr(ptr_C_first_batch), make_layout(make_shape(M, N, L), InternalStrideC{}));
-    ElementD* ptr_D_first_batch = reinterpret_cast<ElementD*>(args.ptr_D);
-    auto mD_mnl = make_tensor(make_gmem_ptr(ptr_D_first_batch), make_layout(make_shape(M, N, L), InternalStrideD{}));
+    XE_Copy_C xe_load_c = {};
+    if constexpr (is_source_supported) {
+      ElementC const* ptr_C_first_batch = reinterpret_cast<ElementC const*>(args.ptr_C);
+      TensorC mC_mnl = make_tensor(make_gmem_ptr(ptr_C_first_batch), make_layout(make_shape(M, N, L), InternalStrideC{}));
+      xe_load_c = {xe_load_c.with(mC_mnl)};
+    }
+
+    XE_Copy_D xe_store_d = {};
+    if constexpr (is_destination_supported) {
+      ElementD* ptr_D_first_batch = reinterpret_cast<ElementD*>(args.ptr_D);
+      TensorD mD_mnl = make_tensor(make_gmem_ptr(ptr_D_first_batch), make_layout(make_shape(M, N, L), InternalStrideD{}));
+      xe_store_d = {xe_store_d.with(mD_mnl)};
+    }
 
     return {
       FusionCallbacks::to_underlying_arguments(problem_shape, args.thread, workspace),
+      xe_load_c,
+      xe_store_d,
       args.ptr_C,
       args.dC,
       args.ptr_D,
-      args.dD,
-      mC_mnl,
-      mD_mnl
+      args.dD
     };
   }
-
-  template<typename Tensor>
-  CUTLASS_DEVICE auto reshape_with_unit_insertion(Tensor&& tensor) {
-    using namespace cute;
-    
-    auto orig_layout = tensor.layout();
-    auto orig_shape = orig_layout.shape();
-    auto orig_stride = orig_layout.stride();
-    
-    auto first_dim = get<0>(orig_shape);
-    auto outer_part = get<0>(first_dim); 
-    auto inner_part = get<1>(first_dim);
-    
-    auto first_stride = get<0>(orig_stride); 
-    auto outer_stride = get<0>(first_stride); 
-    auto inner_stride = get<1>(first_stride); 
-    
-    auto target_shape = make_shape(
-        make_shape(outer_part, _1{}), 
-        get<0>(inner_part),              
-        get<1>(inner_part)  
-    );
-    
-    auto target_stride = make_stride(
-        make_stride(outer_stride, _0{}),  
-        get<0>(inner_stride), 
-        get<1>(inner_stride) 
-    );
-    
-    return make_tensor(tensor.data(), make_layout(target_shape, target_stride));
-}
 
   template <class ProblemShape>
   static size_t
@@ -330,6 +317,7 @@ public:
       int thread_idx,
       LoadStoreTensor const& load_store_tensors) {
     
+    (void) tiled_mma;
     using namespace cute;
 
     static_assert(cute::rank(CtaTileMNK{}) == 3, "CtaTileMNK must be rank-3: [CTA_M, CTA_N, CTA_K]");
@@ -366,6 +354,8 @@ public:
     auto m_sg = get_sub_group_id() / ATOM_N;
     auto n_sg = get_sub_group_id() % ATOM_N;
 
+    auto mn_shape = shape(typename decltype(params.xe_store_d)::Tiler_MN{});
+
     auto sg_local_m_coord = get_sub_group_id() / ATOM_N;
     auto sg_local_n_coord = get_sub_group_id() % ATOM_N;
 
@@ -374,18 +364,18 @@ public:
     auto sg_coord = make_coord(sg_m_coord, sg_n_coord, k_coord, l_coord);
 
     bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
-
-     auto copy_c = make_block_2d_copy_CD(GmemTiledCopyC{}, tiled_mma, params.mC_mnl(_,_,0));
-     auto copy_d = make_block_2d_copy_CD(GmemTiledCopyD{}, tiled_mma, params.mD_mnl(_,_,0));
     
     // Represent the full output tensor
     Tensor mD_mnl = cute::get_xe_tensor(make_shape(M,N,L));
 
     // Tile the output tensor per WG and select the tile for current WG
-    Tensor gD = local_tile(mD_mnl, take<0,2>(CtaTileMNK{}), make_coord(m_coord,n_coord,l_coord));  // (BLK_M,BLK_N)
+    Tensor g_wg_D = local_tile(mD_mnl, take<0,2>(CtaTileMNK{}), make_coord(m_coord,n_coord,l_coord));  // (BLK_M,BLK_N)
+    
+    // Tile the output tensor per SG and select tile for the current SG
+    Tensor gD = local_tile(g_wg_D, take<0,2>(SubgroupTileShape{}), make_coord(m_sg,n_sg));            // (SG_M,SG_N)
 
-    auto thread_xe_store_d = copy_d.get_thread_slice(thread_idx);
-    Tensor tCgD = reshape_with_unit_insertion(thread_xe_store_d.partition_D(gD));
+    auto thread_xe_store_d = params.xe_store_d.get_thread_slice(thread_idx);
+    Tensor tCgD = thread_xe_store_d.partition_D(gD);
 
     Tensor trC = make_tensor<NonVoidElementC>(Shape<Int<FragmentSize>>{});
     Tensor trD_compute = make_tensor<ElementCompute>(Shape<Int<FragmentSize>>{});
@@ -393,8 +383,7 @@ public:
     // Because Sm90 uses shared memory, they are not tied to using the same accumulator values
     // for MMA and Epilogue. But because we are operating directly in the accumulators, we need to be
     // sure that we are operating on the same values.
-    ThrCopy thread_g2r = copy_c.get_slice(thread_idx);
-    auto mn_shape = shape(typename decltype(copy_d)::Tiler_MN{})
+    ThrCopy thread_g2r = params.xe_load_c.get_slice(thread_idx);
 
     // OOB predication for tile quantization "residue"
     // Absolute coordinate tensors (dynamic)
@@ -415,7 +404,7 @@ public:
                       sg_coord,
                       tiled_mma,
                       mn_shape,
-                      copy_d,
+                      params.xe_store_d,
                       cD,
                       residue_mn,
                       tRS_cD,
@@ -449,7 +438,7 @@ public:
         if constexpr (is_source_supported) {
           if (is_C_load_needed) {
             //cordinates for C and D are the same
-            copy(copy_c.with(get<0>(load_store_tensors)(_, _, 0)), tCgD(_, epi_m, epi_n), trC);
+            copy(params.xe_load_c.with(get<0>(load_store_tensors)), tCgD(_, epi_m, epi_n), trC);
           }
         }
 
@@ -468,7 +457,7 @@ public:
           for (int i = 0; i < size(trD_compute_frag); ++i) {
             trD_frag(i) = cutlass::NumericArrayConverter<ElementOutput, ElementCompute, FragmentSize>{}(trD_compute_frag(i));
           }
-          copy(copy_d.with(get<1>(load_store_tensors)(_, _, 0)), trD, tCgD(_, epi_m, epi_n));
+          copy(params.xe_store_d.with(get<1>(load_store_tensors)), trD, tCgD(_, epi_m, epi_n));
         }
       }
     }
