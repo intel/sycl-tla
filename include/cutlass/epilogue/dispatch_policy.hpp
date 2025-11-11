@@ -313,7 +313,7 @@ struct IntelXeXMX16Group {
 // the integration of new MMA atoms (XE_DPAS_TT) and copy atoms for Intel XE architecture
 struct IntelXeGroupGeneric {
   static constexpr int SubgroupSize = 16;
-}
+};
 #endif
 
 //////////////////////////////////////////////////////////////////////////////

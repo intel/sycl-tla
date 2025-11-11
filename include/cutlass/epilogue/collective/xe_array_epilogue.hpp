@@ -394,7 +394,7 @@ public:
     // for MMA and Epilogue. But because we are operating directly in the accumulators, we need to be
     // sure that we are operating on the same values.
     ThrCopy thread_g2r = copy_c.get_slice(thread_idx);
-    auto mn_shape = shape(typename decltype(copy_d)::Tiler_MN{})
+    auto mn_shape = shape(typename decltype(copy_d)::Tiler_MN{});
 
     // OOB predication for tile quantization "residue"
     // Absolute coordinate tensors (dynamic)
