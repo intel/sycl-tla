@@ -86,6 +86,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
   using TileShapeQK = decltype(TiledMMAQK{}.tile_mnk());
   using TileShapePV = decltype(TiledMMAPV{}.tile_mnk());
   static constexpr int VTiles = VTiles_;
+  static constexpr int QGroupSize = 1;
 
   using SGPerWG = decltype(product(take<1,4>(shape(typename TiledMMAQK::ThrLayoutVMNK{}))));
 
@@ -94,6 +95,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
   using TensorV = TensorV_;
 
   using TensorQ2D = decltype(TensorQ_{}(append<rank_v<TensorQ_>>(make_coord(_,_),0)));
+  using TensorQ3D = decltype(TensorQ_{}(append<rank_v<TensorQ_>>(make_coord(_,_,_),0)));
   using TensorK2D = decltype(TensorK_{}(append<rank_v<TensorK_>>(make_coord(_,_),0)));
   using TensorV2D = decltype(TensorV_{}(append<rank_v<TensorV_>>(make_coord(_,_),0)));
 
@@ -119,6 +121,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
 
   using FragS = FragC<TiledMMAQK>;
   using FragSRow = decltype(reduce<1>(FragS{}, sycl::plus<void>{}));
+  using ElementQ = typename TiledMMAQK::ValTypeA;
   using ElementS = typename TiledMMAQK::ValTypeD;
 
   using SingleFragA = FragC<TiledMMAPV>;                          // (atom val,q',v')
@@ -137,15 +140,23 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
   using Params = Arguments;
 
   // SLM data
-  struct SharedStorage {};
+  struct SharedStorage {
+    // Allocate shared memory for QxK tile
+    cute::array<ElementQ, QGroupSize * product(take<0, 2>(TileShapeQK{}))> Q_smem;
+    cute::array<ElementQ, QGroupSize * product(take<0, 2>(TileShapeQK{}))> QPreLoad;
+  };
 
+private:
+  SharedStorage &shared;
+
+public:
   Params params;
 
   //
   // Methods
   //
 
-  FMHAFwdMainloop(Params const& params_, SharedStorage&) : params(params_) {}
+  FMHAFwdMainloop(Params const &params_, SharedStorage &shared_) : params(params_), shared(shared_) {}
 
   static constexpr
   Params to_underlying_arguments(Arguments const &args, void * /* workspace */) {
@@ -162,7 +173,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
   template <typename QVCoord>
   CUTLASS_DEVICE
   void
-  operator()(TensorQ2D const& Q_2D,     // (q,d)
+  operator()(TensorQ3D const& Q_3D,     // (q,d)
              TensorK2D const& K_2D,     // (k,d)
              TensorV2D const& V_2D,     // (d,k)
              FragA          & tArA,     // Output accumulator (q,v)
@@ -171,6 +182,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
              QVCoord          blk_qv,   // WG tile indices: (Q,V)
              int              blk_k0,   // K block range: [K0,K1)
              int              blk_k1,
+             int              blk_head_kv,
              int              thr_id) { // Work-item ID
 
     using namespace sycl::ext::oneapi::this_work_item;
@@ -185,8 +197,10 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
     // Primed letters (q', k', ...) refer to atom block indices.
 
     auto tile_shape_v = make_shape(get<1>(TileShapePV{}) * C<VTiles>{}, get<2>(TileShapePV{}));
-
+    int blk_head_q_start = blk_head_kv * QGroupSize;
     /* Create proxy coordinate tensors for Q/K/P/V */
+  
+    auto Q_2D = Q_3D(_,_,blk_head_q_start);
     Tensor cQ = make_identity_tensor(Q_2D.shape());             // (q,d)
     Tensor cK = make_identity_tensor(K_2D.shape());             // (k,d)
     Tensor cV = make_identity_tensor(V_2D.shape());             // (v,k)
@@ -267,7 +281,24 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
 
     /* Check if */
     bool check_remainder_k = (shape<0>(K_2D) % get<1>(TileShapeQK{}) != 0);
-
+    
+    // PreloadQ All Q into SLM
+    auto tQrQPreLoadSmem = make_tensor(make_smem_ptr<ElementQ>(&shared.QPreLoad), make_shape(QGroupSize, size<4>(tKgK), 16 * SGPerWG{}, size(tQrQ.layout())));
+    barrier_arrive(ScopeWorkgroup, SemanticsRelease | SemanticsWGMemory);
+    for (int Q = 0; Q < QGroupSize; Q++) {
+      for (int D = 0; D < size<4>(tKgK); D++) {
+        copy(copy_q, tQgQ(_,_,_,D), tQrQ);
+        copy_block_r2s(tQrQ, tQrQPreLoadSmem(Q,D,thr_id,_));
+        // for (int i = 0; i < tQrQ.size(); i++) {
+        //   tQrQPreLoadSmem(Q, D, thr_id, i) = tQrQ(i);
+        // }
+        if (thread(0, 0)) {
+          print("Preload Q to SLM QGroup:", Q, " D:", D, "\n");  
+          print_tensor(tQrQ);
+        }
+      }
+    }
+    barrier_wait(ScopeWorkgroup, SemanticsAcquire | SemanticsWGMemory);
     /* Main loop, blocked in k. */
     for (int K = blk_k0; K < blk_k1; K++) {
       /* Split barrier to keep threads together */
@@ -276,13 +307,50 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
       /* GEMM 1: S = K * Q */
       clear(tSrS);    /* TODO: fuse w/ initial gemm call */
       for (int D = 0; D < size<4>(tKgK); D++) {
-        copy(copy_q, tQgQ(_,_,_,D),   tQrQ);
         copy(copy_k, tKgK(_,_,_,K,D), tKrK);
-
-        reorder(tQrQ, tSrQ);
         reorder(tKrK, tSrK);
+        for (int Q = 0; Q < QGroupSize; Q++) {
+          // Load from SLM
+          // barrier_arrive(ScopeWorkgroup, SemanticsRelease | SemanticsWGMemory);
+          copy_block_s2r(tQrQPreLoadSmem(Q,D,thr_id,_), tQrQ);// 0 QGroupSize index
+          // for (int i = 0 ; i < tQrQ.size(); i++) {
+          //   tQrQ(i) = tQrQPreLoadSmem(Q, D, thr_id, i);
+          // }
+          if (thread(0, 0)) {
+            print("Load Q from SLM D:", D, "\n");
+            print_tensor(tQrQ);
+          }
+          // barrier_wait(ScopeWorkgroup, SemanticsAcquire | SemanticsWGMemory);
+          // barrier_arrive(ScopeWorkgroup, SemanticsRelease | SemanticsWGMemory);
 
-        cute::gemm(mma_qk, tSrQ, tSrK, tSrS);
+          reorder(tQrQ, tSrQ);
+
+          cute::gemm(mma_qk, tSrQ, tSrK, tSrS);
+        }
+        if (false && thread(0, 0)) {
+          print("\nQ_2D \n");
+          print(Q_2D); // gmem_ptr[16b](0xffffd556aa400000) o (2,64):(64,_1)
+          print("\ncQ \n");
+          print(cQ); // ArithTuple(_0,_0) o (2,64):(_1@0,_1@1)
+          print("\ngQ \n");
+          print(gQ); // ArithTuple(0,_0) o (_128,_32,2):(_1@0,_1@1,_32@1)
+          print("\ncopy_qQ \n");
+          print(copy_q);
+          print("\nmma_qk \n");
+          print(mma_qk);
+          print("\nthr_copy_q \n");
+          print(thr_copy_q);
+          print("\ntQgQ \n");
+          print(tQgQ); // ArithTuple(0,_0) o (((_16,_2),_1),_1,_1,2):(((_1@0,_16@1),_0),_0,_0,_32@1)
+          print("\ntQrQ \n");
+          print(tQrQ);
+  //         SubgroupTensor
+  // Tensor:           ptr[16b](0x2000000000001400) o (((_16,_2),_1),_1,_1):(((_1,_16),_0),_0,_0)
+  // Subgroup/Layout: ((_16),((_16,_2),_1),(_1,_1)):((_1@1),((_1@0,_16@1),_0),(_0,_0))
+          print("\ntSrQ \n");
+          print(tSrQ);
+        }
+        // barrier_wait(ScopeWorkgroup, SemanticsAcquire | SemanticsWGMemory);
       }
 
       /* V prefetch for GEMM 2 */
@@ -322,6 +390,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_,
         prefetch(prefetch_k, pKgK(_,_,_,K+Stages,D));
       }
 
+      // barrier_wait(ScopeWorkgroup, SemanticsAcquire | SemanticsWGMemory);
       barrier_wait(ScopeWorkgroup);
     }
   }
