@@ -173,7 +173,7 @@ int main(int argc, const char **argv) {
 #if PERSISTENT
   return FMHAConfig<false, ShapeQK, ShapePV, ShapeOut, SubgroupLayoutQK, void, PipelineStages, /*persistent=*/true, ElementQ, ElementK, ElementV>::run(options);
 #else
-  return FMHAConfig<false, ShapeQK, ShapePV, ShapeOut, SubgroupLayoutQK, void, PipelineStages, /*persistent=*/false, ElementQ, ElementK, ElementV>::run(options);
+  return options.is_causal ? FMHAConfig<true, ShapeQK, ShapePV, ShapeOut, SubgroupLayoutQK, void, PipelineStages,  /*persistent=*/false, ElementQ, ElementK, ElementV>::run(options)
+  : FMHAConfig<false, ShapeQK, ShapePV, ShapeOut, SubgroupLayoutQK, void, PipelineStages,  ElementQ, ElementK, ElementV>::run(options);
 #endif
-  // return FMHAConfig<false, ShapeQK, ShapePV, ShapeOut, SubgroupLayoutQK, void, PipelineStages, ElementQ, ElementK, ElementV>::run(options);
 }
