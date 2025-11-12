@@ -697,6 +697,7 @@ struct FMHAConfig {
         GmemTiledCopyO
     >;
 
+    static_assert(persistent && !Causal, "persistent SDPA kernel not support Causal yet");
     using FMHAKernel = conditional_t<is_same_v<Scheduler, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>,
       cutlass::fmha::kernel::XeFMHAFwdDynamicSplitKernel<
         ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>,

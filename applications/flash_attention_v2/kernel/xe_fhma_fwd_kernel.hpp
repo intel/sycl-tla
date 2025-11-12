@@ -590,7 +590,7 @@ public:
               V(_,_,head_kv,idx_b),
               tArA, tA_max, tA_sum,
               blk_qv, start_blk, end_blk, local_k_blocks,
-              thr_id);
+              thr_id, s.seq_len_kv, /*for causal*/0, 0);
 
         // partition id of start batch head id in current wg
         int partition_id = get_partition_id(wg_id, batch_head_id, num_blocks_per_wg, local_k_blocks);
