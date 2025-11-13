@@ -600,7 +600,7 @@ struct TestbedImpl {
     CUTLASS_TRACE_HOST("TestbedImpl::run: Allocating workspace of size " << workspace_size);
 #endif
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
-    
+
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: Calling FlashAttention::can_implement");
 #endif
