@@ -128,20 +128,32 @@ if (CUTLASS_ENABLE_SYCL)
   if(DPCPP_SYCL_TARGET STREQUAL "nvptx64-nvidia-cuda")
     set(SYCL_NVIDIA_TARGET ON)
     add_compile_definitions(SYCL_NVIDIA_TARGET)
-  elseif(DPCPP_SYCL_TARGET STREQUAL "intel_gpu_pvc" OR
-         DPCPP_SYCL_TARGET STREQUAL "spir64" OR
-         DPCPP_SYCL_TARGET STREQUAL "intel_gpu_bmg_g21")
-    set(SYCL_INTEL_TARGET ON)
+  elseif(DPCPP_SYCL_TARGET)
+    string(REPLACE "," ";" LIST_OF_DPCPP_SYCL_TARGETS "${DPCPP_SYCL_TARGET}")
+    foreach(ITEM IN LISTS LIST_OF_DPCPP_SYCL_TARGETS)
+      if(ITEM STREQUAL "intel_gpu_pvc" OR
+         ITEM STREQUAL "spir64" OR
+         ITEM STREQUAL "intel_gpu_bmg_g21")
+        set(SYCL_INTEL_TARGET ON)
+      else()
+        message(FATAL_ERROR "In SYCL target list '${DPCPP_SYCL_TARGET}' ${ITEM} is invalid.")
+      endif()
+    endforeach()
+  else()
+    message(STATUS "DPCPP_SYCL_TARGET not set.")
+  endif()
+
+  if(SYCL_INTEL_TARGET)
     add_compile_definitions(SYCL_INTEL_TARGET)
     add_compile_options(-Wall
-       -Wno-unused-variable
-       -Wno-unused-local-typedef
-       -Wno-unused-but-set-variable
-       -Wno-uninitialized
-       -Wno-reorder-ctor
-       -Wno-logical-op-parentheses
-       -Wno-unused-function
-       -Wno-unknown-pragmas
+      -Wno-unused-variable
+      -Wno-unused-local-typedef
+      -Wno-unused-but-set-variable
+      -Wno-uninitialized
+      -Wno-reorder-ctor
+      -Wno-logical-op-parentheses
+      -Wno-unused-function
+      -Wno-unknown-pragmas
     )
   endif()
 
