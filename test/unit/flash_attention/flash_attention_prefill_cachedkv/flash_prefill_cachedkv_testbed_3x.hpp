@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
  * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
@@ -30,7 +30,7 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief Tests for device-wide Flash Attention Prefill Cached KV interface
+    \brief Tests for device-wide Flash Attention Prefill interface
 */
 
 #pragma once
@@ -38,10 +38,10 @@
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "flash_attention_v2/collective/fmha_fusion.hpp"
-#include "flash_attention_v2/kernel/tile_scheduler_cachedKV.hpp"
+#include "flash_attention_v2/kernel/tile_scheduler.hpp"
 #include "cutlass/util/packed_stride.hpp"
-#include "flash_attention_v2/kernel/xe_flash_attn_prefill_cachedKV.hpp"
-#include "flash_attention_v2/collective/xe_flash_attn_prefill_epilogue_cachedKV.hpp"
+#include "flash_attention_v2/kernel/xe_flash_attn_prefill.hpp"
+#include "flash_attention_v2/collective/xe_flash_attn_prefill_epilogue.hpp"
 #include "flash_attention_v2/collective/xe_flash_attn_prefill_softmax_epilogue.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
@@ -63,43 +63,117 @@
 namespace test {
 namespace flash_attention {
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
+using namespace cute;
+
+using MMAOperationBF16 = cute::XE_8x16x16_F32BF16BF16F32_TT;
+using MMAOperationFP16 = cute::XE_8x16x16_F32F16F16F32_TT;
+
+struct Shape_h64 {
+  using ShapeQK = Shape<_128, _64, _64>;
+  using ShapePV = Shape<_128, _32, _64>;
+  using ShapeOutput = Shape<_128, _64, _64>;
+  using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
+};
+
+struct Shape_h96 {
+  using ShapeQK = Shape<_128, _64, _32>;
+  using ShapePV = Shape<_128, _32, _64>;
+  using ShapeOutput = Shape<_128, _96, _64>;
+  using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
+};
+
+struct Shape_h128 {
+  using ShapeQK = Shape<_128, _64, _64>;
+  using ShapePV = Shape<_128, _32, _64>;
+  using ShapeOutput = Shape<_128, _128, _64>;
+  using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
+};
+
+struct Shape_h192 {
+  using ShapeQK = Shape<_256, _64, _64>;
+  using ShapePV = Shape<_256, _32, _64>;
+  using ShapeOutput = Shape<_256, _192, _64>;
+  using SubgroupLayout = Layout<Shape<_32, _1, _1>, Stride<_1, _1, _1>>; 
+};
+
+/////////////////////////////////////////////////////////////////////
+  template <int input_bits, int output_bits> struct TiledCopyConfig;
+
+  template <> struct TiledCopyConfig<8, 32> {
+    using GmemTiledCopyQ = cute::XE_2D_U8x8x32_LD_N;
+    using GmemTiledCopyK = cute::XE_2D_U8x16x16_LD_T;
+    using GmemTiledCopyV = cute::XE_2D_U8x32x32_LD_V;
+    using GmemTiledCopyO = cute::XE_2D_U32x8x16_ST_N;
+  };
+
+  template <> struct TiledCopyConfig<8, 8> {
+    using GmemTiledCopyQ = cute::XE_2D_U8x8x32_LD_N;
+    using GmemTiledCopyK = cute::XE_2D_U8x16x16_LD_T;
+    using GmemTiledCopyV = cute::XE_2D_U8x32x32_LD_V;
+    using GmemTiledCopyO = cute::XE_2D_U8x8x16_ST_N;
+  };
+
+  template <> struct TiledCopyConfig<16, 32> {
+    using GmemTiledCopyQ = cute::XE_2D_U16x8x32_LD_N;
+    using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
+    using GmemTiledCopyV = cute::XE_2D_U16x16x32_LD_V;
+    using GmemTiledCopyO = cute::XE_2D_U32x8x16_ST_N;
+  };
+
+  template <> struct TiledCopyConfig<16, 16> {
+    using GmemTiledCopyQ = cute::XE_2D_U16x8x32_LD_N;
+    using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T;
+    using GmemTiledCopyV = cute::XE_2D_U16x16x32_LD_V;
+    using GmemTiledCopyO = cute::XE_2D_U16x8x16_ST_N;
+  };
+  
+  template <class, class> class convert_fp8_to_fp16_name;
+
+  template <typename SrcT, typename DstT>
+  void convert_fp8_to_fp16(const SrcT* d_src, DstT* d_dst, size_t size) {
+    compat::get_default_queue().parallel_for<convert_fp8_to_fp16_name<SrcT, DstT>>(size, [=](auto indx) {
+      d_dst[indx] = static_cast<DstT>(d_src[indx]);
+    }).wait();
+  }
+
+
+/////////////////////////////////////////////////////////////////////
+
 template<typename ElementInputType, typename ElementAccumulatorType, typename ElementOutputType,  
-         typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
-         typename MMAOperation, bool HasCausalMask, bool UsePagedKV, bool isVarLen, int PipelineStages>
-struct XE_Flash_Attention_Prefill_CachedKV {
+        typename TileShapeQK, typename TileShapePV, typename TileShapeOutput, typename SubgroupLayout, 
+        typename MMAOperation, bool HasCausalMask, bool isVarLen, int PipelineStages>
+struct XE_Flash_Attention_Prefill {
   using LayoutQ = cutlass::layout::RowMajor;
   using LayoutK = cutlass::layout::ColumnMajor;
   using LayoutV = cutlass::layout::RowMajor;
   using LayoutO = cutlass::layout::RowMajor;
 
   using ElementAccumulator = ElementAccumulatorType;
-  using ElementComputeEpilogue = ElementOutputType;
+  using ElementComputeEpilogue = ElementAccumulatorType;
   using ElementInputQ = ElementInputType;
   using ElementInputKV = ElementInputType;
   using ElementOutput = ElementOutputType;
 
-  using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
+  using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int>;
   using ProblemShapeVarlen = cute::tuple<int, int, int, cutlass::fmha::collective::VariableLength,
-                                         cutlass::fmha::collective::VariableLength, cutlass::fmha::collective::VariableLength,
-                                         int, int>;
+                                         cutlass::fmha::collective::VariableLength, int, int>;
   using ProblemShapeType = std::conditional_t<isVarLen, ProblemShapeVarlen, ProblemShapeRegular>;
 
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-  using GmemTiledCopyQ = cute::XE_2D_U16x8x32_LD_N;
-  using GmemTiledCopyK = cute::XE_2D_U16x16x16_LD_T; // _T designates a transposed block load operation
-  using GmemTiledCopyV = cute::XE_2D_U16x16x32_LD_V;
-  using GmemTiledCopyStore = cute::XE_2D_U32x8x16_ST_N;
-  using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillCachedEpilogue<
+  using GmemTiledCopyQ = typename TiledCopyConfig<cute::sizeof_bits_v<ElementInputQ>, cute::sizeof_bits_v<ElementOutput>>::GmemTiledCopyQ;
+  using GmemTiledCopyK = typename TiledCopyConfig<cute::sizeof_bits_v<ElementInputKV>, cute::sizeof_bits_v<ElementOutput>>::GmemTiledCopyK;
+  using GmemTiledCopyV = typename TiledCopyConfig<cute::sizeof_bits_v<ElementInputKV>, cute::sizeof_bits_v<ElementOutput>>::GmemTiledCopyV;
+  using GmemTiledCopyStore = typename TiledCopyConfig<cute::sizeof_bits_v<ElementInputQ>, cute::sizeof_bits_v<ElementOutput>>::GmemTiledCopyO;
+  using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillEpilogue<
         EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementAccumulator, ElementOutput, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
         GmemTiledCopyStore>;
-  using FlashPrefillSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<
+  using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<
         HasCausalMask, EpilogueDispatchPolicy, ElementAccumulator>;
 
   // Mainloop
-  using CollectiveMainloop = cutlass::flash_attention::collective::FlashPrefillCachedMma<
+  using CollectiveMainloop = cutlass::flash_attention::collective::FlashPrefillMma<
         GEMMDispatchPolicy, ProblemShapeType, ElementInputQ,
         cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
         cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV,
@@ -108,76 +182,74 @@ struct XE_Flash_Attention_Prefill_CachedKV {
         GmemTiledCopyQ, // Q
         GmemTiledCopyK, // K
         GmemTiledCopyV, // V,
-        HasCausalMask,
-        UsePagedKV>;
+        HasCausalMask>;
 
-    using Kernel = cutlass::flash_attention::kernel::FMHAPrefillCached<ProblemShapeType, CollectiveMainloop,
-                                                       FlashPrefillSoftmaxEpilogue, CollectiveEpilogue>;
+  using Kernel = cutlass::flash_attention::kernel::FMHAPrefill<ProblemShapeType, CollectiveMainloop,
+                                                      CollectiveSoftmaxEpilogue, CollectiveEpilogue>;
 };
+/////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace detail {
 
-template <typename FlashPrefillCachedKV>
+template <typename FlashAttention>
 struct TestbedImpl {
   using LayoutQ = cutlass::layout::RowMajor;
   using LayoutK = cutlass::layout::ColumnMajor;
   using LayoutV = cutlass::layout::RowMajor;
   using LayoutO = cutlass::layout::RowMajor;
 
-  using StrideQ = typename FlashPrefillCachedKV::StrideQ;
-  using StrideK = typename FlashPrefillCachedKV::StrideK;
-  using StrideV = typename FlashPrefillCachedKV::StrideV;
-  using StrideO = typename FlashPrefillCachedKV::StrideO;
+  using StrideQ = typename FlashAttention::StrideQ;
+  using StrideK = typename FlashAttention::StrideK;
+  using StrideV = typename FlashAttention::StrideV;
+  using StrideO = typename FlashAttention::StrideO;
 
-  using ElementQ = typename FlashPrefillCachedKV::ElementQ;
-  using ElementK = typename FlashPrefillCachedKV::ElementK;
-  using ElementV = typename FlashPrefillCachedKV::ElementV;
-  using ElementAcc = typename FlashPrefillCachedKV::ElementAccumulator;
+  using ElementQ = typename FlashAttention::ElementQ;
+  using ElementK = typename FlashAttention::ElementK;
+  using ElementV = typename FlashAttention::ElementV;
+  using ElementAcc = typename FlashAttention::ElementAccumulator;
 
-  using CollectiveMainloop = typename FlashPrefillCachedKV::CollectiveMainloop;
-  using CollectiveEpilogue = typename FlashPrefillCachedKV::CollectiveEpilogue;
+  using CollectiveMainloop = typename FlashAttention::CollectiveMainloop;
+  using CollectiveEpilogue = typename FlashAttention::CollectiveEpilogue;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
-  using ProblemShapeType = typename FlashPrefillCachedKV::ProblemShape;
+  using ProblemShapeType = typename FlashAttention::ProblemShape;
   static constexpr bool HasCausalMask = CollectiveMainloop::CausalMask;
-  static constexpr bool UsePagedKV = CollectiveMainloop::PagedKV;
   static constexpr bool isVarLen = CollectiveMainloop::is_var_len;
 
   StrideQ stride_Q;
   StrideK stride_K;
   StrideV stride_V;
-  StrideK stride_K_cache;
-  StrideV stride_V_cache;
   StrideO stride_O;
   uint64_t seed = 0;
-  bool use_kv_cache;
 
   std::vector<int> cumulative_seqlen_q;
   std::vector<int> cumulative_seqlen_kv;
-  std::vector<int> cumulative_seqlen_kv_cache;
   cutlass::DeviceAllocation<int> device_cumulative_seqlen_q;
   cutlass::DeviceAllocation<int> device_cumulative_seqlen_kv;
-  cutlass::DeviceAllocation<int> device_cumulative_seqlen_kv_cache;
   cutlass::DeviceAllocation<ElementQ> block_Q;
   cutlass::DeviceAllocation<ElementK> block_K;
   cutlass::DeviceAllocation<ElementV> block_V;
-  cutlass::DeviceAllocation<ElementK> block_K_cache;
-  cutlass::DeviceAllocation<ElementV> block_V_cache;
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
-
-  struct PagedKVParams {
-      cutlass::DeviceAllocation<int> page_table;
-      int page_size = 128;
-      cutlass::DeviceAllocation<int> num_pages_per_seq;
-  };
-  PagedKVParams paged_kv_cache;
 
   //
   // Methods
   //
+  template <typename T>
+  static constexpr bool is_fp8_v = cute::is_any_of_v<T, cute::float_e5m2_t, cute::float_e4m3_t>;
+
+  template <typename Tin> inline auto in_memory(cutlass::DeviceAllocation<Tin>& in) {
+    using outType = cute::conditional_t<is_fp8_v<Tin>, half_t, Tin>;
+    if constexpr(is_fp8_v<Tin>) {
+      cutlass::DeviceAllocation<outType> out(in.size());
+      convert_fp8_to_fp16<Tin, outType>(in.get(), out.get(), in.size());
+      return out;
+    } else { 
+      return in;
+    };
+  }
 
   /// Initializes data structures
   template <class ProblemShape>
@@ -187,12 +259,6 @@ struct TestbedImpl {
 #endif
     ProblemShapeType problem_shape;
     ProblemShape problem_size;
-
-    if (cute::get<5>(problem_shape_in) > 0) {
-      use_kv_cache = true;
-    } else {
-      use_kv_cache = false;
-    }
 
     if constexpr (isVarLen) {
       auto [problem_shape_init, problem_shape_launch] = initialize_varlen(problem_shape_in);
@@ -204,62 +270,26 @@ struct TestbedImpl {
       problem_shape = problem_shape_in;
     }
 
-    auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo] = problem_size;
+    auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo] = problem_size;
 
     stride_Q = cutlass::make_cute_packed_stride(StrideQ{}, cute::make_shape(seq_len_qo, head_size_qk, batch * num_heads_q));
     stride_K = cutlass::make_cute_packed_stride(StrideK{}, cute::make_shape(seq_len_kv, head_size_qk, batch * num_heads_kv));
     stride_V = cutlass::make_cute_packed_stride(StrideV{}, cute::make_shape(head_size_vo, seq_len_kv, batch * num_heads_kv));
-    stride_K_cache = cutlass::make_cute_packed_stride(StrideK{}, cute::make_shape(seq_len_kv_cache, head_size_qk, batch * num_heads_kv));
-    stride_V_cache = cutlass::make_cute_packed_stride(StrideV{}, cute::make_shape(head_size_vo, seq_len_kv_cache, batch * num_heads_kv));
     stride_O = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, batch * num_heads_q));
 
     block_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
     block_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
     block_V.reset(batch * num_heads_kv * seq_len_kv * head_size_vo);
-    block_K_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_qk);
-    block_V_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_vo);
     block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
-    
-    // Zero-initialize output buffers to prevent uninitialized memory issues
-    if (block_O.size() > 0) {
-      compat::memset(block_O.get(), 0, block_O.size() * sizeof(ElementOutput));
-    }
 
-    if constexpr (UsePagedKV) {
-      std::vector<int> num_pages_per_seq{0};
-      int num_pages = 0;
-      for(int b = 0; b < cute::get<0>(problem_shape); b++) {
-        int seq_len_cache = isVarLen ? cumulative_seqlen_kv_cache[b + 1] - cumulative_seqlen_kv_cache[b] : seq_len_kv_cache;
-        int pages_per_seq = ceil_div(seq_len_cache, paged_kv_cache.page_size);
-        num_pages_per_seq.push_back(num_pages_per_seq.back() + pages_per_seq);
-        num_pages += pages_per_seq;
-      }
-      paged_kv_cache.page_table.reset(num_pages);
-
-      // initialize block table with random mapping for non-contiguous layout
-      std::vector<int> page_mapping(num_pages);
-      for (int b = 0; b < cute::get<0>(problem_shape); ++b) {
-        std::vector<int> physical_pages(num_pages_per_seq[b + 1] - num_pages_per_seq[b]);
-        std::iota(physical_pages.begin(), physical_pages.end(), 0);
-        // shuffle physical pages
-        std::shuffle(physical_pages.begin(), physical_pages.end(), std::mt19937{ std::random_device{}() });
-        for (int blk = 0; blk < physical_pages.size(); ++blk) {
-          int logical_idx = num_pages_per_seq[b] + blk;
-          page_mapping[logical_idx] = physical_pages[blk];
-        }
-      }
-      compat::memcpy(paged_kv_cache.page_table.get(), page_mapping.data(), page_mapping.size() * sizeof(int));
-
-      paged_kv_cache.num_pages_per_seq.reset(num_pages_per_seq.size());
-      compat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
-    }
+    // Zero-initialize output buffer for the kernel result
+    // block_ref_O is fully written in verify() before being read, so no initialization needed
+    compat::memset(block_O.get(), 0, block_O.size() * sizeof(ElementOutput));
 
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
-    initialize_block(block_K_cache, seed + 2024);
-    initialize_block(block_V_cache, seed + 2025);
 
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
@@ -272,23 +302,16 @@ struct TestbedImpl {
         cumulative_seqlen_kv.data(), cumulative_seqlen_kv.size());
     }
 
-    if (!cumulative_seqlen_kv_cache.empty()) {
-      device_cumulative_seqlen_kv_cache.reset(cumulative_seqlen_kv_cache.size());
-      device_cumulative_seqlen_kv_cache.copy_from_host(
-        cumulative_seqlen_kv_cache.data(), cumulative_seqlen_kv_cache.size());
-    }
-
     if constexpr (isVarLen) {
       cute::get<3>(problem_shape).cumulative_length = device_cumulative_seqlen_q.get();
       cute::get<4>(problem_shape).cumulative_length = device_cumulative_seqlen_kv.get();
-      cute::get<5>(problem_shape).cumulative_length = device_cumulative_seqlen_kv_cache.get();
     }
 
     return problem_shape;
   }
 
   template<class ProblemShape>
-  auto initialize_varlen(const ProblemShape& problem_size) {
+  auto initialize_varlen(const ProblemShape& problem_size, const bool VarlenSame = true) {
     int num_batches = cute::get<0>(problem_size);
 
     // generate Q as --b times
@@ -297,7 +320,6 @@ struct TestbedImpl {
     std::mt19937 rng(0x202305151552ull);
     std::normal_distribution<double> dist_q(cute::get<3>(problem_size), cute::get<3>(problem_size) / 2);
     std::normal_distribution<double> dist_kv(cute::get<4>(problem_size), cute::get<4>(problem_size) / 2);
-    std::normal_distribution<double> dist_kv_cache(cute::get<5>(problem_size), cute::get<5>(problem_size) / 2);
 
     // Use Cacheline Size to calculate alignment
     constexpr int cacheline_bytes = 64;
@@ -314,147 +336,97 @@ struct TestbedImpl {
 
     cumulative_seqlen_q = {0};
     cumulative_seqlen_kv = {0};
-    cumulative_seqlen_kv_cache = {0};
 
     int total_seqlen_q = 0;
     int total_seqlen_kv = 0;
-    int total_seqlen_kv_cache = 0;
     int max_seqlen_q = 0;
     int max_seqlen_kv = 0;
-    int max_seqlen_kv_cache = 0;
 
     for (int i = 0; i < num_batches; i++) {
       int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
-      int seqlen_kv_cache = !use_kv_cache ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
 
       total_seqlen_q += seqlen_q;
       total_seqlen_kv += seqlen_kv;
-      total_seqlen_kv_cache += seqlen_kv_cache;
 
       max_seqlen_q = std::max(max_seqlen_q, seqlen_q);
       max_seqlen_kv = std::max(max_seqlen_kv, seqlen_kv);
-      max_seqlen_kv_cache = std::max(max_seqlen_kv_cache, seqlen_kv_cache);
 
       cumulative_seqlen_q.push_back(cumulative_seqlen_q.back() + seqlen_q);
       cumulative_seqlen_kv.push_back(cumulative_seqlen_kv.back() + seqlen_kv);
-      cumulative_seqlen_kv_cache.push_back(cumulative_seqlen_kv_cache.back() + seqlen_kv_cache);
     }
 
     ProblemShape problem_size_for_init = problem_size;
     cute::get<0>(problem_size_for_init) = 1;
     cute::get<3>(problem_size_for_init) = total_seqlen_q;
     cute::get<4>(problem_size_for_init) = total_seqlen_kv;
-    cute::get<5>(problem_size_for_init) = total_seqlen_kv_cache;
 
     ProblemShapeType problem_size_for_launch;
 
     cute::get<3>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_q};
     cute::get<4>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv};
-    cute::get<5>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv_cache};
+    cute::get<5>(problem_size_for_launch) = cute::get<5>(problem_size);
+    cute::get<6>(problem_size_for_launch) = cute::get<6>(problem_size);
     cute::get<0>(problem_size_for_launch) = cute::get<0>(problem_size);
     cute::get<1>(problem_size_for_launch) = cute::get<1>(problem_size);
     cute::get<2>(problem_size_for_launch) = cute::get<2>(problem_size);
-    cute::get<6>(problem_size_for_launch) = cute::get<6>(problem_size);
-    cute::get<7>(problem_size_for_launch) = cute::get<7>(problem_size);
+
 
     return cute::make_tuple(problem_size_for_init, problem_size_for_launch);
   }
 
   /// Verifies the result
-  bool verify(ProblemShapeType problem_size, float softmax_scale) {
+  bool verify(ProblemShapeType problem_size, float softmax_scale)
+  {
     if constexpr (isVarLen) {
       int max_seq_len_q = static_cast<int>(cute::get<3>(problem_size));
       int max_seq_len_kv = static_cast<int>(cute::get<4>(problem_size));
-      int max_seq_len_kv_cache = static_cast<int>(cute::get<5>(problem_size));
       cute::get<3>(problem_size) = cutlass::fmha::collective::VariableLength{max_seq_len_q, cumulative_seqlen_q.data()};
       cute::get<4>(problem_size) = cutlass::fmha::collective::VariableLength{max_seq_len_kv, cumulative_seqlen_kv.data()};
-      cute::get<5>(problem_size) = cutlass::fmha::collective::VariableLength{max_seq_len_kv_cache, cumulative_seqlen_kv_cache.data()};
     }
 
-    auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,6,7>(problem_size);
-    int seq_len_qo, seq_len_kv, seq_len_kv_cache;
+    auto [batch, num_heads_q, num_heads_kv, head_size_qk, head_size_vo] = cute::select<0,1,2,5,6>(problem_size);
+    int seq_len_qo, seq_len_kv;
+
+    auto block_Q_ = in_memory(block_Q);
+    auto block_K_ = in_memory(block_K);
+    auto block_V_ = in_memory(block_V);
+    using ElementV_ = cute::conditional_t<is_fp8_v<ElementV>, half_t, ElementV>;
 
     int offset_q = 0;
     int offset_k = 0;
     int offset_v = 0;
-    int offset_k_cache = 0;
-    int offset_v_cache = 0;
     int offset_o = 0;
-
-    int q_group_size = num_heads_q / num_heads_kv;
     // loop over the batch dimension to compute the output
     // to avoid the risk of running out of device memory
+    int q_group_size = num_heads_q/num_heads_kv;
     for (int b = 0; b < batch; b++) {
       if constexpr (isVarLen) {
         auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(problem_size, b);
         seq_len_qo = cute::get<3>(logical_problem_shape);
         seq_len_kv = cute::get<4>(logical_problem_shape);
-	      seq_len_kv_cache = cute::get<5>(logical_problem_shape);
       } else {
         seq_len_qo = cute::get<3>(problem_size);
         seq_len_kv = cute::get<4>(problem_size);
-	      seq_len_kv_cache = cute::get<5>(problem_size);
       }
-
-      int seq_len_kv_total = seq_len_kv_cache + seq_len_kv;
-
-      int kv_group_update = 1;
+      int kv_group_update=1;
       for (int h = 0; h < num_heads_q; h++) {
         cutlass::DeviceAllocation<ElementAccumulator> block_S;
-        block_S.reset(seq_len_qo * seq_len_kv_total);
+        block_S.reset(seq_len_qo * seq_len_kv);
 
-        ElementK* k_ptr;
-        ElementV* v_ptr;
+        cutlass::TensorRef ref_Q(block_Q_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
+        cutlass::TensorRef ref_K(block_K_.get() + offset_k, LayoutK::packed({head_size_qk, seq_len_kv}));
+        cutlass::TensorRef ref_V(block_V_.get() + offset_v, LayoutV::packed({seq_len_kv, head_size_vo}));
+        cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
 
-        if (use_kv_cache) {
-          cutlass::DeviceAllocation<ElementK> block_K_concat(head_size_qk * seq_len_kv_total);
-          cutlass::DeviceAllocation<ElementV> block_V_concat(seq_len_kv_total * head_size_vo);
-
-          // Concatenate K_cache and K
-          compat::memcpy<ElementK>(
-              block_K_concat.get(),
-              block_K_cache.get() + offset_k_cache,
-              seq_len_kv_cache * head_size_qk
-          );
-          compat::memcpy<ElementK>(
-              block_K_concat.get() + seq_len_kv_cache * head_size_qk,
-              block_K.get() + offset_k,
-              seq_len_kv * head_size_qk
-          );
-
-          // Concatenate V_cache and V
-          compat::memcpy<ElementV>(
-              block_V_concat.get(),
-              block_V_cache.get() + offset_v_cache,
-              seq_len_kv_cache * head_size_vo
-          );
-          compat::memcpy<ElementV>(
-              block_V_concat.get() + seq_len_kv_cache * head_size_vo,
-              block_V.get() + offset_v,
-              seq_len_kv * head_size_vo
-          );
-
-          k_ptr = block_K_concat.get();
-          v_ptr = block_V_concat.get();
-        } else {
-          k_ptr = block_K.get() + offset_k;
-          v_ptr = block_V.get() + offset_v;
-        }
-
-        cutlass::TensorRef ref_Q(block_Q.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
-        cutlass::TensorRef ref_K(k_ptr, LayoutK::packed({head_size_qk, seq_len_kv_total}));
-        cutlass::TensorRef ref_V(v_ptr, LayoutV::packed({seq_len_kv_total, head_size_vo}));
-        cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
-
-        cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv_total, head_size_qk}, ElementAccumulator{1}, ref_Q,
+        cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv, head_size_qk}, ElementAccumulator{1}, ref_Q,
                                                 cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
                                                 ElementAccumulator{0}, ref_S, ref_S, ElementAccumulator{0},
                                                 1,                   // batch_count
                                                 seq_len_qo * head_size_qk, // batch_stride_Q
-                                                seq_len_kv_total * head_size_qk, // batch_stride_K
-                                                seq_len_qo * seq_len_kv_total,   // batch_stride_S
-                                                seq_len_qo * seq_len_kv_total    // batch_stride_S
+                                                seq_len_kv * head_size_qk, // batch_stride_K
+                                                seq_len_qo * seq_len_kv,   // batch_stride_S
+                                                seq_len_qo * seq_len_kv    // batch_stride_S
         );
 
         compat::wait();
@@ -467,24 +439,23 @@ struct TestbedImpl {
         auto offset = cute::min(seq_len_qo, seq_len_kv);
         auto discard_seq_coord = seq_len_qo - offset;
         auto full_tile_offset = seq_len_kv - offset;
-        int start_col = use_kv_cache ? seq_len_kv_cache : 0;
         if (HasCausalMask) {
           // apply mask to S
           for (int row = 0; row < seq_len_qo; row++) {
-            for (int col = start_col; col < seq_len_kv_total; col++) {
-              if (col - full_tile_offset > row + start_col - discard_seq_coord)
-                host_S[col + row * seq_len_kv_total] = ElementAccumulator{-INFINITY};
+            for (int col = 0; col < seq_len_kv; col++) {
+              if ((col - full_tile_offset) > (row - discard_seq_coord))
+                host_S[col + row * seq_len_kv] = ElementAccumulator{-INFINITY};
             }
           }
         }
 
         // compute max element per row of S
-        std::vector<ElementAccumulator> max_vec(seq_len_qo, ElementAccumulator{-INFINITY});
+        std::vector<ElementAccumulator> max_vec(seq_len_qo, -INFINITY);
         for (int row = 0; row < seq_len_qo; row++) {
-          int idx = row * seq_len_kv_total;
+          int idx = row * seq_len_kv;
           int max_idx = row;
           max_vec[max_idx] = host_S[idx++];
-          for (int col = 1; col < seq_len_kv_total; col++, idx++) {
+          for (int col = 1; col < seq_len_kv; col++, idx++) {
             if (max_vec[max_idx] < host_S[idx])
               max_vec[max_idx] = host_S[idx];
           }
@@ -492,26 +463,26 @@ struct TestbedImpl {
 
         // compute exp of S
         for (int row = 0; row < seq_len_qo; row++) {
-          int idx = row * seq_len_kv_total;
+          int idx = row * seq_len_kv;
           int max_idx = row;
-          for (int col = 0; col < seq_len_kv_total; col++, idx++) {
-            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) * static_cast<ElementAccumulator>(softmax_scale));
+          for (int col = 0; col < seq_len_kv; col++, idx++) {
+            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) / sqrt(static_cast<ElementAccumulator>((head_size_qk))));
           }
         }
 
         // compute sum per row of S
         std::vector<ElementAccumulator> sum_vec(seq_len_qo, ElementAccumulator{0});
         for (int row = 0; row < seq_len_qo; row++) {
-          int idx = row * seq_len_kv_total;
+          int idx = row * seq_len_kv;
           int sum_idx = row;
-          for (int col = 0; col < seq_len_kv_total; col++, idx++) {
+          for (int col = 0; col < seq_len_kv; col++, idx++) {
             sum_vec[sum_idx] += host_S[idx];
           }
 
           // scale each row with the sum to compute softmax
-          idx = row * seq_len_kv_total;
+          idx = row * seq_len_kv;
           sum_idx = row;
-          for (int col = 0; col < seq_len_kv_total; col++, idx++) {
+          for (int col = 0; col < seq_len_kv; col++, idx++) {
             if(HasCausalMask && row < discard_seq_coord) {
               host_S[idx] = 0;
             } else {
@@ -520,27 +491,27 @@ struct TestbedImpl {
           }
         }
 
-        std::vector<ElementV> host_P(host_S.size());
+        std::vector<ElementV_> host_P(host_S.size());
         for (int p = 0; p < host_P.size(); p++)
-          host_P[p] = static_cast<ElementV>(host_S[p]);
+          host_P[p] = static_cast<ElementV_>(host_S[p]);
 
-        cutlass::DeviceAllocation<ElementV> block_P;
+        cutlass::DeviceAllocation<ElementV_> block_P;
         block_P.reset(host_P.size());
 
-        compat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
+        compat::memcpy<ElementV_>(block_P.get(), host_P.data(), host_P.size());
 
-        cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
+        cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv}));
 
         cutlass::DeviceAllocation<ElementAccumulator> block_acc;
         block_acc.reset(seq_len_qo * head_size_vo);
         cutlass::TensorRef ref_acc(block_acc.get(), LayoutO::packed({seq_len_qo, head_size_vo}));
 
-        cutlass::reference::device::GemmComplex({seq_len_qo, head_size_vo, seq_len_kv_total}, ElementAccumulator{1}, ref_P,
+        cutlass::reference::device::GemmComplex({seq_len_qo, head_size_vo, seq_len_kv}, ElementAccumulator{1}, ref_P,
                                                 cutlass::ComplexTransform::kNone, ref_V, cutlass::ComplexTransform::kNone,
                                                 ElementAccumulator{0}, ref_acc, ref_acc, ElementAccumulator{0},
                                                 1,                   // batch_count
-                                                seq_len_qo * seq_len_kv_total,   // batch_stride_P
-                                                seq_len_kv_total * head_size_vo, // batch_stride_V
+                                                seq_len_qo * seq_len_kv,   // batch_stride_P
+                                                seq_len_kv * head_size_vo, // batch_stride_V
                                                 seq_len_qo * head_size_vo, // batch_stride_O
                                                 seq_len_qo * head_size_vo  // batch_stride_O
         );
@@ -564,8 +535,6 @@ struct TestbedImpl {
         if(kv_group_update % q_group_size==0) {
           offset_k += seq_len_kv * head_size_qk;
           offset_v += seq_len_kv * head_size_vo;
-          offset_k_cache += seq_len_kv_cache * head_size_qk;
-          offset_v_cache += seq_len_kv_cache * head_size_vo;
         }
         kv_group_update++;
         offset_o += seq_len_qo * head_size_vo;
@@ -614,39 +583,30 @@ struct TestbedImpl {
     // Initialize the Flash attention operator
     //
     cutlass::KernelHardwareInfo hw_info;
-    typename FlashPrefillCachedKV::Arguments arguments{
+    typename FlashAttention::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_Q.get(), stride_Q,
-      block_K.get(), stride_K,
-      block_V.get(), stride_V,
-      block_K_cache.get(), stride_K_cache,
-      block_V_cache.get(), stride_V_cache,
-      UsePagedKV ? paged_kv_cache.page_table.get() : nullptr,
-      UsePagedKV ? paged_kv_cache.page_size : 0,
-      UsePagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
+      {block_Q.get(), stride_Q, block_K.get(), stride_K, block_V.get(), stride_V},
       {softmax_scale},
       {block_O.get(), stride_O},
       hw_info};
 
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
-    CUTLASS_TRACE_HOST("TestbedImpl::run: Calling FlashPrefillCachedKV::get_workspace_size");
+    CUTLASS_TRACE_HOST("TestbedImpl::run: Calling FlashAttention::get_workspace_size");
 #endif
-    size_t workspace_size = FlashPrefillCachedKV::get_workspace_size(arguments);
+    size_t workspace_size = FlashAttention::get_workspace_size(arguments);
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: Allocating workspace of size " << workspace_size);
 #endif
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
     
-    // Zero-initialize workspace to prevent uninitialized memory issues
-    if (workspace_size > 0) {
-      compat::memset(workspace.get(), 0, workspace_size);
-    }
+    // Note: workspace does not require zero-initialization as it's only used
+    // internally by the kernel and all used regions are written before being read
 
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
-    CUTLASS_TRACE_HOST("TestbedImpl::run: Calling FlashPrefillCachedKV::can_implement");
+    CUTLASS_TRACE_HOST("TestbedImpl::run: Calling FlashAttention::can_implement");
 #endif
-    auto can_implement = FlashPrefillCachedKV::can_implement(arguments);
+    auto can_implement = FlashAttention::can_implement(arguments);
 
     if (!can_implement) {
       std::cerr << "This test is not supported." << "\n";
@@ -659,35 +619,35 @@ struct TestbedImpl {
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: Calling to_underlying_arguments");
 #endif
-    auto params = FlashPrefillCachedKV::to_underlying_arguments(arguments, workspace.get());
+    auto params = FlashAttention::to_underlying_arguments(arguments, workspace.get());
 
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: Calling run");
 #endif
-    auto const block = FlashPrefillCachedKV::get_block_shape();
-    auto const grid = FlashPrefillCachedKV::get_grid_shape(params);
+    auto const block = FlashAttention::get_block_shape();
+    auto const grid = FlashAttention::get_grid_shape(params);
 
     // configure smem size and carveout
-    int smem_size = FlashPrefillCachedKV::SharedStorageSize;
+    int smem_size = FlashAttention::SharedStorageSize;
 
     const auto sycl_block = compat::dim3(block.x, block.y, block.z);
     const auto sycl_grid = compat::dim3(grid.x, grid.y, grid.z);
 
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
     using namespace compat::experimental;
-    auto event = launch<cutlass::device_kernel<FlashPrefillCachedKV>>(
+    auto event = launch<cutlass::device_kernel<FlashAttention>>(
         launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
-                      kernel_properties{sycl_exp::sub_group_size<FlashPrefillCachedKV::DispatchPolicy::SubgroupSize>}},
+                      kernel_properties{sycl_exp::sub_group_size<FlashAttention::DispatchPolicy::SubgroupSize>}},
         params);
 #else
     compat::experimental::launch_properties launch_props {
       sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
     };
     compat::experimental::kernel_properties kernel_props{
-      sycl::ext::oneapi::experimental::sub_group_size<FlashPrefillCachedKV::DispatchPolicy::SubgroupSize>
+      sycl::ext::oneapi::experimental::sub_group_size<FlashAttention::DispatchPolicy::SubgroupSize>
     };
     compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
-    auto event = compat::experimental::launch<cutlass::device_kernel<FlashPrefillCachedKV>, FlashPrefillCachedKV>(policy, params);
+    auto event = compat::experimental::launch<cutlass::device_kernel<FlashAttention>, FlashAttention>(policy, params);
 #endif
     EventManager::getInstance().addEvent(event);
 
@@ -727,11 +687,12 @@ struct TestbedImpl {
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <
-  typename FlashPrefillCachedKV
+  typename FlashAttention
 >
 struct Testbed3x {
-  using TestBedImpl = typename detail::TestbedImpl<FlashPrefillCachedKV>;
-  TestBedImpl impl_;
+  // using TestBedImp = typename detail::TestbedImpl<FlashAttention>;
+  // TestBedImp impl_;
+  detail::TestbedImpl<FlashAttention> impl_;
 
   //
   // Methods
@@ -749,67 +710,74 @@ struct Testbed3x {
   }
 };
 
-template <typename FlashPrefillCachedKV>
-bool TestFlashPrefillCachedKVAll(int head_size) {
-  Testbed3x<FlashPrefillCachedKV> testbed;
+template <typename FlashAttention>
+bool TestFlashPrefillAll(int head_size, std::string config="default") {
+  Testbed3x<FlashAttention> testbed;
 
-  std::vector<int> problem_size_batch{8};
-  std::vector<int> problem_size_num_heads{8};
-  std::vector<int> problem_size_seq_len{1024};
-  std::vector<int> problem_size_seq_len_cache{0, 1024};
+  std::vector<int> problem_size_batch;
+  std::vector<int> problem_size_num_heads;
+  std::vector<int> problem_size_seq_len;
+
+  if(config == "llama3_70b"){
+    problem_size_batch = {1, 2};
+    problem_size_num_heads = {128};
+    problem_size_seq_len = {512, 1024};
+  }
+  else{
+    problem_size_batch = {8};
+    problem_size_num_heads = {8};
+    problem_size_seq_len = {512};
+  }
   std::vector<float> problem_size_softmax_scale{ 1.f / sqrt(static_cast<float>(head_size)) };
   bool passed = true;
 
   for (int batch : problem_size_batch) {
     for (int num_heads : problem_size_num_heads) {
       for (int seq_len : problem_size_seq_len) {
-        for (int seq_len_cache : problem_size_seq_len_cache) {
-          for (float softmax_scale : problem_size_softmax_scale) {
-            auto num_heads_q = num_heads;
-            auto num_heads_kv = num_heads;
-            auto seq_len_qo = seq_len;
-            auto seq_len_kv = seq_len;
-            auto seq_len_kv_cache = seq_len_cache;
-            auto head_size_qk = head_size;
-            auto head_size_vo = head_size;
+        for (float softmax_scale : problem_size_softmax_scale) {
+          auto num_heads_q = num_heads;
+          auto num_heads_kv = num_heads;
+          auto seq_len_qo = seq_len;
+          auto seq_len_kv = seq_len;
+          auto head_size_qk = head_size;
+          auto head_size_vo = head_size;
 
-            auto problem_size = cute::make_tuple(
-              batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk, head_size_vo);
-            try {
-              passed = testbed.run(problem_size, softmax_scale);
-            }
-            catch (std::exception const& e) {
-              EXPECT_TRUE(false) << "TestFlashPrefillCachedKVAll: testbed.run {"
-                << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
-                << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
-                << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
-                << ", scale: " << softmax_scale
-                << "} threw an exception: " << e.what();
-              throw;
-            }
-            catch (...) {
-              EXPECT_TRUE(false) << "TestFlashPrefillCachedKVAll: testbed.run {"
-                << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
-                << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
-                << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
-                << ", scale: " << softmax_scale
-                << "} threw an exception (unknown)";
-              throw;
-            }
-
-            EXPECT_TRUE(passed) << "TestFlashPrefillCachedKVAll: testbed.run {"
+          auto problem_size = cute::make_tuple(
+            batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo);
+          try {
+            passed = testbed.run(problem_size, softmax_scale);
+          }
+          catch (std::exception const& e) {
+            EXPECT_TRUE(false) << "TestAll: testbed.run {"
               << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
-              << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv << ", seq_len_kv_cache: "
-              << seq_len_cache << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
+              << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv
+              << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
               << ", scale: " << softmax_scale
-              << "} failed";
+              << "} threw an exception: " << e.what();
+            throw;
+          }
+          catch (...) {
+            EXPECT_TRUE(false) << "TestAll: testbed.run {"
+              << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
+              << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv
+              << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
+              << ", scale: " << softmax_scale
+              << "} threw an exception (unknown)";
+            throw;
+          }
 
-            if (!passed) {
-              std::cout << __FILE__ << ':' << __LINE__ << " : Flash Decode FAILED.\n";
-              return false;
-            }
-          } // softmax_scale
-        } // seq_len_cache
+          EXPECT_TRUE(passed) << "TestAll: testbed.run {"
+            << "batch: " << batch << ", num_heads_q: " << num_heads_q << ", num_heads_kv: " << num_heads_kv
+            << ", seq_len_qo: " << seq_len_qo << ", seq_len_kv: " << seq_len_kv
+            << ", head_size_vo: " << head_size_vo << ", head_size_qk: " << head_size_qk
+            << ", scale: " << softmax_scale
+            << "} failed";
+
+          if (!passed) {
+            std::cout << __FILE__ << ':' << __LINE__ << " : Flash attention FAILED.\n";
+            return false;
+          }
+        } // softmax_scale
       } // seq_len
     } // num_heads
   }  // batch
