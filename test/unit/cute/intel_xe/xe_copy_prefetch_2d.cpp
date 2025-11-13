@@ -45,8 +45,6 @@ using namespace cute;
 using namespace cutlass;
 using namespace compat::experimental;
 
-#define SUBGROUP_SIZE (16)
-
 #if (IGC_VERSION_MAJOR > 2) || (IGC_VERSION_MAJOR == 2 && IGC_VERSION_MINOR >= 18) 
 
 // Kernel name for unique identification
@@ -57,12 +55,13 @@ class XEPrefetch2DKernelName;
 template <class SrcTensor, int Bits, int Height, int Width>
 void xe_prefetch_2d_kernel(SrcTensor src) {
   using namespace cute;
+  using namespace sycl::ext::oneapi::this_work_item;
   using Element = typename SrcTensor::value_type;
 
   // Only execute with the first subgroup to avoid race conditions
-  if (sycl::ext::oneapi::this_work_item::get_nd_item<1>().get_group(0) == 0) {
+  if (get_nd_item<1>().get_group(0) == 0) {
     // Get thread/subgroup information
-    auto local_id = int(sycl::ext::oneapi::this_work_item::get_nd_item<1>().get_local_id(0));
+    auto local_id = int(get_nd_item<1>().get_local_id(0));
     
     // Create block 2D prefetch inside kernel (device-only operation)
     using PrefetchOp = XE_PREFETCH_2D<Bits, Height, Width>;
@@ -85,7 +84,7 @@ void xe_prefetch_2d_kernel(SrcTensor src) {
     copy(tiled_prefetch, thr_src_coord, thr_dst_frag);
     
     // Synchronize to ensure all threads complete their operations
-    sycl::group_barrier(sycl::ext::oneapi::this_work_item::get_nd_item<1>().get_group());
+    sycl::group_barrier(get_nd_item<1>().get_group());
   }
 }
 
@@ -119,14 +118,14 @@ void test_xe_prefetch_2d() {
                     make_layout(Shape<Int<M>, Int<aligned_N>>{}, Stride<Int<aligned_N>, _1>{}));
   
   // Launch kernel - prefetch happens on device
-  auto blockDim = compat::dim3(SUBGROUP_SIZE);
+  auto blockDim = compat::dim3(intel::sg_size);
   auto gridDim = compat::dim3(1);
   
   launch<xe_prefetch_2d_kernel<decltype(tensor_src), Bits, Height, Width>,
          XEPrefetch2DKernelName<decltype(tensor_src)>>(
     launch_policy{
       gridDim, blockDim,
-      kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}
+      kernel_properties{sycl_exp::sub_group_size<intel::sg_size>}
     },
     tensor_src);
   
