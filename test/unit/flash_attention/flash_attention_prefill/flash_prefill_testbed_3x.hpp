@@ -595,7 +595,6 @@ struct TestbedImpl {
     CUTLASS_TRACE_HOST("TestbedImpl::run: Calling FlashAttention::get_workspace_size");
 #endif
     size_t workspace_size = FlashAttention::get_workspace_size(arguments);
-
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: Allocating workspace of size " << workspace_size);
 #endif
