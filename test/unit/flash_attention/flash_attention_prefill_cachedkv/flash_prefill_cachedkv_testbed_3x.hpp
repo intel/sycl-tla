@@ -638,9 +638,6 @@ struct TestbedImpl {
     CUTLASS_TRACE_HOST("TestbedImpl::run: Allocating workspace of size " << workspace_size);
 #endif
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
-    
-    // Note: workspace does not require zero-initialization as it's only used
-    // internally by the kernel and all used regions are written before being read
 
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
     CUTLASS_TRACE_HOST("TestbedImpl::run: Calling FlashPrefillCachedKV::can_implement");
