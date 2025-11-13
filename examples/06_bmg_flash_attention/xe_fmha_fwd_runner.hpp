@@ -88,9 +88,15 @@ struct Options {
 
     cmd.get_cmd_line_argument("scheduler", scheduler, std::string("Individual"));
 
+#ifdef PERSISTENT
+    cmd.get_cmd_line_argument("batch", batch, 1);
+    cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 10);
+    cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, 2);
+#else
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
+#endif
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, 512);
 #ifdef DECODE
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 1);
@@ -697,7 +703,7 @@ struct FMHAConfig {
         GmemTiledCopyO
     >;
 
-    static_assert(persistent && !Causal, "persistent SDPA kernel not support Causal yet");
+    static_assert(!(persistent & Causal), "persistent SDPA kernel not support Causal yet");
     using FMHAKernel = conditional_t<is_same_v<Scheduler, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>,
       cutlass::fmha::kernel::XeFMHAFwdDynamicSplitKernel<
         ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>,
