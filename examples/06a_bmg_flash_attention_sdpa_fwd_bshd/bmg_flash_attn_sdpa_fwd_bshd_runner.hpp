@@ -273,6 +273,8 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
       k_ptr = block_K.get() + offset_k;
       v_ptr = block_V.get() + offset_v;
 
+      int first_non_masked_sequence = seq_len_qo - seq_len_kv;
+
       for (int q_group = 0; q_group < num_heads_q / q_group_size; q_group++) {
         for (int q_head = 0; q_head < q_group_size; q_head++) {
           cutlass::DeviceAllocation<ElementAccumulator> block_S;
@@ -305,27 +307,15 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
 
           // delete this memory as it is no longer needed
           block_S.reset();
-          auto offset = cute::min(seq_len_qo, seq_len_kv);
-          auto discard_seq_coord = seq_len_qo - offset;
-          auto full_tile_offset = seq_len_kv - offset;
 
           // apply mask to S
           if (is_causal) {
             for (int row = 0; row < seq_len_qo; row++) {
               for (int col = 0; col < seq_len_kv; col++) {
                 // Apply bottom right masking
-                if (seq_len_qo > seq_len_kv){
-                  int first_non_masked_sequence = seq_len_qo - seq_len_kv;
                   if (col > row - first_non_masked_sequence)
                     host_S[col + row * seq_len_kv] =
                         ElementAccumulator{-INFINITY};
-                }
-                else{
-                  // Symmetric masking
-                  if ((col - full_tile_offset) > (row - discard_seq_coord))
-                    host_S[col + row * seq_len_kv] =
-                        ElementAccumulator{-INFINITY};
-                }
               }
             }
           }
@@ -403,7 +393,8 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
             idx = row * seq_len_kv;
             sum_idx = row;
             for (int col = 0; col < seq_len_kv; col++, idx++) {
-              if (is_causal && row < discard_seq_coord) {
+              //apply bottom right masking
+              if (is_causal && col > row - first_non_masked_sequence) {
                 host_S[idx] = 0;
               } else {
                 host_S[idx] /= sum_vec[sum_idx];
@@ -483,13 +474,18 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(
-        block_ref_O.get(), block_O.get(), block_O.size(), ElementOutput{0.5},
-        ElementOutput{0.5});
+        block_ref_O.get(), block_O.get(), block_O.size(), ElementOutput{0.01f},
+        ElementOutput{0.01f});
 
     // Check if the LSE output from the CUTLASS kernel and reference kernel are
     // equal or not
     bool passed_lse = cutlass::reference::device::BlockCompareRelativelyEqual(
-        block_ref_LSE.get(), block_LSE.get(), block_LSE.size(), 0.1f, 0.1f);
+        block_ref_LSE.get(), block_LSE.get(), block_LSE.size(), 0.01f, 0.01f);
+
+    passed ? print("Passed Output Accuracy \n") : print("Failed Output Accuracy \n");
+    passed_lse ? print("Passed LSE Accuracy \n") : print("Failed LSE Accuracy \n");
+
+
 
     return passed && passed_lse;
   }
