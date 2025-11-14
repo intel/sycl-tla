@@ -124,14 +124,14 @@ int main(int argc, const char **argv) {
   using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
 #elif HEAD_DIM == 64
-    using ShapeQK = Shape<_1, _512, _64>;
-    using ShapePV = Shape<_1, _32, _512>;
+    using ShapeQK = Shape<_1, KV_TILE_SIZE, _64>;
+    using ShapePV = Shape<_1, _32, KV_TILE_SIZE>;
     using ShapeOut = Shape<_1, _64>;
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
 #elif HEAD_DIM == 96
-    using ShapeQK = Shape<_1, _512, _64>;
-    using ShapePV = Shape<_1, _32, _512>;
+    using ShapeQK = Shape<_1, KV_TILE_SIZE, _64>;
+    using ShapePV = Shape<_1, _32, KV_TILE_SIZE>;
     using ShapeOut = Shape<_1, _96>;
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
@@ -142,8 +142,8 @@ int main(int argc, const char **argv) {
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
 #elif HEAD_DIM == 192
-    using ShapeQK = Shape<_1, _512, _64>;
-    using ShapePV = Shape<_1, _32, _512>;
+    using ShapeQK = Shape<_1, KV_TILE_SIZE, _64>;
+    using ShapePV = Shape<_1, _32, KV_TILE_SIZE>;
     using ShapeOut = Shape<_1, _192>;
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 #endif
