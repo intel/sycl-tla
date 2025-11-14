@@ -90,14 +90,15 @@ struct Options {
 
 #ifdef PERSISTENT
     cmd.get_cmd_line_argument("batch", batch, 1);
-    cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 10);
-    cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, 2);
+    cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 8);
+    cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, 1);
+    cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, 4096);
 #else
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
-#endif
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, 512);
+#endif
 #ifdef DECODE
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 1);
 #else
