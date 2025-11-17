@@ -513,29 +513,6 @@ public:
           }
         }
 
-        // Prevnt numerical errors when seq_len_kv is not fully divisible by
-        // QK_BLK_N
-        if (seq_len_kv % QK_BLK_N != 0) {
-          int col_idx = item_id + (nblock_limit - 1) * QK_BLK_N;
-          int remainder = seq_len_kv % QK_BLK_N;
-          int cutoff = (seq_len_kv / QK_BLK_N) * QK_BLK_N + remainder;
-          CUTLASS_PRAGMA_UNROLL
-          for (int n = 0; n < FragsN;
-               n++, col_idx += get<1>(MmaAtomShape())) {
-
-            CUTLASS_PRAGMA_UNROLL
-            for (int m = 0; m < FragsM; m++) {
-              int row_idx = m * Vec + seq_coord;
-              CUTLASS_PRAGMA_UNROLL
-              for (int row = 0; row < Vec; row++, row_idx++) {
-                if (col_idx >= cutoff) {
-                  tSr(row, m, n) = ElementAccumulator{-INFINITY};
-                }
-              }
-            }
-          }
-        }
-
         CollectiveSoftmaxEpilogue softmax(params.softmax);
         softmax((nblock_limit - 1) == 0, tSr, max_reg, sum_reg, out_reg);
 
