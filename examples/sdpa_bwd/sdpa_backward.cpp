@@ -1133,6 +1133,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     } else {
         setup_bshd_stride(param);
     }
+
     auto dimGrid0 = compat::dim3(size(M_BLOCK), size(param.num_head_q), size(param.batch));
     auto dimBlock0 = compat::dim3(size(kNSGs * trait.SubgroupSize), size(1), size(1));
     compat::experimental::launch_properties launch_props0{
@@ -1247,12 +1248,12 @@ void launch_mha_backward(ProblemShape problem_shape,
             seq_len_q_pad, seq_len_kv_pad);
     } else if (headdim == 128) {
         constexpr int kBlockM = 64;
-        constexpr int kBlockN = 64;
+        constexpr int kBlockN = 32;
         constexpr int kHeadDim = 128;
         constexpr int kNSGs = 8;
         constexpr int AtomLayoutMSdP = 4;
-        constexpr int AtomLayoutNdKV = 4;
-        constexpr int AtomLayoutMdQ = 4;
+        constexpr int AtomLayoutNdKV = 2;
+        constexpr int AtomLayoutMdQ = 2;
         static_assert(kBlockM <=  kMPad, "kBlockM must be less than or equal to kMPad");
         static_assert(kBlockN <=  kNPad, "kBlockN must be less than or equal to kNPad");
         launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
