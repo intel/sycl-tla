@@ -497,6 +497,8 @@ public:
         // mask the elements of each tile using the bottom right masking
         const int item_id = thread_idx % SubgroupSize;
         int col_idx = item_id + (nblock_limit - 1) * QK_BLK_N;
+        int remainder = seq_len_kv % QK_BLK_N;
+        int cutoff = (seq_len_kv / QK_BLK_N) * QK_BLK_N + remainder;
         CUTLASS_PRAGMA_UNROLL
         for (int n = 0; n < FragsN;
              n++, col_idx += get<1>(MmaAtomShape())) { // 4
@@ -505,8 +507,9 @@ public:
             int row_idx = m * Vec + seq_coord;
             CUTLASS_PRAGMA_UNROLL
             for (int row = 0; row < Vec; row++, row_idx++) { // 8
-              if (row_idx < first_non_masked_sequence ||
-                  col_idx > row_idx - first_non_masked_sequence) {
+              if (row_idx < first_non_masked_sequence || // for the sequence that is fully masked
+                  col_idx > row_idx - first_non_masked_sequence || // for the bottom right triangular masking
+                  col_idx >= cutoff) { // for seq_len_kv not fully divisible
                 tSr(row, m, n) = ElementAccumulator{-INFINITY};
               }
             }
