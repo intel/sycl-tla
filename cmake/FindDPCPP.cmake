@@ -73,7 +73,7 @@ if (SYCL_INTEL_TARGET)
     list(APPEND DPCPP_FLAGS "-fno-sycl-instrument-device-code")
   endif()
 
-  set(SYCL_DEVICES "")
+  set(SYCL_DEVICES)
 
   foreach(TGT IN LISTS DPCPP_SYCL_TARGET_LIST)
     if(TGT STREQUAL "intel_gpu_bmg_g21" OR TGT STREQUAL "bmg")
