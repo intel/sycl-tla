@@ -94,4 +94,34 @@ struct MMA_Traits<XE_DPAS_TT<M, TD, TA, TB, TC>>
   using CLayout = Layout<Shape<_16, _M>, Stride<_M, _1>>;
 };
 
+template <int N, typename TD, typename TA, typename TB, typename TC>
+struct MMA_Traits<XE_DPAS_NN<N, TD, TA, TB, TC>>
+{
+  using Op = XE_DPAS_NN<N, TD, TA, TB, TC>;
+
+  static constexpr int BV = 32 / sizeof_bits_v<TB>;
+  static constexpr int K = Op::K;
+
+  using ValTypeD = TD;
+  using ValTypeA = TA;
+  using ValTypeB = TB;
+  using ValTypeC = TC;
+  
+  using _N = Int<N>;
+  using _K = Int<K>;
+
+  using Shape_MNK = Shape<_16, _N, _K>;  // Note: swapped M and N for NN layout 
+  using ThrID = Layout<intel::_SGSize>;
+
+  // Get the corresponding TT traits for layout definitions
+  using TTTraits = MMA_Traits<XE_DPAS_TT<N, TD, TA, TB, TC>>;
+  
+  // Swap A and B layouts for NN (compared to TT)
+  using ALayout = typename TTTraits::BLayout;
+  using BLayout = typename TTTraits::ALayout;
+  
+  // C layout: N x 16 column major (transposed from TT)
+  using CLayout = Layout<Shape<_N, _16>, Stride<_1, _N>>;
+};
+
 } /* namespace cute */
