@@ -332,8 +332,10 @@ public:
       // subgroup. The sequence is always the last sequence in that subblock.
       int longest_non_masked_length = 0;
       if (seq_len_kv > seq_len_qo) {
-        longest_non_masked_length =
-            seq_len_kv - (seq_len_qo - 1) + last_seq_coord; // + the last row
+        // Find out how many elements have to be calcualted in the first sequence
+        int elements_in_first_line = seq_len_kv - seq_len_qo + 1;
+        longest_non_masked_length = elements_in_first_line + last_seq_coord; // the number of elements increased with the sequence row number.
+            //seq_len_kv - (seq_len_qo - 1) + last_seq_coord; // + the last row
       } else {
         if (seq_len_qo > seq_len_kv) {
           longest_non_masked_length = cute::min(
@@ -352,7 +354,7 @@ public:
 
       int seq_len = seq_len_kv;
       if (CausalMask) {
-        seq_len = cute::min(seq_len_kv, longest_non_masked_length);
+        seq_len = longest_non_masked_length;
       }
 
       int nblock_limit = cute::ceil_div(seq_len, QK_BLK_N);
