@@ -331,19 +331,24 @@ public:
       // Calculate the longest length of the non-masked sequences for this
       // subgroup. The sequence is always the last sequence in that subblock.
       int longest_non_masked_length = 0;
-      if (seq_len_kv > seq_len_qo){
-        longest_non_masked_length = seq_len_kv - (seq_len_kv - seq_len_qo - 1) + last_seq_coord;
-      }
-      else{
-        if (seq_len_qo > seq_len_kv){
-          longest_non_masked_length = cute::min(seq_len_kv, cute::max(0, last_seq_coord - first_non_masked_sequence + 1)); // Need to double check
+      if (seq_len_kv > seq_len_qo) {
+        longest_non_masked_length =
+            seq_len_kv - (seq_len_qo - 1) + last_seq_coord; // + the last row
+      } else {
+        if (seq_len_qo > seq_len_kv) {
+          longest_non_masked_length = cute::min(
+              seq_len_kv,
+              cute::max(0, last_seq_coord - first_non_masked_sequence + 1));
         }
-        //seq_len_qo == seq_len_kv
-        else{
-          
+        // seq_len_qo == seq_len_kv
+        else {
+          longest_non_masked_length = cute::min(
+              seq_len_kv,
+              cute::max(0, last_seq_coord - first_non_masked_sequence + 1));
         }
       }
-      longest_non_masked_length = cute::min(seq_len_kv, longest_non_masked_length);
+      longest_non_masked_length =
+          cute::min(seq_len_kv, longest_non_masked_length);
 
       int seq_len = seq_len_kv;
       if (CausalMask) {
@@ -457,8 +462,7 @@ public:
           int cutoff = (seq_len_kv / QK_BLK_N) * QK_BLK_N + remainder;
 
           CUTLASS_PRAGMA_UNROLL
-          for (int n = 0; n < FragsN;
-               n++, col_idx += get<1>(MmaAtomShape())) {
+          for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) {
 
             CUTLASS_PRAGMA_UNROLL
             for (int m = 0; m < FragsM; m++) {
@@ -469,27 +473,28 @@ public:
                   tSr(row, m, n) = ElementAccumulator{-INFINITY};
                 }
 
-                if (CausalMask){
-                  if (seq_len_kv > seq_len_qo){
-                    int first_masked_col_index = seq_len_kv - (seq_len_kv - seq_len_qo - 1) + row_idx; 
-                    if (col_idx >= first_masked_col_index){
+                if (CausalMask) {
+                  if (seq_len_kv > seq_len_qo) {
+                    int first_masked_col_index = seq_len_kv - (seq_len_qo - 1) + row_idx;
+                    if (col_idx >= first_masked_col_index) {
                       tSr(row, m, n) = ElementAccumulator{-INFINITY};
                     }
-                  }
-                  else{
-                    if (seq_len_qo > seq_len_kv){
+                  } else {
+                    if (seq_len_qo > seq_len_kv) {
                       int first_non_masked_sequence = seq_len_qo - seq_len_kv;
-                      if (row_idx < first_non_masked_sequence || col_idx > row_idx - first_non_masked_sequence){
+                      if (row_idx < first_non_masked_sequence ||
+                          col_idx > row_idx - first_non_masked_sequence) {
                         tSr(row, m, n) = ElementAccumulator{-INFINITY};
                       }
                     }
                     // seq_len_qo == seq_len_kv
-                    else{
-                      
+                    else {
+                      if (col_idx > row_idx) {
+                        tSr(row, m, n) = ElementAccumulator{-INFINITY};
+                      }
                     }
                   }
                 }
-
               }
             }
           }
@@ -540,35 +545,28 @@ public:
             int row_idx = m * Vec + seq_coord;
             CUTLASS_PRAGMA_UNROLL
             for (int row = 0; row < Vec; row++, row_idx++) { // 8
-              // if (row_idx < first_non_masked_sequence || // for the sequence that is fully masked
-              //     col_idx > row_idx - first_non_masked_sequence || // for the bottom right triangular masking
-              //     col_idx >= cutoff) { // for seq_len_kv not fully divisible
-              //   tSr(row, m, n) = ElementAccumulator{-INFINITY};
-              // }
+              if (col_idx >= cutoff) {
+                tSr(row, m, n) = ElementAccumulator{-INFINITY};
+              }
 
-              if (seq_len_kv > seq_len_qo){
-                int first_masked_col_index = seq_len_kv - (seq_len_kv - seq_len_qo - 1) + row_idx; 
-                if (col_idx >= first_masked_col_index){
+              if (seq_len_kv > seq_len_qo) {
+                int first_masked_col_index = seq_len_kv - (seq_len_qo - 1) + row_idx;
+                if (col_idx >= first_masked_col_index) {
                   tSr(row, m, n) = ElementAccumulator{-INFINITY};
                 }
-                // if (cute::thread(0)){
-                //   print("row: ");
-                //   print(row);
-                //   print("\n first_masked_col_index: ");
-                //   print(first_masked_col_index);
-                //   print("\n");
-                // }
-              }
-              else{
-                if (seq_len_qo > seq_len_kv){
+              } else {
+                if (seq_len_qo > seq_len_kv) {
                   int first_non_masked_sequence = seq_len_qo - seq_len_kv;
-                  if (row_idx < first_non_masked_sequence || col_idx > row_idx - first_non_masked_sequence){
+                  if (row_idx < first_non_masked_sequence ||
+                      col_idx > row_idx - first_non_masked_sequence) {
                     tSr(row, m, n) = ElementAccumulator{-INFINITY};
                   }
                 }
                 // seq_len_qo == seq_len_kv
-                else{
-                  
+                else {
+                  if (col_idx > row_idx) {
+                    tSr(row, m, n) = ElementAccumulator{-INFINITY};
+                  }
                 }
               }
             }
