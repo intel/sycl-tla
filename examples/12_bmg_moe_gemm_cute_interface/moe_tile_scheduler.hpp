@@ -46,7 +46,9 @@ using namespace cute;
 ///////////////////////////////////////////////////////////////////////////////
 // Adapted from xe_tile_scheduler_group.hpp
 // Persistent Thread Block (TB) scheduler for MoE GEMM
-template <class GroupProblemShape> class PersistentTileSchedulerXeMoE {
+template <class GroupProblemShape>
+class PersistentTileSchedulerXeMoE
+    : public PersistentTileSchedulerXeGroup<GroupProblemShape> {
   //
   // Data members
   //
@@ -84,15 +86,8 @@ public:
   using Params = PersistentTileSchedulerSm90GroupParams<GroupProblemShape>;
   using RasterOrder = typename Params::RasterOrder;
   using RasterOrderOptions = typename Params::RasterOrderOptions;
+  using BaseClass = PersistentTileSchedulerXeGroup<GroupProblemShape>;
 
-  struct Arguments {
-    int max_swizzle_size = 1;
-    // Not applying Heuristics for Grouped problems, since largest dimension can
-    // change per group
-    RasterOrderOptions raster_order = RasterOrderOptions::AlongM;
-  };
-
-  // Sink scheduler params as a member
   Params scheduler_params;
 
   //
@@ -120,23 +115,13 @@ public:
   static Params to_underlying_arguments(
       GroupProblemShape problem_shapes, TileShape tile_shape,
       ClusterShape cluster_shape, KernelHardwareInfo const &hw_info,
-      Arguments const &arguments, [[maybe_unused]] void *workspace = nullptr,
+      typename BaseClass::Arguments const &arguments,
+      [[maybe_unused]] void *workspace = nullptr,
       [[maybe_unused]] const uint32_t epilogue_subtile = 1,
       [[maybe_unused]] uint32_t ktile_start_alignment_count = 1u) {
-
-    // We only need the tile and cluster shape during scheduler setup, so let
-    // FTAD do the magic
-    static_assert(cute::is_static<TileShape>::value);
-    static_assert(cute::is_static<ClusterShape>::value);
-
-    dim3 problem_blocks = get_tiled_cta_shape_mnl(hw_info, cluster_shape);
-
-    Params params;
-    params.initialize(problem_blocks, problem_shapes, to_gemm_coord(tile_shape),
-                      to_gemm_coord(cluster_shape), hw_info,
-                      arguments.max_swizzle_size, arguments.raster_order);
-
-    return params;
+    return BaseClass::to_underlying_arguments(problem_shapes, tile_shape,
+                                              cluster_shape, hw_info, arguments,
+                                              workspace);
   }
 
   // Given the inputs, computes the physical grid we should launch.
@@ -145,14 +130,12 @@ public:
   get_grid_shape([[maybe_unused]] Params const &params,
                  GroupProblemShape problem_shapes, TileShape tile_shape,
                  ClusterShape cluster_shape, KernelHardwareInfo hw_info,
-                 Arguments arguments, bool truncate_by_problem_size = true) {
+                 typename BaseClass::Arguments arguments,
+                 bool truncate_by_problem_size = true) {
 
-    dim3 problem_blocks = get_tiled_cta_shape_mnl(hw_info, cluster_shape);
-
-    return Params::get_grid_shape(problem_blocks, to_gemm_coord(cluster_shape),
-                                  hw_info, arguments.max_swizzle_size,
-                                  arguments.raster_order,
-                                  /* truncate_by_problem_size = */ true);
+    return BaseClass::get_grid_shape(params, problem_shapes, tile_shape,
+                                     cluster_shape, hw_info, arguments,
+                                     truncate_by_problem_size);
   }
 
   CUTLASS_DEVICE explicit PersistentTileSchedulerXeMoE(
@@ -170,7 +153,6 @@ public:
       current_work_linear_idx_ =
           uint64_t(BlockIdxX()) * uint64_t(GridDimY()) + uint64_t(BlockIdxY());
     }
-
     total_grid_size_ =
         uint64_t(GridDimX()) * uint64_t(GridDimY()) * uint64_t(GridDimZ());
   }
@@ -182,11 +164,6 @@ public:
 
   CUTLASS_DEVICE
   WorkTileInfo get_current_work_for_linear_idx(uint64_t linear_idx) {
-    if (scheduler_params.pre_processed_problem_shapes &&
-        linear_idx >= scheduler_params.blocks_across_problem_) {
-      return WorkTileInfo::invalid_work_tile();
-    }
-
     return get_work_idx_m_and_n(
         linear_idx, current_group_info_, scheduler_params.problem_shapes_,
         scheduler_params.cta_shape_, scheduler_params.cluster_shape_,
