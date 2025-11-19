@@ -75,10 +75,9 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
         const int32_t K,
         PersistentTileSchedulerSm90GroupParams<ProblemShape> scheduler_params) {
 
-  TileScheduler scheduler{scheduler_params};
+  TileScheduler scheduler{scheduler_params, const_cast<int32_t *>(M_per_group),
+                          N, K, num_experts};
 
-  // TODO : Modify tile-scheduler to not require configure
-  scheduler.configure(const_cast<int32_t *>(M_per_group), N, K, num_experts);
   auto work_tile_info = scheduler.initial_work_tile_info(Shape<_1, _1, _1>{});
   constexpr char actual_layout_of_B = LayoutKindB ^ ('R' ^ 'C');
   bool did_group_change = true;
@@ -137,8 +136,7 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
         A_tensor, B_tensor, D_tensor, tile_coord, mma);
 
     // Get next work tile
-    auto [next_work_tile_info, temp] =
-        scheduler.fetch_next_work(work_tile_info);
+    auto next_work_tile_info = scheduler.fetch_next_work(work_tile_info);
     work_tile_info = next_work_tile_info;
     did_group_change = curr_group != work_tile_info.L_idx;
   } // end while loop

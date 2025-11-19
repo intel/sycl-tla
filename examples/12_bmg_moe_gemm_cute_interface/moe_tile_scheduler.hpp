@@ -99,14 +99,6 @@ public:
   // Methods
   //
 
-  CUTLASS_HOST_DEVICE void configure(int32_t *num_rows_per_expert, int32_t N,
-                                     int32_t K, int32_t num_experts) {
-    num_rows_per_expert_ = num_rows_per_expert;
-    N_ = N;
-    K_ = K;
-    num_experts_ = num_experts;
-  }
-
   // Given the inputs, computes the total number of output blocks this problem
   // will compute over Note that this is only the logical size of our grid, not
   // the physical grid we will actually launch.
@@ -163,13 +155,14 @@ public:
                                   /* truncate_by_problem_size = */ true);
   }
 
-  PersistentTileSchedulerXeMoE() = default;
-
-  CUTLASS_DEVICE explicit PersistentTileSchedulerXeMoE(Params const &params_)
+  CUTLASS_DEVICE explicit PersistentTileSchedulerXeMoE(
+      Params const &params_, int32_t *num_rows_per_expert, int32_t N, int32_t K,
+      int32_t num_experts)
       : scheduler_params(params_) {
-    // MSVC requires protecting use of CUDA-specific nonstandard syntax,
-    // like blockIdx and gridDim, with __CUDA_ARCH__.
-#if defined(__CUDA_ARCH__) || defined __SYCL_DEVICE_ONLY__
+    num_rows_per_expert_ = num_rows_per_expert;
+    N_ = N;
+    K_ = K;
+    num_experts_ = num_experts;
     if (scheduler_params.raster_order_ == RasterOrder::AlongN) {
       current_work_linear_idx_ =
           uint64_t(BlockIdxX()) + uint64_t(BlockIdxY()) * uint64_t(GridDimX());
@@ -180,10 +173,6 @@ public:
 
     total_grid_size_ =
         uint64_t(GridDimX()) * uint64_t(GridDimY()) * uint64_t(GridDimZ());
-
-#else
-    CUTLASS_ASSERT(false && "This line should never be reached");
-#endif
   }
 
   CUTLASS_DEVICE
@@ -319,22 +308,11 @@ public:
     }
   }
 
-  // Returns whether the current WorkTileInfo passed in should continue to be
-  // used. Since this scheduler only schedules work in units of single, full
-  // output tiles, the WorkTileInfo passed in should not be used after having
-  // been processed.
-  CUTLASS_DEVICE
-  static bool continue_current_work(WorkTileInfo &) { return false; }
-
   // Kernel helper function to get next work tile
   CUTLASS_DEVICE
   auto fetch_next_work(WorkTileInfo work_tile_info) {
-    if (continue_current_work(work_tile_info)) {
-      return cute::make_tuple(work_tile_info, true);
-    }
-
     advance_to_next_work();
-    return cute::make_tuple(get_current_work(), true);
+    return get_current_work();
   }
 
   // Returns the initial work tile info that will be computed over
