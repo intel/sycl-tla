@@ -135,7 +135,7 @@ auto choose_xe_reorder_impl(SLayout const& slayout,   // (src thr, src val) -> c
   else if constexpr (is_subbyte_v<DType>)
     return ReorderDispatchRelayoutConvert{};
   else if constexpr (!is_same_v<remove_cv_t<SType>, remove_cv_t<DType>>)
-    return ReorderDispatchRelayoutConvert{};
+    return ReorderDispatchConvertRelayout{};
   else
     return ReorderDispatchXeGeneric{};
 }
