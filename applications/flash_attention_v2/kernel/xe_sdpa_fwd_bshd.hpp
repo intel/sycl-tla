@@ -333,9 +333,8 @@ public:
       int longest_non_masked_length = 0;
       if (seq_len_kv > seq_len_qo) {
         // Find out how many elements have to be calcualted in the first sequence
-        int elements_in_first_line = seq_len_kv - seq_len_qo + 1;
+        int elements_in_first_line = seq_len_kv - (seq_len_qo - 1);
         longest_non_masked_length = elements_in_first_line + last_seq_coord; // the number of elements increased with the sequence row number.
-            //seq_len_kv - (seq_len_qo - 1) + last_seq_coord; // + the last row
       } else {
         if (seq_len_qo > seq_len_kv) {
           longest_non_masked_length = cute::min(
@@ -474,26 +473,38 @@ public:
                 if (col_idx >= cutoff) {
                   tSr(row, m, n) = ElementAccumulator{-INFINITY};
                 }
+              }
+            }
+          }
+        }
 
-                if (CausalMask) {
-                  if (seq_len_kv > seq_len_qo) {
-                    int first_masked_col_index = seq_len_kv - (seq_len_qo - 1) + row_idx;
-                    if (col_idx >= first_masked_col_index) {
+        // Mask the attention matrix based on different conditions
+        if (CausalMask) {
+          int col_idx = item_id + nblock * QK_BLK_N;
+          CUTLASS_PRAGMA_UNROLL
+          for (int n = 0; n < FragsN; n++, col_idx += get<1>(MmaAtomShape())) {
+            CUTLASS_PRAGMA_UNROLL
+            for (int m = 0; m < FragsM; m++) {
+              int row_idx = m * Vec + seq_coord;
+              CUTLASS_PRAGMA_UNROLL
+              for (int row = 0; row < Vec; row++, row_idx++) {
+                if (seq_len_kv > seq_len_qo) {
+                  int first_masked_col_index = seq_len_kv - (seq_len_qo - 1) + row_idx;
+                  if (col_idx >= first_masked_col_index) {
+                    tSr(row, m, n) = ElementAccumulator{-INFINITY};
+                  }
+                } else {
+                  if (seq_len_qo > seq_len_kv) {
+                    int first_non_masked_sequence = seq_len_qo - seq_len_kv;
+                    if (row_idx < first_non_masked_sequence ||
+                        col_idx > row_idx - first_non_masked_sequence) {
                       tSr(row, m, n) = ElementAccumulator{-INFINITY};
                     }
-                  } else {
-                    if (seq_len_qo > seq_len_kv) {
-                      int first_non_masked_sequence = seq_len_qo - seq_len_kv;
-                      if (row_idx < first_non_masked_sequence ||
-                          col_idx > row_idx - first_non_masked_sequence) {
-                        tSr(row, m, n) = ElementAccumulator{-INFINITY};
-                      }
-                    }
-                    // seq_len_qo == seq_len_kv
-                    else {
-                      if (col_idx > row_idx) {
-                        tSr(row, m, n) = ElementAccumulator{-INFINITY};
-                      }
+                  }
+                  // seq_len_qo == seq_len_kv
+                  else {
+                    if (col_idx > row_idx) {
+                      tSr(row, m, n) = ElementAccumulator{-INFINITY};
                     }
                   }
                 }
