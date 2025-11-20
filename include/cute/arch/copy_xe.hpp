@@ -74,7 +74,8 @@ struct XE_1D_LDSM {
       CUTE_STATIC_ASSERT(sizeof(S_) == sizeof(S));
       auto props = sycl::ext::oneapi::experimental::properties{
           sycl::ext::oneapi::experimental::contiguous_memory,
-          sycl::ext::oneapi::experimental::alignment<sizeof(D)>};
+          sycl::ext::oneapi::experimental::alignment<sizeof(D)>,
+          sycl::ext::oneapi::experimental::data_placement_striped};
       auto sg =
           sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_sub_group();
       sycl::ext::oneapi::experimental::group_load(
@@ -132,7 +133,8 @@ struct XE_1D_STSM {
       auto sg = sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_sub_group();
       auto props = sycl::ext::oneapi::experimental::properties{
           sycl::ext::oneapi::experimental::contiguous_memory,
-          sycl::ext::oneapi::experimental::alignment<sizeof(S)>};
+          sycl::ext::oneapi::experimental::alignment<sizeof(S)>,
+          sycl::ext::oneapi::experimental::data_placement_striped};
       sycl::ext::oneapi::experimental::group_store(
           sg, *reinterpret_cast<sycl::vec<D_, N> const *>(&src), &dst, props);
     #else
