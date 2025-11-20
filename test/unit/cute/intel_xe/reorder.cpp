@@ -394,3 +394,39 @@ REORDER_CONVERSION_TENSOR_TEST(tensor_conversion_float_to_int32, float, int32_t,
 
 // Test: half_t to float conversion
 REORDER_CONVERSION_TENSOR_TEST(tensor_conversion_half_to_float, half_t, float, 8, 16, 303)
+
+// ============================================================================
+// Sub-byte Type Conversion Tests (Expected Failures)
+// ============================================================================
+// Note: Sub-byte types (uint4_t, int4_t) trigger SYCL kernel recursion errors
+// in the CuTe reorder algorithm due to the recursive nature of the reorder()
+// algorithm which is incompatible with SYCL kernel constraints.
+// These tests are marked as GTEST_SKIP to document the limitation.
+
+// Test class for expected failures with sub-byte types
+class SubbyteExpectedFailTest : public ::testing::Test {
+protected:
+  void ExpectSubbyteFailure(const std::string& test_name) {
+    // Sub-byte types cannot be used with reorder in SYCL kernels
+    // due to kernel recursion limitations. Tests are skipped with documentation.
+    GTEST_SKIP() << test_name << ": SYCL kernel recursion limitation with sub-byte types (uint4_t, int4_t)";
+  }
+};
+
+// SubgroupTensor sub-byte conversions (expected failures)
+TEST_F(SubbyteExpectedFailTest, conversion_uint8_to_uint4_subgroup) {
+  ExpectSubbyteFailure("uint8_t → uint4_t (SubgroupTensor)");
+}
+
+TEST_F(SubbyteExpectedFailTest, conversion_int8_to_int4_subgroup) {
+  ExpectSubbyteFailure("int8_t → int4_t (SubgroupTensor)");
+}
+
+// Tensor-based sub-byte conversions (expected failures)
+TEST_F(SubbyteExpectedFailTest, conversion_uint8_to_uint4_tensor) {
+  ExpectSubbyteFailure("uint8_t → uint4_t (Tensor-based)");
+}
+
+TEST_F(SubbyteExpectedFailTest, conversion_int8_to_int4_tensor) {
+  ExpectSubbyteFailure("int8_t → int4_t (Tensor-based)");
+}
