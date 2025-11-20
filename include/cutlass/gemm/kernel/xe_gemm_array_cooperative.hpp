@@ -254,6 +254,7 @@ public:
     int32_t curr_group = -1;
     using ProblemShapeMNKL = Shape<int, int, int, int>;
     ProblemShapeMNKL problem_shape_MNKL;
+    typename CollectiveMainloop::Base::Params base_params;
     EpilogueTensors CD_tensors;
 
     if (work_tile_info.is_valid()) {
@@ -277,7 +278,6 @@ public:
       auto gB_nkl = local_tile(mB_nkl, select<1,2>(workgroup_shape), make_coord(n_coord, _, 0));
 
       CollectiveMainloop collective_mma;
-      typename CollectiveMainloop::Base::Params base_params;
       if(did_group_change) {
         base_params = CollectiveMainloop::Base::to_underlying_arguments(problem_shape_MNKL,
                                                          CollectiveMainloop::to_base_arguments(params.mainloop, curr_group),
