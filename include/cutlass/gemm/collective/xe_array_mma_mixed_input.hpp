@@ -113,22 +113,22 @@ public:
                                 SmemLayoutAtomB_,
                                 SmemCopyAtomB_,
                                 TransformB_>;
-  using BaseArguments = Base::Arguments;
-  using BaseParams = Base::Params;
+  using BaseArguments = typename Base::Arguments;
+  using BaseParams = typename Base::Params;
 
-  using ElementA = Base::ElementA;
-  using ElementB = Base::ElementB;
-  using ElementScale = Base::ElementScale;
-  using ElementZero = Base::ElementZero;
+  using ElementA = typename Base::ElementA;
+  using ElementB = typename Base::ElementB;
+  using ElementScale = typename Base::ElementScale;
+  using ElementZero = typename Base::ElementZero;
 
-  using StrideScale = Base::StrideScale;
-  using StrideZero = Base::StrideZero;
+  using StrideScale = typename Base::StrideScale;
+  using StrideZero = typename Base::StrideZero;
 
   using NonVoidStrideScale = cute::conditional_t<cute::is_same_v<StrideScale, void>, cute::Stride<_1, int64_t, int64_t> *, StrideScale>;
   using NonVoidStrideZero = cute::conditional_t<cute::is_same_v<StrideZero, void>, cute::Stride<_1, int64_t, int64_t> *, StrideZero>;
 
-  using NonVoidElementScale = Base::NonVoidElementScale;
-  using NonVoidElementZero = Base::NonVoidElementZero;
+  using NonVoidElementScale = typename Base::NonVoidElementScale;
+  using NonVoidElementZero = typename Base::NonVoidElementZero;
 
   using DispatchPolicy = MainloopIntelXeXMX16GroupMixedPrecision<Stages, Schedule>;
 
@@ -136,9 +136,9 @@ public:
   using InternalNonVoidStrideZero = cute::remove_pointer_t<NonVoidStrideZero>;
 
   using StrideA = StrideA_;
-  using InternalStrideA = Base::StrideA;
+  using InternalStrideA = typename Base::StrideA;
   using StrideB = StrideB_;
-  using InternalStrideB = Base::StrideB;
+  using InternalStrideB = typename Base::StrideB;
 
   // Host side kernel arguments
   struct Arguments {

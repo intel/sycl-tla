@@ -86,8 +86,8 @@ struct CollectiveMma<MainloopIntelXeXMX16GroupFP8<Stages, Schedule>, TileShape_,
                               SmemLayoutAtomB_,
                               SmemCopyAtomB_,
                               TransformB_>;
-  using BaseArguments = Base::Arguments;
-  using BaseParams = Base::Params;
+  using BaseArguments = typename Base::Arguments;
+  using BaseParams = typename Base::Params;
 
   using DispatchPolicy = MainloopIntelXeXMX16GroupFP8<Stages, Schedule>;
   using WorkgroupTileShape = TileShape_;

@@ -60,16 +60,16 @@ struct CollectiveMma<MainloopXeL1StagedGroup<Stages, Schedule>, TileShape_, Elem
   using Base = CollectiveMma<MainloopXeL1Staged<Stages, Schedule>, TileShape_, ElementA_, StrideA_, ElementB_, StrideB_, TiledMma_,
                                       GmemTiledCopyA_, SmemLayoutAtomA_, SmemCopyAtomA_, TransformA_, GmemTiledCopyB_, SmemLayoutAtomB_,
                                       SmemCopyAtomB_, TransformB_>;
-  using BaseArguments = Base::Arguments;
-  using BaseParams = Base::Params;
+  using BaseArguments = typename Base::Arguments;
+  using BaseParams = typename Base::Params;
 
   using DispatchPolicy = MainloopXeL1StagedGroup<Stages, Schedule>;
   using ElementA = ElementA_;
   using StrideA = StrideA_;
-  using InternalStrideA = Base::StrideA;
+  using InternalStrideA = typename Base::StrideA;
   using ElementB = ElementB_;
   using StrideB = StrideB_;
-  using InternalStrideB = Base::StrideB;
+  using InternalStrideB = typename Base::StrideB;
 
   // Host side kernel arguments
   struct Arguments {
