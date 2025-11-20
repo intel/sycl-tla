@@ -421,7 +421,10 @@ void initialize(const Options &options) {
 }
 
   /// Populates a Gemm::Arguments structure from the given commandline options
-  typename Gemm::Arguments args_from_options(const Options &options, const cutlass::KernelHardwareInfo& hw_info, bool host_problem_shapes_available = true)
+  typename Gemm::Arguments args_from_options(const Options &options,
+      const cutlass::KernelHardwareInfo& hw_info,
+      bool host_problem_shapes_available = true,
+      bool use_nullptr_c = false)
   {
     typename Gemm::Arguments arguments;
     decltype(arguments.epilogue.thread) fusion_args;
@@ -458,7 +461,7 @@ void initialize(const Options &options) {
         cutlass::gemm::GemmUniversalMode::kGrouped,
         {options.groups, problem_sizes.get(), options.problem_sizes_host.data()},
         {ptr_A.get(), stride_A.get(), ptr_B.get(), stride_B.get()},
-        {fusion_args, ptr_C.get(), stride_C.get(), ptr_D.get(), stride_D.get()},
+        {fusion_args, use_nullptr_c ? nullptr : ptr_C.get(), stride_C.get(), ptr_D.get(), stride_D.get()},
         hw_info,
         {1, RasterOrderOptions::AlongN}
       };
@@ -468,7 +471,7 @@ void initialize(const Options &options) {
         cutlass::gemm::GemmUniversalMode::kGrouped,
         {options.groups, problem_sizes.get(), nullptr},
         {ptr_A.get(), stride_A.get(), ptr_B.get(), stride_B.get()},
-        {fusion_args, ptr_C.get(), stride_C.get(), ptr_D.get(), stride_D.get()},
+        {fusion_args, use_nullptr_c ? nullptr : ptr_C.get(), stride_C.get(), ptr_D.get(), stride_D.get()},
         hw_info,
         {1, RasterOrderOptions::AlongN}
       };
@@ -477,13 +480,16 @@ void initialize(const Options &options) {
     return arguments;
   }
 
-  cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info, bool host_problem_shapes_available = true) {
+  cutlass::Status run(const Options& options,
+      const cutlass::KernelHardwareInfo& hw_info,
+      bool host_problem_shapes_available = true,
+      bool use_nullptr_c = false) {
     allocate(options);
     initialize(options);
 
     Gemm gemm_op;
 
-    auto arguments = args_from_options(options, hw_info, host_problem_shapes_available);
+    auto arguments = args_from_options(options, hw_info, host_problem_shapes_available, use_nullptr_c);
 
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
@@ -530,26 +536,8 @@ void initialize(const Options &options) {
 
 };
 
-int main(int argc, const char** argv)
-{
-  //
-  // Parse options
-  //
-
-  Options options;
-
-  options.parse(argc, argv);
-
-  if (options.help) {
-    options.print_usage(std::cout) << std::endl;
-    return 0;
-  }
-
-  if (options.error) {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
-  }
-
+template<bool use_nullptr_c=false>
+void launcher(Options& options) {
   //
   // Run examples
   //
@@ -580,8 +568,9 @@ int main(int argc, const char** argv)
   using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1StagedGroup<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16Group;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
-          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+  using EpilogueOp = 
+     cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
+       ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest, !use_nullptr_c>>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           decltype(tile_shape(TiledMma()))>;
@@ -622,7 +611,38 @@ int main(int argc, const char** argv)
 
   ExampleRunner<Gemm> runner;
 
-  CUTLASS_CHECK(runner.run(options, hw_info));
+  CUTLASS_CHECK(runner.run(options, hw_info, true, /* use_nullptr_c = */use_nullptr_c));
+}
+
+
+int main(int argc, const char** argv)
+{
+  //
+  // Parse options
+  //
+
+  Options options;
+
+  options.parse(argc, argv);
+
+  if (options.help) {
+    options.print_usage(std::cout) << std::endl;
+    return 0;
+  }
+
+  if (options.error) {
+    std::cerr << "Aborting execution." << std::endl;
+    return -1;
+  }
+  if (options.beta == 0.f) {
+    // the reference kernel doesn't accept nullptr for C, so we only test for nullptr ptr_C epilogue arg
+    // when beta is 0.
+    std::cout << "\n\nUse a nullptr as argument ptr_C of the group GEMM epilogue colective\n\n";
+    launcher<true>(options);
+    std::cout << "\n\nPass actual ptr_C as an argument to the group GEMM epilogue colective\n\n";
+  }
+  launcher<false>(options);
 
   return 0;
+
 }
