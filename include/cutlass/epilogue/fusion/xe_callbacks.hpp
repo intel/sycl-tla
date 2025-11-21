@@ -740,7 +740,7 @@ class CtaTileShapeMNK_,
 class EpilogueTile_
 >
 struct FusionCallbacks<
-epilogue::IntelXeGeneric,
+epilogue::IntelXeXMX16,
     fusion::LinCombPerRowBias<ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
