@@ -65,15 +65,16 @@ CUTE_DEVICE auto make_moe_tensor(T *ptr, int r, int c) {
 }
 
 template <class GmemTiledCopyA, class GmemTiledCopyB, class GmemTiledCopyD,
-          char LayoutKindA, char LayoutKindB, char LayoutKindD, class TiledMMA,
-          typename ElementA, typename ElementB, typename ElementS,
-          typename ElementD>
+          char LayoutKindA, char LayoutKindB, char LayoutKindD, class SGLayout,
+          class TiledMMA, typename ElementA, typename ElementB,
+          typename ElementS, typename ElementD>
 CUTE_DEVICE void
 MoEGEMM(const ElementA *Activations, const ElementB *Weights,
         const ElementS *Scales, ElementD *Outputs, TiledMMA const &mma,
         const int32_t *M_per_group, const int32_t num_experts, const int32_t N,
         const int32_t K,
-        PersistentTileSchedulerSm90GroupParams<ProblemShape> scheduler_params) {
+        PersistentTileSchedulerSm90GroupParams<ProblemShape> scheduler_params,
+        SGLayout sg_layout) {
 
   TileScheduler scheduler{scheduler_params, const_cast<int32_t *>(M_per_group),
                           N, K, num_experts};
@@ -127,14 +128,13 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
       did_group_change = false;
     }
 
-    // After adding scaledMM mainloops, add something like
-    // if constexpr (!cute::is_void_v<ElementS>) {
-    //   moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
-    //      A_tensor, B_tensor, Scales, D_tensor, tile_coord, mma);
-    // } else {
-    moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
-        A_tensor, B_tensor, D_tensor, tile_coord, mma);
-
+    if constexpr (!cute::is_void_v<ElementS>) {
+      moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
+          A_tensor, B_tensor, Scales, D_tensor, tile_coord, mma, sg_layout);
+    } else {
+      moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
+          A_tensor, B_tensor, D_tensor, tile_coord, mma);
+    }
     // Get next work tile
     auto next_work_tile_info = scheduler.fetch_next_work(work_tile_info);
     work_tile_info = next_work_tile_info;
