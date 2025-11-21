@@ -85,6 +85,16 @@ if(CUTLASS_ENABLE_SYCL)
       xe_gemm_fp16_fp8_fp32_tensor_op_fp32_group_gemm.cpp
     )
 
+    # Single unified test executable combining all new test files
+    cutlass_test_unit_add_executable(
+      cutlass_test_unit_gemm_device_unified_tests
+      gemm_universal_lincomb_per_rowbias_eltact.cpp
+      gemm_universal_mainloopintelxexmx16group.cpp
+      gemm_universal_mainloopintelxexmx16_group_fp8.cpp
+      gemm_universal_mainloopintelxexmx16group_precision.cpp
+      gemm_universal_fp_scaling.cpp
+    )
+
     add_custom_target(
       cutlass_test_unit_gemm_device
       DEPENDS
