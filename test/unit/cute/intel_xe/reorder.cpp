@@ -278,33 +278,9 @@ struct ConversionSubgroupTest : ConversionReorderTestBase<SrcType, DstType, M, N
 template <class SrcType, class DstType, int M, int N, int TestID>
 struct ConversionTensorTest : ConversionReorderTestBase<SrcType, DstType, M, N, TestID, TensorRunner> {};
 
-// Macro for cross-type conversion tests with SubgroupTensor
-#define REORDER_CONVERSION_SUBGROUP_TEST(TestName, SrcType, DstType, M, N, TestID) \
-  TEST(PVC_CuTe_Xe_Reorder_Conversion, TestName) { \
-    ConversionSubgroupTest<SrcType, DstType, M, N, TestID>::run(); \
-  }
-
-// Macro for cross-type conversion tests with Tensor
-#define REORDER_CONVERSION_TENSOR_TEST(TestName, SrcType, DstType, M, N, TestID) \
-  TEST(PVC_CuTe_Xe_Reorder_Conversion_Tensor, TestName) { \
-    ConversionTensorTest<SrcType, DstType, M, N, TestID>::run(); \
-  }
-
 // Template-based test helper for identity reorders using SubgroupTensor
 template <class T, int M, int N, int TestID>
 struct IdentityReorderTest : ReorderTestBase<T, M, N, TestID, SubgroupTensorRunner> {};
-
-// Macro to simplify test declaration
-#define REORDER_IDENTITY_TEST(TestName, Type, M, N, TestID) \
-  TEST(PVC_CuTe_Xe_Reorder, TestName) { \
-    IdentityReorderTest<Type, M, N, TestID>::run(); \
-  }
-
-// Macro to simplify tensor-based test declaration
-#define REORDER_TENSOR_TEST(TestName, Type, M, N, TestID) \
-  TEST(PVC_CuTe_Xe_Reorder_Tensor, TestName) { \
-    ReorderTestBase<Type, M, N, TestID, TensorRunner>::run(); \
-  }
 
 // ============================================================================
 // SubgroupTensor-based Reorder Tests
@@ -313,30 +289,72 @@ struct IdentityReorderTest : ReorderTestBase<T, M, N, TestID, SubgroupTensorRunn
 // ensuring data integrity through round-robin subgroup ownership patterns.
 
 // Test: Basic Types with SubgroupTensor (8x16 matrices)
-REORDER_IDENTITY_TEST(subgroup_basic_float, float, 8, 16, 0)
-REORDER_IDENTITY_TEST(subgroup_basic_int32, int32_t, 8, 16, 1)
+TEST(PVC_CuTe_Xe_Reorder, subgroup_basic_float) {
+  IdentityReorderTest<float, 8, 16, 0>::run();
+}
+
+TEST(PVC_CuTe_Xe_Reorder, subgroup_basic_int32) {
+  IdentityReorderTest<int32_t, 8, 16, 1>::run();
+}
 
 // Test: Half-precision and BFloat16 types
-REORDER_IDENTITY_TEST(subgroup_half_precision, half_t, 8, 16, 2)
-REORDER_IDENTITY_TEST(subgroup_bfloat16, bfloat16_t, 8, 16, 11)
+TEST(PVC_CuTe_Xe_Reorder, subgroup_half_precision) {
+  IdentityReorderTest<half_t, 8, 16, 2>::run();
+}
+
+TEST(PVC_CuTe_Xe_Reorder, subgroup_bfloat16) {
+  IdentityReorderTest<bfloat16_t, 8, 16, 11>::run();
+}
 
 // Test: Integer types (8-bit and sub-byte)
-REORDER_IDENTITY_TEST(subgroup_int8, int8_t, 8, 16, 12)
+TEST(PVC_CuTe_Xe_Reorder, subgroup_int8) {
+  IdentityReorderTest<int8_t, 8, 16, 12>::run();
+}
+
+// Test: Sub-byte types (uint4_t, int4_t) identity tests
+// NOTE: These tests are disabled due to sub-byte packing issues in device memory.
+// Sub-byte types (uint4_t, int4_t) require special byte-packing handling that is not
+// properly supported in the current reorder kernel implementation. When two 4-bit values
+// are packed into a single byte, the kernel's round-robin memory access pattern causes
+// data corruption. For example, int4_t value -5 gets corrupted to 65 due to improper
+// byte packing/unpacking during the reorder operation.
+TEST(PVC_CuTe_Xe_Reorder, DISABLED_subbyte_uint4_identity) {
+  IdentityReorderTest<uint4_t, 8, 32, 9>::run();
+}
+
+TEST(PVC_CuTe_Xe_Reorder, DISABLED_subbyte_int4_identity) {
+  IdentityReorderTest<int4_t, 8, 32, 10>::run();
+}
 
 // Note: Sub-byte types (uint4_t, int4_t) require special handling due to bit-packing
 // and are covered in conversion tests with appropriate value ranges.
 
 // Test: Varied matrix sizes
-REORDER_IDENTITY_TEST(subgroup_small_matrix_4x4, float, 4, 4, 7)
-REORDER_IDENTITY_TEST(subgroup_large_matrix_16x32, int32_t, 16, 32, 8)
-REORDER_IDENTITY_TEST(subgroup_minimal_1x16, float, 1, 16, 13)
-REORDER_IDENTITY_TEST(subgroup_power_of_two_32x16, half_t, 32, 16, 14)
+TEST(PVC_CuTe_Xe_Reorder, subgroup_small_matrix_4x4) {
+  IdentityReorderTest<float, 4, 4, 7>::run();
+}
+
+TEST(PVC_CuTe_Xe_Reorder, subgroup_large_matrix_16x32) {
+  IdentityReorderTest<int32_t, 16, 32, 8>::run();
+}
+
+TEST(PVC_CuTe_Xe_Reorder, subgroup_minimal_1x16) {
+  IdentityReorderTest<float, 1, 16, 13>::run();
+}
+
+TEST(PVC_CuTe_Xe_Reorder, subgroup_power_of_two_32x16) {
+  IdentityReorderTest<half_t, 32, 16, 14>::run();
+}
 
 // Test: Layout identity verification (same layout in and out)
-REORDER_IDENTITY_TEST(subgroup_layout_identity_int32, int32_t, 8, 16, 5)
+TEST(PVC_CuTe_Xe_Reorder, subgroup_layout_identity_int32) {
+  IdentityReorderTest<int32_t, 8, 16, 5>::run();
+}
 
 // Test: VNNI-compatible patterns
-REORDER_IDENTITY_TEST(subgroup_vnni_pattern_half, half_t, 16, 16, 6)
+TEST(PVC_CuTe_Xe_Reorder, subgroup_vnni_pattern_half) {
+  IdentityReorderTest<half_t, 16, 16, 6>::run();
+}
 
 // ============================================================================
 // Tensor-based Reorder Tests
@@ -346,15 +364,27 @@ REORDER_IDENTITY_TEST(subgroup_vnni_pattern_half, half_t, 16, 16, 6)
 // SubgroupTensor abstraction.
 
 // Test: Basic Types with Tensor Layouts (8x16 matrices)
-REORDER_TENSOR_TEST(tensor_basic_float, float, 8, 16, 100)
-REORDER_TENSOR_TEST(tensor_basic_int32, int32_t, 8, 16, 101)
+TEST(PVC_CuTe_Xe_Reorder_Tensor, tensor_basic_float) {
+  ReorderTestBase<float, 8, 16, 100, TensorRunner>::run();
+}
+
+TEST(PVC_CuTe_Xe_Reorder_Tensor, tensor_basic_int32) {
+  ReorderTestBase<int32_t, 8, 16, 101, TensorRunner>::run();
+}
 
 // Test: Half-precision and BFloat16 types
-REORDER_TENSOR_TEST(tensor_half_precision, half_t, 8, 16, 102)
-REORDER_TENSOR_TEST(tensor_bfloat16, bfloat16_t, 8, 16, 103)
+TEST(PVC_CuTe_Xe_Reorder_Tensor, tensor_half_precision) {
+  ReorderTestBase<half_t, 8, 16, 102, TensorRunner>::run();
+}
+
+TEST(PVC_CuTe_Xe_Reorder_Tensor, tensor_bfloat16) {
+  ReorderTestBase<bfloat16_t, 8, 16, 103, TensorRunner>::run();
+}
 
 // Test: Integer types with larger matrices
-REORDER_TENSOR_TEST(tensor_int8, int8_t, 16, 32, 104)
+TEST(PVC_CuTe_Xe_Reorder_Tensor, tensor_int8) {
+  ReorderTestBase<int8_t, 16, 32, 104, TensorRunner>::run();
+}
 
 // Note: Sub-byte types (uint4_t, int4_t) require special handling due to bit-packing
 // and are covered in conversion tests with appropriate value ranges.
@@ -366,16 +396,24 @@ REORDER_TENSOR_TEST(tensor_int8, int8_t, 16, 32, 104)
 // ensuring correct data conversion from source to destination types.
 
 // Test: float to half_t conversion
-REORDER_CONVERSION_SUBGROUP_TEST(conversion_float_to_half, float, half_t, 8, 16, 200)
+TEST(PVC_CuTe_Xe_Reorder_Conversion, conversion_float_to_half) {
+  ConversionSubgroupTest<float, half_t, 8, 16, 200>::run();
+}
 
 // Test: int32_t to int8_t conversion
-REORDER_CONVERSION_SUBGROUP_TEST(conversion_int32_to_int8, int32_t, int8_t, 8, 16, 201)
+TEST(PVC_CuTe_Xe_Reorder_Conversion, conversion_int32_to_int8) {
+  ConversionSubgroupTest<int32_t, int8_t, 8, 16, 201>::run();
+}
 
 // Test: float to int32_t conversion
-REORDER_CONVERSION_SUBGROUP_TEST(conversion_float_to_int32, float, int32_t, 8, 16, 202)
+TEST(PVC_CuTe_Xe_Reorder_Conversion, conversion_float_to_int32) {
+  ConversionSubgroupTest<float, int32_t, 8, 16, 202>::run();
+}
 
 // Test: half_t to float conversion
-REORDER_CONVERSION_SUBGROUP_TEST(conversion_half_to_float, half_t, float, 8, 16, 203)
+TEST(PVC_CuTe_Xe_Reorder_Conversion, conversion_half_to_float) {
+  ConversionSubgroupTest<half_t, float, 8, 16, 203>::run();
+}
 
 // ============================================================================
 // Cross-Type Conversion Tests (Tensor-based)
@@ -384,16 +422,24 @@ REORDER_CONVERSION_SUBGROUP_TEST(conversion_half_to_float, half_t, float, 8, 16,
 // ensuring correct data conversion without SubgroupTensor abstraction.
 
 // Test: float to half_t conversion
-REORDER_CONVERSION_TENSOR_TEST(tensor_conversion_float_to_half, float, half_t, 8, 16, 300)
+TEST(PVC_CuTe_Xe_Reorder_Conversion_Tensor, tensor_conversion_float_to_half) {
+  ConversionTensorTest<float, half_t, 8, 16, 300>::run();
+}
 
 // Test: int32_t to int8_t conversion
-REORDER_CONVERSION_TENSOR_TEST(tensor_conversion_int32_to_int8, int32_t, int8_t, 8, 16, 301)
+TEST(PVC_CuTe_Xe_Reorder_Conversion_Tensor, tensor_conversion_int32_to_int8) {
+  ConversionTensorTest<int32_t, int8_t, 8, 16, 301>::run();
+}
 
 // Test: float to int32_t conversion
-REORDER_CONVERSION_TENSOR_TEST(tensor_conversion_float_to_int32, float, int32_t, 8, 16, 302)
+TEST(PVC_CuTe_Xe_Reorder_Conversion_Tensor, tensor_conversion_float_to_int32) {
+  ConversionTensorTest<float, int32_t, 8, 16, 302>::run();
+}
 
 // Test: half_t to float conversion
-REORDER_CONVERSION_TENSOR_TEST(tensor_conversion_half_to_float, half_t, float, 8, 16, 303)
+TEST(PVC_CuTe_Xe_Reorder_Conversion_Tensor, tensor_conversion_half_to_float) {
+  ConversionTensorTest<half_t, float, 8, 16, 303>::run();
+}
 
 // ============================================================================
 // Sub-byte Type Conversion Tests (Expected Failures)
@@ -401,32 +447,22 @@ REORDER_CONVERSION_TENSOR_TEST(tensor_conversion_half_to_float, half_t, float, 8
 // Note: Sub-byte types (uint4_t, int4_t) trigger SYCL kernel recursion errors
 // in the CuTe reorder algorithm due to the recursive nature of the reorder()
 // algorithm which is incompatible with SYCL kernel constraints.
-// These tests are marked as GTEST_SKIP to document the limitation.
-
-// Test class for expected failures with sub-byte types
-class SubbyteExpectedFailTest : public ::testing::Test {
-protected:
-  void ExpectSubbyteFailure(const std::string& test_name) {
-    // Sub-byte types cannot be used with reorder in SYCL kernels
-    // due to kernel recursion limitations. Tests are skipped with documentation.
-    GTEST_SKIP() << test_name << ": SYCL kernel recursion limitation with sub-byte types (uint4_t, int4_t)";
-  }
-};
 
 // SubgroupTensor sub-byte conversions (expected failures)
-TEST_F(SubbyteExpectedFailTest, conversion_uint8_to_uint4_subgroup) {
-  ExpectSubbyteFailure("uint8_t → uint4_t (SubgroupTensor)");
-}
 
-TEST_F(SubbyteExpectedFailTest, conversion_int8_to_int4_subgroup) {
-  ExpectSubbyteFailure("int8_t → int4_t (SubgroupTensor)");
-}
+// TEST(PVC_CuTe_Xe_Reorder_Conversion, DISABLED_conversion_uint8_to_uint4_subgroup) {
+//   ConversionSubgroupTest<uint8_t, uint4_t, 8, 16, 400>::run();
+// }
+
+// TEST(PVC_CuTe_Xe_Reorder_Conversion, DISABLED_conversion_int8_to_int4_subgroup) {
+//   ConversionSubgroupTest<int8_t, int4_t, 8, 16, 401>::run();
+// }
 
 // Tensor-based sub-byte conversions (expected failures)
-TEST_F(SubbyteExpectedFailTest, conversion_uint8_to_uint4_tensor) {
-  ExpectSubbyteFailure("uint8_t → uint4_t (Tensor-based)");
-}
+// TEST(PVC_CuTe_Xe_Reorder_Conversion_Tensor, DISABLED_conversion_uint8_to_uint4_tensor) {
+//   ConversionTensorTest<uint8_t, uint4_t, 8, 16, 402>::run();
+// }
 
-TEST_F(SubbyteExpectedFailTest, conversion_int8_to_int4_tensor) {
-  ExpectSubbyteFailure("int8_t → int4_t (Tensor-based)");
-}
+// TEST(PVC_CuTe_Xe_Reorder_Conversion_Tensor, DISABLED_conversion_int8_to_int4_tensor) {
+//   ConversionTensorTest<int8_t, int4_t, 8, 16, 403>::run();
+// }
