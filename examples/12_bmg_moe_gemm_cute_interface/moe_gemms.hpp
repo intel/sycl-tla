@@ -178,6 +178,7 @@ CUTE_DEVICE void moe_gemm(ATensor const &A, // (M,K)
   uint32_t sg_id = sg.get_group_linear_id();
   uint32_t lane = sg.get_local_linear_id();
   auto total_K = get<1>(B.shape());
+  auto q_group_size = total_K / get<0>(S.shape());
   Tensor cA = make_identity_tensor(A.shape()); // (M,K)
   Tensor cB = make_identity_tensor(B.shape()); // (N,K)
   Tensor cD = make_identity_tensor(D.shape()); // (M,N)
@@ -237,7 +238,11 @@ CUTE_DEVICE void moe_gemm(ATensor const &A, // (M,K)
   // needed. The rest is discarded.
   // TODO: use 2D copy atom with height 1
   // but after the broadcast reorder issue is fixed in PR 635
-  auto scalesCopyAtom = Copy_Atom<UniversalCopy<int8_t>, int8_t>{};
+  using scaleLoadType =
+      conditional_t<sizeof_bits_v<typename STensor::element_type> == 8, int8_t,
+                    int16_t>;
+  auto scalesCopyAtom =
+      Copy_Atom<UniversalCopy<scaleLoadType>, scaleLoadType>{};
 
   const int prefetch_dist = 3;
   constexpr int barrier_scope = 2;
@@ -248,7 +253,22 @@ CUTE_DEVICE void moe_gemm(ATensor const &A, // (M,K)
   const int num_N_SG_tiles = get<1>(sg_layout.shape());
   const int N_dim_sg = get<1>(wg_tile) / num_N_SG_tiles;
   const int num_scales_per_col = (get<2>(wg_tile) == 32) ? 4 : 2;
+  typename STensor::element_type
+      frag[num_scales_per_col]; // per-thread registers (compiler
+                                // will keep in regs)
+  float frag_fp32[num_scales_per_col];
+  auto frequency_scale_change = q_group_size / get<2>(wg_tile);
+  Tensor scales_e8m0 = make_tensor(
+      make_rmem_ptr(frag), make_layout(make_shape(Int<num_scales_per_col>{})));
+  Tensor scales_float =
+      make_tensor(make_rmem_ptr(frag_fp32),
+                  make_layout(make_shape(Int<num_scales_per_col>{})));
 
+  auto TV_row = make_layout(
+      make_shape(Int<num_threads_per_sg>{}, Int<num_scales_per_col>{}),
+      make_stride(Int<num_scales_per_col>{}, Int<1>{}));
+  auto scales_e8m0_sg_tensor = make_subgroup_tensor(scales_e8m0, TV_row);
+  auto scales_float_sg_tensor = make_subgroup_tensor(scales_float, TV_row);
   clear(tCrD);
 
   CUTE_UNROLL
@@ -263,53 +283,46 @@ CUTE_DEVICE void moe_gemm(ATensor const &A, // (M,K)
     prefetch(prefetch_b, pBgB(_, _, _, k_tile_prefetch));
     reorder(tBrB, tCrB);
 
-    float_ue8m0_t frag[num_scales_per_col]; // per-thread registers (compiler
-                                            // will keep in regs)
-    float frag_fp32[num_scales_per_col];
-    Tensor scales_e8m0 =
-        make_tensor(make_rmem_ptr(frag), make_layout(make_shape(Int<8>{})));
-    Tensor scales_float = make_tensor(make_rmem_ptr(frag_fp32),
-                                      make_layout(make_shape(Int<8>{})));
+    if ((k_tile % frequency_scale_change) == 0) {
 
-    auto TV_row = make_layout(
-        make_shape(Int<num_threads_per_sg>{}, Int<num_scales_per_col>{}),
-        make_stride(Int<num_scales_per_col>{}, Int<1>{}));
-    auto scales_e8m0_sg_tensor = make_subgroup_tensor(scales_e8m0, TV_row);
-    auto scales_float_sg_tensor = make_subgroup_tensor(scales_float, TV_row);
+      // TODO: Update with broadcast reorder when 635 gets merged
+      // Use a 2D copy atom at the time
+      // It will boost perf by at least 6 TFLOPs for compute-bound gpt-oss GEMMs
+      // on BMG Pair threads as (0,1), (2,3), ..., (14,15)
+      bool is_pair_leader = (local_id % 2) == 0;
+      uint32_t pair_leader_lane = lane & ~1u; // even lane id
+      uint32_t lane_idx = lane >> 1;          // 0..7
 
-    // TODO: Update with broadcast reorder when 635 gets merged
-    // It will boost perf by at least 6 TFLOPs for gpt-oss GEMMMs on BMG
-    // Pair threads as (0,1), (2,3), ..., (14,15)
-    bool is_pair_leader = (local_id % 2) == 0;
-    uint32_t pair_leader_lane = lane & ~1u; // even lane id
-    uint32_t lane_idx = lane >> 1;          // 0..7
+      // Only the even lane loads the two needed elements: idx and idx+8
+      if (is_pair_leader) {
+        CUTE_UNROLL
+        for (int i = 0; i < num_scales_per_col; i++) {
+          auto gmemTensor =
+              make_tensor(make_gmem_ptr(reinterpret_cast<scaleLoadType *>(
+                              static_cast<void *>(cute::raw_pointer_cast(
+                                  S_tile_relayout.data() +
+                                  (N_dim_sg * (sg_id % num_N_SG_tiles)) +
+                                  (k_tile / frequency_scale_change) * total_K +
+                                  lane_idx + i * 8)))),
+                          make_layout(make_shape(_1{})));
+          auto rmemTensor =
+              make_tensor(make_rmem_ptr(reinterpret_cast<scaleLoadType *>(
+                                            static_cast<void *>(frag)) +
+                                        i),
+                          make_layout(make_shape(_1{})));
+          copy(scalesCopyAtom, gmemTensor, rmemTensor);
+        }
+      }
 
-    // Only the even lane loads the two needed elements: idx and idx+8
-    if (is_pair_leader) {
       CUTE_UNROLL
       for (int i = 0; i < num_scales_per_col; i++) {
-        auto gmemTensor = make_tensor(
-            make_gmem_ptr(reinterpret_cast<int8_t *>(static_cast<void *>(
-                cute::raw_pointer_cast(S_tile_relayout.data() +
-                                       (N_dim_sg * (sg_id % num_N_SG_tiles)) +
-                                       k_tile * total_K + lane_idx + i * 8)))),
-            make_layout(make_shape(_1{})));
-        auto rmemTensor = make_tensor(
-            make_rmem_ptr(
-                reinterpret_cast<int8_t *>(static_cast<void *>(frag)) + i),
-            make_layout(make_shape(_1{})));
-        copy(scalesCopyAtom, gmemTensor, rmemTensor);
+        // Broadcast from the pair leader to both lanes in the pair
+        scales_e8m0[i] =
+            sycl::select_from_group(sg, scales_e8m0[i], pair_leader_lane);
       }
-    }
 
-    CUTE_UNROLL
-    for (int i = 0; i < num_scales_per_col; i++) {
-      // Broadcast from the pair leader to both lanes in the pair
-      scales_e8m0[i] =
-          sycl::select_from_group(sg, scales_e8m0[i], pair_leader_lane);
+      reorder(scales_e8m0_sg_tensor, scales_float_sg_tensor);
     }
-
-    reorder(scales_e8m0_sg_tensor, scales_float_sg_tensor);
     copy(copy_a, tAgA(_, _, _, k_tile), tArA);
     prefetch(prefetch_a, pAgA(_, _, _, k_tile_prefetch));
     reorder(tArA, tCrA);
