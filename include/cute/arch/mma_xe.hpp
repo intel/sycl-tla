@@ -68,10 +68,10 @@ struct XE_DPAS_NN_Base
 {
   static constexpr int K = 256 / cute::max(sizeof_bits_v<TypeA>, sizeof_bits_v<TypeB>);
 
-  using DVector = intel::vector_t<TypeD, 16>;
-  using AVector = intel::vector_t<TypeA, K>;
-  using BVector = intel::vector_t<TypeB, (N * K + 15) / 16>;
-  using CVector = intel::vector_t<TypeC, 16>;
+  using DVector = intel::vector_t<TypeD, N>;
+  using AVector = intel::vector_t<TypeB, K>;
+  using BVector = intel::vector_t<TypeA, (N * K + 15) / 16>;
+  using CVector = intel::vector_t<TypeC, N>;
 
 
   using DRegisters = DVector[1];
@@ -136,41 +136,18 @@ template <int M> struct XE_DPAS_TT<M, dpas_type::TD, dpas_type::TA, dpas_type::T
 
 #define CUTE_DECLARE_XE_DPAS_NN(TD, TA, TB, TC) \
 template <int N> struct XE_DPAS_NN<N, dpas_type::TD, dpas_type::TA, dpas_type::TB, dpas_type::TC> \
-    : public XE_DPAS_NN_Base<N, dpas_type::TD, dpas_type::TA, dpas_type::TB, dpas_type::TC> { \
-  using Base = XE_DPAS_NN_Base<N, dpas_type::TD, dpas_type::TA, dpas_type::TB, dpas_type::TC>; \
-  using AVector = typename Base::AVector; \
-  using BVector = typename Base::BVector; \
-  using CVector = typename Base::CVector; \
-  using DVector = typename Base::DVector; \
-  template <typename CVector_ = CVector> \
-  CUTE_DEVICE static void \
-  fma(DVector& d, AVector const& a, BVector const& b, CVector_ const& c) { \
-    if constexpr (std::is_same_v<CVector_, DVector>) { \
-      d = c; \
-      asm ( \
-        "{\n" \
-        ".decl DST     v_type=G type=" #TD " num_elts=%5 alias=<%0,0>\n" \
-        ".decl SRC1_UD v_type=G type=UD num_elts=128 alias=<%2,0>\n" \
-        ".decl SRC2_UD v_type=G type=UD num_elts=%4 alias=<%1,0>\n" \
-        "dpas." #TB "." #TA ".8.%3 (M1, 16) DST.0 DST.0 SRC1_UD.0 SRC2_UD(0,0)\n" \
-        "}\n" \
-        : "+rw"(d) : "rw"(a), "rw"(b), "P"(N), "P"(N*8), "P"(N*16) \
-      ); \
-    } else { \
-      asm ( \
-        "{\n" \
-        ".decl DST     v_type=G type=" #TD " num_elts=%6 alias=<%0,0>\n" \
-        ".decl SRC0    v_type=G type=" #TC " num_elts=%6 alias=<%3,0>\n" \
-        ".decl SRC1_UD v_type=G type=UD num_elts=128 alias=<%2,0>\n" \
-        ".decl SRC2_UD v_type=G type=UD num_elts=%5 alias=<%1,0>\n" \
-        "dpas." #TB "." #TA ".8.%4 (M1, 16) DST.0 SRC0.0 SRC1_UD.0 SRC2_UD(0,0)\n" \
-        "}\n" \
-        : "=rw"(d) : "rw"(a), "rw"(b), "rw"(c), "P"(N), "P"(N*8), "P"(N*16) \
-      ); \
-    } \
+  : public XE_DPAS_NN_Base<N, dpas_type::TD, dpas_type::TA, dpas_type::TB, dpas_type::TC> { \
+  using Base_TT = XE_DPAS_TT<N, dpas_type::TD, dpas_type::TB, dpas_type::TA, dpas_type::TC>; \
+  using Base_NN = XE_DPAS_NN_Base<N, dpas_type::TD, dpas_type::TA, dpas_type::TB, dpas_type::TC>; \
+  using AVector = typename Base_NN::AVector; \
+  using BVector = typename Base_NN::BVector; \
+  using CVector = typename Base_NN::CVector; \
+  using DVector = typename Base_NN::DVector; \
+  CUTE_HOST_DEVICE static void \
+  fma(DVector& d, AVector const& a, BVector const& b, CVector const& c) { \
+     Base_TT{}.fma(d, b, a, c); \
   } \
 };
-
 
 #else /* !defined(CUTE_ARCH_MMA_XE_ENABLED) */
 
@@ -191,14 +168,15 @@ template <int M> struct XE_DPAS_TT<M, dpas_type::TD, dpas_type::TA, dpas_type::T
 #define CUTE_DECLARE_XE_DPAS_NN(TD, TA, TB, TC) \
 template <int N> struct XE_DPAS_NN<N, dpas_type::TD, dpas_type::TA, dpas_type::TB, dpas_type::TC> \
   : public XE_DPAS_NN_Base<N, dpas_type::TD, dpas_type::TA, dpas_type::TB, dpas_type::TC> { \
-  using Base = XE_DPAS_NN_Base<N, dpas_type::TD, dpas_type::TA, dpas_type::TB, dpas_type::TC>; \
-  using AVector = typename Base::AVector; \
-  using BVector = typename Base::BVector; \
-  using CVector = typename Base::CVector; \
-  using DVector = typename Base::DVector; \
+  using Base_TT = XE_DPAS_TT<N, dpas_type::TD, dpas_type::TB, dpas_type::TA, dpas_type::TC>; \
+  using Base_NN = XE_DPAS_NN_Base<N, dpas_type::TD, dpas_type::TA, dpas_type::TB, dpas_type::TC>; \
+  using AVector = typename Base_NN::AVector; \
+  using BVector = typename Base_NN::BVector; \
+  using CVector = typename Base_NN::CVector; \
+  using DVector = typename Base_NN::DVector; \
   CUTE_HOST_DEVICE static void \
   fma(DVector& d, AVector const& a, BVector const& b, CVector const& c) { \
-    CUTE_INVALID_CONTROL_PATH("Cannot use Xe DPAS MMA atom on non-Xe hardware"); \
+     CUTE_INVALID_CONTROL_PATH("Cannot use Xe DPAS MMA atom on non-Xe hardware"); \
   } \
 };
 #endif

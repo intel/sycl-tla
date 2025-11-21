@@ -121,7 +121,7 @@ struct MMA_Traits<XE_DPAS_NN<N, TD, TA, TB, TC>>
   using BLayout = typename TTTraits::ALayout;
   
   // C layout: N x 16 column major (transposed from TT)
-  using CLayout = Layout<Shape<_N, _16>, Stride<_1, _N>>;
+  using CLayout = Layout<Shape<_16, _N>, Stride<_1, _16>>;
 };
 
 } /* namespace cute */

@@ -370,7 +370,7 @@ int main(int argc, const char** argv)
   // each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations). See
   // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 4,1,0) for
   // performance reasons.
-  using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_DPAS_NN<8, float, cute::bfloat16_t>>, Layout<TileShape>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+  using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_DPAS_NN<8, float, cute::bfloat16_t>>, Layout<TileShape>, Layout<Shape<_8, _4, _1>, Stride<_1, _4, _0>>>::TiledMMA;
 
   // For Intel BMG, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
   constexpr int PipelineStages = 2;
