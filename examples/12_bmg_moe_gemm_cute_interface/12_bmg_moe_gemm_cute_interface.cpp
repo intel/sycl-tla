@@ -193,28 +193,6 @@ struct VerificationHelper {
 };
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <typename T, size_t = 0> struct is_complete : std::false_type {};
-
-template <typename T> struct is_complete<T, 0 * sizeof(T)> : std::true_type {};
-
-template <typename T>
-static constexpr bool is_complete_v = is_complete<T>::value;
-
-template <class TA, class TB> auto choose_tiled_mma(TA *A, TB *B) {
-  using TA_non_CV = cutlass::platform::remove_cv_t<TA>;
-  using TB_non_CV = cutlass::platform::remove_cv_t<TB>;
-  auto op = XE_DPAS_TT<8, float, TA_non_CV, TB_non_CV>{};
-
-  using WGTile = Shape<_256, _256, _32>; // 256x256 WG tile size
-  using SGLayout =
-      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>; // 8x4 SG tiling, n-major
-
-  using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>, Layout<WGTile>,
-                                      SGLayout>::TiledMMA;
-
-  return MMA{};
-}
-
 // type tag to define a unique sycl kernel name
 template <typename, typename, typename, char, char> class GemmCuteName;
 
@@ -237,26 +215,41 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
   // for each GEMM problem, which is used in the GroupedGEMM tile-scheduler. If
   // there are 32 groups, then a vector of 32 `ProblemShape` objects is created.
   // Since these would not be known at compile time for a framework, they would
-  // have to be created at run-time instead. However, for MoEGEMM, I just
+  // have to be created at run-time instead. However, for MoEGEMM, we just
   // provide one dummy shape, and then the custom code in tile scheduler can
   // derive the shape of each GEMM problem.
   auto dummy_group_problem_shape =
       cutlass::gemm::GroupProblemShape<Shape<int, int, int>>{
           1, &dummy_problem_shape, nullptr};
-  using TileShape = Shape<_256, _256, _32>;
+  using WGTileShape = Shape<_256, _256, _32>;
   using ClusterShape = Shape<_1, _1, _1>;
   auto scheduler_params =
       PersistentTileSchedulerXeMoE<ProblemShape>::to_underlying_arguments(
-          dummy_group_problem_shape, TileShape{}, ClusterShape{}, hw_info,
+          dummy_group_problem_shape, WGTileShape{}, ClusterShape{}, hw_info,
           PersistentTileSchedulerXeMoE<ProblemShape>::Arguments{
               1, RasterOrderOptions::AlongN});
   auto group_distribution =
       PersistentTileSchedulerXeMoE<ProblemShape>::get_grid_shape(
-          scheduler_params, dummy_group_problem_shape, TileShape{},
+          scheduler_params, dummy_group_problem_shape, WGTileShape{},
           ClusterShape{}, hw_info,
           PersistentTileSchedulerXeMoE<ProblemShape>::Arguments{
               1, RasterOrderOptions::AlongN});
-  auto mma = choose_tiled_mma(activations, weights);
+  using TA_non_CV = cutlass::platform::remove_cv_t<ElementA>;
+  auto op = XE_DPAS_TT<8, float, TA_non_CV, TA_non_CV>{};
+
+  constexpr bool use_4x8_sg =
+      (sizeof_bits_v<ElementB> < sizeof_bits_v<ElementA>);
+
+  using SGLayout8x4 =
+      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>; // 8x4 SG tiling, n-major
+  using SGLayout4x8 =
+      Layout<Shape<_4, _8, _1>, Stride<_8, _1, _0>>; // 4x8 SG tiling, n-major
+  using SGLayout = conditional_t<use_4x8_sg, SGLayout4x8, SGLayout8x4>;
+
+  using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>,
+                                      Layout<WGTileShape>, SGLayout>::TiledMMA;
+  auto mma = MMA{};
+
   auto MaxThreadsPerWorkgroup = size(mma);
   dim3 local_range{MaxThreadsPerWorkgroup, 1, 1};
 
@@ -281,7 +274,8 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
                      XE_LOAD_2D_VNNI<16, 32, 16, 16>, XE_STORE_2D<16, 8, 32>,
                      'R', 'R', 'R'>(activations, weights, scales, outputs, mma,
                                     num_rows_per_expert_device, num_experts,
-                                    gemm_n, gemm_k, scheduler_params);
+                                    gemm_n, gemm_k, scheduler_params,
+                                    SGLayout{});
       });
   EventManager::getInstance().addEvent(event);
   Q.wait_and_throw();
