@@ -35,6 +35,7 @@
 #include <sycl/sycl.hpp>
 #include "cutlass/cutlass.h"
 #include "cutlass/epilogue/dispatch_policy.hpp"
+#include "cutlass/epilogue/collective/collective_builder.hpp"
 #include "cutlass/epilogue/collective/collective_epilogue.hpp"
 #include "cutlass/epilogue/collective/detail.hpp"
 #include "cutlass/epilogue/fusion/callbacks.hpp"
@@ -266,7 +267,9 @@ public:
     static constexpr int EpiC = cute::gcd(EpiCPreferred, get<1>(MMATile{}));
 
     using DefaultEpilogueTile = Shape<Int<EpiR>, Int<EpiC>>;
-    using EpilogueTile = replace_void_t<EpilogueTile_, DefaultEpilogueTile>;
+    using EpilogueTile = conditional_t<is_void_v<EpilogueTile_> || is_same_v<EpilogueTile_, EpilogueTileAuto>,
+                                       DefaultEpilogueTile,
+                                       EpilogueTile_>;
 
     using DefaultCopyOpG2R =  XE_LOAD_2D<CopyBitsC, cute::gcd(8, get<0>(EpilogueTile{})), cute::gcd(512 / CopyBitsC, get<1>(EpilogueTile{}))>;
     using DefaultCopyOpR2G = XE_STORE_2D<CopyBitsD, cute::gcd(8, get<0>(EpilogueTile{})), cute::gcd(512 / CopyBitsD, get<1>(EpilogueTile{}))>;
