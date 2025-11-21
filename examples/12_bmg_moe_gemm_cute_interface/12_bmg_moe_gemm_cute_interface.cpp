@@ -193,6 +193,47 @@ struct VerificationHelper {
 };
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+template <typename T, size_t = 0> struct is_complete : std::false_type {};
+
+template <typename T> struct is_complete<T, 0 * sizeof(T)> : std::true_type {};
+
+template <typename T>
+static constexpr bool is_complete_v = is_complete<T>::value;
+
+template <typename TA, typename TB, typename TD> auto choose_mma_op() {
+  if constexpr (is_any_of_v<TA, bfloat16_t, half_t> &&
+                is_any_of_v<TB, bfloat16_t, half_t>) {
+    return XE_DPAS_TT<8, float, TA, TB>{};
+  } else if constexpr (is_complete_v<XE_DPAS_TT<8, TD, TA, TB>>) {
+    return XE_DPAS_TT<8, TD, TA, TB>{};
+  } else if constexpr (is_same_v<TA, cute::bfloat16_t>) {
+    return XE_DPAS_TT<8, float, cute::bfloat16_t>{};
+  } else { /* Use f16 by default as upconversion sequences are typically faster
+            */
+    return XE_DPAS_TT<8, float, cute::half_t>{};
+  }
+}
+
+template <typename TA, typename TB, typename TD>
+auto choose_tiled_mma(TA *const &A, TB *const &B, TD *D) {
+  using TA_non_CV = cutlass::platform::remove_cv_t<TA>;
+  using TB_non_CV = cutlass::platform::remove_cv_t<TB>;
+  auto op = choose_mma_op<TA_non_CV, TB_non_CV, TD>();
+  using WGTileShape = Shape<_256, _256, _32>;
+  constexpr bool use_4x8_sg = (sizeof_bits_v<TB> < sizeof_bits_v<TA>);
+
+  using SGLayout8x4 =
+      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>; // 8x4 SG tiling, n-major
+  using SGLayout4x8 =
+      Layout<Shape<_4, _8, _1>, Stride<_8, _1, _0>>; // 4x8 SG tiling, n-major
+  using SGLayout = conditional_t<use_4x8_sg, SGLayout4x8, SGLayout8x4>;
+
+  using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>,
+                                      Layout<WGTileShape>, SGLayout>::TiledMMA;
+  auto mma = MMA{};
+  return mma;
+}
+
 // type tag to define a unique sycl kernel name
 template <typename, typename, typename, char, char> class GemmCuteName;
 
@@ -234,8 +275,6 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
           ClusterShape{}, hw_info,
           PersistentTileSchedulerXeMoE<ProblemShape>::Arguments{
               1, RasterOrderOptions::AlongN});
-  using TA_non_CV = cutlass::platform::remove_cv_t<ElementA>;
-  auto op = XE_DPAS_TT<8, float, TA_non_CV, TA_non_CV>{};
 
   constexpr bool use_4x8_sg =
       (sizeof_bits_v<ElementB> < sizeof_bits_v<ElementA>);
@@ -246,9 +285,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
       Layout<Shape<_4, _8, _1>, Stride<_8, _1, _0>>; // 4x8 SG tiling, n-major
   using SGLayout = conditional_t<use_4x8_sg, SGLayout4x8, SGLayout8x4>;
 
-  using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>,
-                                      Layout<WGTileShape>, SGLayout>::TiledMMA;
-  auto mma = MMA{};
+  auto mma = choose_tiled_mma(activations, weights, outputs);
 
   auto MaxThreadsPerWorkgroup = size(mma);
   dim3 local_range{MaxThreadsPerWorkgroup, 1, 1};
