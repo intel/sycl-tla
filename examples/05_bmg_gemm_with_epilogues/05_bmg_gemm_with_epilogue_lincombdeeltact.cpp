@@ -190,13 +190,12 @@ struct ExampleRunner {
 
   using ElementA = typename Gemm::ElementA;
   using ElementB = typename Gemm::ElementB;
-  using ElementAcc = typename Gemm::ElementAccumulator;
+  using ElementAccumulator = typename Gemm::ElementAccumulator;
 
   using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
-  using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
@@ -358,21 +357,20 @@ using LayoutB = cutlass::layout::RowMajor;
 using LayoutC = cutlass::layout::RowMajor;
 using LayoutD = cutlass::layout::RowMajor;
 
-using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+using GmemTiledCopyA = void;
+using GmemTiledCopyB = void;
 
 // Workgroup-level tile
 using TileShape = Shape<_256, _256, _32>;
 
-using TiledMma =
-    typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                  Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, Layout<TileShape>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
 constexpr int PipelineStages = 2;
-using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
-using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
+using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
 
-using CopyOpG2R = XE_2D_U32x8x16_LD_N;
+// using CopyOpG2R = XE_2D_U32x8x16_LD_N;
+using CopyOpG2R = XE_LOAD_2D<32, 8, 16>;
 template <template <class> class ActivationFn>
 using EpilogueOp = cutlass::epilogue::fusion::LinCombDeEltAct<
     LayoutC,
@@ -383,7 +381,7 @@ using EpilogueOp = cutlass::epilogue::fusion::LinCombDeEltAct<
 using EpilogueTile = decltype(take<0,2>(TileShape{}));
 
 template <template <class> class ActivationFn>
-using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
+using FusionCallbacks = cutlass::epilogue::fusion::FusionCallbacks<
         EpilogueDispatchPolicy,
         EpilogueOp<ActivationFn>,
         TileShape,
@@ -393,19 +391,16 @@ using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
 
 template <template <class> class ActivationFn>
 using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-        EpilogueDispatchPolicy,                 // IntelXeXMX16
-        TileShape,                              // CtaTileMNK
+        EpilogueDispatchPolicy,                 // IntelXeGeneric
+        TiledMma,                               // TiledMMA
+        void,                                   // EpilogueTile
         ElementAccumulator,                     // ElementC
         cutlass::gemm::TagToStrideC_t<LayoutC>, // StrideC
         ElementOutput,                          // ElementD
         cutlass::gemm::TagToStrideC_t<LayoutD>, // StrideD
-        FusionCallBacks<ActivationFn>,          // FusionCallBacks
-        CopyOpG2R,                              // CopyOpG2R
-        void,                                   // SmemLayoutAtomC
-        void,                                   // CopyOpS2R
-        XE_2D_U32x8x16_ST_N,                    // CopyOpR2G
-        void,                                   // SmemLayoutAtomD
-        void>;                                  // CopyOpR2S
+        FusionCallbacks<ActivationFn>,          // FusionCallBacks
+        void,                              // CopyOpG2R
+        void>;                                  // CopyOpR2G
 
 // Mainloop
 using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
