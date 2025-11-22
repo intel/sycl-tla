@@ -395,7 +395,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
 
     const index_t s_offset = bofst.ps_offset(bidb, bidh, 0, n_block * kBlockN);
 
-    const auto block_n_dim = tail_n == 0 ? Int<kBlockN>{} : tail_n;
+    const auto block_n_dim = tail_n == 0 ? Int<kBlockN>{} : ((tail_n + 1) & ~1);
     using Shape1 = Shape<
         std::conditional_t<Is_even_N, Int<kBlockN>, int>,
         Int <kHeadDim>, Int<1>>;
