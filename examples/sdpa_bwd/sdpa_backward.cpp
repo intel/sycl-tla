@@ -393,8 +393,6 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
                                + n_block * kBlockN * kBlockM) * 2;
     const index_t dsb_offset = pb_offset + kBlockN * kBlockM;
 
-    const index_t s_offset = bofst.ps_offset(bidb, bidh, 0, n_block * kBlockN);
-
     const auto block_n_dim = tail_n == 0 ? Int<kBlockN>{} : ((tail_n + 1) & ~1);
     using Shape1 = Shape<
         std::conditional_t<Is_even_N, Int<kBlockN>, int>,
@@ -489,13 +487,6 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
                              make_layout(
                                  shapeKtV,
                                  make_stride(param.dk_r_stride, _1{}, _1{})));
-
-    Tensor mS = make_tensor(make_gmem_ptr(param.s_ptr + s_offset), make_layout(
-                                shapeSP,
-                                make_stride(param.s_r_stride, _1{}, _1{})));
-    Tensor mdPd = make_tensor(make_gmem_ptr(param.dp_ptr + s_offset), make_layout(
-                                shapeSP,
-                                make_stride(param.s_r_stride, _1{}, _1{})));
 
     auto tile_sdp = typename Trait::TileShapeSdP{};
     auto tile_dkv = typename Trait::TileShapedKV{};
@@ -1106,8 +1097,6 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
                                  T *dq_d,
                                  T *dk_d,
                                  T *dv_d,
-                                 T *s_d,
-                                 T *dp_d,
                                  const int seq_len_q_pad,
                                  const int seq_len_kv_pad) {
     auto trait = FAKernel<T, kHeadDim, kBlockM, kBlockN, kNSGs,
@@ -1125,7 +1114,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     const int tail_m = SEQ_LEN_Q % kBlockM;
     T * pbuff = compat::malloc<T>(BATCH * NUM_HEAD_Q * seq_len_kv_pad * 2 * kBlockM);
     auto param = Param<T>(do_d, o_d, q_d, k_d, v_d, lse_d, odo_d,
-                          dqaccum_d, dq_d, dk_d, dv_d, s_d, dp_d, pbuff,
+                          dqaccum_d, dq_d, dk_d, dv_d, pbuff,
                           1 / sqrt(static_cast<float>(kHeadDim)));
     param.batch = BATCH;
     param.num_head_q = NUM_HEAD_Q;
@@ -1213,8 +1202,6 @@ void launch_mha_backward(ProblemShape problem_shape,
                          T *dq_d,
                          T *dk_d,
                          T *dv_d,
-                         T *s_d,
-                         T *dp_d,
                          const int seq_len_q_pad,
                          const int seq_len_kv_pad) {
     const int headdim = get<5>(problem_shape);
@@ -1236,7 +1223,6 @@ void launch_mha_backward(ProblemShape problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
             dqaccum_d, dq_d, dk_d, dv_d,
-            s_d, dp_d,
             seq_len_q_pad, seq_len_kv_pad);
     } else if (headdim == 96) {
         constexpr int kBlockM = 64;
@@ -1256,7 +1242,6 @@ void launch_mha_backward(ProblemShape problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
             dqaccum_d, dq_d, dk_d, dv_d,
-            s_d, dp_d,
             seq_len_q_pad, seq_len_kv_pad);
     } else if (headdim == 128) {
         constexpr int kBlockM = 64;
@@ -1276,7 +1261,6 @@ void launch_mha_backward(ProblemShape problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
             dqaccum_d, dq_d, dk_d, dv_d,
-            s_d, dp_d,
             seq_len_q_pad, seq_len_kv_pad);
     } else if (headdim == 192) {
         constexpr int kBlockM = 64;
@@ -1296,7 +1280,6 @@ void launch_mha_backward(ProblemShape problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
             dqaccum_d, dq_d, dk_d, dv_d,
-            s_d, dp_d,
             seq_len_q_pad, seq_len_kv_pad);
     } else if (headdim == 256) {
         constexpr int kBlockM = 64;
@@ -1316,7 +1299,6 @@ void launch_mha_backward(ProblemShape problem_shape,
             do_d, o_d, q_d, k_d, v_d,
             lse_d, odo_d,
             dqaccum_d, dq_d, dk_d, dv_d,
-            s_d, dp_d,
             seq_len_q_pad, seq_len_kv_pad);
     } else {
         assert(false && "only support headdim 64,96,128,192,256");
@@ -1346,8 +1328,6 @@ int main(int argc, char**argv) {
     cnpy::NpyArray dq_npy = cnpy::npz_load(data_file, "q_grad");
     cnpy::NpyArray dk_npy = cnpy::npz_load(data_file, "k_grad");
     cnpy::NpyArray dv_npy = cnpy::npz_load(data_file, "v_grad");
-    cnpy::NpyArray dp_npy = cnpy::npz_load(data_file, "p_grad");
-    cnpy::NpyArray ds_npy = cnpy::npz_load(data_file, "s_grad");
 
     // read shape
     cnpy::NpyArray shape = cnpy::npz_load(data_file, "shape");
@@ -1380,10 +1360,6 @@ int main(int argc, char**argv) {
     T *k_d = compat::malloc<T>(k_npy.num_vals);
     T *v_d = compat::malloc<T>(v_npy.num_vals);
 
-    // alloc ps
-    T *p_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * SEQ_LEN_KV_PAD);
-    T *s_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * SEQ_LEN_KV_PAD);
-
     // alloc lse, odo
     V *lse_d = compat::malloc<V>(lse_npy.num_vals);
     V *odo_d = compat::malloc<V>(odo_npy.num_vals);
@@ -1397,7 +1373,6 @@ int main(int argc, char**argv) {
     V *dqaccum_d = compat::malloc<V>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * HEAD_SIZE_QK);
     T *dk_d = compat::malloc<T>(dk_npy.num_vals);
     T *dv_d = compat::malloc<T>(dv_npy.num_vals);
-    T *dp_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * SEQ_LEN_KV_PAD);
     // copy qkv
     compat::memcpy<T>(q_d, q_npy.data<T>(), q_npy.num_vals);
     compat::memcpy<T>(k_d, k_npy.data<T>(), k_npy.num_vals);
@@ -1424,7 +1399,7 @@ int main(int argc, char**argv) {
                 q_d, k_d, v_d,
                 lse_d, odo_d,
                 dqaccum_d, dq_d, dk_d, dv_d,
-                s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
+                SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
         else
             launch_mha_backward<T, decltype(problem_shape),
                                 kBlockM, kBlockN, false, true>(
@@ -1433,7 +1408,7 @@ int main(int argc, char**argv) {
                 q_d, k_d, v_d,
                 lse_d, odo_d,
                 dqaccum_d, dq_d, dk_d, dv_d,
-                s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
+                SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
     } else {
         if (is_causal) {
             launch_mha_backward<T, decltype(problem_shape),
@@ -1443,7 +1418,7 @@ int main(int argc, char**argv) {
                 q_d, k_d, v_d,
                 lse_d, odo_d,
                 dqaccum_d, dq_d, dk_d, dv_d,
-                s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
+                SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
         } else {
             launch_mha_backward<T, decltype(problem_shape),
                                 kBlockM, kBlockN, false, false>(
@@ -1452,7 +1427,7 @@ int main(int argc, char**argv) {
                 q_d, k_d, v_d,
                 lse_d, odo_d,
                 dqaccum_d, dq_d, dk_d, dv_d,
-                s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
+                SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
         }
     }
     float atol = 5e-3f;
