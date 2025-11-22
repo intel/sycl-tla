@@ -388,8 +388,10 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
     const index_t dq_offset = bofst.dq_offset(bidb, bidh, 0);
     const index_t lse_offset = bofst.lse_offset(bidb, bidh, 0);
     // buff offset
-    const index_t pb_offset = bidb * param.num_head_q * param.seq_len_kv_pad * kBlockM
-        + bidh * param.seq_len_kv_pad * kBlockM + n_block * kBlockN * kBlockM;
+    const index_t pb_offset = (bidb * param.num_head_q * param.seq_len_kv_pad * kBlockM
+                               + bidh * param.seq_len_kv_pad * kBlockM
+                               + n_block * kBlockN * kBlockM) * 2;
+    const index_t dsb_offset = pb_offset + kBlockN * kBlockM;
 
     const index_t s_offset = bofst.ps_offset(bidb, bidh, 0, n_block * kBlockN);
 
@@ -453,7 +455,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
                             make_layout(
                                 shapeK,
                                 make_stride(_1{}, param.k_r_stride, _1{})));
-    Tensor mdPt = make_tensor(make_gmem_ptr(param.pb_ptr + pb_offset),
+    Tensor mdPt = make_tensor(make_gmem_ptr(param.pb_ptr + dsb_offset),
                               make_layout(
                                   shapePt,
                                   make_stride(_1{}, block_n_dim, _1{})));
@@ -475,7 +477,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
                              make_layout(
                                  shapeKtV,
                                  make_stride(param.dv_r_stride, _1{}, _1{})));
-    Tensor mdP = make_tensor(make_gmem_ptr(param.pb_ptr + pb_offset),
+    Tensor mdP = make_tensor(make_gmem_ptr(param.pb_ptr + dsb_offset),
                              make_layout(
                                  shapeSP,
                                  make_stride(block_n_dim, _1{}, _1{})));
@@ -724,6 +726,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         softmax_backward(scores, dP_sum, dS, param.scale_softmax);
         auto tdPrdPl = make_tensor_like<T>(tdPrdP);
         convert_type(converter, tdPrdP, tdPrdPl);
+        mha_save<Is_even_N>(tilesavedP, tdPrdPl, tPgP); // save dP to buffer after P used by dV
         if constexpr(not Seq_parallel)
             if (n_block > 0) // TODO: need actual prefetch here. yk
                 copy(tileloaddQ, tdQgdQ, tdQrdQ);
@@ -731,10 +734,6 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         // dV=Pt*dO
         gemm_ker(tdVrdV, tdVrPt, tdVrdOt, tPtgPt, tPtrPt, gPt, tdOtgdOt, tdOtrdOt, gQtdOt,
                  tiled_mma_dkv, tile_dkv, tileloadPt, tileloaddOt);
-        sycl::group_barrier(group);
-
-        mha_save<Is_even_N>(tilesavedP, tdPrdPl, tPgP); // save dP to buffer after P used by dV
-        sycl::group_barrier(group);
 
         clear(tdQrdQ);
         if constexpr(not Seq_parallel)
@@ -1124,7 +1123,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     const int tail_n = SEQ_LEN_KV % kBlockN;
     const int M_BLOCK = ceil_div(SEQ_LEN_Q, kBlockM);
     const int tail_m = SEQ_LEN_Q % kBlockM;
-    T * pbuff = compat::malloc<T>(BATCH * NUM_HEAD_Q * seq_len_kv_pad * kBlockM);
+    T * pbuff = compat::malloc<T>(BATCH * NUM_HEAD_Q * seq_len_kv_pad * 2 * kBlockM);
     auto param = Param<T>(do_d, o_d, q_d, k_d, v_d, lse_d, odo_d,
                           dqaccum_d, dq_d, dk_d, dv_d, s_d, dp_d, pbuff,
                           1 / sqrt(static_cast<float>(kHeadDim)));
@@ -1171,7 +1170,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     // auto dimBlock = compat::dim3(size(trait.tiled_mma_sdp));
 
     compat::experimental::launch_properties launch_props1{
-        // sycl::ext::oneapi::experimental::work_group_scratch_size(0),
+        sycl::ext::oneapi::experimental::work_group_scratch_size(trait.smem_size),
     };
     compat::experimental::kernel_properties kernel_props1{
         sycl::ext::oneapi::experimental::sub_group_size<trait.SubgroupSize>};
