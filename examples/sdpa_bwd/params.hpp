@@ -169,8 +169,6 @@ struct Param {
           T *dq,
           T *dk,
           T *dv,
-          T *s,
-          T *dp,
           T *pb,
           const float softmax_scale)
         : do_ptr(dO),
@@ -184,8 +182,6 @@ struct Param {
           dq_ptr(dq),
           dk_ptr(dk),
           dv_ptr(dv),
-          s_ptr(s),
-          dp_ptr(dp),
           pb_ptr(pb),
           scale_softmax(softmax_scale),
           scale_softmax_log2(softmax_scale * M_LOG2E),
@@ -205,8 +201,6 @@ struct Param {
     T *dq_ptr;
     T *dk_ptr;
     T *dv_ptr;
-    T *s_ptr;
-    T *dp_ptr;
     T *pb_ptr;
 
     // const dimension
@@ -280,12 +274,6 @@ struct Boffset {
     index_t dv_offset(const index_t b_id, const index_t h_id, const index_t s_id) {
         return b_id * param.dv_b_stride + h_id * param.dv_h_stride + s_id * param.dv_r_stride;
     }
-    index_t ps_offset(const index_t b_id, const index_t h_id,
-                      const index_t sq_id, const index_t sk_id) {
-        return b_id * param.s_b_stride +
-            h_id * param.s_s_stride +
-            sq_id * param.s_r_stride + sk_id;
-    }
     index_t lse_offset(const index_t b_id, const index_t h_id, const index_t s_id) {
         return b_id * param.seq_len_q * param.num_head_q + h_id * param.seq_len_q + s_id;
     }
@@ -331,13 +319,6 @@ void setup_bhsd_stride(Param<T> &param) {
     param.o_h_stride = param.seq_len_q * param.head_dim;
     param.o_b_stride = param.num_head_q * param.seq_len_q * param.head_dim;
 
-    // param.do_r_stride = param.head_dim;
-    // param.do_h_stride = param.seq_len_q * param.head_dim;
-    // param.do_b_stride = param.num_head_q * param.seq_len_q * param.head_dim;
-    param.s_r_stride = param.seq_len_kv_pad;
-    param.s_s_stride = param.seq_len_q_pad * param.seq_len_kv_pad;
-    param.s_b_stride = param.num_head_q * param.seq_len_q_pad * param.seq_len_kv_pad;
-
     param.dq_r_stride = param.head_dim;
     param.dq_h_stride = param.seq_len_q_pad * param.head_dim;
     param.dq_b_stride = param.num_head_q * param.seq_len_q_pad * param.head_dim;
@@ -372,13 +353,6 @@ void setup_bshd_stride(Param<T> &param) {
     param.o_r_stride = param.num_head_q * param.head_dim;
     param.o_h_stride = param.head_dim;
     param.o_b_stride = param.num_head_q * param.seq_len_q * param.head_dim;
-
-    // param.do_r_stride = param.head_dim;
-    // param.do_h_stride = param.seq_len_q * param.head_dim;
-    // param.do_b_stride = param.num_head_q * param.seq_len_q * param.head_dim;
-    param.s_r_stride = param.seq_len_kv_pad;
-    param.s_s_stride = param.seq_len_q_pad * param.seq_len_kv_pad;
-    param.s_b_stride = param.num_head_q * param.seq_len_q_pad * param.seq_len_kv_pad;
 
     param.dq_r_stride = param.num_head_q * param.head_dim;
     param.dq_h_stride = param.head_dim;
