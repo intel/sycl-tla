@@ -217,6 +217,7 @@ struct Param {
     int m_block;
     int tail_m;
     int num_qh_per_kvh;
+    int num_nb_per_blk;
     int q_r_stride;
     int q_h_stride;
     int q_b_stride;
