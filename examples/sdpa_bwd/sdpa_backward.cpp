@@ -718,33 +718,16 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         auto tdPrdPl = make_tensor_like<T>(tdPrdP);
         convert_type(converter, tdPrdP, tdPrdPl);
         mha_save<Is_even_N>(tilesavedP, tdPrdPl, tPgP); // save dP to buffer after P used by dV
-        if constexpr(not Seq_parallel)
-            if (n_block > 0) // TODO: need actual prefetch here. yk
-                copy(tileloaddQ, tdQgdQ, tdQrdQ);
 
         // dV=Pt*dO
         gemm_ker(tdVrdV, tdVrPt, tdVrdOt, tPtgPt, tPtrPt, gPt, tdOtgdOt, tdOtrdOt, gQtdOt,
                  tiled_mma_dkv, tile_dkv, tileloadPt, tileloaddOt);
 
         clear(tdQrdQ);
-        if constexpr(not Seq_parallel)
-            if (n_block > 0) {
-                if (Is_even_M)
-                    mha_load<true>(tileloaddQ, tdQgdQ, tdQrdQ);
-                else
-                    mha_load<false>(tileloaddQ, tdQgdQ, tdQrdQ);
-            }
         // dQ=dP*K
         gemm_ker(tdQrdQ, tdQrdP, tdQrK, tdPgdPa, tdPrdPa, gdPa, tKgK, tKrK, gK,
                  tiled_mma_dq, tile_dq, tileloaddP, tileloadK);
-        if constexpr(Seq_parallel) {
-            mha_atomic_add(mdQaccum, tdQgdQ, tdQrdQ, local_id);
-        } else {
-            if (Is_even_M)
-                mha_save<true>(tilesavedQ, tdQrdQ, tdQgdQ);
-            else
-                mha_save<false>(tilesavedQ, tdQrdQ, tdQgdQ);
-        }
+        mha_atomic_add(mdQaccum, tdQgdQ, tdQrdQ, local_id);
 
         // dK=dPt*Q
         gemm_ker(tdKrdK, tdKrdPt, tdKrQt, tdPtgdPt, tdPtrdPt, gdPt, tQtgQt, tQtrQt, gQtdOt,
@@ -897,8 +880,11 @@ mha_backward_seq(T trait,
                  Param<typename T::DType> param) {
     const int bidb = BlockIdxZ();
     const int bidhq = BlockIdxY();
+    const int bidnblk = BlockIdxX();
     const int bidhkv = bidhq / param.num_qh_per_kvh;
-    for (int n_block = 0; n_block < param.n_block; ++n_block)
+    const int bidns = bidnblk * param.num_nb_per_blk;
+    const int bidne = std::min(bidns + param.num_nb_per_blk, param.n_block);
+    for (int n_block = bidns; n_block < bidne; ++n_block)
         if (param.tail_n > 0 and n_block == param.n_block - 1)
             dq_dk_dv_1colblock<false, false>(trait, param, bidb, bidhq, bidhkv, param.n_block - 1, param.tail_n);
         else
@@ -1120,6 +1106,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     param.num_head_q = NUM_HEAD_Q;
     param.num_head_kv = NUM_HEAD_KV;
     param.num_qh_per_kvh = NUM_HEAD_Q / NUM_HEAD_KV;
+    param.num_nb_per_blk = 4; // tuneable
     param.seq_len_q = SEQ_LEN_Q;
     param.seq_len_kv = SEQ_LEN_KV;
     param.head_dim = kHeadDim;
@@ -1151,7 +1138,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     EventManager::getInstance().addEvent(event0);
     compat::wait_and_throw();
 
-    auto dimGrid1 = compat::dim3(size(param.n_block),
+    auto dimGrid1 = compat::dim3(size(ceil_div(param.n_block, param.num_nb_per_blk)),
                                  size(param.num_head_q), size(param.batch));
     assert((param.num_head_q % param.num_head_kv == 0) && "num_head_q must be dividable by num_head_kv");
     assert((param.num_head_q >= param.num_head_kv) && "num_head_q must be bigger than or equal to num_head_kv");
@@ -1165,7 +1152,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
         sycl::ext::oneapi::experimental::sub_group_size<trait.SubgroupSize>};
     compat::experimental::launch_policy policy1{dimGrid1, dimBlock1, launch_props1, kernel_props1};
     auto event1 = compat::experimental::launch<
-        mha_backward_parallel<decltype(trait)>,
+        mha_backward_seq<decltype(trait)>,
         mhabwdDeviceName<decltype(trait)>>(policy1,
                                            trait,
                                            param);
