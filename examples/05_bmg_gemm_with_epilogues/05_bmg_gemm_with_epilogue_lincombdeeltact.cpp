@@ -369,7 +369,8 @@ constexpr int PipelineStages = 2;
 using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
 using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
 
-using CopyOpG2R = XE_2D_U32x8x16_LD_N;
+// using CopyOpG2R = XE_2D_U32x8x16_LD_N;
+using CopyOpG2R = XE_LOAD_2D<32, 8, 16>;
 template <template <class> class ActivationFn>
 using EpilogueOp = cutlass::epilogue::fusion::LinCombDeEltAct<
     LayoutC,
@@ -380,7 +381,7 @@ using EpilogueOp = cutlass::epilogue::fusion::LinCombDeEltAct<
 using EpilogueTile = decltype(take<0,2>(TileShape{}));
 
 template <template <class> class ActivationFn>
-using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
+using FusionCallbacks = cutlass::epilogue::fusion::FusionCallbacks<
         EpilogueDispatchPolicy,
         EpilogueOp<ActivationFn>,
         TileShape,
@@ -390,19 +391,16 @@ using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
 
 template <template <class> class ActivationFn>
 using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-        EpilogueDispatchPolicy,                 // IntelXeXMX16
-        TileShape,                              // CtaTileMNK
+        EpilogueDispatchPolicy,                 // IntelXeGeneric
+        TiledMma,                               // TiledMMA
+        void,                                   // EpilogueTile
         ElementAccumulator,                     // ElementC
         cutlass::gemm::TagToStrideC_t<LayoutC>, // StrideC
         ElementOutput,                          // ElementD
         cutlass::gemm::TagToStrideC_t<LayoutD>, // StrideD
-        FusionCallBacks<ActivationFn>,          // FusionCallBacks
-        CopyOpG2R,                              // CopyOpG2R
-        void,                                   // SmemLayoutAtomC
-        void,                                   // CopyOpS2R
-        XE_2D_U32x8x16_ST_N,                    // CopyOpR2G
-        void,                                   // SmemLayoutAtomD
-        void>;                                  // CopyOpR2S
+        FusionCallbacks<ActivationFn>,          // FusionCallBacks
+        void,                              // CopyOpG2R
+        void>;                                  // CopyOpR2G
 
 // Mainloop
 using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<

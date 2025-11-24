@@ -223,6 +223,66 @@ struct FusionCallbacks<
   using Impl::Impl;
 };
 
+template <
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementSource_,
+  class ElementScalar_,
+  FloatRoundStyle RoundStyle_,
+  class CtaTileShapeMNK_,
+  class EpilogueTile_
+>
+struct FusionCallbacks<
+    epilogue::IntelXeGeneric,
+    fusion::LinCombEltAct<ActivationFn_, ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_>,
+    CtaTileShapeMNK_,
+    EpilogueTile_
+> : Sm90LinCombEltAct<ActivationFn_, ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_> {
+
+  using Impl = Sm90LinCombEltAct<ActivationFn_, typename cutlass::detail::get_unpacked_element_type<ElementOutput_>::type, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_>;
+  using ElementOutput = ElementOutput_;
+  using ElementCompute = ElementCompute_;
+  using ElementSource = ElementSource_;
+  using ElementScalar = ElementScalar_;
+  using Operation = fusion::LinCombEltAct<ActivationFn_, ElementOutput_, ElementCompute_, ElementSource_, ElementScalar_, RoundStyle_>;
+
+  struct Arguments {
+    ElementScalar_ alpha = ElementScalar_(1);
+    ElementScalar_ beta = ElementScalar_(0);
+    ElementScalar_ const* alpha_ptr = nullptr;
+    ElementScalar_ const* beta_ptr = nullptr;
+
+    using StrideAlpha = Stride<_0,_0,int64_t>;
+    using StrideBeta  = Stride<_0,_0,int64_t>;
+    StrideAlpha dAlpha = {_0{}, _0{}, 0};
+    StrideBeta  dBeta  = {_0{}, _0{}, 0};
+
+    using ActivationArguments = typename Sm90Compute<ActivationFn_, ElementOutput_, ElementCompute_, RoundStyle_>::Arguments;
+    ActivationArguments activation = ActivationArguments();
+
+    operator typename Impl::Arguments() const {
+      return
+              {    // unary op: activation(beta * C + (alpha * acc))
+                        {    // ternary op : beta * C + (alpha * acc)
+                          {{beta}, {beta_ptr}, {dBeta}}, // leaf args : beta
+                          {},                   // leaf args : C
+                          {                     // binary op : alpha * acc
+                                        {{alpha}, {alpha_ptr}, {dAlpha}}, // leaf args : alpha
+                                        {},                     // leaf args : acc
+                                        {}                  // binary args : multiplies
+                          },                    // end binary op
+                          {} // ternary args : multiply_add
+                        },   // end ternary op
+                        activation // unary args: activation
+                };   // end unary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
+
 // D = splitk(alpha * acc + beta * C)
 template<
   // int FragmentSize,
@@ -298,6 +358,64 @@ struct FusionCallbacks<
   using Impl::Impl;
 };
 
+template <
+  // int FragmentSize,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementSource_,
+  class ElementScalar_,
+  class CopyOpR2G_,
+  FloatRoundStyle RoundStyle,
+  class CtaTileShapeMNK,
+  class EpilogueTile
+>
+struct FusionCallbacks<
+    epilogue::IntelXeGeneric,
+    fusion::LinCombSplitK<ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle>,
+    CtaTileShapeMNK,
+    EpilogueTile
+> : XeLinCombSplitK<CtaTileShapeMNK, EpilogueTile, ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle> {
+
+  using ElementOutput = ElementOutput_;
+  using ElementCompute = ElementCompute_;
+  using ElementSource = ElementSource_;
+  using ElementScalar = ElementScalar_;
+  using Impl = XeLinCombSplitK<CtaTileShapeMNK, EpilogueTile, typename cutlass::detail::get_unpacked_element_type<ElementOutput>::type, ElementCompute, CopyOpR2G_, ElementSource, ElementScalar, RoundStyle>;
+  using Operation = fusion::LinCombSplitK<ElementOutput_, ElementCompute, CopyOpR2G_, ElementSource, ElementScalar, RoundStyle>;
+
+  struct Arguments {
+    ElementScalar alpha = ElementScalar(1);
+    ElementScalar beta = ElementScalar(0);
+    ElementScalar const* alpha_ptr = nullptr;
+    ElementScalar const* beta_ptr = nullptr;
+    ElementOutput* output_ptr = nullptr;
+    ElementOutput *output_ptr1 = nullptr;
+    ElementOutput *output_ptr2 = nullptr;
+    size_t NUM_HEAD = 0;
+    size_t NOPE_DIM = 0;
+    size_t ROPE_DIM = 0;
+    operator typename Impl::Arguments() const {
+      return
+        {    // unary op: activation(beta * C + (alpha * acc))
+          {    // ternary op : beta * C + (alpha * acc)
+            {{beta}, {beta_ptr}}, // leaf args : beta
+            {},                   // leaf args : C
+            {                     // binary op : alpha * acc
+              {{alpha}, {alpha_ptr}}, // leaf args : alpha
+              {},                     // leaf args : acc
+              {}                  // binary args : multiplies
+            },                    // end binary op
+            {} // ternary args : multiply_add
+          },   // end ternary op
+          {output_ptr, output_ptr1, output_ptr2, NUM_HEAD, NOPE_DIM, ROPE_DIM} // unary args: activation
+        };   // end unary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
+
 // D = softmax(alpha * acc + beta * C)
 template<
   // int FragmentSize,
@@ -328,6 +446,60 @@ template <
 >
 struct FusionCallbacks<
     epilogue::IntelXeXMX16,
+    fusion::LinCombSoftmaxRow<ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle>,
+    CtaTileShapeMNK,
+    EpilogueTile
+> : XeLinCombSoftmaxRow<CtaTileShapeMNK, EpilogueTile, ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle> {
+
+  using ElementOutput = ElementOutput_;
+  using ElementCompute = ElementCompute_;
+  using ElementSource = ElementSource_;
+  using ElementScalar = ElementScalar_;
+  using Impl = XeLinCombSoftmaxRow<CtaTileShapeMNK, EpilogueTile, typename cutlass::detail::get_unpacked_element_type<ElementOutput>::type, ElementCompute, CopyOpR2G_, ElementSource, ElementScalar, RoundStyle>;
+  using Operation = fusion::LinCombSoftmaxRow<ElementOutput_, ElementCompute, CopyOpR2G_, ElementSource, ElementScalar, RoundStyle>;
+
+  struct Arguments {
+    ElementScalar alpha = ElementScalar(1);
+    ElementScalar beta = ElementScalar(0);
+    ElementScalar const* alpha_ptr = nullptr;
+    ElementScalar const* beta_ptr = nullptr;
+    ElementOutput* output_ptr = nullptr;
+
+    operator typename Impl::Arguments() const {
+      return
+        {    // unary op: activation(beta * C + (alpha * acc))
+          {    // ternary op : beta * C + (alpha * acc)
+            {{beta}, {beta_ptr}}, // leaf args : beta
+            {},                   // leaf args : C
+            {                     // binary op : alpha * acc
+              {{alpha}, {alpha_ptr}}, // leaf args : alpha
+              {},                     // leaf args : acc
+              {}                  // binary args : multiplies
+            },                    // end binary op
+            {} // ternary args : multiply_add
+          },   // end ternary op
+          {output_ptr} // unary args: activation
+        };   // end unary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
+
+template <
+  // int FragmentSize,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementSource_,
+  class ElementScalar_,
+  class CopyOpR2G_,
+  FloatRoundStyle RoundStyle,
+  class CtaTileShapeMNK,
+  class EpilogueTile
+>
+struct FusionCallbacks<
+    epilogue::IntelXeGeneric,
     fusion::LinCombSoftmaxRow<ElementOutput_, ElementCompute_, CopyOpR2G_, ElementSource_, ElementScalar_, RoundStyle>,
     CtaTileShapeMNK,
     EpilogueTile
@@ -473,28 +645,109 @@ struct FusionCallbacks<
   using Impl::Impl;
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// D = alpha * acc + beta * C + per-row bias
 template <
+  class GmemLayoutTagAux,
+  template <class> class ActivationFn,
   class ElementOutput_,
   class ElementCompute_,
-  class ElementBias_,
-  class ElementSource_,
-  class ElementScalar_,
-  int AlignmentBias_,
-  FloatRoundStyle RoundStyle_,
-  class CtaTileShapeMNK_,
-  class EpilogueTile_
+  class ElementAux,
+  class ElementSource,
+  class ElementScalar,
+  int AlignmentAux,
+  FloatRoundStyle RoundStyle,
+  class CtaTileShapeMNK,
+  class EpilogueTile,
+  class CopyOpG2R
 >
 struct FusionCallbacks<
     epilogue::IntelXeXMX16,
+    fusion::LinCombDeEltAct<
+      GmemLayoutTagAux, ActivationFn, ElementOutput_, ElementCompute_,
+      ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
+    >,
+    CtaTileShapeMNK,
+    EpilogueTile,
+    CopyOpG2R
+> : XeLinCombDeEltAct<
+      cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpG2R, ActivationFn, ElementOutput_,
+      ElementCompute_, ElementAux, ElementSource, ElementScalar, RoundStyle
+    > {
+
+  using ElementOutput = ElementOutput_;
+  using ElementCompute = ElementCompute_;
+
+  using Impl =
+    XeLinCombDeEltAct<
+      cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpG2R, ActivationFn, ElementOutput,
+      ElementCompute, ElementAux, ElementSource, ElementScalar, RoundStyle
+    >;
+  using Operation =
+    fusion::LinCombDeEltAct<
+      GmemLayoutTagAux, ActivationFn, ElementOutput, ElementCompute,
+      ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
+    >;
+
+  struct Arguments {
+    ElementScalar alpha = ElementScalar(1);
+    ElementScalar beta = ElementScalar(0);
+    ElementScalar const* alpha_ptr = nullptr;
+    ElementScalar const* beta_ptr = nullptr;
+
+    using StrideAlpha = Stride<_0,_0,int64_t>;
+    using StrideBeta  = Stride<_0,_0,int64_t>;
+    StrideAlpha dAlpha = {_0{}, _0{}, 0};
+    StrideBeta  dBeta  = {_0{}, _0{}, 0};
+
+    using ActivationArguments = typename Sm90Compute<ActivationFn, ElementOutput, ElementCompute, RoundStyle>::Arguments;
+    ActivationArguments activation = ActivationArguments();
+
+    using StrideAux = cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>;
+    ElementAux const* aux_ptr = nullptr;
+    StrideAux dAux = {};
+
+    operator typename Impl::Arguments() const {
+      return
+        {    // binary op : activation(beta * C + (alpha * acc), aux)
+          {                  // ternary op : beta * C + (alpha * acc)
+            {{beta}, {beta_ptr}, {dBeta}}, // leaf args : beta
+            {},                   // leaf args : C
+            {                     // binary op : alpha * acc
+              {{alpha}, {alpha_ptr}, {dAlpha}}, // leaf args : alpha
+              {},                     // leaf args : acc
+              {}                  // binary args : multiplies
+            },                    // end binary op
+            {}               // ternary args : multiply_add
+          },                 // end ternary op
+          {aux_ptr, ElementAux(0), dAux}, // leaf args : aux
+          activation // binary args : activation
+        };   // end binary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
+
+template <
+class ElementOutput_,
+class ElementCompute_,
+class ElementBias_,
+class ElementSource_,
+class ElementScalar_,
+int AlignmentBias_,
+FloatRoundStyle RoundStyle_,
+class CtaTileShapeMNK_,
+class EpilogueTile_
+>
+struct FusionCallbacks<
+epilogue::IntelXeXMX16,
     fusion::LinCombPerRowBias<ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
 > : Sm90LinCombPerRowBias<CtaTileShapeMNK_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
 
   using Impl = Sm90LinCombPerRowBias<
-      CtaTileShapeMNK_,
+  CtaTileShapeMNK_,
       typename cutlass::detail::get_unpacked_element_type<ElementOutput_>::type,
       ElementCompute_, ElementBias_, ElementSource_, ElementScalar_,
       AlignmentBias_, RoundStyle_>;
@@ -523,7 +776,7 @@ struct FusionCallbacks<
 
     operator typename Impl::Arguments() const {
       return
-        {     // ternary op : beta * C + (alpha * acc + bias)
+      {     // ternary op : beta * C + (alpha * acc + bias)
           {{beta}, {beta_ptr}, {dBeta}}, // leaf args : beta
           {},                   // leaf args : C
           {                     // ternary op : alpha * acc + bias
@@ -534,22 +787,24 @@ struct FusionCallbacks<
           },                    // end ternary op
           {} // ternary args : multiply_add
         };   // end ternary op
-    }
+      }
   };
 
   // Ctor inheritance
   using Impl::Impl;
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// D = alpha * acc + beta * C + per-row bias
 // D = alpha * acc + beta * C + per-column bias
 template<
-  int StagesC,
-  class CtaTileShapeMNK,
-  class EpilogueTile,
-  class ElementOutput,
-  class ElementCompute,
-  class ElementBias = ElementOutput,
-  class ElementSource = ElementOutput,
+int StagesC,
+class CtaTileShapeMNK,
+class EpilogueTile,
+class ElementOutput,
+class ElementCompute,
+class ElementBias = ElementOutput,
+class ElementSource = ElementOutput,
   class ElementScalar = ElementCompute,
   int AlignmentBias = 128 / sizeof_bits_v<ElementBias>,
   FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest
@@ -586,7 +841,7 @@ struct FusionCallbacks<
   using Impl = XeLinCombPerColBias<
       _1{},
       CtaTileShapeMNK_,
-      EpilogueTile_, 
+      EpilogueTile_,
       typename cutlass::detail::get_unpacked_element_type<ElementOutput_>::type,
       ElementCompute_, ElementBias_, ElementSource_, ElementScalar_,
       AlignmentBias_, RoundStyle_>;
@@ -655,8 +910,8 @@ struct FusionCallbacks<
   using ElementCompute = ElementCompute_;
   using ElementSource = ElementSource_;
   using ElementScalar = ElementScalar_;
-  using Impl = Sm90LinCombTopKSoftmaxCol<TopK, FragmentSize, CtaTileShapeMNK, EpilogueTile, 
-                                        typename cutlass::detail::get_unpacked_element_type<ElementOutput>::type, 
+  using Impl = Sm90LinCombTopKSoftmaxCol<TopK, FragmentSize, CtaTileShapeMNK, EpilogueTile,
+                                        typename cutlass::detail::get_unpacked_element_type<ElementOutput>::type,
                                         ElementCompute, ElementSource, ElementScalar, RoundStyle>;
   using Operation = fusion::LinCombTopKSoftmaxCol<TopK, ElementOutput, ElementCompute, ElementSource, ElementScalar, RoundStyle>;
 

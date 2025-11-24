@@ -403,11 +403,9 @@ int main(int argc, const char** argv)
   using LayoutD = cutlass::layout::RowMajor;
 
   // using GmemTiledCopyA = XE_2D_U16x8x16_LD_N;
-  using GmemTiledCopyA = XE_LOAD_2D<16, 8, 16>;
-  // using GmemTiledCopyA = void;
+  using GmemTiledCopyA = void;
   // using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
-  using GmemTiledCopyB = XE_LOAD_2D_VNNI<16, 16, 16>;
-  // using GmemTiledCopyB = void;
+  using GmemTiledCopyB = void;
 
   // Workgroup-level tile
   using TileShape = Shape<_32, _512, _32>;
@@ -437,8 +435,6 @@ int main(int argc, const char** argv)
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
           FusionCallbacks,
-          //XE_2D_U32x8x16_LD_N,
-          XE_STORE_2D<32, 8 ,16>,
           void,
           void>;
 
