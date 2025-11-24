@@ -38,7 +38,7 @@
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
 #include "cutlass/gemm/group_array_problem_shape.hpp"
 
-#include "gemm_testbed_3x.hpp"
+#include "gemm_testbed_3x_ptr_array.hpp"
 #include <cute/tensor.hpp>
 
 using namespace cute;
