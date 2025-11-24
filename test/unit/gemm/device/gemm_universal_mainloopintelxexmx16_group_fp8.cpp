@@ -37,7 +37,7 @@
 #include "cutlass/epilogue/collective/xe_array_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
 #include "cutlass/gemm/group_array_problem_shape.hpp"
-#include "gemm_testbed_3x.hpp"
+#include "gemm_testbed_3x_ptr_array.hpp"
 
 using namespace cute;
 using ProblemShape = cutlass::gemm::GroupProblemShape<Shape<int,int,int>>; // <M,N,K> per group
