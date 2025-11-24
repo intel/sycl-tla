@@ -135,17 +135,17 @@ void test_xe_prefetch_2d() {
   EXPECT_TRUE(true) << "XE_PREFETCH_2D operation completed successfully";
 }
 
-TEST(PVC_CuTe_Xe, XE_PREFETCH_2D_uint8) {
+TEST(CuTe_Xe, XE_PREFETCH_2D_uint8) {
   test_xe_prefetch_2d<uint8_t, 8, 2, 64>();
   test_xe_prefetch_2d<uint8_t, 8, 4, 64>();
 }
 
-TEST(PVC_CuTe_Xe, XE_PREFETCH_2D_int16) {
+TEST(CuTe_Xe, XE_PREFETCH_2D_int16) {
   test_xe_prefetch_2d<int16_t, 16, 2, 32>();
   test_xe_prefetch_2d<int16_t, 16, 4, 32>();
 }
 
-TEST(PVC_CuTe_Xe, XE_PREFETCH_2D_float) {
+TEST(CuTe_Xe, XE_PREFETCH_2D_float) {
   test_xe_prefetch_2d<float, 32, 2, 16>();
   test_xe_prefetch_2d<float, 32, 4, 16>();
 }
@@ -155,7 +155,7 @@ TEST(PVC_CuTe_Xe, XE_PREFETCH_2D_float) {
 // For the fallback case
 #include "cutlass_unit_test.h"
 
-TEST(PVC_CuTe_Xe, XE_PREFETCH_2D_SKIPPED) {
+TEST(CuTe_Xe, XE_PREFETCH_2D_SKIPPED) {
   GTEST_SKIP() << "XE_PREFETCH_2D tests require IGC version 2.18 or higher. skipped";
 }
 
