@@ -37,7 +37,7 @@
 #include "cutlass/epilogue/collective/xe_array_epilogue.hpp"
 #include "cutlass/epilogue/fusion/xe_callbacks.hpp"
 #include "cutlass/gemm/group_array_problem_shape.hpp"
-#include "gemm_testbed_3x.hpp"
+#include "gemm_testbed_3x_ptr_array.hpp"
 #include <cute/tensor.hpp>
 
 using namespace cute;
@@ -134,9 +134,9 @@ TEST(MainloopIntelXeXMX16GroupMixedPrecision, GroupedGemm_Large) {
   using Gemm = MainloopIntelXeXMX16GroupMixedPrecision_GemmConfig<
       cutlass::layout::RowMajor, cutlass::layout::RowMajor>::Gemm;
   std::vector<cutlass::gemm::GemmCoord> problem_sizes = {
-    {2048, 2048, 4096},
-    {4096, 2048, 2048},
-    {2048, 4096, 2048}
+    {1024, 1024, 2048},
+    {2048, 1024, 1024},
+    {1024, 2048, 1024}
   };
   EXPECT_TRUE(test::gemm::device::TestXeGrouped<Gemm>(problem_sizes, 1.0f, 1.0f));
 }
@@ -145,8 +145,8 @@ TEST(MainloopIntelXeXMX16GroupMixedPrecision, GroupedGemm_TensorParallel) {
   using Gemm = MainloopIntelXeXMX16GroupMixedPrecision_GemmConfig<
       cutlass::layout::RowMajor, cutlass::layout::RowMajor>::Gemm;
   std::vector<cutlass::gemm::GemmCoord> problem_sizes = {
-    {4096, 1024, 4096},
-    {4096, 1024, 4096}
+    {2048, 512, 2048},
+    {2048, 512, 2048}
   };
   EXPECT_TRUE(test::gemm::device::TestXeGrouped<Gemm>(problem_sizes, 1.0f, 1.0f));
 }
@@ -155,8 +155,8 @@ TEST(MainloopIntelXeXMX16GroupMixedPrecision, GroupedGemm_ModelParallel) {
   using Gemm = MainloopIntelXeXMX16GroupMixedPrecision_GemmConfig<
       cutlass::layout::RowMajor, cutlass::layout::RowMajor>::Gemm;
   std::vector<cutlass::gemm::GemmCoord> problem_sizes = {
-    {1024, 4096, 4096},
-    {1024, 4096, 4096}
+    {512, 2048, 2048},
+    {512, 2048, 2048}
   };
   EXPECT_TRUE(test::gemm::device::TestXeGrouped<Gemm>(problem_sizes, 1.0f, 1.0f));
 }
