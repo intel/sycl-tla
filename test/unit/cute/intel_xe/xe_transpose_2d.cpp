@@ -40,7 +40,7 @@ using namespace cute;
 
 #if (IGC_VERSION_MAJOR > 2) || (IGC_VERSION_MAJOR == 2 && IGC_VERSION_MINOR >= 18) 
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_TRANSPOSE_API_Declaration) {
+TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_API_Declaration) {
   // Template: XE_LOAD_2D_TRANSPOSE<Bits, Height, Width>
   // Constraints: Bits == 32 || Bits == 64, Width <= 8
   // For 64-bit: Height == 8 && Width < 4
@@ -70,7 +70,7 @@ TEST(PVC_CuTe_Xe, XE_LOAD_2D_TRANSPOSE_API_Declaration) {
   EXPECT_TRUE(true) << "XE_LOAD_2D_TRANSPOSE API types declared successfully";
 }
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_TRANSPOSE_Constraints) {
+TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_Constraints) {
   // Test that the compile-time constraints are enforced
   
   // Valid 32-bit operations
@@ -93,7 +93,7 @@ TEST(PVC_CuTe_Xe, XE_LOAD_2D_TRANSPOSE_Constraints) {
 
 #else
 
-TEST(PVC_CuTe_Xe, XE_LOAD_2D_TRANSPOSE_SKIPPED) {
+TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_SKIPPED) {
   GTEST_SKIP() << "XE_LOAD_2D_TRANSPOSE tests require IGC version 2.18 or higher. skipped";
 }
 
