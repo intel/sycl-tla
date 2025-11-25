@@ -729,15 +729,15 @@ struct FusionCallbacks<
 };
 
 template <
-class ElementOutput_,
-class ElementCompute_,
-class ElementBias_,
-class ElementSource_,
-class ElementScalar_,
-int AlignmentBias_,
-FloatRoundStyle RoundStyle_,
-class CtaTileShapeMNK_,
-class EpilogueTile_
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementBias_,
+  class ElementSource_,
+  class ElementScalar_,
+  int AlignmentBias_,
+  FloatRoundStyle RoundStyle_,
+  class CtaTileShapeMNK_,
+  class EpilogueTile_
 >
 struct FusionCallbacks<
 epilogue::IntelXeGeneric,
@@ -798,13 +798,13 @@ epilogue::IntelXeGeneric,
 // D = alpha * acc + beta * C + per-row bias
 // D = alpha * acc + beta * C + per-column bias
 template<
-int StagesC,
-class CtaTileShapeMNK,
-class EpilogueTile,
-class ElementOutput,
-class ElementCompute,
-class ElementBias = ElementOutput,
-class ElementSource = ElementOutput,
+  int StagesC,
+  class CtaTileShapeMNK,
+  class EpilogueTile,
+  class ElementOutput,
+  class ElementCompute,
+  class ElementBias = ElementOutput,
+  class ElementSource = ElementOutput,
   class ElementScalar = ElementCompute,
   int AlignmentBias = 128 / sizeof_bits_v<ElementBias>,
   FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest
