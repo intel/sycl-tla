@@ -304,6 +304,7 @@ struct ExampleRunner {
     EpilogueArguments epilogue_arguments{
       {options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D};
     epilogue_arguments.thread.output_ptr = block_D.get();
+    
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
