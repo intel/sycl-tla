@@ -149,7 +149,8 @@ class SDPA(nn.Module):
         attn_bias = torch.zeros(seq_len_q, seq_len_k, dtype=dtype)
         self.is_causal = is_causal
         if is_causal:
-            temp_mask = torch.ones(seq_len_q, seq_len_k, dtype=torch.bool).tril(diagonal=0)
+            diagonal_offset = seq_len_k - seq_len_q
+            temp_mask = torch.ones(seq_len_q, seq_len_k, dtype=torch.bool).tril(diagonal=diagonal_offset)
             attn_bias.masked_fill_(temp_mask.logical_not(), float("-inf"))
             attn_bias.to(dtype)
 
@@ -165,6 +166,12 @@ class SDPA(nn.Module):
         s = s.to(torch.float32)
         self.softmax_scale = 1 / np.sqrt(self.head_size_q) if scale is None else scale
         s = s * self.softmax_scale + attn_bias
+        if is_causal:
+            diagonal_offset = seq_len_q - seq_len_k
+            if (diagonal_offset > 0):
+                for i in range(diagonal_offset):
+                    s[:, :, i, :] = 0.0
+
         sum_row, _ = torch.max(s, dim= -1, keepdim=True)
         s = s - sum_row
         self.lse = torch.logsumexp(s, dim=-1, keepdim=True) + sum_row
@@ -189,7 +196,8 @@ class SDPA(nn.Module):
         seq_len_q, seq_len_k = q_grad.size(-2), k_grad.size(-2)
         attn_bias = torch.zeros(seq_len_q, seq_len_k, dtype=dtype)
         if self.is_causal:
-            temp_mask = torch.ones(seq_len_q, seq_len_k, dtype=torch.bool).tril(diagonal=0)
+            diagonal_offset = seq_len_k - seq_len_q
+            temp_mask = torch.ones(seq_len_q, seq_len_k, dtype=torch.bool).tril(diagonal=diagonal_offset)
             attn_bias.masked_fill_(temp_mask.logical_not(), float("-inf"))
             attn_bias.to(dtype)
         s = s * self.softmax_scale + attn_bias
@@ -219,11 +227,15 @@ class ptSDPA(nn.Module):
                 is_causal: bool = False,
                 scale: float = None):
         dtype = q.dtype
+        if is_causal:
+            seq_len_q, seq_len_k = q.size(-2), k.size(-2)
+            diagonal_offset = seq_len_k - seq_len_q
+            temp_mask = torch.ones(seq_len_q, seq_len_k, dtype=torch.bool).tril(diagonal=diagonal_offset)
         with sdpa_kernel(backends=[SDPBackend.MATH]):
             return F.scaled_dot_product_attention(q, k, v,
                                                   dropout_p=dropout_p,
-                                                  is_causal=is_causal,
                                                   scale=scale,
+                                                  attn_mask=temp_mask,
                                                   enable_gqa=True)
 
 def set_dict(dump_dict, name, value):
@@ -317,19 +329,19 @@ def loop_run():
     for h in [4]:
         # for seq_q in list(range(512, 512+32)):
         #     for seq_k in list(range(512, 512+32)):
-        for seq_q in [512, 513, 523, 527, 528, 529, 543]:
-            for seq_k in [512, 513, 523, 527, 528, 529, 543]:
-                for dim in [96]:
+        for seq_q in [512, 513, 523, 527, 535, 543]:
+            for seq_k in [512, 513, 523, 527, 535, 543]:
+                for dim in [64, 96, 128, 192]:
                     # print('test_run', 4, 4, h, seq_q, seq_k, dim, dim)
                     # bhsd
-                    test_sdpa(torch.float16, 123, 4, 4, h, seq_q, seq_k, dim, dim, is_bhsd = True)
+                    test_sdpa(torch.float16, 123, 4, 4, h, seq_q, seq_k, dim, dim, is_causal=True, is_bhsd = True)
                     GRAD_DICT = {}
                     # bshd
-                    test_sdpa(torch.float16, 123, 4, 4, h, seq_q, seq_k, dim, dim, is_bhsd = False)
+                    test_sdpa(torch.float16, 123, 4, 4, h, seq_q, seq_k, dim, dim, is_causal=True, is_bhsd = False)
                     GRAD_DICT = {}
 
 if __name__ == '__main__':
-    # test_sdpa(torch.bfloat16, 123, 128, 4, 4, 900, 900, 128, 128)
+    # test_sdpa(torch.float16, 123, 4, 4, 4, 513, 512, 128, 128, is_causal=True)
     loop_run()
     # test_sdpa(torch.float16, 123, 4, 4, 4, 513, 784, 128, 128, is_causal=True)
     # GRAD_DICT = {}
