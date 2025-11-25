@@ -882,13 +882,12 @@ mha_backward_seq(T trait,
     const int bidhq = BlockIdxY();
     const int bidnblk = BlockIdxX();
     const int bidhkv = bidhq / param.num_qh_per_kvh;
-    const int bidns = bidnblk * param.num_nb_per_blk;
-    const int bidne = std::min(bidns + param.num_nb_per_blk, param.n_block);
-    for (int n_block = bidns; n_block < bidne; ++n_block)
+    for (int n_block = bidnblk; n_block < param.n_block; n_block += GridDimX()) {
         if (param.tail_n > 0 and n_block == param.n_block - 1)
             dq_dk_dv_1colblock<false, false>(trait, param, bidb, bidhq, bidhkv, param.n_block - 1, param.tail_n);
         else
             dq_dk_dv_1colblock<true, false>(trait, param, bidb, bidhq, bidhkv, n_block);
+    }
 }
 
 template<class T>
@@ -1106,7 +1105,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     param.num_head_q = NUM_HEAD_Q;
     param.num_head_kv = NUM_HEAD_KV;
     param.num_qh_per_kvh = NUM_HEAD_Q / NUM_HEAD_KV;
-    param.num_nb_per_blk = 4; // tuneable
+    param.num_nb_per_blk = std::max(N_BLOCK * NUM_HEAD_Q * BATCH / 1024, 1); // 1024 tuneable here, best for pvc
     param.seq_len_q = SEQ_LEN_Q;
     param.seq_len_kv = SEQ_LEN_KV;
     param.head_dim = kHeadDim;
