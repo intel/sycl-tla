@@ -131,12 +131,13 @@ struct ExampleRunner {
 
   using ElementA = typename Gemm::ElementA;
   using ElementB = typename Gemm::ElementB;
-  using ElementAccumulator = typename Gemm::ElementAccumulator;
+  using ElementAcc = typename Gemm::ElementAccumulator;
 
   using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
+  using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
@@ -446,8 +447,8 @@ int main(int argc, const char** argv)
 
   using EpilogueTile = Shape<_16, _32>;
   constexpr int PipelineStages = 3;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinCombSplitK<ElementOutput,
           ElementComputeEpilogue, XE_2D_U32x8x16_ST_N, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
@@ -456,15 +457,16 @@ int main(int argc, const char** argv)
           EpilogueTile>;
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
-          TiledMma,
-          void,
+          TileShape,
           ElementAccumulator,
           cutlass::gemm::TagToStrideC_t<LayoutC>,
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
           FusionCallBacks,
+          XE_2D_U32x8x16_LD_N,
+          void, void,
           void,
-          void>;
+          void, void>;
 
 // Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
