@@ -454,7 +454,7 @@ int main(int argc, const char** argv)
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinCombSplitK<ElementOutput,
-          ElementComputeEpilogue, XE_2D_U32x8x16_ST_N, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+          ElementComputeEpilogue, XE_STORE_2D<32, 8, 16>/*XE_2D_U32x8x16_ST_N*/, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           EpilogueTile>;
@@ -467,7 +467,10 @@ int main(int argc, const char** argv)
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
           FusionCallBacks,
+<<<<<<< HEAD
           XE_2D_U32x8x16_LD_N,
+=======
+>>>>>>> afa071e0 (epilogue test)
           void,
           void>;
 
