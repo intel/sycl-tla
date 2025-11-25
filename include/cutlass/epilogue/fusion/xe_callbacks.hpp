@@ -728,6 +728,8 @@ struct FusionCallbacks<
   using Impl::Impl;
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// D = alpha * acc + beta * C + per-row bias
 template <
   class ElementOutput_,
   class ElementCompute_,
@@ -740,14 +742,14 @@ template <
   class EpilogueTile_
 >
 struct FusionCallbacks<
-epilogue::IntelXeGeneric,
+epilogue::IntelXeXMX16,
     fusion::LinCombPerRowBias<ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
 > : Sm90LinCombPerRowBias<CtaTileShapeMNK_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
 
   using Impl = Sm90LinCombPerRowBias<
-  CtaTileShapeMNK_,
+      CtaTileShapeMNK_,
       typename cutlass::detail::get_unpacked_element_type<ElementOutput_>::type,
       ElementCompute_, ElementBias_, ElementSource_, ElementScalar_,
       AlignmentBias_, RoundStyle_>;
@@ -794,8 +796,7 @@ epilogue::IntelXeGeneric,
   using Impl::Impl;
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// D = alpha * acc + beta * C + per-row bias
+
 // D = alpha * acc + beta * C + per-column bias
 template<
   int StagesC,
