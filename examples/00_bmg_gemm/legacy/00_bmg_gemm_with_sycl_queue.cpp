@@ -29,25 +29,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+
 /*! \file
-    \brief CUTLASS Intel BMG Gemm with row-wise softmax epilogue
-
-    This example constructs and executes a standard GEMM fused with a softmax epilogue.
-    Aside from the epilogue operation, it is identical to 00_bmg_gemm.
-
-    CUTLASS 3.x epilogues are implemented using the Epilogue Visitor Tree design pattern, and
-    typically combine 'Linear Combination' (i.e. `D = alpha * A*B + beta * C`) with an additional
-    epilogue operation.
-
-    In this case, a row-wise softmax is applied:
-
-    // D = softmax(alpha * (A*B) + beta * C)
+    \brief CUTLASS Intel BMG Gemm Example with non-default SYCL queue.
+    This example modifies 00_bmg_gemm to use a non-default queue. The main changes are passing the
+    queue to gemm_op.initialize and gemm_op.run. Otherwise, changes are made to allocate memory with
+    the correct queue.
 
     To build & run this example (from your build dir):
-
-      $ ninja 05_bmg_gemm_with_epilogue_softmax
-      $ ./examples/sycl/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_softmax
-
+      $ ninja 00_bmg_gemm_with_sycl_queue
+      $ ./examples/sycl/00_bmg_gemm_with_sycl_queue/00_bmg_gemm_with_sycl_queue
     Call with `--help` for information about available options
 */
 
@@ -67,10 +58,6 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "cutlass/util/reference/device/tensor_relu.h"
-#include "cutlass/tensor_view.h"
-#include "cutlass/coord.h"
-
 #include "sycl_common.hpp"
 #include "helper.h"
 
@@ -90,7 +77,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(100),
+    m(5120), n(4096), k(4096), l(1), iterations(20),
     alpha(1.f), beta(0.f)
   { }
 
@@ -103,9 +90,9 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 512);
-    cmd.get_cmd_line_argument("n", n, 512);
-    cmd.get_cmd_line_argument("k", k, 64);
+    cmd.get_cmd_line_argument("m", m, 5120);
+    cmd.get_cmd_line_argument("n", n, 4096);
+    cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
@@ -170,23 +157,49 @@ struct ExampleRunner {
   StrideD stride_D;
   uint64_t seed = 0;
 
-  cutlass::DeviceAllocation<ElementA> block_A;
-  cutlass::DeviceAllocation<ElementB> block_B;
-  cutlass::DeviceAllocation<ElementC> block_C;
-  cutlass::DeviceAllocation<ElementOutput> block_D;
-  cutlass::DeviceAllocation<ElementOutput> block_ref_D;
+  struct Memory {
+    ElementA* block_A;
+    ElementB* block_B;
+    ElementC* block_C;
+    ElementOutput* block_D;
+    ElementOutput* block_ref_D;
+    sycl::queue q;
+
+    Memory(sycl::queue q, ProblemShapeType problem_shape_MNKL) : q(q) {
+      auto [M, N, K, L] = problem_shape_MNKL;
+      block_A = sycl::malloc_device<ElementA>(static_cast<std::size_t>(M) * K * L, q);
+      block_B = sycl::malloc_device<ElementB>(static_cast<std::size_t>(N) * K * L, q);
+      block_C = sycl::malloc_device<ElementC>(static_cast<std::size_t>(M) * N * L, q);
+      block_D = sycl::malloc_device<ElementOutput>(static_cast<std::size_t>(M) * N * L, q);
+      block_ref_D = sycl::malloc_device<ElementOutput>(static_cast<std::size_t>(M) * N * L, q);
+    }
+
+    ~Memory() {
+      sycl::free(block_A, q);
+      sycl::free(block_B, q);
+      sycl::free(block_C, q);
+      sycl::free(block_D, q);
+      sycl::free(block_ref_D, q);
+    }
+
+    // delete other constructors so avoiding leaks is easy
+    Memory(const Memory&) = delete;
+    Memory(Memory&&) noexcept = delete;
+    Memory& operator=(const Memory&) = delete;
+    Memory& operator=(Memory&&) noexcept = delete;
+  };
 
   //
   // Methods
   //
 
-  bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
+  bool verify(Memory& mem, const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
-    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+    cutlass::TensorRef ref_A(mem.block_A, LayoutA::packed({M, K}));
+    cutlass::TensorRef ref_B(mem.block_B, LayoutB::packed({K, N}));
+    cutlass::TensorRef ref_C(mem.block_C, LayoutC::packed({M, N}));
+    cutlass::TensorRef ref_D(mem.block_ref_D, LayoutD::packed({M, N}));
 
     cutlass::reference::device::GemmComplex(
           {M, N, K},
@@ -206,74 +219,15 @@ struct ExampleRunner {
           M * N  // batch_stride_D
         );
 
-    compat::wait();
+    // Check if output from CUTLASS kernel and reference kernel are equal or not
+    bool passed = cutlass::reference::device::BlockCompareEqual(
+      mem.block_ref_D, mem.block_D, M * N * L);
 
-    std::vector<ElementOutput> ptr(M*N*L);
-    std::vector<ElementOutput> ptr_refD(M*N*L);
-
-    compat::memcpy(ptr.data(), block_ref_D.get(),
-                       M * N * L * sizeof(ElementOutput));
-    compat::memcpy(ptr_refD.data(), block_D.get(),
-                       (size_t)M * N * L * sizeof(ElementOutput));
-
-    // Verify using a manual row-wise softmax on the host
-    for (int l = 0; l < L; l++) {
-      for (int i = 0; i < M; i++) {
-
-        auto row_max = ptr[l * M * N + i * N];
-        for (int j = 0; j < N; j++) {
-          row_max = max(row_max, ptr[l * M * N + i * N + j]);
-        }
-
-        ElementOutput exp_sum = (ElementOutput)0;
-        for (int j = 0; j < N; j++) {
-          ptr[l * M * N + i * N + j] = ptr[l * M * N + i * N + j] - row_max;
-          ptr[l * M * N + i * N + j] = exp(ptr[l * M * N + i * N + j]);
-          exp_sum += ptr[l * M * N + i * N + j];
-        }
-
-        for (int j = 0; j < N; j++) {
-          ptr[l * M * N + i * N + j] = ptr[l * M * N + i * N + j] / exp_sum;
-        }
-      }
-    }
-
-    uint32_t err_cnt = 0;
-
-    for (int b = 0; b < L; b++) {
-      for (int i = 0; i < M; i++) {
-        for (int j = 0; j < N; j++) {
-          int idx = b * M * N + i * N + j;
-          auto expect = ptr[idx];
-          auto val = ptr_refD[idx];
-
-          if (std::isnormal(ptr[idx]) && std::isnormal(ptr_refD[idx])) {
-            auto gap = fabs(fabs(val - expect) / expect);
-            if (gap > 0.001f) {
-              std::cout << "(" << b << ", " << i << ", " << j
-                        << "): " << "host: " << ptr[idx]
-                        << "   and device: " << ptr_refD[idx]
-                        << ", gap: " << gap << std::endl;
-              err_cnt++;
-            }
-          } else {
-            std::cout << "(" << b << ", " << i << ", " << j
-                      << "): " << "host: " << expect << "   and device: " << val
-                      << std::endl;
-            err_cnt++;
-          }
-        }
-      }
-    }
-
-    std::cout << "err count: " << err_cnt
-              << ", pass rate: " << 100 - (100 * err_cnt / (M * N * L)) << "%"
-              << std::endl;
-    return err_cnt == 0;
+    return passed;
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
-  void initialize(const ProblemShapeType& problem_size) {
+  void initialize(const ProblemShapeType& problem_size, Memory& mem) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
@@ -282,72 +236,64 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(static_cast<std::size_t>(M) * K * L);
-    block_B.reset(static_cast<std::size_t>(K) * N * L);
-    block_C.reset(static_cast<std::size_t>(M) * N * L);
-    block_D.reset(static_cast<std::size_t>(M) * N * L);
-    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
-
-    cutlass::reference::device::BlockFillRandomUniform(
-       block_A.get(), block_A.size(), seed + 2023, (ElementA)1, (ElementA)0, 0);
-    cutlass::reference::device::BlockFillRandomUniform(
-       block_B.get(), block_B.size(), seed + 2022, (ElementB)1, (ElementB)0, 0);
-    cutlass::reference::device::BlockFillRandomUniform(
-       block_C.get(), block_C.size(), seed + 2021, (ElementC)1, (ElementC)0, 0);
+    cutlass::initialize_block(mem.block_A, M * K * L, seed + 2023);
+    cutlass::initialize_block(mem.block_B, N * K * L, seed + 2022);
+    cutlass::initialize_block(mem.block_C, M * N * L, seed + 2021);
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
-    initialize(problem_size);
-    using EpilogueArguments = typename Gemm::GemmKernel::EpilogueArguments;
-    EpilogueArguments epilogue_arguments{
-      {options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D};
-    epilogue_arguments.thread.output_ptr = block_D.get();
+    auto q = compat::create_queue();
+    Memory mem(q, problem_size);
+    initialize(problem_size, mem);
 
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A.get(), stride_A, block_B.get(), stride_B},
-      epilogue_arguments,
+      {mem.block_A, stride_A, mem.block_B, stride_B},
+      {{options.alpha, options.beta}, mem.block_C, stride_C, mem.block_D, stride_D},
       hw_info
     };
 
     Gemm gemm_op;
 
     size_t workspace_size = Gemm::get_workspace_size(arguments);
-    cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
+    if (workspace_size != 0) {
+      return cutlass::Status::kErrorInternal;
+    }
 
-    gemm_op.can_implement(arguments);
+    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
+      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      std::exit(1);
+    }
 
-    gemm_op.initialize(arguments, workspace.get());
+    CUTLASS_CHECK(gemm_op.initialize(arguments, nullptr, &q));
 
     // Run the GEMM
-    gemm_op.run();
+    CUTLASS_CHECK(gemm_op.run(&q));
 
-    compat::wait();
+    q.wait_and_throw();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
+    bool passed = verify(mem, problem_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
-    if (!passed) return cutlass::Status::kErrorInternal;
 
-    if (passed && options.iterations > 0) {
+    if(!passed) return cutlass::Status::kErrorInternal;
+
+    if (options.iterations > 0) {
       GPU_Clock timer;
       timer.start();
       for (int i = 0; i < options.iterations; ++i) {
-        gemm_op.run();
+        gemm_op.run(&q);
       }
-      compat::wait();
-    double io =
-        options.l *
-        (options.m * options.k * sizeof(ElementA) + options.k * options.n * sizeof(ElementB) +
-         options.m * options.n * sizeof(ElementOutput)) *
-        1e-9;
+
+      q.wait_and_throw();
+
       float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      printf("Cutlass GEMM Performance:     [%4.3f]GB/s,   [%4.3f]TF/s, [%6.4f]ms\n", io / cute_time, tflops/cute_time,  cute_time*1000);
+      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
     }
 
     return cutlass::Status::kSuccess;
@@ -402,27 +348,30 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x8x16_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
 
   // Workgroup-level tile
-  using TileShape = Shape<_32, _512, _32>;
+  using TileShape = Shape<_256, _256, _32>;
 
+  // The Tile of this layout describes how 8x4x1 sub-groups tile the TileShape of <256, 256, 32>.
+  // This permutation (which can be thought of as a scatter operation on the default tiling)
+  // ensures that each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations)
+  // See 0t_mma_atom.md#TiledMMAs for more info.
+  // Sub-groups are arranged row-major (stride 4,1,0) for performance reasons.
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_2, _16, _1>, Stride<_16, _1, _0>>>::TiledMMA;
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
-  using EpilogueTile = Shape<_16, _32>;
-  constexpr int PipelineStages = 3;
+  constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-  // Linear Combination + Row-wise Softmax Epilogue
-  using EpilogueOp = cutlass::epilogue::fusion::LinCombSoftmaxRow<ElementOutput,
-          ElementComputeEpilogue, XE_2D_U32x8x16_ST_N, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
+          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
-          EpilogueTile>;
+          decltype(tile_shape(TiledMma()))>;
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
           TileShape,
@@ -433,10 +382,10 @@ int main(int argc, const char** argv)
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          void,
+          XE_2D_U32x8x16_ST_N,
           void, void>;
 
-// Mainloop
+  // Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,

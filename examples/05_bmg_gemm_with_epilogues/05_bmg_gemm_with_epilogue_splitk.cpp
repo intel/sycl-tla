@@ -434,19 +434,15 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  // using GmemTiledCopyA = XE_2D_U16x8x16_LD_N;
-  using GmemTiledCopyA =void;
-  // using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
-  using GmemTiledCopyB = void;
+  using GmemTiledCopyA = XE_2D_U16x8x16_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
 
   // Workgroup-level tile
   using TileShape = Shape<_32, _512, _32>;
 
-  // using TiledMma =
-  //     typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-  //                                   Layout<Shape<_2, _16, _1>, Stride<_16, _1, _0>>>::TiledMMA;
-
-  using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, Layout<TileShape>, Layout<Shape<_2, _16, _1>, Stride<_16, _1, _0>>>::TiledMMA;
+  using TiledMma =
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+                                    Layout<Shape<_2, _16, _1>, Stride<_16, _1, _0>>>::TiledMMA;
 
   using EpilogueTile = Shape<_16, _32>;
   constexpr int PipelineStages = 3;
@@ -454,7 +450,7 @@ int main(int argc, const char** argv)
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinCombSplitK<ElementOutput,
-          ElementComputeEpilogue, XE_STORE_2D<32, 8, 16>/*XE_2D_U32x8x16_ST_N*/, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+          ElementComputeEpilogue, XE_2D_U32x8x16_ST_N, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
           EpilogueTile>;
@@ -467,10 +463,6 @@ int main(int argc, const char** argv)
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
           FusionCallBacks,
-<<<<<<< HEAD
-          XE_2D_U32x8x16_LD_N,
-=======
->>>>>>> afa071e0 (epilogue test)
           void,
           void>;
 
