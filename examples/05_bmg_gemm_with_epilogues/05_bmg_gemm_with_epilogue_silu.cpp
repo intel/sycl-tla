@@ -361,11 +361,7 @@ int main(int argc, const char** argv)
           decltype(tile_shape(TiledMma()))>;
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
-<<<<<<< HEAD
-          TiledMMA,
-=======
           TiledMma,
->>>>>>> afa071e0 (epilogue test)
           void,
           ElementAccumulator,
           cutlass::gemm::TagToStrideC_t<LayoutC>,

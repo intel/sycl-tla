@@ -742,7 +742,7 @@ template <
   class EpilogueTile_
 >
 struct FusionCallbacks<
-epilogue::IntelXeXMX16,
+    epilogue::IntelXeXMX16,
     fusion::LinCombPerRowBias<ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
@@ -778,7 +778,7 @@ epilogue::IntelXeXMX16,
 
     operator typename Impl::Arguments() const {
       return
-      {     // ternary op : beta * C + (alpha * acc + bias)
+        {     // ternary op : beta * C + (alpha * acc + bias)
           {{beta}, {beta_ptr}, {dBeta}}, // leaf args : beta
           {},                   // leaf args : C
           {                     // ternary op : alpha * acc + bias
