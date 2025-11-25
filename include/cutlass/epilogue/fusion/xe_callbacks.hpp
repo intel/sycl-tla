@@ -660,7 +660,7 @@ template <
   class CopyOpG2R
 >
 struct FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     fusion::LinCombDeEltAct<
       GmemLayoutTagAux, ActivationFn, ElementOutput_, ElementCompute_,
       ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
