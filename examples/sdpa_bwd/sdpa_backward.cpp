@@ -197,7 +197,7 @@ template <typename Engine0, typename Layout0,
 CUTLASS_DEVICE void
 apply_mask_causal(Tensor<Engine0, Layout0> &tensor,
                   Tensor<Engine1, Layout1> &rC,
-                  int m_offset, int n_offset) {
+                  int m_offset, int n_offset, int diagonal_offset = 0) {
     auto sg = compat::get_nd_item<1>().get_sub_group();
     auto group = compat::get_nd_item<1>().get_group();
     int sg_local_id = sg.get_local_id();
@@ -209,7 +209,7 @@ apply_mask_causal(Tensor<Engine0, Layout0> &tensor,
     for (int n = 0; n < size<1>(tensor); ++n) {
         CUTLASS_PRAGMA_UNROLL
         for (int m = 0; m < size<0>(tensor); ++m) {
-            int x = n_offset + get<1>(rC_2d(m, n)) + sg_local_id;
+            int x = n_offset + get<1>(rC_2d(m, n)) + sg_local_id + diagonal_offset;
             int y = m_offset + get<0>(rC_2d(m, n));
             if (x > y) {
                 tensor(m, n) = -INFINITY;
@@ -686,7 +686,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
                  tiled_mma_sdp, tile_sdp, tileloadQ, tileloadKt);
         Tensor scores = make_tensor(tSrS.data(), convert_layout_acc_layout(tSrS.layout()));
         if constexpr(is_causal) {
-            apply_mask_causal(scores, taccScS_rc, m_block * kBlockM, n_block * kBlockN);
+            apply_mask_causal(scores, taccScS_rc, m_block * kBlockM, n_block * kBlockN, param.seq_len_q - param.seq_len_kv);
         }
 
         if (Is_even_M) {
