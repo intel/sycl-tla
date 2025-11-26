@@ -310,10 +310,6 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
           if (is_causal) {
             for (int row = 0; row < seq_len_qo; row++) {
               for (int col = 0; col < seq_len_kv; col++) {
-                // Apply bottom right masking
-                  // if (col > row - first_non_masked_sequence)
-                  //   host_S[col + row * seq_len_kv] =
-                  //       ElementAccumulator{-INFINITY};
                   if (seq_len_kv > seq_len_qo){
                     int first_masked_col_index = seq_len_kv - (seq_len_kv - seq_len_qo - 1) + row; // Find where does the masking occur for that sequence
                     if (col >= first_masked_col_index){
@@ -329,7 +325,9 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
                     }
                     // seq_len_qo == seq_len_kv
                     else{
-
+                      if (col > row) {
+                        host_S[col + row * seq_len_kv] = ElementAccumulator{-INFINITY};
+                      }
                     }
                   }
 
@@ -433,7 +431,12 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
                   }
                   // seq_len_qo == seq_len_kv
                   else{
-
+                    if (col > row) {
+                      host_S[idx] = 0;
+                    }
+                    else{
+                      host_S[idx] /= sum_vec[sum_idx];
+                    }
                   }
                 }
               }
@@ -441,14 +444,6 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
               else{
                 host_S[idx] /= sum_vec[sum_idx];
               }
-
-
-              //apply bottom right masking
-              // if (is_causal && col > row - first_non_masked_sequence) {
-              //   host_S[idx] = 0;
-              // } else {
-              //   host_S[idx] /= sum_vec[sum_idx];
-              // }
             }
           }
 
