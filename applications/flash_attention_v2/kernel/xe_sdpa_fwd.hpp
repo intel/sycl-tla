@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Intel Corporation All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,7 +36,7 @@
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/kernel_hardware_info.hpp"
 
-#include "flash_attention_v2/collective/xe_flash_attn_prefill_mma_bshd.hpp"
+#include "flash_attention_v2/collective/xe_flash_attn_sdpa_fwd_mma.hpp"
 
 namespace cutlass::flash_attention::kernel {
 

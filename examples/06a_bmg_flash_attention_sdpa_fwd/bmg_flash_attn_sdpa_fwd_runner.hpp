@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Intel Corporation All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,10 +37,10 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
 #include "flash_attention_v2/collective/fmha_fusion.hpp"
-#include "flash_attention_v2/collective/xe_flash_attn_sdpa_fwd_bshd_epilogue.hpp"
-#include "flash_attention_v2/collective/xe_flash_attn_sdpa_fwd_bshd_softmax_epilogue.hpp"
-#include "flash_attention_v2/kernel/tile_scheduler_sdpa_fwd_bshd.hpp"
-#include "flash_attention_v2/kernel/xe_sdpa_fwd_bshd.hpp"
+#include "flash_attention_v2/collective/xe_flash_attn_sdpa_fwd_epilogue.hpp"
+#include "flash_attention_v2/collective/xe_flash_attn_sdpa_fwd_softmax_epilogue.hpp"
+#include "flash_attention_v2/kernel/tile_scheduler_sdpa_fwd.hpp"
+#include "flash_attention_v2/kernel/xe_sdpa_fwd.hpp"
 #include <cute/tensor.hpp>
 #include <random>
 

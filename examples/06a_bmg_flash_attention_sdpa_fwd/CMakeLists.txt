@@ -32,10 +32,10 @@ set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
 foreach(HEAD_DIM 64 96 128 192)
 
   cutlass_example_add_executable(
-    06a_bmg_sdpa_fwd_bshd_hdim${HEAD_DIM}
-    06a_bmg_flash_attention_sdpa_fwd_bshd.cpp
+    06a_bmg_sdpa_fwd_hdim${HEAD_DIM}
+    06a_bmg_flash_attention_sdpa_fwd.cpp
   )
 
-  target_compile_definitions(06a_bmg_sdpa_fwd_bshd_hdim${HEAD_DIM} PRIVATE HEAD_DIM=${HEAD_DIM})
+  target_compile_definitions(06a_bmg_sdpa_fwd_hdim${HEAD_DIM} PRIVATE HEAD_DIM=${HEAD_DIM})
 
 endforeach()
