@@ -1,7 +1,7 @@
 ![ALT](./media/images/gemm-hierarchy-with-epilogue-no-labels.png "Complete CUDA GEMM decomposition")
 
 
-# SYCL\* Templates for Linear Algebra (SYCL\*TLA)
+# SYCL\* Templates for Linear Algebra (SYCL\*TLA) #
 
 **This repository is forked from the NVIDIA CUTLASS repository and extends CUTLASS and CuTe API support to Intel GPUs through SYCL enablement.**
 *This project was previously referred to as CUTLASS-SYCL, you may see references to CUTLASS-SYCL in the code and documentation.*
