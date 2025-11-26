@@ -1574,7 +1574,7 @@ class GemmOperationBase:
             C_out = copy.deepcopy(C)
         return A_out, B_out, C_out
 
-    def run(self, arguments: GemmArguments) -> cuda.CUresult:
+    def run(self, arguments: GemmArguments) :
         """
         Configure and launch the cuda kernel with input arguments
         """
@@ -1588,7 +1588,7 @@ class GemmOperationBase:
             arguments.stream
         )
 
-        if err != cuda.CUresult.CUDA_SUCCESS:
+        if err != 0:
             raise RuntimeError("CUDA Error %s" % str(err))
 
         return err

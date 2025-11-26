@@ -173,8 +173,9 @@ class ArtifactManager:
                                        "-fno-sycl-dead-args-optimization",
                                        "-Xspirv-translator -spirv-ext=+SPV_INTEL_split_barrier",
                                        "-fno-sycl-instrument-device-code",
-                                       "-fsycl-range-rounding=disable"]
-        self.nvcc()
+                                       "-fsycl-range-rounding=disable",
+                                       "-fsycl-targets=intel_gpu_bmg_g21"]
+        self.dpcpp()
         self.compiled_cache_device = {}
         self.compiled_cache_host = {}
 
@@ -473,7 +474,7 @@ class ArtifactManager:
                 self._nvcc_compile_options, arch, include_paths, False)
         else:
             cutlass_cppgen.initialize_sycl_context()
-            arch = "intel_gpu_pvc"
+            arch = "intel_gpu_bmg_g21"
             host_compile_options = CompilationOptions(
                 ["-std=c++17", "-DCUTLASS_ENABLE_SYCL", "-DSYCL_INTEL_TARGET"],
                 arch, include_paths, True)

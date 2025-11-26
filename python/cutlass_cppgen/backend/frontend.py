@@ -83,19 +83,19 @@ class TorchFrontend:
         :return: Device pointer
         """
 
-        if isinstance(stream, dpctl.SyclQueue):
+        if isinstance(stream, dpctl.SyclQueue) or (hasattr(torch_tensor, 'is_xpu') and torch_tensor.is_xpu):
             if not is_xpu_available():
                 raise Exception("No XPU support in Torch available")
-            if not is_xpu_tensor(torch_tensor):
+            if is_xpu_tensor(torch_tensor):
                 torch_tensor = torch_tensor.to("xpu")
 
             return torch_tensor.data_ptr()
 
         # check the device of torch_tensor
-        if not torch_tensor.is_cuda:
+        if torch_tensor.is_cuda:
             torch_tensor = torch_tensor.to("cuda")
-
-        return cuda.CUdeviceptr(torch_tensor.data_ptr())
+            return cuda.CUdeviceptr(torch_tensor.data_ptr())
+        return torch_tensor.data_ptr()
 
 
 class CupyFrontend:
