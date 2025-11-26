@@ -1,6 +1,6 @@
-#################################################################################################
-#
-# Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+###################################################################################################
+# Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+# Copyright (C) 2025 Intel Corporation, All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,7 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-#################################################################################################
+# ################################################################################################
 
 """
 Emitter for Sm12 Epilogue Visitor
