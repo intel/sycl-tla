@@ -321,7 +321,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
                 for (int col = 0; col < seq_len_kv; col++) {
                   if (seq_len_kv > seq_len_qo) {
                     int first_masked_col_index =
-                        seq_len_kv - (seq_len_kv - seq_len_qo - 1) +
+                        seq_len_kv - (seq_len_qo - 1) +
                         row; // Find where does the masking occur for that
                              // sequence
                     if (col >= first_masked_col_index) {
@@ -436,7 +436,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
                   if (seq_len_kv > seq_len_qo) {
                     // Find where does the masking occur for that sequence
                     int first_masked_col_index =
-                        seq_len_kv - (seq_len_kv - seq_len_qo - 1) + row;
+                        seq_len_kv - (seq_len_qo - 1) + row;
                     if (col >= first_masked_col_index) {
                       host_S[idx] = 0;
                     } else {
@@ -589,7 +589,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
               for (int col = 0; col < seq_len_kv; col++) {
                 if (seq_len_kv > seq_len_qo) {
                   int first_masked_col_index =
-                      seq_len_kv - (seq_len_kv - seq_len_qo - 1) +
+                      seq_len_kv - (seq_len_qo - 1) +
                       row; // Find where does the masking occur for that
                            // sequence
                   if (col >= first_masked_col_index) {
@@ -702,9 +702,10 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
             for (int col = 0; col < seq_len_kv; col++, idx++) {
               if (is_causal) {
                 if (seq_len_kv > seq_len_qo) {
-                  // Find where does the masking occur for that sequence
                   int first_masked_col_index =
-                      seq_len_kv - (seq_len_kv - seq_len_qo - 1) + row;
+                      seq_len_kv - (seq_len_qo - 1) +
+                      row; // Find where does the masking occur for that
+                           // sequence
                   if (col >= first_masked_col_index) {
                     host_S[idx] = 0;
                   } else {
@@ -815,48 +816,6 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
            : print("Failed Output Accuracy \n");
     passed_lse ? print("Passed LSE Accuracy \n")
                : print("Failed LSE Accuracy \n");
-
-    if (!passed) {
-      print("\n ================================= \n");
-      std::vector<float> device_O(block_ref_O.size());
-      compat::wait();
-      compat::memcpy<float>(device_O.data(), block_O.get(), block_O.size());
-      print("\n host_O \n");
-      for (int i = 0; i < host_O.size(); i++) {
-        if (i != 0 && i % 64 == 0) {
-          print('\n');
-        }
-        print(host_O[i]);
-        print(' ');
-      }
-      print("\n Device O \n");
-      for (int i = 0; i < device_O.size(); i++) {
-        if (i != 0 && i % 64 == 0) {
-          print('\n');
-        }
-        print(device_O[i]);
-        print(' ');
-      }
-    }
-
-    if (!passed_lse){
-      print("\n ================================= \n");
-      std::vector<float> device_LSE(block_ref_LSE.size());
-      compat::wait();
-      compat::memcpy<float>(device_LSE.data(), block_LSE.get(),
-                                block_LSE.size());
-      print("\n host LSE \n");
-      for (int i = 0; i < host_LSE.size(); i++){
-        print(host_LSE[i]);
-        print('\n');
-
-      }
-      print("\n Device LSE \n");
-      for (int i = 0; i < device_LSE.size(); i++){
-        print(device_LSE[i]);
-        print('\n');
-      }
-    }
 
     return passed && passed_lse;
   }

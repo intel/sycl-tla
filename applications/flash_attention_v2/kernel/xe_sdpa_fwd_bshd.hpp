@@ -375,6 +375,7 @@ public:
         int num_heads_coord = get<3>(blk_coord); // num_heads_blk_idx
         blk_l_coord = is_var_len ? num_heads_coord
                                  : batch_coord * num_heads_q + num_heads_coord;
+        q_head_coord = get<1>(blk_coord); // q_heads_idx
       }
 
       auto sequence_length_shape =
