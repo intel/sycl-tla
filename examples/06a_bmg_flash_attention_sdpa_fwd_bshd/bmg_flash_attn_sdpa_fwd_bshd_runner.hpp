@@ -791,6 +791,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
           }
           kv_group_update++;
           offset_o += seq_len_qo * head_size_vo;
+          offset_lse += seq_len_qo;
         }
       }
     }
@@ -835,6 +836,25 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
         }
         print(device_O[i]);
         print(' ');
+      }
+    }
+
+    if (!passed_lse){
+      print("\n ================================= \n");
+      std::vector<float> device_LSE(block_ref_LSE.size());
+      compat::wait();
+      compat::memcpy<float>(device_LSE.data(), block_LSE.get(),
+                                block_LSE.size());
+      print("\n host LSE \n");
+      for (int i = 0; i < host_LSE.size(); i++){
+        print(host_LSE[i]);
+        print('\n');
+
+      }
+      print("\n Device LSE \n");
+      for (int i = 0; i < device_LSE.size(); i++){
+        print(device_LSE[i]);
+        print('\n');
       }
     }
 
