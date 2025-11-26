@@ -135,20 +135,30 @@ public:
   //
 
   template <class ProblemShape>
-  static constexpr Params
-  to_underlying_arguments(ProblemShape const &problem_shape,
-                          Arguments const &args,
-                          [[maybe_unused]] void *workspace) {
-    auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv,
-          head_size_qk, head_size_vo] = problem_shape;
-    auto tensorO = make_tensor(
-        make_gmem_ptr(static_cast<ElementO const *>(args.ptr_O)),
-        make_layout(make_shape(seq_len_qo, num_heads_q * head_size_vo, batch),
-                    args.dO));
-    XE_Copy_O xe_store_o{XE_Copy_O{}.with(tensorO)};
-    return {
-        xe_store_o, args.ptr_LSE
-    };
+  static constexpr Params to_underlying_arguments(
+      ProblemShape const &problem_shape, Arguments const &args,
+      [[maybe_unused]] void *workspace, bool const &is_bshd) {
+
+    if (is_bshd) {
+      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv,
+            head_size_qk, head_size_vo] = problem_shape;
+      auto tensorO = make_tensor(
+          make_gmem_ptr(static_cast<ElementO const *>(args.ptr_O)),
+          make_layout(make_shape(seq_len_qo, num_heads_q * head_size_vo, batch),
+                      args.dO));
+      XE_Copy_O xe_store_o{XE_Copy_O{}.with(tensorO)};
+      return {xe_store_o, args.ptr_LSE};
+    } else {
+      auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv,
+            head_size_qk, head_size_vo] = problem_shape;
+
+      auto tensorO = make_tensor(
+          make_gmem_ptr(static_cast<ElementO const *>(args.ptr_O)),
+          make_layout(make_shape(seq_len_qo, head_size_vo, batch * num_heads_q),
+                      args.dO));
+      XE_Copy_O xe_store_o{XE_Copy_O{}.with(tensorO)};
+      return {xe_store_o, args.ptr_LSE};
+    }
   }
 
   template <class ProblemShape>
@@ -179,11 +189,11 @@ public:
 
   template <class ProblemShape, class SequenceLengthShape, class TileCoord,
             class FragOut, class FragMax, class FragSum>
-  CUTLASS_DEVICE void operator()(ProblemShape problem_shape,
-                                 SequenceLengthShape sequence_length_shape,
-                                 TileCoord tile_coord, FragOut &out,
-                                 FragMax const &max, FragSum &sum, int const &q_head_coord, float softmax_scale
-                                 ) {
+  CUTLASS_DEVICE void
+  operator()(ProblemShape problem_shape,
+             SequenceLengthShape sequence_length_shape, TileCoord tile_coord,
+             FragOut &out, FragMax const &max, FragSum &sum,
+             int const &q_head_coord, float softmax_scale, bool is_bshd) {
 
     using namespace cute;
     static constexpr bool is_var_len =
@@ -211,12 +221,12 @@ public:
         rowsum(indx) = cur_sum;
         CUTLASS_PRAGMA_UNROLL
         for (int z = 0; z < FragsN; z++) {
-          // Handle -nan for bottom right masking. 
-          // It will generate -nan when the whole sequence is masked. We need to manually assign 0 to the output
-          if (std::isnan(out_reg(x, y, z))){
+          // Handle -nan for bottom right masking.
+          // It will generate -nan when the whole sequence is masked. We need to
+          // manually assign 0 to the output
+          if (std::isnan(out_reg(x, y, z))) {
             out_reg(x, y, z) = 0;
-          }
-          else{
+          } else {
             out_reg(x, y, z) *= cur_scale;
           }
         }
@@ -226,12 +236,20 @@ public:
     // Indexing variables
     auto [batch, num_heads_q, head_size_vo] = select<0, 1, 6>(problem_shape);
     auto [seq_len_qo] = select<0>(sequence_length_shape);
-    Tensor mO_mnl =
-        cute::get_xe_tensor(make_shape(seq_len_qo, head_size_vo, 1));
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord;
-    Tensor g_wg_O = 
+
+    Tensor mO_mnl = cute::get_xe_tensor(make_shape(
+        seq_len_qo, head_size_vo, (is_var_len ? batch : 1) * num_heads_q));
+    Tensor g_wg_O = local_tile(mO_mnl, select<0, 1>(TileShapeOutput{}),
+                               make_coord(m_coord, n_coord, l_coord));
+
+    if (is_bshd) {
+      mO_mnl = cute::get_xe_tensor(make_shape(seq_len_qo, head_size_vo, 1));
+
+      g_wg_O =
           local_tile(mO_mnl, select<0, 1>(TileShapeOutput{}),
-                               make_coord(m_coord, n_coord, 0)); // (BLK_M,BLK_N,m,n,l)
+                     make_coord(m_coord, n_coord, 0)); // (BLK_M,BLK_N,m,n,l)
+    }
     static constexpr auto ATOM_N =
         get<2>(typename TiledMmaOutput::ThrLayoutVMNK{}.shape());
     auto m_sg = get_sub_group_id() / ATOM_N;
@@ -257,18 +275,24 @@ public:
     int lane_id = static_cast<int>(sg.get_local_linear_id());
     int sub_group_id = get_sub_group_id();
     const int BLK_M = size(select<0>(TileShapeOutput{}));
-    auto blk_m_coord  = get<0>(tile_coord);  // seq_len_blk_idx
-    size_t lse_offset = k_coord * num_heads_q * seq_len_qo +                  // shift the batch -- batch_idx * num_heads_q * seq_len_qo  -- OK
-                        q_head_coord * seq_len_qo +                           // shift the head  -- head_q * seq_len_qo -- ok
-                        m_coord * BLK_M;                                      // shift to the particular tile
+    auto blk_m_coord = get<0>(tile_coord); // seq_len_blk_idx
+    size_t lse_offset =
+        k_coord * num_heads_q * seq_len_qo + // shift the batch -- batch_idx *
+                                             // num_heads_q * seq_len_qo  -- OK
+        q_head_coord *
+            seq_len_qo + // shift the head  -- head_q * seq_len_qo -- ok
+        m_coord * BLK_M; // shift to the particular tile
     int localtile_seq_coord = 0;
-    localtile_seq_coord = sub_group_id * SubgroupSize + lane_id; //one subgroup will handle 16 sequence
+    localtile_seq_coord = sub_group_id * SubgroupSize +
+                          lane_id; // one subgroup will handle 16 sequence
     int seq_coord = m_coord * BLK_M + localtile_seq_coord;
     // Check that if this is within the seq_len_qo
-    if (seq_coord < seq_len_qo){
+    if (seq_coord < seq_len_qo) {
       auto cur_sum = rowsum[lane_id];
-      tLSE_reg = cur_sum == 0.f ? -INFINITY : max * softmax_scale + logf(cur_sum);
-      *(params.ptr_LSE + lse_offset + localtile_seq_coord) = std::isnan(tLSE_reg) ? 0 : tLSE_reg;
+      tLSE_reg =
+          cur_sum == 0.f ? -INFINITY : max * softmax_scale + logf(cur_sum);
+      *(params.ptr_LSE + lse_offset + localtile_seq_coord) =
+          std::isnan(tLSE_reg) ? 0 : tLSE_reg;
     }
   }
 
@@ -277,30 +301,60 @@ public:
   // int, int, int> For Variable Sequence Length, ProblemShapeType = Shape<int,
   // int, int, VariableSeqlen, VariableSeqlen, int, int>
   template <bool VarLen, class ProblemShapeType, class SequenceLengthShapeType>
-  CUTLASS_DEVICE static constexpr Params
-  get_updated_copies(Params const &params,
-                     ProblemShapeType const &problem_shape,
-                     SequenceLengthShapeType const &sequence_length_shape,
-                     int const &l_coord, int const &q_head_coord) {
+  CUTLASS_DEVICE static constexpr Params get_updated_copies(
+      Params const &params, ProblemShapeType const &problem_shape,
+      SequenceLengthShapeType const &sequence_length_shape, int const &l_coord,
+      int const &q_head_coord, bool const &is_bshd) {
 
+    if (is_bshd) {
       auto [num_heads_q, head_size_vo] = select<1, 6>(problem_shape);
       auto [seq_len_qo] = select<0>(sequence_length_shape);
       int offset_o = 0;
-      if constexpr (VarLen) { 
+      if constexpr (VarLen) {
         auto qo_cumulative_length = get<3>(problem_shape).cumulative_length;
-        offset_o = num_heads_q * head_size_vo * qo_cumulative_length[l_coord] + q_head_coord * head_size_vo;
+        offset_o = num_heads_q * head_size_vo * qo_cumulative_length[l_coord] +
+                   q_head_coord * head_size_vo;
       } else {
         offset_o = num_heads_q * head_size_vo * seq_len_qo * l_coord +
-                  q_head_coord * head_size_vo;        
+                   q_head_coord * head_size_vo;
       }
-      auto store_traits = static_cast<traits_store_O const &>(params.xe_store_o);
+      auto store_traits =
+          static_cast<traits_store_O const &>(params.xe_store_o);
       ElementO *base_ptr = (ElementO *)store_traits.base_ptr;
-      auto shape_o = make_shape(static_cast<int>(seq_len_qo), num_heads_q * head_size_vo, 1);
+      auto shape_o = make_shape(static_cast<int>(seq_len_qo),
+                                num_heads_q * head_size_vo, 1);
       StrideO stride_o = cutlass::make_cute_packed_stride(StrideO{}, shape_o);
       auto tensorO = make_tensor(make_gmem_ptr(base_ptr + offset_o),
                                  make_layout(shape_o, stride_o));
       XE_Copy_O xe_store_o{XE_Copy_O{}.with(tensorO)};
       return Params{xe_store_o, params.ptr_LSE};
+    }
+    // BHSD layout
+    else {
+      if constexpr (!VarLen) {
+        return params;
+      } else {
+        auto [num_heads_q, head_size_vo] = select<1, 6>(problem_shape);
+        auto [seq_len_qo] = select<0>(sequence_length_shape);
+
+        auto qo_cumulative_length = get<3>(problem_shape).cumulative_length;
+        int offset_o =
+            num_heads_q * head_size_vo * qo_cumulative_length[l_coord];
+        auto store_traits =
+            static_cast<traits_store_O const &>(params.xe_store_o);
+
+        ElementO *base_ptr = (ElementO *)store_traits.base_ptr;
+        auto shape_o =
+            make_shape(static_cast<int>(seq_len_qo), head_size_vo, num_heads_q);
+        StrideO stride_o = cutlass::make_cute_packed_stride(StrideO{}, shape_o);
+
+        auto tensorO = make_tensor(make_gmem_ptr(base_ptr + offset_o),
+                                   make_layout(shape_o, stride_o));
+        XE_Copy_O xe_store_o{XE_Copy_O{}.with(tensorO)};
+
+        return Params{xe_store_o, params.ptr_LSE};
+      }
+    }
   }
 
 private:

@@ -61,6 +61,7 @@ struct Options {
   bool is_causal;
   bool varlen = false;
   std::string scheduler;
+  bool is_bshd;
 
   int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk,
       head_size_vo, iterations;
@@ -71,7 +72,7 @@ struct Options {
       : help(false), error(false), is_causal(false), varlen(false), batch(32),
         num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
         seq_len_kv(512), head_size_vo(128), iterations(100), scale(1.f),
-        scheduler("Individual") {}
+        is_bshd(false), scheduler("Individual") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -90,6 +91,10 @@ struct Options {
       varlen = true;
     }
 
+    if (cmd.check_cmd_line_flag("is_bshd")) {
+      is_bshd = true;
+    }
+
     cmd.get_cmd_line_argument("scheduler", scheduler,
                               std::string("Individual"));
 
@@ -105,11 +110,9 @@ struct Options {
 
     if (cmd.check_cmd_line_flag("scale")) {
       softmax_scale = scale;
-    }
-    else{
+    } else {
       softmax_scale = 1 / sqrt(static_cast<float>(head_size_qk));
     }
-    
   }
 
   /// Prints the usage statement.
@@ -138,7 +141,8 @@ struct Options {
            "the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
         << "  --head_size_vo=<int>        Sets the Attention Head dimension of "
            "the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
-        << "  --iterations=<int>          Iterations\n\n";
+        << "  --iterations=<int>          Iterations\n"
+        << "  -- is_bshd                  Set the layout to be bshd\n\n";
 
     return out;
   }
@@ -222,7 +226,8 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
   //
   // Methods
   //
-  bool verify(ProblemShapeType problem_size, bool is_causal, float softmax_scale) {
+  bool verify(ProblemShapeType problem_size, bool is_causal,
+              float softmax_scale, bool is_bshd) {
     if constexpr (isVarLen) {
       int max_seq_len_q = static_cast<int>(get<3>(problem_size));
       int max_seq_len_kv = static_cast<int>(get<4>(problem_size));
@@ -252,85 +257,362 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     int q_group_size = num_heads_q / num_heads_kv;
     // loop over the batch dimension to compute the output
     // to avoid the risk of running out of device memory
-    for (int b = 0; b < batch; b++) {
-      if constexpr (isVarLen) {
-        auto logical_problem_shape =
-            cutlass::fmha::collective::apply_variable_length(problem_size, b);
-        seq_len_qo = get<3>(logical_problem_shape);
-        seq_len_kv = get<4>(logical_problem_shape);
-      } else {
-        seq_len_qo = get<3>(problem_size);
-        seq_len_kv = get<4>(problem_size);
-      }
+    if (is_bshd) {
+      for (int b = 0; b < batch; b++) {
+        if constexpr (isVarLen) {
+          auto logical_problem_shape =
+              cutlass::fmha::collective::apply_variable_length(problem_size, b);
+          seq_len_qo = get<3>(logical_problem_shape);
+          seq_len_kv = get<4>(logical_problem_shape);
+        } else {
+          seq_len_qo = get<3>(problem_size);
+          seq_len_kv = get<4>(problem_size);
+        }
 
-      // Initialize starting pointers for extrcating one Head * HeadDim from the
-      // BSHD layout
-      ElementQ *q_ptr;
-      ElementK *k_ptr;
-      ElementV *v_ptr;
+        // Initialize starting pointers for extrcating one Head * HeadDim from
+        // the BSHD layout
+        ElementQ *q_ptr;
+        ElementK *k_ptr;
+        ElementV *v_ptr;
 
-      q_ptr = block_Q.get() + offset_q;
-      k_ptr = block_K.get() + offset_k;
-      v_ptr = block_V.get() + offset_v;
+        q_ptr = block_Q.get() + offset_q;
+        k_ptr = block_K.get() + offset_k;
+        v_ptr = block_V.get() + offset_v;
 
-      for (int q_group = 0; q_group < num_heads_q / q_group_size; q_group++) {
-        for (int q_head = 0; q_head < q_group_size; q_head++) {
+        for (int q_group = 0; q_group < num_heads_q / q_group_size; q_group++) {
+          for (int q_head = 0; q_head < q_group_size; q_head++) {
+            cutlass::DeviceAllocation<ElementAccumulator> block_S;
+            block_S.reset(seq_len_qo * seq_len_kv);
+
+            cutlass::TensorRef ref_Q(
+                q_ptr,
+                LayoutQ(
+                    num_heads_q *
+                    head_size_qk)); // define the pitch - stride for next row
+            cutlass::TensorRef ref_K(k_ptr,
+                                     LayoutK(num_heads_kv * head_size_qk));
+            cutlass::TensorRef ref_V(v_ptr,
+                                     LayoutV(num_heads_kv * head_size_vo));
+            cutlass::TensorRef ref_S(block_S.get(),
+                                     LayoutQ::packed({seq_len_qo, seq_len_kv}));
+
+            cutlass::reference::device::GemmComplex(
+                {seq_len_qo, seq_len_kv, head_size_qk}, ElementAccumulator{1},
+                ref_Q, cutlass::ComplexTransform::kNone, ref_K,
+                cutlass::ComplexTransform::kNone, ElementAccumulator{0}, ref_S,
+                ref_S, ElementAccumulator(0),
+                1,                         // batch_count
+                seq_len_qo * head_size_qk, // batch_stride_Q
+                seq_len_kv * head_size_qk, // batch_stride_K
+                seq_len_qo * seq_len_kv,   // batch_stride_S
+                seq_len_qo * seq_len_kv    // batch_stride_S
+            );
+            compat::wait();
+            std::vector<ElementAccumulator> host_S(block_S.size());
+            compat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(),
+                                               host_S.size());
+
+            // delete this memory as it is no longer needed
+            block_S.reset();
+
+            // apply mask to S
+            if (is_causal) {
+              for (int row = 0; row < seq_len_qo; row++) {
+                for (int col = 0; col < seq_len_kv; col++) {
+                  if (seq_len_kv > seq_len_qo) {
+                    int first_masked_col_index =
+                        seq_len_kv - (seq_len_kv - seq_len_qo - 1) +
+                        row; // Find where does the masking occur for that
+                             // sequence
+                    if (col >= first_masked_col_index) {
+                      host_S[col + row * seq_len_kv] =
+                          ElementAccumulator{-INFINITY};
+                    }
+                  } else {
+                    if (seq_len_qo > seq_len_kv) {
+                      int first_non_masked_sequence = seq_len_qo - seq_len_kv;
+                      if (row < first_non_masked_sequence ||
+                          col > row - first_non_masked_sequence) {
+                        host_S[col + row * seq_len_kv] =
+                            ElementAccumulator{-INFINITY};
+                      }
+                    }
+                    // seq_len_qo == seq_len_kv
+                    else {
+                      if (col > row) {
+                        host_S[col + row * seq_len_kv] =
+                            ElementAccumulator{-INFINITY};
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            // compute max element per row of S
+            std::vector<ElementAccumulator> max_vec(
+                seq_len_qo, ElementAccumulator{-INFINITY});
+            for (int row = 0; row < seq_len_qo; row++) {
+              int idx = row * seq_len_kv;
+              int max_idx = row;
+              max_vec[max_idx] = host_S[idx++];
+              for (int col = 1; col < seq_len_kv; col++, idx++) {
+                if (max_vec[max_idx] < host_S[idx])
+                  max_vec[max_idx] = host_S[idx];
+              }
+            }
+
+            // calculate scaled qk score for LSE
+            std::vector<ElementAccumulator> qkscore_scaled(
+                host_S.size(), ElementAccumulator{0});
+            for (int row = 0; row < seq_len_qo; row++) {
+              for (int col = 0; col < seq_len_kv; col++) {
+                qkscore_scaled[col + row * seq_len_kv] =
+                    host_S[col + row * seq_len_kv] *
+                    softmax_scale; // (qkscore * scale) - max_row
+              }
+            }
+
+            // compute max element per row of scaled qk
+            std::vector<ElementAccumulator> max_scaled_lse_vec(
+                seq_len_qo, ElementAccumulator{-INFINITY});
+            for (int row = 0; row < seq_len_qo; row++) {
+              int idx = row * seq_len_kv;
+              int max_idx = row;
+              max_scaled_lse_vec[max_idx] = qkscore_scaled[idx++];
+              for (int col = 1; col < seq_len_kv; col++, idx++) {
+                if (max_scaled_lse_vec[max_idx] < qkscore_scaled[idx])
+                  max_scaled_lse_vec[max_idx] = qkscore_scaled[idx];
+              }
+            }
+
+            // subtract scaled qk by max_row
+            for (int row = 0; row < seq_len_qo; row++) {
+              for (int col = 0; col < seq_len_kv; col++) {
+                qkscore_scaled[col + row * seq_len_kv] =
+                    qkscore_scaled[col + row * seq_len_kv] -
+                    max_scaled_lse_vec[row]; // (qkscore * scale) - max_row
+              }
+            }
+
+            // calculate LSE
+            for (int row = 0; row < seq_len_qo; row++) {
+              ElementAccumulator sum_exp = 0;
+              for (int col = 0; col < seq_len_kv; col++) {
+                sum_exp += expf(qkscore_scaled[col + row * seq_len_kv]);
+              }
+              host_LSE[row + offset_lse] =
+                  std::isnan(max_scaled_lse_vec[row] + logf(sum_exp))
+                      ? 0
+                      : host_LSE[row + offset_lse] =
+                            max_scaled_lse_vec[row] + logf(sum_exp);
+            }
+
+            // compute exp of S
+            for (int row = 0; row < seq_len_qo; row++) {
+              int idx = row * seq_len_kv;
+              int max_idx = row;
+              for (int col = 0; col < seq_len_kv; col++, idx++) {
+                host_S[idx] =
+                    expf((host_S[idx] - max_vec[max_idx]) * softmax_scale);
+              }
+            }
+
+            // compute sum per row of S
+            std::vector<ElementAccumulator> sum_vec(seq_len_qo,
+                                                    ElementAccumulator{0});
+            for (int row = 0; row < seq_len_qo; row++) {
+              int idx = row * seq_len_kv;
+              int sum_idx = row;
+              for (int col = 0; col < seq_len_kv; col++, idx++) {
+                sum_vec[sum_idx] += host_S[idx];
+              }
+
+              // scale each row with the sum to compute softmax
+              idx = row * seq_len_kv;
+              sum_idx = row;
+              for (int col = 0; col < seq_len_kv; col++, idx++) {
+                if (is_causal) {
+                  if (seq_len_kv > seq_len_qo) {
+                    // Find where does the masking occur for that sequence
+                    int first_masked_col_index =
+                        seq_len_kv - (seq_len_kv - seq_len_qo - 1) + row;
+                    if (col >= first_masked_col_index) {
+                      host_S[idx] = 0;
+                    } else {
+                      host_S[idx] /= sum_vec[sum_idx];
+                    }
+                  } else {
+                    if (seq_len_qo > seq_len_kv) {
+                      int first_non_masked_sequence = seq_len_qo - seq_len_kv;
+                      if (row < first_non_masked_sequence ||
+                          col > row - first_non_masked_sequence) {
+                        host_S[idx] = 0;
+                      } else {
+                        host_S[idx] /= sum_vec[sum_idx];
+                      }
+                    }
+                    // seq_len_qo == seq_len_kv
+                    else {
+                      if (col > row) {
+                        host_S[idx] = 0;
+                      } else {
+                        host_S[idx] /= sum_vec[sum_idx];
+                      }
+                    }
+                  }
+                }
+                // non-causal
+                else {
+                  host_S[idx] /= sum_vec[sum_idx];
+                }
+              }
+            }
+
+            std::vector<ElementV_> host_P(host_S.size());
+            for (int p = 0; p < host_P.size(); p++)
+              host_P[p] = static_cast<ElementV_>(host_S[p]);
+
+            cutlass::DeviceAllocation<ElementV_> block_P;
+            block_P.reset(host_P.size());
+
+            compat::memcpy<ElementV_>(block_P.get(), host_P.data(),
+                                      host_P.size());
+
+            cutlass::TensorRef ref_P(block_P.get(),
+                                     LayoutQ::packed({seq_len_qo, seq_len_kv}));
+
+            cutlass::DeviceAllocation<ElementAccumulator> block_acc;
+            block_acc.reset(seq_len_qo * head_size_vo);
+            cutlass::TensorRef ref_acc(
+                block_acc.get(), LayoutO::packed({seq_len_qo, head_size_vo}));
+
+            cutlass::reference::device::GemmComplex(
+                {seq_len_qo, head_size_vo, seq_len_kv}, ElementAccumulator{1},
+                ref_P, cutlass::ComplexTransform::kNone, ref_V,
+                cutlass::ComplexTransform::kNone, ElementAccumulator{0},
+                ref_acc, ref_acc, ElementAccumulator{0},
+                1,                         // batch_count
+                seq_len_qo * seq_len_kv,   // batch_stride_P
+                seq_len_kv * head_size_vo, // batch_stride_V
+                seq_len_qo * head_size_vo, // batch_stride_O
+                seq_len_qo * head_size_vo  // batch_stride_O
+            );
+
+            compat::wait();
+            // delete this memory as it is no longer needed
+            block_P.reset();
+
+            std::vector<ElementAccumulator> vec_acc(block_acc.size());
+            compat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(),
+                                               vec_acc.size());
+
+            // delete this memory as it is no longer needed
+            block_acc.reset();
+            for (int seq = 0; seq < seq_len_qo; seq++) {
+              for (int hvo = 0; hvo < head_size_vo; hvo++) {
+                int idx = offset_o + seq * num_heads_q * head_size_vo +
+                          (q_group * q_group_size + q_head) * head_size_vo +
+                          hvo;
+                host_O[idx] = static_cast<ElementOutput>(
+                    vec_acc[seq * head_size_vo + hvo]);
+              }
+            }
+            q_ptr += head_size_qk;
+            offset_lse += seq_len_qo;
+          } // end of q_group loop
+          // shift 1 head for each q_group loop
+          k_ptr += head_size_qk;
+          v_ptr += head_size_vo;
+        } // end of q_head loop
+
+        // shift the ptr to next batch -- [B, S, H, D]
+        offset_q += seq_len_qo * num_heads_q * head_size_qk;
+        offset_k += seq_len_kv * num_heads_kv * head_size_qk;
+        offset_v += seq_len_kv * num_heads_kv * head_size_vo;
+        offset_o += seq_len_qo * num_heads_q * head_size_vo;
+      } // end of batch loop
+
+      compat::wait();
+      compat::memcpy<ElementOutput>(block_ref_O.get(), host_O.data(),
+                                    host_O.size());
+    }
+    // BHSD Layout
+    else {
+      for (int b = 0; b < batch; b++) {
+        if constexpr (isVarLen) {
+          auto logical_problem_shape =
+              cutlass::fmha::collective::apply_variable_length(problem_size, b);
+          seq_len_qo = get<3>(logical_problem_shape);
+          seq_len_kv = get<4>(logical_problem_shape);
+        } else {
+          seq_len_qo = get<3>(problem_size);
+          seq_len_kv = get<4>(problem_size);
+        }
+        int kv_group_update = 1;
+        for (int h = 0; h < num_heads_q; h++) {
           cutlass::DeviceAllocation<ElementAccumulator> block_S;
           block_S.reset(seq_len_qo * seq_len_kv);
 
-          cutlass::TensorRef ref_Q(
-              q_ptr,
-              LayoutQ(num_heads_q *
-                      head_size_qk)); // define the pitch - stride for next row
-          cutlass::TensorRef ref_K(k_ptr, LayoutK(num_heads_kv * head_size_qk));
-          cutlass::TensorRef ref_V(v_ptr, LayoutV(num_heads_kv * head_size_vo));
+          cutlass::TensorRef ref_Q(block_Q_.get() + offset_q,
+                                   LayoutQ::packed({seq_len_qo, head_size_qk}));
+          cutlass::TensorRef ref_K(block_K_.get() + offset_k,
+                                   LayoutK::packed({head_size_qk, seq_len_kv}));
+          cutlass::TensorRef ref_V(block_V_.get() + offset_v,
+                                   LayoutV::packed({seq_len_kv, head_size_vo}));
           cutlass::TensorRef ref_S(block_S.get(),
                                    LayoutQ::packed({seq_len_qo, seq_len_kv}));
 
           cutlass::reference::device::GemmComplex(
-              {seq_len_qo, seq_len_kv, head_size_qk}, ElementAccumulator{1},
-              ref_Q, cutlass::ComplexTransform::kNone, ref_K,
-              cutlass::ComplexTransform::kNone, ElementAccumulator{0}, ref_S,
-              ref_S, ElementAccumulator(0),
+              {seq_len_qo, seq_len_kv, head_size_qk}, 1.f, ref_Q,
+              cutlass::ComplexTransform::kNone, ref_K,
+              cutlass::ComplexTransform::kNone, 0.f, ref_S, ref_S,
+              ElementAccumulator(0),
               1,                         // batch_count
               seq_len_qo * head_size_qk, // batch_stride_Q
               seq_len_kv * head_size_qk, // batch_stride_K
               seq_len_qo * seq_len_kv,   // batch_stride_S
               seq_len_qo * seq_len_kv    // batch_stride_S
           );
+
           compat::wait();
+
           std::vector<ElementAccumulator> host_S(block_S.size());
           compat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(),
-                                                 host_S.size());
+                                             host_S.size());
 
           // delete this memory as it is no longer needed
           block_S.reset();
-
           // apply mask to S
           if (is_causal) {
             for (int row = 0; row < seq_len_qo; row++) {
               for (int col = 0; col < seq_len_kv; col++) {
-                  if (seq_len_kv > seq_len_qo){
-                    int first_masked_col_index = seq_len_kv - (seq_len_kv - seq_len_qo - 1) + row; // Find where does the masking occur for that sequence
-                    if (col >= first_masked_col_index){
-                      host_S[col + row * seq_len_kv] = ElementAccumulator{-INFINITY};
+                if (seq_len_kv > seq_len_qo) {
+                  int first_masked_col_index =
+                      seq_len_kv - (seq_len_kv - seq_len_qo - 1) +
+                      row; // Find where does the masking occur for that
+                           // sequence
+                  if (col >= first_masked_col_index) {
+                    host_S[col + row * seq_len_kv] =
+                        ElementAccumulator{-INFINITY};
+                  }
+                } else {
+                  if (seq_len_qo > seq_len_kv) {
+                    int first_non_masked_sequence = seq_len_qo - seq_len_kv;
+                    if (row < first_non_masked_sequence ||
+                        col > row - first_non_masked_sequence) {
+                      host_S[col + row * seq_len_kv] =
+                          ElementAccumulator{-INFINITY};
                     }
                   }
+                  // seq_len_qo == seq_len_kv
                   else {
-                    if (seq_len_qo > seq_len_kv){
-                      int first_non_masked_sequence = seq_len_qo - seq_len_kv;
-                      if (row < first_non_masked_sequence || col > row - first_non_masked_sequence){
-                        host_S[col + row * seq_len_kv] = ElementAccumulator{-INFINITY};
-                      }
-                    }
-                    // seq_len_qo == seq_len_kv
-                    else{
-                      if (col > row) {
-                        host_S[col + row * seq_len_kv] = ElementAccumulator{-INFINITY};
-                      }
+                    if (col > row) {
+                      host_S[col + row * seq_len_kv] =
+                          ElementAccumulator{-INFINITY};
                     }
                   }
-
+                }
               }
             }
           }
@@ -349,10 +631,13 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
           }
 
           // calculate scaled qk score for LSE
-          std::vector<ElementAccumulator> qkscore_scaled(host_S.size(), ElementAccumulator{0});
-          for (int row = 0; row < seq_len_qo; row++){
+          std::vector<ElementAccumulator> qkscore_scaled(host_S.size(),
+                                                         ElementAccumulator{0});
+          for (int row = 0; row < seq_len_qo; row++) {
             for (int col = 0; col < seq_len_kv; col++) {
-              qkscore_scaled[col + row * seq_len_kv] = host_S[col + row * seq_len_kv] * softmax_scale; // (qkscore * scale) - max_row
+              qkscore_scaled[col + row * seq_len_kv] =
+                  host_S[col + row * seq_len_kv] *
+                  softmax_scale; // (qkscore * scale) - max_row
             }
           }
 
@@ -370,19 +655,25 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
           }
 
           // subtract scaled qk by max_row
-          for (int row = 0; row < seq_len_qo; row++){
+          for (int row = 0; row < seq_len_qo; row++) {
             for (int col = 0; col < seq_len_kv; col++) {
-              qkscore_scaled[col + row * seq_len_kv] = qkscore_scaled[col + row * seq_len_kv] - max_scaled_lse_vec[row]; // (qkscore * scale) - max_row
+              qkscore_scaled[col + row * seq_len_kv] =
+                  qkscore_scaled[col + row * seq_len_kv] -
+                  max_scaled_lse_vec[row]; // (qkscore * scale) - max_row
             }
           }
 
           // calculate LSE
-          for (int row = 0; row < seq_len_qo; row++){
+          for (int row = 0; row < seq_len_qo; row++) {
             ElementAccumulator sum_exp = 0;
             for (int col = 0; col < seq_len_kv; col++) {
               sum_exp += expf(qkscore_scaled[col + row * seq_len_kv]);
             }
-            host_LSE[row + offset_lse]  = std::isnan(max_scaled_lse_vec[row] + logf(sum_exp)) ? 0 : host_LSE[row + offset_lse] = max_scaled_lse_vec[row] + logf(sum_exp);
+            host_LSE[row + offset_lse] =
+                std::isnan(max_scaled_lse_vec[row] + logf(sum_exp))
+                    ? 0
+                    : host_LSE[row + offset_lse] =
+                          max_scaled_lse_vec[row] + logf(sum_exp);
           }
 
           // compute exp of S
@@ -390,7 +681,8 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
             int idx = row * seq_len_kv;
             int max_idx = row;
             for (int col = 0; col < seq_len_kv; col++, idx++) {
-              host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) * softmax_scale);
+              host_S[idx] =
+                  expf((host_S[idx] - max_vec[max_idx]) * softmax_scale);
             }
           }
 
@@ -408,40 +700,38 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
             idx = row * seq_len_kv;
             sum_idx = row;
             for (int col = 0; col < seq_len_kv; col++, idx++) {
-              if (is_causal){
-                if (seq_len_kv > seq_len_qo){
+              if (is_causal) {
+                if (seq_len_kv > seq_len_qo) {
                   // Find where does the masking occur for that sequence
-                  int first_masked_col_index = seq_len_kv - (seq_len_kv - seq_len_qo - 1) + row; 
-                  if (col >= first_masked_col_index){
+                  int first_masked_col_index =
+                      seq_len_kv - (seq_len_kv - seq_len_qo - 1) + row;
+                  if (col >= first_masked_col_index) {
                     host_S[idx] = 0;
-                  }
-                  else{
+                  } else {
                     host_S[idx] /= sum_vec[sum_idx];
                   }
-                }
-                else {
-                  if (seq_len_qo > seq_len_kv){
-                      int first_non_masked_sequence = seq_len_qo - seq_len_kv;
-                      if (row < first_non_masked_sequence || col > row - first_non_masked_sequence){
-                        host_S[idx] = 0;
-                      }
-                      else{
-                        host_S[idx] /= sum_vec[sum_idx];
-                      }
+                } else {
+                  if (seq_len_qo > seq_len_kv) {
+                    int first_non_masked_sequence = seq_len_qo - seq_len_kv;
+                    if (row < first_non_masked_sequence ||
+                        col > row - first_non_masked_sequence) {
+                      host_S[idx] = 0;
+                    } else {
+                      host_S[idx] /= sum_vec[sum_idx];
+                    }
                   }
                   // seq_len_qo == seq_len_kv
-                  else{
+                  else {
                     if (col > row) {
                       host_S[idx] = 0;
-                    }
-                    else{
+                    } else {
                       host_S[idx] /= sum_vec[sum_idx];
                     }
                   }
                 }
               }
               // non-causal
-              else{
+              else {
                 host_S[idx] /= sum_vec[sum_idx];
               }
             }
@@ -455,7 +745,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
           block_P.reset(host_P.size());
 
           compat::memcpy<ElementV_>(block_P.get(), host_P.data(),
-                                        host_P.size());
+                                    host_P.size());
 
           cutlass::TensorRef ref_P(block_P.get(),
                                    LayoutQ::packed({seq_len_qo, seq_len_kv}));
@@ -482,41 +772,34 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
           block_P.reset();
 
           std::vector<ElementAccumulator> vec_acc(block_acc.size());
-          compat::memcpy<ElementAccumulator>(
-              vec_acc.data(), block_acc.get(), vec_acc.size());
+          compat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(),
+                                             vec_acc.size());
 
           // delete this memory as it is no longer needed
           block_acc.reset();
-          for (int seq = 0; seq < seq_len_qo; seq++) {
-            for (int hvo = 0; hvo < head_size_vo; hvo++) {
-              int idx = offset_o + seq * num_heads_q * head_size_vo +
-                        (q_group * q_group_size + q_head) * head_size_vo + hvo;
-              host_O[idx] =
-                  static_cast<ElementOutput>(vec_acc[seq * head_size_vo + hvo]);
-            }
+          std::vector<ElementOutput> vec_out(vec_acc.size());
+          for (int i = 0; i < vec_out.size(); i++) {
+            vec_out[i] = static_cast<ElementOutput>(vec_acc[i]);
           }
-          q_ptr += head_size_qk;
-          offset_lse += seq_len_qo;
-        } // end of q_group loop
-        // shift 1 head for each q_group loop
-        k_ptr += head_size_qk;
-        v_ptr += head_size_vo;
-      } // end of q_head loop
+          compat::memcpy<ElementOutput>(block_ref_O.get() + offset_o,
+                                        vec_out.data(), vec_out.size());
 
-      // shift the ptr to next batch -- [B, S, H, D]
-      offset_q += seq_len_qo * num_heads_q * head_size_qk;
-      offset_k += seq_len_kv * num_heads_kv * head_size_qk;
-      offset_v += seq_len_kv * num_heads_kv * head_size_vo;
-      offset_o += seq_len_qo * num_heads_q * head_size_vo;
-    } // end of batch loop
+          offset_q += seq_len_qo * head_size_qk;
+          if (kv_group_update % q_group_size == 0) {
+            offset_k += seq_len_kv * head_size_qk;
+            offset_v += seq_len_kv * head_size_vo;
+          }
+          kv_group_update++;
+          offset_o += seq_len_qo * head_size_vo;
+        }
+      }
+    }
 
-    compat::wait();
-    compat::memcpy<ElementOutput>(block_ref_O.get(), host_O.data(),
-                                      host_O.size());
     compat::wait();
     compat::memcpy<float>(block_ref_LSE.get(), host_LSE.data(),
-                              host_LSE.size());
+                          host_LSE.size());
 
+    compat::wait();
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(
         block_ref_O.get(), block_O.get(), block_O.size(), ElementOutput{0.01f},
@@ -527,34 +810,33 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     bool passed_lse = cutlass::reference::device::BlockCompareRelativelyEqual(
         block_ref_LSE.get(), block_LSE.get(), block_LSE.size(), 0.01f, 0.01f);
 
-    passed ? print("Passed Output Accuracy \n") : print("Failed Output Accuracy \n");
-    passed_lse ? print("Passed LSE Accuracy \n") : print("Failed LSE Accuracy \n");
+    passed ? print("Passed Output Accuracy \n")
+           : print("Failed Output Accuracy \n");
+    passed_lse ? print("Passed LSE Accuracy \n")
+               : print("Failed LSE Accuracy \n");
 
-    if (!passed){
+    if (!passed) {
       print("\n ================================= \n");
       std::vector<float> device_O(block_ref_O.size());
       compat::wait();
-      compat::memcpy<float>(device_O.data(), block_O.get(),
-                                block_O.size());
+      compat::memcpy<float>(device_O.data(), block_O.get(), block_O.size());
       print("\n host_O \n");
-      for (int i = 0; i < host_O.size(); i++){
-        if (i != 0 && i % 64 == 0){
+      for (int i = 0; i < host_O.size(); i++) {
+        if (i != 0 && i % 64 == 0) {
           print('\n');
         }
         print(host_O[i]);
         print(' ');
-
       }
       print("\n Device O \n");
-      for (int i = 0; i < device_O.size(); i++){
-        if (i != 0 && i % 64 == 0){
+      for (int i = 0; i < device_O.size(); i++) {
+        if (i != 0 && i % 64 == 0) {
           print('\n');
         }
         print(device_O[i]);
         print(' ');
       }
     }
-
 
     return passed && passed_lse;
   }
@@ -656,18 +938,33 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     auto [batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv,
           head_size_qk, head_size_vo] = problem_size;
 
-    stride_Q = cutlass::make_cute_packed_stride(
-        StrideQ{},
-        cute::make_shape(seq_len_qo, num_heads_q * head_size_qk, batch));
-    stride_K = cutlass::make_cute_packed_stride(
-        StrideK{},
-        cute::make_shape(seq_len_kv, num_heads_kv * head_size_qk, batch));
-    stride_V = cutlass::make_cute_packed_stride(
-        StrideV{},
-        cute::make_shape(head_size_vo * num_heads_kv, seq_len_kv, batch));
-    stride_O = cutlass::make_cute_packed_stride(
-        StrideO{},
-        cute::make_shape(seq_len_qo, num_heads_q * head_size_vo, batch));
+    if (options.is_bshd) {
+      stride_Q = cutlass::make_cute_packed_stride(
+          StrideQ{},
+          cute::make_shape(seq_len_qo, num_heads_q * head_size_qk, batch));
+      stride_K = cutlass::make_cute_packed_stride(
+          StrideK{},
+          cute::make_shape(seq_len_kv, num_heads_kv * head_size_qk, batch));
+      stride_V = cutlass::make_cute_packed_stride(
+          StrideV{},
+          cute::make_shape(head_size_vo * num_heads_kv, seq_len_kv, batch));
+      stride_O = cutlass::make_cute_packed_stride(
+          StrideO{},
+          cute::make_shape(seq_len_qo, num_heads_q * head_size_vo, batch));
+    } else {
+      stride_Q = cutlass::make_cute_packed_stride(
+          StrideQ{},
+          cute::make_shape(seq_len_qo, head_size_qk, batch * num_heads_q));
+      stride_K = cutlass::make_cute_packed_stride(
+          StrideK{},
+          cute::make_shape(seq_len_kv, head_size_qk, batch * num_heads_kv));
+      stride_V = cutlass::make_cute_packed_stride(
+          StrideV{},
+          cute::make_shape(head_size_vo, seq_len_kv, batch * num_heads_kv));
+      stride_O = cutlass::make_cute_packed_stride(
+          StrideO{},
+          cute::make_shape(seq_len_qo, head_size_vo, batch * num_heads_q));
+    }
 
     block_Q.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo *
                   head_size_qk);
@@ -687,27 +984,6 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
 
-    //debug
-    // std::vector<ElementQ> block_Q_host(block_Q.size());
-    // for (int i = 0; i < block_Q.size(); i++){
-    //   block_Q_host[i] = static_cast<ElementQ>(i % 4);
-    // }
-    // std::vector<ElementK> block_K_host(block_K.size());
-    // for (int i = 0; i < block_K.size(); i++){
-    //   block_K_host[i] = static_cast<ElementK>(i % 3);
-    // }
-    // std::vector<ElementV> block_V_host(block_V.size());
-    // for (int i = 0; i < block_V.size(); i++){
-    //   block_V_host[i] = static_cast<ElementV>(i % 2);
-    // }
-
-    // compat::wait();
-    // compat::memcpy<ElementQ>(block_Q.get(), block_Q_host.data(), block_Q.size());
-    // compat::wait();
-    // compat::memcpy<ElementK>(block_K.get(), block_K_host.data(), block_K.size());
-    // compat::wait();
-    // compat::memcpy<ElementV>(block_V.get(), block_V_host.data(), block_V.size());
-    
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
       device_cumulative_seqlen_q.copy_from_host(cumulative_seqlen_q.data(),
@@ -760,9 +1036,10 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
         sycl::ext::oneapi::experimental::sub_group_size<
             FMHAPrefillKernel::DispatchPolicy::SubgroupSize>};
     compat::experimental::launch_policy policy{sycl_grid, sycl_block,
-                                                   launch_props, kernel_props};
-    auto event = compat::experimental::launch<
-        cutlass::device_kernel<FMHAPrefillKernel>>(policy, params);
+                                               launch_props, kernel_props};
+    auto event =
+        compat::experimental::launch<cutlass::device_kernel<FMHAPrefillKernel>>(
+            policy, params);
 #endif
 
     EventManager::getInstance().addEvent(event);
@@ -781,8 +1058,9 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
         {options.softmax_scale},
         {block_O.get(), stride_O, block_LSE.get()},
         hw_info,
-        options.softmax_scale};
-    
+        options.softmax_scale,
+        options.is_bshd};
+
     // Define device-global scratch memory
     size_t workspace_size = FMHAPrefillKernel::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
@@ -811,7 +1089,8 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
     compat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.is_causal, options.softmax_scale);
+    bool passed = verify(problem_size, options.is_causal, options.softmax_scale,
+                         options.is_bshd);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     if (!passed) {
