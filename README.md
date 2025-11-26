@@ -1,5 +1,6 @@
 ![ALT](./media/images/gemm-hierarchy-with-epilogue-no-labels.png "Complete CUDA GEMM decomposition")
 
+
 # SYCL\* Templates for Linear Algebra (SYCL\*TLA)
 
 **This repository is forked from the NVIDIA CUTLASS repository and extends CUTLASS and CuTe API support to Intel GPUs through SYCL enablement.**
@@ -9,12 +10,12 @@
 *SYCL is a trademark of the Khronos Group Inc, Other names and brands may be claimed as the property of others.*
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/intel/sycl-tla/badge)](https://scorecard.dev/viewer/?uri=github.com/intel/sycl-tla)
 
-SYCL\*TLA is a modular, header‑only C++ template framework for high‑performance 
-GEMM, and fused epilogue kernels. It applies hierarchical tiling, composable policy 
-abstractions, and efficient data‑movement primitives to build flexible, reusable 
-building blocks for dense linear algebra. The SYCL implementation brings those 
-optimizations to Intel GPUs with tuned kernels for modern execution units and memory 
-hierarchies. It adds mixed‑precision and epilogue fusion pathways designed to 
+SYCL\*TLA is a modular, header‑only C++ template framework for high‑performance
+GEMM, and fused epilogue kernels. It applies hierarchical tiling, composable policy
+abstractions, and efficient data‑movement primitives to build flexible, reusable
+building blocks for dense linear algebra. The SYCL implementation brings those
+optimizations to Intel GPUs with tuned kernels for modern execution units and memory
+hierarchies. It adds mixed‑precision and epilogue fusion pathways designed to
 simplify integrating advanced quantization and post‑processing into custom pipelines.
 
 To support a wide variety of applications, SYCL\*TLA provides extensive
@@ -45,7 +46,7 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 |0.5 | 4.2.0 |
 |0.6 | 4.2.0 |
 
-# What's New in SYCL*TLA 0.6 
+# What's New in SYCL*TLA 0.6
 
 ## [SYCL*TLA 0.6](https://github.com/intel/sycl-tla/releases/tag/v0.6) (2025-11-03)
 ### Major Architecture Changes
@@ -128,15 +129,15 @@ We are regularly testing following setup in CI.
 ## Target Architecture
 
 The target architecture information is passed on to SYCL*TLA via the cmake flag
-`DPCPP_SYCL_TARGET`. 
+`DPCPP_SYCL_TARGET`.
 
 ```
 cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_pvc"
 ```
-Or 
+Or
 
 ```
-cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" 
+cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21"
 ```
 
 Please refer to the [functionality documentation](./media/docs/cpp/functionality.md)
@@ -248,7 +249,7 @@ include/                     # client applications should target this directory 
     reduction/               # bandwidth-limited reduction kernels optimized for Intel GPU architectures
 
     thread/                  # SYCL workgroup and subgroup code for Intel GPU execution units
-    
+
     transform/               # code specialized for layout, type, and domain transformations using SYCL
 
     *                        # core vocabulary types, containers, and basic numeric operations
@@ -286,7 +287,7 @@ tools/
 
   profiler/                  # Profiler                 - SYCL support not yet available
                              #                            (command-line utility for executing operations)
-  
+
   util/                      # Utilities               - contains numerous helper classes for
     include/                 #                            managing tensors in Intel GPU device memory, reference
       cutlass/               #                            implementations for SYCL GEMM, random initialization
