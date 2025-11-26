@@ -375,7 +375,7 @@ public:
         int num_heads_coord = get<3>(blk_coord); // num_heads_blk_idx
         blk_l_coord = is_var_len ? num_heads_coord
                                  : batch_coord * num_heads_q + num_heads_coord;
-        q_head_coord = get<1>(blk_coord); // q_heads_idx
+        q_head_coord = num_heads_coord; // q_heads_idx
       }
 
       auto sequence_length_shape =
@@ -557,7 +557,7 @@ public:
                  params.is_bshd);
       } else {
         auto blk_coord_mnkl =
-            make_coord(blk_m_coord, blk_n_coord, _, blk_l_coord);
+            make_coord(blk_m_coord, blk_n_coord, batch_coord, blk_l_coord);
         epilogue(params.problem_shape, sequence_length_shape, blk_coord_mnkl,
                  out_reg, max_reg, sum_reg, q_head_coord, softmax_scale,
                  params.is_bshd);

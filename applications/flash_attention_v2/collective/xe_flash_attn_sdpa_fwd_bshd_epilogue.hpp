@@ -278,10 +278,9 @@ public:
     auto blk_m_coord = get<0>(tile_coord); // seq_len_blk_idx
     size_t lse_offset =
         k_coord * num_heads_q * seq_len_qo + // shift the batch -- batch_idx *
-                                             // num_heads_q * seq_len_qo  -- OK
-        q_head_coord *
-            seq_len_qo + // shift the head  -- head_q * seq_len_qo -- ok
-        m_coord * BLK_M; // shift to the particular tile
+                                             // num_heads_q * seq_len_qo
+        q_head_coord * seq_len_qo + // shift the head  -- head_q * seq_len_qo
+        m_coord * BLK_M;            // shift to the particular tile
     int localtile_seq_coord = 0;
     localtile_seq_coord = sub_group_id * SubgroupSize +
                           lane_id; // one subgroup will handle 16 sequence
