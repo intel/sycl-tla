@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: pvc
     
     steps:
       - name: Checkout repository
@@ -106,7 +106,6 @@ jobs:
             --body-file pr_body.md \
             --base main \
             --head ${{ env.BRANCH_NAME }} \
-            --label "sync,automated" \
             --repo anupren/cutlass-sycl
       
       - name: Install GitHub Copilot CLI
@@ -231,7 +230,6 @@ jobs:
             --body-file pr_body.md \
             --base main \
             --head ${{ env.BRANCH_NAME }} \
-            --label "sync,automated,copilot-resolved,needs-review" \
             --repo anupren/cutlass-sycl
       
       - name: Create issue for manual resolution
@@ -283,7 +281,6 @@ jobs:
           # 5. Create PR
           gh pr create --base main --head ${{ env.BRANCH_NAME }} \
             --title "Sync with intel/sycl-tla (Manual) - ${{ env.UPSTREAM_SHORT }}" \
-            --label "sync,manual-resolution" \
             --repo anupren/cutlass-sycl
           ```
           ---
