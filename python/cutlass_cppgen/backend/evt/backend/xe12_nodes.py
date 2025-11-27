@@ -60,7 +60,7 @@ from cutlass_cppgen.backend.library import (
 )
 
 
-class Sm20AccumulatorImpl(AccumulatorImpl):
+class xe12AccumulatorImpl(AccumulatorImpl):
 
     @property
     def type_decl(self):
@@ -74,7 +74,7 @@ class Sm20AccumulatorImpl(AccumulatorImpl):
         return self._type_decl
 
 
-class Sm20LoadSrcImpl(LoadSrcImpl):
+class xe12LoadSrcImpl(LoadSrcImpl):
 
     @property
     def type_decl(self):
@@ -92,7 +92,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90SrcFetch<{DataTypeTag[s
         return self._type_decl
 
 
-class Sm20AuxLoadImpl(AuxLoadImpl):
+class xe12AuxLoadImpl(AuxLoadImpl):
 
     @property
     def descriptor(self) -> str:
@@ -131,7 +131,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90AuxLoad<
         return (DataTypeSize[self.element] * stages_c * product(epilogue_tile_mn) // 8, 128)
 
 
-class Sm20ScalarBroadcastImpl(ScalarBroadcastImpl):
+class xe12ScalarBroadcastImpl(ScalarBroadcastImpl):
     def __init__(self, node: LoadNode) -> None:
         super().__init__(node)
         self.broadcast_count = 1
@@ -153,7 +153,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90ScalarBroadcast<
         return self._type_decl
 
 
-class Sm20RowBroadcastImpl(RowBroadcastImpl):
+class xe12RowBroadcastImpl(RowBroadcastImpl):
     @property
     def type_decl(self):
         """
@@ -171,7 +171,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90RowBroadcast<
         return self._type_decl
 
 
-class Sm20ColumnBroadcastImpl(ColumnBroadcastImpl):
+class xe12ColumnBroadcastImpl(ColumnBroadcastImpl):
 
     @property
     def type_decl(self):
@@ -190,7 +190,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90ColBroadcast<
         return self._type_decl
 
 
-class Sm20ComputeImpl(ComputeImpl):
+class xe12ComputeImpl(ComputeImpl):
 
     @property
     def type_decl(self):
@@ -209,7 +209,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90Compute<
         return self._type_decl
 
 
-class Sm20AuxStoreImpl(AuxStoreImpl):
+class xe12AuxStoreImpl(AuxStoreImpl):
 
     @property
     def descriptor(self) -> str:
@@ -252,7 +252,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90AuxStore<
         return (DataTypeSize[self.element] * stages_d * product(epilogue_tile_mn) // 8, 128)
 
 
-class Sm20StoreDImpl(StoreDImpl):
+class xe12StoreDImpl(StoreDImpl):
 
     @property
     def type_decl(self):
@@ -265,7 +265,7 @@ using StrideD = {self.stride_mnl};
 """
 
 
-class Sm20ColumnReductionImpl(ColumnReductionImpl):
+class xe12ColumnReductionImpl(ColumnReductionImpl):
 
     @property
     def type_decl(self):
@@ -286,7 +286,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90ColReduction<
         return self._type_decl
 
 
-class Sm20RowReductionImpl(RowReductionImpl):
+class xe12RowReductionImpl(RowReductionImpl):
 
 
     @property
@@ -308,7 +308,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90RowReduction<
         return self._type_decl
 
 
-class Sm20ScalarReductionImpl(ScalarReductionImpl):
+class xe12ScalarReductionImpl(ScalarReductionImpl):
 
 
     @property
