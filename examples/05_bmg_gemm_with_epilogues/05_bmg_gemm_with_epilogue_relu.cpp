@@ -362,7 +362,7 @@ int main(int argc, const char** argv)
           decltype(tile_shape(TiledMma()))>;
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
-          TiledMma,
+          TileShape,
           void,
           ElementAccumulator,
           cutlass::gemm::TagToStrideC_t<LayoutC>,

@@ -428,7 +428,7 @@ int main(int argc, const char** argv)
   // auxiliary data required
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
-          TiledMma,
+          TileShape,
           void,                 // Epilogue tile (void = automatic)
           ElementAccumulator,
           cutlass::gemm::TagToStrideC_t<LayoutC>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
