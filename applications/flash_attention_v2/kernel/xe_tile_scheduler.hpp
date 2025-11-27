@@ -45,6 +45,8 @@ struct XeFHMAIndividualTileScheduler {
   struct Params {
     dim3 grid;
     FastDivmod divmod_num_heads;
+    FastDivmod divmod_batch;
+    int num_kv_splits_ = -1;
   };
 
   bool valid_ = true;
@@ -56,14 +58,18 @@ struct XeFHMAIndividualTileScheduler {
   template <class ProblemShape, class TileShape>
   static Params to_underlying_arguments(
       ProblemShape const& shape, KernelHardwareInfo hw_info,
-      TileShape const& tile_shape)
+      TileShape const& tile_shape, const int &num_kv_splits = -1)
   {
     using namespace cute;
 
     dim3 grid(size(ceil_div(shape.head_size_vo, get<1>(tile_shape))),     // V
               size(ceil_div(shape.seq_len_qo,   get<0>(tile_shape))),     // Q
               size(shape.batch * shape.num_heads_q));                     // (h,b) -- split later
-    return Params{grid, {shape.num_heads_q}};
+    if (num_kv_splits > 0) {
+      grid.z *= num_kv_splits;
+    }
+    std::cout << "XeFHMAIndividualTileScheduler Grid: (" << grid.x << ", " << grid.y << ", " << grid.z << ")\n";
+    return Params{grid, {shape.num_heads_q}, {shape.batch * shape.num_heads_q}, num_kv_splits};
   }
 
   template <int Num_SGs>
@@ -79,10 +85,18 @@ struct XeFHMAIndividualTileScheduler {
   CUTLASS_DEVICE
   auto get_block_coord() {
     using namespace cute;
-    int idx_b = BlockIdxZ();
-    int head;
+    int idx_kv_split = BlockIdxZ();
+    int head, idx_b;
+
+    if (params.num_kv_splits_ > 1) {
+      params.divmod_batch(idx_kv_split, idx_b, idx_kv_split);
+      params.divmod_num_heads(idx_b, head, idx_b);
+      return make_coord(BlockIdxY(), BlockIdxX(), head, idx_b, idx_kv_split);
+    }
+
+    idx_b = idx_kv_split;
     params.divmod_num_heads(idx_b, head, idx_b);
-    return make_coord(BlockIdxY(), BlockIdxX(), head, idx_b);
+    return make_coord(BlockIdxY(), BlockIdxX(), head, idx_b, (int)-1);
   }
 
   CUTLASS_DEVICE
@@ -92,7 +106,7 @@ struct XeFHMAIndividualTileScheduler {
   }
 };
 
-struct XeFHMAIndividualPersistentTileScheduler {
+struct XeFHMAPersistentTileScheduler {
 
   struct Params {
     dim3 grid;
@@ -107,7 +121,7 @@ struct XeFHMAIndividualPersistentTileScheduler {
   int num_batch_heads_;
 
   CUTLASS_DEVICE
-  XeFHMAIndividualPersistentTileScheduler(Params const& params, int kv_tile_size,
+  XeFHMAPersistentTileScheduler(Params const& params, int kv_tile_size,
     int local_num_kv_blocks, int num_batch_heads)
     : params(params), kv_tile_size_(kv_tile_size), local_num_kv_blocks_(local_num_kv_blocks), num_batch_heads_(num_batch_heads) {}
 
@@ -154,7 +168,60 @@ struct XeFHMAIndividualPersistentTileScheduler {
   }
 
   CUTLASS_DEVICE
-  XeFHMAIndividualPersistentTileScheduler& operator++() {
+  XeFHMAPersistentTileScheduler& operator++() {
+    valid_ = false;
+    return *this;
+  }
+};
+
+struct XeReduceSplitKTileScheduler {
+
+  struct Params {
+    dim3 grid;
+    FastDivmod divmod_num_heads;
+    int num_kv_splits = -1;
+  };
+
+  bool valid_ = true;
+  Params params;
+
+  CUTLASS_DEVICE
+  XeReduceSplitKTileScheduler(Params const& params) : params(params) {}
+
+  template <class ProblemShape, class TileShape>
+  static Params to_underlying_arguments(
+      ProblemShape const& shape, KernelHardwareInfo hw_info,
+      TileShape const& tile_shape, const int &num_kv_splits = -1)
+  {
+    using namespace cute;
+
+    // dim3 grid(size(ceil_div(shape.head_size_vo, get<1>(tile_shape))),     // V
+    //           size(ceil_div(shape.seq_len_qo,   get<0>(tile_shape))),     // Q
+    //           size(shape.batch * shape.num_heads_q));                     // (h,b) -- split later
+    dim3 grid(shape.seq_len_qo, shape.num_heads_q, shape.batch);
+    std::cout << "Reduce Split K Grid: (" << grid.x << ", " << grid.y << ", " << grid.z << ")\n";
+    return Params{grid, {shape.num_heads_q}, num_kv_splits};
+  }
+
+  template <int Num_SGs>
+  static dim3 get_grid_shape(Params const& params) {
+    return params.grid;
+  }
+
+  CUTLASS_DEVICE
+  bool is_valid() {
+    return valid_;
+  }
+
+  CUTLASS_DEVICE
+  auto get_block_coord() {
+    using namespace cute;
+
+    return make_coord(BlockIdxX(), BlockIdxY(), BlockIdxZ());
+  }
+
+  CUTLASS_DEVICE
+  XeReduceSplitKTileScheduler& operator++() {
     valid_ = false;
     return *this;
   }

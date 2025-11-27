@@ -52,6 +52,12 @@ foreach(HEAD_DIM 64 96 128 192)
       )
     endif()
 
+    # specific test for split kernel
+    cutlass_example_add_executable(
+      06_xe_fmha_fwd_decode_splitkv_${INPUT_TYPE}_hdim${HEAD_DIM}
+      06_xe_fmha_fwd.cpp
+    )
+
     if(INPUT_TYPE STREQUAL "bfloat16_t")
       set(INPUT_MACRO "IS_BFLOAT16")
     elseif(INPUT_TYPE STREQUAL "float_e5m2_t")
@@ -65,6 +71,7 @@ foreach(HEAD_DIM 64 96 128 192)
     if (NOT HEAD_DIM STREQUAL 192)
       target_compile_definitions(06_xe_fmha_fwd_decode_persistent_${INPUT_TYPE}_hdim${HEAD_DIM} PRIVATE HEAD_DIM=${HEAD_DIM} DECODE PERSISTENT SHOW_DIFF=1 INPUT_TYPE=${INPUT_TYPE} ${INPUT_MACRO})
     endif()
+    target_compile_definitions(06_xe_fmha_fwd_decode_splitkv_${INPUT_TYPE}_hdim${HEAD_DIM} PRIVATE HEAD_DIM=${HEAD_DIM} DECODE SPLITKV SHOW_DIFF=1 INPUT_TYPE=${INPUT_TYPE} ${INPUT_MACRO})
   endforeach()
 
   cutlass_example_add_executable(

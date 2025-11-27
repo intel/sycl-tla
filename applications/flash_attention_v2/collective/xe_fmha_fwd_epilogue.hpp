@@ -92,6 +92,7 @@ public:
                 Stride<E<1>, E<0>>{})
   ));
   using ReduceFragARow = decltype(reduce<1>(ReduceFragA{}, sycl::plus<void>{}));
+  // static_assert(is_same_v<ReduceFragARow, float>, "dtype mismatched");
 
   static auto default_tiled_copy_O_helper() {
     if constexpr (ReduceK{} == _1{})
@@ -149,7 +150,59 @@ public:
     using ElementA = typename FragA::element_type;
 
     // Reduce k-blocks of A and A_sum across WG, if needed.
-    auto [rA, rA_sum, active] = reduce_A(tArA, tA_max, tA_sum, thr_id);
+    auto [rA, rA_max_unused, rA_sum, active] = reduce_A(tArA, tA_max, tA_sum, thr_id);
+
+    /* Some subgroups may not have any work to do; if so, quit early. */
+    if (!active) return;
+
+    /* Complete softmax, dividing out sums. */
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < rA_sum.size(); i++)
+      rA_sum(i) = ElementA(1) / rA_sum(i);
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < rA.size(); i++)
+      rA(i) *= broadcast<0>(rA_sum, rA, i);
+
+    /* Tile output */
+    Tensor cO = make_identity_tensor(O.shape());          // (q,v)
+    Tensor gO = local_tile(cO, TileShapeO{}, blk_qv);     // (q,v)
+
+    /* Prepare slices */
+    TiledCopyO copy_o{O};
+    auto thr_copy_o = copy_o.get_slice(thr_id);
+
+    auto tOrO = thr_copy_o.partition_sg_fragment_S(gO);
+    auto tOgO = thr_copy_o.partition_D(gO);
+
+    /* Reorder tile and write out */
+    reorder(rA, tOrO);
+    copy(copy_o, tOrO, tOgO);
+  }
+
+  // splitK version
+  template <typename QVCoord>
+  CUTLASS_DEVICE
+  void
+  operator()(TensorO2D const& O,        // Global O tensor: (q,v)
+             FragA          & tArA,     // O accumulator:   (q,v)
+             FragARow       & tA_max,   // Softmax row-wise max accumulator
+             FragARow       & tA_sum,   // Softmax row-wise sum accumulator
+             QVCoord          blk_qv,   // WG tile indices: (q,v)
+             int              thr_id,   // Work-item ID
+             const TensorO2D & exp_sums, // Global exp sum tensor
+             const TensorO2D & max_logits // Global max logits tensor
+      ) {
+
+    using namespace cute;
+    using ElementA = typename FragA::element_type;
+
+    // Reduce k-blocks of A and A_sum across WG, if needed.
+    auto [rA, rA_max, rA_sum, active] = reduce_A(tArA, tA_max, tA_sum, thr_id);
+
+    // store exp sum and max logits for current KV split
+    exp_sums(0) = rA_sum(0);
+    max_logits(0) = rA_max(0);
 
     /* Some subgroups may not have any work to do; if so, quit early. */
     if (!active) return;
@@ -285,7 +338,7 @@ public:
           }
         }
       }
-      return std::make_tuple(rA, rA_sum, active);
+      return std::make_tuple(rA, rA_max, rA_sum, active);
     }
   }
 };
