@@ -112,7 +112,7 @@ class PassGetArgumentType(EVTPassBase):
         else:
             self.dag_ir.arg_c_type = self.dag_ir.arg_d_type
 
-    def sm12_set_argument_type(self):
+    def xe12_set_argument_type(self):
         self.dag_ir.epilogue_thread_type = self.argument_types[self.dag_ir.get_all_inputs("D")[0]]
         # Get the tensorD argument type
         self.dag_ir.arg_d_type = self.dag_ir.get_node_meta("D").underlying_impl.argument_type_d
@@ -123,7 +123,7 @@ class PassGetArgumentType(EVTPassBase):
         else:
             self.dag_ir.arg_c_type = self.dag_ir.arg_d_type
     
-    def sm20_set_argument_type(self):
+    def xe20_set_argument_type(self):
         self.dag_ir.epilogue_thread_type = self.argument_types[self.dag_ir.get_all_inputs("D")[0]]
         # Get the tensorD argument type
         self.dag_ir.arg_d_type = self.dag_ir.get_node_meta("D").underlying_impl.argument_type_d

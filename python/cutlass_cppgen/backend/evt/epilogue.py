@@ -46,6 +46,7 @@ import cutlass_cppgen.backend.evt.backend
 from cutlass_cppgen.backend.frontend import TensorFrontend
 from cutlass_cppgen.utils.datatypes import is_numpy_tensor
 from cutlass_cppgen.backend.evt.passes.util import cc_map
+import torch
 
 
 class EpilogueFunctorVisitor(EpilogueFunctorBase):
@@ -58,7 +59,10 @@ class EpilogueFunctorVisitor(EpilogueFunctorBase):
     """
     def __init__(self, cc: int, visitor, element_compute=DataType.f32) -> None:
         # Type of Emitter based on CC
-        self.emit_cls = getattr(cutlass_cppgen.backend.evt.backend, f"Sm{cc_map[cc]}Emitter")
+        if torch.xpu.is_available():
+            self.emit_cls = getattr(cutlass_cppgen.backend.evt.backend, f"Xe{cc_map[cc]}Emitter")
+        else:
+            self.emit_cls = getattr(cutlass_cppgen.backend.evt.backend, f"Sm{cc_map[cc]}Emitter")
 
         # Visitor Types
         self.visitor = visitor

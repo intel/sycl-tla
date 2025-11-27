@@ -31,7 +31,7 @@
 # ################################################################################################
 
 """
-Emitter for Sm12 Epilogue Visitor
+Emitter for Xe20 Epilogue Visitor
 """
 
 from cutlass_library import DataTypeTag, EpilogueScheduleTag
@@ -82,7 +82,7 @@ using EpilogueDescriptor = cutlass::epilogue::collective::detail::EpilogueDescri
 """
 
 
-class Sm12Emitter:
+class Xe20Emitter:
     def __init__(self, operation: GemmOperationUniversal, graph) -> None:
         fusion_callbacks = FusionCallbacks(graph, cc=90, emit_CD=False)
 

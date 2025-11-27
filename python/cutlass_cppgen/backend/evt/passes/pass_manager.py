@@ -37,6 +37,7 @@ Pass manager for DAG IR.
 from typing import Any
 
 import networkx as nx
+import torch
 
 from cutlass_cppgen.backend.evt.ir import DAGIR
 from cutlass_cppgen.backend.evt.passes.util import cc_map
@@ -102,8 +103,21 @@ class EVTPassBase:
             def sm80_func(self):
                 // sm80 specific method
                 return
+
+             # Xe12 specific func
+             def xe12_func(self):
+                // xe12 specific method
+                return
+
+            # Xe20 specific func
+            def xe20_func(self):
+                // xe20 specific method
+                return
         """
-        func_name = f"sm{cc_map[self.cc]}_{func.__name__}"
+        if torch.xpu.is_available():
+            func_name = f"xe{cc_map[self.cc]}_{func.__name__}"
+        else:
+            func_name = f"sm{cc_map[self.cc]}_{func.__name__}"
         if hasattr(self, func_name):
             return getattr(self, func_name)
         else:
