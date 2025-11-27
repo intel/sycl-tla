@@ -221,11 +221,11 @@ struct TiledCopy : Copy_Atom
   // Tile a tensor or a layout from shape
   //   (M,N,...)
   // to shape
-  //   ((ThrV,ThrX),FrgV,(RestM,RestN,...))
+  //   (Thr,(FrgV,FrgX),(RestM,RestN,...))
   // where
-  //   ThrV:  The threads local to a COPY_ATOM Src.
-  //   ThrX:  The threads tiled across COPY_ATOMs Src.
+  //   Thr:   The logical threads within the tiled copy.
   //   FrgV:  The values local to a COPY_ATOM Src.
+  //   FrgX:  The values tiled across COPY_ATOMs Src.
   //   RestM: The values tiled in M.
   //   RestN: The values tiled in N.
   template <class STensor>
@@ -242,11 +242,11 @@ struct TiledCopy : Copy_Atom
   // Tile a tensor or a layout from shape
   //   (M,N,...)
   // to shape
-  //   ((ThrV,ThrX),FrgV,(RestM,RestN,...))
+  //   (Thr,(FrgV,FrgX),(RestM,RestN,...))
   // where
-  //   ThrV:  The threads local to a COPY_ATOM Dst.
-  //   ThrX:  The threads tiled across COPY_ATOMs Dst.
+  //   Thr:   The logical threads within the tiled copy.
   //   FrgV:  The values local to a COPY_ATOM Dst.
+  //   FrgX:  The values tiled across COPY_ATOMs Dst.
   //   RestM: The values tiled in M.
   //   RestN: The values tiled in N.
   template <class DTensor>
@@ -263,7 +263,7 @@ struct TiledCopy : Copy_Atom
   // Tile a tensor or a layout from shape
   //   ((TileM,TileN,...), (RestM,RestN,...))
   // to shape
-  //   ((ThrV,ThrX),FrgV,(RestM,RestN,...))
+  //   (Thr,(FrgV,FrgX),(RestM,RestN,...))
   template <class Tensor, class Ref2TrgLayout>
   CUTE_HOST_DEVICE constexpr static
   auto
@@ -395,30 +395,31 @@ struct ThrCopy
     return thr_tensor(thr_idx_, _, repeat<rank_v<DTensor>>(_));
   }
 
+  template <class SDTensor, class ThrFrgLayout>
+  CUTE_HOST_DEVICE
+  auto
+  atom_partition(SDTensor&& sdtensor, ThrFrgLayout const& tf_layout0) const {
+    // Get fragment layout, and group atom thread modes (ThrV) since that is not done by tidfrg_S/D.
+    auto tf_layout = logical_divide(tf_layout0, Shape<typename TiledCopy::AtomNumThr>{});
+    auto thr_tensor = make_tensor(static_cast<SDTensor&&>(sdtensor).data(), tf_layout);
+
+    // Index, selecting full ThrV slice.
+    auto thr = idx2crd(thr_idx_, shape<0>(thr_tensor));
+    return thr_tensor(replace<0>(thr,_),_,_);
+  }
+
   template <class STensor>
   CUTE_HOST_DEVICE
   auto
   atom_partition_S(STensor&& stensor) const {
-    // Get fragment layout, and group atom thread modes (ThrV) since that is not done by tidfrg_D.
-    static constexpr auto RThrV = rank<0>(typename TiledCopy::AtomLayoutSrc{});
-    auto tf_layout0 = TiledCopy::tidfrg_S(stensor.layout());
-    auto tf_layout = replace<0>(tf_layout0, group<0,RThrV>(get<0>(tf_layout0)));
-    auto thr_tensor = make_tensor(static_cast<STensor&&>(stensor).data(), tf_layout);
-    // Index, selecting full ThrV slice.
-    auto thr = idx2crd(thr_idx_, shape<0>(thr_tensor));
-    return thr_tensor(replace<0>(thr, _), _, _);
+    return atom_partition(static_cast<STensor&&>(stensor), TiledCopy::tidfrg_S(stensor.layout()));
   }
 
   template <class DTensor>
   CUTE_HOST_DEVICE
   auto
   atom_partition_D(DTensor&& dtensor) const {
-    static constexpr auto RThrV = rank<0>(typename TiledCopy::AtomLayoutDst{});
-    auto tf_layout0 = TiledCopy::tidfrg_D(dtensor.layout());
-    auto tf_layout = replace<0>(tf_layout0, group<0,RThrV>(get<0>(tf_layout0)));
-    auto thr_tensor = make_tensor(static_cast<DTensor&&>(dtensor).data(), tf_layout);
-    auto thr = idx2crd(thr_idx_, shape<0>(thr_tensor));
-    return thr_tensor(replace<0>(thr, _), _, _);
+    return atom_partition(static_cast<DTensor&&>(dtensor), TiledCopy::tidfrg_D(dtensor.layout()));
   }
 
   template <class STensor>
@@ -608,7 +609,8 @@ make_cotiled_copy(Copy_Atom<Args...> const& copy_atom,
   auto layout_tv_data = composition(inv_data_layout, atom_tv_layout);
 
   // Check validity
-  CUTE_STATIC_ASSERT_V(coalesce(composition(data_layout, layout<1>(layout_tv_data))) == coalesce(layout<1>(atom_tv_layout)),
+  // Append 1:0 to data_layout so that OOB coordinates get the stride-0
+  CUTE_STATIC_ASSERT_V(coalesce(composition(make_layout(data_layout, Layout<_1,_0>{}), layout<1>(layout_tv_data))) == coalesce(layout<1>(atom_tv_layout)),
                        "The memory pointed to by AtomTVLayout does not exist in the DataLayout.");
   //
   // Tiler -- Find the active elements in the DATA tensor and generate a tiler to extract them

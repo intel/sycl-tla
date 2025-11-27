@@ -63,11 +63,15 @@ struct NoSmemWarpSpecialized1Sm {};
 struct NoSmemWarpSpecialized2Sm {};
 struct FastF32NoSmemWarpSpecialized1Sm : NoSmemWarpSpecialized1Sm {};
 struct FastF32NoSmemWarpSpecialized2Sm : NoSmemWarpSpecialized2Sm {};
+struct BlockwiseNoSmemWarpSpecialized1Sm : NoSmemWarpSpecialized1Sm {};
+struct BlockwiseNoSmemWarpSpecialized2Sm : NoSmemWarpSpecialized2Sm {};
 struct PtrArrayNoSmemWarpSpecialized1Sm : NoSmemWarpSpecialized1Sm {};
 struct PtrArrayNoSmemWarpSpecialized2Sm : NoSmemWarpSpecialized2Sm {};
 struct PtrArrayFastF32NoSmemWarpSpecialized1Sm : PtrArrayNoSmemWarpSpecialized1Sm {};
 struct PtrArrayFastF32NoSmemWarpSpecialized2Sm : PtrArrayNoSmemWarpSpecialized2Sm {};
-// Blackwell TMA schedules 
+struct PtrArrayBlockwiseNoSmemWarpSpecialized1Sm : PtrArrayNoSmemWarpSpecialized1Sm {};
+struct PtrArrayBlockwiseNoSmemWarpSpecialized2Sm : PtrArrayNoSmemWarpSpecialized2Sm {};
+// Blackwell TMA schedules
 struct TmaWarpSpecialized1Sm {};
 struct TmaWarpSpecialized2Sm {};
 struct PtrArrayTmaWarpSpecialized1Sm : TmaWarpSpecialized1Sm {};
@@ -294,9 +298,15 @@ struct Sm120PtrArrayTmaWarpSpecialized {
 };
 
 #if defined (SYCL_INTEL_TARGET)
-// Specialization of the GEMM Epilogue for Intel Xe architectures.
-// This version is tuned for operations with a subgroup size of 16.
-// Suitable for use with Intel Battlemage (Xe2) and PVC (Xe) architectures.
+// Standard Xe epilogue.
+struct IntelXeGeneric {
+  static constexpr int SubgroupSize = 16;
+};
+
+struct IntelXeGenericGroup {
+  static constexpr int SubgroupSize = 16;
+};
+// Legacy epilogues.
 struct IntelXeXMX16 {
   static constexpr int SubgroupSize = 16;
 };

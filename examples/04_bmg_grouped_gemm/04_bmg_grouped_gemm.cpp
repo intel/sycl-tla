@@ -567,22 +567,18 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopyA = void; //XE_LOAD_2D<16, 32, 32>;
+  using GmemTiledCopyB = void; //XE_LOAD_2D_VNNI<16, 32, 32>;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
-  using TiledMma =
-      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
-               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                    Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
+  using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, ElementAccumulator, ElementA>>, Layout<TileShape>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
   // Dispatch to grouped gemm algorithm
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16Group<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16Group;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1StagedGroup<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGenericGroup;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
           ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
@@ -591,15 +587,16 @@ int main(int argc, const char** argv)
           decltype(tile_shape(TiledMma()))>;
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
+          TiledMma,
           TileShape,
           ElementAccumulator,
           cutlass::gemm::TagToStrideC_t<LayoutC*>,
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD*>,
           FusionCallBacks,
-          XE_2D_U32x8x16_LD_N,
+          void,
           void, void,
-          XE_2D_U32x8x16_ST_N,
+          void,
           void, void>;
 
 // Mainloop
