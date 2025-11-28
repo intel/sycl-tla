@@ -2477,6 +2477,46 @@ bool TestXeGrouped(
   EXPECT_TRUE(passed) << "TestXeGrouped: testbed.run failed for " 
                       << problem_sizes.size() << " grouped problems"
                       << ", alpha: " << alpha << ", beta: " << beta;
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+// TestAll template function overload for grouped GEMM testing with explicit problem sizes
+template <typename Gemm, template <class T> class ActivationFunctor = cutlass::epilogue::thread::Identity>
+bool TestAll(const std::vector<cutlass::gemm::GemmCoord>& problem_sizes,
+             double alpha = 1.0, double beta = 0.0) {
+  using ElementScalar = typename Gemm::EpilogueOutputOp::ElementScalar;
+  using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
+
+  if (problem_sizes.empty()) {
+    std::cerr << "Error: problem_sizes vector cannot be empty.\n";
+    return false;
+  }
+
+  Testbed3x<Gemm, ActivationFunctor> testbed(
+    CheckEquality::RELATIVE,
+    ScalarLoc::ON_DEVICE,
+    VectorScale::DISABLED
+  );
+
+  // Convert vector of GemmCoord to the format needed by grouped GEMM testbed
+  std::vector<typename ProblemShapeType::UnderlyingProblemShape> problem_sizes_host;
+  for (const auto& coord : problem_sizes) {
+    problem_sizes_host.push_back({coord.m(), coord.n(), coord.k()});
+  }
+
+  cutlass::DeviceAllocation<typename ProblemShapeType::UnderlyingProblemShape> problem_sizes_device;
+  problem_sizes_device.reset(problem_sizes_host.size());
+  problem_sizes_device.copy_from_host(problem_sizes_host.data());
+
+
+  bool passed = testbed.run(
+    ProblemShapeType{
+      static_cast<int>(problem_sizes_host.size()),
+      problem_sizes_device.get(),
+      problem_sizes_host.data()
+    },
+    cutlass::from_real<ElementScalar>(alpha),
+    cutlass::from_real<ElementScalar>(beta)
+  );
 
   return passed;
 }
