@@ -65,9 +65,9 @@ CUTE_DEVICE auto make_moe_tensor(T *ptr, int r, int c) {
 }
 
 template <class GmemTiledCopyA, class GmemTiledCopyB, class GmemTiledCopyD,
-          char LayoutKindA, char LayoutKindB, char LayoutKindD, class TiledMMA,
-          typename ElementA, typename ElementB, typename ElementS,
-          typename ElementD>
+          char LayoutKindA, char LayoutKindB, char LayoutKindD, int SG_N,
+          int WG_N, int q_group_size, class TiledMMA, typename ElementA,
+          typename ElementB, typename ElementS, typename ElementD>
 CUTE_DEVICE void
 MoEGEMM(const ElementA *Activations, const ElementB *Weights,
         const ElementS *Scales, ElementD *Outputs, TiledMMA const &mma,
@@ -128,13 +128,14 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
     }
 
     // After adding scaledMM mainloops, add something like
-    // if constexpr (!cute::is_void_v<ElementS>) {
-    //   moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
-    //      A_tensor, B_tensor, Scales, D_tensor, tile_coord, mma);
-    // } else {
-    moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
-        A_tensor, B_tensor, D_tensor, tile_coord, mma);
-
+    if constexpr (!cute::is_void_v<ElementS>) {
+      moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD, SG_N, WG_N,
+               q_group_size>(A_tensor, B_tensor, Scales, D_tensor, tile_coord,
+                             mma);
+    } else {
+      moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
+          A_tensor, B_tensor, D_tensor, tile_coord, mma);
+    }
     // Get next work tile
     work_tile_info = scheduler.fetch_next_work(work_tile_info);
     did_group_change = curr_group != work_tile_info.L_idx;
