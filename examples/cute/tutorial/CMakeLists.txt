@@ -61,6 +61,14 @@ if (CUTLASS_ENABLE_SYCL)
       cute_tutorial_xe_gemm
       xe_gemm.cpp
     )
+
+    if(NOT "${DPCPP_HOST_COMPILER}" MATCHES "g\\+\\+")
+      cutlass_example_add_executable(
+        cute_tutorial_xe_gemm_microscaling
+        xe_gemm_microscaling.cpp
+      )
+    endif()
+
   endif()
 
   if (SYCL_NVIDIA_TARGET)
