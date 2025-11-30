@@ -127,7 +127,6 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
       did_group_change = false;
     }
 
-    // After adding scaledMM mainloops, add something like
     if constexpr (!cute::is_void_v<ElementS>) {
       moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD, SG_N, WG_N,
                q_group_size>(A_tensor, B_tensor, Scales, D_tensor, tile_coord,
