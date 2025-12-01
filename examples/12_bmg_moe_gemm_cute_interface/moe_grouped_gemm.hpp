@@ -66,7 +66,7 @@ CUTE_DEVICE auto make_moe_tensor(T *ptr, int r, int c) {
 
 template <class GmemTiledCopyA, class GmemTiledCopyB, class GmemTiledCopyD,
           char LayoutKindA, char LayoutKindB, char LayoutKindD, int SG_N,
-          int WG_N, int q_group_size, class TiledMMA, typename ElementA,
+          int WG_N, int q_group_size=32, class TiledMMA, typename ElementA,
           typename ElementB, typename ElementS, typename ElementD>
 CUTE_DEVICE void
 MoEGEMM(const ElementA *Activations, const ElementB *Weights,
@@ -99,6 +99,8 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
   auto B_tensor = make_moe_tensor<ElementB, actual_layout_of_B>(
       const_cast<ElementB *>(Weights), N, K);
   auto D_tensor = make_moe_tensor<ElementD, LayoutKindD>(Outputs, M, N);
+  auto S_tensor = make_moe_tensor<ElementS, LayoutKindD>(
+    const_cast<ElementS *>(Scales), K/q_group_size, N);
 
   while (work_tile_info.is_valid()) {
     auto m_coord = work_tile_info.M_idx;
@@ -124,12 +126,17 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
       B_tensor =
           make_moe_tensor<ElementB, actual_layout_of_B>(ptr_B_curr_batch, N, K);
       D_tensor = make_moe_tensor<ElementD, LayoutKindD>(ptr_D_curr_batch, M, N);
+      if constexpr (!cute::is_void_v<ElementS>) {
+        ElementS *ptr_S_curr_batch =
+          const_cast<ElementS *>(Scales) + curr_group * (K / q_group_size) * N;        
+        S_tensor = make_moe_tensor<ElementS, LayoutKindD>(ptr_S_curr_batch, K / q_group_size, N);
+      }
       did_group_change = false;
     }
 
     if constexpr (!cute::is_void_v<ElementS>) {
       moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD, SG_N, WG_N,
-               q_group_size>(A_tensor, B_tensor, Scales, D_tensor, tile_coord,
+               q_group_size>(A_tensor, B_tensor, S_tensor, D_tensor, tile_coord,
                              mma);
     } else {
       moe_gemm<GmemTiledCopyA, GmemTiledCopyB, GmemTiledCopyD>(
@@ -142,3 +149,4 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
 }
 
 } // namespace MoE
+
