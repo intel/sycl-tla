@@ -70,6 +70,8 @@
 #include "cute/layout.hpp"
 #include "cute/numeric/int.hpp"
 
+#include "cutlass/util/GPU_Clock.hpp"
+
 namespace test {
 namespace gemm {
 namespace device {
@@ -3041,7 +3043,7 @@ struct TestbedImpl {
 
     if (status != cutlass::Status::kSuccess) {
 #if defined(CUTLASS_ENABLE_SYCL)
-      std::cerr << "This test is not supported." << "\n";
+      std::cerr << "This test is not supported. - gemm_op can_implement failed" << "\n";
       return true;
 #else
       cudaError_t error = cudaGetLastError();
@@ -3069,7 +3071,7 @@ struct TestbedImpl {
       status = gemm_op.initialize(arguments, workspace.get());
       if (status != cutlass::Status::kSuccess) {
 #if defined(CUTLASS_ENABLE_SYCL)
-      std::cerr << "This test is not supported." << "\n";
+      std::cerr << "This test is not supported. - gemm_op initialize failed" << "\n";
 #else
         cudaError_t error = cudaGetLastError();
         const auto error_str = cudaGetErrorString(error);
@@ -3079,10 +3081,28 @@ struct TestbedImpl {
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
       CUTLASS_TRACE_HOST("TestbedImpl::run: Calling gemm_op.run");
 #endif
+      GPU_Clock timer;
+      if (profiling)
+        timer.start();
       status = gemm_op.run();
 #if defined(CUTLASS_ENABLE_SYCL)
       try {
         compat::wait_and_throw();
+        if (profiling) {
+          double time = timer.seconds();
+          auto m = cute::get<0>(problem_size);
+          auto n = cute::get<1>(problem_size);
+          auto k = cute::get<2>(problem_size);
+          auto l = cute::get<3>(problem_size);
+          double tops = (2.0 * m * n * k * l) * 1e-12;
+          printf(
+              "[Perf] M=%d N=%d K=%d L=%d | "
+              "-> [%4.3f] Tops/s (%.4f ms)\n",
+              m, n, k, l,
+              tops / time,
+              time * 1000
+          );
+        }
       } catch (std::exception const &e) {
         ADD_FAILURE() << "Error at Kernel Sync.";
         return false;

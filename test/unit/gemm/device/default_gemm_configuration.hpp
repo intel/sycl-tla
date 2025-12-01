@@ -62,6 +62,17 @@ struct DefaultGemmConfigurationToCutlass3Types {
   static_assert(sizeof(ElementA) == 0, "No valid DefaultGemmConfigurationToCutlass3Types configuration exists.");
 };
 
+template<
+  class OperatorClass, class ArchTag,
+  class ElementA, class LayoutA,
+  class ElementB, class LayoutB,
+  class ElementC, class LayoutC,
+  class ElementAccumulator>
+struct XeLegacyGemmConfigurationToCutlass3Types {
+  static_assert(sizeof(ElementA) == 0, "No valid DefaultGemmConfigurationToCutlass3Types configuration exists.");
+};
+
+
 // This type is only intended to demonstrate porting 2.x kernels to 3.0
 template<
   class OperatorClass, class ArchTag,
@@ -1901,9 +1912,9 @@ struct DefaultGemmConfigurationToCutlass3Types<
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Intel XE MMA S32S8
+// Intel XE MMA S32S8 Legacy
 template <typename LayoutA, typename LayoutB, typename LayoutC>
-struct DefaultGemmConfigurationToCutlass3Types<
+struct XeLegacyGemmConfigurationToCutlass3Types<
     arch::OpClassTensorOp, arch::IntelXe,
     int8_t, LayoutA,
     int8_t, LayoutB,
@@ -1961,6 +1972,64 @@ struct DefaultGemmConfigurationToCutlass3Types<
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Intel XE MMA S32S8
+template <typename LayoutA, typename LayoutB, typename LayoutC>
+struct DefaultGemmConfigurationToCutlass3Types<
+    arch::OpClassTensorOp, arch::IntelXe,
+    int8_t, LayoutA,
+    int8_t, LayoutB,
+    int32_t, LayoutC,
+    int32_t>
+{
+  using TileShape = Shape<_256, _256, _32>;
+
+  using GEMMDispatchPolicy = gemm::MainloopXeL1Staged<3>;
+
+  using TiledMma =
+    typename TiledMMAHelper<
+              MMA_Atom<XE_DPAS_TT<8, int32_t, int8_t>>, 
+              Layout<TileShape>,
+              Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>
+              >::TiledMMA;
+
+  using GmemTiledCopyA = void;
+  using GmemTiledCopyB = void;
+
+  // Mainloop
+  using CollectiveMainloop = collective::CollectiveMma<
+    GEMMDispatchPolicy, TileShape,
+    int8_t, TagToStrideA_t<LayoutA>,
+    int8_t, TagToStrideB_t<LayoutB>,
+    TiledMma,
+    GmemTiledCopyA, void, void, cute::identity,  // A
+    GmemTiledCopyB, void, void, cute::identity   // B
+  >;
+
+  using EpilogueDispatchPolicy = epilogue::IntelXeGeneric;
+  using EpilogueOp = epilogue::fusion::LinearCombination<int32_t, int32_t>;
+
+  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
+    EpilogueDispatchPolicy,
+    EpilogueOp,
+    TileShape,
+    decltype(tile_shape(TiledMma()))
+  >;
+
+  using GmemTiledCopyC = XE_LOAD_2D<32, 8, 16>; 
+  using GmemTiledCopyD = XE_STORE_2D<32, 8, 16>; 
+
+  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
+    EpilogueDispatchPolicy,
+    TileShape,
+    int32_t, TagToStrideC_t<LayoutC>,
+    int32_t, TagToStrideC_t<LayoutC>,
+    FusionCallBacks,
+    GmemTiledCopyC, void, void,
+    GmemTiledCopyD, void, void>;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 namespace detail {
 
 //
@@ -2002,7 +2071,7 @@ struct DefaultGemm_TensorOpXe_OperandB<tfloat32_t, layout::ColumnMajor, 32, Size
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Intel XE MMA S32S8
+// Intel XE MMA F32TF32
 template <typename LayoutA, typename LayoutB, typename LayoutC>
 struct DefaultGemmConfigurationToCutlass3Types<
     arch::OpClassTensorOp, arch::IntelXe,
@@ -2158,6 +2227,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
     XE_2D_U32x8x16_ST_N, void, void>;
 };
 
+// Intel XE MMA FP32FP16
 template <typename LayoutA, typename LayoutB, typename LayoutC>
 struct DefaultGemmConfigurationToCutlass3Types<
     arch::OpClassTensorOp, arch::IntelXe,

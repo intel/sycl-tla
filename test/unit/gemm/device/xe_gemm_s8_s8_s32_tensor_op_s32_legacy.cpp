@@ -46,7 +46,7 @@ namespace cutlass {
 namespace {
 template <typename LayoutA, typename LayoutB>
 struct XE_Device_Gemm_s8_s8_s32_tensor_op_s32 {
-  using Config = gemm::device::DefaultGemmConfigurationToCutlass3Types<
+  using Config = gemm::device::XeLegacyGemmConfigurationToCutlass3Types<
     arch::OpClassTensorOp, arch::IntelXe,
     int8_t, LayoutA,
     int8_t, LayoutB,
@@ -58,12 +58,7 @@ struct XE_Device_Gemm_s8_s8_s32_tensor_op_s32 {
     typename Config::CollectiveMainloop,
     typename Config::CollectiveEpilogue>;
 
-  struct Gemm : public gemm::device::GemmUniversalAdapter<GemmKernel> {
-    static constexpr int kAlignmentA = 16;
-    static constexpr int kAlignmentB = 16;
-    static constexpr int kAlignmentC = 4;
-    static constexpr int kAlignmentD = 4;
-  };
+  using Gemm = gemm::device::GemmUniversalAdapter<GemmKernel>;
 };
 
 TEST(XE_Device_Gemm_s8t_s8t_s32t_tensor_op_s32, 256x256x32) {
