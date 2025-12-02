@@ -47,7 +47,7 @@ The goal of introduing Shared Local Memory ([SLM](https://www.intel.com/content/
     - Subgroups-specialised: only a subset of subgroups in a block act as producers; the rest are consumers.
     - Scale-out: the same kernel can run with 2 producer subgroups + 6 consumer subgroups, or 4 + 12, etc.;
 
-<!-- ### Subgroup specialization
+<!-- ### Subgroup specialization 
 * `Subgroup specialization`originates from concept `Warp specialization` On NVIDIA Hopper.
   - Warp Groups (warpgroup) – 4 consecutive warps (128 threads) that act as one schedulable unit for the new matrix-multiply-and-accumulate instruction WGMMA.
   - Asynchronous special-purpose units – TMA (Tensor Memory Accelerator) for global→shared bulk copy and WGMMA for shared→register MMA; both run without stalling the issuing warp.
