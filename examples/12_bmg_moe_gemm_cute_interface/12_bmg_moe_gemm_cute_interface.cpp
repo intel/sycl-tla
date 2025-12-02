@@ -193,23 +193,43 @@ struct VerificationHelper {
 };
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class TA, class TB> auto choose_tiled_mma(TA *A, TB *B) {
+template <typename TA, typename TB, typename TD> auto choose_mma_op() {
+  if constexpr (is_any_of_v<TA, bfloat16_t, half_t> &&
+                is_any_of_v<TB, bfloat16_t, half_t>) {
+    return XE_DPAS_TT<8, float, TA, TB>{};
+  } else if constexpr (is_complete_v<XE_DPAS_TT<8, TD, TA, TB>>) {
+    return XE_DPAS_TT<8, TD, TA, TB>{};
+  } else if constexpr (is_same_v<TA, cute::bfloat16_t>) {
+    return XE_DPAS_TT<8, float, cute::bfloat16_t>{};
+  } else { /* Use f16 by default as upconversion sequences are typically faster
+            */
+    return XE_DPAS_TT<8, float, cute::half_t>{};
+  }
+}
+
+template <typename TA, typename TB, typename TD>
+auto choose_tiled_mma(TA *const &A, TB *const &B, TD *D) {
   using TA_non_CV = cutlass::platform::remove_cv_t<TA>;
   using TB_non_CV = cutlass::platform::remove_cv_t<TB>;
-  auto op = XE_DPAS_TT<8, float, TA_non_CV, TB_non_CV>{};
+  auto op = choose_mma_op<TA_non_CV, TB_non_CV, TD>();
 
-  using WGTile = Shape<_256, _128, _32>; // 256x128 WG tile size
-  using SGLayout =
+  constexpr bool use_4x8_sg = (sizeof_bits_v<TB> < sizeof_bits_v<TA>);
+  using WGTileShape =
+      conditional_t<use_4x8_sg, Shape<_256, _256, _32>, Shape<_256, _128, _32>>;
+  using SGLayout8x2 =
       Layout<Shape<_8, _2, _1>, Stride<_2, _1, _0>>; // 8x2 SG tiling, n-major
+  using SGLayout4x8 =
+      Layout<Shape<_4, _8, _1>, Stride<_8, _1, _0>>; // 4x8 SG tiling, n-major
+  using SGLayout = conditional_t<use_4x8_sg, SGLayout4x8, SGLayout8x2>;
 
-  using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>, Layout<WGTile>,
-                                      SGLayout>::TiledMMA;
-
-  return MMA{};
+  using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>,
+                                      Layout<WGTileShape>, SGLayout>::TiledMMA;
+  auto mma = MMA{};
+  return mma;
 }
 
 // type tag to define a unique sycl kernel name
-template <typename, typename, typename, char, char> class GemmCuteName;
+template <typename, typename, typename, char, char, int> class GemmCuteName;
 
 template <char layoutA, char layoutB, typename ElementA, typename ElementB,
           typename ElementS, typename ElementD>
@@ -236,20 +256,34 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
   auto dummy_group_problem_shape =
       cutlass::gemm::GroupProblemShape<Shape<int, int, int>>{
           1, &dummy_problem_shape, nullptr};
-  using TileShape = Shape<_256, _128, _32>;
+  constexpr bool use_4x8_sg =
+      (sizeof_bits_v<ElementB> < sizeof_bits_v<ElementA>);
+  using WGTileShape =
+      conditional_t<use_4x8_sg, Shape<_256, _256, _32>, Shape<_256, _128, _32>>;
   using ClusterShape = Shape<_1, _1, _1>;
   auto scheduler_params =
       PersistentTileSchedulerXeMoE<ProblemShape>::to_underlying_arguments(
-          dummy_group_problem_shape, TileShape{}, ClusterShape{}, hw_info,
+          dummy_group_problem_shape, WGTileShape{}, ClusterShape{}, hw_info,
           PersistentTileSchedulerXeMoE<ProblemShape>::Arguments{
               1, RasterOrderOptions::AlongN});
   auto group_distribution =
       PersistentTileSchedulerXeMoE<ProblemShape>::get_grid_shape(
-          scheduler_params, dummy_group_problem_shape, TileShape{},
+          scheduler_params, dummy_group_problem_shape, WGTileShape{},
           ClusterShape{}, hw_info,
           PersistentTileSchedulerXeMoE<ProblemShape>::Arguments{
               1, RasterOrderOptions::AlongN});
-  auto mma = choose_tiled_mma(activations, weights);
+
+  using SGLayout8x2 =
+      Layout<Shape<_8, _2, _1>, Stride<_2, _1, _0>>; // 8x2 SG tiling, n-major
+  using SGLayout4x8 =
+      Layout<Shape<_4, _8, _1>, Stride<_8, _1, _0>>; // 4x8 SG tiling, n-major
+  using SGLayout = conditional_t<use_4x8_sg, SGLayout4x8, SGLayout8x2>;
+
+  auto mma = choose_tiled_mma(activations, weights, outputs);
+  constexpr auto wg_n = get<1>(mma.tile_mnk());
+  constexpr auto sg_n = wg_n / get<1>(SGLayout{}.shape());
+  constexpr auto q_group_size = 32;
+
   auto MaxThreadsPerWorkgroup = size(mma);
   dim3 local_range{MaxThreadsPerWorkgroup, 1, 1};
 
@@ -268,16 +302,17 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
 
   GPU_Clock timer;
   timer.start();
-  auto event = Q.parallel_for<
-      GemmCuteName<ElementA, ElementB, ElementD, layoutA, layoutB>>(
+  auto event = Q.parallel_for<GemmCuteName<ElementA, ElementB, ElementD,
+                                           layoutA, layoutB, q_group_size>>(
       sycl::nd_range<3>(global, local), kernel_props, [=](auto) {
         // Can also use void for copy atoms.
         // In that case, they will be chosen automatically.
         MoE::MoEGEMM<XE_LOAD_2D<16, 32, 32, 16>,
                      XE_LOAD_2D_VNNI<16, 32, 16, 16>, XE_STORE_2D<16, 8, 32>,
-                     'R', 'R', 'R'>(activations, weights, scales, outputs, mma,
-                                    num_rows_per_expert_device, num_experts,
-                                    gemm_n, gemm_k, scheduler_params);
+                     'R', 'R', 'R', sg_n, wg_n, q_group_size>(
+            activations, weights, scales, outputs, mma,
+            num_rows_per_expert_device, num_experts, gemm_n, gemm_k,
+            scheduler_params);
       });
   EventManager::getInstance().addEvent(event);
   Q.wait_and_throw();
@@ -413,8 +448,7 @@ int main(int argc, const char **argv) {
       {6, 13, 123, 28, 197,  0, 202, 69,   0, 6,  0,  21, 1434, 1582, 11, 0, 6,
        0, 7,  190, 4,  1700, 6, 434, 1886, 0, 14, 28, 8,  30,   25,   18},
       {5,  27, 1442, 18, 0,  6, 0, 73,  6,    781, 0,  1915, 291, 649, 98,  4,
-       33, 77, 6,    22, 73, 9, 8, 587, 1486, 32,  10, 244,  37,  0,   100, 9}
-       };
+       33, 77, 6,    22, 73, 9, 8, 587, 1486, 32,  10, 244,  37,  0,   100, 9}};
 
   for (int i = 0; i < num_layers; i++) {
     launcher(total_rows_for_each_expert[i], 5760, 2880, num_experts);
