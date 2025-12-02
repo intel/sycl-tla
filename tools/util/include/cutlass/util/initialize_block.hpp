@@ -65,11 +65,34 @@ auto max_for_test<T, std::enable_if_t<cute::sizeof_bits_v<T> < 8>> = T(cutlass::
 /// Helper to initialize a block of device data
 template <class Element, class... Args_t>
 bool initialize_block(Element* block, std::size_t size, uint64_t seed, Args_t&&... args) {
-  static_assert(sizeof...(Args_t) == 0 || sizeof...(Args_t) == 2);
+  static_assert(sizeof...(Args_t) == 0 || sizeof...(Args_t) == 2 || sizeof...(Args_t) == 1);
 
   Element scope_max;
   Element scope_min;
+  if constexpr ( sizeof...(Args_t) == 1) {
+     auto &infile = std::get<0>(std::forward_as_tuple(std::forward<Args_t>(args)...));
 
+      auto block_host = std::vector<Element>(size);
+    for (auto& element : block_host) {
+        float temp;
+        if (infile >> temp) {
+            element = static_cast<Element>(temp);
+        } else {
+            printf("Warning: Not enough data in file, remaining elements will be zero\n");
+            break;
+        }
+    }
+    // block_device.copy_from_host(block_host.data());
+      //  cutlass::device_memory::copy_to_device(((uint8_t*)(block)) + (i * array_size) / elements_per_byte,
+      //                               (uint8_t*)(raw_pointer_cast(block_host.begin())),
+      //                               array_size / elements_per_byte);
+
+    cutlass::device_memory::copy_to_device((Element*)(block),
+                                    (Element*)(block_host.data()),
+                                    size );
+      compat::wait();
+      return true;
+  }
   if constexpr ( sizeof...(Args_t) == 2) {
     auto tuple_args = std::forward_as_tuple(std::forward<Args_t>(args)...);
     scope_min = Element(std::get<0>(tuple_args));

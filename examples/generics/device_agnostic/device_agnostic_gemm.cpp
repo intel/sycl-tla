@@ -203,6 +203,33 @@ struct ExampleRunner {
     block_device.copy_from_host(block_host.data());
   }
 
+  template <typename T>
+void initialize_block(cutlass::DeviceAllocation<T> block_device, const char* filename) {
+    std::ifstream infile(filename);
+    if (!infile.is_open()) {
+        printf("Error: Cannot open file %s\n", filename);
+        return;
+    }
+    
+    printf("Loading from %s\n", filename);
+    
+    auto block_host = std::vector<T>(block_device.size());
+    
+    // 从文件读取数据
+    for (auto& element : block_host) {
+        float temp;
+        if (infile >> temp) {
+            element = static_cast<T>(temp);
+        } else {
+            printf("Warning: Not enough data in file, remaining elements will be zero\n");
+            break;
+        }
+    }
+    
+    infile.close();
+    block_device.copy_from_host(block_host.data());
+}
+
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(const ProblemShapeType& problem_size) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
