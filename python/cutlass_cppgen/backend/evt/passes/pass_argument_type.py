@@ -55,7 +55,7 @@ class PassGetArgumentType(EVTPassBase):
 
     def requires(self) -> None:
         # Check "D" is in the node list
-        if cc_map[self.cc] in [90, 100] and (not self.dag_ir.has_node("D")):
+        if cc_map[self.cc] in [12, 20, 90, 100] and (not self.dag_ir.has_node("D")):
             raise SyntaxError(
                 "Sm90+ EVT requires the epilogue to have a returned tensor D, "
                 "but the variable 'D' is not found in the return values.")
@@ -67,7 +67,7 @@ class PassGetArgumentType(EVTPassBase):
             meta = self.dag_ir.get_node_meta(node)
             if not meta.disabled:
                 self.argument_types[node] = meta.underlying_impl.argument_type
-            if node == "D" and cc_map[self.cc] in [90, 100]:
+            if node == "D" and cc_map[self.cc] in [12, 20, 90, 100]:
                 continue
             if isinstance(meta, TopoVisitorNode):
                 self.get_dag_argument_type(node)
