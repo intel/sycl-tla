@@ -46,8 +46,12 @@
 
 #include "../../common/sycl_cute_common.hpp"
 
-#pragma clang diagnostic ignored "-Wpass-failed"
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#if defined(__clang__)
+  #pragma clang diagnostic ignored "-Wpass-failed"
+  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__GNUC__)
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 
 using namespace cute;
 
@@ -169,18 +173,6 @@ gemm_device(ATensor   const& A,         // (M,K)
   /* Write C to global memory */
   copy(copy_c, tCrC, tCgC);
 }
-
-
-
-template <typename T, size_t = 0>
-struct is_complete : std::false_type {};
-
-template <typename T>
-struct is_complete<T, 0 * sizeof(T)> : std::true_type {};
-
-template <typename T>
-static constexpr bool is_complete_v = is_complete<T>::value;
-
 
 template <typename TA, typename TB, typename TC>
 auto

@@ -125,24 +125,50 @@ option(CUTLASS_SYCL_BUILTIN_ENABLE "Enable this option to use builtin functions 
 if (CUTLASS_ENABLE_SYCL)
   set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-  if(DPCPP_SYCL_TARGET STREQUAL "nvptx64-nvidia-cuda")
+  string(REPLACE "," ";" DPCPP_SYCL_TARGET_LIST "${DPCPP_SYCL_TARGET}")
+  message(STATUS "DPCPP_SYCL_TARGET as list ${DPCPP_SYCL_TARGET_LIST}")
+
+  if("nvptx64-nvidia-cuda" IN_LIST DPCPP_SYCL_TARGET_LIST)
     set(SYCL_NVIDIA_TARGET ON)
     add_compile_definitions(SYCL_NVIDIA_TARGET)
-  elseif(DPCPP_SYCL_TARGET STREQUAL "intel_gpu_pvc" OR
-         DPCPP_SYCL_TARGET STREQUAL "spir64" OR
-         DPCPP_SYCL_TARGET STREQUAL "intel_gpu_bmg_g21")
-    set(SYCL_INTEL_TARGET ON)
-    add_compile_definitions(SYCL_INTEL_TARGET)
-    add_compile_options(-Wall
-       -Wno-unused-variable
-       -Wno-unused-local-typedef
-       -Wno-unused-but-set-variable
-       -Wno-uninitialized
-       -Wno-reorder-ctor
-       -Wno-logical-op-parentheses
-       -Wno-unused-function
-       -Wno-unknown-pragmas
-    )
+    list(REMOVE_ITEM DPCPP_SYCL_TARGET_LIST "nvptx64-nvidia-cuda")
+  endif()
+
+  set(INTEL_SYCL_TARGETS
+    intel_gpu_pvc
+    spir64
+    intel_gpu_bmg_g21
+    bmg
+    pvc
+  )
+
+  foreach(ITEM IN LISTS DPCPP_SYCL_TARGET_LIST)
+    if(ITEM IN_LIST INTEL_SYCL_TARGETS)
+      set(SYCL_INTEL_TARGET ON)
+    else()
+      message(FATAL_ERROR "In SYCL target list '${DPCPP_SYCL_TARGET}' ${ITEM} is invalid.")
+    endif()
+  endforeach()
+
+  if (SYCL_NVIDIA_TARGET AND SYCL_INTEL_TARGET)
+    message(FATAL_ERROR "Both SYCL_NVIDIA_TARGET and SYCL_INTEL_TARGET are set. Only one is allowed.")
+  elseif (NOT SYCL_NVIDIA_TARGET AND NOT SYCL_INTEL_TARGET)
+    message(FATAL_ERROR "Both SYCL_NVIDIA_TARGET and SYCL_INTEL_TARGET are unset.")
+  endif()
+
+  if(SYCL_INTEL_TARGET)
+      add_compile_definitions(SYCL_INTEL_TARGET)
+      add_compile_options(
+        -Wall
+        -Wno-unused-variable
+        -Wno-unused-local-typedef
+        -Wno-unused-but-set-variable
+        -Wno-uninitialized
+        -Wno-reorder-ctor
+        -Wno-logical-op-parentheses
+        -Wno-unused-function
+        -Wno-unknown-pragmas
+      )
   endif()
 
   add_compile_definitions(CUTLASS_ENABLE_SYCL)
@@ -158,7 +184,6 @@ if (CUTLASS_ENABLE_SYCL)
     add_compile_definitions(CUTLASS_SYCL_BUILTIN_ENABLE)
   endif()
 
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/onemkl.cmake)
 endif()
 find_package(Doxygen QUIET)
 
@@ -201,7 +226,7 @@ set(CUTLASS_ENABLE_HEADERS_ONLY OFF CACHE BOOL "Enable only the header library")
 
 if(CUTLASS_ENABLE_HEADERS_ONLY)
   set(CUTLASS_ENABLE_EXAMPLES_INIT OFF)
-  set(CUTLASS_ENABLE_TOOLS_INIT ON)
+  set(CUTLASS_ENABLE_TOOLS_INIT OFF)
   set(CUTLASS_ENABLE_LIBRARY_INIT OFF)
   set(CUTLASS_ENABLE_TESTS_INIT OFF)
 else()
@@ -213,6 +238,9 @@ else()
   else()
     set(CUTLASS_ENABLE_TESTS_INIT OFF)
   endif()
+
+  # Not include MKL when headers only
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/onemkl.cmake)
 endif()
 
 set(CUTLASS_TEST_UNIT_ENABLE_WARNINGS OFF CACHE BOOL "Enable warnings on waived unit tests.")
