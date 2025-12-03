@@ -119,7 +119,7 @@ public:
                                        Layout<Shape<int,int,int>, StrideD>{}));
 
 private:
-  constexpr static bool is_source_supported      = !is_void_v<ElementC>;
+  constexpr static bool is_source_supported      = !is_void_v<NonVoidElementC>;
   constexpr static bool is_destination_supported = !is_void_v<ElementD>;
 
 public:
@@ -271,10 +271,14 @@ public:
                                        DefaultEpilogueTile,
                                        EpilogueTile_>;
 
+    constexpr bool IsColMajorC = cutlass::gemm::detail::is_major<0, StrideC>();
+    constexpr bool IsRowMajorC = cutlass::gemm::detail::is_major<1, StrideC>();
+
     using DefaultCopyOpG2R =  XE_LOAD_2D<CopyBitsC, cute::gcd(8, get<0>(EpilogueTile{})), cute::gcd(512 / CopyBitsC, get<1>(EpilogueTile{}))>;
+    using DefaultCopyOpG2RTransposed =  XE_LOAD_2D_TRANSPOSE<CopyBitsC, cute::gcd(512 / CopyBitsC, get<1>(EpilogueTile{})), cute::gcd(8, get<0>(EpilogueTile{}))>;
     using DefaultCopyOpR2G = XE_STORE_2D<CopyBitsD, cute::gcd(8, get<0>(EpilogueTile{})), cute::gcd(512 / CopyBitsD, get<1>(EpilogueTile{}))>;
 
-    using ActualGmemTiledCopyC = replace_void_t<CopyOpG2R, DefaultCopyOpG2R>;
+    using ActualGmemTiledCopyC = replace_void_t<CopyOpG2R, std::conditional_t<IsRowMajorC, DefaultCopyOpG2R, DefaultCopyOpG2RTransposed>>;
     using ActualGmemTiledCopyD = replace_void_t<CopyOpR2G, DefaultCopyOpR2G>;
 
     auto batch_idx = get<3>(tile_coord_mnkl);
@@ -282,11 +286,14 @@ public:
     bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
 
     auto MN = take<0,2>(problem_shape_mnkl);
-    auto cCD = make_identity_tensor(MN);                                                // (m,n)
-    auto gCD = local_tile(cCD, take<0,2>(WGTileMNK{}), take<0,2>(tile_coord_mnkl));     // (m_in_wg_tile, n_in_wg_tile)
+    auto cC = make_identity_tensor(MN);                                                 // (m,n)
+    auto cD = make_identity_tensor(MN);                                                 // (m,n)
+    auto gC = local_tile(cC, take<0,2>(WGTileMNK{}), take<0,2>(tile_coord_mnkl));       // (m_in_wg_tile, n_in_wg_tile)
+    auto gD = local_tile(cD, take<0,2>(WGTileMNK{}), take<0,2>(tile_coord_mnkl));       // (m_in_wg_tile, n_in_wg_tile)
 
     auto thr_mma = TiledMMA{}.get_slice(thread_idx);
-    auto tCDgCD = thr_mma.partition_C(gCD);                                             // (mma_v,mma_m,mma_n) -> coord
+    auto tCgC_mma = thr_mma.partition_C(gC);                                             // (mma_v,mma_m,mma_n) -> coord
+    auto tDgD_mma = thr_mma.partition_C(gD);                                             // (mma_v,mma_m,mma_n) -> coord
 
     // Tile accumulator into epilogue tiles.
     auto mma_per_epi = shape_div(EpilogueTile{}, MMATile{});
@@ -295,8 +302,10 @@ public:
     auto tiled_acc = make_tensor(accumulators.data(), tiled_acc_layout);                // ((mma_v,mma_m,mma_n),epi_m,epi_n)
 
     // Tile subgroup's TV coord layout into epilogue tiles.
-    auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
-                              get<0>(tCDgCD.layout()));                                 // (mma_v,mma_m,mma_n,epi_m,epi_n) -> coord
+    auto sg_v_coord_c = prepend(flat_divide(remove<0>(tCgC_mma.layout()), mma_per_epi),
+                              get<0>(tCgC_mma.layout()));                                 // (mma_v,mma_m,mma_n,epi_m,epi_n) -> coord
+    auto sg_v_coord_d = prepend(flat_divide(remove<0>(tDgD_mma.layout()), mma_per_epi),
+                              get<0>(tDgD_mma.layout()));                                 // (mma_v,mma_m,mma_n,epi_m,epi_n) -> coord
 
     // Copy C/D one epilogue tile at a time. Prepare:
     //   - subgroup-scope TiledCopy objects
@@ -314,27 +323,38 @@ public:
 
     // Partition global coordinate tensors into epilogue tiles, matching
     //  the work-division from the TiledMMA.
-    auto gCD_epi_layout = append(append(make_identity_layout(EpilogueTile{}),
-                                        get<3>(sg_v_coord)), get<4>(sg_v_coord));
-    auto gCD_epi = make_tensor(tCDgCD.data(), gCD_epi_layout);                          // (m,n,epi_m,epi_n) -> coord
+    auto gC_epi_layout = append(append(make_identity_layout(EpilogueTile{}),
+                                        get<3>(sg_v_coord_c)), get<4>(sg_v_coord_c));
+    auto gC_epi = make_tensor(tCgC_mma.data(), gC_epi_layout);                            // (m,n,epi_m,epi_n) -> coord
 
-    auto tCgC = thr_copy_c.partition_S(gCD_epi);                                        // (atom_v,atom_m,atom_n,epi_m,epi_n)
-    auto tDgD = thr_copy_d.partition_D(gCD_epi);                                        // (atom_v,atom_m,atom_n,epi_m,epi_n)
+    auto gD_epi_layout = append(append(make_identity_layout(EpilogueTile{}),
+                                        get<3>(sg_v_coord_d)), get<4>(sg_v_coord_d));
+    auto gD_epi = make_tensor(tDgD_mma.data(), gD_epi_layout);                            // (m,n,epi_m,epi_n) -> coord
 
-    auto tCrC = thr_copy_c.partition_sg_fragment_D(gCD_epi(_,_,0,0));                   // (atom_v,atom_m,atom_n,epi_m,epi_n)
-    auto tDrD = thr_copy_d.partition_sg_fragment_S(gCD_epi(_,_,0,0));                   // (atom_v,atom_m,atom_n,epi_m,epi_n)
+    auto tCgC = thr_copy_c.partition_S(gC_epi);                                         // (atom_v,atom_m,atom_n,epi_m,epi_n)
+    auto tDgD = thr_copy_d.partition_D(gD_epi);                                         // (atom_v,atom_m,atom_n,epi_m,epi_n)
+
+    auto tCrC = thr_copy_c.partition_sg_fragment_D(gC_epi(_,_,0,0));                    // (atom_v,atom_m,atom_n,epi_m,epi_n)
+    auto tDrD = thr_copy_d.partition_sg_fragment_S(gD_epi(_,_,0,0));                    // (atom_v,atom_m,atom_n,epi_m,epi_n)
 
     // Create C subgroup fragments for epilogue compute.
-    using AccTVLayout = decltype(thr_mma.partition_sg_fragment_C(gCD).tv_layout());
-    auto cd_compute_tv = make_layout(get<0>(AccTVLayout{}),
-                                     sg_v_coord(_,_,_,_0{},_0{}));
+    using AccTVLayoutForC = decltype(thr_mma.partition_sg_fragment_C(gC).tv_layout());
+    auto c_compute_tv = make_layout(get<0>(AccTVLayoutForC{}),
+                                     sg_v_coord_c(_,_,_,_0{},_0{}));
+
+    // Create D subgroup fragments for epilogue compute.
+    using AccTVLayoutForD = decltype(thr_mma.partition_sg_fragment_C(gD).tv_layout());
+    auto d_compute_tv = make_layout(get<0>(AccTVLayoutForD{}),
+                                     sg_v_coord_d(_,_,_,_0{},_0{}));
 
     auto tCrC_compute_wi = make_fragment_like<NonVoidElementC>(tiled_acc(_,_0{},_0{}));
-    auto tCrC_compute = make_subgroup_tensor(tCrC_compute_wi, cd_compute_tv);           // (mma_v,mma_m,mma_n)
+    auto tCrC_compute = make_subgroup_tensor(tCrC_compute_wi, c_compute_tv);           // (mma_v,mma_m,mma_n)
 
     // Calculate residues.
-    auto residue_gCD    = MN - gCD(_0{});                                               // (res_m, res_n)
-    auto residue_tCDgCD = MN - tCDgCD(_0{});                                            // (res_m, res_n)
+    auto residue_gC    = MN - gC(_0{});                                               // (res_m, res_n)
+    auto residue_tCgC = MN - tCgC(_0{});                                            // (res_m, res_n)
+    auto residue_gD    = MN - gD(_0{});                                               // (res_m, res_n)
+    auto residue_tDgD = MN - tDgD(_0{});                                            // (res_m, res_n)
 
     // Pass data to fusions.
     // FIXME: Some Xe visitors expect subgroup tiles/coordinates here and should be updated to accept
@@ -349,10 +369,10 @@ public:
         TiledMMA{},
         EpilogueTile{},
         copy_d,
-        gCD,
-        residue_gCD,
+        gD,
+        residue_gD,
         tDgD,
-        residue_tCDgCD,
+        residue_tDgD,
         tCrC_compute,
         thread_idx,
     };
@@ -370,12 +390,12 @@ public:
     using ElementVisit = typename FragmentVisit::Element;
 
     auto tDrD_compute_wi = make_fragment_like<ElementVisit>(tiled_acc(_,_0{},_0{}));
-    auto tDrD_compute = make_subgroup_tensor(tDrD_compute_wi, cd_compute_tv);           // (mma_v,mma_m,mma_n)
+    auto tDrD_compute = make_subgroup_tensor(tDrD_compute_wi, d_compute_tv);           // (mma_v,mma_m,mma_n)
     auto tDrD_compute_v = recast<FragmentVisit>(tDrD_compute_wi);
 
     // Outer loops over epilogue tiles.
-    constexpr auto EpiTilesM = size<2>(gCD_epi);
-    constexpr auto EpiTilesN = size<3>(gCD_epi);
+    constexpr auto EpiTilesM = size<2>(gD_epi);
+    constexpr auto EpiTilesN = size<3>(gD_epi);
 
     cst_callbacks.begin();
 
