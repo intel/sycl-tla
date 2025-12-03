@@ -2477,6 +2477,10 @@ bool TestXeGrouped(
   EXPECT_TRUE(passed) << "TestXeGrouped: testbed.run failed for " 
                       << problem_sizes.size() << " grouped problems"
                       << ", alpha: " << alpha << ", beta: " << beta;
+  
+  return passed;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 // TestAll template function overload for grouped GEMM testing with explicit problem sizes
