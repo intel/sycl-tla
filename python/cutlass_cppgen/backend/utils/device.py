@@ -44,9 +44,6 @@ bmg_indicators = [
             "dg2", "g21", "b580", "b770", "a770", "a750", "a580"
         ]
 
-intel_device = dpctl.SyclDevice("gpu")
-device_name = intel_device.name.lower()
-
 import cutlass_cppgen
 from cutlass_cppgen.utils.datatypes import is_cupy_tensor, is_numpy_tensor, is_torch_tensor
 
@@ -89,9 +86,10 @@ def device_cc(device: int = -1) -> int:
 
     if cutlass_cppgen._use_sycl:
         # Using '12' to encode Intel PVC as an integer in the expected format.
-        for indicator in bmg_indicators:
-            if indicator in device_name:
-                return 20
+        intel_device = cutlass_cppgen._sycl_device
+        device_name = intel_device.name.lower()
+        if any(indicator in device_name for indicator in bmg_indicators):
+            return 20
         return 12
 
     deviceProp = check_cuda_errors(cudart.cudaGetDeviceProperties(device))
