@@ -53,8 +53,8 @@
 using namespace cute;
 
 template <typename TB> CUTE_DEVICE TB apply_scale(TB &x, float &y) {
-  uint16_t z = sycl::bit_cast<uint16_t>(x);
   static_assert(is_any_of_v<TB, bfloat16_t, half_t>, "Only BF16 & FP16 are supported");
+  uint16_t z = sycl::bit_cast<uint16_t>(x);
 #if defined(__SYCL_DEVICE_ONLY__) && defined(SYCL_INTEL_TARGET)
   if constexpr (is_same_v<TB, half_t>) {
     asm("{\n"
