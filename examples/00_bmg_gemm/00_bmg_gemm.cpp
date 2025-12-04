@@ -339,8 +339,8 @@ int main(int argc, const char** argv)
 
   using LayoutA = cutlass::layout::ColumnMajor;
   using LayoutB = cutlass::layout::ColumnMajor;
-  using LayoutC = cutlass::layout::ColumnMajor;
-  using LayoutD = cutlass::layout::ColumnMajor;
+  using LayoutC = cutlass::layout::RowMajor;
+  using LayoutD = cutlass::layout::RowMajor;
 
 
   // [New Copy Atom] When left unspecified (void), MainloopXeL1Staged automatically selects
