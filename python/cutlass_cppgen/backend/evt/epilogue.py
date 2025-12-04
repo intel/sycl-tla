@@ -46,6 +46,7 @@ import cutlass_cppgen.backend.evt.backend
 from cutlass_cppgen.backend.frontend import TensorFrontend
 from cutlass_cppgen.utils.datatypes import is_numpy_tensor
 from cutlass_cppgen.backend.evt.passes.util import cc_map
+import torch
 
 
 class EpilogueFunctorVisitor(EpilogueFunctorBase):
@@ -58,7 +59,10 @@ class EpilogueFunctorVisitor(EpilogueFunctorBase):
     """
     def __init__(self, cc: int, visitor, element_compute=DataType.f32) -> None:
         # Type of Emitter based on CC
-        self.emit_cls = getattr(cutlass_cppgen.backend.evt.backend, f"Sm{cc_map[cc]}Emitter")
+        if torch.xpu.is_available():
+            self.emit_cls = getattr(cutlass_cppgen.backend.evt.backend, f"Xe{cc_map[cc]}Emitter")
+        else:
+            self.emit_cls = getattr(cutlass_cppgen.backend.evt.backend, f"Sm{cc_map[cc]}Emitter")
 
         # Visitor Types
         self.visitor = visitor
@@ -70,7 +74,7 @@ class EpilogueFunctorVisitor(EpilogueFunctorBase):
 
         # Epilogue Thread Type
         epilogue_thread_type = self.visitor.epilogue_thread_type
-        if cc_map[cc] in [90, 100]:
+        if cc_map[cc] in [12, 20, 90, 100]:
             self.arg_c_type = self.visitor.arg_c_type
             self.arg_d_type = self.visitor.arg_d_type
         output_names = self.visitor.return_names
@@ -114,7 +118,7 @@ class EpilogueFunctorVisitor(EpilogueFunctorBase):
                 Helper function for extracting device pointer
                 """
                 # Skip the special tensors
-                if cc in [90, 100]:
+                if cc in [12, 20, 90, 100]:
                     if tensor_name in ["C", "D"]:
                         return 0
                 if tensor_name not in kwargs.keys():
