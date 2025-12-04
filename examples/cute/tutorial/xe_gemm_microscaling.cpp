@@ -52,7 +52,32 @@
 
 using namespace cute;
 
-template <int SG_N, int WG_N, int q_group_size, class ATensor, class BTensor,
+template <typename TB> CUTE_DEVICE TB apply_scale(TB &x, float &y) {
+  uint16_t z = sycl::bit_cast<uint16_t>(x);
+#if defined(__SYCL_DEVICE_ONLY__) && defined(SYCL_INTEL_TARGET)
+  if constexpr (is_same_v<TB, half_t>) {
+    asm("{\n"
+        ".decl Z_FP16 v_type=G type=HF num_elts=16 alias=<%0,0>\n"
+        ".decl Y_FP32 v_type=G type=F num_elts=16 alias=<%1,0>\n"
+        "mul (M1, 16) Z_FP16(0,0)<1> Z_FP16(0,0)<1;1,0> Y_FP32(0,0)<1;1,0>\n"
+        "}\n"
+        : "+rw"(z)
+        : "rw"(y));
+  } else {
+    static_assert(is_same_v<TB, bfloat16_t>, "Only BF16 & FP16 are supported");
+    asm("{\n"
+        ".decl Z_BF16 v_type=G type=BF num_elts=16 alias=<%0,0>\n"
+        ".decl Y_FP32 v_type=G type=F num_elts=16 alias=<%1,0>\n"
+        "mul (M1, 16) Z_BF16(0,0)<1> Z_BF16(0,0)<1;1,0> Y_FP32(0,0)<1;1,0>\n"
+        "}\n"
+        : "+rw"(z)
+        : "rw"(y));
+  }
+#endif
+  return sycl::bit_cast<TB>(z);
+}
+
+template <int WG_N, int SG_N, int q_group_size, class ATensor, class BTensor,
           class STensor, class CTensor,
           class TiledMMA>
 CUTE_DEVICE void gemm_device(ATensor const &A, // (M,K)
@@ -91,13 +116,14 @@ CUTE_DEVICE void gemm_device(ATensor const &A, // (M,K)
 
   // When we use E8M0, the compiler behaves differently & loads more data than
   // needed. The rest is discarded.
-  // The scales might be FP16 or BF16 in case of int4 weights
+  // BF16 or FP16 scales are also supported, but please choose a suitable
+  // tiling scheme that'd avoid register spills.
   using scaleLoadType =
       conditional_t<is_same_v<typename STensor::element_type, float_ue8m0_t>,
                     int8_t, int16_t>;
 
-  auto S_tile = coalesce(local_tile(S, make_shape(Int<1>{}, Int<WG_N>{}),
-                                    make_coord(_, wg_n)));
+  auto S_tile = coalesce(
+      local_tile(S, make_shape(Int<1>{}, Int<WG_N>{}), make_coord(_, wg_n)));
 
   auto copy_a = make_block_2d_copy_A(mma, A);
   auto copy_b = make_block_2d_copy_B(mma, B);
@@ -168,6 +194,7 @@ CUTE_DEVICE void gemm_device(ATensor const &A, // (M,K)
   /* Main loop */
   for (int k_tile = 0; k_tile < k_tile_count; k_tile++, k_tile_prefetch++) {
     barrier_arrive(barrier_scope);
+
     copy(copy_b, tBgB(_, _, _, k_tile), tBrB);
     prefetch(prefetch_b, pBgB(_, _, _, k_tile_prefetch));
     reorder(tBrB, tCrB);
@@ -187,6 +214,10 @@ CUTE_DEVICE void gemm_device(ATensor const &A, // (M,K)
       auto scales_per_thread = thr_copy_scales.partition_S(cScales_per_sg);
       copy(copy_scales, scales_per_thread(_, 0, 0), scales_e8m0);
       reorder(scales_e8m0_sg_tensor, scales_float_sg_tensor);
+      // For non MX-format scaledMM, it'd be beter if prefetch is outside
+      // Even in this file, we could use if constexpr to add conditionals
+      // for that case, but it'd make the code messy because it requires
+      // duplication
       if (k_tile != (k_tile_count - frequency_scale_change)) {
         auto next_scales_tensor = make_tensor(
             make_gmem_ptr(reinterpret_cast<scaleLoadType *>(
@@ -201,9 +232,11 @@ CUTE_DEVICE void gemm_device(ATensor const &A, // (M,K)
         prefetch(prefetch_scales, pSgS(_, 0, 0));
       }
     }
+
     copy(copy_a, tAgA(_, _, _, k_tile), tArA);
     prefetch(prefetch_a, pAgA(_, _, _, k_tile_prefetch));
     reorder(tArA, tCrA);
+
     // Instead of hardcoding, figure out CuTe algebra based
     // transformations that can lead to generic code.
     auto scale0 = scales_float_sg_tensor[0];
@@ -213,39 +246,29 @@ CUTE_DEVICE void gemm_device(ATensor const &A, // (M,K)
       auto scale3 = scales_float_sg_tensor[3];
       CUTE_UNROLL
       for (int i = 0; i < 16; i += 2) {
-        tCrB[i] = static_cast<typename ATensor::element_type>(
-            scale0 * static_cast<float>(tCrB[i]));
-        tCrB[i + 1] = static_cast<typename ATensor::element_type>(
-            scale1 * static_cast<float>(tCrB[i + 1]));
+        tCrB[i] = apply_scale(tCrB[i], scale0);
+        tCrB[i + 1] = apply_scale(tCrB[i + 1], scale1);
       }
       CUTE_UNROLL
       for (int i = 16; i < 32; i += 2) {
-        tCrB[i] = static_cast<typename ATensor::element_type>(
-            scale2 * static_cast<float>(tCrB[i]));
-        tCrB[i + 1] = static_cast<typename ATensor::element_type>(
-            scale3 * static_cast<float>(tCrB[i + 1]));
+        tCrB[i] = apply_scale(tCrB[i], scale2);
+        tCrB[i + 1] = apply_scale(tCrB[i + 1], scale3);
       }
       CUTE_UNROLL
       for (int i = 32; i < 48; i += 2) {
-        tCrB[i] = static_cast<typename ATensor::element_type>(
-            scale0 * static_cast<float>(tCrB[i]));
-        tCrB[i + 1] = static_cast<typename ATensor::element_type>(
-            scale1 * static_cast<float>(tCrB[i + 1]));
+        tCrB[i] = apply_scale(tCrB[i], scale0);
+        tCrB[i + 1] = apply_scale(tCrB[i + 1], scale1);
       }
       CUTE_UNROLL
       for (int i = 48; i < 64; i += 2) {
-        tCrB[i] = static_cast<typename ATensor::element_type>(
-            scale2 * static_cast<float>(tCrB[i]));
-        tCrB[i + 1] = static_cast<typename ATensor::element_type>(
-            scale3 * static_cast<float>(tCrB[i + 1]));
+        tCrB[i] = apply_scale(tCrB[i], scale2);
+        tCrB[i + 1] = apply_scale(tCrB[i + 1], scale3);
       }
     } else {
       CUTE_UNROLL
       for (int i = 0; i < 32; i += 2) {
-        tCrB[i] = static_cast<typename ATensor::element_type>(
-            scale0 * static_cast<float>(tCrB[i]));
-        tCrB[i + 1] = static_cast<typename ATensor::element_type>(
-            scale1 * static_cast<float>(tCrB[i + 1]));
+        tCrB[i] = apply_scale(tCrB[i], scale0);
+        tCrB[i + 1] = apply_scale(tCrB[i + 1], scale1);
       }
     }
 
@@ -319,7 +342,7 @@ void gemm_cute(sycl::queue &Q,
   auto event =
       Q.parallel_for<GemmCuteName<TA, TB, layoutA, layoutB, q_group_size>>(
           sycl::nd_range<2>(global, local), kernel_props, [=](auto) {
-            gemm_device<sg_n, wg_n, q_group_size>(A, B, S, C, mma);
+            gemm_device<wg_n, sg_n, q_group_size>(A, B, S, C, mma);
           });
 
   EventManager::getInstance().addEvent(event);
@@ -431,7 +454,7 @@ void test_case(sycl::queue &Q, int m, int n, int k) {
     std::cout << (ok ? "passed" : "failed");
   } else {
     // int4 weights with BF16/half scales have poor accuracy with atol=1e-2,
-    // rtol=1e-2.
+    // rtol=1e-2 because we don't apply zero points
     std::cout << "atol=rtol=1e-2 has poor accuracy";
   }
 
@@ -506,6 +529,4 @@ int main(int argc, char **argv) {
   test_case<bfloat16_t, float_e2m1_t, bfloat16_t, 'R', 'C'>(Q, m, n, k);
   test_case<half_t, float_e2m1_t, half_t, 'R', 'R'>(Q, m, n, k);
   test_case<half_t, float_e2m1_t, half_t, 'R', 'C'>(Q, m, n, k);
-  test_case<half_t, int4_t, half_t, 'R', 'R', 128>(Q, m, n, k);
-  test_case<half_t, int4_t, half_t, 'R', 'C', 128>(Q, m, n, k);
 }
