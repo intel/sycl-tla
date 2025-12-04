@@ -214,7 +214,7 @@ CUTE_DEVICE void gemm_device(ATensor const &A, // (M,K)
       auto scales_per_thread = thr_copy_scales.partition_S(cScales_per_sg);
       copy(copy_scales, scales_per_thread(_, 0, 0), scales_e8m0);
       reorder(scales_e8m0_sg_tensor, scales_float_sg_tensor);
-      // For non MX-format scaledMM, it'd be beter if prefetch is outside
+      // For non MX-format scaledMM, it'd be better if prefetch is outside
       // Even in this file, we could use if constexpr to add conditionals
       // for that case, but it'd make the code messy because it requires
       // duplication
