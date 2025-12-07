@@ -25,442 +25,196 @@
  * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
  * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+
+#include "cutlass/detail/layout.hpp"
 
 #include <cute/tensor.hpp>
 #include <cute/atom/copy_atom.hpp>
 #include <cute/atom/copy_traits_xe_2d.hpp>
 #include <cute/arch/copy_xe_2d.hpp>
 #include <sycl/sycl.hpp>
+#include <cute/util/compat.hpp>
+
 #include "cutlass_unit_test.h"
+#include "utils.hpp"
 
 using namespace cute;
+using namespace cutlass;
+using namespace compat::experimental;
 
-#if (IGC_VERSION_MAJOR > 2) || (IGC_VERSION_MAJOR == 2 && IGC_VERSION_MINOR >= 18) 
+#define SUBGROUP_SIZE (16)
 
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_API_Declaration) {
-  // Template: XE_LOAD_2D_TRANSPOSE<Bits, Height, Width>
-  // Constraints: Bits == 32 || Bits == 64, Width <= 8
-  // For 64-bit: Height == 8 && Width < 4
-  
-  // Test 32-bit transpose operations
-  using TransposeOp_32bit_2x4 = XE_LOAD_2D_TRANSPOSE<32, 2, 4>;
-  using TransposeOp_32bit_4x8 = XE_LOAD_2D_TRANSPOSE<32, 4, 8>;
-  using TransposeOp_32bit_8x2 = XE_LOAD_2D_TRANSPOSE<32, 8, 2>;
-  
-  // Test 64-bit transpose operations (limited constraints)
-  using TransposeOp_64bit_8x2 = XE_LOAD_2D_TRANSPOSE<64, 8, 2>;
-  using TransposeOp_64bit_8x3 = XE_LOAD_2D_TRANSPOSE<64, 8, 3>;
-  
-  // Test that the operations have the required static members from XE_Copy_Op_2D_Base
-  static_assert(TransposeOp_32bit_2x4::AtomHeight == 2);
-  static_assert(TransposeOp_32bit_2x4::AtomWidth == 4);
-  static_assert(TransposeOp_32bit_2x4::CopyBits == 32);
-  
-  static_assert(TransposeOp_32bit_4x8::AtomHeight == 4);
-  static_assert(TransposeOp_32bit_4x8::AtomWidth == 8);
-  static_assert(TransposeOp_32bit_4x8::CopyBits == 32);
-  
-  static_assert(TransposeOp_64bit_8x2::AtomHeight == 8);
-  static_assert(TransposeOp_64bit_8x2::AtomWidth == 2);
-  static_assert(TransposeOp_64bit_8x2::CopyBits == 64);
-  
-  EXPECT_TRUE(true) << "XE_LOAD_2D_TRANSPOSE API types declared successfully";
+#if (IGC_VERSION_MAJOR > 2) || (IGC_VERSION_MAJOR == 2 && IGC_VERSION_MINOR >= 18)
+
+// Kernel name for unique identification
+template<class...> class XETranspose2DKernelName;
+
+// Device kernel for XE_LOAD_2D_TRANSPOSE testing
+// Note: Transpose load performs HW-level transpose during load operation
+// Memory layout (Height×Width) is transposed to register layout (Width×Height)
+template <class SrcTensor, class DstTensor, int Bits, int Height, int Width>
+void xe_transpose_2d_kernel(SrcTensor src, DstTensor dst) {
+  using namespace cute;
+  using Element = typename SrcTensor::value_type;
+
+  // Only execute with the first subgroup to avoid race conditions
+  if (sycl::ext::oneapi::this_work_item::get_nd_item<1>().get_group(0) == 0) {
+    // Get thread/subgroup information
+    auto local_id = int(sycl::ext::oneapi::this_work_item::get_nd_item<1>().get_local_id(0));
+
+    // Create block 2D transpose load inside kernel (device-only operation)
+    using TransposeOp = XE_LOAD_2D_TRANSPOSE<Bits, Height, Width>;
+    auto tiled_transpose = make_block_2d_copy(TransposeOp{}, src);
+
+    // Get thread slice of the tiled transpose
+    auto thr_transpose = tiled_transpose.get_slice(local_id);
+
+    // Create coordinate tensor for a single tile
+    // Note: coordinates are in memory space (Height×Width)
+    auto coord_shape = make_shape(Int<Height>{}, Int<Width * Bits / sizeof_bits_v<Element>>{});
+    Tensor coord_tile = make_identity_tensor(coord_shape);
+
+    // Partition source coordinates for transpose load
+    auto thr_src_coord = thr_transpose.partition_S(coord_tile);
+
+    // Create destination fragment - transpose changes the layout in registers
+    auto thr_dst_frag = thr_transpose.partition_fragment_D(coord_tile);
+
+    // Perform the transpose load operation from global memory to registers
+    // Data is transposed during this operation by hardware
+    copy(tiled_transpose, thr_src_coord, thr_dst_frag);
+
+    // For verification, we need to store the transposed data back
+    // Note: Output will be in transposed layout (Width×Height in memory)
+    // We store to the transposed destination shape
+    auto dst_coord_shape = make_shape(Int<Width * Bits / sizeof_bits_v<Element>>{}, Int<Height>{});
+    Tensor dst_coord_tile = make_identity_tensor(dst_coord_shape);
+
+    using StoreOp = XE_STORE_2D<Bits, Width, Height>;  // Swapped dimensions
+    auto tiled_store = make_block_2d_copy(StoreOp{}, dst);
+    auto thr_store = tiled_store.get_slice(local_id);
+
+    // Create destination coordinates for the store operation
+    auto thr_dst_coord = thr_store.partition_D(dst_coord_tile);
+    auto thr_src_frag = thr_store.partition_fragment_S(dst_coord_tile);
+
+    // Copy from transpose fragment to store fragment
+    copy(thr_dst_frag, thr_src_frag);
+
+    // Perform the store operation from registers to global memory
+    copy(tiled_store, thr_src_frag, thr_dst_coord);
+
+    // Synchronize to ensure all threads complete their operations
+    sycl::group_barrier(sycl::ext::oneapi::this_work_item::get_nd_item<1>().get_group());
+  }
 }
 
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_Constraints) {
-  // Test that the compile-time constraints are enforced
-  
-  // Valid 32-bit operations
-  using Valid32_1 = XE_LOAD_2D_TRANSPOSE<32, 1, 1>;
-  using Valid32_2 = XE_LOAD_2D_TRANSPOSE<32, 16, 8>; // Width <= 8
-  
-  // Valid 64-bit operations (Height == 8 && Width < 4)
-  using Valid64_1 = XE_LOAD_2D_TRANSPOSE<64, 8, 1>;
-  using Valid64_2 = XE_LOAD_2D_TRANSPOSE<64, 8, 2>;
-  using Valid64_3 = XE_LOAD_2D_TRANSPOSE<64, 8, 3>;
-  
-  static_assert(Valid32_1::CopyBits == 32);
-  static_assert(Valid32_2::CopyBits == 32);
-  static_assert(Valid64_1::CopyBits == 64);
-  static_assert(Valid64_2::CopyBits == 64);
-  static_assert(Valid64_3::CopyBits == 64);
-  
-  EXPECT_TRUE(true) << "XE_LOAD_2D_TRANSPOSE constraint validation successful";
+// Host test function template for transpose operations
+template <typename Element, int Bits, int Height, int Width>
+void test_xe_transpose_2d() {
+  using namespace cute;
+
+  // Source matrix dimensions (Height×Width in memory)
+  constexpr int M = Height;
+  constexpr int N = Width * sizeof_bits_v<Element> / Bits;
+
+  // Destination will be transposed (Width×Height in memory)
+  constexpr int M_dst = N;
+  constexpr int N_dst = M;
+
+  // Ensure proper alignment
+  constexpr int elem_alignment = 16 / sizeof(Element);
+  constexpr int aligned_N = ((N + elem_alignment - 1) / elem_alignment) * elem_alignment;
+  constexpr int aligned_M_dst = ((M_dst + elem_alignment - 1) / elem_alignment) * elem_alignment;
+
+  // Allocate host memory
+  cutlass::host_vector<Element> host_src(M * aligned_N);
+  cutlass::host_vector<Element> host_dst(M_dst * aligned_M_dst);
+
+  // Initialize source with test pattern
+  for (int i = 0; i < M; ++i) {
+    for (int j = 0; j < N; ++j) {
+      Element val;
+      if constexpr (std::is_floating_point_v<Element> ||
+                    std::is_same_v<Element, half_t> ||
+                    std::is_same_v<Element, bfloat16_t>) {
+        val = Element(static_cast<float>(i * N + j) / 100.0f);
+      } else {
+        val = static_cast<Element>((i * N + j) % 256);
+      }
+      host_src[i * aligned_N + j] = val;
+    }
+  }
+
+  // Copy to device
+  cutlass::device_vector<Element> device_src = host_src;
+  cutlass::device_vector<Element> device_dst(M_dst * aligned_M_dst);
+
+  // Create source tensor (Height×Width)
+  Tensor tensor_src =
+        make_tensor(make_gmem_ptr(device_src.data()),
+                    make_layout(Shape<Int<M>, Int<aligned_N>>{},
+                               Stride<Int<aligned_N>, _1>{}));
+
+  // Create destination tensor (Width×Height) - transposed shape
+  Tensor tensor_dst =
+        make_tensor(make_gmem_ptr(device_dst.data()),
+                    make_layout(Shape<Int<M_dst>, Int<aligned_M_dst>>{},
+                               Stride<Int<aligned_M_dst>, _1>{}));
+
+  // Launch kernel
+  auto blockDim = compat::dim3(SUBGROUP_SIZE);
+  auto gridDim = compat::dim3(1);
+
+  launch<xe_transpose_2d_kernel<decltype(tensor_src), decltype(tensor_dst), Bits, Height, Width>,
+         XETranspose2DKernelName<decltype(tensor_src), decltype(tensor_dst)>>(
+    launch_policy{
+      gridDim, blockDim,
+      kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}
+    },
+    tensor_src, tensor_dst);
+
+  compat::wait_and_throw();
+  host_dst = device_dst;
+
+  // Verify transpose: dst[j][i] should equal src[i][j]
+  for (int i = 0; i < M; ++i) {
+    for (int j = 0; j < N; ++j) {
+      Element src_val = host_src[i * aligned_N + j];
+      Element dst_val = host_dst[j * aligned_M_dst + i];
+      EXPECT_EQ(dst_val, src_val)
+        << "Mismatch at src[" << i << "][" << j << "] vs dst[" << j << "][" << i << "]";
+    }
+  }
 }
 
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_MinimalConfigs) {
-  // Test minimal 32-bit transpose configurations
-  using Transpose_32bit_1x1 = XE_LOAD_2D_TRANSPOSE<32, 1, 1>;
-  using Transpose_32bit_1x2 = XE_LOAD_2D_TRANSPOSE<32, 1, 2>;
-  using Transpose_32bit_2x1 = XE_LOAD_2D_TRANSPOSE<32, 2, 1>;
-  using Transpose_32bit_2x2 = XE_LOAD_2D_TRANSPOSE<32, 2, 2>;
-  
-  static_assert(Transpose_32bit_1x1::CopyBits == 32);
-  static_assert(Transpose_32bit_1x1::AtomHeight == 1 && Transpose_32bit_1x1::AtomWidth == 1);
-  
-  static_assert(Transpose_32bit_1x2::CopyBits == 32);
-  static_assert(Transpose_32bit_1x2::AtomHeight == 1 && Transpose_32bit_1x2::AtomWidth == 2);
-  
-  static_assert(Transpose_32bit_2x1::CopyBits == 32);
-  static_assert(Transpose_32bit_2x1::AtomHeight == 2 && Transpose_32bit_2x1::AtomWidth == 1);
-  
-  static_assert(Transpose_32bit_2x2::CopyBits == 32);
-  static_assert(Transpose_32bit_2x2::AtomHeight == 2 && Transpose_32bit_2x2::AtomWidth == 2);
-  
-  EXPECT_TRUE(true) << "32-bit minimal transpose configurations validated";
+// Test 32-bit transpose operations (Width ≤ 8 constraint)
+TEST(CuTe_Xe, XE_TRANSPOSE_2D_float_4x8) {
+  test_xe_transpose_2d<float, 32, 4, 8>();
 }
 
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_Width4) {
-  // Test 32-bit transpose with width = 4
-  using Transpose_32bit_1x4 = XE_LOAD_2D_TRANSPOSE<32, 1, 4>;
-  using Transpose_32bit_2x4 = XE_LOAD_2D_TRANSPOSE<32, 2, 4>;
-  using Transpose_32bit_4x4 = XE_LOAD_2D_TRANSPOSE<32, 4, 4>;
-  using Transpose_32bit_8x4 = XE_LOAD_2D_TRANSPOSE<32, 8, 4>;
-  
-  static_assert(Transpose_32bit_1x4::AtomHeight == 1 && Transpose_32bit_1x4::AtomWidth == 4);
-  static_assert(Transpose_32bit_2x4::AtomHeight == 2 && Transpose_32bit_2x4::AtomWidth == 4);
-  static_assert(Transpose_32bit_4x4::AtomHeight == 4 && Transpose_32bit_4x4::AtomWidth == 4);
-  static_assert(Transpose_32bit_8x4::AtomHeight == 8 && Transpose_32bit_8x4::AtomWidth == 4);
-  
-  EXPECT_TRUE(true) << "32-bit width=4 transpose configurations validated";
+TEST(CuTe_Xe, XE_TRANSPOSE_2D_float_8x8) {
+  test_xe_transpose_2d<float, 32, 8, 8>();
 }
 
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_Width8_MaxWidth) {
-  // Test 32-bit transpose with width = 8 (maximum allowed width)
-  using Transpose_32bit_1x8 = XE_LOAD_2D_TRANSPOSE<32, 1, 8>;
-  using Transpose_32bit_2x8 = XE_LOAD_2D_TRANSPOSE<32, 2, 8>;
-  using Transpose_32bit_4x8 = XE_LOAD_2D_TRANSPOSE<32, 4, 8>;
-  using Transpose_32bit_8x8 = XE_LOAD_2D_TRANSPOSE<32, 8, 8>;
-  using Transpose_32bit_16x8 = XE_LOAD_2D_TRANSPOSE<32, 16, 8>;
-  
-  static_assert(Transpose_32bit_1x8::AtomHeight == 1 && Transpose_32bit_1x8::AtomWidth == 8);
-  static_assert(Transpose_32bit_2x8::AtomHeight == 2 && Transpose_32bit_2x8::AtomWidth == 8);
-  static_assert(Transpose_32bit_4x8::AtomHeight == 4 && Transpose_32bit_4x8::AtomWidth == 8);
-  static_assert(Transpose_32bit_8x8::AtomHeight == 8 && Transpose_32bit_8x8::AtomWidth == 8);
-  static_assert(Transpose_32bit_16x8::AtomHeight == 16 && Transpose_32bit_16x8::AtomWidth == 8);
-  
-  EXPECT_TRUE(true) << "32-bit max width=8 transpose configurations validated";
+TEST(CuTe_Xe, XE_TRANSPOSE_2D_float_4x4) {
+  test_xe_transpose_2d<float, 32, 4, 4>();
 }
 
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_VariousHeights) {
-  // Test 32-bit transpose with various height values
-  using Transpose_32bit_1x4 = XE_LOAD_2D_TRANSPOSE<32, 1, 4>;
-  using Transpose_32bit_4x4 = XE_LOAD_2D_TRANSPOSE<32, 4, 4>;
-  using Transpose_32bit_8x4 = XE_LOAD_2D_TRANSPOSE<32, 8, 4>;
-  using Transpose_32bit_16x4 = XE_LOAD_2D_TRANSPOSE<32, 16, 4>;
-  using Transpose_32bit_32x4 = XE_LOAD_2D_TRANSPOSE<32, 32, 4>;
-  
-  static_assert(Transpose_32bit_1x4::AtomHeight == 1);
-  static_assert(Transpose_32bit_4x4::AtomHeight == 4);
-  static_assert(Transpose_32bit_8x4::AtomHeight == 8);
-  static_assert(Transpose_32bit_16x4::AtomHeight == 16);
-  static_assert(Transpose_32bit_32x4::AtomHeight == 32);
-  
-  EXPECT_TRUE(true) << "32-bit various height transpose configurations validated";
+TEST(CuTe_Xe, XE_TRANSPOSE_2D_int32_4x8) {
+  test_xe_transpose_2d<int32_t, 32, 4, 8>();
 }
 
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_SquareConfigs) {
-  // Test 32-bit square transpose configurations
-  using Transpose_32bit_1x1 = XE_LOAD_2D_TRANSPOSE<32, 1, 1>;
-  using Transpose_32bit_2x2 = XE_LOAD_2D_TRANSPOSE<32, 2, 2>;
-  using Transpose_32bit_4x4 = XE_LOAD_2D_TRANSPOSE<32, 4, 4>;
-  using Transpose_32bit_8x8 = XE_LOAD_2D_TRANSPOSE<32, 8, 8>;
-  
-  static_assert(Transpose_32bit_1x1::AtomHeight == 1 && Transpose_32bit_1x1::AtomWidth == 1);
-  static_assert(Transpose_32bit_2x2::AtomHeight == 2 && Transpose_32bit_2x2::AtomWidth == 2);
-  static_assert(Transpose_32bit_4x4::AtomHeight == 4 && Transpose_32bit_4x4::AtomWidth == 4);
-  static_assert(Transpose_32bit_8x8::AtomHeight == 8 && Transpose_32bit_8x8::AtomWidth == 8);
-  
-  EXPECT_TRUE(true) << "32-bit square transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_TallConfigs) {
-  // Test 32-bit tall (Height > Width) transpose configurations
-  using Transpose_32bit_8x1 = XE_LOAD_2D_TRANSPOSE<32, 8, 1>;
-  using Transpose_32bit_8x2 = XE_LOAD_2D_TRANSPOSE<32, 8, 2>;
-  using Transpose_32bit_16x4 = XE_LOAD_2D_TRANSPOSE<32, 16, 4>;
-  using Transpose_32bit_32x8 = XE_LOAD_2D_TRANSPOSE<32, 32, 8>;
-  
-  static_assert(Transpose_32bit_8x1::AtomHeight == 8 && Transpose_32bit_8x1::AtomWidth == 1);
-  static_assert(Transpose_32bit_8x2::AtomHeight == 8 && Transpose_32bit_8x2::AtomWidth == 2);
-  static_assert(Transpose_32bit_16x4::AtomHeight == 16 && Transpose_32bit_16x4::AtomWidth == 4);
-  static_assert(Transpose_32bit_32x8::AtomHeight == 32 && Transpose_32bit_32x8::AtomWidth == 8);
-  
-  EXPECT_TRUE(true) << "32-bit tall transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_WideConfigs) {
-  // Test 32-bit wide (Width > Height) transpose configurations
-  using Transpose_32bit_1x8 = XE_LOAD_2D_TRANSPOSE<32, 1, 8>;
-  using Transpose_32bit_2x8 = XE_LOAD_2D_TRANSPOSE<32, 2, 8>;
-  using Transpose_32bit_4x8 = XE_LOAD_2D_TRANSPOSE<32, 4, 8>;
-  using Transpose_32bit_1x4 = XE_LOAD_2D_TRANSPOSE<32, 1, 4>;
-  
-  static_assert(Transpose_32bit_1x8::AtomHeight == 1 && Transpose_32bit_1x8::AtomWidth == 8);
-  static_assert(Transpose_32bit_2x8::AtomHeight == 2 && Transpose_32bit_2x8::AtomWidth == 8);
-  static_assert(Transpose_32bit_4x8::AtomHeight == 4 && Transpose_32bit_4x8::AtomWidth == 8);
-  static_assert(Transpose_32bit_1x4::AtomHeight == 1 && Transpose_32bit_1x4::AtomWidth == 4);
-  
-  EXPECT_TRUE(true) << "32-bit wide transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_64bit_AllValid) {
-  // Test all valid 64-bit transpose configurations (Height=8, Width<4)
-  using Transpose_64bit_8x1 = XE_LOAD_2D_TRANSPOSE<64, 8, 1>;
-  using Transpose_64bit_8x2 = XE_LOAD_2D_TRANSPOSE<64, 8, 2>;
-  using Transpose_64bit_8x3 = XE_LOAD_2D_TRANSPOSE<64, 8, 3>;
-  
-  static_assert(Transpose_64bit_8x1::CopyBits == 64);
-  static_assert(Transpose_64bit_8x1::AtomHeight == 8 && Transpose_64bit_8x1::AtomWidth == 1);
-  
-  static_assert(Transpose_64bit_8x2::CopyBits == 64);
-  static_assert(Transpose_64bit_8x2::AtomHeight == 8 && Transpose_64bit_8x2::AtomWidth == 2);
-  
-  static_assert(Transpose_64bit_8x3::CopyBits == 64);
-  static_assert(Transpose_64bit_8x3::AtomHeight == 8 && Transpose_64bit_8x3::AtomWidth == 3);
-  
-  EXPECT_TRUE(true) << "64-bit all valid transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_64bit_Constraints) {
-  // Test that 64-bit transpose respects its strict constraints
-  // Valid: Height == 8 && Width < 4
-  using Valid_64bit_1 = XE_LOAD_2D_TRANSPOSE<64, 8, 1>;
-  using Valid_64bit_2 = XE_LOAD_2D_TRANSPOSE<64, 8, 2>;
-  using Valid_64bit_3 = XE_LOAD_2D_TRANSPOSE<64, 8, 3>;
-  
-  // Verify all have correct dimensions
-  static_assert(Valid_64bit_1::AtomHeight == 8 && Valid_64bit_1::AtomWidth == 1);
-  static_assert(Valid_64bit_2::AtomHeight == 8 && Valid_64bit_2::AtomWidth == 2);
-  static_assert(Valid_64bit_3::AtomHeight == 8 && Valid_64bit_3::AtomWidth == 3);
-  
-  // Verify all have 64-bit size
-  static_assert(Valid_64bit_1::CopyBits == 64);
-  static_assert(Valid_64bit_2::CopyBits == 64);
-  static_assert(Valid_64bit_3::CopyBits == 64);
-  
-  EXPECT_TRUE(true) << "64-bit constraint validation successful";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_PowerOfTwo_Heights) {
-  // Test 32-bit transpose with power-of-two heights
-  using Transpose_32bit_1x4 = XE_LOAD_2D_TRANSPOSE<32, 1, 4>;
-  using Transpose_32bit_2x4 = XE_LOAD_2D_TRANSPOSE<32, 2, 4>;
-  using Transpose_32bit_4x4 = XE_LOAD_2D_TRANSPOSE<32, 4, 4>;
-  using Transpose_32bit_8x4 = XE_LOAD_2D_TRANSPOSE<32, 8, 4>;
-  using Transpose_32bit_16x4 = XE_LOAD_2D_TRANSPOSE<32, 16, 4>;
-  using Transpose_32bit_32x4 = XE_LOAD_2D_TRANSPOSE<32, 32, 4>;
-  
-  static_assert(Transpose_32bit_1x4::AtomHeight == 1);
-  static_assert(Transpose_32bit_2x4::AtomHeight == 2);
-  static_assert(Transpose_32bit_4x4::AtomHeight == 4);
-  static_assert(Transpose_32bit_8x4::AtomHeight == 8);
-  static_assert(Transpose_32bit_16x4::AtomHeight == 16);
-  static_assert(Transpose_32bit_32x4::AtomHeight == 32);
-  
-  EXPECT_TRUE(true) << "32-bit power-of-two height transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_AllWidths) {
-  // Test 32-bit transpose with all valid widths (1-8) and height=8
-  using Transpose_32bit_8x1 = XE_LOAD_2D_TRANSPOSE<32, 8, 1>;
-  using Transpose_32bit_8x2 = XE_LOAD_2D_TRANSPOSE<32, 8, 2>;
-  using Transpose_32bit_8x3 = XE_LOAD_2D_TRANSPOSE<32, 8, 3>;
-  using Transpose_32bit_8x4 = XE_LOAD_2D_TRANSPOSE<32, 8, 4>;
-  using Transpose_32bit_8x5 = XE_LOAD_2D_TRANSPOSE<32, 8, 5>;
-  using Transpose_32bit_8x6 = XE_LOAD_2D_TRANSPOSE<32, 8, 6>;
-  using Transpose_32bit_8x7 = XE_LOAD_2D_TRANSPOSE<32, 8, 7>;
-  using Transpose_32bit_8x8 = XE_LOAD_2D_TRANSPOSE<32, 8, 8>;
-  
-  static_assert(Transpose_32bit_8x1::AtomWidth == 1);
-  static_assert(Transpose_32bit_8x2::AtomWidth == 2);
-  static_assert(Transpose_32bit_8x3::AtomWidth == 3);
-  static_assert(Transpose_32bit_8x4::AtomWidth == 4);
-  static_assert(Transpose_32bit_8x5::AtomWidth == 5);
-  static_assert(Transpose_32bit_8x6::AtomWidth == 6);
-  static_assert(Transpose_32bit_8x7::AtomWidth == 7);
-  static_assert(Transpose_32bit_8x8::AtomWidth == 8);
-  
-  EXPECT_TRUE(true) << "32-bit all width values transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_MatMul_Optimized) {
-  // Test 32-bit transpose configurations useful for matrix multiplication
-  // Common for transposing A matrix in row-major to column-major for DPAS
-  using MatMul_32bit_8x8 = XE_LOAD_2D_TRANSPOSE<32, 8, 8>;
-  using MatMul_32bit_16x8 = XE_LOAD_2D_TRANSPOSE<32, 16, 8>;
-  using MatMul_32bit_8x4 = XE_LOAD_2D_TRANSPOSE<32, 8, 4>;
-  using MatMul_32bit_16x4 = XE_LOAD_2D_TRANSPOSE<32, 16, 4>;
-  
-  static_assert(MatMul_32bit_8x8::CopyBits == 32);
-  static_assert(MatMul_32bit_8x8::AtomHeight == 8 && MatMul_32bit_8x8::AtomWidth == 8);
-  
-  static_assert(MatMul_32bit_16x8::CopyBits == 32);
-  static_assert(MatMul_32bit_16x8::AtomHeight == 16 && MatMul_32bit_16x8::AtomWidth == 8);
-  
-  static_assert(MatMul_32bit_8x4::CopyBits == 32);
-  static_assert(MatMul_32bit_8x4::AtomHeight == 8 && MatMul_32bit_8x4::AtomWidth == 4);
-  
-  static_assert(MatMul_32bit_16x4::CopyBits == 32);
-  static_assert(MatMul_32bit_16x4::AtomHeight == 16 && MatMul_32bit_16x4::AtomWidth == 4);
-  
-  EXPECT_TRUE(true) << "32-bit MatMul-optimized transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_SmallTiles) {
-  // Test 32-bit transpose small tiles for boundary handling
-  using Small_32bit_1x1 = XE_LOAD_2D_TRANSPOSE<32, 1, 1>;
-  using Small_32bit_2x1 = XE_LOAD_2D_TRANSPOSE<32, 2, 1>;
-  using Small_32bit_1x2 = XE_LOAD_2D_TRANSPOSE<32, 1, 2>;
-  using Small_32bit_4x2 = XE_LOAD_2D_TRANSPOSE<32, 4, 2>;
-  
-  static_assert(Small_32bit_1x1::AtomHeight == 1 && Small_32bit_1x1::AtomWidth == 1);
-  static_assert(Small_32bit_2x1::AtomHeight == 2 && Small_32bit_2x1::AtomWidth == 1);
-  static_assert(Small_32bit_1x2::AtomHeight == 1 && Small_32bit_1x2::AtomWidth == 2);
-  static_assert(Small_32bit_4x2::AtomHeight == 4 && Small_32bit_4x2::AtomWidth == 2);
-  
-  EXPECT_TRUE(true) << "32-bit small tile transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_DataSize_Consistency) {
-  // Test that CopyBits correctly reflects 32 or 64 bits
-  using Op_32bit_Small = XE_LOAD_2D_TRANSPOSE<32, 2, 2>;
-  using Op_32bit_Large = XE_LOAD_2D_TRANSPOSE<32, 32, 8>;
-  using Op_64bit_Valid1 = XE_LOAD_2D_TRANSPOSE<64, 8, 1>;
-  using Op_64bit_Valid2 = XE_LOAD_2D_TRANSPOSE<64, 8, 3>;
-  
-  // All 32-bit variants should have CopyBits == 32
-  static_assert(Op_32bit_Small::CopyBits == 32);
-  static_assert(Op_32bit_Large::CopyBits == 32);
-  
-  // All 64-bit variants should have CopyBits == 64
-  static_assert(Op_64bit_Valid1::CopyBits == 64);
-  static_assert(Op_64bit_Valid2::CopyBits == 64);
-  
-  EXPECT_TRUE(true) << "Transpose data size consistency validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_Width_Progression) {
-  // Test 32-bit transpose with progressive widths and fixed height
-  using Transpose_16x1 = XE_LOAD_2D_TRANSPOSE<32, 16, 1>;
-  using Transpose_16x2 = XE_LOAD_2D_TRANSPOSE<32, 16, 2>;
-  using Transpose_16x3 = XE_LOAD_2D_TRANSPOSE<32, 16, 3>;
-  using Transpose_16x4 = XE_LOAD_2D_TRANSPOSE<32, 16, 4>;
-  using Transpose_16x5 = XE_LOAD_2D_TRANSPOSE<32, 16, 5>;
-  using Transpose_16x6 = XE_LOAD_2D_TRANSPOSE<32, 16, 6>;
-  using Transpose_16x7 = XE_LOAD_2D_TRANSPOSE<32, 16, 7>;
-  using Transpose_16x8 = XE_LOAD_2D_TRANSPOSE<32, 16, 8>;
-  
-  static_assert(Transpose_16x1::AtomHeight == 16 && Transpose_16x1::AtomWidth == 1);
-  static_assert(Transpose_16x2::AtomHeight == 16 && Transpose_16x2::AtomWidth == 2);
-  static_assert(Transpose_16x3::AtomHeight == 16 && Transpose_16x3::AtomWidth == 3);
-  static_assert(Transpose_16x4::AtomHeight == 16 && Transpose_16x4::AtomWidth == 4);
-  static_assert(Transpose_16x5::AtomHeight == 16 && Transpose_16x5::AtomWidth == 5);
-  static_assert(Transpose_16x6::AtomHeight == 16 && Transpose_16x6::AtomWidth == 6);
-  static_assert(Transpose_16x7::AtomHeight == 16 && Transpose_16x7::AtomWidth == 7);
-  static_assert(Transpose_16x8::AtomHeight == 16 && Transpose_16x8::AtomWidth == 8);
-  
-  EXPECT_TRUE(true) << "32-bit progressive width transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_32bit_LargeTiles) {
-  // Test 32-bit transpose with larger tile configurations (Height <= 32 limit)
-  using Large_32bit_32x8 = XE_LOAD_2D_TRANSPOSE<32, 32, 8>;
-  using Large_32bit_32x6 = XE_LOAD_2D_TRANSPOSE<32, 32, 6>;
-  using Large_32bit_32x4 = XE_LOAD_2D_TRANSPOSE<32, 32, 4>;
-  using Large_32bit_32x2 = XE_LOAD_2D_TRANSPOSE<32, 32, 2>;
-  
-  static_assert(Large_32bit_32x8::CopyBits == 32);
-  static_assert(Large_32bit_32x8::AtomHeight == 32 && Large_32bit_32x8::AtomWidth == 8);
-  
-  static_assert(Large_32bit_32x6::CopyBits == 32);
-  static_assert(Large_32bit_32x6::AtomHeight == 32 && Large_32bit_32x6::AtomWidth == 6);
-  
-  static_assert(Large_32bit_32x4::CopyBits == 32);
-  static_assert(Large_32bit_32x4::AtomHeight == 32 && Large_32bit_32x4::AtomWidth == 4);
-  
-  static_assert(Large_32bit_32x2::CopyBits == 32);
-  static_assert(Large_32bit_32x2::AtomHeight == 32 && Large_32bit_32x2::AtomWidth == 2);
-  
-  EXPECT_TRUE(true) << "32-bit large tile transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_Mixed_AspectRatios) {
-  // Test various aspect ratios for 32-bit transpose (Height <= 32 limit)
-  using AspectRatio_1to8 = XE_LOAD_2D_TRANSPOSE<32, 1, 8>;    // 1:8
-  using AspectRatio_2to8 = XE_LOAD_2D_TRANSPOSE<32, 2, 8>;    // 1:4
-  using AspectRatio_4to8 = XE_LOAD_2D_TRANSPOSE<32, 4, 8>;    // 1:2
-  using AspectRatio_8to8 = XE_LOAD_2D_TRANSPOSE<32, 8, 8>;    // 1:1
-  using AspectRatio_16to8 = XE_LOAD_2D_TRANSPOSE<32, 16, 8>;  // 2:1
-  using AspectRatio_32to8 = XE_LOAD_2D_TRANSPOSE<32, 32, 8>;  // 4:1
-  using AspectRatio_32to4 = XE_LOAD_2D_TRANSPOSE<32, 32, 4>;  // 8:1
-  
-  static_assert(AspectRatio_1to8::AtomHeight == 1 && AspectRatio_1to8::AtomWidth == 8);
-  static_assert(AspectRatio_2to8::AtomHeight == 2 && AspectRatio_2to8::AtomWidth == 8);
-  static_assert(AspectRatio_4to8::AtomHeight == 4 && AspectRatio_4to8::AtomWidth == 8);
-  static_assert(AspectRatio_8to8::AtomHeight == 8 && AspectRatio_8to8::AtomWidth == 8);
-  static_assert(AspectRatio_16to8::AtomHeight == 16 && AspectRatio_16to8::AtomWidth == 8);
-  static_assert(AspectRatio_32to8::AtomHeight == 32 && AspectRatio_32to8::AtomWidth == 8);
-  static_assert(AspectRatio_32to4::AtomHeight == 32 && AspectRatio_32to4::AtomWidth == 4);
-  
-  EXPECT_TRUE(true) << "Mixed aspect ratio transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_BF16_FP16_UseCase) {
-  // Test transpose configurations useful for bf16/fp16 data (stored as 32-bit for transpose)
-  // Transpose allows loading 16-bit data as 32-bit, then converting after transpose
-  using BF16_8x8 = XE_LOAD_2D_TRANSPOSE<32, 8, 8>;
-  using BF16_16x8 = XE_LOAD_2D_TRANSPOSE<32, 16, 8>;
-  using BF16_8x4 = XE_LOAD_2D_TRANSPOSE<32, 8, 4>;
-  using BF16_16x4 = XE_LOAD_2D_TRANSPOSE<32, 16, 4>;
-  
-  // These are 32-bit operations but can be used with 16-bit data
-  static_assert(BF16_8x8::CopyBits == 32);
-  static_assert(BF16_8x8::AtomHeight == 8 && BF16_8x8::AtomWidth == 8);
-  
-  static_assert(BF16_16x8::CopyBits == 32);
-  static_assert(BF16_16x8::AtomHeight == 16 && BF16_16x8::AtomWidth == 8);
-  
-  static_assert(BF16_8x4::CopyBits == 32);
-  static_assert(BF16_8x4::AtomHeight == 8 && BF16_8x4::AtomWidth == 4);
-  
-  static_assert(BF16_16x4::CopyBits == 32);
-  static_assert(BF16_16x4::AtomHeight == 16 && BF16_16x4::AtomWidth == 4);
-  
-  EXPECT_TRUE(true) << "BF16/FP16 use case transpose configurations validated";
-}
-
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_64bit_UseCase) {
-  // Test 64-bit transpose use cases (double precision or two 32-bit values)
-  // Limited to Height=8, Width in {1, 2, 3}
-  using Double_8x1 = XE_LOAD_2D_TRANSPOSE<64, 8, 1>;
-  using Double_8x2 = XE_LOAD_2D_TRANSPOSE<64, 8, 2>;
-  using Double_8x3 = XE_LOAD_2D_TRANSPOSE<64, 8, 3>;
-  
-  // All must be 64-bit
-  static_assert(Double_8x1::CopyBits == 64);
-  static_assert(Double_8x2::CopyBits == 64);
-  static_assert(Double_8x3::CopyBits == 64);
-  
-  // All must have height=8
-  static_assert(Double_8x1::AtomHeight == 8);
-  static_assert(Double_8x2::AtomHeight == 8);
-  static_assert(Double_8x3::AtomHeight == 8);
-  
-  // Widths must be < 4
-  static_assert(Double_8x1::AtomWidth == 1);
-  static_assert(Double_8x2::AtomWidth == 2);
-  static_assert(Double_8x3::AtomWidth == 3);
-  
-  EXPECT_TRUE(true) << "64-bit use case transpose configurations validated";
+TEST(CuTe_Xe, XE_TRANSPOSE_2D_uint32_4x8) {
+  test_xe_transpose_2d<uint32_t, 32, 4, 8>();
 }
 
 #else
 
-TEST(CuTe_Xe, XE_LOAD_2D_TRANSPOSE_SKIPPED) {
+TEST(CuTe_Xe, XE_TRANSPOSE_2D_SKIPPED) {
   GTEST_SKIP() << "XE_LOAD_2D_TRANSPOSE tests require IGC version 2.18 or higher. skipped";
 }
 
