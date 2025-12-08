@@ -246,7 +246,8 @@ public:
     using namespace sycl::ext::oneapi::this_work_item;
 
     if constexpr (ReduceK{} == _1{}) {
-      return std::make_tuple(tArA, tA_sum, true);
+      ReduceFragARow rA_sum;
+      return std::make_tuple(tArA, tA_sum, rA_sum, true);
     } else {
       /* Identify A tile ID and k block for this subgroup. */
       auto thr_vak = group<1,3>(TiledMMAPV{}.get_thr_layout_vmnk()).get_flat_coord(assert_uniform(thr_id));
