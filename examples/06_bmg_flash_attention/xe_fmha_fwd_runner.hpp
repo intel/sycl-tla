@@ -147,7 +147,7 @@ struct Options {
         << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
         << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
         << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
-        << "  --iterations=<int>          Iterations\n\n"
+        << "  --iterations=<int>          Iterations\n"
         << "  --verify=<int>              Specify whether to verify.\n\n";
     return out;
   }
@@ -349,6 +349,16 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     int offset_v_cache = 0;
     int offset_o = 0;
 
+    std::vector<int> page_table_host;
+    std::vector<int> num_pages_per_seq_host;
+    if (paged_kv_cache.page_size > 0) {
+      page_table_host.resize(paged_kv_cache.page_table.size());
+      compat::memcpy(page_table_host.data(), paged_kv_cache.page_table.get(), page_table_host.size() * sizeof(int));
+      num_pages_per_seq_host.resize(paged_kv_cache.num_pages_per_seq.size());
+      compat::memcpy(num_pages_per_seq_host.data(), paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq_host.size() * sizeof(int));
+      compat::wait();
+    }
+
     // loop over the batch dimension to compute the output
     // to avoid the risk of running out of device memory
     int q_group_size = num_heads_q/num_heads_kv;
@@ -378,19 +388,42 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
         if (seq_len_kv_cache > 0) {
             block_K_concat.reset(head_size_qk * seq_len_kv_total);
             block_V_concat.reset(seq_len_kv_total * head_size_vo);
-            compat::memcpy<ElementK_>(
-                  block_K_concat.get(),
-                  block_K_cache_.get() + offset_k_cache,
-                  head_size_qk * seq_len_kv_cache);
+            
+            if (paged_kv_cache.page_size > 0) {
+              int page_size = paged_kv_cache.page_size;
+              int start_page_idx = isVarLen ? num_pages_per_seq_host[b] : b * (seq_len_kv_cache / page_size);
+              int num_pages = ceil_div(seq_len_kv_cache, page_size);
+
+              for (int i = 0; i < num_pages; ++i) {
+                int physical_page_id = page_table_host[start_page_idx + i];
+                int current_copy_len = std::min(page_size, seq_len_kv_cache - i * page_size);
+
+                compat::memcpy<ElementK_>(
+                    block_K_concat.get() + head_size_qk * i * page_size,
+                    block_K_cache_.get() + offset_k_cache + head_size_qk * physical_page_id * page_size,
+                    head_size_qk * current_copy_len);
+                
+                compat::memcpy<ElementV_>(
+                    block_V_concat.get() + i * page_size * head_size_vo,
+                    block_V_cache_.get() + offset_v_cache + physical_page_id * page_size * head_size_vo,
+                    current_copy_len * head_size_vo);
+              }
+            } else {
+              compat::memcpy<ElementK_>(
+                    block_K_concat.get(),
+                    block_K_cache_.get() + offset_k_cache,
+                    head_size_qk * seq_len_kv_cache);
+              compat::memcpy<ElementV_>(
+                    block_V_concat.get(),
+                    block_V_cache_.get() + offset_v_cache,
+                    seq_len_kv_cache * head_size_vo);
+            }
+
             compat::memcpy<ElementK_>(
                   block_K_concat.get() + head_size_qk * seq_len_kv_cache,
                   block_K_.get() + offset_k,
                   head_size_qk * seq_len_kv);
             
-            compat::memcpy<ElementV_>(
-                  block_V_concat.get(),
-                  block_V_cache_.get() + offset_v_cache,
-                  seq_len_kv_cache * head_size_vo);
             compat::memcpy<ElementV_>(
                   block_V_concat.get() + seq_len_kv_cache * head_size_vo,
                   block_V_.get() + offset_v,
@@ -875,6 +908,10 @@ struct FMHAConfig {
 
   static int run(const Options &options) {
     if (persistent) {
+      if (options.use_paged_kv || options.seq_len_kv_cache > 0) {
+        std::cerr << "Error: Persistent kernel does not support paged/cached KV cache (use_paged_kv or seq_len_kv_cache > 0)." << std::endl;
+        return -1;
+      }
       return run<false, false, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>(options);
     } else if (options.use_paged_kv && !options.varlen) {
       return run<false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);

@@ -178,6 +178,20 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, PagedKV_,
     return true;
   }
 
+  CUTLASS_DEVICE
+  int get_physical_k_tile(int K, int l_coord, int seq_len_kv_cache) {
+    int next_page_logical_idx = K * get<1>(TileShapeQK{}) / params.page_size;
+    // get<1>(TileShapeQK{}) usually smaller than page_size.
+    // assuming page_size is multiple of get<1>(TileShapeQK{})
+    int tiles_per_page = params.page_size / get<1>(TileShapeQK{});
+    int batch_offset = params.num_pages_per_seq ? params.num_pages_per_seq[l_coord] : l_coord * (seq_len_kv_cache / params.page_size);
+    // if varlen, num_pages_per_seq array is used. If not, assuming fixed size.
+    return params.ptr_page_table[
+          batch_offset +                  
+          next_page_logical_idx] * tiles_per_page +            
+          K % tiles_per_page; 
+  }
+
   template <typename QVCoord>
   CUTLASS_DEVICE
   void
@@ -300,7 +314,12 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, PagedKV_,
         CUTLASS_PRAGMA_UNROLL
         for (int K = 0; K < Stages; K++) {
           if (K < kblocks_cache) {
-            prefetch(prefetch_k_cache, pKgK_cache(_,_,_,K,D));
+            if constexpr (PagedKV) {
+              int physical_K_tile = get_physical_k_tile(K, l_coord, seq_len_kv_cache);
+              prefetch(prefetch_k_cache, pKgK_cache(_,_,_,physical_K_tile,D));
+            } else {
+              prefetch(prefetch_k_cache, pKgK_cache(_,_,_,K,D));
+            }
           } else {
             prefetch(prefetch_k, pKgK(_,_,_,K - kblocks_cache,D));
           }
@@ -324,18 +343,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, PagedKV_,
       int physical_K_tile = K;
       if constexpr (PagedKV) {
         if (is_cache) {
-          int next_page_logical_idx = K * get<1>(TileShapeQK{}) / params.page_size;
-          // get<1>(TileShapeQK{}) usually smaller than page_size.
-          // assuming page_size is multiple of get<1>(TileShapeQK{})
-          int tiles_per_page = params.page_size / get<1>(TileShapeQK{});
-          int batch_offset = params.num_pages_per_seq ? params.num_pages_per_seq[l_coord] : l_coord * (seq_len_kv_cache / params.page_size);
-          // if varlen, num_pages_per_seq array is used. If not, assuming fixed size.
-          // Actually, the Runner calculates num_pages_per_seq even for fixed size.
-          physical_K_tile = params.ptr_page_table[
-                batch_offset +                  // page table for this batch
-                next_page_logical_idx           // nblock (tile idx) to logical page idx
-                ] * tiles_per_page +            // base block idx of physical page
-                K % tiles_per_page;             // offset within page
+          physical_K_tile = get_physical_k_tile(K, l_coord, seq_len_kv_cache);
         }
       }
 
@@ -344,9 +352,9 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, PagedKV_,
       for (int D = 0; D < size<4>(tKgK); D++) {
         copy(copy_q, tQgQ(_,_,_,D),   tQrQ);
         if (is_cache) {
-            copy(copy_k_cache, tKgK_cache(_,_,_,physical_K_tile,D), tKrK);
+          copy(copy_k_cache, tKgK_cache(_,_,_,physical_K_tile,D), tKrK);
         } else {
-            copy(copy_k, tKgK(_,_,_,K - kblocks_cache,D), tKrK);
+          copy(copy_k, tKgK(_,_,_,K - kblocks_cache,D), tKrK);
         }
 
         reorder(tQrQ, tSrQ);
@@ -420,14 +428,8 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, PagedKV_,
         int physical_K_next = K_next;
         if constexpr (PagedKV) {
           if (is_cache_next) {
-            int next_page_logical_idx = K_next * get<1>(TileShapeQK{}) / params.page_size;
-            int tiles_per_page = params.page_size / get<1>(TileShapeQK{});
-            int batch_offset = params.num_pages_per_seq ? params.num_pages_per_seq[l_coord] : l_coord * (seq_len_kv_cache / params.page_size);
+            physical_K_next = get_physical_k_tile(K_next, l_coord, seq_len_kv_cache);
             
-            physical_K_next = params.ptr_page_table[
-                  batch_offset +                  
-                  next_page_logical_idx] * tiles_per_page +            
-                  K_next % tiles_per_page;             
           }
         }
 
