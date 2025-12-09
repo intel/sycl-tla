@@ -103,7 +103,7 @@ if(CUTLASS_ENABLE_SYCL)
       00_bmg_gemm
       00_bmg_gemm/legacy
       01_bmg_gemm_with_collective_builder
-      02_bmg_gemm_mixed_dtype
+      # 02_bmg_gemm_mixed_dtype
       03_bmg_gemm_streamk
       04_bmg_grouped_gemm
       04_bmg_grouped_gemm/legacy
