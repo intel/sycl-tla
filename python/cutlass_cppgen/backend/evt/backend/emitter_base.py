@@ -36,6 +36,7 @@ Base class for Epilogue Visitor Emitter
 
 from cutlass_library import DataTypeTag
 from cutlass_cppgen.backend.evt.ir import TopoVisitorNode, DAGIR
+from cutlass_library.arch_constants import ( INTEL_XE12, INTEL_XE20)
 
 
 class FusionCallbacks:
@@ -53,7 +54,7 @@ class FusionCallbacks:
         self.emit_CD = emit_CD
         self.cc = cc
         self.evt_cc = 90 if cc >= 90 else cc
-        if self.cc < 90:
+        if self.cc not in [INTEL_XE12, INTEL_XE20] and self.cc < 90:
             self.namespace = "threadblock"
         else:
             self.namespace = "fusion"
