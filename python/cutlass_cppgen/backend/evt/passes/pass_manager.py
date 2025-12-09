@@ -37,10 +37,10 @@ Pass manager for DAG IR.
 from typing import Any
 
 import networkx as nx
-import torch
 
 from cutlass_cppgen.backend.evt.ir import DAGIR
 from cutlass_cppgen.backend.evt.passes.util import cc_map
+from cutlass_library.arch_constants import (INTEL_XE12, INTEL_XE20)
 
 
 class EVTPassBase:
@@ -114,7 +114,7 @@ class EVTPassBase:
                 // xe20 specific method
                 return
         """
-        if torch.xpu.is_available():
+        if self.cc in [INTEL_XE12, INTEL_XE20]:
             func_name = f"xe{cc_map[self.cc]}_{func.__name__}"
         else:
             func_name = f"sm{cc_map[self.cc]}_{func.__name__}"
