@@ -52,6 +52,7 @@ from cutlass_cppgen import CACHE_FILE, CUTLASS_PATH, cuda_install_path, logger
 from cutlass_cppgen.backend.gemm_operation import GemmOperationUniversal
 from cutlass_cppgen.backend.library import ApiVersion
 from cutlass_cppgen.backend.utils.device import device_cc
+from cutlass_library.arch_constants import ( INTEL_XE12, INTEL_XE20)
 
 IncludeTemplate = r"""#include "${include}"
 """
@@ -176,7 +177,7 @@ class ArtifactManager:
                                        "-fsycl-range-rounding=disable"]
         try:
             cc = device_cc()
-            if cc in [12, 20]:  
+            if cc in [INTEL_XE12, INTEL_XE20]:  
                 self.dpcpp()
             else:
                 self.nvcc()
