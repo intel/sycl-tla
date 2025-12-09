@@ -46,6 +46,7 @@ bmg_indicators = [
 
 import cutlass_cppgen
 from cutlass_cppgen.utils.datatypes import is_cupy_tensor, is_numpy_tensor, is_torch_tensor
+from cutlass_library.arch_constants import ( INTEL_XE12, INTEL_XE20)
 
 
 def check_cuda_errors(result: list):
@@ -89,8 +90,8 @@ def device_cc(device: int = -1) -> int:
         intel_device = cutlass_cppgen._sycl_device
         device_name = intel_device.name.lower()
         if any(indicator in device_name for indicator in bmg_indicators):
-            return 20
-        return 12
+            return INTEL_XE20
+        return INTEL_XE12
 
     deviceProp = check_cuda_errors(cudart.cudaGetDeviceProperties(device))
     major = str(deviceProp.major)
