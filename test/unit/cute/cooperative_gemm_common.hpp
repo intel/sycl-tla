@@ -627,7 +627,7 @@ void test_cooperative_gemm(GMemALayout     gmem_a_layout,
     ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform,
     ASMemCopyOp, BSMemCopyOp, CSMemCopyLdOp, CSMemCopyStOp
   >>
-  ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), sc_exp::local_mem_size{shared_memory_size}},
+  ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), sc_exp::local_mem_size{shared_memory_size}, sc_exp::kernel_properties{sycl_ext::sub_group_size<16>}},
        gmem_a_layout,
        gmem_b_layout,
        gmem_c_layout,
@@ -785,7 +785,7 @@ void test_cooperative_gemm_rmem_c(GMemALayout     gmem_a_layout,
     ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform,
     ASMemCopyOp, BSMemCopyOp
   >>
-  ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), sc_exp::local_mem_size{shared_memory_size}},
+  ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), sc_exp::local_mem_size{shared_memory_size}, sc_exp::kernel_properties{sycl_ext::sub_group_size<16>}},
        gmem_a_layout,
        gmem_b_layout,
        gmem_c_layout,
