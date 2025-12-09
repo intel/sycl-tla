@@ -46,7 +46,7 @@ from cutlass_cppgen.backend.evt.passes.pass_manager import EVTPassBase
 from cutlass_cppgen.backend.evt.passes.pass_no_op_elimination import PassNoOpElimination
 from cutlass_cppgen.backend.evt.passes.pass_shape_type_propagation import PassShapeTypePropagation
 from cutlass_cppgen.backend.evt.passes.util import cc_map
-import torch
+from cutlass_library.arch_constants import (INTEL_XE12, INTEL_XE20)
 
 
 class PassGetImpl(EVTPassBase):
@@ -82,7 +82,7 @@ class PassGetImpl(EVTPassBase):
     def ensures(self) -> None:
         # Some nodes will be lowered to NoOp, eliminate them
         self.no_op_elimination()
-        if torch.xpu.is_available():
+        if self.cc in [INTEL_XE12, INTEL_XE20]:
            sm_xe_cc_map = f"xe{cc_map[self.cc]}"
         else:
             sm_xe_cc_map = f"sm{cc_map[self.cc]}"
