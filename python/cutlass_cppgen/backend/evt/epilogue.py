@@ -37,6 +37,7 @@ Epilogue Visitor interface for compiling, and running visitor-based epilogue.
 import ctypes
 
 from cutlass_cppgen.utils.lazy_import import lazy_import
+from cutlass_library.arch_constants import (INTEL_XE12, INTEL_XE20)
 cuda = lazy_import("cuda.cuda")
 from cutlass_library import DataType
 import numpy as np
@@ -46,7 +47,6 @@ import cutlass_cppgen.backend.evt.backend
 from cutlass_cppgen.backend.frontend import TensorFrontend
 from cutlass_cppgen.utils.datatypes import is_numpy_tensor
 from cutlass_cppgen.backend.evt.passes.util import cc_map
-import torch
 
 
 class EpilogueFunctorVisitor(EpilogueFunctorBase):
@@ -59,7 +59,7 @@ class EpilogueFunctorVisitor(EpilogueFunctorBase):
     """
     def __init__(self, cc: int, visitor, element_compute=DataType.f32) -> None:
         # Type of Emitter based on CC
-        if torch.xpu.is_available():
+        if cc in [INTEL_XE12, INTEL_XE20]:
             self.emit_cls = getattr(cutlass_cppgen.backend.evt.backend, f"Xe{cc_map[cc]}Emitter")
         else:
             self.emit_cls = getattr(cutlass_cppgen.backend.evt.backend, f"Sm{cc_map[cc]}Emitter")
