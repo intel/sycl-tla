@@ -83,7 +83,7 @@ using EpilogueDescriptor = cutlass::epilogue::collective::detail::EpilogueDescri
 
 class Xe12Emitter:
     def __init__(self, operation: GemmOperationUniversal, graph) -> None:
-        fusion_callbacks = FusionCallbacks(graph, cc=90, emit_CD=False)
+        fusion_callbacks = FusionCallbacks(graph, cc=12, emit_CD=False)
 
         self.collective_epilogue = CollectiveEpilogue(
             tile_description=operation.tile_description,
