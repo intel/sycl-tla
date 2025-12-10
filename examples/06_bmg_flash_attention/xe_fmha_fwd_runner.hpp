@@ -464,11 +464,9 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
         if (is_causal) {
           // apply mask to S
           for (int row = 0; row < seq_len_qo; row++) {
-            for (int col = 0; col < seq_len_kv_total; col++) {
-              if (col >= seq_len_kv_cache) {
-                  if ((col - seq_len_kv_cache - full_tile_offset) > (row - discard_seq_coord))
-                    host_S[col + row * seq_len_kv_total] = ElementS{-INFINITY};
-              }
+            for (int col = seq_len_kv_cache; col < seq_len_kv_total; col++) {
+                if ((col - seq_len_kv_cache - full_tile_offset) > (row - discard_seq_coord))
+                  host_S[col + row * seq_len_kv_total] = ElementS{-INFINITY};
             }
           }
         }

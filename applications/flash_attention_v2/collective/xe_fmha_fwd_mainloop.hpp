@@ -381,7 +381,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, PagedKV_,
           for (int i = 0; i < tSrS.size(); ++i) {
             int row_idx = get<0>(cS_thread(i));
             int col_idx = get<1>(cS_thread(i));
-            if (col_idx - full_tile_offset > row_idx - discard_seq_coord) {
+            if (col_idx - seq_len_kv_cache - full_tile_offset > row_idx - discard_seq_coord) {
               tSrS(i) = ElementS(-INFINITY);
             }
           }
