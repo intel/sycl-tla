@@ -185,7 +185,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, PagedKV_,
     // assuming page_size is multiple of get<1>(TileShapeQK{})
     int tiles_per_page = params.page_size / get<1>(TileShapeQK{});
     int batch_offset = params.num_pages_per_seq ? params.num_pages_per_seq[l_coord] : l_coord * (seq_len_kv_cache / params.page_size);
-    // if varlen, num_pages_per_seq array is used. If not, assuming fixed size.
+
     return params.ptr_page_table[
           batch_offset +                  
           next_page_logical_idx] * tiles_per_page +            

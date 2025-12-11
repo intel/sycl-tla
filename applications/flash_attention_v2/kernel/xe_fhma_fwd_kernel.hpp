@@ -287,7 +287,7 @@ public:
               V(_,_,head,l_coord),
               tArA, tA_max, tA_sum,
               blk_qv, 0, k_blocks, k_blocks,
-              thr_id, seq_len, seq_len_kv_cache, l_coord,
+              thr_id, seq_len, seq_len_kv_cache, idx_b,
               full_tile_offset, discard_seq_coord,
               K_cache(_,_,head,l_coord),
               V_cache(_,_,head,l_coord));
