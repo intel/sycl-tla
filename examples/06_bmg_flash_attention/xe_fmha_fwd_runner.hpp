@@ -258,7 +258,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     constexpr int cacheline_bytes = 64;
     constexpr int AlignmentQ = cacheline_bytes / sizeof(ElementQ);    // Alignment of Q matrix in units of elements
     constexpr int AlignmentKV = cacheline_bytes / sizeof(ElementK);   // Alignment of Kand V matrix in units of elements
-
+    constexpr int AlignmentKVCache = 128; //Page size must be a multiple of 128
     auto generate_positive_int = [](auto& dist, auto& gen) {
       int result = 0;
       do {
@@ -281,7 +281,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     for (int i = 0; i < num_batches; i++) {
       int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
-      int seqlen_kv_cache = get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
+      int seqlen_kv_cache = get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKVCache);
 
       total_seqlen_q += seqlen_q;
       total_seqlen_kv += seqlen_kv;
@@ -620,7 +620,9 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     block_V_cache.reset(static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv_cache * head_size_vo);
     block_O.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo);
-
+    // Zero-initialize output buffer for the kernel result
+    // block_ref_O is fully written in verify() before being read, so no initialization needed
+    compat::memset(block_O.get(), 0, block_O.size() * sizeof(ElementO));
     if (options.use_paged_kv) {
       paged_kv_cache.page_size = options.page_size;
       std::vector<int> num_pages_per_seq{0};
