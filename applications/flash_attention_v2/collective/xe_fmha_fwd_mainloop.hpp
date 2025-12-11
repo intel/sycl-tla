@@ -429,7 +429,6 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, PagedKV_,
         if constexpr (PagedKV) {
           if (is_cache_next) {
             physical_K_next = get_physical_k_tile(K_next, l_coord, seq_len_kv_cache);
-            
           }
         }
 
