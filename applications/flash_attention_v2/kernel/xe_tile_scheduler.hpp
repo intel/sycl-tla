@@ -65,7 +65,7 @@ struct XeFHMAIndividualTileScheduler {
     dim3 grid(size(ceil_div(shape.head_size_vo, get<1>(tile_shape))),     // V
               size(ceil_div(shape.seq_len_qo,   get<0>(tile_shape))),     // Q
               size(shape.batch * shape.num_heads_q));                     // (h,b) -- split later
-    if (num_kv_splits > 0) {
+    if (num_kv_splits > 1) {
       grid.z *= num_kv_splits;
     }
     std::cout << "XeFHMAIndividualTileScheduler Grid: (" << grid.x << ", " << grid.y << ", " << grid.z << ")\n";

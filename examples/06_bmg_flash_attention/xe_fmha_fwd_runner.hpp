@@ -886,6 +886,31 @@ struct ExampleRunner {
       bool passed = verify(shape, options.is_causal);
       std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
+#if 0
+    std::vector<ElementO> vec_Oaccum(block_Oaccum.size());
+    block_Oaccum.copy_to_host(vec_Oaccum.data());
+    for (size_t i = 0; i < vec_Oaccum.size(); i++) {
+      std::cout << "Oaccum[" << i << "] = " << vec_Oaccum[i] << std::endl;
+      if (i > 20) break;
+    }
+
+    std::vector<ElementO> vec_exp_sums(block_exp_sums.size());
+    std::vector<ElementO> vec_max_logits(block_max_logits.size());
+    block_exp_sums.copy_to_host(vec_exp_sums.data());
+    block_max_logits.copy_to_host(vec_max_logits.data());
+    for (size_t i = 0; i < vec_exp_sums.size(); i++) {
+      std::cout << "exp_sums[" << i << "]: " << vec_exp_sums[i] << ", max_logits[" << i << "]: " << vec_max_logits[i] << std::endl;
+      if (i > 20) break;
+    }
+
+    std::vector<ElementO> vec_O(block_O.size());
+    block_O.copy_to_host(vec_O.data());
+    for (size_t i = 0; i < vec_O.size(); i++) {
+      std::cout << "O[" << i << "] = " << vec_O[i] << std::endl;
+      if (i > 20) break;
+    }
+#endif
+
       if (!passed) {
         return cutlass::Status::kErrorInternal;
       }
@@ -960,6 +985,7 @@ struct ExampleRunner {
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q  << "\tNumHeads_kv: " << options.num_heads_kv  << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
                 << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false")
+                << "\tKV Splits: " << options.num_kv_splits
                 << "\t Scheduler: " << options.scheduler;
       printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
     }

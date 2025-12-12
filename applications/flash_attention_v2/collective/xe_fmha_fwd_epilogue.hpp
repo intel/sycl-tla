@@ -164,6 +164,12 @@ public:
     for (int i = 0; i < rA.size(); i++)
       rA(i) *= broadcast<0>(rA_sum, rA, i);
 
+#if 1
+    if (ThreadIdxX() == 0) {
+      // cute::print("wg id: %d, rA(0): %f, rA_sum(0): %f\n", BlockIdxZ(), (float)rA(0),(float)rA_sum(0));
+    }
+#endif
+
     /* Tile output */
     Tensor cO = make_identity_tensor(O.shape());          // (q,v)
     Tensor gO = local_tile(cO, TileShapeO{}, blk_qv);     // (q,v)
@@ -197,12 +203,25 @@ public:
     using namespace cute;
     using ElementA = typename FragA::element_type;
 
+#if 0
+      if (ThreadIdxX() == 0 && BlockIdxZ() == 0) {
+        // cute::print("idx_kv_split: %d, idx_b: %d, head_q: %d, Q(0,0,head_q,l_coord): %f\n", idx_kv_split, idx_b, head_q, float(Q(0,34,head_q,l_coord)));
+        cute::print(" fwd epilogue tA_max(0): %f\n", float(tA_max(0)));
+        cute::print(" fwd epilogue tA_sum(0): %f\n", float(tA_sum(0)));
+        cute::print(" fwd epilogue tArA(0): %f\n", float(tArA(0)));
+      }
+#endif
+
     // Reduce k-blocks of A and A_sum across WG, if needed.
     auto [rA, rA_max, rA_sum, active] = reduce_A(tArA, tA_max, tA_sum, thr_id);
 
     // store exp sum and max logits for current KV split
-    exp_sums(0) = rA_sum(0);
-    max_logits(0) = rA_max(0);
+    // assume seq_len_qo == 1
+    if (ThreadIdxX() == 0) {
+      static_assert(size(FragARow{}) == 1, "only size 1 of FragARow is now supported");
+      exp_sums(0,0) = rA_sum(0);
+      max_logits(0,0) = rA_max(0);
+    }
 
     /* Some subgroups may not have any work to do; if so, quit early. */
     if (!active) return;

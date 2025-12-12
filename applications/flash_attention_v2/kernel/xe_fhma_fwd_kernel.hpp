@@ -938,49 +938,64 @@ public:
       // auto shape_V = make_shape(s.head_size_vo, seq_len_kv, s.num_heads_kv, batch_dim);
       // auto shape_O = make_shape(seq_len_qo, s.head_size_vo, s.num_heads_kv, batch_dim);
 
-      int num_blocks_per_split, kv_split_offset, num_effective_kv_blocks;
+      int num_blocks_per_split, kv_split_offset, num_effective_kv_blocks, effective_kv_seq_length;
 
       if constexpr (SplitKV) {
         num_blocks_per_split = cute::ceil_div(k_blocks, params.scheduler.num_kv_splits_);
         kv_split_offset = idx_kv_split * num_blocks_per_split;
         num_effective_kv_blocks = cute::min(k_blocks - kv_split_offset, num_blocks_per_split);
+        effective_kv_seq_length = num_effective_kv_blocks * get<1>(TileShapeQK{});
+        effective_kv_seq_length = seq_len;
 
-        shape_K = make_shape(num_effective_kv_blocks * get<1>(TileShapeQK{}), s.head_size_qk, s.num_heads_kv, batch_dim);
-        shape_V = make_shape(s.head_size_vo, num_effective_kv_blocks * get<1>(TileShapeQK{}), s.num_heads_kv, batch_dim);
+#if 0
+        if (thr_id == 0) {
+          cute::print("\nidx_kv_split: %d, kv_split_offset: %d, num_effective_kv_blocks: %d, k_blocks: %d, num_blocks_per_split: %d\n",
+              idx_kv_split, kv_split_offset, num_effective_kv_blocks, k_blocks, num_blocks_per_split);
+        }
+#endif
+
+        shape_K = make_shape(effective_kv_seq_length, s.head_size_qk, s.num_heads_kv, batch_dim);
+        shape_V = make_shape(s.head_size_vo, effective_kv_seq_length, s.num_heads_kv, batch_dim);
         shape_O = make_shape(seq_len_qo, s.head_size_vo, 1, s.num_heads_q * batch_dim);
+        // shape_O = make_shape(seq_len_qo, s.head_size_vo, s.num_heads_q, batch_dim);
 
         shape_exp_sums = make_shape(s.seq_len_qo, 1, s.num_heads_q, batch_dim);
         shape_max_logits = make_shape(s.seq_len_qo, 1, s.num_heads_q, batch_dim);
 
         // TODO: adapt for var length
         // offset_k = ((kv_split_offset * get<1>(TileShapeQK{})) * s.head_size_qk) * s.num_heads_kv * batch_dim;
-        offset_k = kv_split_offset * get<1>(TileShapeQK{});
+        offset_k = kv_split_offset * get<1>(TileShapeQK{}) * s.head_size_qk;
         // offset_v = s.num_heads_kv * s.head_size_vo * (idx_b * seq_len + kv_split_offset * get<1>(TileShapeQK{}));
         // offset_v = ((kv_split_offset * get<1>(TileShapeQK{})) * s.head_size_vo) * s.num_heads_kv * batch_dim;
-        offset_v = kv_split_offset * get<1>(TileShapeQK{});
+        offset_v = kv_split_offset * get<1>(TileShapeQK{}) * s.head_size_qk;
 
         // assume: Oaccum is allocated with shape (batch * num_heads_q, num_kv_splits, seq_len_qo, head_size_vo)
         offset_o = s.head_size_vo * seq_len_qo * idx_kv_split;
 
         offset_exp_sums = idx_kv_split;
         offset_max_logits = idx_kv_split;
+
+        // offset_o = offset_k = offset_v = offset_exp_sums = offset_max_logits = 0;
+        offset_k = offset_v = 0;
       } else {
         shape_K = make_shape(seq_len_kv, s.head_size_qk, s.num_heads_kv, batch_dim);
         shape_V = make_shape(s.head_size_vo, seq_len_kv, s.num_heads_kv, batch_dim);
-        shape_O = make_shape(seq_len_qo, s.head_size_vo, s.num_heads_kv, batch_dim);
+        shape_O = make_shape(seq_len_qo, s.head_size_vo, s.num_heads_q, batch_dim);
       }
 
       auto dcQ = const_cast<ElementQ*>(p.Q + offset_q);
       auto dcK = const_cast<ElementK*>(p.K + offset_k);
       auto dcV = const_cast<ElementV*>(p.V + offset_v);
       auto ptrO = (SplitKV ? p.Oaccum : p.O) + offset_o;
+      // auto ptrO = p.O + offset_o;
       auto ptrExp_sums = p.exp_sums + offset_exp_sums;
       auto ptrMax_logits = p.max_logits + offset_max_logits;
 
       auto stride_q = is_var_len ? cutlass::make_cute_packed_stride(StrideQ{}, shape_Q) : p.dQ;
       auto stride_k = is_var_len ? cutlass::make_cute_packed_stride(StrideK{}, shape_K) : p.dK;
       auto stride_v = is_var_len ? cutlass::make_cute_packed_stride(StrideV{}, shape_V) : p.dV;
-      auto stride_o = is_var_len ? cutlass::make_cute_packed_stride(StrideO{}, shape_O) : p.dO;
+      auto stride_o = is_var_len ? cutlass::make_cute_packed_stride(StrideO{}, shape_O) : (SplitKV ? p.dOaccum : p.dO);
+      // auto stride_o = is_var_len ? cutlass::make_cute_packed_stride(StrideO{}, shape_O) : p.dO;
       auto stride_exp_sums = p.dExp_sums;
       auto stride_max_logits = p.dMax_logits;
 
@@ -988,6 +1003,16 @@ public:
       Tensor K = make_tensor(make_gmem_ptr(dcK), make_layout(shape_K, stride_k));
       Tensor V = make_tensor(make_gmem_ptr(dcV), make_layout(shape_V, stride_v));
       Tensor O = make_tensor(make_gmem_ptr(ptrO), make_layout(shape_O, stride_o));
+
+#if 0
+      if (thr_id == 0 && BlockIdxZ() == 0 && idx_kv_split == 0 && head_q == 0) {
+        cute::print("\nidx_kv_split: %d, idx_b: %d, head_q: %d, O shape: ", idx_kv_split, idx_b, head_q);cute::print(O.shape());print("\n");
+        cute::print("K shape: ");cute::print(K.shape());cute::print(K.stride());cute::print("\n");
+        cute::print("V shape: ");cute::print(V.shape());cute::print(V.stride());cute::print("\n");
+        cute::print("O stride: ");cute::print(O.stride());cute::print("\n");
+        cute::print("stride_o: ");cute::print(stride_o);cute::print("\n");
+      }
+#endif
 
       Tensor exp_sums = make_tensor(make_gmem_ptr(ptrExp_sums), make_layout(shape_exp_sums, stride_exp_sums));
       Tensor max_logits = make_tensor(make_gmem_ptr(ptrMax_logits), make_layout(shape_max_logits, stride_max_logits));
@@ -1002,6 +1027,12 @@ public:
       int start_blk = SplitKV ? kv_split_offset : 0;
       int end_blk = SplitKV ? (kv_split_offset + num_effective_kv_blocks) : k_blocks;
 
+#if 0
+      if (thr_id == 0) {
+        cute::print("\nidx_kv_split: %d, idx_b: %d, head_q: %d, start_blk: %d, end_blk: %d\n", idx_kv_split, idx_b, head_q, start_blk, end_blk);
+      }
+#endif
+
       CollectiveMainloop mainloop(params.mainloop, shared_storage.mainloop);
 
       mainloop(Q(_,_,head_q,l_coord),
@@ -1010,7 +1041,24 @@ public:
               tArA, tA_max, tA_sum,
               blk_qv, start_blk, end_blk, k_blocks,
               thr_id, seq_len,
-              full_tile_offset, discard_seq_coord);
+              full_tile_offset, discard_seq_coord,
+              /*need_init*/true);
+
+#if 0
+      // static_assert(is_same_v<FragARow, float>, "dtype mismatch");
+      if (idx_kv_split == 0 && head_q == 0 && thr_id == 0) {
+        // cute::print("idx_kv_split: %d, idx_b: %d, head_q: %d, Q(0,0,head_q,l_coord): %f\n", idx_kv_split, idx_b, head_q, float(Q(0,34,head_q,l_coord)));
+        cute::print("idx_kv_split: 0, head_q: 0, tid: 0, tA_max(0): %f\n", float(tA_max(0)));
+        cute::print("idx_kv_split: 0, head_q: 0, tid: 0, tA_sum(0): %f\n", float(tA_sum(0)));
+        cute::print("idx_kv_split: 0, head_q: 0, tid: 0, tArA(0): %f\n", float(tArA(0)));
+      }
+
+      if (idx_kv_split == 1 && head_q == 0 && thr_id == 0) {
+        // cute::print("idx_kv_split: %d, idx_b: %d, head_q: %d, Q(0,0,head_q,l_coord): %f\n", idx_kv_split, idx_b, head_q, float(Q(0,34,head_q,l_coord)));
+        cute::print("idx_kv_split: 1, head_q: 0, tid: 0, tA_max(0): %f\n", float(tA_max(0)));
+        cute::print("idx_kv_split: 1, head_q: 0, tid: 0, tArA(0): %f\n", float(tArA(0)));
+      }
+#endif
 
       if constexpr (!is_empty_v<MainloopSharedStorage> && !is_empty_v<EpilogueSharedStorage>) {
         sycl::group_barrier(get_work_group<3>());
@@ -1025,11 +1073,22 @@ public:
                  blk_qv, thr_id,
                  exp_sums(_,_,head_q,l_coord),
                  max_logits(_,_,head_q,l_coord));
+        // epilogue(O(_,_,0,head_q + idx_b * s.num_heads_q),
+        //         tArA, tA_max, tA_sum,
+        //         blk_qv, thr_id);
       } else {
         epilogue(O(_,_,head_q,l_coord),
                 tArA, tA_max, tA_sum,
                 blk_qv, thr_id);
     }
+
+#if 1
+      if (thr_id == 0) {
+        // cute::print("idx_kv_split: %d, idx_b: %d, head_q: %d, O(0,0): %f, exp_sums(0,0): \n", idx_kv_split, idx_b, head_q, float(O(0,0,0,1)));
+        // cute::print("idx_kv_split: %d, idx_b: %d, head_q: %d, max_logits(0,0): %f\n", idx_kv_split, idx_b, head_q, max_logits(0,0,head_q,l_coord));
+      }
+#endif
+
   }
 };
 

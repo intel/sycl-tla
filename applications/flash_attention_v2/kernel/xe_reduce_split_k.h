@@ -86,11 +86,11 @@ public:
     StrideO dO;
     // below are inputs
     // TODO: whether same dtype as output or accum?
-    ElementO *Oaccum;
+    const ElementO *Oaccum;
     StrideO dOaccum;
-    ElementO *exp_sums;
+    const ElementO *exp_sums;
     StrideO dExp_sums;
-    ElementO *max_logits;
+    const ElementO *max_logits;
     StrideO dMax_logits;
   };
   using KernelParams = KernelArguments;
@@ -185,8 +185,8 @@ public:
       offset_max_logits = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo;
       auto dcOaccum = const_cast<ElementO*>(p.Oaccum + offset_o_accum);
       auto ptrO = p.O + offset_o;
-      auto ptrExp_sums = p.exp_sums + offset_exp_sums;
-      auto ptrMax_logits = p.max_logits + offset_max_logits;
+      auto ptrExp_sums = const_cast<ElementO*>(p.exp_sums + offset_exp_sums);
+      auto ptrMax_logits = const_cast<ElementO*>(p.max_logits + offset_max_logits);
 
       using Stride_O = cute::Stride<int, cute::Int<1>, int64_t>;
       using Stride_Oaccum = Stride_O;
@@ -222,23 +222,25 @@ public:
 
         ElementO cur_exp_sum = exp_sums(0, thr_id, 0);
         shared_storage.exp_sums_slm_array[thr_id] = cur_exp_sum;
-        global_exp_sums = cur_exp_sum;
-      }
-
-      if (sub_group_id == 0) {
-        // reduce within subgroup
-        global_max_logits = reduce_over_group(get_sub_group(), global_max_logits, sycl::maximum<>());
-        global_exp_sums = reduce_over_group(get_sub_group(), global_exp_sums, sycl::plus<>());
-
-        // broadcast to other threads
-        sycl::group_broadcast(get_work_group<3>(), global_max_logits, 0);
-        sycl::group_broadcast(get_work_group<3>(), global_exp_sums, 0);
       }
 
       // barrier for SLM writes finished
       sycl::group_barrier(get_work_group<3>());
 
-      ElementO inv_global_exp_sums = 1. / global_exp_sums;
+      if (sub_group_id == 0) {
+        // reduce within subgroup
+        // here assume num_kv_splits not exceed subgroup size 16
+        global_max_logits = reduce_over_group(get_sub_group(), global_max_logits, sycl::maximum<>());
+        // global_exp_sums = reduce_over_group(get_sub_group(), global_exp_sums, sycl::plus<>());
+      }
+
+      // broadcast to other threads
+      global_max_logits = sycl::group_broadcast(get_work_group<1>(), global_max_logits, 0);
+
+      // global_exp_sums = sycl::group_broadcast(get_work_group<1>(), global_exp_sums, 0);
+
+      // barrier for SLM writes finished
+      sycl::group_barrier(get_work_group<3>());
 
       // step 2: rescale Oaccum and write back to O
       for (int idx = thr_id; idx < s.head_size_vo; idx += SGPerWG::value * intel::sg_size) {
@@ -252,7 +254,12 @@ public:
           // in FMHA epilogue, it's divided by local_exp_sum
           ElementO adjusted_o_accum = Oaccum(0, idx, i) * local_exp_sum;
           acc += adjusted_o_accum * rescale;
+
+          // update global exp sum
+          global_exp_sums += local_exp_sum * rescale;
         }
+
+        ElementO inv_global_exp_sums = 1. / global_exp_sums;
         acc *= inv_global_exp_sums;
         O(0, idx, 0) = acc;
       }
