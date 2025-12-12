@@ -58,10 +58,10 @@ template <class NodeOp, class... ChildOps>
 using Sm90EVT = Sm90TreeVisitor<NodeOp, ChildOps...>;
 
 template <class NodeOp, class... ChildOps>
-using Sm20EVT = Sm90EVT<NodeOp, ChildOps...>;
+using Xe20EVT = Sm90EVT<NodeOp, ChildOps...>;
 
 template <class NodeOp, class... ChildOps>
-using Sm12EVT = Sm90EVT<NodeOp, ChildOps...>;
+using Xe12EVT = Sm90EVT<NodeOp, ChildOps...>;
 
 // D = alpha * acc
 template <
