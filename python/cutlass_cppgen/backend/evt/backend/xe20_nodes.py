@@ -200,7 +200,7 @@ class xe20ComputeImpl(ComputeImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90Compute<
+using {self.name_camel} = cutlass::epilogue::fusion::Xe20Compute<
     {op_tag(self.fn)}, {DataTypeTag[self.element_output]}, {DataTypeTag[self.element_compute]},
     {FloatRoundStyleTag[self.round_style]}
 >;
