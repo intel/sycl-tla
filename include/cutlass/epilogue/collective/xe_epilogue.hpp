@@ -271,7 +271,14 @@ public:
                                        DefaultEpilogueTile,
                                        EpilogueTile_>;
 
-    using DefaultCopyOpG2R =  XE_LOAD_2D<CopyBitsC, cute::gcd(8, get<0>(EpilogueTile{})), cute::gcd(512 / CopyBitsC, get<1>(EpilogueTile{}))>;
+    constexpr bool IsColMajorC = cutlass::gemm::detail::is_major<0, StrideC>();
+    static constexpr int CopyBitsCTranspose = cute::max(CopyBitsC, 32);
+    static constexpr int Sub32BitFactor = CopyBitsCTranspose / CopyBitsC;
+
+    using DefaultCopyOpG2RNonTranspose =  XE_LOAD_2D<CopyBitsC, cute::gcd(8, get<0>(EpilogueTile{})), cute::gcd(512 / CopyBitsC, get<1>(EpilogueTile{}))>;
+    using DefaultCopyOpG2RTranspose = XE_LOAD_2D_TRANSPOSE<CopyBitsCTranspose, cute::gcd(512 / CopyBitsC, get<1>(EpilogueTile{})), cute::gcd(8 / Sub32BitFactor, get<0>(EpilogueTile{}))>;
+    using DefaultCopyOpG2R = conditional_t<IsColMajorC, DefaultCopyOpG2RTranspose, DefaultCopyOpG2RNonTranspose>;
+
     using DefaultCopyOpR2G = XE_STORE_2D<CopyBitsD, cute::gcd(8, get<0>(EpilogueTile{})), cute::gcd(512 / CopyBitsD, get<1>(EpilogueTile{}))>;
 
     using ActualGmemTiledCopyC = replace_void_t<CopyOpG2R, DefaultCopyOpG2R>;

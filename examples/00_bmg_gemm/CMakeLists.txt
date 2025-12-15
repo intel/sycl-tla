@@ -40,6 +40,14 @@ cutlass_example_add_executable(
   TEST_SMALL_SHAPE
 )
 
+set(TEST_SHAPE_GEMM_WITH_BIAS --m=512 --n=1024 --k=64 --l=2)
+cutlass_example_add_executable(
+  00_bmg_gemm_bias
+  00_bmg_gemm_bias.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_SHAPE_GEMM_WITH_BIAS
+)
+
 set(TEST_SMALL_SHAPE_PADDABLE --m=1 --n=1 --k=2 --l=2)
 cutlass_example_add_executable(
   00_bmg_gemm_padded
