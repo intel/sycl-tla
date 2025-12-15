@@ -108,12 +108,23 @@ int main(int argc, const char **argv) {
 #endif
 #elif defined(DECODE)
 
-#if PERSISTENT
+#if defined(PERSISTENT) || defined(SPLITKV)
 #define NUM_SG _16
 #define KV_TILE_SIZE _256
+
+// turn on gqa packing optimizations
+#define GQA_PACKING
+#if defined(GQA_PACKING)
+// dpas maximum repeat count is 8
+#define Q_FUSED_TILE_SIZE _8
+#else
+#define Q_FUSED_TILE_SIZE _1
+#endif
+
 #else
 #define NUM_SG _8
 #define KV_TILE_SIZE _512
+#define Q_FUSED_TILE_SIZE _1
 #endif
 
 #if HEAD_DIM == 16
@@ -136,9 +147,9 @@ int main(int argc, const char **argv) {
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
 #elif HEAD_DIM == 128
-    using ShapeQK = Shape<_1, KV_TILE_SIZE, _64>;
-    using ShapePV = Shape<_1, _32, KV_TILE_SIZE>;
-    using ShapeOut = Shape<_1, _128>;
+    using ShapeQK = Shape<Q_FUSED_TILE_SIZE, KV_TILE_SIZE, _64>;
+    using ShapePV = Shape<Q_FUSED_TILE_SIZE, _32, KV_TILE_SIZE>;
+    using ShapeOut = Shape<Q_FUSED_TILE_SIZE, _128>;
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
 #elif HEAD_DIM == 192

@@ -164,6 +164,11 @@ public:
     TileScheduler tile_scheduler{params.scheduler};
     auto num_kv_splits = params.scheduler.num_kv_splits;
 
+    auto seq_len_qo = s.seq_len_qo;
+    auto batch_dim = s.batch;
+    auto num_heads_q = s.num_heads_q;
+    auto head_size_vo = s.head_size_vo;
+
     CUTLASS_PRAGMA_NO_UNROLL
     for (; tile_scheduler.is_valid(); ++tile_scheduler) {
       auto [seq_idx, head_q, idx_b] = tile_scheduler.get_block_coord();
@@ -171,18 +176,18 @@ public:
       int offset_o = 0, offset_o_accum = 0;
       int offset_exp_sums = 0, offset_max_logits = 0;
 
-      auto shape_O = make_shape(s.seq_len_qo, s.head_size_vo, 1);
-      auto shape_Oaccum = make_shape(s.seq_len_qo, s.head_size_vo, num_kv_splits);
+      auto shape_O = make_shape(seq_len_qo, head_size_vo, num_heads_q,  batch_dim);
+      auto shape_Oaccum = make_shape(seq_len_qo, head_size_vo, num_heads_q * batch_dim, num_kv_splits);
 
-      auto shape_exp_sums = make_shape(s.seq_len_qo, num_kv_splits, 1);
-      auto shape_max_logits = make_shape(s.seq_len_qo, num_kv_splits, 1);
+      auto shape_exp_sums = make_shape(seq_len_qo, num_kv_splits, num_heads_q, batch_dim);
+      auto shape_max_logits = make_shape(seq_len_qo, num_kv_splits, num_heads_q, batch_dim);
 
-      // assume: Oaccum is allocated with shape (batch * num_heads_q, num_kv_splits, seq_len_qo, head_size_vo)
-      offset_o_accum = (idx_b * s.num_heads_q + head_q) * num_kv_splits * s.seq_len_qo * s.head_size_vo;
-      offset_o = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo * s.head_size_vo;
+      // assume: Oaccum is allocated with shape (num_kv_splits, batch * num_heads_q, seq_len_qo, head_size_vo)
+      // offset_o_accum = (idx_b * s.num_heads_q + head_q) * num_kv_splits * s.seq_len_qo * s.head_size_vo;
+      // offset_o = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo * s.head_size_vo;
 
-      offset_exp_sums = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo;
-      offset_max_logits = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo;
+      // offset_exp_sums = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo;
+      // offset_max_logits = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo;
       auto dcOaccum = const_cast<ElementO*>(p.Oaccum + offset_o_accum);
       auto ptrO = p.O + offset_o;
       auto ptrExp_sums = const_cast<ElementO*>(p.exp_sums + offset_exp_sums);
@@ -195,17 +200,17 @@ public:
       // 3D
       // static_assert(is_same_v<StrideO, float>, "dtype mismatched");
       // static_assert(is_same_v<decltype(take<0,3>(StrideO{})), float>, "dtype mismatched");
-      auto stride_o_accum = cutlass::make_cute_packed_stride(Stride_Oaccum{}, shape_Oaccum);
-      // 2D
-      auto stride_o = cutlass::make_cute_packed_stride(Stride_O{}, shape_O);
-      auto stride_exp_sums = cutlass::make_cute_packed_stride(Stride_Exp_sums{}, shape_exp_sums);
-      auto stride_max_logits = cutlass::make_cute_packed_stride(Stride_Exp_sums{}, shape_max_logits);
+      // auto stride_o_accum = cutlass::make_cute_packed_stride(Stride_Oaccum{}, shape_Oaccum);
+      // // 2D
+      // auto stride_o = cutlass::make_cute_packed_stride(Stride_O{}, shape_O);
+      // auto stride_exp_sums = cutlass::make_cute_packed_stride(Stride_Exp_sums{}, shape_exp_sums);
+      // auto stride_max_logits = cutlass::make_cute_packed_stride(Stride_Exp_sums{}, shape_max_logits);
 
-      Tensor Oaccum = make_tensor(make_gmem_ptr(dcOaccum), make_layout(shape_Oaccum, stride_o_accum));
-      Tensor O = make_tensor(make_gmem_ptr(ptrO), make_layout(shape_O, stride_o));
+      Tensor Oaccum = make_tensor(make_gmem_ptr(dcOaccum), make_layout(shape_Oaccum, p.dOaccum));
+      Tensor O = make_tensor(make_gmem_ptr(ptrO), make_layout(shape_O, p.dO));
 
-      Tensor exp_sums = make_tensor(make_gmem_ptr(ptrExp_sums), make_layout(shape_exp_sums, stride_exp_sums));
-      Tensor max_logits = make_tensor(make_gmem_ptr(ptrMax_logits), make_layout(shape_max_logits, stride_max_logits));
+      Tensor exp_sums = make_tensor(make_gmem_ptr(ptrExp_sums), make_layout(shape_exp_sums, p.dExp_sums));
+      Tensor max_logits = make_tensor(make_gmem_ptr(ptrMax_logits), make_layout(shape_max_logits, p.dMax_logits));
 
       // static_assert(is_same_v<decltype(max_logits), float>, "dtype mismatched");
 
@@ -216,11 +221,11 @@ public:
       ElementO global_exp_sums = 0;
       // only first subgroup participates
       if (thr_id < num_kv_splits) {
-        ElementO cur_max_logit = max_logits(0, thr_id, 0);
+        ElementO cur_max_logit = max_logits(seq_idx, thr_id, head_q, idx_b);
         global_max_logits = sycl::max(global_max_logits, cur_max_logit);
         shared_storage.max_logits_slm_array[thr_id] = cur_max_logit;
 
-        ElementO cur_exp_sum = exp_sums(0, thr_id, 0);
+        ElementO cur_exp_sum = exp_sums(seq_idx, thr_id, head_q, idx_b);
         shared_storage.exp_sums_slm_array[thr_id] = cur_exp_sum;
       }
 
@@ -231,13 +236,10 @@ public:
         // reduce within subgroup
         // here assume num_kv_splits not exceed subgroup size 16
         global_max_logits = reduce_over_group(get_sub_group(), global_max_logits, sycl::maximum<>());
-        // global_exp_sums = reduce_over_group(get_sub_group(), global_exp_sums, sycl::plus<>());
       }
 
       // broadcast to other threads
       global_max_logits = sycl::group_broadcast(get_work_group<1>(), global_max_logits, 0);
-
-      // global_exp_sums = sycl::group_broadcast(get_work_group<1>(), global_exp_sums, 0);
 
       // barrier for SLM writes finished
       sycl::group_barrier(get_work_group<3>());
@@ -252,7 +254,8 @@ public:
           ElementO rescale = sycl::native::exp2(local_max_logit - global_max_logits);
 
           // in FMHA epilogue, it's divided by local_exp_sum
-          ElementO adjusted_o_accum = Oaccum(0, idx, i) * local_exp_sum;
+          // assume seq_len_q == 1
+          ElementO adjusted_o_accum = Oaccum(seq_idx, idx, idx_b * num_heads_q + head_q, i) * local_exp_sum;
           acc += adjusted_o_accum * rescale;
 
           // update global exp sum
@@ -261,7 +264,7 @@ public:
 
         ElementO inv_global_exp_sums = 1. / global_exp_sums;
         acc *= inv_global_exp_sums;
-        O(0, idx, 0) = acc;
+        O(seq_idx, idx, head_q, idx_b) = acc;
       }
     }
   }

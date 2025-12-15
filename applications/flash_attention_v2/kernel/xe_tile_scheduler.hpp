@@ -64,12 +64,12 @@ struct XeFHMAIndividualTileScheduler {
 
     dim3 grid(size(ceil_div(shape.head_size_vo, get<1>(tile_shape))),     // V
               size(ceil_div(shape.seq_len_qo,   get<0>(tile_shape))),     // Q
-              size(shape.batch * shape.num_heads_q));                     // (h,b) -- split later
+              size(shape.batch * shape.num_heads_kv));                     // (h,b) -- split later
     if (num_kv_splits > 1) {
       grid.z *= num_kv_splits;
     }
     std::cout << "XeFHMAIndividualTileScheduler Grid: (" << grid.x << ", " << grid.y << ", " << grid.z << ")\n";
-    return Params{grid, {shape.num_heads_q}, {shape.batch * shape.num_heads_q}, num_kv_splits};
+    return Params{grid, {shape.num_heads_kv}, {shape.batch * shape.num_heads_kv}, num_kv_splits};
   }
 
   template <int Num_SGs>

@@ -197,7 +197,9 @@ public:
              QVCoord          blk_qv,   // WG tile indices: (q,v)
              int              thr_id,   // Work-item ID
              const TensorO2D & exp_sums, // Global exp sum tensor
-             const TensorO2D & max_logits // Global max logits tensor
+             const TensorO2D & max_logits, // Global max logits tensor
+             int idx_kv_split,
+             int head_q
       ) {
 
     using namespace cute;
@@ -218,9 +220,8 @@ public:
     // store exp sum and max logits for current KV split
     // assume seq_len_qo == 1
     if (ThreadIdxX() == 0) {
-      static_assert(size(FragARow{}) == 1, "only size 1 of FragARow is now supported");
-      exp_sums(0,0) = rA_sum(0);
-      max_logits(0,0) = rA_max(0);
+      exp_sums(head_q,idx_kv_split) = rA_sum(0);
+      max_logits(head_q,idx_kv_split) = rA_max(0);
     }
 
     /* Some subgroups may not have any work to do; if so, quit early. */

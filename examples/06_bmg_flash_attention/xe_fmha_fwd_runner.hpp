@@ -591,6 +591,33 @@ struct ExampleRunner {
 
     compat::wait();
 
+#if 0
+    std::vector<ElementO> vec_Oaccum(block_Oaccum.size());
+    block_Oaccum.copy_to_host(vec_Oaccum.data());
+    for (size_t i = 0; i < vec_Oaccum.size(); i++) {
+      std::cout << "Oaccum[" << i << "] = " << vec_Oaccum[i] << std::endl;
+      if (i > 20) break;
+    }
+
+    std::vector<ElementO> vec_exp_sums(block_exp_sums.size());
+    std::vector<ElementO> vec_max_logits(block_max_logits.size());
+    block_exp_sums.copy_to_host(vec_exp_sums.data());
+    block_max_logits.copy_to_host(vec_max_logits.data());
+    for (size_t i = 0; i < vec_exp_sums.size(); i++) {
+      // if (i < 8 * 10) continue;
+      std::cout << "exp_sums[" << i << "]: " << vec_exp_sums[i] << ", max_logits[" << i << "]: " << vec_max_logits[i] << std::endl;
+    }
+
+    std::vector<ElementO> vec_O(block_O.size());
+    block_O.copy_to_host(vec_O.data());
+    std::vector<ElementO> vec_ref_O(block_ref_O.size());
+    block_ref_O.copy_to_host(vec_ref_O.data());
+    for (size_t i = 0; i < vec_ref_O.size(); i++) {
+      if (i < 5 * 128) continue;
+      std::cout << "ref_O[" << i << "] = " << vec_ref_O[i] << " vs. O[" << i << "] = " << vec_O[i] << std::endl;
+    }
+#endif
+
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
                                                                           block_O.size(), ElementO{0.05}, ElementO{0.05});
@@ -678,7 +705,7 @@ struct ExampleRunner {
     }
 
     if constexpr (isSplitKV) {
-      stride_Oaccum = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, num_kv_splits, num_heads_q * batch));
+      stride_Oaccum = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, num_heads_q * batch, num_kv_splits));
       block_Oaccum.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo * num_kv_splits);
 
       // assume seq_len_qo==1
@@ -783,7 +810,8 @@ struct ExampleRunner {
     compat::experimental::launch_policy reduce_policy{reduce_sycl_grid, reduce_sycl_block, launch_props_reduce, kernel_props};
 
     // wait for FA kernel finished
-    event.wait();
+    // no need wait here if launched with same queue???
+    // event.wait();
 
     auto reduce_event = compat::experimental::launch<cutlass::device_kernel<ReductionSplitKernel>, ReductionSplitKernel>(reduce_policy, reduce_params);
 
@@ -1020,6 +1048,7 @@ template <bool Causal,
           typename GmemTiledCopyO = void>
 struct FMHAConfig {
 
+  // when GQA used, fused group query heads into one single MMA call
   static constexpr int SGTileQ = get<0>(shape_div(TileShapeQK{}, shape(SubgroupLayoutQK{})))();
   using MMAOperation = cute::conditional_t<is_void_v<MMAOperation_>,
                                            typename cute::conditional_t<
