@@ -246,9 +246,6 @@ public:
       // broadcast to other threads
       global_max_logits = sycl::group_broadcast(get_work_group<1>(), global_max_logits, 0);
 
-      // barrier for SLM writes finished
-      sycl::group_barrier(get_work_group<3>());
-
       // step 2: rescale Oaccum and write back to O
       for (int idx = thr_id; idx < s.head_size_vo; idx += SGPerWG::value * intel::sg_size) {
         ElementO acc = 0;
