@@ -51,7 +51,8 @@ jobs:
         uses: ./.github/actions/install-intel-graphics
         with:
           GPU: ${{ matrix.gpu }}
-          IGC: ${{ matrix.intel_graphics }}
+          # IGC: ${{ matrix.intel_graphics }}
+          IGC: 'DOWNGRADE'
       - name: Install DPC++
         uses: ./.github/actions/install-dpcpp
         with:
