@@ -28,13 +28,16 @@ jobs:
             gpu: BMG
             intel_graphics: ROLLING
             sycl_target: intel_gpu_bmg_g21
+            igc_version_major: 2
+            igc_version_minor: 18
             runner: bmg
           - compiler: RELEASE
             gpu: PVC
             intel_graphics: ROLLING
             sycl_target: intel_gpu_pvc
+            igc_version_major: 2
+            igc_version_minor: 11
             runner: pvc
-
 
     name: Run Intel ${{ matrix.compiler }} tests on ${{ matrix.gpu }} with intel-graphics ${{ matrix.intel_graphics }}
     runs-on: ${{ matrix.runner }}
@@ -71,9 +74,6 @@ jobs:
           export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           export IGC_VectorAliasBBThreshold=100000000000
-          export igc_version_major=$(dpkg -l | grep intel-igc-opencl | awk '{print $3}' | cut -d'-' -f1 | cut -d'.' -f1)
-          export igc_version_minor=$(dpkg -l | grep intel-igc-opencl | awk '{print $3}' | cut -d'-' -f1 | cut -d'.' -f2)
-          echo "Detected IGC version: ${igc_version_major}.${igc_version_minor}"
           # Persist environment variables to following steps 
           env >> $GITHUB_ENV
           which $CXX
@@ -86,8 +86,8 @@ jobs:
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
-            -DIGC_VERSION_MAJOR=$igc_version_major \
-            -DIGC_VERSION_MINOR=$igc_version_minor \
+            -DIGC_VERSION_MAJOR=${{ matrix.igc_version_major }} \
+            -DIGC_VERSION_MINOR=${{ matrix.igc_version_minor }} \
             -DCUTLASS_SYCL_RUNNING_CI=ON \
             -DCMAKE_CXX_FLAGS="-Werror" \
             -DDPCPP_HOST_COMPILER=g++-13 \
