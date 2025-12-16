@@ -1035,6 +1035,11 @@ public:
       int start_blk = SplitKV ? kv_split_offset : 0;
       int end_blk = SplitKV ? (kv_split_offset + num_effective_kv_blocks) : k_blocks;
 
+      if (end_blk <= start_blk) {
+        // early exit
+        return;
+      }
+
 #if 0
       if (thr_id == 0) {
         cute::print("\nidx_kv_split: %d, idx_b: %d, head_q_start: %d, start_blk: %d, end_blk: %d\n", idx_kv_split, idx_b, head_q_start, start_blk, end_blk);

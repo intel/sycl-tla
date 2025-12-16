@@ -69,6 +69,7 @@ public:
   using ElementO = typename FMHAKernel_::ElementO;
   using StrideO = typename FMHAKernel_::StrideO;
   using TileShapeO = typename FMHAKernel_::TileShapeO;
+  using TileShapeQK = typename FMHAKernel_::TileShapeQK;
 
   using SGPerWG = typename FMHAKernel_::SGPerWG;
 
@@ -165,9 +166,13 @@ public:
     auto num_kv_splits = params.scheduler.num_kv_splits;
 
     auto seq_len_qo = s.seq_len_qo;
+    auto seq_len_kv = s.seq_len_kv;
     auto batch_dim = s.batch;
     auto num_heads_q = s.num_heads_q;
     auto head_size_vo = s.head_size_vo;
+
+    const int k_blocks = cute::ceil_div(seq_len_kv, get<1>(TileShapeQK{}));
+    int num_blocks_per_split = cute::ceil_div(k_blocks, num_kv_splits);
 
     CUTLASS_PRAGMA_NO_UNROLL
     for (; tile_scheduler.is_valid(); ++tile_scheduler) {
@@ -248,6 +253,9 @@ public:
       for (int idx = thr_id; idx < s.head_size_vo; idx += SGPerWG::value * intel::sg_size) {
         ElementO acc = 0;
         for (int i = 0; i < num_kv_splits; ++i) {
+          if (i * num_blocks_per_split > k_blocks) {
+            break;
+          }
           ElementO local_max_logit = shared_storage.max_logits_slm_array[i];
           ElementO local_exp_sum = shared_storage.exp_sums_slm_array[i];
 

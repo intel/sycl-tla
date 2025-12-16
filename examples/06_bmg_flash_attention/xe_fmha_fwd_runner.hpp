@@ -810,8 +810,8 @@ struct ExampleRunner {
     compat::experimental::launch_policy reduce_policy{reduce_sycl_grid, reduce_sycl_block, launch_props_reduce, kernel_props};
 
     // wait for FA kernel finished
-    // no need wait here if launched with same queue???
-    // event.wait();
+    // maybe no need wait here if launched with in-order queue
+    event.wait();
 
     auto reduce_event = compat::experimental::launch<cutlass::device_kernel<ReductionSplitKernel>, ReductionSplitKernel>(reduce_policy, reduce_params);
 
