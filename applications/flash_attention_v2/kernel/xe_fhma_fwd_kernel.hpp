@@ -742,9 +742,6 @@ public:
   using ProblemShape = ProblemShape_;
   using VariableLength = cutlass::fmha::collective::VariableLength;
   static constexpr bool is_var_len = cutlass::fmha::collective::is_variable_length_v<typename ProblemShape::SeqLenType>;
-  // TODO: support later
-  static_assert(SplitKV && !is_var_len, "XeFMHAFwdSplitKVKernel only supports variable length without KV split");
-  // Mainloop derived types
   using CollectiveMainloop = CollectiveMainloop_;
   using MainloopArguments = typename CollectiveMainloop::Arguments;
   using MainloopParams = typename CollectiveMainloop::Params;
@@ -843,7 +840,7 @@ public:
   }
 
   static bool can_implement(Arguments const &args) {
-    if (args.kernel.shape.seq_len_qo != 1) {
+    if (!is_var_len && args.kernel.shape.seq_len_qo != 1) {
       // decode only
       return false;
     }
@@ -934,83 +931,63 @@ public:
         offset_q = s.num_heads_q * s.head_size_qk * qo_cumulative[idx_b];
         offset_k = s.num_heads_kv * s.head_size_qk * kv_cumulative[idx_b];
         offset_v = s.num_heads_kv * s.head_size_vo * kv_cumulative[idx_b];
-        offset_o = s.num_heads_q * s.head_size_vo * qo_cumulative[idx_b];
+
+        offset_o = s.num_heads_q * s.head_size_vo * qo_cumulative[idx_b] * num_kv_splits;
+        offset_exp_sums = s.num_heads_q * num_kv_splits * qo_cumulative[idx_b];
+        offset_max_logits = s.num_heads_q * num_kv_splits * qo_cumulative[idx_b];
+
+        if constexpr (GqaPacking) {
+          // seq_len_qo must be 1
+          seq_len_qo = 1;
+        }
       }
 
       auto batch_dim = is_var_len ? 1 : s.batch;
       auto shape_Q = GqaPacking ? make_shape(seq_len_qo * head_group_q, s.head_size_qk, s.num_heads_kv, batch_dim) : make_shape(seq_len_qo, s.head_size_qk, s.num_heads_q, batch_dim);
       // 4D shape
-      decltype(shape_Q) shape_K, shape_V, shape_O, shape_exp_sums, shape_max_logits;
-      // auto shape_K = make_shape(seq_len_kv, s.head_size_qk, s.num_heads_kv, batch_dim);
-      // auto shape_V = make_shape(s.head_size_vo, seq_len_kv, s.num_heads_kv, batch_dim);
-      // auto shape_O = make_shape(seq_len_qo, s.head_size_vo, s.num_heads_kv, batch_dim);
+      auto shape_K = make_shape(seq_len_kv, s.head_size_qk, s.num_heads_kv, batch_dim);
+      auto shape_V = make_shape(s.head_size_vo, seq_len_kv, s.num_heads_kv, batch_dim);
+      decltype(shape_Q) shape_O;
+      if constexpr (is_var_len) {
+        shape_O = GqaPacking ? make_shape(seq_len_qo * head_group_q, s.head_size_vo, s.num_heads_kv * num_kv_splits, batch_dim) : make_shape(seq_len_qo, s.head_size_vo, s.num_heads_q * num_kv_splits, batch_dim);
+      } else {
+        shape_O = GqaPacking ? make_shape(seq_len_qo * head_group_q, s.head_size_vo, s.num_heads_kv * num_kv_splits, batch_dim) : make_shape(seq_len_qo, s.head_size_vo, s.num_heads_q * num_kv_splits, batch_dim);
+      }
+      auto shape_exp_sums = GqaPacking ? make_shape(seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim) :  make_shape(seq_len_qo, num_kv_splits, s.num_heads_q, batch_dim);
+      auto shape_max_logits = GqaPacking ? make_shape(seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim) : make_shape(seq_len_qo, num_kv_splits, s.num_heads_q, batch_dim);
 
-      int num_blocks_per_split, kv_split_offset, num_effective_kv_blocks, effective_kv_seq_length;
-
-      if constexpr (SplitKV) {
-        num_blocks_per_split = cute::ceil_div(k_blocks, num_kv_splits);
-        kv_split_offset = idx_kv_split * num_blocks_per_split;
-        num_effective_kv_blocks = cute::min(k_blocks - kv_split_offset, num_blocks_per_split);
-        effective_kv_seq_length = num_effective_kv_blocks * get<1>(TileShapeQK{});
-        effective_kv_seq_length = seq_len;
+      int num_blocks_per_split = cute::ceil_div(k_blocks, num_kv_splits);
+      int kv_split_offset = idx_kv_split * num_blocks_per_split;
+      int num_effective_kv_blocks = cute::min(k_blocks - kv_split_offset, num_blocks_per_split);
 
 #if 0
-        if (thr_id == 0) {
-          cute::print("\nidx_kv_split: %d, kv_split_offset: %d, num_effective_kv_blocks: %d, k_blocks: %d, num_blocks_per_split: %d\n",
-              idx_kv_split, kv_split_offset, num_effective_kv_blocks, k_blocks, num_blocks_per_split);
-        }
-#endif
-
-        shape_K = make_shape(effective_kv_seq_length, s.head_size_qk, s.num_heads_kv, batch_dim);
-        shape_V = make_shape(s.head_size_vo, effective_kv_seq_length, s.num_heads_kv, batch_dim);
-        // shape_O = make_shape(seq_len_qo, s.head_size_vo, 1, s.num_heads_q * batch_dim);
-        shape_O = GqaPacking ? make_shape(seq_len_qo * head_group_q, s.head_size_vo, s.num_heads_kv * batch_dim, num_kv_splits) : make_shape(seq_len_qo, s.head_size_vo, s.num_heads_q * batch_dim, num_kv_splits);
-
-        // shape_exp_sums = make_shape(s.seq_len_qo, 1, s.num_heads_q, batch_dim);
-        // shape_max_logits = make_shape(s.seq_len_qo, 1, s.num_heads_q, batch_dim);
-        shape_exp_sums = GqaPacking ? make_shape(s.seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim) :  make_shape(s.seq_len_qo, num_kv_splits, s.num_heads_q, batch_dim);
-        shape_max_logits = GqaPacking ? make_shape(s.seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim) : make_shape(s.seq_len_qo, num_kv_splits, s.num_heads_q, batch_dim);
-
-        // TODO: adapt for var length
-        // offset_k = ((kv_split_offset * get<1>(TileShapeQK{})) * s.head_size_qk) * s.num_heads_kv * batch_dim;
-        // offset_k = kv_split_offset * get<1>(TileShapeQK{}) * s.head_size_qk;
-        // // offset_v = s.num_heads_kv * s.head_size_vo * (idx_b * seq_len + kv_split_offset * get<1>(TileShapeQK{}));
-        // // offset_v = ((kv_split_offset * get<1>(TileShapeQK{})) * s.head_size_vo) * s.num_heads_kv * batch_dim;
-        // offset_v = kv_split_offset * get<1>(TileShapeQK{}) * s.head_size_qk;
-
-        // // assume: Oaccum is allocated with shape (num_kv_splits, batch * num_heads_q, seq_len_qo, head_size_vo)
-        // offset_o = s.head_size_vo * seq_len_qo * idx_kv_split * s.num_heads_q * batch_dim;
-
-        // offset_exp_sums = idx_kv_split;
-        // offset_max_logits = idx_kv_split;
-
-        offset_o = offset_k = offset_v = offset_exp_sums = offset_max_logits = 0;
-      } else {
-        shape_K = make_shape(seq_len_kv, s.head_size_qk, s.num_heads_kv, batch_dim);
-        shape_V = make_shape(s.head_size_vo, seq_len_kv, s.num_heads_kv, batch_dim);
-        shape_O = make_shape(seq_len_qo, s.head_size_vo, s.num_heads_q, batch_dim);
+      if (thr_id == 0) {
+        cute::print("\nidx_kv_split: %d, kv_split_offset: %d, num_effective_kv_blocks: %d, k_blocks: %d, num_blocks_per_split: %d\n",
+            idx_kv_split, kv_split_offset, num_effective_kv_blocks, k_blocks, num_blocks_per_split);
       }
+#endif
 
       auto dcQ = const_cast<ElementQ*>(p.Q + offset_q);
       auto dcK = const_cast<ElementK*>(p.K + offset_k);
       auto dcV = const_cast<ElementV*>(p.V + offset_v);
-      auto ptrO = (SplitKV ? p.Oaccum : p.O) + offset_o;
+      auto ptrO = p.Oaccum + offset_o;
       auto ptrExp_sums = p.exp_sums + offset_exp_sums;
       auto ptrMax_logits = p.max_logits + offset_max_logits;
 
       auto stride_q = (is_var_len || GqaPacking) ? cutlass::make_cute_packed_stride(StrideQ{}, shape_Q) : p.dQ;
       auto stride_k = is_var_len ? cutlass::make_cute_packed_stride(StrideK{}, shape_K) : p.dK;
       auto stride_v = is_var_len ? cutlass::make_cute_packed_stride(StrideV{}, shape_V) : p.dV;
-      auto stride_o = (is_var_len || GqaPacking) ? cutlass::make_cute_packed_stride(StrideO{}, shape_O) : (SplitKV ? p.dOaccum : p.dO);
-      // auto stride_exp_sums = p.dExp_sums;
-      // auto stride_max_logits = p.dMax_logits;
-      auto stride_exp_sums = GqaPacking ? cutlass::make_cute_packed_stride(StrideQ{}, shape_exp_sums) : p.dExp_sums;
-      auto stride_max_logits = GqaPacking ? cutlass::make_cute_packed_stride(StrideQ{}, shape_max_logits) : p.dMax_logits;
+      auto stride_o = (is_var_len || GqaPacking) ? cutlass::make_cute_packed_stride(StrideO{}, shape_O) : p.dOaccum;
+      auto stride_exp_sums = GqaPacking ? cutlass::make_cute_packed_stride(StrideO{}, shape_exp_sums) : p.dExp_sums;
+      auto stride_max_logits = GqaPacking ? cutlass::make_cute_packed_stride(StrideO{}, shape_max_logits) : p.dMax_logits;
 
       Tensor Q = make_tensor(make_gmem_ptr(dcQ), make_layout(shape_Q, stride_q));
       Tensor K = make_tensor(make_gmem_ptr(dcK), make_layout(shape_K, stride_k));
       Tensor V = make_tensor(make_gmem_ptr(dcV), make_layout(shape_V, stride_v));
       Tensor O = make_tensor(make_gmem_ptr(ptrO), make_layout(shape_O, stride_o));
+      Tensor exp_sums = make_tensor(make_gmem_ptr(ptrExp_sums), make_layout(shape_exp_sums, stride_exp_sums));
+      Tensor max_logits = make_tensor(make_gmem_ptr(ptrMax_logits), make_layout(shape_max_logits, stride_max_logits));
+
 
 #if 0
       if (thr_id == 0 && BlockIdxZ() == 0 && idx_kv_split == 0 && head_q_start == 0) {
@@ -1022,9 +999,6 @@ public:
       }
 #endif
 
-      Tensor exp_sums = make_tensor(make_gmem_ptr(ptrExp_sums), make_layout(shape_exp_sums, stride_exp_sums));
-      Tensor max_logits = make_tensor(make_gmem_ptr(ptrMax_logits), make_layout(shape_max_logits, stride_max_logits));
-
       // O accumulator types
       FragA tArA;
       FragARow tA_max, tA_sum;
@@ -1032,8 +1006,8 @@ public:
       // Main loop
       int l_coord = is_var_len ? 0 : idx_b;
 
-      int start_blk = SplitKV ? kv_split_offset : 0;
-      int end_blk = SplitKV ? (kv_split_offset + num_effective_kv_blocks) : k_blocks;
+      int start_blk = kv_split_offset;
+      int end_blk = kv_split_offset + num_effective_kv_blocks;
 
       if (end_blk <= start_blk) {
         // early exit
@@ -1048,7 +1022,6 @@ public:
 
       CollectiveMainloop mainloop(params.mainloop, shared_storage.mainloop);
 
-      // for GQA packing
       mainloop(Q(_,_,head,l_coord),
               K(_,_,head,l_coord),
               V(_,_,head,l_coord),
@@ -1060,14 +1033,14 @@ public:
 
 #if 0
       // static_assert(is_same_v<FragARow, float>, "dtype mismatch");
-      if (idx_kv_split == 0 && head_q == 0 && thr_id == 0) {
+      if (idx_kv_split == 0 && head == 0 && thr_id == 0) {
         // cute::print("idx_kv_split: %d, idx_b: %d, head_q: %d, Q(0,0,head_q,l_coord): %f\n", idx_kv_split, idx_b, head_q, float(Q(0,34,head_q,l_coord)));
         cute::print("idx_kv_split: 0, head_q: 0, tid: 0, tA_max(0): %f\n", float(tA_max(0)));
         cute::print("idx_kv_split: 0, head_q: 0, tid: 0, tA_sum(0): %f\n", float(tA_sum(0)));
         cute::print("idx_kv_split: 0, head_q: 0, tid: 0, tArA(0): %f\n", float(tArA(0)));
       }
 
-      if (idx_kv_split == 1 && head_q == 0 && thr_id == 0) {
+      if (idx_kv_split == 1 && head == 0 && thr_id == 0) {
         // cute::print("idx_kv_split: %d, idx_b: %d, head_q: %d, Q(0,0,head_q,l_coord): %f\n", idx_kv_split, idx_b, head_q, float(Q(0,34,head_q,l_coord)));
         cute::print("idx_kv_split: 1, head_q: 0, tid: 0, tA_max(0): %f\n", float(tA_max(0)));
         cute::print("idx_kv_split: 1, head_q: 0, tid: 0, tArA(0): %f\n", float(tArA(0)));
@@ -1081,26 +1054,16 @@ public:
       // Epilogue
       CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
 
-      // for GQA packing
       for (int q_head_cnt = 0; q_head_cnt < head_group_q; ++q_head_cnt) {
-        int head_q_curr = head_q_start + q_head_cnt;
-        if constexpr (SplitKV) {
-          epilogue(O(_,_,idx_b * s.num_heads_kv + head, idx_kv_split),
-                  tArA, tA_max, tA_sum,
-                  blk_qv, thr_id,
-                  exp_sums(_,_,head,l_coord),
-                  max_logits(_,_,head,l_coord),
-                  idx_kv_split, q_head_cnt);
-        } else {
-          // FIXME: use correct head q indx
-          epilogue(O(_,_,head_q_curr,l_coord),
-                  tArA, tA_max, tA_sum,
-                  blk_qv, thr_id);
+        epilogue(O(_,_,idx_kv_split * s.num_heads_kv + head,l_coord),
+                tArA, tA_max, tA_sum,
+                blk_qv, thr_id,
+                exp_sums(_,_,head,l_coord),
+                max_logits(_,_,head,l_coord),
+                idx_kv_split, q_head_cnt);
       }
     }
   }
-};
-
 };
 
 } // namespace cutlass::fmha::kernel

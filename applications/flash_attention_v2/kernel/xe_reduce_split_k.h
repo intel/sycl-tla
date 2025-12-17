@@ -61,6 +61,8 @@ class ReduceSplitK {
 public:
 
   using ProblemShape = ProblemShape_;
+  using VariableLength = cutlass::fmha::collective::VariableLength;
+  static constexpr bool is_var_len = cutlass::fmha::collective::is_variable_length_v<typename ProblemShape::SeqLenType>;
   using TileScheduler = TileScheduler_;
   static_assert(is_same_v<TileScheduler, cutlass::fmha::kernel::XeReduceSplitKTileScheduler>,
                 "ReduceSplitK kernel requires XeReduceSplitKTileScheduler");
@@ -120,14 +122,14 @@ public:
 
   static Params to_underlying_arguments(Arguments const &args, void *workspace) {
     return {args.kernel,
-            TileScheduler::to_underlying_arguments(args.kernel.shape, args.hw_info, TileShapeO{}, args.num_kv_splits)};
+            TileScheduler::template to_underlying_arguments<ProblemShape, TileShapeO, is_var_len>(args.kernel.shape, args.hw_info, TileShapeO{}, args.num_kv_splits)};
   }
 
   static bool can_implement(Arguments const &args) {
     // only support decode
-    if (args.kernel.shape.seq_len_qo > 1) {
-      return false;
-    }
+    // if (args.kernel.shape.seq_len_qo > 1) {
+    //   return false;
+    // }
 
     if (args.num_kv_splits > FMHAKernel_::max_num_kv_splits) {
       return false;
@@ -148,6 +150,15 @@ public:
 
   static dim3 get_block_shape() { return dim3(SGPerWG::value * intel::sg_size, 1, 1); }
 
+  CUTLASS_DEVICE
+  Shape<int, int> get_sequence_length_shape(ProblemShape const& problem_shape, int const& batch) {
+    if constexpr (is_var_len) {
+      return cutlass::fmha::collective::apply_variable_length(Shape<VariableLength, VariableLength>{problem_shape.seq_len_qo, problem_shape.seq_len_kv}, batch);
+    } else {
+      return Shape<int, int>{problem_shape.seq_len_qo, problem_shape.seq_len_kv};
+    }
+  }
+
   /// Perform a reduction
   CUTLASS_DEVICE
   void operator()(Params const &params, char *smem_buf) {
@@ -165,59 +176,59 @@ public:
     TileScheduler tile_scheduler{params.scheduler};
     auto num_kv_splits = params.scheduler.num_kv_splits;
 
-    auto seq_len_qo = s.seq_len_qo;
-    auto seq_len_kv = s.seq_len_kv;
-    auto batch_dim = s.batch;
+    auto batch_dim = is_var_len ? 1 : s.batch;
     auto num_heads_q = s.num_heads_q;
     auto head_size_vo = s.head_size_vo;
-
-    const int k_blocks = cute::ceil_div(seq_len_kv, get<1>(TileShapeQK{}));
-    int num_blocks_per_split = cute::ceil_div(k_blocks, num_kv_splits);
 
     CUTLASS_PRAGMA_NO_UNROLL
     for (; tile_scheduler.is_valid(); ++tile_scheduler) {
       auto [seq_idx, head_q, idx_b] = tile_scheduler.get_block_coord();
 
+      auto sequence_length_shape = get_sequence_length_shape(s, idx_b);
+      auto [seq_len_qo, seq_len_kv] = sequence_length_shape;
+
+      // when varlen enabled, use largest seq_len_qo to decide work group num
+      if (seq_idx >= seq_len_qo) continue;
+
+      const int k_blocks = cute::ceil_div(seq_len_kv, get<1>(TileShapeQK{}));
+      int num_blocks_per_split = cute::ceil_div(k_blocks, num_kv_splits);
+
       int offset_o = 0, offset_o_accum = 0;
       int offset_exp_sums = 0, offset_max_logits = 0;
 
+      if constexpr (is_var_len) {
+        auto qo_cumulative = s.seq_len_qo.cumulative_length;
+
+        offset_o_accum = s.num_heads_q * s.head_size_vo * num_kv_splits * qo_cumulative[idx_b];
+        offset_exp_sums = s.num_heads_q * num_kv_splits * qo_cumulative[idx_b];
+        offset_max_logits = s.num_heads_q * num_kv_splits * qo_cumulative[idx_b];
+
+        offset_o = s.num_heads_q * s.head_size_vo * qo_cumulative[idx_b];
+      }
+
       auto shape_O = make_shape(seq_len_qo, head_size_vo, num_heads_q,  batch_dim);
-      auto shape_Oaccum = make_shape(seq_len_qo, head_size_vo, num_heads_q * batch_dim, num_kv_splits);
+      auto shape_Oaccum = is_var_len ? make_shape(seq_len_qo, head_size_vo, num_heads_q * num_kv_splits, batch_dim) : make_shape(seq_len_qo, head_size_vo, num_heads_q * num_kv_splits, batch_dim);
 
       auto shape_exp_sums = make_shape(seq_len_qo, num_kv_splits, num_heads_q, batch_dim);
       auto shape_max_logits = make_shape(seq_len_qo, num_kv_splits, num_heads_q, batch_dim);
 
-      // assume: Oaccum is allocated with shape (num_kv_splits, batch * num_heads_q, seq_len_qo, head_size_vo)
-      // offset_o_accum = (idx_b * s.num_heads_q + head_q) * num_kv_splits * s.seq_len_qo * s.head_size_vo;
-      // offset_o = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo * s.head_size_vo;
-
-      // offset_exp_sums = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo;
-      // offset_max_logits = (idx_b * s.num_heads_q + head_q) * s.seq_len_qo;
       auto dcOaccum = const_cast<ElementO*>(p.Oaccum + offset_o_accum);
-      auto ptrO = p.O + offset_o;
       auto ptrExp_sums = const_cast<ElementO*>(p.exp_sums + offset_exp_sums);
       auto ptrMax_logits = const_cast<ElementO*>(p.max_logits + offset_max_logits);
+      auto ptrO = p.O + offset_o;
 
-      using Stride_O = cute::Stride<int, cute::Int<1>, int64_t>;
-      using Stride_Oaccum = Stride_O;
-      using Stride_Exp_sums = Stride_O;
+      auto stride_o = is_var_len ? cutlass::make_cute_packed_stride(StrideO{}, shape_O) : p.dO;
+      auto stride_o_accum = is_var_len ? cutlass::make_cute_packed_stride(StrideO{}, shape_Oaccum) : p.dOaccum;
+      auto stride_exp_sums = is_var_len ? cutlass::make_cute_packed_stride(StrideO{}, shape_exp_sums) : p.dExp_sums;
+      auto stride_max_logits = is_var_len ? cutlass::make_cute_packed_stride(StrideO{}, shape_max_logits) : p.dMax_logits;
 
-      // 3D
-      // static_assert(is_same_v<StrideO, float>, "dtype mismatched");
-      // static_assert(is_same_v<decltype(take<0,3>(StrideO{})), float>, "dtype mismatched");
-      // auto stride_o_accum = cutlass::make_cute_packed_stride(Stride_Oaccum{}, shape_Oaccum);
-      // // 2D
-      // auto stride_o = cutlass::make_cute_packed_stride(Stride_O{}, shape_O);
-      // auto stride_exp_sums = cutlass::make_cute_packed_stride(Stride_Exp_sums{}, shape_exp_sums);
-      // auto stride_max_logits = cutlass::make_cute_packed_stride(Stride_Exp_sums{}, shape_max_logits);
+      Tensor Oaccum = make_tensor(make_gmem_ptr(dcOaccum), make_layout(shape_Oaccum, stride_o_accum));
+      Tensor O = make_tensor(make_gmem_ptr(ptrO), make_layout(shape_O, stride_o));
 
-      Tensor Oaccum = make_tensor(make_gmem_ptr(dcOaccum), make_layout(shape_Oaccum, p.dOaccum));
-      Tensor O = make_tensor(make_gmem_ptr(ptrO), make_layout(shape_O, p.dO));
+      Tensor exp_sums = make_tensor(make_gmem_ptr(ptrExp_sums), make_layout(shape_exp_sums, stride_exp_sums));
+      Tensor max_logits = make_tensor(make_gmem_ptr(ptrMax_logits), make_layout(shape_max_logits, stride_max_logits));
 
-      Tensor exp_sums = make_tensor(make_gmem_ptr(ptrExp_sums), make_layout(shape_exp_sums, p.dExp_sums));
-      Tensor max_logits = make_tensor(make_gmem_ptr(ptrMax_logits), make_layout(shape_max_logits, p.dMax_logits));
-
-      // static_assert(is_same_v<decltype(max_logits), float>, "dtype mismatched");
+      int l_coord = is_var_len ? 0 : idx_b;
 
       // Step 1: reduce max logits across different partitions
       // store into SLM for later use
@@ -226,11 +237,11 @@ public:
       ElementO global_exp_sums = 0;
       // only first subgroup participates
       if (thr_id < num_kv_splits) {
-        ElementO cur_max_logit = max_logits(seq_idx, thr_id, head_q, idx_b);
+        ElementO cur_max_logit = max_logits(seq_idx, thr_id, head_q, l_coord);
         global_max_logits = sycl::max(global_max_logits, cur_max_logit);
         shared_storage.max_logits_slm_array[thr_id] = cur_max_logit;
 
-        ElementO cur_exp_sum = exp_sums(seq_idx, thr_id, head_q, idx_b);
+        ElementO cur_exp_sum = exp_sums(seq_idx, thr_id, head_q, l_coord);
         shared_storage.exp_sums_slm_array[thr_id] = cur_exp_sum;
       }
 
@@ -260,7 +271,7 @@ public:
 
           // in FMHA epilogue, it's divided by local_exp_sum
           // assume seq_len_q == 1
-          ElementO adjusted_o_accum = Oaccum(seq_idx, idx, idx_b * num_heads_q + head_q, i) * local_exp_sum;
+          ElementO adjusted_o_accum = Oaccum(seq_idx, idx, i * num_heads_q + head_q, l_coord) * local_exp_sum;
           acc += adjusted_o_accum * rescale;
 
           // update global exp sum
@@ -269,7 +280,7 @@ public:
 
         ElementO inv_global_exp_sums = 1. / global_exp_sums;
         acc *= inv_global_exp_sums;
-        O(seq_idx, idx, head_q, idx_b) = acc;
+        O(seq_idx, idx, head_q, l_coord) = acc;
       }
     }
   }

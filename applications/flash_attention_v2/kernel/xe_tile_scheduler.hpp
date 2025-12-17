@@ -65,6 +65,7 @@ struct XeFHMAIndividualTileScheduler {
     dim3 grid(size(ceil_div(shape.head_size_vo, get<1>(tile_shape))),     // V
               size(ceil_div(shape.seq_len_qo,   get<0>(tile_shape))),     // Q
               size(shape.batch * shape.num_heads_kv));                     // (h,b) -- split later
+    std::cout << "seq len qo: " << shape.seq_len_qo << ", seq_len_kv: " << shape.seq_len_kv << "\n";
     if (num_kv_splits > 1) {
       grid.z *= num_kv_splits;
     }
@@ -188,17 +189,21 @@ struct XeReduceSplitKTileScheduler {
   CUTLASS_DEVICE
   XeReduceSplitKTileScheduler(Params const& params) : params(params) {}
 
-  template <class ProblemShape, class TileShape>
+  template <class ProblemShape, class TileShape, bool is_var_len>
   static Params to_underlying_arguments(
       ProblemShape const& shape, KernelHardwareInfo hw_info,
       TileShape const& tile_shape, const int &num_kv_splits = -1)
   {
     using namespace cute;
 
-    // dim3 grid(size(ceil_div(shape.head_size_vo, get<1>(tile_shape))),     // V
-    //           size(ceil_div(shape.seq_len_qo,   get<0>(tile_shape))),     // Q
-    //           size(shape.batch * shape.num_heads_q));                     // (h,b) -- split later
-    dim3 grid(shape.seq_len_qo, shape.num_heads_q, shape.batch);
+    int seq_len_qo;
+    if constexpr (is_var_len) {
+      seq_len_qo = shape.seq_len_qo;
+    } else {
+      seq_len_qo = shape.seq_len_qo;
+    }
+
+    dim3 grid(seq_len_qo, shape.num_heads_q, shape.batch);
     std::cout << "Reduce Split K Grid: (" << grid.x << ", " << grid.y << ", " << grid.z << ")\n";
     return Params{grid, {shape.num_heads_q}, num_kv_splits};
   }

@@ -302,6 +302,13 @@ struct ExampleRunner {
     int max_seqlen_kv_cache = 0;
 
     for (int i = 0; i < num_batches; i++) {
+#if defined(DECODE)
+      int seqlen_q = 1;
+      int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
+      if (num_batches == 1) {
+         seqlen_kv = get<4>(problem_size);
+      }
+#else
       int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
       int seqlen_kv_cache = get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKVCache);
@@ -705,7 +712,7 @@ struct ExampleRunner {
     }
 
     if constexpr (isSplitKV) {
-      stride_Oaccum = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, num_heads_q * batch, num_kv_splits));
+      stride_Oaccum = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, num_heads_q * num_kv_splits, batch));
       block_Oaccum.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo * num_kv_splits);
 
       // assume seq_len_qo==1
