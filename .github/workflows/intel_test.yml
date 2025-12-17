@@ -98,6 +98,7 @@ jobs:
           export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           export IGC_VectorAliasBBThreshold=100000000000
+          export IGC_allowDecompose2DBlockFuncs=0
           # Persist environment variables to following steps 
           env >> $GITHUB_ENV
           which $CXX
