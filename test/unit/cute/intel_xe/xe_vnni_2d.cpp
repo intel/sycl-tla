@@ -37,7 +37,7 @@
 
 using namespace cute;
 
-#if (IGC_VERSION_MAJOR > 2) || (IGC_VERSION_MAJOR == 2 && IGC_VERSION_MINOR >= 18) 
+//#if (IGC_VERSION_MAJOR > 2) || (IGC_VERSION_MAJOR == 2 && IGC_VERSION_MINOR >= 18) 
 
 TEST(CuTe_Xe, XE_LOAD_2D_VNNI_API_Declaration) {
   // Template: XE_LOAD_2D_VNNI<Bits, Height, Width, BlockWidth = Width>
@@ -60,10 +60,10 @@ TEST(CuTe_Xe, XE_LOAD_2D_VNNI_API_Declaration) {
   EXPECT_TRUE(true) << "XE_LOAD_2D_VNNI API types declared successfully";
 }
 
-#else
+//#else
 
-TEST(CuTe_Xe, XE_LOAD_2D_VNNI_SKIPPED) {
-  GTEST_SKIP() << "XE_LOAD_2D_VNNI tests require IGC version 2.18 or higher. skipped";
-}
+//TEST(CuTe_Xe, XE_LOAD_2D_VNNI_SKIPPED) {
+//  GTEST_SKIP() << "XE_LOAD_2D_VNNI tests require IGC version 2.18 or higher. skipped";
+//}
 
-#endif
+//#endif
