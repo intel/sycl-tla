@@ -44,7 +44,7 @@ runs:
         shopt -s expand_aliases
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
-          sudo rm -f /etc/apt/sources.list.d/ppa_kobuk_team_intel_graphics_oracular.list
+          sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           sudo apt update
           sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
@@ -60,6 +60,7 @@ runs:
       run: |
         shopt -s expand_aliases
         which sudo || alias sudo=""
+        sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
         sudo rm -rf neo
         mkdir neo || true
         cd neo
