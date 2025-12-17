@@ -69,6 +69,7 @@ setup(
         'pybind11',
         'scikit-build',
         'treelib',
-        'pydot'
+        'pydot',
+        'dpctl'
         ]
 )
