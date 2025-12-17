@@ -54,27 +54,19 @@ jobs:
           env >> $GITHUB_ENV
           sycl-ls
 
-      - name: Install DPCTL
-        id: install_dpctl
-        uses: ./.github/actions/install-dpctl
-        with:
-          DPCTL_URL: https://github.com/IntelPython/dpctl.git
-          DPCTL_BRANCH: master
-          DPCTL_PATH: ~/dpctl
-          VENV_PATH: ~/.venv
 
-      - name: Install Torch XPU
+      - name: Install Sycl-TLA & Torch XPU
         shell: bash
         run: |
           source ~/.venv/bin/activate
-          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/test/xpu
-          pip uninstall --yes intel-sycl-rt intel-cmplr-lib-ur umf
+          pip install build setuptools
+          python -m build
+          pip install torch torchvision torchaudio dist/*.whl --extra-index-url https://download.pytorch.org/whl/test/xpu
 
       - name: Run Python Interface GEMM Tests
         shell: bash
         run: |
           source ~/.venv/bin/activate
-          pip install -e .
           export CUTLASS_USE_SYCL=1
           export SYCL_UR_TRACE=2
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
@@ -95,15 +87,3 @@ jobs:
           rm -rf build/ || true
           echo "DPC++ cleanup completed"
 
-      - name: Cleanup DPCTL
-        if: always()
-        shell: bash
-        run: |
-          echo "Cleaning up DPCTL installation..."
-          DPCTL_PATH="${{ inputs.DPCTL_PATH || '~/dpctl' }}"
-          DPCTL_PATH=$(eval echo $DPCTL_PATH)  # Expand ~ to home directory
-          if [ -d "$DPCTL_PATH" ]; then
-            echo "Removing DPCTL directory: $DPCTL_PATH"
-            sudo rm -rf "$DPCTL_PATH"
-          fi
-          echo "DPCTL cleanup completed"
