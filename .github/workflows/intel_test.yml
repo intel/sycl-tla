@@ -12,6 +12,7 @@ on:
       DPCPP_VERSION:
         description: "DPCPP version to use"
         type: string
+        default: "nightly-2025-12-05"
 
 permissions: {}
 
