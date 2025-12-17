@@ -305,6 +305,7 @@ struct ExampleRunner {
 #if defined(DECODE)
       int seqlen_q = 1;
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
+      // for test purpose
       if (num_batches == 1) {
          seqlen_kv = get<4>(problem_size);
       }

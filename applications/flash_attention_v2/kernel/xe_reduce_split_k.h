@@ -122,7 +122,7 @@ public:
 
   static Params to_underlying_arguments(Arguments const &args, void *workspace) {
     return {args.kernel,
-            TileScheduler::template to_underlying_arguments<ProblemShape, TileShapeO, is_var_len>(args.kernel.shape, args.hw_info, TileShapeO{}, args.num_kv_splits)};
+            TileScheduler::to_underlying_arguments(args.kernel.shape, args.hw_info, TileShapeO{}, args.num_kv_splits)};
   }
 
   static bool can_implement(Arguments const &args) {

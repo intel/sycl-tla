@@ -58,7 +58,7 @@ struct FMHAProblemShape {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-template <class ProblemShape_, class CollectiveMainloop_, class CollectiveEpilogue_, class TileScheduler_, bool SplitKV = false>
+template <class ProblemShape_, class CollectiveMainloop_, class CollectiveEpilogue_, class TileScheduler_>
 class XeFMHAFwdKernel {
 
 public:
@@ -732,7 +732,7 @@ public:
   }
 };
 
-template <class ProblemShape_, class CollectiveMainloop_, class CollectiveEpilogue_, class TileScheduler_, bool SplitKV = true, bool GqaPacking = true>
+template <class ProblemShape_, class CollectiveMainloop_, class CollectiveEpilogue_, class TileScheduler_>
 class XeFMHAFwdSplitKVKernel {
 
 public:
@@ -850,7 +850,7 @@ public:
     }
 
     // when GQA packing enabled, limit head group size to 8
-    if (GqaPacking && (args.kernel.shape.num_heads_q / args.kernel.shape.num_heads_kv > dpas_max_repeat_count)) {
+    if (args.kernel.shape.num_heads_q / args.kernel.shape.num_heads_kv > dpas_max_repeat_count) {
       return false;
     }
 
@@ -936,25 +936,19 @@ public:
         offset_exp_sums = s.num_heads_q * num_kv_splits * qo_cumulative[idx_b];
         offset_max_logits = s.num_heads_q * num_kv_splits * qo_cumulative[idx_b];
 
-        if constexpr (GqaPacking) {
-          // seq_len_qo must be 1
-          seq_len_qo = 1;
-        }
+        // for gqa packing, seq_len_qo must be 1
+        seq_len_qo = 1;
       }
 
       auto batch_dim = is_var_len ? 1 : s.batch;
-      auto shape_Q = GqaPacking ? make_shape(seq_len_qo * head_group_q, s.head_size_qk, s.num_heads_kv, batch_dim) : make_shape(seq_len_qo, s.head_size_qk, s.num_heads_q, batch_dim);
+      auto shape_Q = make_shape(seq_len_qo * head_group_q, s.head_size_qk, s.num_heads_kv, batch_dim);
       // 4D shape
       auto shape_K = make_shape(seq_len_kv, s.head_size_qk, s.num_heads_kv, batch_dim);
       auto shape_V = make_shape(s.head_size_vo, seq_len_kv, s.num_heads_kv, batch_dim);
-      decltype(shape_Q) shape_O;
-      if constexpr (is_var_len) {
-        shape_O = GqaPacking ? make_shape(seq_len_qo * head_group_q, s.head_size_vo, s.num_heads_kv * num_kv_splits, batch_dim) : make_shape(seq_len_qo, s.head_size_vo, s.num_heads_q * num_kv_splits, batch_dim);
-      } else {
-        shape_O = GqaPacking ? make_shape(seq_len_qo * head_group_q, s.head_size_vo, s.num_heads_kv * num_kv_splits, batch_dim) : make_shape(seq_len_qo, s.head_size_vo, s.num_heads_q * num_kv_splits, batch_dim);
-      }
-      auto shape_exp_sums = GqaPacking ? make_shape(seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim) :  make_shape(seq_len_qo, num_kv_splits, s.num_heads_q, batch_dim);
-      auto shape_max_logits = GqaPacking ? make_shape(seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim) : make_shape(seq_len_qo, num_kv_splits, s.num_heads_q, batch_dim);
+      auto shape_O = make_shape(seq_len_qo * head_group_q, s.head_size_vo, s.num_heads_kv * num_kv_splits, batch_dim);
+
+      auto shape_exp_sums = make_shape(seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim);
+      auto shape_max_logits = make_shape(seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim);
 
       int num_blocks_per_split = cute::ceil_div(k_blocks, num_kv_splits);
       int kv_split_offset = idx_kv_split * num_blocks_per_split;
@@ -974,12 +968,12 @@ public:
       auto ptrExp_sums = p.exp_sums + offset_exp_sums;
       auto ptrMax_logits = p.max_logits + offset_max_logits;
 
-      auto stride_q = (is_var_len || GqaPacking) ? cutlass::make_cute_packed_stride(StrideQ{}, shape_Q) : p.dQ;
-      auto stride_k = is_var_len ? cutlass::make_cute_packed_stride(StrideK{}, shape_K) : p.dK;
-      auto stride_v = is_var_len ? cutlass::make_cute_packed_stride(StrideV{}, shape_V) : p.dV;
-      auto stride_o = (is_var_len || GqaPacking) ? cutlass::make_cute_packed_stride(StrideO{}, shape_O) : p.dOaccum;
-      auto stride_exp_sums = GqaPacking ? cutlass::make_cute_packed_stride(StrideO{}, shape_exp_sums) : p.dExp_sums;
-      auto stride_max_logits = GqaPacking ? cutlass::make_cute_packed_stride(StrideO{}, shape_max_logits) : p.dMax_logits;
+      auto stride_q = cutlass::make_cute_packed_stride(StrideQ{}, shape_Q);
+      auto stride_k = cutlass::make_cute_packed_stride(StrideK{}, shape_K);
+      auto stride_v = cutlass::make_cute_packed_stride(StrideV{}, shape_V);
+      auto stride_o = cutlass::make_cute_packed_stride(StrideO{}, shape_O);
+      auto stride_exp_sums = cutlass::make_cute_packed_stride(StrideO{}, shape_exp_sums);
+      auto stride_max_logits = cutlass::make_cute_packed_stride(StrideO{}, shape_max_logits);
 
       Tensor Q = make_tensor(make_gmem_ptr(dcQ), make_layout(shape_Q, stride_q));
       Tensor K = make_tensor(make_gmem_ptr(dcK), make_layout(shape_K, stride_k));
@@ -987,7 +981,6 @@ public:
       Tensor O = make_tensor(make_gmem_ptr(ptrO), make_layout(shape_O, stride_o));
       Tensor exp_sums = make_tensor(make_gmem_ptr(ptrExp_sums), make_layout(shape_exp_sums, stride_exp_sums));
       Tensor max_logits = make_tensor(make_gmem_ptr(ptrMax_logits), make_layout(shape_max_logits, stride_max_logits));
-
 
 #if 0
       if (thr_id == 0 && BlockIdxZ() == 0 && idx_kv_split == 0 && head_q_start == 0) {

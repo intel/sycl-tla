@@ -189,21 +189,14 @@ struct XeReduceSplitKTileScheduler {
   CUTLASS_DEVICE
   XeReduceSplitKTileScheduler(Params const& params) : params(params) {}
 
-  template <class ProblemShape, class TileShape, bool is_var_len>
+  template <class ProblemShape, class TileShape>
   static Params to_underlying_arguments(
       ProblemShape const& shape, KernelHardwareInfo hw_info,
       TileShape const& tile_shape, const int &num_kv_splits = -1)
   {
     using namespace cute;
 
-    int seq_len_qo;
-    if constexpr (is_var_len) {
-      seq_len_qo = shape.seq_len_qo;
-    } else {
-      seq_len_qo = shape.seq_len_qo;
-    }
-
-    dim3 grid(seq_len_qo, shape.num_heads_q, shape.batch);
+    dim3 grid(shape.seq_len_qo, shape.num_heads_q, shape.batch);
     std::cout << "Reduce Split K Grid: (" << grid.x << ", " << grid.y << ", " << grid.z << ")\n";
     return Params{grid, {shape.num_heads_q}, num_kv_splits};
   }
