@@ -788,7 +788,7 @@ public:
   static constexpr int SharedStorageSize = is_empty_v<SharedStorage> ? size_t(0)
                                                                      : sizeof(SharedStorage);
 
-  static constexpr int max_num_kv_splits = intel::sg_size;
+  static constexpr int max_num_kv_splits = SGPerWG::value * intel::sg_size;
   static constexpr int dpas_max_repeat_count = 8;
 
   // Device side arguments
@@ -954,6 +954,11 @@ public:
       int kv_split_offset = idx_kv_split * num_blocks_per_split;
       int num_effective_kv_blocks = cute::min(k_blocks - kv_split_offset, num_blocks_per_split);
 
+      if (num_effective_kv_blocks <= 0) {
+        // no need computation
+        continue;
+      }
+
 #if 0
       if (thr_id == 0) {
         cute::print("\nidx_kv_split: %d, kv_split_offset: %d, num_effective_kv_blocks: %d, k_blocks: %d, num_blocks_per_split: %d\n",
@@ -1001,11 +1006,6 @@ public:
 
       int start_blk = kv_split_offset;
       int end_blk = kv_split_offset + num_effective_kv_blocks;
-
-      if (end_blk <= start_blk) {
-        // early exit
-        return;
-      }
 
 #if 0
       if (thr_id == 0) {

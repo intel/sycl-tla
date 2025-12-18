@@ -127,9 +127,9 @@ public:
 
   static bool can_implement(Arguments const &args) {
     // only support decode
-    // if (args.kernel.shape.seq_len_qo > 1) {
-    //   return false;
-    // }
+    if (!is_var_len && args.kernel.shape.seq_len_qo > 1) {
+      return false;
+    }
 
     if (args.num_kv_splits > FMHAKernel_::max_num_kv_splits) {
       return false;
@@ -248,13 +248,10 @@ public:
       // barrier for SLM writes finished
       sycl::group_barrier(get_work_group<3>());
 
-      if (sub_group_id == 0) {
-        // reduce within subgroup
-        // here assume num_kv_splits not exceed subgroup size 16
-        global_max_logits = reduce_over_group(get_sub_group(), global_max_logits, sycl::maximum<>());
-      }
+      // reduce across wg
+      global_max_logits = reduce_over_group(get_work_group<1>(), global_max_logits, sycl::maximum<>());
 
-      // broadcast to other threads
+      // broadcast to all other threads
       global_max_logits = sycl::group_broadcast(get_work_group<1>(), global_max_logits, 0);
 
       // step 2: rescale Oaccum and write back to O
