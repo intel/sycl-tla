@@ -64,13 +64,17 @@ struct XeFHMAIndividualTileScheduler {
 
     dim3 grid(size(ceil_div(shape.head_size_vo, get<1>(tile_shape))),     // V
               size(ceil_div(shape.seq_len_qo,   get<0>(tile_shape))),     // Q
-              size(shape.batch * shape.num_heads_kv));                     // (h,b) -- split later
+              size(shape.batch * shape.num_heads_q));                  // (h,b) -- split later
     std::cout << "seq len qo: " << shape.seq_len_qo << ", seq_len_kv: " << shape.seq_len_kv << "\n";
+    int num_head = shape.num_heads_q;
     if (num_kv_splits > 1) {
+      // for splitKV, each wg handles group query heads
+      grid.z = size(shape.batch * shape.num_heads_kv);
       grid.z *= num_kv_splits;
+      num_head = shape.num_heads_kv;
     }
     std::cout << "XeFHMAIndividualTileScheduler Grid: (" << grid.x << ", " << grid.y << ", " << grid.z << ")\n";
-    return Params{grid, {shape.num_heads_kv}, {shape.batch * shape.num_heads_kv}, num_kv_splits};
+    return Params{grid, {num_head}, {shape.batch * num_head}, num_kv_splits};
   }
 
   template <int Num_SGs>
