@@ -26,17 +26,14 @@ jobs:
       matrix:
         compiler: ${{ fromJSON(inputs.compiler) }}
         intel_graphics: ${{ fromJSON(inputs.intel_graphics) }}
+        gpu: [BMG, PVC]
         include:
-          - compiler: RELEASE
-            gpu: BMG
-            intel_graphics: ROLLING
+          - gpu: BMG
             sycl_target: intel_gpu_bmg_g21
             igc_version_major: 2
             igc_version_minor: 18
             runner: bmg
-          - compiler: RELEASE
-            gpu: PVC
-            intel_graphics: ROLLING
+          - gpu: PVC
             sycl_target: intel_gpu_pvc
             igc_version_major: 2
             igc_version_minor: 11
