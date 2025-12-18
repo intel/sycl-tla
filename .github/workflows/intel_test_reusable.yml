@@ -32,7 +32,6 @@ jobs:
             igc_version_major: 2
             igc_version_minor: 18
             runner: bmg
-            enabled: ${{ inputs.test_on_bmg }}
           - gpu: PVC
             sycl_target: intel_gpu_pvc
             igc_version_major: 2
