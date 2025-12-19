@@ -26,6 +26,7 @@ runs:
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         elif [[ "${{ inputs.GPU }}" == "PVC" ]]; then
           # PVC: Use LTS drivers + Kobuk compute runtime
+          sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
           . /etc/os-release
           wget -q https://repositories.intel.com/gpu/ubuntu/dists/${VERSION_CODENAME}/intel-gpu-ubuntu-${VERSION_CODENAME}.run
           chmod +x intel-gpu-ubuntu-${VERSION_CODENAME}.run
@@ -63,6 +64,7 @@ runs:
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         elif [[ "${{ inputs.GPU }}" == "PVC" ]]; then
           # PVC: Use LTS drivers + Kobuk staging compute runtime
+          sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
           . /etc/os-release
           wget -q https://repositories.intel.com/gpu/ubuntu/dists/${VERSION_CODENAME}/intel-gpu-ubuntu-${VERSION_CODENAME}.run
           chmod +x intel-gpu-ubuntu-${VERSION_CODENAME}.run
