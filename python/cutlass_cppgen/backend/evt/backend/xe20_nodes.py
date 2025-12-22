@@ -94,40 +94,27 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90SrcFetch<{DataTypeTag[s
 class xe20AuxLoadImpl(AuxLoadImpl):
 
     @property
-    def descriptor(self) -> str:
-        """
-        Descriptor for Aux Load
-        """
-        return f"{self.name_camel}Descriptor"
-
-    def decl_descriptor(self) -> str:
-        """
-        Declare the descriptor type
-        """
-        return f"\nusing {self.descriptor} = cutlass::epilogue::collective::detail::AuxLoadDescriptor<EpilogueDescriptor, {self.stride_mnl}, {DataTypeTag[self.element]}>;\n"
-
-    @property
     def type_decl(self):
         """
-        Return the string defining the type
+        Return the string defining the type using XeAuxLoad directly (no descriptor needed)
+        XeAuxLoad auto-deduces copy operation from Element type
         """
         if self._type_decl is not None:
             return self._type_decl
 
-        self._type_decl = self.decl_descriptor()
-        self._type_decl += f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90AuxLoad<
-    {self.descriptor}::Stages, typename {self.descriptor}::EpilogueTile, {DataTypeTag[self.element]},
-    {self.stride_mnl}, typename {self.descriptor}::SmemLayoutAtom, typename {self.descriptor}::CopyOpS2R
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeAuxLoad<
+    {DataTypeTag[self.element]},
+    {self.stride_mnl}
 >;
 """
         return self._type_decl
 
     def get_smem_size(self, cta_tile_mnk, epilogue_tile_mn, stages_c, stages_d, epi_tiles):
         """
-        Get the shared memory size based on epilogue_tile_mn, stages_c, and stages_d
+        XeAuxLoad uses direct G2R path, no shared memory needed
         """
-        return (DataTypeSize[self.element] * stages_c * product(epilogue_tile_mn) // 8, 128)
+        return (0, 0)
 
 
 class xe20ScalarBroadcastImpl(ScalarBroadcastImpl):
@@ -211,44 +198,28 @@ using {self.name_camel} = cutlass::epilogue::fusion::Xe20Compute<
 class xe20AuxStoreImpl(AuxStoreImpl):
 
     @property
-    def descriptor(self) -> str:
-        """
-        Descriptor for Aux Load
-        """
-        return f"{self.name_camel}Descriptor"
-
-    def decl_descriptor(self) -> str:
-        """
-        Declare the descriptor type
-        """
-        return f"""
-using {self.descriptor} = cutlass::epilogue::collective::detail::AuxStoreDescriptor<
-    EpilogueDescriptor, {self.stride_mnl}, {DataTypeTag[self.element]}
->;
-"""
-    @property
     def type_decl(self):
         """
         Return the string defining the type
+        Note: XeAuxStore not yet implemented, will follow same pattern as XeAuxLoad
         """
         if self._type_decl is not None:
             return self._type_decl
 
-        self._type_decl = self.decl_descriptor()
-        self._type_decl += f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90AuxStore<
-    {self.descriptor}::Stages, typename {self.descriptor}::EpilogueTile, {DataTypeTag[self.element]},
-    {FloatRoundStyleTag[self.round_style]}, {self.stride_mnl}, typename {self.descriptor}::SmemLayoutAtom,
-    typename {self.descriptor}::CopyOpR2S
->;
+        # TODO: Implement XeAuxStore following XeAuxLoad pattern (direct R2G path)
+        # For now, this will cause a compilation error if used
+        self._type_decl = f"""
+// TODO: XeAuxStore not yet implemented
+// Will follow XeAuxLoad pattern with direct Register-to-Global copy
+#error "XeAuxStore not yet implemented. Implement following XeAuxLoad pattern."
 """
         return self._type_decl
 
     def get_smem_size(self, cta_tile_mnk, epilogue_tile_mn, stages_c, stages_d, epi_tiles):
         """
-        Get the shared memory size based on epilogue_tile_mn, stages_c, and stages_d
+        XeAuxStore will use direct R2G path, no shared memory needed
         """
-        return (DataTypeSize[self.element] * stages_d * product(epilogue_tile_mn) // 8, 128)
+        return (0, 0)
 
 
 class xe20StoreDImpl(StoreDImpl):
@@ -275,6 +246,7 @@ class xe20ColumnReductionImpl(ColumnReductionImpl):
             return self._type_decl
 
         self._type_decl = f"""
+# using {self.name_camel} = cutlass::epilogue::fusion::Xe20ColReduction<
 using {self.name_camel} = cutlass::epilogue::fusion::Sm90ColReduction<
     {op_tag(self.reg_reduce_fn)}, {op_tag(self.reg_reduce_fn)}, {op_tag(self.gmem_reduce_fn)}, 0,
     typename EpilogueDescriptor::TileShape, {DataTypeTag[self.element]},
@@ -297,6 +269,7 @@ class xe20RowReductionImpl(RowReductionImpl):
             return self._type_decl
 
         self._type_decl = f"""
+# using {self.name_camel} = cutlass::epilogue::fusion::Xe20RowReduction<
 using {self.name_camel} = cutlass::epilogue::fusion::Sm90RowReduction<
     {op_tag(self.reg_reduce_fn)}, {op_tag(self.reg_reduce_fn)}, {op_tag(self.gmem_reduce_fn)}, 0 /* Stages */,
     typename EpilogueDescriptor::TileShape, {DataTypeTag[self.element]},
@@ -319,6 +292,7 @@ class xe20ScalarReductionImpl(ScalarReductionImpl):
             return self._type_decl
 
         self._type_decl = f"""
+# using {self.name_camel} = cutlass::epilogue::fusion::Xe20ScalarReduction<
 using {self.name_camel} = cutlass::epilogue::fusion::Sm90ScalarReduction<
     {op_tag(self.reg_reduce_fn)}, {op_tag(self.gmem_reduce_fn)},
     {DataTypeTag[self.element]}, {DataTypeTag[self.element_compute]},

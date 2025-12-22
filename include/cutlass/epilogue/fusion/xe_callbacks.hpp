@@ -320,7 +320,6 @@ struct FusionCallbacks<
 
 template<
   class StrideAux,
-  class CopyOpG2R,
   template <class> class ActivationFn,
   class ElementOutput,
   class ElementCompute,
@@ -332,7 +331,7 @@ template<
 using XeLinCombDeEltAct =
   Sm90EVT<Sm90Compute<ActivationFn, ElementOutput, ElementCompute, RoundStyle>, // activation(beta * C + (alpha * acc), aux)
     Sm90LinearCombination<ElementCompute, ElementCompute, ElementSource, ElementScalar, RoundStyle>, // beta * C + (alpha * acc)
-    XeAuxLoad<ElementAux, StrideAux, CopyOpG2R> // aux
+    XeAuxLoad<ElementAux, StrideAux> // aux (auto-deduces copy operation)
   >;
 
 // Z = Aux
@@ -350,8 +349,7 @@ template <
   int AlignmentAux,
   FloatRoundStyle RoundStyle,
   class CtaTileShapeMNK,
-  class EpilogueTile,
-  class CopyOpG2R
+  class EpilogueTile
 >
 struct FusionCallbacks<
     epilogue::IntelXeGeneric,
@@ -360,10 +358,9 @@ struct FusionCallbacks<
       ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
     >,
     CtaTileShapeMNK,
-    EpilogueTile,
-    CopyOpG2R
+    EpilogueTile
 > : XeLinCombDeEltAct<
-      cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpG2R, ActivationFn, ElementOutput_,
+      cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, ActivationFn, ElementOutput_,
       ElementCompute_, ElementAux, ElementSource, ElementScalar, RoundStyle
     > {
 
@@ -372,7 +369,7 @@ struct FusionCallbacks<
 
   using Impl =
     XeLinCombDeEltAct<
-      cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpG2R, ActivationFn, ElementOutput,
+      cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, ActivationFn, ElementOutput,
       ElementCompute, ElementAux, ElementSource, ElementScalar, RoundStyle
     >;
   using Operation =
@@ -420,44 +417,6 @@ struct FusionCallbacks<
 
   // Ctor inheritance
   using Impl::Impl;
-};
-
-// Temporary: provide default G2R operation for LinCombDeEltAct, for CollectiveBuilder.
-// This will be removed once XeAuxLoad moves to new atoms and autodetects copy op.
-template <typename ElementSource>
-using XeAuxLoadDefaultCopyOpG2R = conditional_t<sizeof_bits_v<ElementSource> == 32, XE_2D_U32x8x16_LD_N, XE_2D_U16x8x16_LD_N>;
-
-template <
-  class GmemLayoutTagAux, template <class> class ActivationFn,
-  class ElementOutput_, class ElementCompute_, class ElementAux, class ElementSource, class ElementScalar,
-  int AlignmentAux, FloatRoundStyle RoundStyle,
-  class CtaTileShapeMNK, class EpilogueTile
->
-struct FusionCallbacks<
-    epilogue::IntelXeGeneric,
-    fusion::LinCombDeEltAct<
-      GmemLayoutTagAux, ActivationFn, ElementOutput_, ElementCompute_,
-      ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
-    >,
-    CtaTileShapeMNK,
-    EpilogueTile
-> : FusionCallbacks<
-    epilogue::IntelXeGeneric,
-    fusion::LinCombDeEltAct<
-      GmemLayoutTagAux, ActivationFn, ElementOutput_, ElementCompute_,
-      ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
-    >,
-    CtaTileShapeMNK,
-    EpilogueTile,
-    XeAuxLoadDefaultCopyOpG2R<ElementSource>
-> {
-  using FusionCallbacks<
-    epilogue::IntelXeGeneric, fusion::LinCombDeEltAct<
-      GmemLayoutTagAux, ActivationFn, ElementOutput_, ElementCompute_,
-      ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
-    >,
-    CtaTileShapeMNK, EpilogueTile, XeAuxLoadDefaultCopyOpG2R<ElementSource>
-  >::FusionCallbacks;
 };
 
 
