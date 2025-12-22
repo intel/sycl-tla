@@ -91,7 +91,7 @@ struct Options {
 
     cmd.get_cmd_line_argument("scheduler", scheduler, std::string("Individual"));
 
-#ifdef PERSISTENT
+#if defined(PERSISTENT) || defined(SPLITKV)
     cmd.get_cmd_line_argument("batch", batch, 1);
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 8);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, 1);

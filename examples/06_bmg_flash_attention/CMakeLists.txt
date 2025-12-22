@@ -52,7 +52,7 @@ foreach(HEAD_DIM 64 96 128 192)
       )
     endif()
 
-    # specific test for split kernel
+    # specific test for split reduction kernel
     cutlass_example_add_executable(
       06_xe_fmha_fwd_decode_splitkv_${INPUT_TYPE}_hdim${HEAD_DIM}
       06_xe_fmha_fwd.cpp
