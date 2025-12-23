@@ -248,12 +248,15 @@ cooperative_gemm_kernel(GMemALayout gmem_a_layout,
     cp_async_wait<0>();
     syncthreads();
 
-    cooperative_gemm(
-      ThreadIdxX(), tiled_mma,
-      alpha, s_a_tensor, s_b_tensor, beta, s_c_tensor,
-      a_load_transform, b_load_transform, c_load_transform, c_store_transform,
-      a_copy_op, b_copy_op, c_copy_ld_op, c_copy_st_op
-    );
+    constexpr auto mma_thread_count = size(TiledMma{});
+    if (ThreadIdxX() < mma_thread_count) {
+      cooperative_gemm(
+        ThreadIdxX(), tiled_mma,
+        alpha, s_a_tensor, s_b_tensor, beta, s_c_tensor,
+        a_load_transform, b_load_transform, c_load_transform, c_store_transform,
+        a_copy_op, b_copy_op, c_copy_ld_op, c_copy_st_op
+      );
+    }
     syncthreads();
 
     cooperative_copy<ThreadBlockSize, CopyMaxVecBits>(ThreadIdxX(), s_c_tensor, g_c_out_tensor);
