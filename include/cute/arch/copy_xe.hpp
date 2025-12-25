@@ -68,7 +68,6 @@ struct XE_1D_LDSM {
     "register vector only supports 1, 2, 4, 8");
   static constexpr size_t N_d32 = sizeof(D) / sizeof(uint32_t);
   using StorageT = intel::vector_t<uint32_t, N_d32>;
-  // static constexpr size_t shift_l = cutlass::log2_up<sizeof(D)>::value;
   
   template<class S_, class D_>
   CUTE_HOST_DEVICE static void
@@ -82,37 +81,14 @@ struct XE_1D_LDSM {
       if constexpr (N_d32 > 1) {
         asm volatile(
             "{\n"
-            // ".decl LOAD_SLM_ADDR_W v_type=G type=w num_elts=16 align=wordx32 \n"
-            // ".decl LOAD_SLM_ADDR_UW v_type=G type=uw num_elts=16 align=wordx32 alias=<LOAD_SLM_ADDR_W, 0> \n"
-            // ".decl LOAD_SLM_ADDR_D v_type=G type=d num_elts=16 align=wordx32 \n"
-            // ".decl LOAD_SLM_ADDR_UD v_type=G type=ud num_elts=16 align=wordx32 alias=<LOAD_SLM_ADDR_D, 0> \n"
-            // "mov (M1_NM, 8) LOAD_SLM_ADDR_W(0,0)<1> 0x76543210:v \n"
-            // "add (M1_NM, 8) LOAD_SLM_ADDR_W(0,8)<1> LOAD_SLM_ADDR_W(0,0)<1;1,0> 0x8:w \n"
-            // "mov (M1, 16) LOAD_SLM_ADDR_D(0,0)<1> LOAD_SLM_ADDR_UW(0,0)<1;1,0> \n"
-            // "shl (M1, 16) LOAD_SLM_ADDR_D(0,0)<1> LOAD_SLM_ADDR_D(0,0)<1;1,0> 0x%3:d \n"
-            // "add (M1, 16) LOAD_SLM_ADDR_UD(0,0)<1> LOAD_SLM_ADDR_UD(0,0)<1;1,0> %1(0,0)<1;1,0> \n"
-            // "lsc_load.slm (M1, 16) %0:d32x%2 flat[LOAD_SLM_ADDR_UD]:a32 \n"
             "lsc_load.slm (M1, 16) %0:d32x%2 flat[%1]:a32 \n"
-            // "fence_sw \n"
             "}\n" : "=rw"(data_vec)
             : "rw"(smem_int_ptr), "P"(N_d32)
-            // , "P"(shift_l)
           );
       } else {
         asm volatile(
             "{\n"
-            // ".decl LOAD_SLM_ADDR_W v_type=G type=w num_elts=16 align=wordx32 \n"
-            // ".decl LOAD_SLM_ADDR_UW v_type=G type=uw num_elts=16 align=wordx32 alias=<LOAD_SLM_ADDR_W, 0> \n"
-            // ".decl LOAD_SLM_ADDR_D v_type=G type=d num_elts=16 align=wordx32 \n"
-            // ".decl LOAD_SLM_ADDR_UD v_type=G type=ud num_elts=16 align=wordx32 alias=<LOAD_SLM_ADDR_D, 0> \n"
-            // "mov (M1_NM, 8) LOAD_SLM_ADDR_W(0,0)<1> 0x76543210:v \n"
-            // "add (M1_NM, 8) LOAD_SLM_ADDR_W(0,8)<1> LOAD_SLM_ADDR_W(0,0)<1;1,0> 0x8:w \n"
-            // "mov (M1, 16) LOAD_SLM_ADDR_D(0,0)<1> LOAD_SLM_ADDR_UW(0,0)<1;1,0> \n"
-            // "shl (M1, 16) LOAD_SLM_ADDR_D(0,0)<1> LOAD_SLM_ADDR_D(0,0)<1;1,0> 0x2:d \n"
-            // "add (M1, 16) LOAD_SLM_ADDR_UD(0,0)<1> LOAD_SLM_ADDR_UD(0,0)<1;1,0> %1(0,0)<1;1,0> \n"
-            // "lsc_load.slm (M1, 16) %0:d32 flat[LOAD_SLM_ADDR_UD]:a32 \n"
             "lsc_load.slm (M1, 16) %0:d32 flat[%1]:a32 \n"
-            // "fence_sw \n"
             "}\n" : "=rw"(data_vec)
             : "rw"(smem_int_ptr)
           );
@@ -164,7 +140,6 @@ struct XE_1D_STSM {
       "register vector only supports 1, 2, 4, 8");
   static constexpr size_t N_d32 = sizeof(S) / sizeof(uint32_t);
   using StorageT = intel::vector_t<uint32_t, N_d32>;
-  // static constexpr size_t shift_l = cutlass::log2_up<sizeof(S)>::value;
 
   template<class S_, class D_>
   CUTE_HOST_DEVICE static void
@@ -177,18 +152,7 @@ struct XE_1D_STSM {
           if constexpr (N_d32 > 1) {
             asm volatile(
                 "{\n"
-                // ".decl STORE_SLM_ADDR_W v_type=G type=w num_elts=16 align=wordx32 \n"
-                // ".decl STORE_SLM_ADDR_UW v_type=G type=uw num_elts=16 align=wordx32 alias=<STORE_SLM_ADDR_W, 0> \n"
-                // ".decl STORE_SLM_ADDR_D v_type=G type=d num_elts=16 align=wordx32 \n"
-                // ".decl STORE_SLM_ADDR_UD v_type=G type=ud num_elts=16 align=wordx32 alias=<STORE_SLM_ADDR_D, 0> \n"
-                // "mov (M1_NM, 8) STORE_SLM_ADDR_W(0,0)<1> 0x76543210:v \n"
-                // "add (M1_NM, 8) STORE_SLM_ADDR_W(0,8)<1> STORE_SLM_ADDR_W(0,0)<1;1,0> 0x8:w \n"
-                // "mov (M1, 16) STORE_SLM_ADDR_D(0,0)<1> STORE_SLM_ADDR_UW(0,0)<1;1,0> \n"
-                // "shl (M1, 16) STORE_SLM_ADDR_D(0,0)<1> STORE_SLM_ADDR_D(0,0)<1;1,0> 0x%3:d \n"
-                // "add (M1, 16) STORE_SLM_ADDR_UD(0,0)<1> STORE_SLM_ADDR_UD(0,0)<1;1,0> %1(0,0)<1;1,0> \n"
-                // "lsc_store.slm (M1, 16) flat[STORE_SLM_ADDR_UD]:a32 %0:d32x%2 \n"
                 "lsc_store.slm (M1, 16) flat[%1]:a32 %0:d32x%2 \n"
-                // "fence_sw \n"
                 "}\n" ::
                     "rw"(data_vec),
                 "rw"(smem_int_ptr), "P"(N_d32)
@@ -197,18 +161,7 @@ struct XE_1D_STSM {
           } else {
             asm volatile(
                 "{\n"
-                // ".decl STORE_SLM_ADDR_W v_type=G type=w num_elts=16 align=wordx32 \n"
-                // ".decl STORE_SLM_ADDR_UW v_type=G type=uw num_elts=16 align=wordx32 alias=<STORE_SLM_ADDR_W, 0> \n"
-                // ".decl STORE_SLM_ADDR_D v_type=G type=d num_elts=16 align=wordx32 \n"
-                // ".decl STORE_SLM_ADDR_UD v_type=G type=ud num_elts=16 align=wordx32 alias=<STORE_SLM_ADDR_D, 0> \n"
-                // "mov (M1_NM, 8) STORE_SLM_ADDR_W(0,0)<1> 0x76543210:v \n"
-                // "add (M1_NM, 8) STORE_SLM_ADDR_W(0,8)<1> STORE_SLM_ADDR_W(0,0)<1;1,0> 0x8:w \n"
-                // "mov (M1, 16) STORE_SLM_ADDR_D(0,0)<1> STORE_SLM_ADDR_UW(0,0)<1;1,0> \n"
-                // "shl (M1, 16) STORE_SLM_ADDR_D(0,0)<1> STORE_SLM_ADDR_D(0,0)<1;1,0> 0x2:d \n"
-                // "add (M1, 16) STORE_SLM_ADDR_UD(0,0)<1> STORE_SLM_ADDR_UD(0,0)<1;1,0> %1(0,0)<1;1,0> \n"
-                // "lsc_store.slm (M1, 16) flat[STORE_SLM_ADDR_UD]:a32 %0:d32 \n"
                 "lsc_store.slm (M1, 16) flat[%1]:a32 %0:d32 \n"
-                // "fence_sw \n"
                 "}\n" ::"rw"(data_vec),
                 "rw"(smem_int_ptr)
               );
