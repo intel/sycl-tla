@@ -1043,7 +1043,7 @@ template <bool Causal,
           typename ElementK = bfloat16_t,
           typename ElementV = bfloat16_t,
           typename ElementO = float,
-          typename ElementOaccum = float,
+          typename ElementOaccum = ElementO,
           typename MMAOperation_ = void,    /* void -> default */
           typename StrideQ = Stride<int, _1, int, int>,
           typename StrideK = Stride<int, _1, int, int>,
@@ -1056,7 +1056,6 @@ template <bool Causal,
           typename GmemTiledCopyO = void>
 struct FMHAConfig {
 
-  // when GQA used, fused group query heads into one single MMA call
   static constexpr int SGTileQ = get<0>(shape_div(TileShapeQK{}, shape(SubgroupLayoutQK{})))();
   using MMAOperation = cute::conditional_t<is_void_v<MMAOperation_>,
                                            typename cute::conditional_t<

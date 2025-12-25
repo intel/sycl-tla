@@ -92,7 +92,6 @@ public:
                 Stride<E<1>, E<0>>{})
   ));
   using ReduceFragARow = decltype(reduce<1>(ReduceFragA{}, sycl::plus<void>{}));
-  // static_assert(is_same_v<ReduceFragARow, float>, "dtype mismatched");
 
   static auto default_tiled_copy_O_helper() {
     if constexpr (ReduceK{} == _1{})
@@ -164,12 +163,6 @@ public:
     for (int i = 0; i < rA.size(); i++)
       rA(i) *= broadcast<0>(rA_sum, rA, i);
 
-#if 1
-    if (ThreadIdxX() == 0) {
-      // cute::print("wg id: %d, rA(0): %f, rA_sum(0): %f\n", BlockIdxZ(), (float)rA(0),(float)rA_sum(0));
-    }
-#endif
-
     /* Tile output */
     Tensor cO = make_identity_tensor(O.shape());          // (q,v)
     Tensor gO = local_tile(cO, TileShapeO{}, blk_qv);     // (q,v)
@@ -198,8 +191,7 @@ public:
              int              thr_id,   // Work-item ID
              const TensorO2D & exp_sums, // Global exp sum tensor
              const TensorO2D & max_logits, // Global max logits tensor
-             int idx_kv_split,
-             int head_q
+             int idx_kv_split
       ) {
 
     using namespace cute;
@@ -211,6 +203,7 @@ public:
         cute::print(" fwd epilogue tA_max(0): %f\n", float(tA_max(0)));
         cute::print(" fwd epilogue tA_sum(0): %f\n", float(tA_sum(0)));
         cute::print(" fwd epilogue tArA(0): %f\n", float(tArA(0)));
+        cute::print(" blk_qk: (%d, %d)\n", get<0>(blk_qv), get<1>(blk_qv));
       }
 #endif
 
@@ -220,8 +213,8 @@ public:
     // store exp sum and max logits for current KV split
     // assume seq_len_qo == 1
     if (ThreadIdxX() == 0) {
-      exp_sums(head_q,idx_kv_split) = rA_sum(0);
-      max_logits(head_q,idx_kv_split) = rA_max(0);
+      exp_sums(get<0>(blk_qv), idx_kv_split) = rA_sum(0);
+      max_logits(get<0>(blk_qv), idx_kv_split) = rA_max(0);
     }
 
     /* Some subgroups may not have any work to do; if so, quit early. */

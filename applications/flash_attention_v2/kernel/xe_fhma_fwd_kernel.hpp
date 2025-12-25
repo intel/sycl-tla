@@ -849,11 +849,6 @@ public:
       return false;
     }
 
-    // when GQA packing enabled, limit head group size to 8
-    if (args.kernel.shape.num_heads_q / args.kernel.shape.num_heads_kv > dpas_max_repeat_count) {
-      return false;
-    }
-
     return CollectiveMainloop::can_implement(args.mainloop)
         && CollectiveEpilogue::can_implement(args.epilogue);
   }
@@ -905,14 +900,16 @@ public:
 
     CUTLASS_PRAGMA_NO_UNROLL
     for (; tile_scheduler.is_valid(); ++tile_scheduler) {
-      // auto [blk_q, blk_v, head_q, idx_b] = tile_scheduler.get_block_coord(); // (Q,V,h,b)
-      auto [blk_q, blk_v, head, idx_b, idx_kv_split] = tile_scheduler.get_block_coord(); // (Q,V,h,b)
+      auto [blk_q, blk_v, head, idx_b, idx_kv_split] = tile_scheduler.get_block_coord(); // (Q,V,h,b,kv_split)
       auto blk_qv = make_coord(blk_q, blk_v);
       int head_q_start = head * head_group_q;
 
       auto sequence_length_shape = get_sequence_length_shape(s, idx_b);
       auto [seq_len_qo, seq_len_kv] = sequence_length_shape;
-      if (blk_q * get<0>(TileShapeQK{}) >= seq_len_qo) continue;
+
+      auto seq_len_qo_packed = seq_len_qo * head_group_q;
+
+      if (blk_q * get<0>(TileShapeQK{}) >= seq_len_qo_packed) continue;
 
       auto offset = cute::min(seq_len_qo, seq_len_kv);
       auto discard_seq_coord = seq_len_qo - offset;
@@ -941,14 +938,13 @@ public:
       }
 
       auto batch_dim = is_var_len ? 1 : s.batch;
-      auto shape_Q = make_shape(seq_len_qo * head_group_q, s.head_size_qk, s.num_heads_kv, batch_dim);
+      auto shape_Q = make_shape(seq_len_qo_packed, s.head_size_qk, s.num_heads_kv, batch_dim);
       // 4D shape
       auto shape_K = make_shape(seq_len_kv, s.head_size_qk, s.num_heads_kv, batch_dim);
       auto shape_V = make_shape(s.head_size_vo, seq_len_kv, s.num_heads_kv, batch_dim);
-      auto shape_O = make_shape(seq_len_qo * head_group_q, s.head_size_vo, s.num_heads_kv * num_kv_splits, batch_dim);
-
-      auto shape_exp_sums = make_shape(seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim);
-      auto shape_max_logits = make_shape(seq_len_qo * head_group_q, num_kv_splits, s.num_heads_kv, batch_dim);
+      auto shape_O = make_shape(seq_len_qo_packed, s.head_size_vo, s.num_heads_kv * num_kv_splits, batch_dim);
+      auto shape_exp_sums = make_shape(seq_len_qo_packed, num_kv_splits, s.num_heads_kv, batch_dim);
+      auto shape_max_logits = make_shape(seq_len_qo_packed, num_kv_splits, s.num_heads_kv, batch_dim);
 
       int num_blocks_per_split = cute::ceil_div(k_blocks, num_kv_splits);
       int kv_split_offset = idx_kv_split * num_blocks_per_split;
@@ -1046,15 +1042,12 @@ public:
 
       // Epilogue
       CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
-
-      for (int q_head_cnt = 0; q_head_cnt < head_group_q; ++q_head_cnt) {
-        epilogue(O(_,_,idx_kv_split * s.num_heads_kv + head,l_coord),
+      epilogue(O(_,_,idx_kv_split * s.num_heads_kv + head,l_coord),
                 tArA, tA_max, tA_sum,
                 blk_qv, thr_id,
                 exp_sums(_,_,head,l_coord),
                 max_logits(_,_,head,l_coord),
-                idx_kv_split, q_head_cnt);
-      }
+                idx_kv_split);
     }
   }
 };

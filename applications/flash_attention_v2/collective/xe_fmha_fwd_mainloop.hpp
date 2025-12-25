@@ -140,7 +140,6 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
   using SingleFragA = FragC<TiledMMAPV>;                          // (atom val,q',v')
   using FragA = expand_sg_fragment_t<SingleFragA, 1, VTiles>;     // (atom val,q',v',VV)
   using FragARow = decltype(reduce<1>(FragA{}, sycl::plus<void>{}));
-  // static_assert(is_same_v<decltype(FragSRow{}.shape()), float>, "dtype mismatched");
   using ElementA = typename TiledMMAPV::ValTypeD;
 
   static constexpr bool CausalMask = CausalMask_;
@@ -236,12 +235,6 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
     Tensor cK_cache = make_identity_tensor(K_cache_2D.shape()); // (k,d)
     Tensor cV_cache = make_identity_tensor(V_cache_2D.shape()); // (v,k)
     Tensor cP = make_identity_tensor(take<0,2>(TileShapeQK{})); // (q,k)
-
-#if 0
-    if (ThreadIdxX() == 0 && BlockIdxZ() == 0) {
-      print("Q 2D shape: "); print(Q_2D.shape()); print("\n");
-    }
-#endif
 
     /* Partition global tensors into workgroup tiles */
     Tensor gQ       = local_tile(cQ, TileShapeQK{}, append(blk_qv,_),             Step<_1,X,_1>{});   // (q,d,D)
