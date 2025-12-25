@@ -17,34 +17,34 @@ runs:
       run: |
         shopt -s expand_aliases
         which sudo || alias sudo=""
-        if [[ "${{ inputs.GPU }}" == "BMG" || "${{ inputs.GPU }}" == "PVC" ]]; then
+        if [[ "${{ inputs.GPU }}" == "BMG" ]] || [[ "${{ inputs.GPU }}" == "PVC" ]]; then
+          #purge existing intel graphics packages
+          sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
+          'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
+          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true        
+          sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
+
           sudo add-apt-repository ppa:kobuk-team/intel-graphics
           sudo apt update
+          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+            intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
+          dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         else
-          # LTS PVC drivers
-          # . /etc/os-release
-          # wget https://repositories.intel.com/gpu/ubuntu/dists/${VERSION_CODENAME}/intel-gpu-ubuntu-${VERSION_CODENAME}.run
-          # chmod +x intel-gpu-ubuntu-${VERSION_CODENAME}.run
-          # sudo ./intel-gpu-ubuntu-${VERSION_CODENAME}.run
-          # sudo apt install -y \
-          #   intel-media-va-driver-non-free libmfx-gen1 libvpl2 \
-          #   libegl-mesa0 libegl1-mesa-dev libgl1-mesa-dev  \
-          #   libgles2-mesa-dev libigdgmm12 libxatracker2 mesa-va-drivers \
-          #   mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo \
-          #   libigc-dev intel-igc-cm libigdfcl-dev libigfxcmrt-dev libze-dev hwinfo
           exit 1
         fi
-        sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
-          intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
-        dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
     - name: Install Intel graphics drivers
       if: inputs.IGC == 'STAGING'
       shell: bash
       run: |
         shopt -s expand_aliases
         which sudo || alias sudo=""
-        if [[ "${{ inputs.GPU }}" == "BMG" ]]; then
-          sudo rm -f /etc/apt/sources.list.d/ppa_kobuk_team_intel_graphics_oracular.list
+        if [[ "${{ inputs.GPU }}" == "BMG" ]] || [[ "${{ inputs.GPU }}" == "PVC" ]]; then
+          #purge existing intel graphics packages
+          sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
+          'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
+          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true        
+          sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
+
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           sudo apt update
           sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
