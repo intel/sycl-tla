@@ -235,7 +235,6 @@ public:
 
       ElementO global_max_logits = cutlass::platform::numeric_limits<ElementO>::lowest();
       ElementO global_exp_sums = 0;
-      // only first subgroup participates
       if (thr_id < num_kv_splits) {
         ElementO cur_max_logit = max_logits(seq_idx, thr_id, head_q, l_coord);
         global_max_logits = sycl::max(global_max_logits, cur_max_logit);
@@ -266,8 +265,7 @@ public:
 
           ElementO rescale = sycl::native::exp2(local_max_logit - global_max_logits);
 
-          // in FMHA epilogue, it's divided by local_exp_sum
-          // assume seq_len_q == 1
+          // in FMHA epilogue, it's divided by local_exp_sum, here we multiply back
           ElementO adjusted_o_accum = Oaccum(seq_idx, idx, i * num_heads_q + head_q, l_coord) * local_exp_sum;
           acc += adjusted_o_accum * rescale;
 

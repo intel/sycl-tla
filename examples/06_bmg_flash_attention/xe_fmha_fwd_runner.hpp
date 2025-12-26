@@ -852,7 +852,11 @@ struct ExampleRunner {
         block_O.get(), stride_O,
         block_K_cache.get(), stride_K_cache,
         block_V_cache.get(), stride_V_cache,
-      },
+      };
+    }
+
+    typename FMHAKernel::Arguments arguments {
+      kernel_args,
       {
         options.softmax_scale,
         options.use_paged_kv ? paged_kv_cache.page_table.get() : nullptr,
@@ -861,7 +865,7 @@ struct ExampleRunner {
       },
       {},
       hw_info,
-      options.num_kv_splits,
+      options.num_kv_splits
     };
 
     typename ReductionSplitKernel::Arguments reduce_arg {
