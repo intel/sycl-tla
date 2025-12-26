@@ -174,6 +174,12 @@ namespace sc = compat;
 namespace sc_exp = compat::experimental;
 namespace sycl_ext = sycl::ext::oneapi::experimental;
 
+template<typename TiledMma, typename TA, typename TB, typename TC>
+struct CooperativeGemmKernelName {};
+
+template<typename TiledMma, typename TA, typename TB, typename TC>
+struct CooperativeGemmRmemCKernelName {};
+
 template<uint32_t ThreadBlockSize,
          uint32_t CopyMaxVecBits,
          class GMemALayout,
@@ -629,7 +635,7 @@ void test_cooperative_gemm(GMemALayout     gmem_a_layout,
     TiledMma,
     ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform,
     ASMemCopyOp, BSMemCopyOp, CSMemCopyLdOp, CSMemCopyStOp
-  >>
+  >, CooperativeGemmKernelName<TiledMma, TA, TB, TC>>
   ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), sc_exp::local_mem_size{shared_memory_size}, sc_exp::kernel_properties{sycl_ext::sub_group_size<16>}},
        gmem_a_layout,
        gmem_b_layout,
@@ -787,7 +793,7 @@ void test_cooperative_gemm_rmem_c(GMemALayout     gmem_a_layout,
     TiledMma,
     ALoadTransform, BLoadTransform, CLoadTransform, CStoreTransform,
     ASMemCopyOp, BSMemCopyOp
-  >>
+  >, CooperativeGemmRmemCKernelName<TiledMma, TA, TB, TC>>
   ( sc_exp::launch_policy{sc::dim3(1), sc::dim3(ThreadBlockSize), sc_exp::local_mem_size{shared_memory_size}, sc_exp::kernel_properties{sycl_ext::sub_group_size<16>}},
        gmem_a_layout,
        gmem_b_layout,
