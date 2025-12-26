@@ -130,12 +130,18 @@ class EVTTestBed:
             dtype = self.element
         
         dtype = torch_type(dtype)
+        if torch.cuda.is_available():
+            device="cuda"
+        elif torch.xpu.is_available():
+            device="xpu"
+        else:
+            device="cpu"
         if fill is None:
             return torch.ceil(
-                torch.empty(size=shape, dtype=dtype, device="cuda").uniform_(-4.5, 3.5)
+                torch.empty(size=shape, dtype=dtype, device=device).uniform_(-4.5, 3.5)
             )
         else:
-            return torch.full(shape, fill, dtype=dtype, device="cuda")
+            return torch.full(shape, fill, dtype=dtype, device=device)
     
     def verify(self, problem_size, input_keys, result_keys, batch_count=1):
         """
@@ -172,6 +178,7 @@ class EVTTestBed:
             tensor_C = epilogue_args["C"]
         else:
             tensor_C = tensor_D
+        
         # Run the device kernel
         self.plan.run(tensor_A, tensor_B, tensor_C, tensor_D, visitor_args=epilogue_args)
         
@@ -185,9 +192,28 @@ class EVTTestBed:
         
         # Compare the results
         for result, ref in zip(result_keys, reference_results):
-            assert torch.equal(
-                epilogue_args[result].flatten(), 
-                ref.masked_fill(torch.isnan(ref), float('inf')).flatten())
+            # Convert reference to output dtype before comparison (handles fp32 ref vs fp16 output)
+            output_tensor = epilogue_args[result].flatten()
+            ref_converted = ref.masked_fill(torch.isnan(ref), float('inf')).to(output_tensor.dtype).flatten()
+            
+            # Debug: print differences if not equal
+            if not torch.equal(output_tensor, ref_converted):
+                print(f"\n[DEBUG] Mismatch in {result}:")
+                print(f"  Output dtype: {output_tensor.dtype}, Ref dtype: {ref_converted.dtype}")
+                print(f"  Output shape: {output_tensor.shape}, Ref shape: {ref_converted.shape}")
+                diff = (output_tensor - ref_converted).abs()
+                max_diff = diff.max().item()
+                print(f"  Max absolute difference: {max_diff}")
+                print(f"  Number of mismatches: {(output_tensor != ref_converted).sum().item()}")
+                
+                # Show first few mismatches
+                mismatch_idx = (output_tensor != ref_converted).nonzero(as_tuple=True)[0][:10]
+                if len(mismatch_idx) > 0:
+                    print(f"  First few mismatches (index: output vs ref):")
+                    for idx in mismatch_idx:
+                        print(f"    [{idx.item()}]: {output_tensor[idx].item():.6f} vs {ref_converted[idx].item():.6f}")
+            
+            assert torch.equal(output_tensor, ref_converted)
         
         # Run profile
         if self.profile:
