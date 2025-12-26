@@ -26,42 +26,15 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# Pass these configuration files for the CI
-set(CONFIG_FILE_INTEL_SMALL --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_small_gemm.in)
-set(CONFIG_FILE_CUDA --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/ampere/input_files/input_gemm.in)
+set(TEST_BATCHES --l=2)
 
-cutlass_benchmark_add_suite(cutlass_benchmarks_gemm)
-
-if(CUTLASS_ENABLE_SYCL)
-
-if(SYCL_INTEL_TARGET)
-
-cutlass_benchmark_add_executable(
-    cutlass_benchmarks_gemm_sycl
-    main.cpp
-    SUITE cutlass_benchmarks_gemm
-    TEST_COMMAND_OPTIONS
-    CONFIG_FILE_INTEL_SMALL
+cutlass_example_add_executable(
+  03_bmg_gemm_streamk_legacy
+  03_bmg_gemm_streamk.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
 )
-
-else()
-cutlass_benchmark_add_executable(
-    cutlass_benchmarks_gemm_sycl
-    main.cpp
-    SUITE cutlass_benchmarks_gemm
-    TEST_COMMAND_OPTIONS
-    CONFIG_FILE_CUDA
-)
-endif()
-
-else()
-
-cutlass_benchmark_add_executable(
-    cutlass_benchmarks_gemm_cuda
-    main.cu
-    SUITE cutlass_benchmarks_gemm
-    TEST_COMMAND_OPTIONS
-    CONFIG_FILE_CUDA
-)
-
+if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
+  # TODO(codeplay): Remove these once IGC VectorAliasThreshold issue is fixed
+  target_link_options( 03_bmg_gemm_streamk_legacy PRIVATE -Xs "-options \"-igc_opts 'VectorAliasBBThreshold=10000'\"" )
 endif()
