@@ -149,7 +149,73 @@ public:
     using ElementA = typename FragA::element_type;
 
     // Reduce k-blocks of A and A_sum across WG, if needed.
-    auto [rA, rA_sum, active] = reduce_A(tArA, tA_max, tA_sum, thr_id);
+    auto [rA, rA_max_unused, rA_sum, active] = reduce_A(tArA, tA_max, tA_sum, thr_id);
+
+    /* Some subgroups may not have any work to do; if so, quit early. */
+    if (!active) return;
+
+    /* Complete softmax, dividing out sums. */
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < rA_sum.size(); i++)
+      rA_sum(i) = ElementA(1) / rA_sum(i);
+
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < rA.size(); i++)
+      rA(i) *= broadcast<0>(rA_sum, rA, i);
+
+    /* Tile output */
+    Tensor cO = make_identity_tensor(O.shape());          // (q,v)
+    Tensor gO = local_tile(cO, TileShapeO{}, blk_qv);     // (q,v)
+
+    /* Prepare slices */
+    TiledCopyO copy_o{O};
+    auto thr_copy_o = copy_o.get_slice(thr_id);
+
+    auto tOrO = thr_copy_o.partition_sg_fragment_S(gO);
+    auto tOgO = thr_copy_o.partition_D(gO);
+
+    /* Reorder tile and write out */
+    reorder(rA, tOrO);
+    copy(copy_o, tOrO, tOgO);
+  }
+
+  // splitK version
+  template <typename QVCoord>
+  CUTLASS_DEVICE
+  void
+  operator()(TensorO2D const& O,        // Global O tensor: (q,v)
+             FragA          & tArA,     // O accumulator:   (q,v)
+             FragARow       & tA_max,   // Softmax row-wise max accumulator
+             FragARow       & tA_sum,   // Softmax row-wise sum accumulator
+             QVCoord          blk_qv,   // WG tile indices: (q,v)
+             int              thr_id,   // Work-item ID
+             const TensorO2D & exp_sums, // Global exp sum tensor
+             const TensorO2D & max_logits, // Global max logits tensor
+             int idx_kv_split
+      ) {
+
+    using namespace cute;
+    using ElementA = typename FragA::element_type;
+
+#if 0
+      if (ThreadIdxX() == 0 && BlockIdxZ() == 0) {
+        // cute::print("idx_kv_split: %d, idx_b: %d, head_q: %d, Q(0,0,head_q,l_coord): %f\n", idx_kv_split, idx_b, head_q, float(Q(0,34,head_q,l_coord)));
+        cute::print(" fwd epilogue tA_max(0): %f\n", float(tA_max(0)));
+        cute::print(" fwd epilogue tA_sum(0): %f\n", float(tA_sum(0)));
+        cute::print(" fwd epilogue tArA(0): %f\n", float(tArA(0)));
+        cute::print(" blk_qk: (%d, %d)\n", get<0>(blk_qv), get<1>(blk_qv));
+      }
+#endif
+
+    // Reduce k-blocks of A and A_sum across WG, if needed.
+    auto [rA, rA_max, rA_sum, active] = reduce_A(tArA, tA_max, tA_sum, thr_id);
+
+    // store exp sum and max logits for current KV split
+    // assume seq_len_qo == 1
+    if (ThreadIdxX() == 0) {
+      exp_sums(get<0>(blk_qv), idx_kv_split) = rA_sum(0);
+      max_logits(get<0>(blk_qv), idx_kv_split) = rA_max(0);
+    }
 
     /* Some subgroups may not have any work to do; if so, quit early. */
     if (!active) return;
@@ -193,7 +259,8 @@ public:
     using namespace sycl::ext::oneapi::this_work_item;
 
     if constexpr (ReduceK{} == _1{}) {
-      return std::make_tuple(tArA, tA_sum, true);
+      ReduceFragARow rA_max;
+      return std::make_tuple(tArA, rA_max, tA_sum, true);
     } else {
       /* Identify A tile ID and k block for this subgroup. */
       auto thr_vak = group<1,3>(TiledMMAPV{}.get_thr_layout_vmnk()).get_flat_coord(assert_uniform(thr_id));
@@ -285,7 +352,7 @@ public:
           }
         }
       }
-      return std::make_tuple(rA, rA_sum, active);
+      return std::make_tuple(rA, rA_max, rA_sum, active);
     }
   }
 };

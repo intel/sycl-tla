@@ -37,6 +37,7 @@
 #include "flash_attention_v2/collective/fmha_fusion.hpp"
 #include "flash_attention_v2/kernel/xe_fhma_fwd_kernel.hpp"
 #include "flash_attention_v2/kernel/xe_tile_scheduler.hpp"
+#include "flash_attention_v2/kernel/xe_reduce_split_k.h"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
 #include <cute/tensor.hpp>
@@ -65,10 +66,11 @@ struct Options {
 
   int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations, verify;
   float softmax_scale;
+  int num_kv_splits;
 
   Options()
       : help(false), error(false), is_causal(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
-        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), verify(1), scheduler("Individual") {}
+        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), num_kv_splits(1), iterations(100), softmax_scale(1.f), verify(1), scheduler("Individual") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -89,7 +91,7 @@ struct Options {
 
     cmd.get_cmd_line_argument("scheduler", scheduler, std::string("Individual"));
 
-#ifdef PERSISTENT
+#if defined(PERSISTENT) || defined(SPLITKV)
     cmd.get_cmd_line_argument("batch", batch, 1);
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 8);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, 1);
@@ -103,6 +105,11 @@ struct Options {
 #endif
 #ifdef DECODE
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 1);
+#ifdef SPLITKV
+    cmd.get_cmd_line_argument("num_kv_splits", num_kv_splits, 2);
+#else
+  cmd.get_cmd_line_argument("num_kv_splits", num_kv_splits, 1);
+#endif
 #else
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, seq_len_kv);
 #endif
@@ -147,6 +154,7 @@ struct Options {
         << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
         << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
         << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
+        << "  --num_kv_splits=<int>       Sets the Number of Key-Value splits in Multi-Head Self Attention module\n"
         << "  --iterations=<int>          Iterations\n"
         << "  --verify=<int>              Specify whether to verify.\n\n";
     return out;
@@ -186,7 +194,8 @@ using LayoutK = cutlass::layout::ColumnMajor;
 using LayoutV = cutlass::layout::RowMajor;
 using LayoutO = cutlass::layout::RowMajor;
 
-template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
+template <class FMHAKernel, class ReductionSplitKernel, bool isVarLen = false, bool isSplitKV = false> 
+struct ExampleRunner {
 
   using StrideQ = typename FMHAKernel::StrideQ;
   using StrideK = typename FMHAKernel::StrideK;
@@ -203,6 +212,8 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
 
   using ProblemShapeType = cutlass::fmha::kernel::FMHAProblemShape<isVarLen>;
 
+  static_assert(!isSplitKV || !is_void_v<ReductionSplitKernel>, "Standalone reduction kernel is required if splitKV enabled");
+
   //
   // Data members
   //
@@ -214,7 +225,12 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
   StrideK stride_K_cache;
   StrideV stride_V_cache;
   StrideO stride_O;
+  StrideO stride_Oaccum;
+  StrideO stride_exp_sums;
+  StrideO stride_max_logits;
   uint64_t seed = 0;
+
+  int num_kv_splits;
 
   cutlass::DeviceAllocation<ElementQ> block_Q;
   cutlass::DeviceAllocation<ElementK> block_K;
@@ -222,6 +238,11 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
   cutlass::DeviceAllocation<ElementK> block_K_cache;
   cutlass::DeviceAllocation<ElementV> block_V_cache;
   cutlass::DeviceAllocation<ElementO> block_O;
+  // TODO: assume same dtype as outputs
+  cutlass::DeviceAllocation<ElementO> block_Oaccum;
+  cutlass::DeviceAllocation<ElementO> block_exp_sums;
+  cutlass::DeviceAllocation<ElementO> block_max_logits;
+
   cutlass::DeviceAllocation<ElementO> block_ref_O;
 
   std::vector<int> cumulative_seqlen_q;
@@ -279,8 +300,17 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     int max_seqlen_kv_cache = 0;
 
     for (int i = 0; i < num_batches; i++) {
+#if defined(DECODE)
+      int seqlen_q = 1;
+      int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
+      // for test purpose
+      if (num_batches == 1) {
+         seqlen_kv = get<4>(problem_size);
+      }
+#else
       int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
+#endif
       int seqlen_kv_cache = get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKVCache);
 
       total_seqlen_q += seqlen_q;
@@ -568,6 +598,33 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
 
     compat::wait();
 
+#if 0
+    std::vector<ElementO> vec_Oaccum(block_Oaccum.size());
+    block_Oaccum.copy_to_host(vec_Oaccum.data());
+    for (size_t i = 0; i < vec_Oaccum.size(); i++) {
+      std::cout << "Oaccum[" << i << "] = " << vec_Oaccum[i] << std::endl;
+      if (i > 20) break;
+    }
+
+    std::vector<ElementO> vec_exp_sums(block_exp_sums.size());
+    std::vector<ElementO> vec_max_logits(block_max_logits.size());
+    block_exp_sums.copy_to_host(vec_exp_sums.data());
+    block_max_logits.copy_to_host(vec_max_logits.data());
+    for (size_t i = 0; i < vec_exp_sums.size(); i++) {
+      // if (i < 8 * 10) continue;
+      std::cout << "exp_sums[" << i << "]: " << vec_exp_sums[i] << ", max_logits[" << i << "]: " << vec_max_logits[i] << std::endl;
+    }
+
+    std::vector<ElementO> vec_O(block_O.size());
+    block_O.copy_to_host(vec_O.data());
+    std::vector<ElementO> vec_ref_O(block_ref_O.size());
+    block_ref_O.copy_to_host(vec_ref_O.data());
+    for (size_t i = 0; i < vec_ref_O.size(); i++) {
+      if (i < 5 * 128) continue;
+      std::cout << "ref_O[" << i << "] = " << vec_ref_O[i] << " vs. O[" << i << "] = " << vec_O[i] << std::endl;
+    }
+#endif
+
     // Check if output from CUTLASS kernel and reference kernel are equal or not
     bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_O.get(), block_O.get(),
                                                                           block_O.size(), ElementO{0.05}, ElementO{0.05});
@@ -579,6 +636,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
   ProblemShapeType initialize(const Options &options) {
     auto problem_shape_in = cute::make_tuple(options.batch, options.num_heads_q, options.num_heads_kv, options.seq_len_qo, options.seq_len_kv, options.seq_len_kv_cache, options.head_size_qk, options.head_size_vo);
     ProblemShapeType shape;
+    num_kv_splits = options.num_kv_splits;
 
     decltype(problem_shape_in) problem_size;
 
@@ -653,6 +711,18 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
       compat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
     }
 
+    if constexpr (isSplitKV) {
+      stride_Oaccum = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, num_heads_q * num_kv_splits, batch));
+      block_Oaccum.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo * num_kv_splits);
+
+      // assume seq_len_qo==1
+      stride_exp_sums = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, num_kv_splits, num_heads_q, batch));
+      block_exp_sums.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * num_kv_splits);
+
+      stride_max_logits = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, num_kv_splits, num_heads_q, batch));
+      block_max_logits.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * num_kv_splits);
+    }
+
     initialize_block(block_Q, seed + 2023);
     initialize_block(block_K, seed + 2022);
     initialize_block(block_V, seed + 2021);
@@ -712,12 +782,68 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     EventManager::getInstance().addEvent(event);
   }
 
+  static void run(typename FMHAKernel::Params params, typename ReductionSplitKernel::Params reduce_params)
+  {
+    namespace syclex = sycl::ext::oneapi::experimental;
+    namespace intelex = sycl::ext::intel::experimental;
+
+    dim3 const block = FMHAKernel::get_block_shape();
+    dim3 const grid = FMHAKernel::get_grid_shape(params);
+
+    // configure smem size and carveout
+    int smem_size = FMHAKernel::SharedStorageSize;
+
+    const auto sycl_block = compat::dim3(block.x, block.y, block.z);
+    const auto sycl_grid = compat::dim3(grid.x, grid.y, grid.z);
+
+    // Launch parameters depend on whether SYCL compiler supports work-group scratch memory extension
+    compat::experimental::launch_properties launch_props {
+      syclex::work_group_scratch_size(smem_size),
+    };
+    compat::experimental::kernel_properties kernel_props{
+      syclex::sub_group_size<cute::intel::sg_size>,
+      intelex::grf_size<256>
+    };
+    compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
+    auto event = compat::experimental::launch<cutlass::device_kernel<FMHAKernel>, FMHAKernel>(policy, params);
+
+    dim3 const reduce_grid = ReductionSplitKernel::get_grid_shape(reduce_params);
+    int reduce_smem_size = ReductionSplitKernel::SharedStorageSize;
+    const auto reduce_sycl_block = compat::dim3(block.x, block.y, block.z);
+    const auto reduce_sycl_grid = compat::dim3(reduce_grid.x, reduce_grid.y, reduce_grid.z);
+    compat::experimental::launch_properties launch_props_reduce {
+      syclex::work_group_scratch_size(reduce_smem_size),
+    };
+    compat::experimental::launch_policy reduce_policy{reduce_sycl_grid, reduce_sycl_block, launch_props_reduce, kernel_props};
+
+    // wait for FA kernel finished
+    // maybe no need wait here if launched with in-order queue
+    event.wait();
+
+    auto reduce_event = compat::experimental::launch<cutlass::device_kernel<ReductionSplitKernel>, ReductionSplitKernel>(reduce_policy, reduce_params);
+
+    EventManager::getInstance().addEvent(event);
+    EventManager::getInstance().addEvent(reduce_event);
+  }
+
   cutlass::Status run(const Options &options, const cutlass::KernelHardwareInfo &hw_info) {
 
     ProblemShapeType shape = initialize(options);
 
-    typename FMHAKernel::Arguments arguments{
-      {
+    typename FMHAKernel::KernelArguments kernel_args;
+    if constexpr (isSplitKV) {
+      kernel_args = typename FMHAKernel::KernelArguments {
+        shape,
+        block_Q.get(), stride_Q,
+        block_K.get(), stride_K,
+        block_V.get(), stride_V,
+        block_O.get(), stride_O,
+        block_Oaccum.get(), stride_Oaccum,
+        block_exp_sums.get(), stride_exp_sums,
+        block_max_logits.get(), stride_max_logits,
+      };
+    } else {
+      kernel_args = typename FMHAKernel::KernelArguments {
         shape,
         block_Q.get(), stride_Q,
         block_K.get(), stride_K,
@@ -725,7 +851,11 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
         block_O.get(), stride_O,
         block_K_cache.get(), stride_K_cache,
         block_V_cache.get(), stride_V_cache,
-      },
+      };
+    }
+
+    typename FMHAKernel::Arguments arguments {
+      kernel_args,
       {
         options.softmax_scale,
         options.use_paged_kv ? paged_kv_cache.page_table.get() : nullptr,
@@ -733,12 +863,27 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
         options.use_paged_kv ? paged_kv_cache.num_pages_per_seq.get() : nullptr
       },
       {},
-      hw_info
+      hw_info,
+      options.num_kv_splits
+    };
+
+    typename ReductionSplitKernel::Arguments reduce_arg {
+      {shape,
+      block_O.get(), stride_O,
+      block_Oaccum.get(), stride_Oaccum,
+      block_exp_sums.get(), stride_exp_sums,
+      block_max_logits.get(), stride_max_logits},
+      hw_info,
+      options.num_kv_splits
     };
 
     // Define device-global scratch memory
     size_t workspace_size = FMHAKernel::get_workspace_size(arguments);
-    cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
+    size_t reduce_workspace_size = 0;
+    if constexpr (isSplitKV) {
+      reduce_workspace_size = ReductionSplitKernel::get_workspace_size(reduce_arg);
+    }
+    cutlass::device_memory::allocation<uint8_t> workspace(workspace_size + reduce_workspace_size);
 
     if (!FMHAKernel::can_implement(arguments)) {
       std::cout << "Invalid Problem Size: " << options.batch << 'x' << options.num_heads_q << 'x' <<
@@ -752,9 +897,20 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
 
     // Convert host-side arguments to device-side arguments to be passed to the kernel
     auto params = FMHAKernel::to_underlying_arguments(arguments, workspace.get());
+    auto reduce_params = ReductionSplitKernel::to_underlying_arguments(reduce_arg, workspace.get() + workspace_size);
 
     // Run the GEMM
-    run(params);
+    if constexpr (isSplitKV) {
+      if (!ReductionSplitKernel::can_implement(reduce_arg)) {
+        std::cout << "Invalid Problem Size for ReductionSplitKernel" << std::endl;
+        return cutlass::Status::kErrorInvalidProblem;
+      }
+
+      CUTLASS_CHECK(ReductionSplitKernel::initialize_workspace(reduce_arg, workspace.get() + workspace_size));
+      run(params, reduce_params);
+    } else {
+      run(params);
+    }
 
     compat::wait();
 
@@ -773,10 +929,14 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
       GPU_Clock timer;
       timer.start();
       for (int i = 0; i < options.iterations; ++i) {
-        run(params);
+        if constexpr (isSplitKV) {
+          run(params, reduce_params);
+        } else {
+          run(params);
+        }
       }
       compat::wait();
-    // when seq_len_qo is not equal to seq_len_kv we use bottom up approach for the masking.
+      // when seq_len_qo is not equal to seq_len_kv we use bottom up approach for the masking.
       // Following changes will adjust the effective_seq_len_kv when masking applied for such cases
       auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
       auto discard_seq_coord = options.seq_len_qo - offset;
@@ -796,6 +956,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q  << "\tNumHeads_kv: " << options.num_heads_kv  << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
                 << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false")
+                << "\tKV Splits: " << options.num_kv_splits
                 << "\t Scheduler: " << options.scheduler;
       printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
     }
@@ -812,15 +973,18 @@ template <bool Causal,
           typename SubgroupLayoutPV_,      /* void -> default */
           int PipelineStages,
           bool persistent,
+          bool splitkv,
           typename ElementQ = bfloat16_t,
           typename ElementK = bfloat16_t,
           typename ElementV = bfloat16_t,
           typename ElementO = float,
+          typename ElementOaccum = ElementO,
           typename MMAOperation_ = void,    /* void -> default */
           typename StrideQ = Stride<int, _1, int, int>,
           typename StrideK = Stride<int, _1, int, int>,
           typename StrideV = Stride<_1, int, int, int>,
           typename StrideO = Stride<int, _1, int, int>,
+          typename StrideOaccum = Stride<int, _1, int, int>,
           typename GmemTiledCopyQ = void,   /* void -> default block 2D */
           typename GmemTiledCopyK = void,
           typename GmemTiledCopyV = void,
@@ -839,7 +1003,7 @@ struct FMHAConfig {
                                                decltype(cutlass::fmha::collective::get_sg_layout_pv(SubgroupLayoutQK{})),
                                                SubgroupLayoutPV_>;
 
-  template <bool isVarLen, bool PagedKV, class Scheduler>
+  template <bool isVarLen, bool PagedKV, bool isSplitKV, class Scheduler>
   static int run(const Options &options) {
     //
     // Run examples
@@ -867,7 +1031,10 @@ struct FMHAConfig {
     using TensorQ = decltype(make_dummy_tensor(ElementQ{}, StrideQ{}));
     using TensorK = decltype(make_dummy_tensor(ElementK{}, StrideK{}));
     using TensorV = decltype(make_dummy_tensor(ElementV{}, StrideV{}));
-    using TensorO = decltype(make_dummy_tensor(ElementO{}, StrideO{}));
+    using TensorO = conditional_t<isSplitKV,
+      decltype(make_dummy_tensor(ElementOaccum{}, StrideOaccum{})),
+      decltype(make_dummy_tensor(ElementO{}, StrideO{}))
+    >;
     using TensorK_cache = TensorK;
     using TensorV_cache = TensorV;
     using GmemTiledCopyK_cache = GmemTiledCopyK;
@@ -889,20 +1056,28 @@ struct FMHAConfig {
         CollectiveMainloop,
         TileShapeOutput,
         TensorO,
-        GmemTiledCopyO
+        conditional_t<isSplitKV, void, GmemTiledCopyO>
     >;
 
     static_assert(!(persistent & Causal), "persistent SDPA kernel not support Causal yet");
-    using FMHAKernel = conditional_t<is_same_v<Scheduler, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>,
-      cutlass::fmha::kernel::XeFMHAFwdDynamicSplitKernel<
+    using FMHAKernel = conditional_t<is_same_v<Scheduler, cutlass::fmha::kernel::XeFHMAPersistentTileScheduler>,
+      cutlass::fmha::kernel::XeFMHAFwdPersistentKernel<
         ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>,
-        cutlass::fmha::kernel::XeFMHAFwdKernel<
-        ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>
+        conditional_t<isSplitKV,
+          cutlass::fmha::kernel::XeFMHAFwdSplitKVKernel<
+          ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>,
+          cutlass::fmha::kernel::XeFMHAFwdKernel<
+          ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>
+          >
         >;
 
-    ExampleRunner<FMHAKernel, isVarLen> runner;
+    using ReduceSplitKernel = cutlass::reduction::kernel::ReduceSplitK<
+        ProblemShapeType, cutlass::fmha::kernel::XeReduceSplitKTileScheduler, FMHAKernel>;
+
+    ExampleRunner<FMHAKernel, ReduceSplitKernel, isVarLen, isSplitKV> runner;
 
     CUTLASS_CHECK(runner.run(options, hw_info));
+
     return 0;
   }
 
@@ -912,15 +1087,17 @@ struct FMHAConfig {
         std::cerr << "Error: Persistent kernel does not support paged/cached KV cache (use_paged_kv or seq_len_kv_cache > 0)." << std::endl;
         return -1;
       }
-      return run<false, false, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>(options);
+      return run<false, false, false, cutlass::fmha::kernel::XeFHMAPersistentTileScheduler>(options);
     } else if (options.use_paged_kv && !options.varlen) {
-      return run<false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return run<false, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else if(!options.use_paged_kv && options.varlen) {
-      return run<true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<true, false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+                       run<true, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else if(!options.use_paged_kv && !options.varlen) {
-      return run<false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<false, false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+                       run<false, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else {
-      return run<true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return run<true, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     }
   }
 };
