@@ -29,23 +29,9 @@ struct FAKernel {
     using SubgroupLayoutSdP = Layout<Shape<Int<AtomLayoutMSdP>, Int<kNSGs / AtomLayoutMSdP>, _1>>;
     using SubgroupLayoutdKV = Layout<Shape<Int<AtomLayoutNdKV>, Int<kNSGs / AtomLayoutNdKV>, _1>>;
     using SubgroupLayoutdQ = Layout<Shape<Int<AtomLayoutMdQ>, Int<kNSGs / AtomLayoutMdQ>, _1>>;
-    using TileShapeSdP = Layout<Shape<Int<kBlockM>, Int<kBlockN>, _K>>;
-    static_assert(size<0>(TileShapeSdP{}) <= kBlockM && "tile size M must be smaller than or equal to kBlockM");
-    static_assert(kBlockM % size<0>(TileShapeSdP{}) == 0 && "kBlockM must be dividable by tile size M");
-    static_assert(size<1>(TileShapeSdP{}) <= kBlockN && "tile size N must be smaller than or equal to kBlockN");
-    static_assert(kBlockN % size<1>(TileShapeSdP{}) == 0 && "kBlockN must be dividable by tile size N ");
-
+    using TileShapeSdP = Layout<Shape<Int<kBlockN>, Int<kBlockM>, _K>>;
     using TileShapedKV = Layout<Shape<Int<kBlockN>, Int<kHeadDim>, _K>>;
-    static_assert(size<0>(TileShapedKV{}) <= kBlockN && "tile size M must be smaller than or equal to kBlockN");
-    static_assert(kBlockN % size<0>(TileShapedKV{}) == 0 && "kBlockN must be dividable by tile size M");
-    static_assert(size<1>(TileShapedKV{}) <= kHeadDim && "tile size N must be smaller than or equal to kHeadDim");
-    static_assert(kHeadDim % size<1>(TileShapedKV{}) == 0 && "kHeadDim must be dividable by tile size N");
-
     using TileShapedQ = Layout<Shape<Int<kBlockM>, Int<kHeadDim>, _K>>;
-    static_assert(size<0>(TileShapedQ{}) <= kBlockM && "tile size M must be smaller than or equal to kBlockM");
-    static_assert(kBlockM % size<0>(TileShapedQ{}) == 0 && "kBlockM must dividable by tile size M");
-    static_assert(size<1>(TileShapedQ{}) <= kHeadDim && "tile size N must be smaller than or equal to kHeadDim");
-    static_assert(kHeadDim % size<1>(TileShapedQ{}) == 0 && "kHeadDim must be dividable by tile size N");
 
     using TiledMmaSdP = typename TiledMMAHelper<MMA_Atom<MMA_Atom_ARCH>,
                                                 TileShapeSdP,
