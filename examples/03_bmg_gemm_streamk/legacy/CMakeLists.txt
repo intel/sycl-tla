@@ -1,6 +1,4 @@
-#################################################################################################
-#
-# Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -27,16 +25,16 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-#################################################################################################
 
-from cutlass_cppgen.backend.evt.backend.sm80_emitter import Sm80Emitter
-import cutlass_cppgen.backend.evt.backend.sm80_nodes as sm80_nodes
-from cutlass_cppgen.backend.evt.backend.sm90_emitter import Sm90Emitter
-import cutlass_cppgen.backend.evt.backend.sm90_nodes as sm90_nodes
-from cutlass_cppgen.backend.evt.backend.sm100_emitter import Sm100Emitter
-import cutlass_cppgen.backend.evt.backend.sm100_nodes as sm100_nodes
-from cutlass_cppgen.backend.evt.backend.xe12_emitter import Xe12Emitter
-import cutlass_cppgen.backend.evt.backend.xe12_nodes as xe12_nodes
-from cutlass_cppgen.backend.evt.backend.xe20_emitter import Xe20Emitter
-import cutlass_cppgen.backend.evt.backend.xe20_nodes as xe20_nodes
+set(TEST_BATCHES --l=2)
+
+cutlass_example_add_executable(
+  03_bmg_gemm_streamk_legacy
+  03_bmg_gemm_streamk.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)
+if(NOT DPCPP_SYCL_TARGET STREQUAL "spir64")
+  # TODO(codeplay): Remove these once IGC VectorAliasThreshold issue is fixed
+  target_link_options( 03_bmg_gemm_streamk_legacy PRIVATE -Xs "-options \"-igc_opts 'VectorAliasBBThreshold=10000'\"" )
+endif()
