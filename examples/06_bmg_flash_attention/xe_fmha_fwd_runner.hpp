@@ -101,8 +101,8 @@ struct Options {
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, 512);
-    cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
 #endif
+    cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
 #ifdef DECODE
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 1);
 #ifdef SPLITKV
@@ -305,15 +305,17 @@ struct ExampleRunner {
 #if defined(DECODE)
       int seqlen_q = 1;
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
+      int seqlen_kv_cache = get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKVCache);
       // for test purpose
       if (num_batches == 1) {
          seqlen_kv = get<4>(problem_size);
+         seqlen_kv_cache = get<5>(problem_size);
       }
 #else
       int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
-#endif
       int seqlen_kv_cache = get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKVCache);
+#endif
 
       total_seqlen_q += seqlen_q;
       total_seqlen_kv += seqlen_kv;
@@ -841,8 +843,9 @@ struct ExampleRunner {
         block_Q.get(), stride_Q,
         block_K.get(), stride_K,
         block_V.get(), stride_V,
-        block_O.get(), stride_O,
         block_Oaccum.get(), stride_Oaccum,
+        block_K_cache.get(), stride_K_cache,
+        block_V_cache.get(), stride_V_cache,
         block_exp_sums.get(), stride_exp_sums,
         block_max_logits.get(), stride_max_logits,
       };
@@ -988,7 +991,6 @@ template <bool Causal,
           typename StrideK = Stride<int, _1, int, int>,
           typename StrideV = Stride<_1, int, int, int>,
           typename StrideO = Stride<int, _1, int, int>,
-          typename StrideOaccum = Stride<int, _1, int, int>,
           typename GmemTiledCopyQ = void,   /* void -> default block 2D */
           typename GmemTiledCopyK = void,
           typename GmemTiledCopyV = void,
@@ -1036,7 +1038,7 @@ struct FMHAConfig {
     using TensorK = decltype(make_dummy_tensor(ElementK{}, StrideK{}));
     using TensorV = decltype(make_dummy_tensor(ElementV{}, StrideV{}));
     using TensorO = conditional_t<isSplitKV,
-      decltype(make_dummy_tensor(ElementOaccum{}, StrideOaccum{})),
+      decltype(make_dummy_tensor(ElementOaccum{}, StrideO{})),
       decltype(make_dummy_tensor(ElementO{}, StrideO{}))
     >;
     // currently only support float for intermediate states like max logits and exp sums
@@ -1096,7 +1098,8 @@ struct FMHAConfig {
       }
       return run<false, false, false, cutlass::fmha::kernel::XeFHMAPersistentTileScheduler>(options);
     } else if (options.use_paged_kv && !options.varlen) {
-      return run<false, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<false, true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+                       run<false, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else if(!options.use_paged_kv && options.varlen) {
       return splitkv ? run<true, false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
                        run<true, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
@@ -1104,7 +1107,8 @@ struct FMHAConfig {
       return splitkv ? run<false, false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
                        run<false, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else {
-      return run<true, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<true, true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+                      run<true, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     }
   }
 };
