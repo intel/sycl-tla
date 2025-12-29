@@ -1,6 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,23 +29,23 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief CUTLASS Intel BMG Gemm with ReLU Activation Fn epilogue
+    \brief CUTLASS Intel BMG Gemm with Linear Combination, Per-Row Bias, Activation, and Aux Output epilogue.
 
-    This example constructs and executes a standard GEMM fused with a ReLU (Rectified Linear Unit)
-    activation epilogue. Aside from the epilogue operation, it is identical to 00_bmg_gemm.
+    This example constructs and executes a standard GEMM fused with a complex epilogue pipeline
+    consisting of Linear Combination, Per-Row Bias addition, Activation (ReLU), and an Auxiliary output.
 
-    CUTLASS 3.x epilogues are implemented using the Epilogue Visitor Tree design pattern, and
-    typically combine 'Linear Combination' (i.e. `D = alpha * A*B + beta * C`) with an additional
-    epilogue operation.
+    CUTLASS 3.x epilogues are implemented using the Epilogue Visitor Tree design pattern.
+    This example demonstrates the `LinCombPerRowBiasEltActAux` fusion operation which performs:
 
-    In this case, the ReLU Element-wise activation function is applied:
-
-    // D = ReLU(alpha * (A*B) + beta * C)
+    1. Linear Combination: Accum = alpha * (A*B)
+    2. Bias Addition:      Accum = Accum + Bias (broadcasted per row) + beta * C
+    3. Aux Store:          Aux   = Accum (stored to global memory before activation)
+    4. Activation:         D     = ReLU(Accum)
 
     To build & run this example (from your build dir):
 
-      $ ninja 05_bmg_gemm_with_epilogue_relu
-      $ ./examples/sycl/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_relu
+      $ ninja 05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux
+      $ ./examples/sycl/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux
 
     Call with `--help` for information about available options
 */
@@ -175,6 +174,7 @@ struct ExampleRunner {
   cutlass::DeviceAllocation<ElementC> block_C;
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
+  cutlass::DeviceAllocation<ElementOutput> block_Aux;
 
   //
   // Methods
@@ -208,6 +208,9 @@ struct ExampleRunner {
 
     compat::wait();
 
+    bool passed = cutlass::reference::device::BlockCompareEqual(
+      block_ref_D.get(), block_Aux.get(), block_Aux.size());
+
     using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
     for(int batch = 0, offset = 0; batch < L; batch++, offset += M * N) {
       cutlass::reference::device::TensorReLu(TensorView(block_ref_D.get() + offset, LayoutD::packed({M, N}),
@@ -217,7 +220,7 @@ struct ExampleRunner {
     compat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
-    bool passed = cutlass::reference::device::BlockCompareEqual(
+    passed = passed && cutlass::reference::device::BlockCompareEqual(
       block_ref_D.get(), block_D.get(), block_D.size());
 
     return passed;
@@ -238,10 +241,12 @@ struct ExampleRunner {
     block_C.reset(static_cast<std::size_t>(M) * N * L);
     block_D.reset(static_cast<std::size_t>(M) * N * L);
     block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
+    block_Aux.reset(static_cast<std::size_t>(M) * N * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
+    initialize_block(block_Aux, seed + 2020);
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -249,11 +254,18 @@ struct ExampleRunner {
 
     initialize(problem_size);
 
+    using EpilogueArguments = typename Gemm::GemmKernel::EpilogueArguments;
+    EpilogueArguments epilogue_arguments{
+      {options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D};
+    epilogue_arguments.thread.aux_ptr = block_Aux.get();
+    epilogue_arguments.thread.dAux = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
+
+
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
       {block_A.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
+      epilogue_arguments,
       hw_info
     };
 
@@ -357,12 +369,14 @@ int main(int argc, const char** argv)
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
-  // The Linear Combination with ReLU epilogue
-  using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, ElementOutput,
-          ElementComputeEpilogue, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+  using EpilogueOp = cutlass::epilogue::fusion::LinCombPerRowBiasEltActAux<LayoutC, cutlass::epilogue::thread::ReLu, ElementOutput,
+          ElementComputeEpilogue, ElementAccumulator, ElementAccumulator>;
 
-  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
-          decltype(tile_shape(TiledMma()))>;
+  using CopyOpR2G = conditional_t<sizeof_bits_v<ElementOutput> == 32, XE_2D_U32x8x16_ST_N, XE_2D_U16x8x16_ST_N>;            
+
+  using FusionCallbacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
+          decltype(tile_shape(TiledMma())), CopyOpR2G>;          
+
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
           TileShape,
@@ -370,7 +384,7 @@ int main(int argc, const char** argv)
           cutlass::gemm::TagToStrideC_t<LayoutC>,
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
-          FusionCallBacks,
+          FusionCallbacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
           XE_2D_U32x8x16_ST_N,

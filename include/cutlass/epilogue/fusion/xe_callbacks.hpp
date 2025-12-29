@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -820,9 +821,237 @@ struct FusionCallbacks<
   using Impl::Impl;
 };
 
+// D = activation(alpha * acc + beta * C + per-row bias)
+// Aux = alpha * acc + beta * C + per-row bias)
+template<
+  class CtaTileShapeMNK,
+  class EpilogueTile,
+  class StrideAux,
+  class CopyOpR2G,
+  template <class> class ActivationFn,
+  class ElementOutput,
+  class ElementCompute,
+  class ElementAux = ElementOutput,
+  class ElementBias = ElementOutput,
+  class ElementSource = ElementOutput,
+  class ElementScalar = ElementCompute,
+  int AlignmentAux = 128 / sizeof_bits_v<ElementAux>,
+  int AlignmentBias = 128 / sizeof_bits_v<ElementBias>,
+  FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest
+>
+using XeLinCombPerRowBiasEltActAux =
+  Sm90EVT<Sm90Compute<ActivationFn, ElementOutput, ElementCompute, RoundStyle>,
+    Sm90EVT<XeAuxStore<ElementAux, StrideAux, CopyOpR2G>,
+      Sm90LinCombPerRowBias<CtaTileShapeMNK, ElementCompute, ElementCompute, ElementBias, ElementSource, ElementScalar, AlignmentBias, RoundStyle>
+    >
+  >;
+
+template <
+  class GmemLayoutTagAux,
+  template <class> class ActivationFn,
+  class ElementOutput,
+  class ElementCompute,
+  class ElementAux,
+  class ElementBias,
+  class ElementSource,
+  class ElementScalar,
+  int AlignmentAux,
+  int AlignmentBias,
+  FloatRoundStyle RoundStyle,
+  class CtaTileShapeMNK,
+  class EpilogueTile,
+  class CopyOpR2G
+>
+struct FusionCallbacks<
+    epilogue::IntelXeGeneric,
+    fusion::LinCombPerRowBiasEltActAux<
+      GmemLayoutTagAux, ActivationFn, ElementOutput, ElementCompute,
+      ElementAux, ElementBias, ElementSource, ElementScalar, AlignmentAux, AlignmentBias, RoundStyle
+    >,
+    CtaTileShapeMNK,
+    EpilogueTile,
+    CopyOpR2G
+> : XeLinCombPerRowBiasEltActAux<
+      CtaTileShapeMNK, EpilogueTile, cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpR2G, ActivationFn,
+      ElementOutput, ElementCompute, ElementAux, ElementBias, ElementSource, ElementScalar, AlignmentAux, AlignmentBias, RoundStyle
+    > {
+
+  using Impl =
+    XeLinCombPerRowBiasEltActAux<
+      CtaTileShapeMNK, EpilogueTile, cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpR2G, ActivationFn,
+      ElementOutput, ElementCompute, ElementAux, ElementBias, ElementSource, ElementScalar, AlignmentAux, AlignmentBias, RoundStyle
+    >;
+  using Operation =
+    fusion::LinCombPerRowBiasEltActAux<
+      GmemLayoutTagAux, ActivationFn,
+      ElementOutput, ElementCompute, ElementAux, ElementBias, ElementSource, ElementScalar, AlignmentAux, AlignmentBias, RoundStyle
+    >;
+
+  struct Arguments {
+    ElementScalar alpha = ElementScalar(1);
+    ElementScalar beta = ElementScalar(0);
+    ElementScalar const* alpha_ptr = nullptr;
+    ElementScalar const* beta_ptr = nullptr;
+
+    using StrideAlpha = Stride<_0,_0,int64_t>;
+    using StrideBeta  = Stride<_0,_0,int64_t>;
+    StrideAlpha dAlpha = {_0{}, _0{}, 0};
+    StrideBeta  dBeta  = {_0{}, _0{}, 0};
+
+    using StrideBias = Stride<_1,_0,int64_t>;
+    ElementBias const* bias_ptr = nullptr;
+    StrideBias dBias = {};
+
+    using ActivationArguments = typename Sm90Compute<ActivationFn, ElementOutput, ElementCompute, RoundStyle>::Arguments;
+    ActivationArguments activation = ActivationArguments();
+
+    using StrideAux = cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>;
+    ElementAux* aux_ptr = nullptr;
+    StrideAux dAux = {};
+
+    operator typename Impl::Arguments() const {
+      return
+        {    // unary op : activation(store(beta * C + (alpha * acc + bias)))
+          {                 // unary op : store(beta * C + (alpha * acc + bias))
+            {                  // ternary op : beta * C + (alpha * acc + bias)
+              {{beta}, {beta_ptr}, {dBeta}}, // leaf args : beta
+              {},                   // leaf args : C
+              {                     // ternary op : alpha * acc + bias
+                {{alpha}, {alpha_ptr}, {dAlpha}}, // leaf args : alpha
+                {},                     // leaf args : acc
+                {bias_ptr, ElementBias(0), dBias}, // leaf args : bias
+                {}                  // ternary args : multiply_add
+              },                    // end ternary op
+              {}               // ternary args : multiply_add
+            },                 // end ternary op
+            {aux_ptr, ElementAux(0), dAux} // unary args : store
+          },                // end unary op
+          activation // unary args : activation
+        };   // end unary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Callbacks for legacy epilogues (deprecated).
+
+// D = activation(alpha * acc + beta * C + per-row bias)
+// Aux = alpha * acc + beta * C + per-row bias)
+template<
+  class CtaTileShapeMNK,
+  class EpilogueTile,
+  class StrideAux,
+  class CopyOpR2G,
+  template <class> class ActivationFn,
+  class ElementOutput,
+  class ElementCompute,
+  class ElementAux = ElementOutput,
+  class ElementBias = ElementOutput,
+  class ElementSource = ElementOutput,
+  class ElementScalar = ElementCompute,
+  int AlignmentAux = 128 / sizeof_bits_v<ElementAux>,
+  int AlignmentBias = 128 / sizeof_bits_v<ElementBias>,
+  FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest
+>
+using XeLinCombPerRowBiasEltActAuxLegacy =
+  Sm90EVT<Sm90Compute<ActivationFn, ElementOutput, ElementCompute, RoundStyle>,
+    Sm90EVT<XeAuxStoreLegacy<ElementAux, StrideAux, CopyOpR2G>,
+      Sm90LinCombPerRowBias<CtaTileShapeMNK, ElementCompute, ElementCompute, ElementBias, ElementSource, ElementScalar, AlignmentBias, RoundStyle>
+    >
+  >;
+
+template <
+  class GmemLayoutTagAux,
+  template <class> class ActivationFn,
+  class ElementOutput,
+  class ElementCompute,
+  class ElementAux,
+  class ElementBias,
+  class ElementSource,
+  class ElementScalar,
+  int AlignmentAux,
+  int AlignmentBias,
+  FloatRoundStyle RoundStyle,
+  class CtaTileShapeMNK,
+  class EpilogueTile,
+  class CopyOpR2G
+>
+struct FusionCallbacks<
+    epilogue::IntelXeXMX16,
+    fusion::LinCombPerRowBiasEltActAux<
+      GmemLayoutTagAux, ActivationFn, ElementOutput, ElementCompute,
+      ElementAux, ElementBias, ElementSource, ElementScalar, AlignmentAux, AlignmentBias, RoundStyle
+    >,
+    CtaTileShapeMNK,
+    EpilogueTile,
+    CopyOpR2G
+> : XeLinCombPerRowBiasEltActAuxLegacy<
+      CtaTileShapeMNK, EpilogueTile, cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpR2G, ActivationFn,
+      ElementOutput, ElementCompute, ElementAux, ElementBias, ElementSource, ElementScalar, AlignmentAux, AlignmentBias, RoundStyle
+    > {
+
+  using Impl =
+    XeLinCombPerRowBiasEltActAuxLegacy<
+      CtaTileShapeMNK, EpilogueTile, cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpR2G, ActivationFn,
+      ElementOutput, ElementCompute, ElementAux, ElementBias, ElementSource, ElementScalar, AlignmentAux, AlignmentBias, RoundStyle
+    >;
+  using Operation =
+    fusion::LinCombPerRowBiasEltActAux<
+      GmemLayoutTagAux, ActivationFn,
+      ElementOutput, ElementCompute, ElementAux, ElementBias, ElementSource, ElementScalar, AlignmentAux, AlignmentBias, RoundStyle
+    >;
+
+  struct Arguments {
+    ElementScalar alpha = ElementScalar(1);
+    ElementScalar beta = ElementScalar(0);
+    ElementScalar const* alpha_ptr = nullptr;
+    ElementScalar const* beta_ptr = nullptr;
+
+    using StrideAlpha = Stride<_0,_0,int64_t>;
+    using StrideBeta  = Stride<_0,_0,int64_t>;
+    StrideAlpha dAlpha = {_0{}, _0{}, 0};
+    StrideBeta  dBeta  = {_0{}, _0{}, 0};
+
+    using StrideBias = Stride<_1,_0,int64_t>;
+    ElementBias const* bias_ptr = nullptr;
+    StrideBias dBias = {};
+
+    using ActivationArguments = typename Sm90Compute<ActivationFn, ElementOutput, ElementCompute, RoundStyle>::Arguments;
+    ActivationArguments activation = ActivationArguments();
+
+    using StrideAux = cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>;
+    ElementAux* aux_ptr = nullptr;
+    StrideAux dAux = {};
+
+    operator typename Impl::Arguments() const {
+      return
+        {    // unary op : activation(store(beta * C + (alpha * acc + bias)))
+          {                 // unary op : store(beta * C + (alpha * acc + bias))
+            {                  // ternary op : beta * C + (alpha * acc + bias)
+              {{beta}, {beta_ptr}, {dBeta}}, // leaf args : beta
+              {},                   // leaf args : C
+              {                     // ternary op : alpha * acc + bias
+                {{alpha}, {alpha_ptr}, {dAlpha}}, // leaf args : alpha
+                {},                     // leaf args : acc
+                {bias_ptr, ElementBias(0), dBias}, // leaf args : bias
+                {}                  // ternary args : multiply_add
+              },                    // end ternary op
+              {}               // ternary args : multiply_add
+            },                 // end ternary op
+            {aux_ptr, ElementAux(0), dAux} // unary args : store
+          },                // end unary op
+          activation // unary args : activation
+        };   // end unary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
 
 template <
   class ElementOutput_,
