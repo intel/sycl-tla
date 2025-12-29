@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,6 +45,7 @@
 #include "cutlass/epilogue/fusion/sm90_callbacks_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/xe_visitor.hpp"
+#include "cutlass/epilogue/fusion/xe_visitor_legacy.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_load_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_store_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_compute_tma_warpspecialized.hpp"
@@ -318,6 +320,8 @@ struct FusionCallbacks<
   using Impl::Impl;
 };
 
+// XeLinCombDeEltActLegacy - uses old XeAuxLoad for backward compatibility with examples
+// EVT tests bypass this and directly instantiate XeAuxLoad via Python code generation
 template<
   class StrideAux,
   class CopyOpG2R,
@@ -329,16 +333,17 @@ template<
   class ElementScalar = ElementCompute,
   FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest
 >
-using XeLinCombDeEltAct =
+using XeLinCombDeEltActLegacy =
   Sm90EVT<Sm90Compute<ActivationFn, ElementOutput, ElementCompute, RoundStyle>, // activation(beta * C + (alpha * acc), aux)
     Sm90LinearCombination<ElementCompute, ElementCompute, ElementSource, ElementScalar, RoundStyle>, // beta * C + (alpha * acc)
-    XeAuxLoad<ElementAux, StrideAux, CopyOpG2R> // aux
+    XeAuxLoadLegacy<ElementAux, StrideAux, CopyOpG2R> // aux (legacy version with explicit CopyOpG2R)
   >;
 
 // Z = Aux
 // dY = alpha * acc + beta * C
 // D = activation(dY, Z)
 //
+// Specialization with explicit CopyOpG2R - uses legacy XeAuxLoad for backward compatibility
 template <
   class GmemLayoutTagAux,
   template <class> class ActivationFn,
@@ -362,7 +367,7 @@ struct FusionCallbacks<
     CtaTileShapeMNK,
     EpilogueTile,
     CopyOpG2R
-> : XeLinCombDeEltAct<
+> : XeLinCombDeEltActLegacy<
       cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpG2R, ActivationFn, ElementOutput_,
       ElementCompute_, ElementAux, ElementSource, ElementScalar, RoundStyle
     > {
@@ -371,7 +376,7 @@ struct FusionCallbacks<
   using ElementCompute = ElementCompute_;
 
   using Impl =
-    XeLinCombDeEltAct<
+    XeLinCombDeEltActLegacy<
       cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>, CopyOpG2R, ActivationFn, ElementOutput,
       ElementCompute, ElementAux, ElementSource, ElementScalar, RoundStyle
     >;
@@ -423,7 +428,7 @@ struct FusionCallbacks<
 };
 
 // Temporary: provide default G2R operation for LinCombDeEltAct, for CollectiveBuilder.
-// This will be removed once XeAuxLoad moves to new atoms and autodetects copy op.
+// Used by examples and non-EVT tests that don't specify CopyOpG2R template parameter
 template <typename ElementSource>
 using XeAuxLoadDefaultCopyOpG2R = conditional_t<sizeof_bits_v<ElementSource> == 32, XE_2D_U32x8x16_LD_N, XE_2D_U16x8x16_LD_N>;
 

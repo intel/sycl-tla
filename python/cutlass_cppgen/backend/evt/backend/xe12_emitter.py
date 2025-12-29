@@ -1,5 +1,5 @@
 ###################################################################################################
-# Copyright (C) 2025 Intel Corporation, All rights reserved.
+# Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -71,12 +71,9 @@ class CollectiveEpilogue:
 
     def emit(self):
         callback_decl, callback_name = self.fusion_callbacks.emit()
+        # Define TileShape_MNK alias for reduction nodes to reference
         return callback_name, f"""
-using EpilogueDescriptor = cutlass::epilogue::collective::detail::EpilogueDescriptor<
-  {self.CtaTileMNK}, {self.EpilogueTileType},
-  {DataTypeTag[self.element_c]}, {DataTypeTag[self.element_d]},
-  {self.Schedule}
->;
+using TileShape_MNK = {self.CtaTileMNK};
 {callback_decl}
 """
 
