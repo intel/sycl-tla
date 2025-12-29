@@ -104,6 +104,8 @@ public:
   using ElementO = typename CollectiveEpilogue::TensorO::element_type;
   using StrideO = decltype(stride(typename CollectiveEpilogue::TensorO{}));
 
+  using ElementLSE = void;
+
   // Kernel level shared memory storage
   using MainloopSharedStorage = typename CollectiveMainloop::SharedStorage;
   using EpilogueSharedStorage = typename CollectiveEpilogue::SharedStorage;
@@ -354,6 +356,8 @@ public:
   using TileShapeO = typename CollectiveEpilogue::TileShapeO;
   using ElementO = typename CollectiveEpilogue::TensorO::element_type;
   using StrideO = decltype(stride(typename CollectiveEpilogue::TensorO{}));
+
+  using ElementLSE = void;
 
   // Kernel level shared memory storage
   using MainloopSharedStorage = typename CollectiveMainloop::SharedStorage;
@@ -777,6 +781,9 @@ public:
   using ElementO = typename CollectiveEpilogue::TensorO::element_type;
   using StrideO = decltype(stride(typename CollectiveEpilogue::TensorO{}));
 
+  // dtype for storing intermediate exp sums and max logits
+  using ElementLSE = typename CollectiveEpilogue::ElementLSE;
+
   // Kernel level shared memory storage
   using MainloopSharedStorage = typename CollectiveMainloop::SharedStorage;
   using EpilogueSharedStorage = typename CollectiveEpilogue::SharedStorage;
@@ -805,9 +812,9 @@ public:
     // TODO: whether same dtype as output or accum?
     ElementO *Oaccum;
     StrideO dOaccum;
-    ElementO *exp_sums;
+    ElementLSE *exp_sums;
     StrideO dExp_sums;
-    ElementO *max_logits;
+    ElementLSE *max_logits;
     StrideO dMax_logits;
   };
   using KernelParams = KernelArguments;

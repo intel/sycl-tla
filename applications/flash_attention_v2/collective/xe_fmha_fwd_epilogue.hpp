@@ -50,6 +50,7 @@ using namespace cute;
 template <class CollectiveMainloop, // Attention mainloop
           class TileShapeO_,        // Shape of output tile, may be larger than P*V GEMM
           class TensorO_,           // 2D slice of global output tensor
+          class TensorLSE_ = void,    // Optional tensor for storing intermediate exp sums and max logits
           class TiledCopyO_ = void> // Optional TiledCopy for loading O
 class FMHAFwdEpilogue {
 
@@ -65,6 +66,10 @@ public:
   using TensorO = TensorO_;
   using TensorO2D = decltype(TensorO_{}(append<rank_v<TensorO_>>(make_coord(_,_),0)));
   using ElementO = typename TensorO_::value_type;
+
+  using TensorLSE = TensorLSE_;
+  using TensorLSE2D = conditional_t<is_void_v<TensorLSE_>, void, decltype(TensorLSE_{}(append<rank_v<TensorLSE_>>(make_coord(_,_),0)))>;
+  using ElementLSE = conditional_t<is_void_v<TensorLSE_>, void, typename TensorLSE_::value_type>;
 
   using FragA = typename CollectiveMainloop::FragA;
   using FragARow = typename CollectiveMainloop::FragARow;
@@ -189,8 +194,8 @@ public:
              FragARow       & tA_sum,   // Softmax row-wise sum accumulator
              QVCoord          blk_qv,   // WG tile indices: (q,v)
              int              thr_id,   // Work-item ID
-             const TensorO2D & exp_sums, // Global exp sum tensor
-             const TensorO2D & max_logits, // Global max logits tensor
+             const TensorLSE2D & exp_sums, // Global exp sum tensor
+             const TensorLSE2D & max_logits, // Global max logits tensor
              int idx_kv_split
       ) {
 

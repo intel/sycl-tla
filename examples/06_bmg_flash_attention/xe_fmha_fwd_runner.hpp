@@ -209,6 +209,8 @@ struct ExampleRunner {
   using ElementV = typename FMHAKernel::ElementV;
   using ElementO = typename FMHAKernel::ElementO;
 
+  using ElementLSE =  float;
+
   using CollectiveMainloop = typename FMHAKernel::CollectiveMainloop;
   using ElementS = typename CollectiveMainloop::ElementS;
 
@@ -242,8 +244,8 @@ struct ExampleRunner {
   cutlass::DeviceAllocation<ElementO> block_O;
   // TODO: assume same dtype as outputs
   cutlass::DeviceAllocation<ElementO> block_Oaccum;
-  cutlass::DeviceAllocation<ElementO> block_exp_sums;
-  cutlass::DeviceAllocation<ElementO> block_max_logits;
+  cutlass::DeviceAllocation<ElementLSE> block_exp_sums;
+  cutlass::DeviceAllocation<ElementLSE> block_max_logits;
 
   cutlass::DeviceAllocation<ElementO> block_ref_O;
 
@@ -607,13 +609,15 @@ struct ExampleRunner {
       if (i > 20) break;
     }
 
-    std::vector<ElementO> vec_exp_sums(block_exp_sums.size());
-    std::vector<ElementO> vec_max_logits(block_max_logits.size());
-    block_exp_sums.copy_to_host(vec_exp_sums.data());
-    block_max_logits.copy_to_host(vec_max_logits.data());
-    for (size_t i = 0; i < vec_exp_sums.size(); i++) {
-      // if (i < 8 * 10) continue;
-      std::cout << "exp_sums[" << i << "]: " << vec_exp_sums[i] << ", max_logits[" << i << "]: " << vec_max_logits[i] << std::endl;
+    if constexpr (!is_void_v<ElementLSE>) {
+      std::vector<ElementLSE> vec_exp_sums(block_exp_sums.size());
+      std::vector<ElementLSE> vec_max_logits(block_max_logits.size());
+      block_exp_sums.copy_to_host(vec_exp_sums.data());
+      block_max_logits.copy_to_host(vec_max_logits.data());
+      for (size_t i = 0; i < vec_exp_sums.size(); i++) {
+        // if (i < 8 * 10) continue;
+        std::cout << "exp_sums[" << i << "]: " << vec_exp_sums[i] << ", max_logits[" << i << "]: " << vec_max_logits[i] << std::endl;
+      }
     }
 
     std::vector<ElementO> vec_O(block_O.size());
@@ -1104,6 +1108,8 @@ struct FMHAConfig {
       decltype(make_dummy_tensor(ElementOaccum{}, StrideOaccum{})),
       decltype(make_dummy_tensor(ElementO{}, StrideO{}))
     >;
+    // currently only support float for intermediate states like max logits and exp sums
+    using TensorLSE = decltype(make_dummy_tensor(float{}, StrideO{}));
     using TensorK_cache = TensorK;
     using TensorV_cache = TensorV;
     using GmemTiledCopyK_cache = GmemTiledCopyK;
@@ -1125,6 +1131,7 @@ struct FMHAConfig {
         CollectiveMainloop,
         TileShapeOutput,
         TensorO,
+        TensorLSE,
         conditional_t<isSplitKV, void, GmemTiledCopyO>
     >;
 
