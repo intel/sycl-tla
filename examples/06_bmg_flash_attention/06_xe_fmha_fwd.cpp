@@ -110,7 +110,8 @@ int main(int argc, const char **argv) {
 
 #if defined(PERSISTENT) || defined(SPLITKV)
 #define NUM_SG _16
-#define KV_TILE_SIZE _256
+// when paged KV cached used, page size should be multiple of QK tile size
+#define KV_TILE_SIZE _128
 
 #else
 #define NUM_SG _8
