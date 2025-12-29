@@ -1,6 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +39,7 @@
 #include "cutlass/cutlass.h"
 
 #include "cute/tensor.hpp"
+#include "cute/arch/copy_xe_2d.hpp"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -133,6 +134,349 @@ xe_signal_final_reduction(
 }
 
 } // namespace detail
+
+template <
+  class Element,
+  class StrideMNL,
+  class CopyOpR2G_ = void,
+  bool EnableNullptr = true
+>
+struct XeAuxStore {
+  using SharedStorage = Element;
+
+  struct Arguments {
+    Element const* ptr_aux = nullptr;
+    Element null_default = Element(0);
+    StrideMNL dAux = {};
+  };
+
+  static constexpr int CopyBits = cute::min(sizeof_bits_v<Element>, 64);
+
+  // Define 3D tensor type for aux tensor (M, N, L)
+  using TensorAux = decltype(make_tensor(make_gmem_ptr(static_cast<Element const*>(nullptr)),
+                                         Layout<Shape<int,int,int>, StrideMNL>{}));
+
+  struct Params {
+    TensorAux mAux;            // 3D tensor (M, N, L)
+    Element null_default = Element(0);
+    bool use_default = false;
+  };
+
+  template <class ProblemShape>
+  static constexpr Params
+  to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
+    // Optionally append 1s until problem shape is rank-4 in case its is only rank-3 (MNK)
+    auto problem_shape_mnkl = append<4>(problem_shape, 1);
+    auto [M, N, K, L] = problem_shape_mnkl;
+
+    // Create 3D tensor with shape (M, N, L) and stride (stride_M, stride_N, stride_L)
+    auto shape_MNL = make_shape(int(M), int(N), int(L));
+    auto mAux = make_tensor(make_gmem_ptr(args.ptr_aux),
+                           make_layout(shape_MNL, args.dAux));
+
+    bool use_default = false;
+    if constexpr (EnableNullptr) {
+      use_default = args.ptr_aux == nullptr;
+    }
+
+    return Params{mAux, args.null_default, use_default};
+  }
+
+  template <class ProblemShape>
+  static bool
+  can_implement(ProblemShape const& problem_shape, Arguments const& args) {
+    return true;
+  }
+
+  template <class ProblemShape>
+  static size_t
+  get_workspace_size(ProblemShape const& problem_shape, Arguments const& args) {
+    return 0;
+  }
+
+  template <class ProblemShape>
+  static cutlass::Status
+  initialize_workspace(ProblemShape const& problem_shape, Arguments const& args, void* workspace, cudaStream_t stream,
+    CudaHostAdapter* cuda_adapter = nullptr) {
+    return cutlass::Status::kSuccess;
+  }
+
+  CUTLASS_HOST_DEVICE
+  XeAuxStore() { }
+
+  CUTLASS_HOST_DEVICE
+  XeAuxStore(Params const& params, SharedStorage const&) : params_ptr(&params) { }
+
+  Params const* params_ptr;
+
+  CUTLASS_DEVICE bool
+  is_producer_load_needed() const {
+    return false;
+  }
+
+  CUTLASS_DEVICE bool
+  is_C_load_needed() const {
+    return false;
+  }
+
+  CUTLASS_DEVICE bool
+  is_zero() const {
+    return (params_ptr->use_default && params_ptr->null_default == Element(0));
+  }
+
+  template <class... Args>
+  CUTLASS_DEVICE auto
+  get_producer_load_callbacks(ProducerLoadArgs<Args...> const&) {
+    return EmptyProducerLoadCallbacks{};
+  }
+
+  // Callback for epilogue visitor - loads aux data and returns it via visit()
+  template <class CTensor, class RTensor, class AuxCopy>
+  struct ConsumerStoreCallbacks : EmptyConsumerStoreCallbacks {
+    CTensor rw_coord;         // Coordinate tensor (atom_v, atom_m, atom_n, epi_m, epi_n)
+    AuxCopy xe_copy_aux;      // Block 2D copy operation
+    RTensor tC_rAux;          // Register fragment (SubgroupTensor)
+    Params const* params_ptr;
+
+    CUTLASS_DEVICE
+    ConsumerStoreCallbacks(CTensor rw_coord, AuxCopy xe_copy_aux, RTensor&& tC_rAux, Params const* params_ptr)
+      : rw_coord(cute::forward<CTensor>(rw_coord)), xe_copy_aux(xe_copy_aux), tC_rAux(cute::forward<RTensor>(tC_rAux)), params_ptr(params_ptr) { }
+
+    CUTLASS_DEVICE void
+    end_loop(int epi_m, int epi_n) {
+        if constexpr (EnableNullptr) {
+            if (params_ptr->use_default) {
+                return; // Skip store if pointer is nullptr
+            }
+        }      
+        copy(xe_copy_aux, tC_rAux, rw_coord(_, _, _, epi_m, epi_n));
+    }
+
+    template <typename ElementAccumulator, typename ElementInput, int FragmentSize>
+    CUTLASS_DEVICE Array<ElementInput, FragmentSize>
+    visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, 
+      int epi_n, Array<ElementInput, FragmentSize> const& frg_input) {
+      for(int i = 0; i < FragmentSize; ++i) {
+        tC_rAux[i] = static_cast<Element>(frg_input.data()[i]);
+      }
+      return frg_input;
+    }
+  };
+
+  template <
+    bool ReferenceSrc,
+    class... Args
+  >
+  CUTLASS_DEVICE auto
+  get_consumer_store_callbacks(ConsumerStoreArgs<Args...> const& args) {
+    auto [M, N, K, L] = args.problem_shape_mnkl;
+    auto [m_coord, n_coord, k_coord, l_coord] = args.tile_coord_mnkl;
+
+    auto mAux_batch = params_ptr->mAux(_,_,l_coord);
+
+    // use TiledMMA to properly partition coordinates
+    // This ensures we get the correct number of epilogue tiles for the actual problem size
+    auto thr_mma = args.tiled_mma.get_slice(args.thread_idx);
+    auto tCDgCD = thr_mma.partition_C(args.cD);  // Use workgroup coord tensor from args
+
+    // Calculate MMA tiles per epilogue tile
+    using MMATile = decltype(take<0,2>(typename cute::remove_cvref_t<decltype(args.tiled_mma)>::AtomShape_MNK{}));
+    
+    // Deduce copy operation tile dimensions to match xe_epilogue's logic:
+    // - Preferred: 8 rows, 512 bits per row (adjusts to element size)
+    // - Use gcd with MMATile to ensure alignment with MMA tile boundaries
+    // - Example for fp16 with 16x16 MMA: gcd(8,16)=8, gcd(32,16)=16 -> 8x16 tile
+    // - Unless user explicitly provided CopyOpR2G_, then use that instead
+    using ActualCopyOpR2G = cute::conditional_t<
+      cute::is_void_v<CopyOpR2G_>,
+      XE_STORE_2D<CopyBits, 
+                 cute::gcd(8, get<0>(MMATile{})), 
+                 cute::gcd(512 / CopyBits, get<1>(MMATile{}))>,
+      CopyOpR2G_
+    >;
+    
+    auto mma_per_epi = shape_div(args.epi_tile, MMATile{});
+
+    // Create epilogue-tiled coordinate structure matching xe_epilogue
+    auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
+                              get<0>(tCDgCD.layout()));
+
+    auto gAux_epi_layout = append(append(make_identity_layout(args.epi_tile),
+                                        get<3>(sg_v_coord)), get<4>(sg_v_coord));
+    auto gAux_epi = make_tensor(tCDgCD.data(), gAux_epi_layout);  // (epi_m, epi_n, num_epi_m, num_epi_n)
+
+    // Create copy operation from aux tensor using computed tile dimensions
+    auto xe_copy_aux = make_block_2d_copy(ActualCopyOpR2G{}, mAux_batch);
+    auto thr_copy_aux = xe_copy_aux.get_slice(args.thread_idx % intel::sg_size);
+
+    // Partition coordinates for epilogue iteration (now with correct tile counts)
+    auto tCgAux = thr_copy_aux.partition_D(gAux_epi);  // (atom_v,atom_m,atom_n,epi_m,epi_n)
+
+    // Create register fragment
+    auto trAux = thr_copy_aux.partition_sg_fragment_S(gAux_epi(_,_,0,0));  // (atom_v,atom_m,atom_n)
+
+
+    return ConsumerStoreCallbacks(tCgAux, xe_copy_aux, cute::move(trAux), params_ptr);
+  }
+};
+
+template <
+  class Element,
+  class StrideMNL,
+  class CopyOpR2G,
+  bool EnableNullptr = true
+>
+struct XeAuxStoreLegacy {
+  using SharedStorage = Element;
+
+  struct Arguments {
+    Element const* ptr_aux = nullptr;
+    Element null_default = Element(0);
+    StrideMNL dAux = {};
+  };
+
+  using Trait_Aux = Copy_Traits<CopyOpR2G>;
+  using SubgroupSize = decltype(size((typename Trait_Aux::ThrID){}));
+  using XE_Copy_Aux = decltype(make_tiled_copy(Copy_Atom<Trait_Aux, Element>{}
+                      .with(static_cast<Element const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
+                         Layout<Shape<_1, SubgroupSize>>{},
+                         make_layout(make_shape(get<0>(typename Trait_Aux::BlockShape{}),
+                         get<1>(typename Trait_Aux::BlockShape{}) / SubgroupSize{}))));
+  struct Params {
+    Element null_default = Element(0);
+    bool use_default = false;
+    long M_AUX = 0;
+    long N_AUX = 0;
+    Element const* ptr_aux = nullptr;
+  };
+
+  template <class ProblemShape>
+  static constexpr Params
+  to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
+    // Optionally append 1s until problem shape is rank-4 in case its is only rank-3 (MNK)
+    auto problem_shape_mnkl = append<4>(problem_shape, 1);
+    auto [M, N, K, L] = problem_shape_mnkl;
+    // TODO(codeplay): This assumes a packed 2D (+ a batch dim) aux matrix
+    static_assert(rank(decltype(args.dAux){}) == 3);
+    auto N_AUX = get<0>(args.dAux); // dAux is a stride and N_AUX is a size
+    auto M_AUX = size(M);
+
+    bool use_default = false;
+    if constexpr (EnableNullptr) {
+      use_default = args.ptr_aux == nullptr;
+    }
+
+    return Params{args.null_default, use_default, M_AUX, N_AUX, args.ptr_aux};    
+  }
+
+  template <class ProblemShape>
+  static bool
+  can_implement(ProblemShape const& problem_shape, Arguments const& args) {
+    return true;
+  }
+
+  template <class ProblemShape>
+  static size_t
+  get_workspace_size(ProblemShape const& problem_shape, Arguments const& args) {
+    return 0;
+  }
+
+  template <class ProblemShape>
+  static cutlass::Status
+  initialize_workspace(ProblemShape const& problem_shape, Arguments const& args, void* workspace, cudaStream_t stream,
+    CudaHostAdapter* cuda_adapter = nullptr) {
+    return cutlass::Status::kSuccess;
+  }
+
+  CUTLASS_HOST_DEVICE
+  XeAuxStoreLegacy() { }
+
+  CUTLASS_HOST_DEVICE
+  XeAuxStoreLegacy(Params const& params, SharedStorage const&) : params_ptr(&params) { }
+
+  Params const* params_ptr;
+
+  CUTLASS_DEVICE bool
+  is_producer_load_needed() const {
+    return false;
+  }
+
+  CUTLASS_DEVICE bool
+  is_C_load_needed() const {
+    return false;
+  }
+
+  CUTLASS_DEVICE bool
+  is_zero() const {
+    return (params_ptr->use_default && params_ptr->null_default == Element(0));
+  }
+
+  template <class... Args>
+  CUTLASS_DEVICE auto
+  get_producer_load_callbacks(ProducerLoadArgs<Args...> const&) {
+    return EmptyProducerLoadCallbacks{};
+  }
+
+  template <class CTensor, class RTensor>
+  struct ConsumerStoreCallbacks : EmptyConsumerStoreCallbacks {
+    CTensor rw_coord;                                                                           // (EPI_V, EPI_M, EPI_N)
+    XE_Copy_Aux xe_copy_aux;
+    RTensor tC_rAux;                                                                                // (CPY,CPY_M,CPY_N)
+    Params const* params_ptr;
+
+    CUTLASS_DEVICE
+    ConsumerStoreCallbacks(CTensor rw_coord, XE_Copy_Aux xe_copy_aux, RTensor&& tC_rAux, Params const* params_ptr)
+      : rw_coord(cute::forward<CTensor>(rw_coord)), xe_copy_aux(xe_copy_aux), tC_rAux(cute::forward<RTensor>(tC_rAux)), params_ptr(params_ptr) { }
+
+
+    CUTLASS_DEVICE void
+    end_loop(int epi_m, int epi_n) {
+        if constexpr (EnableNullptr) {
+            if (params_ptr->use_default) {
+                return; // Skip store if pointer is nullptr
+            }
+        }
+        copy(xe_copy_aux, tC_rAux, rw_coord(_, epi_m, epi_n));
+    }
+
+    template <typename ElementAccumulator, typename ElementInput, int FragmentSize>
+    CUTLASS_DEVICE Array<Element, FragmentSize>
+    visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, 
+      int epi_n, Array<ElementInput, FragmentSize> const& frg_input) {
+      for(int i = 0; i < FragmentSize; ++i) {
+        tC_rAux[i] = static_cast<Element>(frg_input.data()[i]);
+      }
+      return frg_input;
+    }
+  };
+
+  template <
+    bool ReferenceSrc,
+    class... Args
+  >
+  CUTLASS_DEVICE auto
+  get_consumer_store_callbacks(ConsumerStoreArgs<Args...> const& args) {
+    auto [M, N, K, L] = args.problem_shape_mnkl;
+    auto [m_coord, n_coord, k_coord, l_coord] = args.tile_coord_mnkl;    
+
+    XE_Copy_Aux xe_copy_aux = make_tiled_copy(Copy_Atom<Trait_Aux, Element>{}.with(
+                                  (params_ptr->ptr_aux + l_coord*M*N), params_ptr->M_AUX, params_ptr->N_AUX),
+                                  Layout<Shape<_1, SubgroupSize>>{},
+                                  make_layout(make_shape(get<0>(typename Trait_Aux::BlockShape{}),
+                                                         get<1>(typename Trait_Aux::BlockShape{}) / SubgroupSize{})));
+    
+    Tensor trAux = make_tensor_like<Element>(args.tCrC.tensor());
+
+    Tensor mAux_mnl = cute::get_xe_tensor(make_shape(M,N,L));
+    // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
+    Tensor gAux = local_tile(mAux_mnl, select<0,1>(args.tile_shape_mnk), make_coord(m_coord,n_coord,l_coord));
+    Tensor tCgAux = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux);
+
+    return ConsumerStoreCallbacks(
+        tCgAux, xe_copy_aux, cute::move(trAux), params_ptr
+    );
+  }
+};
 
 template <
   class Element,

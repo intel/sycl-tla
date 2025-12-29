@@ -49,3 +49,10 @@ cutlass_example_add_executable(
   TEST_COMMAND_OPTIONS
   TEST_BATCHES
 )
+
+cutlass_example_add_executable(
+  05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux_legacy
+  05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)
