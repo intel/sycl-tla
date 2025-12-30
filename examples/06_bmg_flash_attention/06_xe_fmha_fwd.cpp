@@ -108,6 +108,9 @@ int main(int argc, const char **argv) {
 #endif
 #elif defined(DECODE)
 
+// Note: using NUM_SG=16 / KV_TILE_SIZE=128 will cause fp16 correctness failure
+// when paged KV cache is enabled. Use NUM_SG=8 / KV_TILE_SIZE=64 instead though
+// may have performance impact.
 #if defined(PERSISTENT) || defined(SPLITKV)
 #define NUM_SG _16
 // when paged KV cached used, page size should be multiple of QK tile size

@@ -311,7 +311,7 @@ struct ExampleRunner {
       // for test purpose
       if (num_batches == 1) {
          seqlen_kv = get<4>(problem_size);
-         seqlen_kv_cache = get<5>(problem_size);
+         seqlen_kv_cache = cutlass::round_up(get<5>(problem_size), AlignmentKVCache);
       }
 #else
       int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
