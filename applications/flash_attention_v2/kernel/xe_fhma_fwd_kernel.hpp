@@ -925,7 +925,6 @@ public:
       int seq_coord = cute::min(seq_len_qo, (blk_q * get<0>(TileShapeQK{}) + q_offset_sg));
 
       if (CollectiveMainloop::CausalMask && seq_coord < discard_seq_coord) continue;
-      // const int seq_len = CollectiveMainloop::CausalMask ? full_tile_offset + cute::min(seq_len_kv, seq_coord - discard_seq_coord) + q_sg_tile : seq_len_kv;
       const int seq_len_new = CollectiveMainloop::CausalMask ? full_tile_offset + cute::min(seq_len_kv, seq_coord - discard_seq_coord) + q_sg_tile : seq_len_kv;
       const int seq_len = seq_len_new + seq_len_kv_cache;
 
