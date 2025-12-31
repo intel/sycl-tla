@@ -857,6 +857,11 @@ public:
       return false;
     }
 
+    // GQA group size limited to DPAS max repeat count
+    if (args.kernel.shape.num_heads_q / args.kernel.shape.num_heads_kv > 8) {
+      return false;
+    }
+
     return CollectiveMainloop::can_implement(args.mainloop)
         && CollectiveEpilogue::can_implement(args.epilogue);
   }
@@ -1074,7 +1079,7 @@ public:
                 blk_qv, thr_id,
                 exp_sums(_,_,head,l_coord),
                 max_logits(_,_,head,l_coord),
-                idx_kv_split);
+                idx_kv_split, head_group_q);
     }
   }
 };
