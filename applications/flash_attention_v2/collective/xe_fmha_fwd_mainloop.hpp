@@ -359,7 +359,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
         prefetch(prefetch_v_cache, pVgV_cache(_,_,_,physical_K_tile));
 
         /* Apply softmax and scaling */
-        softmax(K == 0, tSrS, tA_max, tA_sum, tArA);
+        softmax(K == blk_k0, tSrS, tA_max, tA_sum, tArA);
         reorder(tSrS, tArP);
 
         /* GEMM 2: A += P * V, split in v dimension */
@@ -439,7 +439,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
       }
 
       /* Apply softmax and scaling */
-      softmax(K == 0, tSrS, tA_max, tA_sum, tArA);
+      softmax(K == blk_k0, tSrS, tA_max, tA_sum, tArA);
       reorder(tSrS, tArP);
 
       /* GEMM 2: A += P * V, split in v dimension */
