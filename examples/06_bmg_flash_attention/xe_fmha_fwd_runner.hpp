@@ -839,7 +839,7 @@ struct FMHAConfig {
                                                decltype(cutlass::fmha::collective::get_sg_layout_pv(SubgroupLayoutQK{})),
                                                SubgroupLayoutPV_>;
 
-  template <bool isVarLen, bool PagedKV, class Scheduler>
+  template <bool isVarLen, bool CachedKV, bool PagedKV, class Scheduler>
   static int run(const Options &options) {
     //
     // Run examples
@@ -876,7 +876,7 @@ struct FMHAConfig {
     // Mainloop
     using MainloopDispatchPolicy = cutlass::fmha::XeDefault<PipelineStages>;
     using CollectiveMainloop = cutlass::fmha::collective::FMHAFwdMainloop<
-        MainloopDispatchPolicy, Causal, PagedKV,
+        MainloopDispatchPolicy, Causal, CachedKV, PagedKV,
         TiledMMAQK, TiledMMAPV, VTiles,
         TensorQ, TensorK, TensorV,
         TensorK_cache, TensorV_cache,
@@ -907,20 +907,25 @@ struct FMHAConfig {
   }
 
   static int run(const Options &options) {
-    if (persistent) {
+    bool cached_kv = options.seq_len_kv_cache > 0;
+    if constexpr (persistent) {
       if (options.use_paged_kv || options.seq_len_kv_cache > 0) {
         std::cerr << "Error: Persistent kernel does not support paged/cached KV cache (use_paged_kv or seq_len_kv_cache > 0)." << std::endl;
         return -1;
       }
-      return run<false, false, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>(options);
+      return run<false, false, false, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>(options);
     } else if (options.use_paged_kv && !options.varlen) {
-      return run<false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
-    } else if(!options.use_paged_kv && options.varlen) {
-      return run<true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
-    } else if(!options.use_paged_kv && !options.varlen) {
-      return run<false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return run<false, true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+    } else if(!options.use_paged_kv && options.varlen && !cached_kv) {
+      return run<true, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+    } else if(!options.use_paged_kv && !options.varlen && !cached_kv) {
+      return run<false, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+    } else if (!options.use_paged_kv && options.varlen && cached_kv) {
+      return run<true, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+    } else if (!options.use_paged_kv && !options.varlen && cached_kv) {
+      return run<false, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else {
-      return run<true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return run<true, true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     }
   }
 };
