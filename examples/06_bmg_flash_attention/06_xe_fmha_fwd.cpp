@@ -116,9 +116,13 @@ int main(int argc, const char **argv) {
 // when paged KV cached used, page size should be multiple of QK tile size
 #define KV_TILE_SIZE _128
 
+// this depends on the max query group size to be supported
+#define Q_PACKED_TILE_SIZE _8
+
 #else
 #define NUM_SG _8
 #define KV_TILE_SIZE _512
+#define Q_PACKED_TILE_SIZE _1
 #endif
 
 #if HEAD_DIM == 16
@@ -129,27 +133,27 @@ int main(int argc, const char **argv) {
   using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
 #elif HEAD_DIM == 64
-    using ShapeQK = Shape<_1, KV_TILE_SIZE, _64>;
-    using ShapePV = Shape<_1, _32, KV_TILE_SIZE>;
-    using ShapeOut = Shape<_1, _64>;
+    using ShapeQK = Shape<Q_PACKED_TILE_SIZE, KV_TILE_SIZE, _64>;
+    using ShapePV = Shape<Q_PACKED_TILE_SIZE, _32, KV_TILE_SIZE>;
+    using ShapeOut = Shape<Q_PACKED_TILE_SIZE, _64>;
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
 #elif HEAD_DIM == 96
-    using ShapeQK = Shape<_1, KV_TILE_SIZE, _64>;
-    using ShapePV = Shape<_1, _32, KV_TILE_SIZE>;
-    using ShapeOut = Shape<_1, _96>;
+    using ShapeQK = Shape<Q_PACKED_TILE_SIZE, KV_TILE_SIZE, _64>;
+    using ShapePV = Shape<Q_PACKED_TILE_SIZE, _32, KV_TILE_SIZE>;
+    using ShapeOut = Shape<Q_PACKED_TILE_SIZE, _96>;
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
 #elif HEAD_DIM == 128
-    using ShapeQK = Shape<_1, KV_TILE_SIZE, _64>;
-    using ShapePV = Shape<_1, _32, KV_TILE_SIZE>;
-    using ShapeOut = Shape<_1, _128>;
+    using ShapeQK = Shape<Q_PACKED_TILE_SIZE, KV_TILE_SIZE, _64>;
+    using ShapePV = Shape<Q_PACKED_TILE_SIZE, _32, KV_TILE_SIZE>;
+    using ShapeOut = Shape<Q_PACKED_TILE_SIZE, _128>;
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 
 #elif HEAD_DIM == 192
-    using ShapeQK = Shape<_1, KV_TILE_SIZE, _64>;
-    using ShapePV = Shape<_1, _32, KV_TILE_SIZE>;
-    using ShapeOut = Shape<_1, _192>;
+    using ShapeQK = Shape<Q_PACKED_TILE_SIZE, KV_TILE_SIZE, _64>;
+    using ShapePV = Shape<Q_PACKED_TILE_SIZE, _32, KV_TILE_SIZE>;
+    using ShapeOut = Shape<Q_PACKED_TILE_SIZE, _192>;
     using SubgroupLayoutQK = Layout<Shape<_1, NUM_SG, _1>>;
 #endif
 #else
