@@ -765,14 +765,27 @@ compute_o_dot_do(T &trait, Param<typename T::DType> &param,
                                 make_layout(
                                     dP_shape,
                                     Stride<_1>{}));
+    using ThreadLayout = Layout<Shape<Int<kNSGs>, Int<SubgroupSize>>,
+                                Stride<Int<SubgroupSize>, _1>>;
+    using ValueLayout = std::conditional_t<
+        kHeadDim == 96,
+        Layout<Shape<_1, _2>>,
+        std::conditional_t<
+            kHeadDim == 192,
+            Layout<Shape<_1, _4>>,
+            Layout<Shape<_1, Int<kHeadDim / SubgroupSize>>>>>;
+    using OdOType = cutlass::AlignedArray<DType, size(ValueLayout{})>;
+    using OdOAtom = Copy_Atom<UniversalCopy<OdOType>, DType>;
+    using dQType = cutlass::AlignedArray<VType, size(ValueLayout{})>;
+    using dQAtom = Copy_Atom<UniversalCopy<dQType>, VType>;
 
-    auto tileload_odo = make_tiled_copy(Copy_Atom<UniversalCopy<DType>, DType>{},
-                                        Layout<Shape<Int<kNSGs>, Int<SubgroupSize>>,
-                                        Stride<Int<SubgroupSize>, _1>>{},
-                                        Layout<Shape<_1, _1>>{});
-    auto tileload_dq = make_tiled_copy(Copy_Atom<UniversalCopy<VType>, VType>{},
-                                        Layout<Shape<Int<kNSGs>, Int<SubgroupSize>>>{},
-                                        Layout<Shape<_1, _1>>{});
+    auto tileload_odo = make_tiled_copy(OdOAtom{},
+                                        ThreadLayout{},
+                                        ValueLayout{});
+    auto tileload_dq = make_tiled_copy(dQAtom{},
+                                       ThreadLayout{},
+                                       ValueLayout{});
+
     auto thr_load_odo = tileload_odo.get_thread_slice(ThreadIdxX());
     auto thr_load_dq = tileload_dq.get_thread_slice(ThreadIdxX());
 
@@ -782,31 +795,30 @@ compute_o_dot_do(T &trait, Param<typename T::DType> &param,
     Tensor rdQ = make_fragment_like(thr_tile_dq_D);
     Tensor rdO = make_fragment_like<DType>(rdQ);
     Tensor rO = make_fragment_like<DType>(rdQ);
-    clear(rdQ);
-    copy(tileload_dq, rdQ, thr_tile_dq_D);
-
     Tensor cO = make_identity_tensor(dQ_shape);
     Tensor tcO = thr_load_odo.partition_S(cO);
     Tensor tcO_row = logical_divide(tcO, Shape<_1>{})(make_coord(0, 0), _, 0);
+    Layout rdO_layout = rdO.layout();
     Tensor rdO_2d = make_tensor(rdO.data(),
-                                convert_layout_2d_layout(rdO.layout()));
+                                make_layout(get<1>(rdO_layout),
+                                            make_layout(get<0>(rdO_layout),
+                                                        get<2>(rdO_layout))));
     Tensor rO_2d = make_tensor(rO.data(),
-                               convert_layout_2d_layout(rO.layout()));
+                               rdO_2d.layout());
+
+    constexpr int NumValperCol = size<0>(rdO_2d);
+    auto smem = compat::local_mem<VType[kNSGs * SubgroupSize * NumValperCol]>();
+    auto stensor = make_tensor(make_smem_ptr(smem),
+                               make_layout(
+                                   Shape<
+                                   Int<NumValperCol>,
+                                   Int<kNSGs>,
+                                   Int<SubgroupSize>>{}));
+    clear(rdO_2d);
+    clear(rO_2d);
     if constexpr(Is_even_M) {
         copy(tileload_odo, thr_tile_do_S, rdO);
         copy(tileload_odo, thr_tile_o_S, rO);
-        CUTLASS_PRAGMA_UNROLL
-        for (int mi = 0; mi < size<0>(rdO_2d); ++mi) {
-            float accum = 0.0f;
-            CUTLASS_PRAGMA_UNROLL
-            for (int ni = 0; ni < size<1>(rdO_2d); ++ni) {
-                accum = accum + (float)rdO_2d(mi, ni) * (float)rO_2d(mi, ni);
-            }
-            accum = sycl::reduce_over_group(sg, accum, sycl::plus<>());
-            if (sg.get_local_id() == 0) {
-                mdPsum(get<0>(tcO_row(mi))) = accum;
-            }
-        }
     } else {
         for (int mi = 0; mi < size<0>(rdO_2d); ++mi) {
             if (get<0>(tcO_row(mi)) < param.tail_m) {
@@ -814,16 +826,36 @@ compute_o_dot_do(T &trait, Param<typename T::DType> &param,
                 copy(tileload_odo, thr_tile_o_S(_, mi, _), rO(_, mi, _));
             }
         }
+    }
+    int sg_group_id = sg.get_group_id();
+    int sg_local_id = sg.get_local_id();
+    CUTLASS_PRAGMA_UNROLL
+    for (int mi = 0; mi < size<0>(rdO_2d); ++mi) {
+        float accum = 0.0f;
         CUTLASS_PRAGMA_UNROLL
-        for (int mi = 0; mi < size<0>(rdO_2d); ++mi) {
+        for (int ni = 0; ni < size<1>(rdO_2d); ++ni) {
+            accum = accum + (float)rdO_2d(mi, ni) * (float)rO_2d(mi, ni);
+        }
+        stensor(mi, sg_group_id, sg_local_id) = accum;
+    }
+    // sycl::group_barrier(group);
+    if (sg_local_id == 0) {
+        float accum = 0.0f;
+        CUTLASS_PRAGMA_UNROLL
+        for (int mi = 0; mi < NumValperCol; ++mi) {
             float accum = 0.0f;
+            // reduce within subgroup
             CUTLASS_PRAGMA_UNROLL
-            for (int ni = 0; ni < size<1>(rdO_2d); ++ni) {
-                accum = accum + (float)rdO_2d(mi, ni) * (float)rO_2d(mi, ni);
+            for (int ni = 0; ni < SubgroupSize; ++ni) {
+                accum += stensor(mi, sg_group_id, ni);
             }
-            accum = sycl::reduce_over_group(sg, accum, sycl::plus<>());
-            if (sg.get_local_id() == 0 and get<0>(tcO_row(mi)) < param.tail_m)
+            if constexpr(Is_even_M) {
                 mdPsum(get<0>(tcO_row(mi))) = accum;
+            } else {
+                if (get<0>(tcO_row(mi)) < param.tail_m) {
+                    mdPsum(get<0>(tcO_row(mi))) = accum;
+                }
+            }
         }
     }
 }
@@ -867,7 +899,7 @@ mha_dot_do_o(T trait,
     // The block index for the batch.
     const int bidb = BlockIdxZ();
     // The block index for the head.
-    const int bidh = BlockIdxY();;
+    const int bidh = BlockIdxY();
     if (m_block == param.m_block - 1 and param.tail_m > 0) {
         compute_o_dot_do<false>(trait, param, m_block, bidb, bidh);
     } else {
@@ -1026,8 +1058,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
                                  T *dk_d,
                                  T *dv_d,
                                  const int seq_len_q_pad,
-                                 const int seq_len_kv_pad,
-                                 int count = 1) {
+                                 const int seq_len_kv_pad) {
     auto trait = FAKernel<T, kHeadDim, kBlockM, kBlockN, kNSGs,
                           AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
                           is_causal>{};
@@ -1064,6 +1095,7 @@ void launch_mha_backward_headdim(ProblemShape problem_shape,
     } else {
         setup_bshd_stride(param);
     }
+
     auto dimGrid0 = compat::dim3(size(M_BLOCK), size(param.num_head_q), size(param.batch));
     auto dimBlock0 = compat::dim3(size(kNSGs * trait.SubgroupSize), size(1), size(1));
     compat::experimental::launch_properties launch_props0{
@@ -1179,7 +1211,7 @@ void launch_mha_backward(ProblemShape problem_shape,
         constexpr int kNSGs = 8;
         constexpr int AtomLayoutMSdP = 2;
         constexpr int AtomLayoutNdKV = 2;
-        constexpr int AtomLayoutMdQ = 2;
+        constexpr int AtomLayoutMdQ = 4;
         static_assert(kBlockM <=  kMPad, "kBlockM must be less than or equal to kMPad");
         static_assert(kBlockN <=  kNPad, "kBlockN must be less than or equal to kNPad");
         launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
@@ -1310,7 +1342,8 @@ int main(int argc, char**argv) {
     // copy grad output
     compat::memcpy<T>(do_d, do_npy.data<T>(), do_npy.num_vals);
     compat::memcpy<T>(o_d, o_npy.data<T>(), o_npy.num_vals);
-
+    // init dqaccum
+    compat::fill(dqaccum_d, 0.0f, BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * HEAD_SIZE_QK);
     // copy lse
     compat::memcpy<V>(lse_d, lse_npy.data<V>(), lse_npy.num_vals);
 
