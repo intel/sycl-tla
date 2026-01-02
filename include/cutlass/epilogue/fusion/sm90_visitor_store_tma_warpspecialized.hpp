@@ -816,6 +816,7 @@ public:
     CUTLASS_DEVICE auto
     visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, int epi_n,
           Array<ElementInputs, FragmentSize> const&... frg_inputs) {
+      
       if constexpr (EnableNullptr) {
         if (params.ptr_row == nullptr) {
           return cute::get<0>(cute::make_tuple(frg_inputs...));
@@ -893,7 +894,8 @@ public:
       }
 
       // fully OOB CTA in partially OOB cluster
-      if (not elem_less(cRow(_0{},_0{}), residue_cRow)) {
+      auto residue_zero = repeat_like(residue_cRow, _0{});
+      if (not elem_less(residue_zero, residue_cRow)) {
         return;
       }
 
@@ -972,7 +974,11 @@ public:
         auto FltFrgSizePerLaneM = size(tCrRow_flt) / size<0>(lane_layout_MN);
 
         Tensor tCgRow = sm90_partition_for_epilogue<ReferenceSrc>(gRow_l(_,_,l), epi_tile, tiled_copy, thread_idx);
-        Tensor tCgRow_flt = filter_zeros(tCgRow);
+        int tile_extent_m = int(size<0>(gRow_l));
+        int tile_extent_n = int(size<1>(gRow_l));
+        int tile_m = int(m);
+        int tile_n = int(n);
+        int tile_l = int(l);
         // NOTE: atomic reduction is performed in the output type
         using ConvertOutput = NumericConverter<ElementOutput, ElementCompute, RoundStyle>;
         using ReduceOutput = GmemReduceFn<ElementOutput>;
@@ -983,10 +989,16 @@ public:
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < FltFrgSizePerLaneM; ++i) {
             int idx = lane_m * FltFrgSizePerLaneM + i;
-            // Only care about OOB for N mode
+            // Row reduction produces output indexed by M (rows), so check M coordinate
             if (get<1>(tCcRow_flt(idx)) < get<1>(residue_tCcRow)) {
-              reduce_output(&tCgRow_flt(idx), convert_output(tCrRow_flt(i)));
-            }
+
+              int global_m = int(get<0>(tCcRow_flt(idx)));
+              int global_n = int(get<1>(tCcRow_flt(idx)));
+              int local_m = global_m - tile_m * tile_extent_m;
+              int local_n = global_n - tile_n * tile_extent_n;
+              auto* output_ptr = &gRow_l(local_m, local_n, tile_l);
+              reduce_output(output_ptr, convert_output(tCrRow_flt(i)));
+            } 
           }
         }
         else {
@@ -994,8 +1006,13 @@ public:
             CUTLASS_PRAGMA_UNROLL
             for (int i = 0; i < size(tCrRow_flt); ++i) {
               if (elem_less(tCcRow_flt(i), residue_tCcRow)) {
-                reduce_output(&tCgRow_flt(i), convert_output(tCrRow_flt(i)));
-              }
+                int global_m = int(get<0>(tCcRow_flt(i)));
+                int global_n = int(get<1>(tCcRow_flt(i)));
+                int local_m = global_m - tile_m * tile_extent_m;
+                int local_n = global_n - tile_n * tile_extent_n;
+                auto* output_ptr = &gRow_l(local_m, local_n, tile_l);
+                reduce_output(output_ptr, convert_output(tCrRow_flt(i)));
+              } 
             }
           }
         }
@@ -1224,14 +1241,15 @@ public:
     Layout sBuf_layout = blocked_product(gBuf_layout,                                          // (CTA_M,CTA_N,WARPS_M)
       make_layout(make_shape(_1{},_1{},size<0>(warp_layout_MN))));
 
+    // For row reduction, use full problem dimensions for residue checking
+    auto residue_mnk = make_coord(size<0>(args.problem_shape_mnkl), size<1>(args.problem_shape_mnkl));
     auto args_tuple = make_tuple(
         bool_constant<ReferenceSrc>{}, cute::move(tCrRow), args.tCcD, gRow_l, args.cD, gBuf_ml, sBuf_layout,
         lane_layout_MN, lane_mn, warp_layout_MN, warp_mn,
-        args.tile_coord_mnkl, args.residue_cD, args.residue_tCcD, args.epi_tile, args.tiled_copy, args.thread_idx);
+        args.tile_coord_mnkl, args.residue_cD, residue_mnk, args.epi_tile, args.tiled_copy, args.thread_idx);
     return ConsumerStoreCallbacks<decltype(args_tuple)>(cute::move(args_tuple), params);
   }
 };
-
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Col vector reduction
