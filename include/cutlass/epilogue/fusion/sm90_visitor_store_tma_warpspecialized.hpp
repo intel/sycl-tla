@@ -893,6 +893,9 @@ public:
         }
       }
 
+      auto cta_origin = cRow(_0{},_0{});
+      auto* row_ptr = reinterpret_cast<ElementOutput*>(params.ptr_row);
+
       // fully OOB CTA in partially OOB cluster
       auto residue_zero = repeat_like(residue_cRow, _0{});
       if (not elem_less(residue_zero, residue_cRow)) {
@@ -976,8 +979,8 @@ public:
         Tensor tCgRow = sm90_partition_for_epilogue<ReferenceSrc>(gRow_l(_,_,l), epi_tile, tiled_copy, thread_idx);
         int tile_extent_m = int(size<0>(gRow_l));
         int tile_extent_n = int(size<1>(gRow_l));
-        int tile_m = int(m);
-        int tile_n = int(n);
+        int tile_origin_m = int(get<0>(cta_origin));
+        int tile_origin_n = int(get<1>(cta_origin));
         int tile_l = int(l);
         // NOTE: atomic reduction is performed in the output type
         using ConvertOutput = NumericConverter<ElementOutput, ElementCompute, RoundStyle>;
@@ -985,34 +988,70 @@ public:
         ConvertOutput convert_output{};
         ReduceOutput reduce_output{};
 
+        // Debug: log before atomic writes
+        if (ThreadIdxX() == 0 && ThreadIdxY() == 0 && ThreadIdxZ() == 0) {
+          printf("[Sm90RowReduction::reduce] ATOMIC bid=(%d,%d,%d) epi_m=%d epi_n=%d FltFrgSizePerLaneM=%d SwapShuffle=%d lane_m=%d is_reduced_lane=%d\n",
+                 int(BlockIdxX()), int(BlockIdxY()), int(BlockIdxZ()),
+                 epi_m, epi_n, int(FltFrgSizePerLaneM), int(SwapShuffle), lane_m, int(is_reduced_lane));
+        }
+
         if constexpr (SwapShuffle) {
+          int valid_writes = 0, skipped_writes = 0;
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < FltFrgSizePerLaneM; ++i) {
             int idx = lane_m * FltFrgSizePerLaneM + i;
             // Row reduction produces output indexed by M (rows), so check M coordinate
-            if (get<1>(tCcRow_flt(idx)) < get<1>(residue_tCcRow)) {
-
+            bool in_bounds = get<1>(tCcRow_flt(idx)) < get<1>(residue_tCcRow);
+            if (in_bounds) {
+              valid_writes++;
+              ElementOutput val = convert_output(tCrRow_flt(i));
               int global_m = int(get<0>(tCcRow_flt(idx)));
               int global_n = int(get<1>(tCcRow_flt(idx)));
-              int local_m = global_m - tile_m * tile_extent_m;
-              int local_n = global_n - tile_n * tile_extent_n;
-              auto* output_ptr = &gRow_l(local_m, local_n, tile_l);
-              reduce_output(output_ptr, convert_output(tCrRow_flt(i)));
-            } 
+              int local_m = global_m - tile_origin_m;
+              int local_n = global_n - tile_origin_n;
+                auto* output_ptr = &gRow_l(local_m, local_n, tile_l);
+                output_ptr = reinterpret_cast<ElementOutput*>(reinterpret_cast<uint8_t*>(row_ptr) +
+                  (reinterpret_cast<uint8_t*>(output_ptr) - reinterpret_cast<uint8_t*>(row_ptr)));
+              if (ThreadIdxX() == 0 && ThreadIdxY() == 0 && ThreadIdxZ() == 0 && i < 3) {
+                printf("[Sm90RowReduction::reduce] WRITE bid=(%d,%d,%d) i=%d idx=%d global=(%d,%d) local=(%d,%d) value=%.1f ptr=%p\n",
+                       int(BlockIdxX()), int(BlockIdxY()), int(BlockIdxZ()),
+                       i, idx, global_m, global_n, local_m, local_n, float(val), output_ptr);
+              }
+              reduce_output(output_ptr, val);
+            } else {
+              skipped_writes++;
+            }
+          }
+          if (ThreadIdxX() == 0 && ThreadIdxY() == 0 && ThreadIdxZ() == 0) {
+            printf("[Sm90RowReduction::reduce] ATOMIC_SWAP bid=(%d,%d,%d) valid=%d skipped=%d\n",
+                   int(BlockIdxX()), int(BlockIdxY()), int(BlockIdxZ()),
+                   valid_writes, skipped_writes);
           }
         }
         else {
           if (is_reduced_lane) {
+            int valid_writes = 0, skipped_writes = 0;
             CUTLASS_PRAGMA_UNROLL
             for (int i = 0; i < size(tCrRow_flt); ++i) {
-              if (elem_less(tCcRow_flt(i), residue_tCcRow)) {
+              bool in_bounds = elem_less(tCcRow_flt(i), residue_tCcRow);
+              if (in_bounds) {
+                valid_writes++;
                 int global_m = int(get<0>(tCcRow_flt(i)));
                 int global_n = int(get<1>(tCcRow_flt(i)));
-                int local_m = global_m - tile_m * tile_extent_m;
-                int local_n = global_n - tile_n * tile_extent_n;
+                int local_m = global_m - tile_origin_m;
+                int local_n = global_n - tile_origin_n;
                 auto* output_ptr = &gRow_l(local_m, local_n, tile_l);
+                output_ptr = reinterpret_cast<ElementOutput*>(reinterpret_cast<uint8_t*>(row_ptr) +
+                  (reinterpret_cast<uint8_t*>(output_ptr) - reinterpret_cast<uint8_t*>(row_ptr)));
                 reduce_output(output_ptr, convert_output(tCrRow_flt(i)));
-              } 
+              } else {
+                skipped_writes++;
+              }
+            }
+            if (ThreadIdxX() == 0 && ThreadIdxY() == 0 && ThreadIdxZ() == 0) {
+              printf("[Sm90RowReduction::reduce] ATOMIC_SIMPLE bid=(%d,%d,%d) valid=%d skipped=%d\n",
+                     int(BlockIdxX()), int(BlockIdxY()), int(BlockIdxZ()),
+                     valid_writes, skipped_writes);
             }
           }
         }
@@ -1250,6 +1289,7 @@ public:
     return ConsumerStoreCallbacks<decltype(args_tuple)>(cute::move(args_tuple), params);
   }
 };
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Col vector reduction
