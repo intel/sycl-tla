@@ -1438,14 +1438,15 @@ public:
     template <class STensor, class SyncFn, class VTensor>
     CUTLASS_DEVICE void
     reduce(STensor&& smem_buffer, SyncFn const& sync_fn, int epi_m, int epi_n, bool is_last_iteration, VTensor visit_results) {
-      if (not is_last_iteration) {
-        return;
-      }
-
       auto& [ref_src, tCrCol, tCcCol, gCol_l, cCol, gBuf_nl, sBuf_layout,
               lane_layout_MN, lane_mn, warp_layout_MN, warp_mn,
               tile_coord_mnkl, residue_cCol, residue_tCcCol, epi_tile, tiled_copy, thread_idx] = args_tuple;
       auto [m, n, k, l] = tile_coord_mnkl;
+
+      if (not is_last_iteration) {
+        return;
+      }
+
       constexpr bool ReferenceSrc = decltype(ref_src)::value;
 
       // Runtime nullptr is noop
@@ -1456,7 +1457,8 @@ public:
       }
 
       // fully OOB CTA in partially OOB cluster
-      if (not elem_less(cCol(_0{},_0{}), residue_cCol)) {
+      // Use residue_tCcCol (full problem size) instead of residue_cCol (clipped) since cCol contains global coordinates
+      if (not elem_less(cCol(_0{},_0{}), residue_tCcCol)) {
         return;
       }
 
@@ -1485,7 +1487,6 @@ public:
         // Filter so we don't issue redunant copies over stride-0 modes
         Tensor tCrCol_flt = filter_zeros(tCrCol);
         Tensor tCcCol_flt = make_tensor(tCcCol.data(), make_layout(tCrCol_flt.shape(), tCcCol.stride()));
-
         Tensor tCgCol = sm90_partition_for_epilogue<ReferenceSrc>(gCol_l(_,_,l), epi_tile, tiled_copy, thread_idx);
         Tensor tCgCol_flt = filter_zeros(tCgCol);
 
@@ -1499,10 +1500,21 @@ public:
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < size(tCrCol_flt); ++i) {
             if (elem_less(tCcCol_flt(i), residue_tCcCol)) {
-              reduce_output(&tCgCol_flt(i), convert_output(tCrCol_flt(i)));
+              // tCcCol_flt reports global (M,N) coordinates; convert to tile-local before indexing gCol_l
+              auto [tile_m, tile_n, tile_k, tile_l] = tile_coord_mnkl;
+              auto tile_shape = shape(gCol_l);  // (CTA_M, CTA_N, L)
+              int tile_extent_m = int(size<0>(tile_shape));
+              int tile_extent_n = int(size<1>(tile_shape));
+              int global_m = int(get<0>(tCcCol_flt(i)));
+              int global_n = int(get<1>(tCcCol_flt(i)));
+              int local_m = global_m - tile_m * tile_extent_m;
+              int local_n = global_n - tile_n * tile_extent_n;
+              auto* output_ptr = &gCol_l(local_m, local_n, tile_l);
+              reduce_output(output_ptr, convert_output(tCrCol_flt(i)));
             }
           }
         }
+        
         sync_fn();
       }
 
@@ -1617,7 +1629,7 @@ public:
             for (int nl = 1; nl < size(tRgBuf_nl); ++nl) {
               output = reduce_output(output, tRgBuf_nl(nl));
             }
-            if (elem_less(cCol(m,_0{}), residue_cCol)) {
+            if (elem_less(cCol(m,_0{}), residue_tCcCol)) {
               gCol_l(m,_0{},_0{}) = convert_output(output);
             }
           }
@@ -1626,7 +1638,7 @@ public:
         else {
           CUTLASS_PRAGMA_NO_UNROLL
           for (int m = thread_idx; m < size<0>(gBuf_nl); m += size(tiled_copy)) {
-            bool do_store = elem_less(cCol(m,_0{}), residue_cCol);
+            bool do_store = elem_less(cCol(m,_0{}), residue_tCcCol);
             CUTLASS_PRAGMA_NO_UNROLL
             for (int l = 0; l < size<3>(gBuf_nl); ++l) {
               Tensor tRgBuf_n = gBuf_nl(m,_0{},_,l);
@@ -1695,10 +1707,12 @@ public:
     Tensor gBuf_nl = local_tile(mBuf, take<0,2>(args.tile_shape_mnk), make_coord(m,_,_));     // (CTA_M,CTA_N,REST_N,L)
     Layout sBuf_layout = blocked_product(gBuf_layout,make_layout(make_shape(_1{},_1{},size<1>(warp_layout_MN)))); // (CTA_M,CTA_N,WARPS_N)
 
+    // For column reduction, use full problem dimensions for residue checking
+    auto residue_mnk = make_coord(size<0>(args.problem_shape_mnkl), size<1>(args.problem_shape_mnkl));
     auto args_tuple = make_tuple(
         bool_constant<ReferenceSrc>{}, cute::move(tCrCol), args.tCcD, gCol_l, args.cD, gBuf_nl, sBuf_layout,
         lane_layout_MN, lane_mn, warp_layout_MN, warp_mn,
-        args.tile_coord_mnkl, args.residue_cD, args.residue_tCcD, args.epi_tile, args.tiled_copy, args.thread_idx);
+        args.tile_coord_mnkl, args.residue_cD, residue_mnk, args.epi_tile, args.tiled_copy, args.thread_idx);
     return ConsumerStoreCallbacks<decltype(args_tuple)>(std::move(args_tuple), params);
   }
 };
