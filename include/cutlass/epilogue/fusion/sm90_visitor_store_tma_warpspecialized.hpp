@@ -630,8 +630,11 @@ public:
   >
   CUTLASS_DEVICE auto
   get_consumer_store_callbacks(ConsumerStoreArgs<Args...> const& args) {
-    return ConsumerStoreCallbacks<decltype(args.tCcD), decltype(args.residue_tCcD)>(
-      get<3>(args.tile_coord_mnkl), args.tCcD, args.residue_tCcD, params);
+    // For scalar reduction, we need to process ALL elements in the output tensor.
+    // Use the full problem M,N dimensions for residue checking (not per-tile residue).
+    auto residue_mnk = make_coord(size<0>(args.problem_shape_mnkl), size<1>(args.problem_shape_mnkl));
+    return ConsumerStoreCallbacks<decltype(args.tCcD), decltype(residue_mnk)>(
+      get<3>(args.tile_coord_mnkl), args.tCcD, residue_mnk, params);
   }
 
 };
@@ -939,7 +942,7 @@ public:
               // Step2: shuffle
               uint64_t frg_shfl = reinterpret_cast<uint64_t&>(frg_A(v));
               // each half of threads get a half of data from the other half of threads
-              frg_shfl = __shfl_xor_sync(0xFFFFFFFF, frg_shfl, lane_layout_MN(m, _0{}));
+              frg_shfl = shfl_xor_sync(0xFFFFFFFF, frg_shfl, lane_layout_MN(m, _0{}));
 
               // Step3: reduction
               frg_A(v) = reduce_shuffle(frg_B(v), reinterpret_cast<FragmentShuffle&>(frg_shfl));
@@ -953,7 +956,7 @@ public:
           CUTLASS_PRAGMA_UNROLL
           for (int frg_idx = 0; frg_idx < size(tCrRow_frg); ++frg_idx) {
             uint64_t frg_shfl = reinterpret_cast<uint64_t&>(tCrRow_frg(frg_idx));
-            frg_shfl = __shfl_down_sync(0xFFFFFFFF, frg_shfl, lane_layout_MN(reduction_rows, _0{}));
+            frg_shfl = shfl_down_sync(0xFFFFFFFF, frg_shfl, lane_layout_MN(reduction_rows, _0{}));
             tCrRow_frg(frg_idx) = reduce_shuffle(tCrRow_frg(frg_idx), reinterpret_cast<FragmentShuffle&>(frg_shfl));
           }
         }
@@ -1469,7 +1472,7 @@ public:
         CUTLASS_PRAGMA_UNROLL
         for (int frg_idx = 0; frg_idx < size(tCrCol_frg); ++frg_idx) {
           uint64_t frg_shfl = reinterpret_cast<uint64_t&>(tCrCol_frg(frg_idx));
-          frg_shfl = __shfl_down_sync(0xFFFFFFFF, frg_shfl, lane_layout_MN(_0{},reduction_cols));
+          frg_shfl = shfl_down_sync(0xFFFFFFFF, frg_shfl, lane_layout_MN(_0{},reduction_cols));
           tCrCol_frg(frg_idx) = reduce_shuffle(tCrCol_frg(frg_idx), reinterpret_cast<FragmentShuffle&>(frg_shfl));
         }
       }

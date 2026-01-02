@@ -952,6 +952,11 @@ struct atomic_maximum {
   T operator()(T *ptr, T value) const {
 #if defined(__CUDA_ARCH__)
     return atomicMax(ptr, value);
+#elif defined(SYCL_INTEL_TARGET)
+    auto atm = sycl::atomic_ref<T, sycl::memory_order::acq_rel,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>(*ptr);
+    return atm.fetch_max(value);
 #else
     CUTLASS_UNUSED(ptr);
     CUTLASS_UNUSED(value);
@@ -975,6 +980,23 @@ struct atomic_maximum<float> {
     return ! ::signbit(value) ?
       __int_as_float(atomicMax((int*)ptr, __float_as_int(value))) :
       __uint_as_float(atomicMin((unsigned int*)ptr, __float_as_uint(value)));
+#elif defined(SYCL_INTEL_TARGET)
+    // Use CAS loop for floating-point atomic maximum
+    auto atm = sycl::atomic_ref<float, sycl::memory_order::acq_rel,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>(*ptr);
+    float old_val = atm.load();
+    float assumed;
+    do {
+      assumed = old_val;
+      float new_val = (value > assumed) ? value : assumed;
+      // compare_exchange_strong modifies assumed to the current value if comparison fails
+      if (atm.compare_exchange_strong(assumed, new_val)) {
+        break;
+      }
+      old_val = assumed;
+    } while (true);
+    return old_val;
 #else
     CUTLASS_UNUSED(ptr);
     CUTLASS_UNUSED(value);
