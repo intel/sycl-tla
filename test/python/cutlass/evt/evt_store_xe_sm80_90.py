@@ -123,32 +123,6 @@ class TestEVTStore(EVTTestCaseBase):
             result_keys = ["D", "F_row_max", "acc_row_max"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
 
-    def test_row_reduce(self):
-        """
-        Reduction [m, n] -> [n]
-        """
-        def evt_col_reduce(accum, alpha, C):
-            acc_col_max = max(accum, dim=[1,])
-            F = alpha * accum
-            F_col_max = max(F, dim=[0, 1])
-            D = F + C
-            return D, F_col_max, acc_col_max
-
-        for m, n, k, l in self.get_problem_sizes(8):
-            example_inputs = {
-                "accum": self.fake_tensor(self.element, (l, m, n)),
-                "alpha": 2.0,
-                "C": self.fake_tensor(self.element, (l, m, n)),
-                "F_col_max": self.fake_tensor(np.float32, (n,)),
-                "acc_col_max": self.fake_tensor(np.float32, (l, 1, n)),
-                "D": self.fake_tensor(self.element, (l, m, n)),
-            }
-
-            launcher = EVTTestBed(self.element, evt_col_reduce, example_inputs)
-            input_keys = ["C", "alpha"]
-            result_keys = ["D", "F_col_max", "acc_col_max"]
-            launcher.verify((m, n, k), input_keys, result_keys, l)
-
     def test_scalar_reduce(self):
         """
         Reduction [m, n] -> [1,]
@@ -173,6 +147,32 @@ class TestEVTStore(EVTTestCaseBase):
             launcher = EVTTestBed(self.element, evt_scalar_reduce, example_inputs)
             input_keys = ["C", "alpha"]
             result_keys = ["D", "F_max", "acc_max"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_row_reduce(self):
+        """
+        Reduction [m, n] -> [n]
+        """
+        def evt_col_reduce(accum, alpha, C):
+            acc_col_max = max(accum, dim=[1,])
+            F = alpha * accum
+            F_col_max = max(F, dim=[0, 1])
+            D = F + C
+            return D, F_col_max, acc_col_max
+
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 2.0,
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "F_col_max": self.fake_tensor(np.float32, (n,)),
+                "acc_col_max": self.fake_tensor(np.float32, (l, 1, n)),
+                "D": self.fake_tensor(self.element, (l, m, n)),
+            }
+
+            launcher = EVTTestBed(self.element, evt_col_reduce, example_inputs)
+            input_keys = ["C", "alpha"]
+            result_keys = ["D", "F_col_max", "acc_col_max"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
 
 
