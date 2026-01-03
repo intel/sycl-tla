@@ -74,6 +74,7 @@ class TestEVTStore(EVTTestCaseBase):
             
             break  # Only need to test once
 
+    @unittest.skipIf(device_cc() not in [80, 86, 89, 90], "This unittest is only supported on CC [80, 86, 89, 90]")
     def test_aux_store(self):
         """
         Returning a tensor with shape [m, n]
