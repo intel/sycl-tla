@@ -218,6 +218,7 @@ struct ExampleRunner {
     auto D2 = std::vector<ElementOutput>(size(D2_shape));
     compat::memcpy<ElementOutput>(D.data(), block_ref_D.get(), size(D_shape));
     compat::wait();
+
     for (int l = 0; l < L; l++) {
       for (int i = 0; i < M; i++) {
         for (int j = 0; j < NUM_HEAD; j++) {
