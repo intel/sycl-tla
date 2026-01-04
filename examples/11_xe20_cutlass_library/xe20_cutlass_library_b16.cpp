@@ -94,15 +94,15 @@ struct identity_op {
   T operator()(T val) const { return val; }
 };
 
-using cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_epilogue =
+using cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_epilogue =
   typename cutlass::epilogue::collective::CollectiveBuilder<
     cutlass::arch::Xe20, cutlass::arch::OpClassTensorOp,
-    cute::Shape<cute::_128, cute::_128, cute::_32>,
+    cute::Shape<cute::_256, cute::_256, cute::_32>,
     cute::Shape<cute::_1, cute::_1, cute::_1>,
     cutlass::epilogue::collective::EpilogueTileAuto,
     float, float,
-    cutlass::bfloat16_t, cutlass::layout::ColumnMajor, 8,
-    cutlass::bfloat16_t, cutlass::layout::RowMajor, 8,
+    cutlass::bfloat16_t, cutlass::layout::ColumnMajor, 8, // Bias
+    cutlass::bfloat16_t, cutlass::layout::RowMajor, 8,  // Output
     cutlass::epilogue::collective::EpilogueScheduleAuto,
     cutlass::epilogue::fusion::LinearCombination<
       cutlass::bfloat16_t,
@@ -112,37 +112,37 @@ using cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_epilogue =
     >
   >::CollectiveOp;
 
-using cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_mainloop =
+using cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_mainloop =
   typename cutlass::gemm::collective::CollectiveBuilder<
     cutlass::arch::Xe20, cutlass::arch::OpClassTensorOp,
-    cutlass::bfloat16_t, cutlass::layout::RowMajor, 8,
-    cutlass::bfloat16_t, cutlass::layout::RowMajor, 8,
+    cutlass::bfloat16_t, cutlass::layout::RowMajor, 8,  // A
+    cutlass::bfloat16_t, cutlass::layout::RowMajor, 8,  // B
     float,
-    cute::Shape<cute::_128, cute::_128, cute::_32>,
+    cute::Shape<cute::_256, cute::_256, cute::_32>,
     cute::Shape<cute::_1, cute::_1, cute::_1>,
     cutlass::gemm::collective::StageCountAuto,
     cutlass::gemm::collective::KernelScheduleAuto
   >::CollectiveOp;
 
 // Gemm operator cutlass3x_xe11_tensorop_gemm_bf16_128x256_16x0_tn_align2
-using cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_base = cutlass::gemm::kernel::GemmUniversal<
+using cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_base = cutlass::gemm::kernel::GemmUniversal<
     cute::Shape<int,int,int,int>,
-    cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_mainloop,
-    cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_epilogue,
+    cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_mainloop,
+    cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_epilogue,
     cutlass::gemm::PersistentScheduler>;
 
 // Define named type
-struct cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8 :
-public cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_base { };
+struct cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8 :
+public cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_base { };
 
-using cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_device_type = cutlass::gemm::device::GemmUniversalAdapter<cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8>;
+using cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_device_type = cutlass::gemm::device::GemmUniversalAdapter<cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8>;
 
 // When workspace_size is not a nullptr, populates requested workspace_size and returns.
 // Otherwise, computes the Gemm kernel using the given workspace ptr.
 extern "C" {
 PT_EXPORT int sycl_tla_gemm_xe20_bf16(const cutlass::bfloat16_t* X, const cutlass::bfloat16_t* W, const cutlass::bfloat16_t* Bias, cutlass::bfloat16_t* Y, const int M, const int N, const int K, const int B, const int lda, const int ldb, const int ldc, const int ldd, const int X_offset, const int W_offset, const int Bias_offset, const int Y_offset, const uint8_t swizzle, size_t* workspace_size, uint8_t* workspace, sycl::queue* stream) {
   try {
-  using ElementComputeEpilogue = cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_device_type::ElementAccumulator;
+  using ElementComputeEpilogue = cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_device_type::ElementAccumulator;
   using coord_t = cutlass::gemm::GemmCoord::Index;
   static cutlass::KernelHardwareInfo hw_info;
   if (hw_info.sm_count == 0) {
@@ -206,7 +206,7 @@ PT_EXPORT int sycl_tla_gemm_xe20_bf16(const cutlass::bfloat16_t* X, const cutlas
   }
 
   // Initialize GemmUniversal3xInstance arguments using constructor
-  cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_device_type::Arguments arguments{
+  cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_device_type::Arguments arguments{
     cutlass::gemm::GemmUniversalMode::kGemm,  // GemmUniversalMode mode
     {
       static_cast<coord_t>(M),
@@ -233,7 +233,7 @@ PT_EXPORT int sycl_tla_gemm_xe20_bf16(const cutlass::bfloat16_t* X, const cutlas
   };
 
   arguments.scheduler.max_swizzle_size = swizzle;
-  cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8_device_type gemm_op;
+  cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8_device_type gemm_op;
   if (workspace_size) {
     *workspace_size = gemm_op.get_workspace_size(arguments);
     return 0;
@@ -279,4 +279,4 @@ PT_EXPORT int sycl_tla_gemm_xe20_bf16(const cutlass::bfloat16_t* X, const cutlas
 }
 }
 
-// configuration name: cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_nn_align8
+// configuration name: cutlass3x_xe20_tensorop_gemm_bf16_256x256_32x0_tt_align8
