@@ -196,7 +196,8 @@ public:
              int              thr_id,   // Work-item ID
              const TensorLSE2D & exp_sums, // Global exp sum tensor
              const TensorLSE2D & max_logits, // Global max logits tensor
-             int idx_kv_split
+             int idx_kv_split,
+             int head_group_q
       ) {
 
     using namespace cute;
@@ -217,9 +218,9 @@ public:
 
     // store exp sum and max logits for current KV split
     // assume seq_len_qo == 1
-    if (ThreadIdxX() == 0) {
-      exp_sums(get<0>(blk_qv), idx_kv_split) = rA_sum(0);
-      max_logits(get<0>(blk_qv), idx_kv_split) = rA_max(0);
+    if (ThreadIdxX() < head_group_q) {
+      exp_sums(ThreadIdxX(), idx_kv_split) = rA_sum(0);
+      max_logits(ThreadIdxX(), idx_kv_split) = rA_max(0);
     }
 
     /* Some subgroups may not have any work to do; if so, quit early. */
