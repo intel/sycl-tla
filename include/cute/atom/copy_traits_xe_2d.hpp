@@ -1039,30 +1039,26 @@ make_coop_block_2d_copy_A(TiledMMA                 const& mma,       // TiledMMA
   auto op = block_2d_selector<ValType, MMAType>(new_thr_frg(atom_vmk), gmem.stride());
 
   // reshape MMA atom shape to cooperative block 2d copy atom shape 
-  auto coop_atom_layout = make_layout(Shape<Int<alongM>, Int<alongK>>{});
+  auto coop_atom_layout = make_layout(make_shape(Int<alongM>{}, Int<alongK>{}));
   // Step 2.0: linear sg -> coop atom layout 
   auto gstride = gmem.stride();
   auto thr_vmnk = mma.get_thr_layout_vmnk();                                                            // (ThrV,ThrM,ThrN,ThrK) -> thr
-  auto shape_vmnk = shape(thr_vmnk); 
+  auto shape_vmnk = shape(thr_vmnk);
   auto copy_thr_to_vmk = right_inverse(tiled_product(make_layout(intel::_SGSize{}), coop_atom_layout)); // thr -> (ThrV,ThrM',ThrK') 
   auto sg_to_vmk = composition(copy_thr_to_vmk, 
-                        make_layout(product(take<1, 4>(shape_vmnk)),get<0>(shape_vmnk)));               // SG -> (0, ATOM_M',ATOM_K')
+                        make_layout(product(take<1, 4>(shape_vmnk)),get<0>(shape_vmnk)));               // SG -> (0, ThrM',ThrK')
   // Step 2.1: reconstruct thrfrg tensor
-  auto orig_thr_frg = mma.thrfrg_A(make_layout(tile_mk));
-  auto block_ = zip(layout<0>(orig_thr_frg), layout<1>(orig_thr_frg));
-  auto rest_block_ = zip(layout<1,0>(block_), layout<1,1>(block_));
-  auto zipped_new_thrfrg = logical_divide(replace<1>(block_, rest_block_),
-                                          make_tile(_, make_tile(Int<alongM>{},Int<alongK>{})));
-  // ((ThrV,FrgV),((ATOM_M', FrgM), (ATOM_K',FrgK)))->offset
-  auto thr_frg_tile = replace<1>(zipped_new_thrfrg,
-                                 zip(layout<1,0>(zipped_new_thrfrg), layout<1,1>(zipped_new_thrfrg)));
-  // ((ThrV,(ThrM',ThrK')),(FrgV,(FrgM,FrgK)))->offset
-  auto new_thrfrg  = zip(layout<0>(thr_frg_tile), layout<1>(thr_frg_tile));
-  auto svA = composition(new_thrfrg, make_tile(sg_to_vmk,_));                                            // (SG, V) -> (M, K)
+  auto a_tile = make_tile(make_layout(size<0>(typename TiledMMA::AtomShape_MNK{})),
+                          make_layout(size<2>(typename TiledMMA::AtomShape_MNK{})));
+  auto a_tensor = zipped_divide(make_layout(tile_mk), a_tile);                                         // ((AtomM,AtomK),(RestM,RestK))
+  auto tv_tensor = a_tensor.compose(typename TiledMMA::AtomLayoutA_TV{}, _);                           // ((ThrV,FrgV),(RestM,RestK))
+  auto thr_tile = make_tile(_, make_tile(Int<alongM>{}, Int<alongK>{}));
+  auto thr_tensor = zipped_divide(tv_tensor, thr_tile);                                                // ((ThrV,(ThrM',ThrK')),(FrgV,(FrgM,FrgK)))->offset
+  auto svA = composition(thr_tensor, make_tile(sg_to_vmk,_));                                          // (SG, V) -> (M, K)
 
   #if CUTLASS_ENABLE_DEBUG_PRINTS
   if(cute::thread0()) {
-    PRINT(new_thrfrg);
+    PRINT(thr_tensor);
     PRINT(svA);
   }
   #endif
@@ -1118,7 +1114,7 @@ make_coop_block_2d_copy_B(TiledMMA                 const& mma,  // TiledMMA inst
   auto op = block_2d_selector<ValType, MMAType>(new_thr_frg(atom_vnk), gmem.stride());
 
   // reshape MMA atom shape to cooperative block 2d copy atom shape 
-  auto coop_atom_layout = make_layout(Shape<Int<alongN>, Int<alongK>>{});
+  auto coop_atom_layout = make_layout(make_shape(Int<alongN>{}, Int<alongK>{}));
   // Step 2.0: linear sg -> coop atom layout 
   auto gstride = gmem.stride();
   auto thr_vmnk = mma.get_thr_layout_vmnk();                                                            // (ThrV,ThrM,ThrN,ThrK) -> thr
@@ -1127,21 +1123,17 @@ make_coop_block_2d_copy_B(TiledMMA                 const& mma,  // TiledMMA inst
   auto sg_to_vnk = composition(copy_thr_to_vnk, 
                         make_layout(product(take<1, 4>(shape_vmnk)),get<0>(shape_vmnk)));               // SG -> (0, ATOM_N',ATOM_K')
   // Step 2.1: reconstruct thrfrg tensor
-  auto orig_thr_frg = mma.thrfrg_B(make_layout(tile_nk));
-  auto block_ = zip(layout<0>(orig_thr_frg), layout<1>(orig_thr_frg));
-  auto rest_block_ = zip(layout<1,0>(block_), layout<1,1>(block_));
-  auto zipped_new_thrfrg = logical_divide(replace<1>(block_, rest_block_),
-                                          make_tile(_, make_tile(Int<alongN>{},Int<alongK>{})));
-  // ((ThrV,FrgV),((ATOM_N', FrgN), (ATOM_K',FrgK)))->offset
-  auto thr_frg_tile = replace<1>(zipped_new_thrfrg,
-                                 zip(layout<1,0>(zipped_new_thrfrg), layout<1,1>(zipped_new_thrfrg)));
-  // ((ThrV,(ThrN',ThrK')),(FrgV,(FrgN,FrgK)))->offset
-  auto new_thrfrg  = zip(layout<0>(thr_frg_tile), layout<1>(thr_frg_tile));
-  auto svB = composition(new_thrfrg, make_tile(sg_to_vnk,_));                                           // (SG, V) -> (N, K)
-  
+  auto b_tile = make_tile(make_layout(size<1>(typename TiledMMA::AtomShape_MNK{})),
+                          make_layout(size<2>(typename TiledMMA::AtomShape_MNK{})));
+  auto b_tensor = zipped_divide(make_layout(tile_nk), b_tile);                                         // ((AtomN,AtomK),(RestN,RestK))
+  auto tv_tensor = b_tensor.compose(typename TiledMMA::AtomLayoutB_TV{}, _);                           // ((ThrV,FrgV),(RestN,RestK))
+  auto thr_tile = make_tile(_, make_tile(Int<alongN>{}, Int<alongK>{}));
+  auto thr_tensor = zipped_divide(tv_tensor, thr_tile);                                                // ((ThrV,(ThrN',ThrK')),(FrgV,(FrgN,FrgK)))->offset
+  auto svB = composition(thr_tensor, make_tile(sg_to_vnk,_));                                          // (SG, V) -> (M, K)
+
   #if CUTLASS_ENABLE_DEBUG_PRINTS
   if(cute::thread0()) {
-    PRINT(new_thrfrg);
+    PRINT(thr_tensor);
     PRINT(svB);
   }
   #endif
@@ -1185,10 +1177,10 @@ make_A_slm_layout(TiledMMA const& tiled_mma)
   auto atom_layout = coalesce(tiled_mma.get_atom_layout_mnk());
   constexpr auto alongM = cute::gcd(size(atom_layout), size<0>(rest_block));
   constexpr auto alongK = cute::ceil_div(size(atom_layout), alongM);
-  // ((ThrV,FrgV),((ATOM_M',FrgM),(ATOM_K',FrgK)) -> offset
+  // ((ThrV,FrgV),((ThrM',FrgM),(ThrK',FrgK)) -> offset
   auto pre_thr_frg = logical_divide(replace<1>(block_tile, rest_block),
                                     make_tile(_, make_tile(Int<alongM>{},Int<alongK>{})));
-  // zipped to (ThrM, ThrK),(FrgM, FrgK)
+  // zipped to (ThrM',ThrK'),(FrgM,FrgK)
   auto blocks = zip(layout<1, 0>(pre_thr_frg), layout<1, 1>(pre_thr_frg));  
   #if CUTLASS_ENABLE_DEBUG_PRINTS
   if(cute::thread0()) {
@@ -1214,10 +1206,10 @@ make_B_slm_layout(TiledMMA const& tiled_mma)
   auto atom_layout = coalesce(tiled_mma.get_atom_layout_mnk());
   constexpr auto alongK = cute::gcd(size(atom_layout), size<1>(rest_block));
   constexpr auto alongN = cute::ceil_div(size(atom_layout), alongK);
-  // ((ThrV,FrgV),((ATOM_N',FrgN),(ATOM_K',FrgK)) -> offset
+  // ((ThrV,FrgV),((ThrN',FrgN),(ThrK',FrgK)) -> offset
   auto pre_thr_frg = logical_divide(replace<1>(block_tile, rest_block),
                                     make_tile(_, make_tile(Int<alongN>{},Int<alongK>{})));
-  // zipped to (ThrN, ThrK),(FrgN, FrgK)
+  // zipped to (ThrN', ThrK'),(FrgN, FrgK)
   auto blocks = zip(layout<1, 0>(pre_thr_frg), layout<1, 1>(pre_thr_frg)); 
   #if CUTLASS_ENABLE_DEBUG_PRINTS
   if(cute::thread0()) {
@@ -1225,7 +1217,7 @@ make_B_slm_layout(TiledMMA const& tiled_mma)
     PRINT(blocks);
   }
   #endif
-  // (ThrV, FrgV),(FrgM,FrgK),(ThrM,ThrK)
+  // (ThrV,FrgV),(FrgN,FrgK),(ThrN',ThrK')
   return make_layout(make_shape(shape<0>(pre_thr_frg), shape<1>(blocks), shape<0>(blocks)));
 }
 

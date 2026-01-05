@@ -92,6 +92,9 @@ gemm_device(ATensor   const& A,         // (M,K)
   using TB = typename BTensor::element_type;
   auto coop_copy_a = make_coop_block_2d_copy_A(mma, A);
   auto coop_copy_b = make_coop_block_2d_copy_B(mma, B);
+  // TODO: generate proper subgroup tensors
+  auto coop_copy_a_ = make_coop_block_2d_copy_A(mma, make_tensor(A.data(), make_layout(shape(A), LayoutRight{})));
+  auto coop_copy_b_ = make_coop_block_2d_copy_B(mma, make_tensor(B.data(), make_layout(shape(B), LayoutRight{})));
   auto [r2s_A, s2r_A] = make_A_slm_copies(mma, coop_copy_a);
   auto [r2s_B, s2r_B] = make_B_slm_copies(mma, coop_copy_b);
   auto copy_c = make_block_2d_copy_D(mma, C);
@@ -111,6 +114,8 @@ gemm_device(ATensor   const& A,         // (M,K)
   auto thr_mma    =    mma.get_slice(local_id);
   auto coop_thr_copy_a = coop_copy_a.get_slice(local_id);
   auto coop_thr_copy_b = coop_copy_b.get_slice(local_id);
+  auto coop_thr_copy_a_ = coop_copy_a_.get_slice(local_id);
+  auto coop_thr_copy_b_ = coop_copy_b_.get_slice(local_id);
   auto thr_r2s_A = r2s_A.get_slice(local_id);
   auto thr_r2s_B = r2s_B.get_slice(local_id);
   auto thr_s2r_A = s2r_A.get_slice(local_id);
@@ -124,10 +129,12 @@ gemm_device(ATensor   const& A,         // (M,K)
   /* Register fragments for copies */
   auto tArA_in = coop_thr_copy_a.partition_sg_fragment_D(gA(_,_,0));
   auto tBrB_in = coop_thr_copy_b.partition_sg_fragment_D(gB(_,_,0));
+  auto tArA_in_ = coop_thr_copy_a_.partition_sg_fragment_D(gA(_,_,0));
+  auto tBrB_in_ = coop_thr_copy_b_.partition_sg_fragment_D(gB(_,_,0));
   auto tAsA_out = thr_r2s_A.partition_D(sA);
   auto tBsB_out = thr_r2s_B.partition_D(sB);
-  auto tArA_out = thr_r2s_A.retile_S(tArA_in);
-  auto tBrB_out = thr_r2s_B.retile_S(tBrB_in);
+  auto tArA_out = thr_r2s_A.retile_S(tArA_in_);
+  auto tBrB_out = thr_r2s_B.retile_S(tBrB_in_);
   auto tAsA_in = thr_s2r_A.partition_S(sA);
   auto tBsB_in = thr_s2r_B.partition_S(sB);
   auto tCrA_in = thr_s2r_A.retile_D(tCrA);
@@ -140,37 +147,6 @@ gemm_device(ATensor   const& A,         // (M,K)
   /* Partition C */
   Tensor tCrC = partition_fragment_C(mma, select<0,1>(wg_tile));
   Tensor tCgC = thr_mma.partition_C(gC);    /* also matches copy_c's source layout */
-
-  // if(cute::thread0()) {
-  //   PRINT(cB);
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 0).partition_S(gB));
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 1).partition_S(gB));
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 2).partition_S(gB));
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 3).partition_S(gB));
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 4).partition_S(gB));
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 5).partition_S(gB));
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 6).partition_S(gB));
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 7).partition_S(gB));
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 8).partition_S(gB));
-  //   PRINT(coop_copy_b.get_slice(local_id + 16 * 9).partition_S(gB));
-    
-  //   PRINT(tBgB);
-    // PRINT(tArA_in);
-    // PRINT(tBrB_in);
-  //   PRINT(tArA_coop);
-  //   PRINT(tCrA);
-  //   PRINT(tBrB);
-  //   PRINT(tBrB_coop);
-  //   PRINT(tCrB);
-  //   PRINT(tCrC);
-    // PRINT(a_slm_layout);
-    // PRINT(r2s_A);
-    // PRINT(s2r_A);
-    // PRINT(tArA_out);
-    // PRINT(tBrB_out);
-    // PRINT(coop_copy_a);
-    // PRINT(coop_copy_b);
-  // }
 
   // ------
   // Kernel
@@ -188,8 +164,8 @@ gemm_device(ATensor   const& A,         // (M,K)
     copy(coop_copy_b, tBgB(_,_,_,k_tile), tBrB_in);
 
     // Reorder input to output fragments, and write to SLM
-    // reorder(tArA_in, tArA_out);
-    // reorder(tBrB_in, tBrB_out);
+    reorder(tArA_in, tArA_in_);
+    reorder(tBrB_in, tBrB_in_);
     copy(r2s_A, tArA_out, tAsA_out);
     copy(r2s_B, tBrB_out, tBsB_out);
 
@@ -210,12 +186,6 @@ gemm_device(ATensor   const& A,         // (M,K)
 
   /* Write C to global memory */
   copy(copy_c, tCrC, tCgC);
-    if(cute::thread0()) {
-    PRINT(tCrC(4));
-    PRINT(tCrC(5));
-    PRINT(tCrC(6));
-    PRINT(tCrC(7));
-  }
 }
 
 template <typename TA, typename TB, typename TC>
@@ -255,8 +225,7 @@ choose_tiled_mma(ATensor const& A, BTensor const& B, CTensor const&)
 
   using WGTile = Shape<_256, _256, _32>;                               // 256x256 WG tile size
   using SGLayout8x4 = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>;  // 8x4 SG tiling, n-major
-  using SGLayout4x8 = Layout<Shape<_4, _8, _1>, Stride<_8, _1, _0>>;  // 4x8 SG tiling, n-major
-  using SGLayout = conditional_t<use_4x8_sg, SGLayout4x8, SGLayout8x4>;
+  using SGLayout = SGLayout8x4;
 
   using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>, Layout<WGTile>, SGLayout>::TiledMMA;
 
@@ -376,13 +345,12 @@ test_case(sycl::queue &Q, int m, int n, int k)
   std::cout << "verification skipped";
 #else
   bool ok = gemm_verify(Q, A_ref, B_ref, C);
-  // bool ok = true;
   std::cout << (ok ? "passed" : "failed");
 #endif
 
   if (ok) {
     // Test performance:
-    const int timing_iterations = 0;
+    const int timing_iterations = 100;
     GPU_Clock timer;
 
     timer.start();
@@ -392,8 +360,9 @@ test_case(sycl::queue &Q, int m, int n, int k)
 
     double avg = timer.seconds() / timing_iterations;
     double tops = (2.0*m*n*k) * 1e-12;
-
-    printf(", %4.3f TF/s", tops / avg, avg*1000);
+    double io = (m * k * sizeof(TA) + n * k * sizeof(TB) +
+                 m * n * sizeof(TC)) * 1e-9;
+    printf(", [%4.3f]GB/s, %4.3f TF/s", io / avg, tops / avg, avg*1000);
   }
 
   free_usm_tensor(A, Q);
@@ -432,12 +401,14 @@ int main(int argc, char** argv)
 
   (void) shift();
 
-  auto m = 256/*parse_size()*/;
-  auto n = 256/*parse_size()*/;
-  auto k = 32/*parse_size()*/;
+  auto m = parse_size();
+  auto n = parse_size();
+  auto k = parse_size();
 
   sycl::queue Q = compat::get_default_queue();
 
   // Native compute
   test_case<half_t, half_t, float, 'R', 'R'>(Q, m, n, k);
+  test_case<half_t, half_t, float, 'C', 'R'>(Q, m, n, k);
+  test_case<half_t, half_t, float, 'C', 'C'>(Q, m, n, k);
 }
