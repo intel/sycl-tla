@@ -49,7 +49,7 @@ cutlass_cppgen.set_log_level(logging.WARNING)
 @unittest.skipIf(device_cc() not in [12, 20, 80, 86, 89, 90], "This unittest is only supported on CC [12, 20, 80, 86, 89, 90]")
 class TestEVTStore(EVTTestCaseBase):
 
-    @unittest.skipIf(device_cc() not in [12, 20, 90], "This test is only supported for CC [12, 20, 90]")
+    @unittest.skipIf(device_cc() not in [12, 20, 90], "This test is only supported on CC [12, 20, 90]")
     def test_invalid_store(self):
         """
         Test invalid store
@@ -74,7 +74,7 @@ class TestEVTStore(EVTTestCaseBase):
             
             break  # Only need to test once
 
-    @unittest.skipIf(device_cc() not in [80, 86, 89, 90], "This unittest is only supported on CC [80, 86, 89, 90]")
+    @unittest.skipIf(device_cc() not in [80, 86, 89, 90], "This test is only supported on CC [80, 86, 89, 90]")
     def test_aux_store(self):
         """
         Returning a tensor with shape [m, n]
@@ -124,32 +124,6 @@ class TestEVTStore(EVTTestCaseBase):
             result_keys = ["D", "F_row_max", "acc_row_max"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
 
-    def test_scalar_reduce(self):
-        """
-        Reduction [m, n] -> [1,]
-        """
-        def evt_scalar_reduce(accum, alpha, C):
-            acc_max = max(accum, dim=[1, 2])
-            F = alpha * accum
-            F_max = max(F, dim=[0, 1, 2])
-            D = F + C
-            return D, F_max, acc_max
-
-        for m, n, k, l in self.get_problem_sizes(8):
-            example_inputs = {
-                "accum": self.fake_tensor(self.element, (l, m, n)),
-                "alpha": 2.0,
-                "C": self.fake_tensor(self.element, (l, m, n)),
-                "acc_max": self.fake_tensor(np.float32, (l, 1, 1)),
-                "F_max": self.fake_tensor(np.float32, (1,)),
-                "D": self.fake_tensor(self.element, (l, m, n)),
-            }
-
-            launcher = EVTTestBed(self.element, evt_scalar_reduce, example_inputs)
-            input_keys = ["C", "alpha"]
-            result_keys = ["D", "F_max", "acc_max"]
-            launcher.verify((m, n, k), input_keys, result_keys, l)
-
     def test_row_reduce(self):
         """
         Reduction [m, n] -> [n]
@@ -174,6 +148,32 @@ class TestEVTStore(EVTTestCaseBase):
             launcher = EVTTestBed(self.element, evt_col_reduce, example_inputs)
             input_keys = ["C", "alpha"]
             result_keys = ["D", "F_col_max", "acc_col_max"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_scalar_reduce(self):
+        """
+        Reduction [m, n] -> [1,]
+        """
+        def evt_scalar_reduce(accum, alpha, C):
+            acc_max = max(accum, dim=[1, 2])
+            F = alpha * accum
+            F_max = max(F, dim=[0, 1, 2])
+            D = F + C
+            return D, F_max, acc_max
+
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 2.0,
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "acc_max": self.fake_tensor(np.float32, (l, 1, 1)),
+                "F_max": self.fake_tensor(np.float32, (1,)),
+                "D": self.fake_tensor(self.element, (l, m, n)),
+            }
+
+            launcher = EVTTestBed(self.element, evt_scalar_reduce, example_inputs)
+            input_keys = ["C", "alpha"]
+            result_keys = ["D", "F_max", "acc_max"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
 
 
