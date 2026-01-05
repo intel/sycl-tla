@@ -206,7 +206,7 @@ struct ExampleRunner {
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
-  using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
+  using ElementAccumulator = typename Gemm::ElementAccumulator;
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
@@ -244,19 +244,21 @@ struct ExampleRunner {
     // Compute reference output (default gemm kernel w/ ElementA == ElementB)
     //
 
-    using GmemTiledCopyA = XE_2D_Packed_U8x32x32_LD_N;
-    using GmemTiledCopyB = XE_2D_U8x16x32_LD_T;
+    // Copy atoms (void = automatic selection by CUTLASS)
+    using GmemTiledCopyA = void;
+    using GmemTiledCopyB = void;
 
     // Workgroup-level tile
     using TileShape = Shape<_32, _64, _32>;
 
+    // MMA atom (new API using XE_DPAS_TT)
     using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x32_S32S8S8S32_TT>, Layout<TileShape>,
+        typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, int32_t, int8_t, int8_t>>, Layout<TileShape>,
                                       Layout<Shape<_1, _2, _1>, Stride<_2, _1, _0>>>::TiledMMA;
 
     constexpr int PipelineStages = 3;
-    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
-    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+    using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
+    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
 
     using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementAccumulator, ElementCompute,
             ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
@@ -267,15 +269,14 @@ struct ExampleRunner {
     using CollectiveEpilogueRef = cutlass::epilogue::collective::CollectiveEpilogue<
             EpilogueDispatchPolicy,
             TileShape,
+            void,   // Epilogue tile (void = automatic)
             ElementAccumulator,
             cutlass::gemm::TagToStrideC_t<LayoutC>,
             ElementOutput,
             cutlass::gemm::TagToStrideC_t<LayoutD>,
             FusionCallBacks,
-            XE_2D_U32x8x16_LD_N,
-            void, void,
-            XE_2D_U16x8x16_ST_N,
-            void, void>;
+            void,   // Copy atom for C (void = automatic)
+            void>;  // Copy atom for D (void = automatic)
 
     // Mainloop
     using CollectiveMainloopRef = cutlass::gemm::collective::CollectiveMma<

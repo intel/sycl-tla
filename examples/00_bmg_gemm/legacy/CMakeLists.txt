@@ -39,3 +39,19 @@ cutlass_example_add_executable(
   TEST_LARGE
   TEST_SMALL_SHAPE
 )
+
+set(TEST_SMALL_SHAPE_PADDABLE --m=1 --n=1 --k=2 --l=2)
+cutlass_example_add_executable(
+  00_bmg_gemm_padded_legacy
+  00_bmg_gemm_padded.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+  TEST_SMALL_SHAPE_PADDABLE
+)
+
+cutlass_example_add_executable(
+  00_bmg_gemm_with_sycl_queue_legacy
+  00_bmg_gemm_with_sycl_queue.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_BATCHES
+)

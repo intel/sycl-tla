@@ -104,10 +104,13 @@ if(CUTLASS_ENABLE_SYCL)
       00_bmg_gemm/legacy
       01_bmg_gemm_with_collective_builder
       02_bmg_gemm_mixed_dtype
+      02_bmg_gemm_mixed_dtype/legacy
       03_bmg_gemm_streamk
+      03_bmg_gemm_streamk/legacy
       04_bmg_grouped_gemm
       04_bmg_grouped_gemm/legacy
       05_bmg_gemm_with_epilogues
+      05_bmg_gemm_with_epilogues/legacy
       06_bmg_flash_attention
       07_bmg_dual_gemm
       08_bmg_gemm_f8
@@ -115,6 +118,7 @@ if(CUTLASS_ENABLE_SYCL)
       09_bmg_grouped_gemm_f8/legacy
       10_bmg_grouped_gemm_mixed_dtype
       11_xe20_cutlass_library
+      12_xe20_moe_gemm_cute_interface
       )
       add_subdirectory(${EXAMPLE})
     endforeach()
