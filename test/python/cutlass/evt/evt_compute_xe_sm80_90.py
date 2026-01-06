@@ -43,6 +43,7 @@ from cutlass_cppgen import swizzle
 
 from utils.evt_testbed import EVTTestBed, EVTTestCaseBase
 
+
 cutlass_cppgen.set_log_level(logging.WARNING)
 
 
