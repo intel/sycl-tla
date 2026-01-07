@@ -100,10 +100,9 @@ gemm_device(ATensor   const& A,         // (M,K)
   auto copy_c = make_block_2d_copy_D(mma, C);
 
   // Shared memory buffers
-  Layout a_slm_layout = make_layout(select<0, 2>(mma.tile_mnk()));
-  Layout b_slm_layout = make_layout(select<1, 2>(mma.tile_mnk()));
-  // Layout a_slm_layout = make_A_slm_layout(mma);
-  // Layout b_slm_layout = make_B_slm_layout(mma);
+  Layout a_slm_layout = make_layout(typename decltype(r2s_A)::Tiler_MN{});
+  Layout b_slm_layout = make_layout(typename decltype(r2s_B)::Tiler_MN{});
+
   auto smemA = compat::local_mem<TA[size(a_slm_layout)]>();
   auto smemB = compat::local_mem<TB[size(b_slm_layout)]>();
 
@@ -221,10 +220,10 @@ choose_tiled_mma(ATensor const& A, BTensor const& B, CTensor const&)
                            || (b_n && sizeof_bits_v<TB> < 8);
 
   using _K = conditional_t<use_1x_dpas_per_k,
-                           C<op.K>, C<op.K*2>>;
+                           C<op.K*2>, C<op.K*2>>;
 
-  using WGTile = Shape<_256, _256, _32>;                               // 256x256 WG tile size
-  using SGLayout8x4 = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>;  // 8x4 SG tiling, n-major
+  using WGTile = Shape<_256, _256, _K>;                               // 256x256 WG tile size
+  using SGLayout8x4 = Layout<Shape<_8, _4, _1>, Stride<_1, _8, _0>>;  // 8x4 SG tiling, n-major
   using SGLayout = SGLayout8x4;
 
   using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>, Layout<WGTile>, SGLayout>::TiledMMA;
@@ -411,4 +410,15 @@ int main(int argc, char** argv)
   test_case<half_t, half_t, float, 'R', 'R'>(Q, m, n, k);
   test_case<half_t, half_t, float, 'C', 'R'>(Q, m, n, k);
   test_case<half_t, half_t, float, 'C', 'C'>(Q, m, n, k);
+
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, m, n, k);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, m, n, k);
+  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, m, n, k);
+
+  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, m, n, k);
+  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, m, n, k);
+  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, m, n, k);
+
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, m, n, k);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, m, n, k);
 }

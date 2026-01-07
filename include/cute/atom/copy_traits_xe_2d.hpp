@@ -37,7 +37,6 @@
 #include <cute/algorithm/prefetch.hpp>
 #include <cute/arch/copy_xe_2d.hpp>
 
-#define PRINT(x) print(#x ": "); print(x); print("\n");
 // 2D block payload intrinsics
 SYCL_EXTERNAL extern "C" int* __builtin_IB_subgroup_createBlock2DAddressPayload(long base, int width_minus_one, int height_minus_one, int pitch_minus_one,
                                                                                 int blockX, int blockY, int blockWidth, int blockHeight, int numBlocks);
@@ -1056,12 +1055,6 @@ make_coop_block_2d_copy_A(TiledMMA                 const& mma,       // TiledMMA
   auto thr_tensor = zipped_divide(tv_tensor, thr_tile);                                                // ((ThrV,(ThrM',ThrK')),(FrgV,(FrgM,FrgK)))->offset
   auto svA = composition(thr_tensor, make_tile(sg_to_vmk,_));                                          // (SG, V) -> (M, K)
 
-  #if CUTLASS_ENABLE_DEBUG_PRINTS
-  if(cute::thread0()) {
-    PRINT(thr_tensor);
-    PRINT(svA);
-  }
-  #endif
   return make_block_2d_copy_X<ValType>(op, gstride, find_x_mode(gstride), find_y_mode(gstride), tile_mk, svA).with(gmem);
 }
 
@@ -1131,12 +1124,6 @@ make_coop_block_2d_copy_B(TiledMMA                 const& mma,  // TiledMMA inst
   auto thr_tensor = zipped_divide(tv_tensor, thr_tile);                                                // ((ThrV,(ThrN',ThrK')),(FrgV,(FrgN,FrgK)))->offset
   auto svB = composition(thr_tensor, make_tile(sg_to_vnk,_));                                          // (SG, V) -> (M, K)
 
-  #if CUTLASS_ENABLE_DEBUG_PRINTS
-  if(cute::thread0()) {
-    PRINT(thr_tensor);
-    PRINT(svB);
-  }
-  #endif
   return make_block_2d_copy_X<ValType>(op, gstride, find_x_mode(gstride), find_y_mode(gstride), tile_nk, svB).with(gmem);
 }
 
@@ -1182,12 +1169,7 @@ make_A_slm_layout(TiledMMA const& tiled_mma)
                                     make_tile(_, make_tile(Int<alongM>{},Int<alongK>{})));
   // zipped to (ThrM',ThrK'),(FrgM,FrgK)
   auto blocks = zip(layout<1, 0>(pre_thr_frg), layout<1, 1>(pre_thr_frg));  
-  #if CUTLASS_ENABLE_DEBUG_PRINTS
-  if(cute::thread0()) {
-    PRINT(pre_thr_frg);
-    PRINT(blocks);
-  }
-  #endif
+
   // (ThrV, FrgV),(FrgM,FrgK),(ThrM,ThrK)
   return make_layout(make_shape(shape<0>(pre_thr_frg), shape<1>(blocks), shape<0>(blocks)));
 }
@@ -1211,12 +1193,7 @@ make_B_slm_layout(TiledMMA const& tiled_mma)
                                     make_tile(_, make_tile(Int<alongN>{},Int<alongK>{})));
   // zipped to (ThrN', ThrK'),(FrgN, FrgK)
   auto blocks = zip(layout<1, 0>(pre_thr_frg), layout<1, 1>(pre_thr_frg)); 
-  #if CUTLASS_ENABLE_DEBUG_PRINTS
-  if(cute::thread0()) {
-    PRINT(pre_thr_frg);
-    PRINT(blocks);
-  }
-  #endif
+
   // (ThrV,FrgV),(FrgN,FrgK),(ThrN',ThrK')
   return make_layout(make_shape(shape<0>(pre_thr_frg), shape<1>(blocks), shape<0>(blocks)));
 }
@@ -1238,14 +1215,7 @@ make_slm_copy(SubgroupTensor<SEngine, SLayoutWI, SLayout> const& src,
   Layout ThrLayout = make_layout(Shape<_1, _SGSize>{});
   Layout ValLayout = make_layout(Shape<Int<frg_size>, _1>{});
   TiledCopy r2s = make_tiled_copy(atom_r2s, ThrLayout, ValLayout);
-  #if CUTLASS_ENABLE_DEBUG_PRINTS
-  if(cute::thread0()) {
-    PRINT(src);
-    PRINT(src_tv);
-    PRINT(dst);
-    PRINT(r2s);
-  }
-  #endif
+
   return r2s;
 }
 
@@ -1266,13 +1236,7 @@ make_slm_copy(Tensor<SEngine, SLayout>               const& src,
   Layout ThrLayout = make_layout(Shape<_1, _SGSize>{});
   Layout ValLayout = make_layout(Shape<Int<frg_size>, _1>{});
   TiledCopy s2r = make_tiled_copy(atom_s2r, ThrLayout, ValLayout);
-  #if CUTLASS_ENABLE_DEBUG_PRINTS
-  if(cute::thread0()) {
-    PRINT(dst);
-    PRINT(dst_tv);
-    PRINT(s2r);
-  }
-  #endif
+
   return s2r;
 }
 
@@ -1300,11 +1264,7 @@ make_slm_copy(SubgroupTensor<SEngine, SLayoutWI, SLayout> const& src,
   auto tv_layout1 = composition(make_layout(Tiler_MN{}, make_layout(tile_shape).stride()), TiledLayout_TV{});
   auto sgval_layout = make_layout(make_shape(sg_shape, val_shape));
   auto tv_layout = blocked_product(tv_layout1, sgval_layout);
-  #if CUTLASS_ENABLE_DEBUG_PRINTS
-  if(cute::thread0()) {
-    PRINT(tv_layout1);
-  }
-  #endif
+
   return TiledCopy<Atom, decltype(tv_layout), decltype(tile_shape)>{};
 }
 
@@ -1383,7 +1343,7 @@ make_B_slm_copies(TiledMMA  const& tiled_mma,
   using SLM_Layout = decltype(make_B_slm_layout(tiled_mma));
   using ValType = typename TiledMMA::ValTypeB;
   auto dummy_tensor = make_tensor(make_smem_ptr(static_cast<ValType*>(nullptr)), SLM_Layout{});
-  auto tile_nk = select<1, 2>(tiled_mma.tile_mnk());   // (M,K)
+  auto tile_nk = select<1, 2>(tiled_mma.tile_mnk());   // (N,K)
   auto r2s = make_slm_copy(global_copy.get_slice(0).partition_sg_fragment_D(make_identity_tensor(tile_nk)), dummy_tensor,
                            make_layout(make_shape(shape<2>(SLM_Layout{}), shape<1>(SLM_Layout{}))));
   auto thr_vmnk = tiled_mma.get_thr_layout_vmnk();                                  // (ThrV,ThrM,ThrN,ThrK) -> thr
