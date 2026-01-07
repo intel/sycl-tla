@@ -1,6 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@
  *
  **************************************************************************************************/
 /*! \file
-    \brief CUTLASS Intel BMG Gemm Example.
+    \brief CUTLASS Intel BMG Gemm Example with Bias addition.
 
     This example constructs and executes a simple CUTLASS GEMM kernel on Intel BMG hardware, and
     verifies its correctness with a reference implementation
@@ -54,8 +54,8 @@
 
     To build & run this example (from your build dir):
 
-      $ ninja 00_bmg_gemm
-      $ ./examples/sycl/00_bmg_gemm/00_bmg_gemm
+      $ ninja 13_bmg_gemm_bias
+      $ ./examples/13_bmg_gemm_bias/13_bmg_gemm_bias
 
     Call with `--help` for information about available options
 */
@@ -120,7 +120,7 @@ struct Options {
   /// Prints the usage statement.
   std::ostream & print_usage(std::ostream &out) const {
 
-    out << "BMG GEMM Example\n\n"
+    out << "BMG GEMM Example with Bias addition\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"

@@ -26,32 +26,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(TEST_BATCHES --l=2)
-set(TEST_LARGE "--l=513 --m=8 --n=16384 --k=512") # B matrix capacity > uint32_max
-set(TEST_SMALL_SHAPE --m=4 --n=8 --k=8 --l=2)
-
-
+set(TEST_SHAPE_GEMM_WITH_BIAS --m=512 --n=1024 --k=64 --l=2)
 cutlass_example_add_executable(
-  00_bmg_gemm
-  00_bmg_gemm.cpp
+  13_bmg_gemm_bias
+  13_bmg_gemm_bias.cpp
   TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-  TEST_LARGE
-  TEST_SMALL_SHAPE
-)
-
-set(TEST_SMALL_SHAPE_PADDABLE --m=1 --n=1 --k=2 --l=2)
-cutlass_example_add_executable(
-  00_bmg_gemm_padded
-  00_bmg_gemm_padded.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
-  TEST_SMALL_SHAPE_PADDABLE
-)
-
-cutlass_example_add_executable(
-  00_bmg_gemm_with_sycl_queue
-  00_bmg_gemm_with_sycl_queue.cpp
-  TEST_COMMAND_OPTIONS
-  TEST_BATCHES
+  TEST_SHAPE_GEMM_WITH_BIAS
 )
