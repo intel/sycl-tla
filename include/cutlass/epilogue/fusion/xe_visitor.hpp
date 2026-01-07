@@ -487,7 +487,6 @@ public:
   static cutlass::Status
   initialize_workspace(ProblemShape const& problem_shape, Arguments const& args, void* workspace, cudaStream_t stream,
     CudaHostAdapter* cuda_adapter = nullptr) {
-  #if !defined(CUTLASS_SKIP_REDUCTION_INIT)
     if constexpr (IsAtomic) {
       auto problem_shape_mnkl = append<4>(problem_shape, 1);
       auto [M, N, K, L] = problem_shape_mnkl;
@@ -496,7 +495,6 @@ public:
         return fill_workspace(args.ptr_scalar, ElementOutput(args.reduction_identity), cosize(mScalar_layout), stream, cuda_adapter);
       }
     }
-  #endif
 
     return cutlass::Status::kSuccess;
   }
