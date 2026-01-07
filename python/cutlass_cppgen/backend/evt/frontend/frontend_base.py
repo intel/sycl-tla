@@ -110,7 +110,7 @@ class EVTFrontendBase:
         self.parse(*args, **kwargs)
 
         # Verify the DAG IR to ensure that "D" is the output node with out_degree = 0
-        if (self.cc >= 90):
+        if cc_map[self.cc] in [12, 20, 90, 100]:
             if (self.dag_ir.out_degree("D") != 0):
                 raise RuntimeError(
                     f"On SM90 or higher, D is expected to be a output node with 0 users to "
