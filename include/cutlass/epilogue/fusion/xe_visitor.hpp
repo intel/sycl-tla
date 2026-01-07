@@ -48,6 +48,92 @@
 
 namespace cutlass::epilogue::fusion {
 
+namespace detail {
+
+enum class XeReductionAxis { Column, Row };
+
+template <XeReductionAxis Axis>
+struct XeReductionAxisTraits;
+
+template <>
+struct XeReductionAxisTraits<XeReductionAxis::Column> {
+  template <class MShape, class NShape>
+  CUTLASS_HOST_DEVICE static auto axis_extent(MShape const& M, NShape const&) {
+    return M;
+  }
+  template <class TileM, class TileN>
+  CUTLASS_HOST_DEVICE static auto tile_extent(TileM const& tile_M, TileN const&) {
+    return tile_M;
+  }
+};
+
+template <>
+struct XeReductionAxisTraits<XeReductionAxis::Row> {
+  template <class MShape, class NShape>
+  CUTLASS_HOST_DEVICE static auto axis_extent(MShape const&, NShape const& N) {
+    return N;
+  }
+  template <class TileM, class TileN>
+  CUTLASS_HOST_DEVICE static auto tile_extent(TileM const&, TileN const& tile_N) {
+    return tile_N;
+  }
+};
+
+struct XeReductionWorkspaceLayout {
+  size_t reduction_buffer_bytes = 0;
+  size_t tile_counter_count = 0;
+};
+
+template <class T>
+CUTLASS_HOST_DEVICE constexpr size_t
+xe_to_size_t(T const& value) {
+  return static_cast<size_t>(static_cast<long long>(value));
+}
+
+template <XeReductionAxis Axis, class CtaTileShapeMNK>
+struct XeReductionWorkspaceHelper {
+  template <class ElementCompute, class ProblemShape>
+  CUTLASS_HOST_DEVICE static XeReductionWorkspaceLayout
+  layout(ProblemShape const& problem_shape) {
+    auto problem_shape_mnkl = append<4>(problem_shape, 1);
+    auto [M, N, K, L] = problem_shape_mnkl;
+    auto [tile_M, tile_N, tile_K] = CtaTileShapeMNK{};
+
+    auto ceil_tiles = ceil_div(make_shape(M, N, L), make_shape(tile_M, tile_N));
+    using AxisTraits = XeReductionAxisTraits<Axis>;
+    auto reduction_axis = AxisTraits::axis_extent(M, N);
+    auto tile_axis = AxisTraits::tile_extent(tile_M, tile_N);
+    auto tile_counter_tiles = cute::ceil_div(reduction_axis, tile_axis);
+
+    XeReductionWorkspaceLayout workspace{};
+    workspace.reduction_buffer_bytes =
+      xe_to_size_t(product(ceil_tiles)) * xe_to_size_t(tile_axis) * sizeof(ElementCompute);
+    workspace.tile_counter_count = xe_to_size_t(tile_counter_tiles);
+    return workspace;
+  }
+};
+
+template <class SyncFn>
+CUTLASS_DEVICE bool
+xe_signal_final_reduction(
+    int* tile_counters,
+    int axis_index,
+    int total_tiles,
+    int thread_idx,
+    void* shared_storage,
+    SyncFn const& sync_fn) {
+  int* prev_tile_count = reinterpret_cast<int*>(shared_storage);
+  if (thread_idx == 0) {
+    *prev_tile_count = atomicAdd(&tile_counters[axis_index], 1);
+  }
+  sync_fn();
+  bool do_final = *prev_tile_count == total_tiles - 1;
+  sync_fn();
+  return do_final;
+}
+
+} // namespace detail
+
 template <
   class Element,
   class StrideMNL,
@@ -635,6 +721,7 @@ private:
   static_assert(take<0,2>(StrideMNL{}) == Stride<_1,_0>{});
   static constexpr bool IsAtomic = is_atomic<GmemReduceFn<ElementCompute>>::value;
   static_assert(not (IsAtomic && not FinalReduction), "atomic reduction must be final");
+  using WorkspaceHelper = detail::XeReductionWorkspaceHelper<detail::XeReductionAxis::Column, CtaTileShapeMNK>;
 
 public:
   struct SharedStorage { };
@@ -662,11 +749,8 @@ public:
       reduction_buffer = nullptr;
     }
     else if constexpr (FinalReduction) {
-      auto problem_shape_mnkl = append<4>(problem_shape, 1);
-      auto [M, N, K, L] = problem_shape_mnkl;
-      auto [tile_M, tile_N, tile_K] = CtaTileShapeMNK{};
-      size_t tile_counters_offset = product(ceil_div(make_shape(M,N,L), make_shape(tile_M, tile_N))) * tile_M * sizeof(ElementCompute);
-      tile_counters_offset = round_nearest(tile_counters_offset, MinWorkspaceAlignment);
+      auto workspace_layout = WorkspaceHelper::template layout<ElementCompute>(problem_shape);
+      size_t tile_counters_offset = round_nearest(workspace_layout.reduction_buffer_bytes, MinWorkspaceAlignment);
 
       reduction_buffer = reinterpret_cast<ElementCompute*>(workspace);
       tile_counters = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(workspace) + tile_counters_offset);
@@ -697,17 +781,10 @@ public:
       return 0;
     }
 
-    size_t workspace_size = 0;
-    auto problem_shape_mnkl = append<4>(problem_shape, 1);
-    auto [M, N, K, L] = problem_shape_mnkl;
-    auto [tile_M, tile_N, tile_K] = CtaTileShapeMNK{};
-
-    // Increment by size of reduction buffer
-    workspace_size += product(ceil_div(make_shape(M,N,L), make_shape(tile_M, tile_N))) * tile_M * sizeof(ElementCompute);
-    // Align and increment by size of tile counters
+    auto workspace_layout = WorkspaceHelper::template layout<ElementCompute>(problem_shape);
+    size_t workspace_size = workspace_layout.reduction_buffer_bytes;
     workspace_size = round_nearest(workspace_size, MinWorkspaceAlignment);
-    workspace_size += cute::ceil_div(M, tile_M) * sizeof(int);
-
+    workspace_size += workspace_layout.tile_counter_count * sizeof(int);
     return workspace_size;
   }
 
@@ -725,14 +802,11 @@ public:
       return Status::kSuccess;
     }
     else if constexpr (FinalReduction) {
-      auto problem_shape_mnkl = append<4>(problem_shape, 1);
-      auto [M, N, K, L] = problem_shape_mnkl;
-      auto [tile_M, tile_N, tile_K] = CtaTileShapeMNK{};
-      size_t tile_counters_offset = product(ceil_div(make_shape(M,N,L), make_shape(tile_M, tile_N))) * tile_M * sizeof(ElementCompute);
-      tile_counters_offset = round_nearest(tile_counters_offset, MinWorkspaceAlignment);
+      auto workspace_layout = WorkspaceHelper::template layout<ElementCompute>(problem_shape);
+      size_t tile_counters_offset = round_nearest(workspace_layout.reduction_buffer_bytes, MinWorkspaceAlignment);
 
       int* tile_counters = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(workspace) + tile_counters_offset);
-      size_t tile_counters_size = cute::ceil_div(M, tile_M) * sizeof(int);
+      size_t tile_counters_size = workspace_layout.tile_counter_count * sizeof(int);
       return zero_workspace(tile_counters, tile_counters_size, stream, cuda_adapter);
     }
     else {
@@ -962,15 +1036,15 @@ public:
         // Ensure gmem writes are visible to other threads before incrementing counter
         threadfence();
         sync_fn();
-        // Collective thread 0 increments atomic tile counter and copies value to smem
-        int* prev_tile_count = reinterpret_cast<int*>(raw_pointer_cast(smem_buffer.data()));
-        if (thread_idx == 0) {
-          *prev_tile_count = atomicAdd(&params.tile_counters[m], 1);
-        }
-        sync_fn();
-        // Broadcast tile count to other threads in CTA and determine final reduction status
-        do_final_reduction = *prev_tile_count == size<2>(gBuf_nl) * size<3>(gBuf_nl) - 1;
-        sync_fn();
+        int axis_index = int(m);
+        int total_tiles = size<2>(gBuf_nl) * size<3>(gBuf_nl);
+        do_final_reduction = detail::xe_signal_final_reduction(
+          params.tile_counters,
+          axis_index,
+          total_tiles,
+          thread_idx,
+          raw_pointer_cast(smem_buffer.data()),
+          sync_fn);
       }
     }
 
@@ -1123,6 +1197,7 @@ private:
   static_assert(take<0,2>(StrideMNL{}) == Stride<_0,_1>{}); // Tensor column major
   static constexpr bool IsAtomic = is_atomic<GmemReduceFn<ElementCompute>>::value;
   static_assert(not (IsAtomic && not FinalReduction), "atomic reduction must be final");
+  using WorkspaceHelper = detail::XeReductionWorkspaceHelper<detail::XeReductionAxis::Row, CtaTileShapeMNK>;
 
 public:
   struct SharedStorage { };
@@ -1150,11 +1225,8 @@ public:
       reduction_buffer = nullptr; // shared local memory
     }
     else if constexpr (FinalReduction) {
-      auto problem_shape_mnkl = append<4>(problem_shape, 1);
-      auto [M, N, K, L] = problem_shape_mnkl;
-      auto [tile_M, tile_N, tile_K] = CtaTileShapeMNK{};
-      size_t tile_counters_offset = product(ceil_div(make_shape(size<>(M), size<>(N), L), make_shape(tile_M, tile_N))) * tile_N * sizeof(ElementCompute);
-      tile_counters_offset = round_nearest(tile_counters_offset, MinWorkspaceAlignment);
+      auto workspace_layout = WorkspaceHelper::template layout<ElementCompute>(problem_shape);
+      size_t tile_counters_offset = round_nearest(workspace_layout.reduction_buffer_bytes, MinWorkspaceAlignment);
 
       reduction_buffer = reinterpret_cast<ElementCompute*>(workspace);
       tile_counters = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(workspace) + tile_counters_offset);
@@ -1185,15 +1257,10 @@ public:
       return 0;
     }
 
-    size_t workspace_size = 0;
-    auto problem_shape_mnkl = append<4>(problem_shape, 1);
-    auto [M, N, K, L] = problem_shape_mnkl;
-    auto [tile_M, tile_N, tile_K] = CtaTileShapeMNK{};
-    // Increment by size of reduction buffer
-    workspace_size += product(ceil_div(make_shape(size<>(M),size<>(N),L), make_shape(tile_M, tile_N))) * tile_N * sizeof(ElementCompute);
-    // Align and increment by size of tile counters
+    auto workspace_layout = WorkspaceHelper::template layout<ElementCompute>(problem_shape);
+    size_t workspace_size = workspace_layout.reduction_buffer_bytes;
     workspace_size = round_nearest(workspace_size, MinWorkspaceAlignment);
-    workspace_size += cute::ceil_div(size<>(N), tile_N) * sizeof(int);
+    workspace_size += workspace_layout.tile_counter_count * sizeof(int);
     return workspace_size;
   }
 
@@ -1211,14 +1278,11 @@ public:
       return Status::kSuccess;
     }
     else if constexpr (FinalReduction) {
-      auto problem_shape_mnkl = append<4>(problem_shape, 1);
-      auto [M, N, K, L] = problem_shape_mnkl;
-      auto [tile_M, tile_N, tile_K] = CtaTileShapeMNK{};
-      size_t tile_counters_offset = product(ceil_div(make_shape(size<>(M),size<>(N),L), make_shape(tile_M, tile_N))) * tile_N * sizeof(ElementCompute);
-      tile_counters_offset = round_nearest(tile_counters_offset, MinWorkspaceAlignment);
+      auto workspace_layout = WorkspaceHelper::template layout<ElementCompute>(problem_shape);
+      size_t tile_counters_offset = round_nearest(workspace_layout.reduction_buffer_bytes, MinWorkspaceAlignment);
 
       int* tile_counters = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(workspace) + tile_counters_offset);
-      size_t tile_counters_size = cute::ceil_div(size<>(N), tile_N) * sizeof(int);
+      size_t tile_counters_size = workspace_layout.tile_counter_count * sizeof(int);
       return zero_workspace(tile_counters, tile_counters_size, stream, cuda_adapter);
     }
     else {
@@ -1565,15 +1629,15 @@ public:
         // Ensure gmem writes are visible to other threads before incrementing counter
         threadfence();
         sync_fn();
-        // Collective thread 0 increments atomic tile counter and copies value to smem
-        int* prev_tile_count = reinterpret_cast<int*>(raw_pointer_cast(smem_buffer.data()));
-        if (thread_idx == 0) {
-          *prev_tile_count = atomicAdd(&params.tile_counters[n], 1);
-        }
-        sync_fn();
-        // Broadcast tile count to other threads in CTA and determine final reduction status
-        do_final_reduction = *prev_tile_count == size<2>(gBuf_ml) * size<3>(gBuf_ml) - 1;
-        sync_fn();
+        int axis_index = int(n);
+        int total_tiles = size<2>(gBuf_ml) * size<3>(gBuf_ml);
+        do_final_reduction = detail::xe_signal_final_reduction(
+          params.tile_counters,
+          axis_index,
+          total_tiles,
+          thread_idx,
+          raw_pointer_cast(smem_buffer.data()),
+          sync_fn);
       }
     }
 
