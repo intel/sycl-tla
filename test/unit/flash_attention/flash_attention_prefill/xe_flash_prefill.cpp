@@ -42,13 +42,25 @@ using Shape_h = test::flash_attention::SHAPE_H;
 
 TEST(TEST_NAME, causal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
-                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, false, 2>::Kernel;
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, false, 2, false>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
+}
+
+TEST(TEST_NAME, causal_rope) {
+  using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, true, false, 2, true>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
 }
 
 TEST(TEST_NAME, noncausal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, false, 2>::Kernel;
+  EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
+}
+
+TEST(TEST_NAME, noncausal_rope) {
+  using Kernel = test::flash_attention::XE_Flash_Attention_Prefill<INPUT_TYPE, float, OUT_TYPE, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
+                                            typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperation, false, false, 2, true>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashPrefillAll<Kernel>(HEAD_DIM));
 }
 
