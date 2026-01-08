@@ -676,7 +676,6 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         // P=softmax(S,lse)
         scale_apply_exp2(scores, mLSE, taccScS_rt,
                          param.scale_softmax_log2);
-        mha_reorder_copy(trait, tiled_mma_sdp, rS, mPt);
         auto rdP = create_reg<V>(trait,
                                  mdP,
                                  tiled_mma_sdp);
@@ -686,17 +685,19 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         Tensor dS = make_tensor(rdP.data(), scores.layout());
         // dS=P(dP-sum_row(P))*scale
         softmax_backward(scores, mdPsum, dS, taccScS_rt, param.scale_softmax);
+        mha_reorder_copy(trait, tiled_mma_sdp, rS, mPt);
         mha_reorder_copy(trait, tiled_mma_sdp, rdP, mdPt); // copy dP to internal buff
         }
+        sycl::group_barrier(group);
         // dV=Pt*dO
         gemm_dKV(trait, mPt, mdOt, rdV,
+                 tiled_mma_dkv);
+        // dK=dPt*Q
+        gemm_dKV(trait, mdPt, mQt, rdK,
                  tiled_mma_dkv);
         // dQ=dP*K
         gemm_dQ(trait, mdP, mK, mdQaccum,
                 tiled_mma_dq);
-        // dK=dPt*Q
-        gemm_dKV(trait, mdPt, mQt, rdK,
-                 tiled_mma_dkv);
         // update ptr/atom copy
         mQ.data() = mQ.data() + int(kBlockM * param.q_r_stride);
         mdO.data() = mdO.data() + int(kBlockM * param.o_r_stride);
