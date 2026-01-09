@@ -1098,8 +1098,8 @@ make_coop_block_2d_copy_B(TiledMMA                 const& mma,  // TiledMMA inst
   auto atom_layout = coalesce(mma.get_atom_layout_mnk());
   static_assert(size(rest_block) >= size(atom_layout), "block size should not be less than sg size");
 
-  constexpr auto alongK = cute::gcd(size(atom_layout), size<1>(rest_block));
-  constexpr auto alongN = cute::ceil_div(size(atom_layout), alongK);
+  constexpr auto alongN = cute::gcd(size(atom_layout), size<0>(rest_block));
+  constexpr auto alongK = cute::ceil_div(size(atom_layout), alongN);
   // ((ThrV,FrgV),((ATOM_N', FrgN), (ATOM_K',FrgK))) -> offset
   auto new_thr_frg = logical_divide(replace<1>(block_tile, rest_block),
                                     make_tile(_, make_tile(Int<alongN>{},Int<alongK>{})));
@@ -1186,8 +1186,8 @@ make_B_slm_layout(TiledMMA const& tiled_mma)
 
   auto rest_block = zip(layout<1,0>(block_tile), layout<1,1>(block_tile));
   auto atom_layout = coalesce(tiled_mma.get_atom_layout_mnk());
-  constexpr auto alongK = cute::gcd(size(atom_layout), size<1>(rest_block));
-  constexpr auto alongN = cute::ceil_div(size(atom_layout), alongK);
+  constexpr auto alongN = cute::gcd(size(atom_layout), size<0>(rest_block));
+  constexpr auto alongK = cute::ceil_div(size(atom_layout), alongN);
   // ((ThrV,FrgV),((ThrN',FrgN),(ThrK',FrgK)) -> offset
   auto pre_thr_frg = logical_divide(replace<1>(block_tile, rest_block),
                                     make_tile(_, make_tile(Int<alongN>{},Int<alongK>{})));
