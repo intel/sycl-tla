@@ -44,6 +44,7 @@
 #include "cutlass/epilogue/fusion/sm90_callbacks_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/xe_visitor.hpp"
+#include "cutlass/epilogue/fusion/xe_visitor_legacy.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_load_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_store_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_compute_tma_warpspecialized.hpp"
@@ -530,6 +531,8 @@ struct FusionCallbacks<
 };
 
 // D = alpha * acc + beta * C + per-column bias
+// XeLinCombPerColBiasLegacy - uses XeRowBroadcastLegacy for backward compatibility with examples
+// EVT tests bypass this and directly instantiate XeRowBroadcast via Python code generation
 template<
   int StagesC,
   class CtaTileShapeMNK,
@@ -542,14 +545,14 @@ template<
   int AlignmentBias = 128 / sizeof_bits_v<ElementBias>,
   FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest
 >
-using XeLinCombPerColBias =
+using XeLinCombPerColBiasLegacy =
   Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementOutput, ElementCompute, RoundStyle>, // beta * C + (alpha * acc + bias)
     Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>, // beta
     Sm90SrcFetch<ElementSource>, // C
     Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle>, // alpha * acc + bias
       Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>, // alpha
       Sm90AccFetch, // acc
-      XeRowBroadcast<0, CtaTileShapeMNK, ElementBias, ElementCompute, Stride<_0,_1,int64_t>, AlignmentBias> // bias
+      XeRowBroadcastLegacy<0, CtaTileShapeMNK, ElementBias, ElementCompute, Stride<_0,_1,int64_t>, AlignmentBias> // bias (legacy version)
     >
   >;
 
@@ -569,9 +572,9 @@ struct FusionCallbacks<
     fusion::LinCombPerColBias<ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
-> : XeLinCombPerColBias<_1{} /* Stages */, CtaTileShapeMNK_, EpilogueTile_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
+> : XeLinCombPerColBiasLegacy<_1{} /* Stages */, CtaTileShapeMNK_, EpilogueTile_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
 
-  using Impl = XeLinCombPerColBias<
+  using Impl = XeLinCombPerColBiasLegacy<
       _1{},
       CtaTileShapeMNK_,
       EpilogueTile_,

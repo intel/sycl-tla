@@ -162,8 +162,8 @@ class xe12RowBroadcastImpl(RowBroadcastImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90RowBroadcast<
-    0 /*Stages*/, typename EpilogueDescriptor::TileShape, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
+using {self.name_camel} = cutlass::epilogue::fusion::XeRowBroadcast<
+    0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
     {self.stride_mnl}
 >;
 """
@@ -181,8 +181,8 @@ class xe12ColumnBroadcastImpl(ColumnBroadcastImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90ColBroadcast<
-    0 /*Stages*/, typename EpilogueDescriptor::TileShape, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
+using {self.name_camel} = cutlass::epilogue::fusion::XeColBroadcast<
+    0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
     {self.stride_mnl}
 >;
 """

@@ -72,11 +72,7 @@ class CollectiveEpilogue:
     def emit(self):
         callback_decl, callback_name = self.fusion_callbacks.emit()
         return callback_name, f"""
-using EpilogueDescriptor = cutlass::epilogue::collective::detail::EpilogueDescriptor<
-  {self.CtaTileMNK}, {self.EpilogueTileType},
-  {DataTypeTag[self.element_c]}, {DataTypeTag[self.element_d]},
-  {self.Schedule}
->;
+using TileShape_MNK = {self.CtaTileMNK};
 {callback_decl}
 """
 
