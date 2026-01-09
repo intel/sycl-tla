@@ -178,10 +178,37 @@ class EVTTestBed:
             tensor_C = epilogue_args["C"]
         else:
             tensor_C = tensor_D
+        
         # Run the device kernel
+        print("\n" + "="*80)
+        print("[TESTBED] Running device kernel...")
+        print("="*80)
+        print(f"Input shapes: A={tensor_A.shape}, B={tensor_B.shape}, C={tensor_C.shape}, D={tensor_D.shape}")
+        print(f"Epilogue args keys: {list(epilogue_args.keys())}")
+        for key, val in epilogue_args.items():
+            if hasattr(val, 'shape'):
+                print(f"  {key}: shape={val.shape}, dtype={val.dtype}, stride={val.stride()}")
+        
         self.plan.run(tensor_A, tensor_B, tensor_C, tensor_D, visitor_args=epilogue_args)
         
+        print("\n" + "-"*80)
+        print("[TESTBED] Device kernel output D:")
+        print("-"*80)
+        D_flat = tensor_D.flatten()
+        print(f"D shape: {tensor_D.shape}, dtype: {tensor_D.dtype}")
+        print(f"D first 64 values: {D_flat[:64].tolist()}")
+        if tensor_D.numel() == 64:
+            # Print as 8x8 matrix if exactly 64 elements
+            D_2d = tensor_D.view(8, 8)
+            print(f"\nD as 8x8 matrix (row-major):")
+            for i in range(8):
+                row_vals = [f"{D_2d[i,j].item():6.0f}" for j in range(8)]
+                print(f"  Row {i}: [{', '.join(row_vals)}]")
+        
         # Run the host reference
+        print("\n" + "-"*80)
+        print("[TESTBED] Running host reference...")
+        print("-"*80)
         evt_args_inputs = {}
         for key in input_keys:
             evt_args_inputs[key] = epilogue_args[key]
@@ -189,11 +216,47 @@ class EVTTestBed:
         reference_results = self.reference_fn(
             tensor_A, tensor_B, tensor_C, problem_size, batch_count, evt_args_inputs)
         
+        print(f"Reference results: {len(reference_results)} outputs")
+        for idx, ref in enumerate(reference_results):
+            print(f"  Result {idx}: shape={ref.shape}, dtype={ref.dtype}")
+            if ref.numel() == 64:
+                ref_2d = ref.view(8, 8)
+                print(f"    As 8x8 matrix:")
+                for i in range(min(8, ref_2d.shape[0])):
+                    row_vals = [f"{ref_2d[i,j].item():6.0f}" for j in range(min(8, ref_2d.shape[1]))]
+                    print(f"      Row {i}: [{', '.join(row_vals)}]")
+        
         # Compare the results
+        print("\n" + "="*80)
+        print("[TESTBED] Comparing results...")
+        print("="*80)
         for result, ref in zip(result_keys, reference_results):
-            assert torch.equal(
-                epilogue_args[result].flatten(), 
-                ref.masked_fill(torch.isnan(ref), float('inf')).flatten())
+            output_tensor = epilogue_args[result].flatten()
+            ref_converted = ref.masked_fill(torch.isnan(ref), float('inf')).flatten()
+            
+            # Print comparison details (always, not just on mismatch)
+            is_equal = torch.equal(output_tensor, ref_converted)
+            status = "PASS ✓" if is_equal else "FAIL ✗"
+            print(f"\n[{status}] Result: {result}")
+            print(f"  Output dtype: {output_tensor.dtype}, Ref dtype: {ref_converted.dtype}")
+            print(f"  Output shape: {output_tensor.shape}, Ref shape: {ref_converted.shape}")
+            
+            if not is_equal:
+                diff = (output_tensor - ref_converted).abs()
+                max_diff = diff.max().item()
+                print(f"  Max absolute difference: {max_diff}")
+                print(f"  Number of mismatches: {(output_tensor != ref_converted).sum().item()}")
+            
+            # Print ALL values for pattern analysis
+            print(f"\n  ALL VALUES (index: output vs ref):")
+            for idx in range(min(len(output_tensor), 200)):  # Cap at 200 for readability
+                match_str = "✓" if output_tensor[idx] == ref_converted[idx] else "✗"
+                print(f"    [{idx:3d}] {match_str}: {output_tensor[idx].item():8.2f} vs {ref_converted[idx].item():8.2f}")
+            
+            if len(output_tensor) > 200:
+                print(f"  ... (showing first 200 of {len(output_tensor)} total values)")
+            
+            assert torch.equal(output_tensor, ref_converted)
         
         # Run profile
         if self.profile:

@@ -285,14 +285,37 @@ public:
     auto cCD = make_identity_tensor(MN);                                                // (m,n)
     auto gCD = local_tile(cCD, take<0,2>(WGTileMNK{}), take<0,2>(tile_coord_mnkl));     // (m_in_wg_tile, n_in_wg_tile)
 
+    if (thread_idx == 15) {
+      printf("\n=== Partition Setup T%d ===\n", thread_idx);
+      printf("MN (problem shape): "); print(MN); printf("\n");
+      printf("WGTileMNK: "); print(WGTileMNK{}); printf("\n");
+      printf("tile_coord_mnkl: "); print(tile_coord_mnkl); printf("\n");
+      printf("gCD shape: "); print(shape(gCD)); printf("\n");
+      printf("==========================\n\n");
+    }
+
     auto thr_mma = TiledMMA{}.get_slice(thread_idx);
     auto tCDgCD = thr_mma.partition_C(gCD);                                             // (mma_v,mma_m,mma_n) -> coord
+    
+    if (thread_idx == 15) {
+      printf("tCDgCD shape (after partition_C): "); print(shape(tCDgCD)); printf("\n\n");
+    }
 
     // Tile accumulator into epilogue tiles.
     auto mma_per_epi = shape_div(EpilogueTile{}, MMATile{});
     auto tiled_acc_layout = group<0,3>(prepend(flat_divide(remove<0>(accumulators.layout()), mma_per_epi),
                                                get<0>(accumulators.layout())));
     auto tiled_acc = make_tensor(accumulators.data(), tiled_acc_layout);                // ((mma_v,mma_m,mma_n),epi_m,epi_n)
+
+    if (thread_idx == 15) {
+      printf("\n=== Tiling Debug T%d ===\n", thread_idx);
+      printf("MMATile: "); print(MMATile{}); printf("\n");
+      printf("EpilogueTile: "); print(EpilogueTile{}); printf("\n");
+      printf("mma_per_epi: "); print(mma_per_epi); printf("\n");
+      printf("tCDgCD.layout() shape: "); print(shape(tCDgCD.layout())); printf("\n");
+      printf("remove<0>(tCDgCD.layout()) shape: "); print(shape(remove<0>(tCDgCD.layout()))); printf("\n");
+      printf("========================\n\n");
+    }
 
     // Tile subgroup's TV coord layout into epilogue tiles.
     auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
@@ -376,6 +399,14 @@ public:
     // Outer loops over epilogue tiles.
     constexpr auto EpiTilesM = size<2>(gCD_epi);
     constexpr auto EpiTilesN = size<3>(gCD_epi);
+
+    if (thread_idx == 15) {
+      printf("\n=== xe_epilogue operator() T%d ===\n", thread_idx);
+      printf("EpiTilesM=%d, EpiTilesN=%d\n", int(EpiTilesM), int(EpiTilesN));
+      printf("gCD_epi shape: "); print(shape(gCD_epi)); printf("\n");
+      printf("sg_v_coord shape: "); print(shape(sg_v_coord)); printf("\n");
+      printf("===================================\n\n");
+    }
 
     cst_callbacks.begin();
 

@@ -114,11 +114,13 @@ class xe20AuxLoadImpl(AuxLoadImpl):
         if self._type_decl is not None:
             return self._type_decl
 
-        self._type_decl = self.decl_descriptor()
-        self._type_decl += f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90AuxLoad<
-    {self.descriptor}::Stages, typename {self.descriptor}::EpilogueTile, {DataTypeTag[self.element]},
-    {self.stride_mnl}, typename {self.descriptor}::SmemLayoutAtom, typename {self.descriptor}::CopyOpS2R
+        print(f"[xe20AuxLoadImpl] Generating C++ code for '{self.name}'")
+        print(f"  Using XeAuxLoad with stride_mnl: {self.stride_mnl}")
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeAuxLoad<
+    {DataTypeTag[self.element]},
+    {self.stride_mnl}
 >;
 """
         return self._type_decl
@@ -161,9 +163,12 @@ class xe20RowBroadcastImpl(RowBroadcastImpl):
         if self._type_decl is not None:
             return self._type_decl
 
+        print(f"[xe20RowBroadcastImpl] Generating C++ code for '{self.name}'")
+        print(f"  Using XeRowBroadcast with stride_mnl: {self.stride_mnl}")
+
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90RowBroadcast<
-    0 /*Stages*/, typename EpilogueDescriptor::TileShape, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
+using {self.name_camel} = cutlass::epilogue::fusion::XeRowBroadcast<
+    0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
     {self.stride_mnl}
 >;
 """

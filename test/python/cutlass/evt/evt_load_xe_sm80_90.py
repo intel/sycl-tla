@@ -46,7 +46,7 @@ from utils.evt_testbed import EVTTestBed, EVTTestCaseBase
 cutlass_cppgen.set_log_level(logging.WARNING)
 
 
-@unittest.skipIf(device_cc() not in [80, 86, 89, 90], "This unittest is only supported on CC [80, 86, 89, 90]")
+@unittest.skipIf(device_cc() not in [12, 20, 80, 86, 89, 90], "This unittest is only supported on CC [12, 20, 80, 86, 89, 90]")
 class TestEVTLoad(EVTTestCaseBase):
 
     def test_tensor_load(self):
@@ -92,6 +92,124 @@ class TestEVTLoad(EVTTestCaseBase):
             input_keys = ["C", "bias", "bias_batch"]
             result_keys = ["D"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_row_broadcast_simple(self):
+        """
+        Test simple bias row broadcast (without bias_batch) across all problem sizes
+        D = accum + bias (broadcasted along rows)
+        This tests that regular row broadcast works before testing batched version
+        """
+        print("\n=== Test: row broadcast simple (regular bias only) ===")
+        def evt_row_broadcast_simple(accum, bias):
+            D = accum + bias
+            return D
+
+        # for m, n, k, l in self.get_problem_sizes(8):
+        for m, n, k, l in [(8, 64, 8, 1)]:
+            print(f"\nTesting shape: m={m}, n={n}, k={k}, l={l}")
+            print("  Pattern: accum=zeros, bias=[1,2,3,...,24], so D should equal bias broadcast to all rows")
+            
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "bias": self.fake_tensor(self.element, (n,)),
+                "D": self.fake_tensor(self.element, (l, m, n)),
+            }
+
+            launcher = EVTTestBed(self.element, evt_row_broadcast_simple, example_inputs)
+            
+            # Override tensor generation for predictable pattern
+            import torch
+            def get_predictable_tensor(shape, dtype=None, fill=None):
+                if dtype is None:
+                    dtype = self.element
+                dtype_torch = torch.float16 if dtype == cutlass_cppgen.DataType.f16 else torch.float32
+
+                if torch.cuda.is_available():
+                    device = "cuda"
+                elif torch.xpu.is_available():
+                    device = "xpu"
+                else:
+                    device = "cpu"
+
+                if shape == (n,):  # bias vector: [1, 2, 3, ...]
+                    tensor = torch.arange(1, n+1, dtype=dtype_torch, device=device)
+                    print(f"    bias: [{tensor[0].item()}, {tensor[1].item()}, ..., {tensor[-1].item()}]")
+                else:  # accum or D: all zeros
+                    tensor = torch.zeros(shape, dtype=dtype_torch, device=device)
+
+                return tensor
+
+            launcher.get_torch_tensor = get_predictable_tensor
+            input_keys = ["bias"]
+            result_keys = ["D"]
+
+            try:
+                launcher.verify((m, n, k), input_keys, result_keys, l)
+                print(f"  ✓ Shape ({m}, {n}, {k}, {l}) passed")
+            except AssertionError as e:
+                print(f"  ✗ Shape ({m}, {n}, {k}, {l}) FAILED: {e}")
+                raise
+
+    def test_aux_load_only(self):
+        """
+        Test JUST the aux load (no broadcast) - verify global->reg copy is correct
+        D = accum + aux (where aux is [m, n] full tensor, not broadcast)
+        This verifies XeAuxLoad copy operation before testing XeRowBroadcast
+        """
+        print("\n=== Test: aux load only (verifying XeAuxLoad copy) ===")
+        def evt_aux_load_only(accum, aux):
+            D = accum + aux
+            return D
+
+        m, n, k, l = 8, 16, 8, 1
+
+        example_inputs = {
+            "accum": self.fake_tensor(self.element, (l, m, n)),
+            "aux": self.fake_tensor(self.element, (m, n)),
+            "D": self.fake_tensor(self.element, (l, m, n)),
+        }
+
+        launcher = EVTTestBed(self.element, evt_aux_load_only, example_inputs)
+
+        # Custom tensor: accum=0, aux=sequential pattern row by row
+        import torch
+        def get_aux_test_tensor(shape, dtype=None, fill=None):
+            if dtype is None:
+                dtype = self.element
+            dtype_torch = torch.float16 if dtype == cutlass_cppgen.DataType.f16 else torch.float32
+
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.xpu.is_available():
+                device = "xpu"
+            else:
+                device = "cpu"
+
+            if shape == (m, n):  # aux tensor - each row is [0, 1, 2, ..., 15]
+                tensor = torch.zeros(shape, dtype=dtype_torch, device=device)
+                for i in range(m):
+                    tensor[i, :] = torch.arange(0, n, dtype=dtype_torch)
+                print(f"  aux: shape={shape}, each row is [0, 1, 2, ..., {n-1}]")
+                print(f"    first row: {tensor[0].tolist()}")
+                print(f"    second row: {tensor[1].tolist()}")
+            else:  # accum or D
+                tensor = torch.zeros(shape, dtype=dtype_torch, device=device)
+                print(f"  accum/D: shape={shape}, all zeros")
+
+            return tensor
+
+        launcher.get_torch_tensor = get_aux_test_tensor
+
+        input_keys = ["aux"]
+        result_keys = ["D"]
+
+        try:
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+            print("✓ Test passed: XeAuxLoad copy works correctly")
+        except AssertionError as e:
+            print(f"✗ Test FAILED: XeAuxLoad copy has issues")
+            print(f"  {e}")
+            raise
 
     def test_column_broadcast(self):
         """

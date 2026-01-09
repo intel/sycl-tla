@@ -44,6 +44,7 @@
 #include "cutlass/epilogue/fusion/sm90_callbacks_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/xe_visitor.hpp"
+#include "cutlass/epilogue/fusion/xe_visitor_legacy.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_load_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_store_tma_warpspecialized.hpp"
 #include "cutlass/epilogue/fusion/sm90_visitor_compute_tma_warpspecialized.hpp"

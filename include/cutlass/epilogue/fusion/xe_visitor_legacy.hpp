@@ -40,11 +40,170 @@
 
 #include "cute/tensor.hpp"
 
-#ifndef DEBUG_THREAD_IDX
-#define DEBUG_THREAD_IDX 15
-#endif
+/////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Elementwise Load Operations
+//
+/////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::epilogue::fusion {
+
+template <
+  class Element,
+  class StrideMNL,
+  class CopyOpG2R,
+  bool EnableNullptr = true
+>
+struct XeAuxLoad {
+  using SharedStorage = Element;
+
+  struct Arguments {
+    Element const* ptr_aux = nullptr;
+    Element null_default = Element(0);
+    StrideMNL dAux = {};
+  };
+
+  using Trait_Aux = Copy_Traits<CopyOpG2R>;
+  using SubgroupSize = decltype(size((typename Trait_Aux::ThrID){}));
+  using XE_Copy_Aux = decltype(make_tiled_copy(Copy_Atom<Trait_Aux, Element>{}
+                      .with(static_cast<Element const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
+                         Layout<Shape<_1, SubgroupSize>>{},
+                         make_layout(make_shape(get<0>(typename Trait_Aux::BlockShape{}),
+                         get<1>(typename Trait_Aux::BlockShape{}) / SubgroupSize{}))));
+  struct Params {
+    XE_Copy_Aux xe_load_aux;
+    Element null_default = Element(0);
+    bool use_default = false;
+  };
+
+  template <class ProblemShape>
+  static constexpr Params
+  to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
+    // Optionally append 1s until problem shape is rank-4 in case its is only rank-3 (MNK)
+    auto problem_shape_mnkl = append<4>(problem_shape, 1);
+    auto [M, N, K, L] = problem_shape_mnkl;
+    // TODO(codeplay): This assumes a packed 2D (+ a batch dim) aux matrix
+    static_assert(rank(decltype(args.dAux){}) == 3);
+    auto N_AUX = get<0>(args.dAux); // dAux is a stride and N_AUX is a size
+    auto M_AUX = size(M);
+    XE_Copy_Aux xe_load_aux = make_tiled_copy(Copy_Atom<Trait_Aux, Element>{}.with(
+                                  args.ptr_aux, M_AUX, N_AUX),
+                                  Layout<Shape<_1, SubgroupSize>>{},
+                                  make_layout(make_shape(get<0>(typename Trait_Aux::BlockShape{}),
+                                                         get<1>(typename Trait_Aux::BlockShape{}) / SubgroupSize{})));
+
+    bool use_default = false;
+    if constexpr (EnableNullptr) {
+      use_default = args.ptr_aux == nullptr;
+    }
+
+    return Params{xe_load_aux, args.null_default, use_default};
+  }
+
+  template <class ProblemShape>
+  static bool
+  can_implement(ProblemShape const& problem_shape, Arguments const& args) {
+    return true;
+  }
+
+  template <class ProblemShape>
+  static size_t
+  get_workspace_size(ProblemShape const& problem_shape, Arguments const& args) {
+    return 0;
+  }
+
+  template <class ProblemShape>
+  static cutlass::Status
+  initialize_workspace(ProblemShape const& problem_shape, Arguments const& args, void* workspace, cudaStream_t stream,
+    CudaHostAdapter* cuda_adapter = nullptr) {
+    return cutlass::Status::kSuccess;
+  }
+
+  CUTLASS_HOST_DEVICE
+  XeAuxLoad() { }
+
+  CUTLASS_HOST_DEVICE
+  XeAuxLoad(Params const& params, SharedStorage const&) : params_ptr(&params) { }
+
+  Params const* params_ptr;
+
+  CUTLASS_DEVICE bool
+  is_producer_load_needed() const {
+    return false;
+  }
+
+  CUTLASS_DEVICE bool
+  is_C_load_needed() const {
+    return false;
+  }
+
+  CUTLASS_DEVICE bool
+  is_zero() const {
+    return (params_ptr->use_default && params_ptr->null_default == Element(0));
+  }
+
+  template <class... Args>
+  CUTLASS_DEVICE auto
+  get_producer_load_callbacks(ProducerLoadArgs<Args...> const&) {
+    return EmptyProducerLoadCallbacks{};
+  }
+
+  template <class CTensor, class RTensor>
+  struct ConsumerStoreCallbacks : EmptyConsumerStoreCallbacks {
+    CTensor rw_coord;                                                                           // (EPI_V, EPI_M, EPI_N)
+    XE_Copy_Aux xe_copy_aux;
+    RTensor tC_rAux;                                                                                // (CPY,CPY_M,CPY_N)
+    Params const* params_ptr;
+
+    CUTLASS_DEVICE
+    ConsumerStoreCallbacks(CTensor rw_coord, XE_Copy_Aux xe_copy_aux, RTensor&& tC_rAux, Params const* params_ptr)
+      : rw_coord(cute::forward<CTensor>(rw_coord)), xe_copy_aux(xe_copy_aux), tC_rAux(cute::forward<RTensor>(tC_rAux)), params_ptr(params_ptr) { }
+
+
+    CUTLASS_DEVICE void
+    previsit(int epi_m, int epi_n, int load_iteration, bool is_producer_load_needed) {
+       if constexpr (EnableNullptr) {
+         if (params_ptr->use_default) {
+           fill(tC_rAux, params_ptr->null_default);
+           return;
+         }
+       }
+
+       copy(xe_copy_aux, rw_coord(_, epi_m, epi_n), tC_rAux);
+    }
+
+    // here is where we return values from the aux tile being processed
+    template <typename ElementAccumulator, int FragmentSize>
+    CUTLASS_DEVICE Array<Element, FragmentSize>
+    visit(Array<ElementAccumulator, FragmentSize> const&, int epi_v, int, int) {
+       Tensor tC_rAux_frg = recast<Array<Element, FragmentSize>>(coalesce(tC_rAux));                          // (EPI_V)
+       return tC_rAux_frg(epi_v);
+
+    }
+  };
+
+  template <
+    bool ReferenceSrc,
+    class... Args
+  >
+  CUTLASS_DEVICE auto
+  get_consumer_store_callbacks(ConsumerStoreArgs<Args...> const& args) {
+    auto xe_copy_aux = params_ptr->xe_load_aux;
+    Tensor trAux = make_tensor_like<Element>(args.tCrC.tensor());
+
+    auto [M, N, K, L] = args.problem_shape_mnkl;
+    auto [m_coord, n_coord, k_coord, l_coord] = args.tile_coord_mnkl;
+
+    Tensor mAux_mnl = cute::get_xe_tensor(make_shape(M,N,L));
+    // Tiling is done differently than in epilogue as we get in coordinates of subgroup in kernel
+    Tensor gAux = local_tile(mAux_mnl, select<0,1>(args.tile_shape_mnk), make_coord(m_coord,n_coord,l_coord));
+    Tensor tCgAux = args.tiled_copy.get_thread_slice(args.thread_idx).partition_D(gAux);
+
+    return ConsumerStoreCallbacks(
+        tCgAux, xe_copy_aux, cute::move(trAux), params_ptr
+    );
+  }
+};
 
 template<
   int Stages,
@@ -55,7 +214,7 @@ template<
   int Alignment = 128 / sizeof_bits_v<cute::remove_pointer_t<ElementInput_>>,
   bool EnableNullptr = true // Fallback scalar broadcast for nullptr params
 >
-struct XeRowBroadcast {
+struct XeRowBroadcastLegacy {
   using StrideMNL = StrideMNL_;
   // Get base element input type.
   using ElementInput = cute::remove_pointer_t<ElementInput_>;
@@ -66,8 +225,8 @@ struct XeRowBroadcast {
   static_assert(Stages == 0, "Row broadcast doesn't support smem pipelining");
 
   static constexpr bool IsDynamicBroadcast = is_same_v<remove_cvref_t<decltype(get<1>(StrideMNL{}))>, bool>; // row vector or scalar broadcast
-  static_assert(is_static_v<decltype(take<0,2>(StrideMNL{}))> || IsDynamicBroadcast, "XeRowBroadcast requires static MN stride for non-dynamic broadcast case."); // batch stride can be dynamic or static
-  static_assert(take<0,2>(StrideMNL{}) == Stride<_0,_1>{} || IsDynamicBroadcast, "XeRowBroadcast requires MN stride=(0,1) for non-dynamic broadcast case.");
+  static_assert(is_static_v<decltype(take<0,2>(StrideMNL{}))> || IsDynamicBroadcast, "XeRowBroadcastLegacy requires static MN stride for non-dynamic broadcast case."); // batch stride can be dynamic or static
+  static_assert(take<0,2>(StrideMNL{}) == Stride<_0,_1>{} || IsDynamicBroadcast, "XeRowBroadcastLegacy requires MN stride=(0,1) for non-dynamic broadcast case.");
 
   struct SharedStorage { };
 
@@ -109,10 +268,10 @@ struct XeRowBroadcast {
   }
 
   CUTLASS_HOST_DEVICE
-  XeRowBroadcast() { }
+  XeRowBroadcastLegacy() { }
 
   CUTLASS_HOST_DEVICE
-  XeRowBroadcast(Params const& params, SharedStorage const& shared_storage)
+  XeRowBroadcastLegacy(Params const& params, SharedStorage const& shared_storage)
       : params(params), is_zero_(false) {
     auto const& [stride_M, stride_N, stride_L] = params.dRow;
     // Nullptr default
@@ -155,13 +314,12 @@ struct XeRowBroadcast {
   template<class GTensor, class RTensor, class CTensor, class ThrResidue>
   struct ConsumerStoreCallbacks : EmptyConsumerStoreCallbacks {
     CUTLASS_DEVICE
-    ConsumerStoreCallbacks(GTensor tCgRow_, RTensor tCrRow_, CTensor tCcRow_, ThrResidue residue_tCcRow_, Params const& params_, int thread_idx_)
+    ConsumerStoreCallbacks(GTensor tCgRow_, RTensor tCrRow_, CTensor tCcRow_, ThrResidue residue_tCcRow_, Params const& params_)
       : tCgRow(tCgRow_),
         tCrRow(tCrRow_),
         tCcRow(tCcRow_),
         residue_tCcRow(residue_tCcRow_),
-        params(params_),
-        thread_idx(thread_idx_) {
+        params(params_) {
       if (EnableNullptr && params.ptr_row == nullptr) {
         fill(tCrRow, params.null_default);
       }
@@ -172,7 +330,6 @@ struct XeRowBroadcast {
     CTensor tCcRow;                                                                    // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
     ThrResidue residue_tCcRow;
     Params const& params;
-    int thread_idx;
 
     CUTLASS_DEVICE void
     begin() {
@@ -185,11 +342,6 @@ struct XeRowBroadcast {
       Tensor tCgRow_flt = filter_zeros(tCgRow);
       Tensor tCrRow_flt = make_tensor_like<ElementInput>(filter_zeros(tCrRow));
       Tensor tCcRow_flt = filter_zeros(tCcRow, tCgRow.stride());
-
-      if (thread_idx == DEBUG_THREAD_IDX) {
-        printf("T%d: residue_tCcRow=", thread_idx); print(residue_tCcRow); 
-        printf(", tCcRow_flt size=%d\n", int(size(tCcRow_flt)));
-      }
 
       constexpr auto MCL = decltype(max_common_layout(tCgRow_flt, tCrRow_flt)){};
       constexpr int V = cute::min(Alignment, size(MCL));
@@ -218,75 +370,17 @@ struct XeRowBroadcast {
       Tensor tCrRow_compute_frg = recast<FrgCompute>(filter(tCrRow));
       ConvertInput convert_input{};
       tCrRow_compute_frg(_0{}) = convert_input(tCrRow_input_frg(_0{}));
-
-      if (thread_idx == DEBUG_THREAD_IDX) {
-        printf("\n=== After copy Debug start===\n");
-        printf(" Thread %d \n", thread_idx);
-        printf("FrgSize=%d, tCrRow_flt size=%d\n", FrgSize, int(size(tCrRow_flt)));
-        printf("tCrRow_flt values: ");
-        for (int i = 0; i < FrgSize && i < 16; ++i) {
-          printf("%.0f ", float(tCrRow_flt(i)));
-        }
-        printf("\n");
-        
-        Tensor tCrRow_check = filter(tCrRow);
-        printf("filter(tCrRow) size=%d\n", int(size(tCrRow_check)));
-        printf("filter(tCrRow) values: ");
-        for (int i = 0; i < 16 && i < size(tCrRow_check); ++i) {
-          printf("%.0f ", float(tCrRow_check(i)));
-        }
-        printf("\n=== After copy Debug End ===\n");
-        printf("\n\n");
-      }
     }
 
     template <typename ElementAccumulator, int FragmentSize>
     CUTLASS_DEVICE Array<ElementCompute, FragmentSize>
     visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, int epi_n) {
       Array<ElementCompute, FragmentSize> frg_row;
-
       Tensor tCrRow_mn = tCrRow(_,_,_,epi_m,epi_n);
-      
-      if (thread_idx == DEBUG_THREAD_IDX) {
-        printf("\n=== visit() Debug T%d ===\n", thread_idx);
-        printf("epi_v=%d, epi_m=%d, epi_n=%d, FragmentSize=%d\n", epi_v, epi_m, epi_n, FragmentSize);
-        printf("tCrRow shape: "); print(shape(tCrRow)); printf("\n");
-        printf("tCrRow_mn shape: "); print(shape(tCrRow_mn)); printf("\n");
-        printf("tCrRow_mn size=%d\n", int(size(tCrRow_mn)));
-        
-        // Show filter(tCrRow) for comparison
-        Tensor tCrRow_flt = filter(tCrRow);
-        printf("filter(tCrRow) size=%d, values: ", int(size(tCrRow_flt)));
-        for (int i = 0; i < 16 && i < size(tCrRow_flt); ++i) {
-          printf("%.0f ", float(tCrRow_flt(i)));
-        }
-        printf("\n");
-        
-        // Show filter(tCrRow_mn) for comparison
-        Tensor tCrRow_mn_flt = filter(tCrRow_mn);
-        printf("filter(tCrRow_mn) size=%d, values: ", int(size(tCrRow_mn_flt)));
-        for (int i = 0; i < 16 && i < size(tCrRow_mn_flt); ++i) {
-          printf("%.0f ", float(tCrRow_mn_flt(i)));
-        }
-        printf("\n");
-      }
 
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < FragmentSize; ++i) {
-        int linear_idx = epi_v * FragmentSize + i;
-        frg_row[i] = tCrRow_mn(linear_idx);
-        
-        if (thread_idx == DEBUG_THREAD_IDX && i < 4) {
-          printf("  frg_row[%d] = tCrRow_mn(%d) = %.0f\n", i, linear_idx, float(frg_row[i]));
-        }
-      }
-
-      if (thread_idx == DEBUG_THREAD_IDX) {
-        printf("Returning frg_row: ");
-        for (int i = 0; i < FragmentSize && i < 8; ++i) {
-          printf("%.0f ", float(frg_row[i]));
-        }
-        printf("\n=== visit() End ===\n\n");
+        frg_row[i] = tCrRow_mn(epi_v * FragmentSize + i);
       }
 
       return frg_row;
@@ -301,15 +395,6 @@ struct XeRowBroadcast {
   get_consumer_store_callbacks(ConsumerStoreArgs<Args...> const& args) {
     auto [M, N, K, L] = args.problem_shape_mnkl;
     auto [m, n, k, l] = args.tile_coord_mnkl;
-
-    if (args.thread_idx == DEBUG_THREAD_IDX) {
-      printf("\n=== get_consumer_store_callbacks T%d ===\n", args.thread_idx);
-      printf("args.epi_tile = "); print(args.epi_tile); printf("\n");
-      printf("Problem shape MNKL = "); print(args.problem_shape_mnkl); printf("\n");
-      printf("Tile coord mnkl = (%d,%d,%d,%d)\n", int(m), int(n), int(k), int(l));
-      printf("Tile shape MNK = "); print(args.tile_shape_mnk); printf("\n");
-      printf("=====================================\n\n");
-    }
 
     auto layout_N = [&] () CUTLASS_LAMBDA_FUNC_INLINE {
       auto shape_N = get<1>(args.problem_shape_mnkl);
@@ -333,21 +418,20 @@ struct XeRowBroadcast {
     if constexpr(IsArrayOfPointers) {
       ptr_row = params.ptr_row[l];
     } else {
-      // For batched bias, offset pointer by batch index * batch stride
-      auto batch_stride = size_t(get<2>(params.dRow));
-      ptr_row = params.ptr_row + l * batch_stride;
+      ptr_row = params.ptr_row;
     }
+  // TODO(Codeplay): id_in_sg instead of thread_idx here because incorrect tiled copy definition
     int id_in_sg = compat::get_nd_item<1>().get_sub_group().get_local_id();
     Tensor mRow = make_tensor(make_gmem_ptr(ptr_row), make_layout(layout_M,layout_N,layout_L));
-
-    Tensor tCgRow = sm90_partition_for_epilogue<true>(
+    Tensor tCgRow = sm90_partition_for_epilogue<ReferenceSrc>(                         // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
       mRow, args.tile_shape_mnk, args.tile_coord_mnkl, args.epi_tile, args.tiled_copy, id_in_sg);
-    Tensor tCrRow = make_tensor_like<ElementCompute>(tCgRow);
 
-    // Use output D coordinates but adjust residue for row broadcast N dimension
-    auto residue_tCcRow = cute::replace<1>(args.residue_tCcD, N - n * get<1>(args.tile_shape_mnk));
+    Tensor mRow_static = make_tensor(make_gmem_ptr(ptr_row), make_layout(layout_M, make_layout(N),layout_L));
+    Tensor tCgRow_static = sm90_partition_for_epilogue<ReferenceSrc>(                  // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
+      mRow_static, args.tile_shape_mnk, args.tile_coord_mnkl, args.epi_tile, args.tiled_copy, id_in_sg);
+    Tensor tCrRow = make_tensor_like<ElementCompute>(tCgRow_static);                   // (CPY,CPY_M,CPY_N,EPI_M,EPI_N)
 
-    return ConsumerStoreCallbacks(tCgRow, tCrRow, args.tCcD, residue_tCcRow, params, args.thread_idx);
+    return ConsumerStoreCallbacks(tCgRow, tCrRow, args.tCcD, args.residue_tCcD, params);
   }
 };
 } // namespace cutlass::epilogue::fusion
