@@ -44,6 +44,16 @@ namespace cutlass::gemm::kernel {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Type trait for epilogue legacy API compatibility
+template <typename T, typename = void>
+struct has_base_type : std::false_type {};
+
+template <typename T>
+struct has_base_type<T, std::void_t<typename T::Base>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool has_base_type_v = has_base_type<T>::value;
+
 template <
   class ProblemShape_,
   class CollectiveMainloop_,
@@ -93,6 +103,20 @@ public:
   using InternalStrideD = typename CollectiveEpilogue::InternalStrideD;
   using EpilogueArguments = typename CollectiveEpilogue::Arguments;
   using EpilogueParams = typename CollectiveEpilogue::Params;
+
+  // Epilogue legacy API compatibility
+  static constexpr bool EpilogueHasBaseType = has_base_type_v<CollectiveEpilogue>;
+  using EpilogueTensors = typename CollectiveEpilogue::EpilogueTensors;
+
+  template <bool HasBase, typename Epilogue>
+  struct EpilogueBaseParamsHelper {
+    using type = typename Epilogue::Base::Params;
+  };
+  template <typename Epilogue>
+  struct EpilogueBaseParamsHelper<false, Epilogue> {
+    using type = int;
+  };
+  using EpilogueBaseParams = typename EpilogueBaseParamsHelper<EpilogueHasBaseType, CollectiveEpilogue>::type;
 
   static_assert(cute::is_same_v<TileScheduler_, GroupScheduler>,
     "Only Group Scheduler is supported with this code.");
@@ -253,7 +277,10 @@ public:
     using ProblemShapeMNKL = Shape<int, int, int, int>;
     ProblemShapeMNKL problem_shape_MNKL;
     typename CollectiveMainloop::Base::Params base_mainloop_params;
-    typename CollectiveEpilogue::Base::Params base_epilogue_params;
+
+    // Epilogue legacy API compatibility
+    [[maybe_unused]] EpilogueBaseParams base_epilogue_params;
+    [[maybe_unused]] EpilogueTensors CD_tensors;
 
     if (work_tile_info.is_valid()) {
       curr_group = work_tile_info.L_idx;
@@ -280,9 +307,11 @@ public:
         base_mainloop_params = CollectiveMainloop::Base::to_underlying_arguments(problem_shape_MNKL,
                                                          CollectiveMainloop::to_base_arguments(params.mainloop, curr_group),
                                                          params.workspace);
-        base_epilogue_params = CollectiveEpilogue::Base::to_underlying_arguments(problem_shape_MNKL,
-                                                         CollectiveEpilogue::to_base_arguments(params.epilogue, curr_group),
-                                                         params.workspace);
+        if constexpr (EpilogueHasBaseType) {
+          base_epilogue_params = CollectiveEpilogue::Base::to_underlying_arguments(problem_shape_MNKL,
+                                                           CollectiveEpilogue::to_base_arguments(params.epilogue, curr_group),
+                                                           params.workspace);
+        }
         did_group_change = false;
       }
       auto tile_coord = make_coord(m_coord, n_coord, _, 0);
@@ -312,16 +341,36 @@ public:
         params.scheduler, work_tile_info, accumulators, -1, -1);
 
       if (TileScheduler::compute_epilogue(work_tile_info, params.scheduler)) {
-        typename CollectiveEpilogue::Base epilogue{base_epilogue_params, shared_storage.epilogue};
+        if constexpr (EpilogueHasBaseType) {
+          typename CollectiveEpilogue::Base epilogue{base_epilogue_params, shared_storage.epilogue};
 
-        epilogue(
-          problem_shape_MNKL,
-          subgroup_shape,
-          tile_coord,
-          accumulators,
-          tiled_mma,
-          thread_idx
-        );
+          epilogue(
+            problem_shape_MNKL,
+            subgroup_shape,
+            tile_coord,
+            accumulators,
+            tiled_mma,
+            thread_idx
+          );
+        } else {
+          // Epilogue legacy API
+          CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
+
+          if(did_group_change) {
+            CD_tensors = epilogue.update_tensor_shape_stride(curr_group, problem_shape_MNKL);
+            did_group_change = false;
+          }
+
+          epilogue(
+            problem_shape_MNKL,
+            subgroup_shape,
+            tile_coord,
+            accumulators,
+            tiled_mma,
+            thread_idx,
+            CD_tensors
+          );
+        }
       }
 
       // Get next work tile
