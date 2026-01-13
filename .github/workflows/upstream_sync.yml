@@ -61,10 +61,7 @@ jobs:
             git diff --name-only --diff-filter=U > /tmp/conflicts.txt
             echo "conflicts<<EOF" >> $GITHUB_OUTPUT
             cat /tmp/conflicts.txt >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-            
-            # Keep the conflict state for Copilot to resolve
-            exit 1
+            echo "EOF" >> $GITHUB_OUTPUT            
           fi
       
       - name: Push clean merge and create PR
@@ -95,7 +92,7 @@ jobs:
             --body-file pr_body.md \
             --base main \
             --head ${{ env.BRANCH_NAME }} \
-            --repo Intel/sycl-tla
+            --repo intel/sycl-tla
       
       
       
@@ -142,12 +139,12 @@ jobs:
           # 4. Create PR
           gh pr create --base main --head ${{ env.BRANCH_NAME }} \
             --title "Sync with NVIDIA/cutlass (Manual) - ${{ env.UPSTREAM_SHORT }}" \
-            --repo Intel/sycl-tla
+            --repo intel/sycl-tla
           ```
           EOF
                 
       - name: Cleanup on failure
-        if: failure() && env.BRANCH_NAME != ''
+        if: failure() && steps.merge.outputs.status != 'conflict' && env.BRANCH_NAME != ''        
         run: |
           git push origin --delete ${{ env.BRANCH_NAME }} || true
       
