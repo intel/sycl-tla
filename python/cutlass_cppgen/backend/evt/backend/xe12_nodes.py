@@ -211,22 +211,6 @@ using {self.name_camel} = cutlass::epilogue::fusion::Xe12Compute<
 class xe12AuxStoreImpl(AuxStoreImpl):
 
     @property
-    def descriptor(self) -> str:
-        """
-        Descriptor for Aux Load
-        """
-        return f"{self.name_camel}Descriptor"
-
-    def decl_descriptor(self) -> str:
-        """
-        Declare the descriptor type
-        """
-        return f"""
-using {self.descriptor} = cutlass::epilogue::collective::detail::AuxStoreDescriptor<
-    EpilogueDescriptor, {self.stride_mnl}, {DataTypeTag[self.element]}
->;
-"""
-    @property
     def type_decl(self):
         """
         Return the string defining the type
@@ -235,11 +219,10 @@ using {self.descriptor} = cutlass::epilogue::collective::detail::AuxStoreDescrip
             return self._type_decl
 
         self._type_decl = self.decl_descriptor()
-        self._type_decl += f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90AuxStore<
-    {self.descriptor}::Stages, typename {self.descriptor}::EpilogueTile, {DataTypeTag[self.element]},
-    {FloatRoundStyleTag[self.round_style]}, {self.stride_mnl}, typename {self.descriptor}::SmemLayoutAtom,
-    typename {self.descriptor}::CopyOpR2S
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeAuxStore<
+    {DataTypeTag[self.element]},
+    {self.stride_mnl}
 >;
 """
         return self._type_decl
@@ -248,7 +231,7 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90AuxStore<
         """
         Get the shared memory size based on epilogue_tile_mn, stages_c, and stages_d
         """
-        return (DataTypeSize[self.element] * stages_d * product(epilogue_tile_mn) // 8, 128)
+        return (0,0)
 
 
 class xe12StoreDImpl(StoreDImpl):
