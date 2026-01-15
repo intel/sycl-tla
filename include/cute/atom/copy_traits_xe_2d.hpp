@@ -1057,29 +1057,6 @@ make_coop_block_2d_copy_A(TiledMMA                 const& mma,       // TiledMMA
 
   return make_block_2d_copy_X<ValType>(op, gstride, find_x_mode(gstride), find_y_mode(gstride), tile_mk, svA).with(gmem);
 }
-
-template <class TiledMMA, class CopyOp, class GEngine, class GLayout>
-CUTE_HOST_DEVICE
-auto
-make_coop_copy_A(CopyOp                   const& op,        // Copy operation
-                 TiledMMA                 const& mma,       // TiledMMA instance
-                 Tensor<GEngine, GLayout> const& gmem)      // Global tensor
-{
-  static_assert(is_xe_block_2d_atom_v<CopyOp>, "Expected a block2d atom in current stage");
-  return make_coop_block_2d_copy_A(mma, gmem);
-}
-
-template <class TiledMMA, class CopyOp, class... Shapes, class GEngine, class GLayout>
-CUTE_HOST_DEVICE
-auto
-make_coop_copy_A(CopyOp                   const& op,            // Copy operation
-                 Shape<Shapes...>         const& sg_tile_shape, // SG tile shape
-                 TiledMMA                 const& mma,           // TiledMMA instance
-                 Tensor<GEngine, GLayout> const& gmem)          // Global tensor
-{
-  static_assert(is_xe_block_2d_atom_v<CopyOp>, "Expected a block2d atom in current stage");
-  return make_coop_block_2d_copy_A(mma, gmem);
-}
               
 template <class TiledMMA, class GEngine, class GLayout>
 CUTE_HOST_DEVICE
@@ -1125,29 +1102,6 @@ make_coop_block_2d_copy_B(TiledMMA                 const& mma,  // TiledMMA inst
   auto svB = composition(thr_tensor, make_tile(sg_to_vnk,_));                                          // (SG, V) -> (M, K)
 
   return make_block_2d_copy_X<ValType>(op, gstride, find_x_mode(gstride), find_y_mode(gstride), tile_nk, svB).with(gmem);
-}
-
-template <class TiledMMA, class CopyOp, class GEngine, class GLayout>
-CUTE_HOST_DEVICE
-auto
-make_coop_copy_B(CopyOp                   const& op,        // Copy operation
-                 TiledMMA                 const& mma,       // TiledMMA instance
-                 Tensor<GEngine, GLayout> const& gmem)      // Global tensor
-{
-  static_assert(is_xe_block_2d_atom_v<CopyOp>, "Expected a block2d atom in current stage");
-  return make_coop_block_2d_copy_B(mma, gmem);
-}
-
-template <class TiledMMA, class CopyOp, class... Shapes, class GEngine, class GLayout>
-CUTE_HOST_DEVICE
-auto
-make_coop_copy_B(CopyOp                   const& op,            // Copy operation
-                 Shape<Shapes...>         const& sg_tile_shape, // SG tile shape
-                 TiledMMA                 const& mma,           // TiledMMA instance
-                 Tensor<GEngine, GLayout> const& gmem)          // Global tensor
-{
-  static_assert(is_xe_block_2d_atom_v<CopyOp>, "Expected a block2d atom in current stage");
-  return make_coop_block_2d_copy_B(mma, gmem);
 }
 
 template<class TiledMMA>
