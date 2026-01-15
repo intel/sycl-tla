@@ -39,6 +39,7 @@
 #include "cutlass/platform/platform.h"
 #include "cutlass/tensor_ref.h"
 #include "cutlass/util/sycl_event_manager.hpp"
+#include "cutlass/util/command_line.h"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
@@ -54,7 +55,50 @@
 #endif
 
 using namespace cute;
+// Command line options parsing
+struct Options {
 
+  bool help;
+  bool error;
+
+  int m, n, k, iterations, verify;
+
+  Options():
+    help(false),
+    error(false),
+    m(4096), n(4096), k(4096), iterations(100)
+  { }
+
+  // Parses the command line
+  void parse(int argc, char const **args) {
+    cutlass::CommandLine cmd(argc, args);
+
+    if (cmd.check_cmd_line_flag("help")) {
+      help = true;
+      return;
+    }
+
+    cmd.get_cmd_line_argument("m", m, 4096);
+    cmd.get_cmd_line_argument("n", n, 4096);
+    cmd.get_cmd_line_argument("k", k, 4096);
+    cmd.get_cmd_line_argument("iterations", iterations, 100);
+  }
+
+  /// Prints the usage statement.
+  std::ostream & print_usage(std::ostream &out) const {
+
+    out << "GEMM Example\n\n"
+      << "Options:\n\n"
+      << "  --help                      If specified, displays this usage statement\n\n"
+      << "  --m=<int>                   Sets the M extent of the GEMM\n"
+      << "  --n=<int>                   Sets the N extent of the GEMM\n"
+      << "  --k=<int>                   Sets the K extent of the GEMM\n"
+      << "  --k=<int>                   Sets the K extent of the GEMM\n"
+      << "  --iterations=<int>          Iterations\n\n";
+
+    return out;
+  }
+};
 
 template <class ATensor, class BTensor, class CTensor,
           class TiledMMA>
@@ -100,8 +144,9 @@ gemm_device(ATensor   const& A,         // (M,K)
   auto copy_c = make_block_2d_copy_D(mma, C);
 
   // Shared memory buffers
-  Layout a_slm_layout = make_layout(typename decltype(r2s_A)::Tiler_MN{});
-  Layout b_slm_layout = make_layout(typename decltype(r2s_B)::Tiler_MN{});
+  constexpr auto stages = 2;
+  Layout a_slm_layout = make_layout(append<3>(typename decltype(r2s_A)::Tiler_MN{}, Int<stages>{}));
+  Layout b_slm_layout = make_layout(append<3>(typename decltype(r2s_B)::Tiler_MN{}, Int<stages>{}));
 
   auto smemA = compat::local_mem<TA[size(a_slm_layout)]>();
   auto smemB = compat::local_mem<TB[size(b_slm_layout)]>();
@@ -152,35 +197,48 @@ gemm_device(ATensor   const& A,         // (M,K)
   // ------
 
   int k_tile_count = ceil_div(shape<1>(A), get<2>(wg_tile));
-
+  int k_tile_prefetch = 0;
   /* Clear the accumulators */
   clear(tCrC);
 
-  /* Main loop */
-  for (int k_tile = 0; k_tile < k_tile_count; k_tile++) {
+  /* Warm up loops with prefetch to SLM */
+  CUTE_UNROLL
+  for (; k_tile_prefetch < stages; k_tile_prefetch++) {
     // Global -> registers load
-    copy(coop_copy_a, tAgA(_,_,_,k_tile), tArA_in);
-    copy(coop_copy_b, tBgB(_,_,_,k_tile), tBrB_in);
+    copy(coop_copy_a, tAgA(_,_,_,k_tile_prefetch), tArA_in);
+    copy(coop_copy_b, tBgB(_,_,_,k_tile_prefetch), tBrB_in);
 
     // Reorder input to output fragments, and write to SLM
     reorder(tArA_in, tArA_in_);
     reorder(tBrB_in, tBrB_in_);
-    copy(r2s_A, tArA_out, tAsA_out);
-    copy(r2s_B, tBrB_out, tBsB_out);
-
+    copy(r2s_A, tArA_out, tAsA_out(_,_,_,k_tile_prefetch));
+    copy(r2s_B, tBrB_out, tBsB_out(_,_,_,k_tile_prefetch));
     // Barrier, with memory fence
     barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
     barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
+  }
+  /* Main loop */
+  for (int k_tile = 0; k_tile < k_tile_count; k_tile++, k_tile_prefetch++) {
     // Load SLM -> registers
-    copy(s2r_A, tAsA_in, tCrA_in);
-    copy(s2r_B, tBsB_in, tCrB_in);
+    copy(s2r_A, tAsA_in(_,_,_,k_tile%stages), tCrA_in);
+    copy(s2r_B, tBsB_in(_,_,_,k_tile%stages), tCrB_in);
 
     // // Multiply
     gemm(mma, tCrA, tCrB, tCrC);
-
     // Barrier, with memory fence
     barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
     barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
+    if(k_tile_prefetch < k_tile_count) {
+      // Global -> registers load
+      copy(coop_copy_a, tAgA(_,_,_,k_tile_prefetch), tArA_in);
+      copy(coop_copy_b, tBgB(_,_,_,k_tile_prefetch), tBrB_in);
+
+      // Reorder input to output fragments, and write to SLM
+      reorder(tArA_in, tArA_in_);
+      reorder(tBrB_in, tBrB_in_);
+      copy(r2s_A, tArA_out, tAsA_out(_,_,_,k_tile_prefetch%stages));
+      copy(r2s_B, tBrB_out, tBsB_out(_,_,_,k_tile_prefetch%stages));
+    }
   }
 
   /* Write C to global memory */
@@ -213,17 +271,13 @@ choose_tiled_mma(ATensor const& A, BTensor const& B, CTensor const&)
   constexpr bool a_t = is_constant_v<1, decltype(stride<0>(A))>;
   constexpr bool b_n = is_constant_v<1, decltype(stride<0>(B))>;
 
-  constexpr bool use_1x_dpas_per_k = a_t                                  // Use one DPAS in k dimension for A^T case
-                                  || (byte && b_n);                       //  pending compiler improvements (also int8 B^N).
   constexpr bool use_4x8_sg = ((sizeof_bits_v<TB> < sizeof_bits_v<TA>)    // Use smaller B loads for expensive reorders.
                                   && !(is_same_v<TB, cute::float_e5m2_t>))
                            || (b_n && sizeof_bits_v<TB> < 8);
 
-  using _K = conditional_t<use_1x_dpas_per_k,
-                           C<op.K*2>, C<op.K*2>>;
+  using WGTile = Shape<_256, _256,  C<op.K * 2>>;                               // 256x256 WG tile size
+  using SGLayout8x4 = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>;  // 8x4 SG tiling, n-major
 
-  using WGTile = Shape<_256, _256, _K>;                               // 256x256 WG tile size
-  using SGLayout8x4 = Layout<Shape<_8, _4, _1>, Stride<_1, _8, _0>>;  // 8x4 SG tiling, n-major
   using SGLayout = SGLayout8x4;
 
   using MMA = typename TiledMMAHelper<MMA_Atom<decltype(op)>, Layout<WGTile>, SGLayout>::TiledMMA;
@@ -306,7 +360,7 @@ gemm_verify(sycl::queue &Q,
 template <typename TA, typename TB, typename TC,
           char layoutA = 'R', char layoutB = 'R'>
 void
-test_case(sycl::queue &Q, int m, int n, int k)
+test_case(sycl::queue &Q, int m, int n, int k, int iterations)
 {
   std::cout << type_str<TA>() << " (" << layoutA << ") x "
             << type_str<TB>() << " (" << layoutB << ") -> "
@@ -324,13 +378,11 @@ test_case(sycl::queue &Q, int m, int n, int k)
   random_fill(B);
   zero_fill(C);
 
-#ifndef SKIP_VERIFY
   auto A_ref = make_shared_usm_tensor<float,  layoutA>(Q, m, k);
   auto B_ref = make_shared_usm_tensor<float, tlayoutB>(Q, n, k);
 
   copy(A, A_ref);
   copy(B, B_ref);
-#endif
 
   subbyte_pack(A);
   subbyte_pack(B);
@@ -339,17 +391,12 @@ test_case(sycl::queue &Q, int m, int n, int k)
   gemm_cute<decltype(A), decltype(B), decltype(C), TA, TB, layoutA, layoutB>(Q, A, B, C);
   Q.wait_and_throw();
 
-#ifdef SKIP_VERIFY
-  const bool ok = true;
-  std::cout << "verification skipped";
-#else
   bool ok = gemm_verify(Q, A_ref, B_ref, C);
   std::cout << (ok ? "passed" : "failed");
-#endif
 
   if (ok) {
     // Test performance:
-    const int timing_iterations = 100;
+    const int timing_iterations = iterations;
     GPU_Clock timer;
 
     timer.start();
@@ -368,10 +415,8 @@ test_case(sycl::queue &Q, int m, int n, int k)
   free_usm_tensor(B, Q);
   free_usm_tensor(C, Q);
 
-#ifndef SKIP_VERIFY
   free_usm_tensor(A_ref, Q);
   free_usm_tensor(B_ref, Q);
-#endif
 
   std::cout << '\n';
 
@@ -383,42 +428,48 @@ test_case(sycl::queue &Q, int m, int n, int k)
     sleep(1);
 }
 
-
-int main(int argc, char** argv)
+int main(int argc, const char** argv)
 {
-  auto shift = [&] {
-    return (argc-- > 0) ? *argv++ : nullptr;
-  };
+  //
+  // Parse options
+  //
 
-  auto parse_size = [&] {
-    static constexpr int default_size = 4096;
-    if (auto e = shift())
-      return atoi(e);
-    else
-      return default_size;
-  };
+  Options options;
 
-  (void) shift();
+  options.parse(argc, argv);
 
-  auto m = parse_size();
-  auto n = parse_size();
-  auto k = parse_size();
+  if (options.help) {
+    options.print_usage(std::cout) << std::endl;
+    return 0;
+  }
+
+  if (options.error) {
+    std::cerr << "Aborting execution." << std::endl;
+    return -1;
+  }
 
   sycl::queue Q = compat::get_default_queue();
 
   // Native compute
-  test_case<half_t, half_t, float, 'R', 'R'>(Q, m, n, k);
-  test_case<half_t, half_t, float, 'C', 'R'>(Q, m, n, k);
-  test_case<half_t, half_t, float, 'C', 'C'>(Q, m, n, k);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
 
-  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, m, n, k);
-  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, m, n, k);
-  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, m, n, k);
+  test_case<half_t, half_t, float, 'R', 'R'>(Q,  options.m, options.n, options.k, options.iterations);
+  test_case<half_t, half_t, float, 'R', 'C'>(Q,  options.m, options.n, options.k, options.iterations);
+  test_case<half_t, half_t, float, 'C', 'R'>(Q,  options.m, options.n, options.k, options.iterations);
 
-  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, m, n, k);
-  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, m, n, k);
-  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, m, n, k);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
 
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, m, n, k);
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, m, n, k);
+  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+
+  test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
 }
