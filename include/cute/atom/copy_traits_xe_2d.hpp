@@ -1023,19 +1023,21 @@ make_coop_block_2d_copy_A(TiledMMA                 const& mma,       // TiledMMA
   // Step 1: Automatically select op type
   auto tile_mk = select<0, 2>(mma.tile_mnk());
   auto tile_mk_coord = make_identity_tensor(tile_mk);
-  auto thr_frag = mma.thrfrg_A(tile_mk_coord);                                                         // ((ThrV,(ThrM,ThrK)),(FrgV,(FrgM,FrgK))) -> offset
-  auto block_tile = zip(layout<0>(thr_frag), layout<1>(thr_frag));                                     // ((ThrV,FrgV),((ThrM,ThrK),(FrgM,FrgK))) -> offset
-  auto rest_block = zip(layout<1,0>(block_tile), layout<1,1>(block_tile));                             // ((ThrM,FrgM),(ThrK,FrgK)) -> blockID
+  auto a_tile_ = make_tile(make_layout(size<0>(typename TiledMMA::AtomShape_MNK{})),
+                           make_layout(size<2>(typename TiledMMA::AtomShape_MNK{})));
+  auto a_tensor_ = zipped_divide(tile_mk_coord, a_tile_);                                              // ((AtomM,AtomK),(RestM,RestK))
+  auto tv_tensor_ = a_tensor_.compose(typename TiledMMA::AtomLayoutA_TV{}, _);                         // ((ThrV,FrgV),(RestM,RestK))
   auto atom_layout = coalesce(mma.get_atom_layout_mnk());                                              // (ATOM_M, ATOM_N) -> SG
-  static_assert(size(rest_block) >= size(atom_layout), "block size should not be less than sg size");
+  static_assert(size<1>(tv_tensor_) >= size(atom_layout), "block size should not be less than sg size");
 
-  constexpr auto alongM = cute::gcd(size(atom_layout), size<0>(rest_block));
+  constexpr auto alongM = cute::gcd(size(atom_layout), size<1,0>(tv_tensor_));
   constexpr auto alongK = cute::ceil_div(size(atom_layout), alongM);
   // ((ThrV,FrgV),((ATOM_M', FrgM), (ATOM_K',FrgK))) -> offset
-  auto new_thr_frg = logical_divide(replace<1>(block_tile, rest_block),
-                                    make_tile(_, make_tile(Int<alongM>{},Int<alongK>{})));
-  auto atom_vmk = make_coord(_, make_coord(make_coord(0, _), make_coord(0, _)));                    
-  auto op = block_2d_selector<ValType, MMAType>(new_thr_frg(atom_vmk), gmem.stride());
+  auto new_thr_frg = logical_divide(tv_tensor_,
+                                    make_tile(_, make_tile(Layout<Int<alongM>, Int<size<1,0>(tv_tensor_) / alongM>>{},
+                                                           Layout<Int<alongK>, Int<size<1,1>(tv_tensor_) / alongK>>{})));
+  auto atom_vmk = make_coord(_, make_coord(make_coord(_0{}, _), make_coord(_0{}, _)));
+  auto op = block_2d_selector<ValType, MMAType>(new_thr_frg(atom_vmk).layout(), gmem.stride());
 
   // reshape MMA atom shape to cooperative block 2d copy atom shape 
   auto coop_atom_layout = make_layout(make_shape(Int<alongM>{}, Int<alongK>{}));
@@ -1051,7 +1053,8 @@ make_coop_block_2d_copy_A(TiledMMA                 const& mma,       // TiledMMA
                           make_layout(size<2>(typename TiledMMA::AtomShape_MNK{})));
   auto a_tensor = zipped_divide(make_layout(tile_mk), a_tile);                                         // ((AtomM,AtomK),(RestM,RestK))
   auto tv_tensor = a_tensor.compose(typename TiledMMA::AtomLayoutA_TV{}, _);                           // ((ThrV,FrgV),(RestM,RestK))
-  auto thr_tile = make_tile(_, make_tile(Int<alongM>{}, Int<alongK>{}));
+  auto thr_tile = make_tile(_, make_tile(Layout<Int<alongM>, Int<size<1,0>(tv_tensor_) / alongM>>{},
+                                         Layout<Int<alongK>, Int<size<1,1>(tv_tensor_) / alongK>>{}));
   auto thr_tensor = zipped_divide(tv_tensor, thr_tile);                                                // ((ThrV,(ThrM',ThrK')),(FrgV,(FrgM,FrgK)))->offset
   auto svA = composition(thr_tensor, make_tile(sg_to_vmk,_));                                          // (SG, V) -> (M, K)
 
@@ -1069,19 +1072,21 @@ make_coop_block_2d_copy_B(TiledMMA                 const& mma,  // TiledMMA inst
   // Step 1: Automatically select op type
   auto tile_nk = select<1, 2>(mma.tile_mnk());
   auto tile_nk_coord = make_identity_tensor(tile_nk);
-  auto thr_frag = mma.thrfrg_B(tile_nk_coord);
-  auto block_tile = zip(layout<0>(thr_frag), layout<1>(thr_frag));
-  auto rest_block = zip(layout<1,0>(block_tile), layout<1,1>(block_tile));
+  auto b_tile_ = make_tile(make_layout(size<1>(typename TiledMMA::AtomShape_MNK{})),
+                           make_layout(size<2>(typename TiledMMA::AtomShape_MNK{})));
+  auto b_tensor_ = zipped_divide(tile_nk_coord, b_tile_);
+  auto tv_tensor_ = b_tensor_.compose(typename TiledMMA::AtomLayoutB_TV{}, _);
   auto atom_layout = coalesce(mma.get_atom_layout_mnk());
-  static_assert(size(rest_block) >= size(atom_layout), "block size should not be less than sg size");
+  static_assert(size<1>(tv_tensor_) >= size(atom_layout), "block size should not be less than sg size");
 
-  constexpr auto alongN = cute::gcd(size(atom_layout), size<0>(rest_block));
+  constexpr auto alongN = cute::gcd(size(atom_layout), size<1,0>(tv_tensor_));
   constexpr auto alongK = cute::ceil_div(size(atom_layout), alongN);
   // ((ThrV,FrgV),((ATOM_N', FrgN), (ATOM_K',FrgK))) -> offset
-  auto new_thr_frg = logical_divide(replace<1>(block_tile, rest_block),
-                                    make_tile(_, make_tile(Int<alongN>{},Int<alongK>{})));
+  auto new_thr_frg = logical_divide(tv_tensor_,
+                                    make_tile(_, make_tile(Layout<Int<alongN>, Int<size<1,0>(tv_tensor_) / alongN>>{},
+                                                           Layout<Int<alongK>, Int<size<1,1>(tv_tensor_) / alongK>>{})));
   auto atom_vnk = make_coord(_, make_coord(make_coord(0, _), make_coord(0, _)));                    
-  auto op = block_2d_selector<ValType, MMAType>(new_thr_frg(atom_vnk), gmem.stride());
+  auto op = block_2d_selector<ValType, MMAType>(new_thr_frg(atom_vnk).layout(), gmem.stride());
 
   // reshape MMA atom shape to cooperative block 2d copy atom shape 
   auto coop_atom_layout = make_layout(make_shape(Int<alongN>{}, Int<alongK>{}));
@@ -1097,7 +1102,8 @@ make_coop_block_2d_copy_B(TiledMMA                 const& mma,  // TiledMMA inst
                           make_layout(size<2>(typename TiledMMA::AtomShape_MNK{})));
   auto b_tensor = zipped_divide(make_layout(tile_nk), b_tile);                                         // ((AtomN,AtomK),(RestN,RestK))
   auto tv_tensor = b_tensor.compose(typename TiledMMA::AtomLayoutB_TV{}, _);                           // ((ThrV,FrgV),(RestN,RestK))
-  auto thr_tile = make_tile(_, make_tile(Int<alongN>{}, Int<alongK>{}));
+  auto thr_tile = make_tile(_, make_tile(Layout<Int<alongN>, Int<size<1,0>(tv_tensor_) / alongN>>{},
+                                         Layout<Int<alongK>, Int<size<1,1>(tv_tensor_) / alongK>>{}));
   auto thr_tensor = zipped_divide(tv_tensor, thr_tile);                                                // ((ThrV,(ThrN',ThrK')),(FrgV,(FrgN,FrgK)))->offset
   auto svB = composition(thr_tensor, make_tile(sg_to_vnk,_));                                          // (SG, V) -> (M, K)
 
@@ -1110,22 +1116,24 @@ auto
 make_A_slm_layout(TiledMMA const& tiled_mma)
 {
   auto tile_mk = select<0, 2>(tiled_mma.tile_mnk());
-
-  auto thr_vmnk = tiled_mma.get_thr_layout_vmnk();                                   // (ThrV,ThrM,ThrN,ThrK) -> thr
-  auto thr_frag = tiled_mma.thrfrg_A(make_layout(tile_mk));                          // ((ThrV,(ThrM,ThrK)),(FrgV,(FrgM,FrgK))) -> offset
-  auto block_tile = zip(get<0>(thr_frag), get<1>(thr_frag));                         // ((ThrV,FrgV),((ThrM,ThrK),(FrgM,FrgK))) -> offset
-  auto rest_block = zip(layout<1,0>(block_tile), layout<1,1>(block_tile));
+  auto a_tile = make_tile(make_layout(size<0>(typename TiledMMA::AtomShape_MNK{})),
+                          make_layout(size<2>(typename TiledMMA::AtomShape_MNK{})));
+  auto a_tensor = zipped_divide(make_layout(tile_mk), a_tile);                          // ((AtomM,AtomK),(RestM,RestK))
+  auto tv_tensor = a_tensor.compose(typename TiledMMA::AtomLayoutA_TV{}, _);            // ((ThrV,FrgV),(RestM,RestK))
   auto atom_layout = coalesce(tiled_mma.get_atom_layout_mnk());
-  constexpr auto alongM = cute::gcd(size(atom_layout), size<0>(rest_block));
+  constexpr auto alongM = cute::gcd(size(atom_layout), size<1, 0>(a_tensor));
   constexpr auto alongK = cute::ceil_div(size(atom_layout), alongM);
+  auto thr_tile = make_tile(_, make_tile(Int<alongM>{}, Int<alongK>{}));
+  auto thr_tensor = zipped_divide(tv_tensor, thr_tile);                                  // ((ThrV,(ThrM',ThrK')),(FrgV,(FrgM,FrgK)))->offset
   // ((ThrV,FrgV),((ThrM',FrgM),(ThrK',FrgK)) -> offset
-  auto pre_thr_frg = logical_divide(replace<1>(block_tile, rest_block),
-                                    make_tile(_, make_tile(Int<alongM>{},Int<alongK>{})));
+  auto pre_thr_frg = logical_divide(tv_tensor,
+                                    make_tile(_, make_tile(Layout<Int<alongM>, Int<size<1,0>(a_tensor) / alongM>>{},
+                                                           Layout<Int<alongK>, Int<size<1,1>(a_tensor) / alongK>>{})));
   // zipped to (ThrM',ThrK'),(FrgM,FrgK)
   auto blocks = zip(layout<1, 0>(pre_thr_frg), layout<1, 1>(pre_thr_frg));  
 
-  // (ThrV, FrgV),(FrgM,FrgK),(ThrM,ThrK)
-  return make_layout(make_shape(shape<0>(pre_thr_frg), shape<1>(blocks), shape<0>(blocks)));
+  // ((ThrV, (ThrM',ThrK')), (FrgV, (FrgM,FrgK)))
+  return zip(layout<0>(pre_thr_frg), blocks);
 }
 
 template<class TiledMMA>
@@ -1134,22 +1142,23 @@ auto
 make_B_slm_layout(TiledMMA const& tiled_mma)
 {
   auto tile_nk = select<1, 2>(tiled_mma.tile_mnk());
-  auto thr_vmnk = tiled_mma.get_thr_layout_vmnk();
-  auto thr_frag = tiled_mma.thrfrg_B(make_layout(tile_nk));
-  auto block_tile = zip(get<0>(thr_frag), get<1>(thr_frag));
-
-  auto rest_block = zip(layout<1,0>(block_tile), layout<1,1>(block_tile));
   auto atom_layout = coalesce(tiled_mma.get_atom_layout_mnk());
-  constexpr auto alongN = cute::gcd(size(atom_layout), size<0>(rest_block));
+  auto b_tile = make_tile(make_layout(size<1>(typename TiledMMA::AtomShape_MNK{})),
+                          make_layout(size<2>(typename TiledMMA::AtomShape_MNK{})));
+  auto b_tensor = zipped_divide(make_layout(tile_nk), b_tile);                                         // ((AtomN,AtomK),(RestN,RestK))
+  constexpr auto alongN = cute::gcd(size(atom_layout), size<1, 0>(b_tensor));
   constexpr auto alongK = cute::ceil_div(size(atom_layout), alongN);
+  auto tv_tensor = b_tensor.compose(typename TiledMMA::AtomLayoutB_TV{}, _);                           // ((ThrV,FrgV),(RestN,RestK))
+  auto thr_tile = make_tile(_, make_tile(Int<alongN>{}, Int<alongK>{}));
   // ((ThrV,FrgV),((ThrN',FrgN),(ThrK',FrgK)) -> offset
-  auto pre_thr_frg = logical_divide(replace<1>(block_tile, rest_block),
-                                    make_tile(_, make_tile(Int<alongN>{},Int<alongK>{})));
+  auto pre_thr_frg = logical_divide(tv_tensor,
+                                    make_tile(_, make_tile(Layout<Int<alongN>, Int<size<1,0>(b_tensor) / alongN>>{},
+                                                           Layout<Int<alongK>, Int<size<1,1>(b_tensor) / alongK>>{})));
   // zipped to (ThrN', ThrK'),(FrgN, FrgK)
   auto blocks = zip(layout<1, 0>(pre_thr_frg), layout<1, 1>(pre_thr_frg)); 
 
-  // (ThrV,FrgV),(FrgN,FrgK),(ThrN',ThrK')
-  return make_layout(make_shape(shape<0>(pre_thr_frg), shape<1>(blocks), shape<0>(blocks)));
+  // (ThrV,(ThrN',ThrK')),(FrgV, (FrgN,FrgK))
+  return zip(layout<0>(pre_thr_frg), blocks);
 }
 
 template<class SEngine, class SLayoutWI, class SLayout, class DEngine, class DLayout>
@@ -1160,8 +1169,8 @@ make_slm_copy(SubgroupTensor<SEngine, SLayoutWI, SLayout> const& src,
 {
   static_assert(is_rmem_v<SEngine> && is_smem_v<DEngine>, "Expected rmem->smem copy");
   static_assert(rank(DLayout{}) >= 2, "Rank of dst tensor should be greater than 2");
-  auto src_tv = composition(src.tv_layout(), take<0,1>(layout(dst)));
-  constexpr uint32_t frg_size = size<0 ,1>(src_tv);
+  auto src_tv = composition(src.tv_layout(), make_layout(layout<0,0>(dst),layout<1,0>(dst)));
+  constexpr uint32_t frg_size = size<1>(src_tv);
   using XType = typename SEngine::value_type;
   using PackedType = cutlass::AlignedArray<XType, frg_size>;
   using namespace intel;
@@ -1181,8 +1190,8 @@ make_slm_copy(Tensor<SEngine, SLayout>               const& src,
 {
   static_assert(is_rmem_v<DEngine> && is_smem_v<SEngine>, "Expected smem->rmem copy");
   static_assert(rank(SLayout{}) >= 2, "Rank of src tensor should be greater than 2");
-  auto dst_tv = composition(dst.tv_layout(), take<0,1>(layout(src)));
-  constexpr uint32_t frg_size = size<0, 1>(dst_tv);
+  auto dst_tv = composition(dst.tv_layout(), make_layout(layout<0,0>(src),layout<1,0>(src)));
+  constexpr uint32_t frg_size = size<1>(dst_tv);
   using XType = typename DEngine::value_type;
   using PackedType = cutlass::AlignedArray<XType, frg_size>;
   using namespace intel;
@@ -1211,14 +1220,12 @@ make_slm_copy(SubgroupTensor<SEngine, SLayoutWI, SLayout> const& src,
   using TiledLayout_TV = typename SGCopy::TiledLayout_TV;
 
   // Expand the shape
-  auto sg_shape = shape<2>(dst);
-  auto val_shape = shape<1>(dst);
+  auto sg_shape = shape<0,1>(dst);
+  auto val_shape = shape<1,1>(dst);
   auto tile_shape = elem_scale(Tiler_MN{}, zip(sg_shape, val_shape));
-  // Expand the single-SG TV layout to the full shape, then tile
-  auto tv_layout1 = composition(make_layout(Tiler_MN{}, make_layout(tile_shape).stride()), TiledLayout_TV{});
-  auto sgval_layout = make_layout(make_shape(sg_shape, val_shape));
-  auto tv_layout = blocked_product(tv_layout1, sgval_layout);
 
+  auto tv_layout1 = composition(make_layout(Tiler_MN{}, make_layout(tile_shape).stride()),  TiledLayout_TV{});
+  auto tv_layout = blocked_product(tv_layout1, sv_layout);
   return TiledCopy<Atom, decltype(tv_layout), decltype(tile_shape)>{};
 }
 
@@ -1237,8 +1244,8 @@ make_slm_copy(Tensor<SEngine, SLayout>               const& src,
   using Atom = typename SGCopy::Atom;
   using Tiler_MN = typename SGCopy::Tiler_MN;
   using TiledLayout_TV = typename SGCopy::TiledLayout_TV;
-  auto sg_shape = shape<2>(src);
-  auto val_shape = shape<1>(src);
+  auto sg_shape = shape<0,1>(src);
+  auto val_shape = shape<1,1>(src);
   auto tile_shape = elem_scale(Tiler_MN{}, zip(sg_shape, val_shape));
   
   auto tv_layout1 = composition(make_layout(Tiler_MN{}, make_layout(tile_shape).stride()),  TiledLayout_TV{});
@@ -1256,8 +1263,12 @@ make_A_slm_copies(TiledMMA  const& tiled_mma,
   using ValType = typename TiledMMA::ValTypeA;
   auto dummy_tensor = make_tensor(make_smem_ptr(static_cast<ValType*>(nullptr)), SLM_Layout{});
   auto tile_mk = select<0, 2>(tiled_mma.tile_mnk());   // (M,K)
-  auto r2s = make_slm_copy(global_copy.get_slice(0).partition_sg_fragment_D(make_identity_tensor(tile_mk)), dummy_tensor,
-                           make_layout(make_shape(shape<2>(SLM_Layout{}), shape<1>(SLM_Layout{}))));
+  auto thrfrg_shape = shape(SLM_Layout{});
+  auto thr_to_vmk_ = right_inverse(make_layout(make_shape(get<0, 0>(thrfrg_shape), get<1, 1>(thrfrg_shape))));
+  auto sg_to_vmk_ = composition(thr_to_vmk_, make_layout(product(get<0,1>(thrfrg_shape)), product(get<0,0>(thrfrg_shape))));
+
+  auto svA_= composition(SLM_Layout{}, make_tile(sg_to_vmk_,_));
+
   auto thr_vmnk = tiled_mma.get_thr_layout_vmnk();                                  // (ThrV,ThrM,ThrN,ThrK) -> thr
   auto shape_vmnk = shape(thr_vmnk);                                                // (ThrV,ThrM,ThrN,ThrK)
   auto drop_n = make_layout(shape_vmnk,
@@ -1283,7 +1294,12 @@ make_A_slm_copies(TiledMMA  const& tiled_mma,
   auto sv_layout_t0 = composition(divide_by_op_tile, svA);                     // (SG,V) -> (M tile, K tile)
   auto sv_layout_t = make_layout(get<0>(sv_layout_t0),
                                  filter(get<1>(sv_layout_t0)));                // (SG,V') -> (M tile, K tile)
+  auto sv_layout_t0_ = composition(divide_by_op_tile, svA_);                   // (SG,V) -> (M tile, K tile)
+  auto sv_layout_t_ = make_layout(get<0>(sv_layout_t0_),
+                                 filter(get<1>(sv_layout_t0_)));               // (SG,V') -> (M tile, K tile)
   auto tCrA = tiled_mma.get_slice(0).partition_sg_fragment_A(make_identity_tensor(tile_mk));
+  auto r2s = make_slm_copy(global_copy.get_slice(0).partition_sg_fragment_D(make_identity_tensor(tile_mk)), dummy_tensor,
+                         sv_layout_t_);
   auto s2r = make_slm_copy(dummy_tensor, tCrA, sv_layout_t);
   return std::tuple(r2s, s2r);
 }
@@ -1298,8 +1314,11 @@ make_B_slm_copies(TiledMMA  const& tiled_mma,
   using ValType = typename TiledMMA::ValTypeB;
   auto dummy_tensor = make_tensor(make_smem_ptr(static_cast<ValType*>(nullptr)), SLM_Layout{});
   auto tile_nk = select<1, 2>(tiled_mma.tile_mnk());   // (N,K)
-  auto r2s = make_slm_copy(global_copy.get_slice(0).partition_sg_fragment_D(make_identity_tensor(tile_nk)), dummy_tensor,
-                           make_layout(make_shape(shape<2>(SLM_Layout{}), shape<1>(SLM_Layout{}))));
+  auto thrfrg_shape = shape(SLM_Layout{});
+  auto thr_to_vnk_ = right_inverse(make_layout(make_shape(get<0, 0>(thrfrg_shape), get<1, 1>(thrfrg_shape))));
+  auto sg_to_vnk_ = composition(thr_to_vnk_, make_layout(product(get<0,1>(thrfrg_shape)), product(get<0,0>(thrfrg_shape))));
+
+  auto svB_= composition(SLM_Layout{}, make_tile(sg_to_vnk_,_));
   auto thr_vmnk = tiled_mma.get_thr_layout_vmnk();                                  // (ThrV,ThrM,ThrN,ThrK) -> thr
   auto shape_vmnk = shape(thr_vmnk);                                                // (ThrV,ThrM,ThrN,ThrK)
   auto drop_m = make_layout(shape_vmnk,
@@ -1320,12 +1339,17 @@ make_B_slm_copies(TiledMMA  const& tiled_mma,
   auto atom_shape = shape_div(tile_nk, op_tile);
 
   auto divide_by_op_tile = zip(make_layout(op_tile, make_stride(_0{}, _0{})),
-                               make_layout(atom_shape));                       // (M,K) -> (M tile, K tile)
+                               make_layout(atom_shape));                         // (M,K) -> (M tile, K tile)
 
-  auto sv_layout_t0 = composition(divide_by_op_tile, svB);                     // (SG,V) -> (M tile, K tile)
+  auto sv_layout_t0 = composition(divide_by_op_tile, svB);                       // (SG,V) -> (M tile, K tile)
   auto sv_layout_t = make_layout(get<0>(sv_layout_t0),
-                                 filter(get<1>(sv_layout_t0)));                // (SG,V') -> (M tile, K tile)
+                                 filter(get<1>(sv_layout_t0)));                  // (SG,V') -> (M tile, K tile)
+  auto sv_layout_t0_ = composition(divide_by_op_tile, svB_);                     // (SG,V) -> (M tile, K tile)
+  auto sv_layout_t_ = make_layout(get<0>(sv_layout_t0_),
+                                 filter(get<1>(sv_layout_t0_)));                 // (SG,V') -> (M tile, K tile)
   auto tCrB = tiled_mma.get_slice(0).partition_sg_fragment_B(make_identity_tensor(tile_nk));
+  auto r2s = make_slm_copy(global_copy.get_slice(0).partition_sg_fragment_D(make_identity_tensor(tile_nk)), dummy_tensor,
+                           sv_layout_t_);
   auto s2r = make_slm_copy(dummy_tensor, tCrB, sv_layout_t);
   return std::tuple(r2s, s2r);
 }
