@@ -93,7 +93,6 @@ struct Options {
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
-      << "  --k=<int>                   Sets the K extent of the GEMM\n"
       << "  --iterations=<int>          Iterations\n\n";
 
     return out;
