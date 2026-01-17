@@ -50,13 +50,13 @@ namespace collective {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <bool CausalMask_, class DispatchPolicy, class... Args> class FlashDecodeSoftmaxEpilogue {
+template <bool CausalMask_, bool HasSink_, class DispatchPolicy, class... Args> class FlashDecodeSoftmaxEpilogue {
   static_assert(cutlass::detail::dependent_false<DispatchPolicy>, "Could not find an epilogue specialization.");
 };
 
 
-template <bool CausalMask_, class Element_>
-class FlashDecodeSoftmaxEpilogue<CausalMask_, epilogue::IntelXeXMX16, Element_> {
+template <bool CausalMask_, bool HasSink_, class Element_>
+class FlashDecodeSoftmaxEpilogue<CausalMask_, HasSink_, epilogue::IntelXeXMX16, Element_> {
 public:
 
   //
@@ -66,6 +66,7 @@ public:
   using Element = Element_;
 
   static constexpr bool CausalMask = CausalMask_;
+  static constexpr bool HasSink = HasSink_;
 
   using GmemTiledCopyOut = void;
 
@@ -149,7 +150,7 @@ public:
   }
 
   template <int Num_SGs, class FragAcc, class FragSum, class STensorMax, class FragOut>
-  CUTLASS_DEVICE void operator()(bool is_first, FragAcc &frag_s, Element& max_val, FragSum& sum, 
+  CUTLASS_DEVICE void operator()(bool is_first, FragAcc &frag_s, Element& max_val, FragSum& sum, FragSum& sink_token,
                                   STensorMax& shmem_tensor_max, FragOut& out) {
     using FragAccLayout = typename FragAcc::layout_type;
     using FragOutLayout = typename FragOut::layout_type;
@@ -161,6 +162,13 @@ public:
     static_assert(Vec * FragsM == 1, "No. of attention rows per subgroup should not exceed 1 MMA Atom worth of rows.");
 
     reduce_max<Num_SGs,FragsNS>(frag_s, shmem_tensor_max, max_val);
+
+    if constexpr (HasSink) {
+      if (compat::get_nd_item<3>().get_local_linear_id() == 0) {
+        Element max_scale{max_val * params.scale};
+        sum += sycl::native::exp2((sink_token- max_scale));
+      }
+    }
 
     if (!is_first) {
       auto sg = compat::get_nd_item<1>().get_sub_group();

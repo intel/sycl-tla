@@ -69,8 +69,14 @@ int run_decode(Options const& options) {
 
 #endif
 
-    return options.is_causal ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options)
-                             : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen>::run(options);
+  if (options.is_causal) {
+    return options.use_sink_attn ? FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen, true>::run(options)
+      : FMHAConfig<true, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen, false>::run(options);
+  }
+  else {
+    return options.use_sink_attn ? FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen, true>::run(options)
+      : FMHAConfig<false, PagedKV, ShapeQK, ShapePV, ShapeOutput, SubgroupLayout, Varlen, false>::run(options);
+  }
 }
 
 int main(int argc, const char **argv) {

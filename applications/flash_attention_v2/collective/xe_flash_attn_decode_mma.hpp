@@ -60,8 +60,8 @@ CUTLASS_DEVICE auto convert_type(Tensor<Engine, Layout> const &tensor) {
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <class DispatchPolicy, class ProblemShapeType_, class ElementQ_, class StrideQ_, class ElementK_, class StrideK_,
-          class ElementV_, class StrideV_, class MMAOp_, class TileShapeQK_, class TileShapePV_, class SubgroupLayout_, class GmemTiledCopyQ_,
-          class GmemTiledCopyK_, class GmemTiledCopyV_, bool CausalMask_, bool PagedKV_>
+          class ElementV_, class StrideV_, class ElementSink_, class MMAOp_, class TileShapeQK_, class TileShapePV_, class SubgroupLayout_, class GmemTiledCopyQ_,
+          class GmemTiledCopyK_, class GmemTiledCopyV_, bool CausalMask_, bool PagedKV_, bool HasSink_>
 struct FlashDecodeMma {
   static_assert(cutlass::detail::dependent_false<ElementQ_>, "Could not find a mainloop specialization.");
 };
@@ -69,11 +69,11 @@ struct FlashDecodeMma {
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <int Stages, class ProblemShapeType_, class ElementQ_, class StrideQ_, class ElementK_, class StrideK_,
-          class ElementV_, class StrideV_, class MMAOp_, class TileShapeQK_, class TileShapePV_, class SubgroupLayout_,
-          class GmemTiledCopyQ_, class GmemTiledCopyK_, class GmemTiledCopyV_, bool CausalMask_, bool PagedKV_>
+          class ElementV_, class StrideV_, class ElementSink_, class MMAOp_, class TileShapeQK_, class TileShapePV_, class SubgroupLayout_,
+          class GmemTiledCopyQ_, class GmemTiledCopyK_, class GmemTiledCopyV_, bool CausalMask_, bool PagedKV_, bool HasSink_>
 struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, ElementQ_, StrideQ_, ElementK_, StrideK_, ElementV_,
-                              StrideV_, MMAOp_, TileShapeQK_, TileShapePV_, SubgroupLayout_, GmemTiledCopyQ_, GmemTiledCopyK_,
-                              GmemTiledCopyV_, CausalMask_, PagedKV_> {
+                              StrideV_, ElementSink_, MMAOp_, TileShapeQK_, TileShapePV_, SubgroupLayout_, GmemTiledCopyQ_, GmemTiledCopyK_,
+                              GmemTiledCopyV_, CausalMask_, PagedKV_, HasSink_> {
   //
   // Type Aliases
   //
@@ -88,6 +88,7 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
   using StrideK = StrideK_;
   using ElementV = ElementV_;
   using StrideV = StrideV_;
+  using ElementSink = ElementSink_;
   using GmemTiledCopyQ = GmemTiledCopyQ_;
   using GmemTiledCopyK = GmemTiledCopyK_;
   using GmemTiledCopyV = GmemTiledCopyV_;
@@ -95,6 +96,7 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
 
   static constexpr bool CausalMask = CausalMask_;
   static constexpr bool PagedKV = PagedKV_;
+  static constexpr bool HasSink = HasSink_;
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
   using MmaAtom = MMA_Atom<MMAOp_>;
@@ -174,6 +176,8 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     int const* ptr_page_table;
     int page_size;
     int const* num_pages_per_seq;
+    // attention sink
+    ElementSink const* ptr_Sink;
   };
 
   struct Params {
@@ -186,6 +190,8 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     int const* ptr_page_table;
     int page_size;
     int const* num_pages_per_seq;
+    // attention sink
+    ElementSink const* ptr_Sink;
   };
 
   //
@@ -212,7 +218,7 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
     XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
     XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
   
-    return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache, args.ptr_page_table, args.page_size, args.num_pages_per_seq};
+    return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache, args.ptr_page_table, args.page_size, args.num_pages_per_seq, args.ptr_Sink};
   }
 
   template <class FragAccum, class TensorQ, class TensorK, class FragSrc>
@@ -430,7 +436,7 @@ struct FlashDecodeMma<gemm::MainloopIntelXeXMX16<Stages>, ProblemShapeType_, Ele
       XE_Copy_K copyK_cache{XE_Copy_K{}.with(tensorK_cache)};
       XE_Copy_V copyV_cache{XE_Copy_V{}.with(tensorV_cache)};
 
-      return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache, params.ptr_page_table, params.page_size, params.num_pages_per_seq};
+      return Params{copyQ, copyK, copyV, copyK_cache, copyV_cache, params.ptr_page_table, params.page_size, params.num_pages_per_seq, params.ptr_Sink};
     }
   }
 };
