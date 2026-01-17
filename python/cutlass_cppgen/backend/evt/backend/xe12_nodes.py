@@ -110,12 +110,6 @@ using {self.name_camel} = cutlass::epilogue::fusion::XeAuxLoad<
 """
         return self._type_decl
 
-    def get_smem_size(self, cta_tile_mnk, epilogue_tile_mn, stages_c, stages_d, epi_tiles):
-        """
-        XeAuxLoad uses direct G2R path, no shared memory needed
-        """
-        return (0, 0)
-
 
 class xe12ScalarBroadcastImpl(ScalarBroadcastImpl):
     def __init__(self, node: LoadNode) -> None:
@@ -150,7 +144,7 @@ class xe12RowBroadcastImpl(RowBroadcastImpl):
 
         self._type_decl = f"""
 using {self.name_camel} = cutlass::epilogue::fusion::Sm90RowBroadcast<
-    0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
+    0 /*Stages*/, typename EpilogueDescriptor::TileShape, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
     {self.stride_mnl}
 >;
 """
@@ -169,7 +163,7 @@ class xe12ColumnBroadcastImpl(ColumnBroadcastImpl):
 
         self._type_decl = f"""
 using {self.name_camel} = cutlass::epilogue::fusion::Sm90ColBroadcast<
-    0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
+    0 /*Stages*/, typename EpilogueDescriptor::TileShape, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
     {self.stride_mnl}
 >;
 """
