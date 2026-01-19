@@ -225,6 +225,44 @@ struct LinCombPerRowBiasEltAct
   static constexpr bool IsEltActSupported = true;
 };
 
+// D = activation(alpha * acc + beta * C + per-row bias)
+// Xe-specific operation that uses XeColBroadcast instead of legacy broadcast
+template<
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementBias_ = ElementOutput_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct XeLinCombPerRowBiasEltAct
+    : LinCombPerRowBias<ElementOutput_, ElementCompute_,
+        ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
+  using ActivationFn = ActivationFn_<ElementCompute_>;
+  static constexpr bool IsEltActSupported = true;
+};
+
+// D = activation(alpha * acc + beta * C + per-column bias)
+// Xe-specific operation that uses XeRowBroadcast instead of legacy broadcast
+template<
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementBias_ = ElementOutput_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  int AlignmentBias_ = 128 / cute::sizeof_bits_v<ElementBias_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct XeLinCombPerColBiasEltAct
+    : LinCombPerColBias<ElementOutput_, ElementCompute_,
+        ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
+  using ActivationFn = ActivationFn_<ElementCompute_>;
+  static constexpr bool IsEltActSupported = true;
+};
+
 // Grouped Wgrad's D = alpha * acc + beta * C with special AccFetch.
 template<
   class GroupsPerTile_,
