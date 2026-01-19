@@ -86,13 +86,36 @@ class EVTReferenceModule:
             A, B, C, problem_size, 1.0, 0.0, batch=batch
         ).reshape(batch, problem_size.m, problem_size.n)
         
-        # Running the epilogue
+        # Running the epilogue with optional mixed-precision computation
         epilogue_args["accum"] = accum
-        references = self.epilogue_visitor(**epilogue_args)
-        
-        # Return the results
-        if not isinstance(references, tuple):
-            references = (references,)
+        if accum.dtype in [torch.float16, torch.bfloat16]:
+            # Mixed-precision mode: compute in FP32, convert back to original dtype
+            # This provides more accurate reference by reducing intermediate rounding errors
+            original_dtype = accum.dtype
+
+            # Convert all tensor inputs to FP32
+            epilogue_args_fp32 = {}
+            for key, value in epilogue_args.items():
+                if isinstance(value, torch.Tensor) and value.dtype in [torch.float16, torch.bfloat16]:
+                    epilogue_args_fp32[key] = value.to(torch.float32)
+                else:
+                    epilogue_args_fp32[key] = value
+
+            # Compute reference in FP32
+            references = self.epilogue_visitor(**epilogue_args_fp32)
+
+            # Convert results back to original dtype
+            if not isinstance(references, tuple):
+                references = (references,)
+            references = tuple(
+                ref.to(original_dtype) if isinstance(ref, torch.Tensor) else ref
+                for ref in references
+            )
+        else:
+            # Standard mode: compute in native dtype
+            references = self.epilogue_visitor(**epilogue_args)
+            if not isinstance(references, tuple):
+                references = (references,)
         return references
         
 
