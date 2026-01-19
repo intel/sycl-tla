@@ -505,6 +505,26 @@ struct LinCombDeEltAct
 // Z = Aux
 // dY = alpha * acc + beta * C
 // D = d_activation(dY, Z)
+// Xe-specific operation that uses new XeAuxLoad with auto-deduced copy operation
+template<
+  class GmemLayoutTagAux_,
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementAux_ = ElementOutput_,
+  class ElementSource_ = ElementOutput_,
+  class ElementScalar_ = ElementCompute_,
+  int AlignmentAux_ = 128 / cute::sizeof_bits_v<ElementAux_>,
+  FloatRoundStyle RoundStyle_ = FloatRoundStyle::round_to_nearest
+>
+struct XeLinCombDeEltAct
+    : LinCombDeEltAct<GmemLayoutTagAux_, ActivationFn_, ElementOutput_, ElementCompute_,
+        ElementAux_, ElementSource_, ElementScalar_, AlignmentAux_, RoundStyle_> {
+};
+
+// Z = Aux
+// dY = alpha * acc + beta * C
+// D = d_activation(dY, Z)
 // dBias = sum of columns of D
 template<
   class GmemLayoutTagAux_,

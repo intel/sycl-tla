@@ -465,6 +465,93 @@ struct FusionCallbacks<
   >::FusionCallbacks;
 };
 
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// New XeLinCombDeEltAct - uses new XeAuxLoad with auto-deduced copy operation
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+// FusionCallbacks specialization for XeLinCombDeEltAct using new XeAuxLoad
+template <
+  class GmemLayoutTagAux,
+  template <class> class ActivationFn,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementAux,
+  class ElementSource,
+  class ElementScalar,
+  int AlignmentAux,
+  FloatRoundStyle RoundStyle,
+  class CtaTileShapeMNK,
+  class EpilogueTile
+>
+struct FusionCallbacks<
+    epilogue::IntelXeGeneric,
+    fusion::XeLinCombDeEltAct<
+      GmemLayoutTagAux, ActivationFn, ElementOutput_, ElementCompute_,
+      ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
+    >,
+    CtaTileShapeMNK,
+    EpilogueTile
+> : Sm90EVT<
+      Sm90Compute<ActivationFn, ElementOutput_, ElementCompute_, RoundStyle>,
+      Sm90LinearCombination<ElementCompute_, ElementCompute_, ElementSource, ElementScalar, RoundStyle>,
+      XeAuxLoad<ElementAux, cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>>
+    > {
+
+  using ElementOutput = ElementOutput_;
+  using ElementCompute = ElementCompute_;
+
+  using Impl =
+    Sm90EVT<
+      Sm90Compute<ActivationFn, ElementOutput, ElementCompute, RoundStyle>,
+      Sm90LinearCombination<ElementCompute, ElementCompute, ElementSource, ElementScalar, RoundStyle>,
+      XeAuxLoad<ElementAux, cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>>
+    >;
+  using Operation =
+    fusion::XeLinCombDeEltAct<
+      GmemLayoutTagAux, ActivationFn, ElementOutput, ElementCompute,
+      ElementAux, ElementSource, ElementScalar, AlignmentAux, RoundStyle
+    >;
+
+  struct Arguments {
+    ElementScalar alpha = ElementScalar(1);
+    ElementScalar beta = ElementScalar(0);
+    ElementScalar const* alpha_ptr = nullptr;
+    ElementScalar const* beta_ptr = nullptr;
+
+    using StrideAlpha = Stride<_0,_0,int64_t>;
+    using StrideBeta  = Stride<_0,_0,int64_t>;
+    StrideAlpha dAlpha = {_0{}, _0{}, 0};
+    StrideBeta  dBeta  = {_0{}, _0{}, 0};
+
+    using ActivationArguments = typename Sm90Compute<ActivationFn, ElementOutput, ElementCompute, RoundStyle>::Arguments;
+    ActivationArguments activation = ActivationArguments();
+
+    using StrideAux = cutlass::gemm::TagToStrideC_t<GmemLayoutTagAux>;
+    ElementAux const* aux_ptr = nullptr;
+    StrideAux dAux = {};
+
+    operator typename Impl::Arguments() const {
+      return
+        {    // binary op : activation(beta * C + (alpha * acc), aux)
+          {                  // ternary op : beta * C + (alpha * acc)
+            {{beta}, {beta_ptr}, {dBeta}}, // leaf args : beta
+            {},                   // leaf args : C
+            {                     // binary op : alpha * acc
+              {{alpha}, {alpha_ptr}, {dAlpha}}, // leaf args : alpha
+              {},                     // leaf args : acc
+              {}                  // binary args : multiplies
+            },                    // end binary op
+            {}               // ternary args : multiply_add
+          },                 // end ternary op
+          {aux_ptr, ElementAux(0), dAux}, // leaf args : aux
+          activation // binary args : activation
+        };   // end binary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // D = alpha * acc + beta * C + per-row bias
