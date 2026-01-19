@@ -71,7 +71,6 @@ class CollectiveEpilogue:
 
     def emit(self):
         callback_decl, callback_name = self.fusion_callbacks.emit()
-        # Define TileShape_MNK alias for reduction nodes to reference
         return callback_name, f"""
 using TileShape_MNK = {self.CtaTileMNK};
 {callback_decl}
