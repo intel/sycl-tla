@@ -24,12 +24,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
- 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
 
+      - name: Install Python venv package
+        shell: bash
+        run: |
+          sudo apt-get install -y python3.13-venv
+ 
       - name: Install Intel graphics drivers
         uses: ./.github/actions/install-intel-graphics
         with:
@@ -77,9 +77,6 @@ jobs:
           pip install -e .
           export CUTLASS_USE_SYCL=1
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-          export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
-          export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
-          export IGC_VectorAliasBBThreshold=100000000000
 
       - name: Run Python EVT Compute Tests (Xe-compatible)
         shell: bash
@@ -88,9 +85,6 @@ jobs:
           export CUTLASS_USE_SYCL=1
           export SYCL_UR_TRACE=2
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-          export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
-          export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
-          export IGC_VectorAliasBBThreshold=100000000000
           cd test/python/cutlass/evt
           python -m pytest -v evt_compute_xe_sm80_90.py
 
