@@ -70,7 +70,7 @@ struct MainloopIntelXeXMX16_LinCombPerRowBiasEltAct_GemmConfig {
   using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinCombPerRowBiasEltAct<
+  using EpilogueOp = cutlass::epilogue::fusion::XeLinCombPerRowBiasEltAct<
       cutlass::epilogue::thread::ReLu,
       ElementOutput, ElementComputeEpilogue, ElementBias,
       ElementAccumulator, ElementAccumulator,
