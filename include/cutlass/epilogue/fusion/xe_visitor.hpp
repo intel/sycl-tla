@@ -191,15 +191,8 @@ struct XeAuxLoad {
     template <typename ElementAccumulator, int FragmentSize>
     CUTLASS_DEVICE Array<Element, FragmentSize>
     visit(Array<ElementAccumulator, FragmentSize> const&, int epi_v, int epi_m, int epi_n) {
-       Array<Element, FragmentSize> result;
-       auto tC_rAux_flat = tC_rAux.tensor();
-
-       CUTLASS_PRAGMA_UNROLL
-       for (int i = 0; i < FragmentSize; ++i) {
-         result[i] = tC_rAux_flat(i);
-       }
-
-       return result;
+       Tensor tC_rAux_frg = recast<Array<Element, FragmentSize>>(coalesce(tC_rAux.tensor()));  // (EPI_V)
+       return tC_rAux_frg(epi_v);
     }
   };
 
