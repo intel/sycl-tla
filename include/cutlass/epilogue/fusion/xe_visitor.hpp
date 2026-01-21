@@ -257,7 +257,7 @@ struct XeAuxStore {
     visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, 
       int epi_n, Array<ElementInput, FragmentSize> const& frg_input) {
       for(int i = 0; i < FragmentSize; ++i) {
-        tC_rAux[i] = static_cast<Element>(frg_input.data()[i]);
+        tC_rAux(epi_v * FragmentSize + i) = static_cast<Element>(frg_input.data()[i]);
       }
       return frg_input;
     }
@@ -440,11 +440,11 @@ struct XeAuxStoreLegacy {
     }
 
     template <typename ElementAccumulator, typename ElementInput, int FragmentSize>
-    CUTLASS_DEVICE Array<Element, FragmentSize>
+    CUTLASS_DEVICE Array<ElementInput, FragmentSize>
     visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, 
       int epi_n, Array<ElementInput, FragmentSize> const& frg_input) {
       for(int i = 0; i < FragmentSize; ++i) {
-        tC_rAux[i] = static_cast<Element>(frg_input.data()[i]);
+        tC_rAux(epi_v * FragmentSize + i) = static_cast<Element>(frg_input.data()[i]);
       }
       return frg_input;
     }
