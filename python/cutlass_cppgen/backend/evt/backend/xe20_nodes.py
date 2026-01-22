@@ -152,7 +152,7 @@ class xe20RowBroadcastImpl(RowBroadcastImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90RowBroadcast<
+using {self.name_camel} = cutlass::epilogue::fusion::XeRowBroadcast<
     0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
     {self.stride_mnl}
 >;
@@ -171,7 +171,7 @@ class xe20ColumnBroadcastImpl(ColumnBroadcastImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90ColBroadcast<
+using {self.name_camel} = cutlass::epilogue::fusion::XeColBroadcast<
     0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
     {self.stride_mnl}
 >;

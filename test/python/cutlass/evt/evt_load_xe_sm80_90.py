@@ -93,6 +93,7 @@ class TestEVTLoad(EVTTestCaseBase):
             result_keys = ["D"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
 
+
     def test_column_broadcast(self):
         """
         Load extra tensor with shape [m, 1]
