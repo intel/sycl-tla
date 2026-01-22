@@ -1,4 +1,4 @@
-# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+# Copyright (c) 2026 Intel Corporation, All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,20 +26,8 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
-
-# Pass these configuration files for the CI
-set(CONFIG_FILE_PVC --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/pvc/input_files/input_flash_attention_prefill.in)
-set(CONFIG_FILE_BMG --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_prefill_extend_nokvcache.in)
-
-cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_prefill
-                            SUPERSUITE cutlass_benchmarks_flash_attention)
-
-cutlass_benchmark_add_executable(
-    cutlass_benchmarks_flash_attention_prefill_xe
-    main.cpp
-    TEST_COMMAND_OPTIONS
-    CONFIG_FILE_PVC
-    CONFIG_FILE_BMG
-    SUITE cutlass_benchmarks_flash_attention_prefill
-)
+# Create a legacy flash_attention suite
+cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_legacy)
+add_subdirectory(flash_attention_prefill)
+add_subdirectory(flash_attention_prefill_cachedKV)
+add_subdirectory(flash_attention_decode)

@@ -31,30 +31,30 @@ set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
 # Pass these configuration files for the CI
 set(CONFIG_FILE_NO_KV_CACHE --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_decode_nokvcache.in)
 
-cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_decode
-                            SUPERSUITE cutlass_benchmarks_flash_attention)
+cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_decode_legacy
+                            SUPERSUITE cutlass_benchmarks_flash_attention_legacy)
 
-add_library(decode_h64 SHARED
+add_library(decode_h64_legacy SHARED
             benchmarks_h64_512_nonpaged.cpp
             benchmarks_h64_1024_nonpaged.cpp
 )
 
-add_library(decode_h96 SHARED
+add_library(decode_h96_legacy SHARED
             benchmarks_h96_512_nonpaged.cpp
             benchmarks_h96_1024_nonpaged.cpp
 )
 
-add_library(decode_h128 SHARED
+add_library(decode_h128_legacy SHARED
             benchmarks_h128_512_nonpaged.cpp
             benchmarks_h128_1024_nonpaged.cpp
 )
 
-add_library(decode_h192 SHARED
+add_library(decode_h192_legacy SHARED
             benchmarks_h192_512_nonpaged.cpp
             benchmarks_h192_1024_nonpaged.cpp
 )
 
-set(LIB_LIST decode_h64 decode_h96 decode_h128 decode_h192)
+set(LIB_LIST decode_h64_legacy decode_h96_legacy decode_h128_legacy decode_h192_legacy)
 
 foreach(name IN LISTS LIB_LIST)
   target_include_directories(${name} PRIVATE ${CUTLASS_APPLICATIONS_DIR})
@@ -65,10 +65,10 @@ foreach(name IN LISTS LIB_LIST)
 endforeach()
 
 cutlass_benchmark_add_executable(
-    cutlass_benchmarks_flash_attention_decode_xe
+    cutlass_benchmarks_flash_attention_decode_legacy_xe
     main.cpp
     TEST_COMMAND_OPTIONS CONFIG_FILE_NO_KV_CACHE
-    LIBRARIES decode_h64 decode_h96 decode_h128 decode_h192
+    LIBRARIES decode_h64_legacy decode_h96_legacy decode_h128_legacy decode_h192_legacy
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}
-    SUITE cutlass_benchmarks_flash_attention_decode
+    SUITE cutlass_benchmarks_flash_attention_decode_legacy
 )
