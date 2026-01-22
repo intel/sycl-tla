@@ -238,7 +238,6 @@ gemm_kernel(Trait &trait,
         prefetch(prefetch_a, pAgA(_,_,_,k_tile_prefetch));
         prefetch(prefetch_b, pBgB(_,_,_,k_tile_prefetch));
     }
-
     /* Main loop */
     for (int k_tile = 0; k_tile < k_tile_count; k_tile++, k_tile_prefetch++) {
         /* Split barrier keeping threads loosely together */
@@ -528,9 +527,8 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
     const auto block_n_dim = tail_n == 0 ? Int<kBlockN>{} : ((tail_n + 1) & ~1);
     auto shapeO = make_shape(kBlockM, Int<kHeadDim>{});
     auto shapeQtOt = make_shape(Int<kHeadDim>{}, kBlockM);
-    auto shapeSPt = make_shape(block_n_dim, Int<kBlockM>{});
-    auto shapeSP = make_shape(Int<kBlockM>{}, block_n_dim);
-    auto shapePt = make_shape(block_n_dim, kBlockM);
+    auto shapeSPt = make_shape(Int<kBlockN>{}, kBlockM);
+    auto shapeSP = make_shape(kBlockM, block_n_dim);
 
     using Shape1 = Shape<
         std::conditional_t<Is_even_N, Int<kBlockN>, int>, Int<kHeadDim>>;
@@ -548,7 +546,6 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         shapeKtVt = make_shape(tail_n, Int<kHeadDim>{});
         shapeKV = make_shape(Int<kHeadDim>{}, tail_n);
     }
-
     Tensor mQ = make_tensor(make_gmem_ptr(param.q_ptr + q_offset),
                             make_layout(
                                 shapeQ,
@@ -640,6 +637,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
     for (int m_block = 0; m_block < max_m_block; ++m_block) {
         const bool Is_even_M = not ((m_block == max_m_block - 1) and (tail_m != 0));
         if (not Is_even_M) {
+            const int block_m_dim = ((tail_m + 1) & ~1);
             mQ = make_tensor(make_gmem_ptr(mQ.data()),
                              make_layout(
                                  make_shape(tail_m, Int<kHeadDim>{}),
@@ -648,10 +646,22 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
                              make_layout(
                                  make_shape(tail_m, Int<kHeadDim>{}),
                                  make_stride(param.o_r_stride, _1{})));
+            mPt = make_tensor(make_gmem_ptr(mPt.data()),
+                              make_layout(
+                                  make_shape(Int<kBlockN>{}, block_m_dim),
+                                  make_stride(Int<kBlockM>{}, _1{})));
             mdOt = make_tensor(make_gmem_ptr(mdOt.data()),
                                make_layout(
                                    make_shape(Int<kHeadDim>{}, tail_m),
                                    make_stride(_1{}, param.o_r_stride)));
+            mdPt = make_tensor(make_gmem_ptr(mdPt.data()),
+                               make_layout(
+                                   make_shape(Int<kBlockN>{}, block_m_dim),
+                                   make_stride(Int<kBlockM>{}, _1{})));
+            mdP = make_tensor(make_gmem_ptr(mdP.data()),
+                             make_layout(
+                                 make_shape(block_m_dim, block_n_dim),
+                                 make_stride(_1{}, Int<kBlockM>{})));
             mdQaccum = make_tensor(make_gmem_ptr(mdQaccum.data()),
                                    make_layout(
                                        shapedQ,
@@ -672,7 +682,6 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         if constexpr(is_causal) {
             apply_mask_causal(scores, taccScS_rt, m_block * kBlockM, n_block * kBlockN, param.seq_len_kv - param.seq_len_q);
         }
-
         // P=softmax(S,lse)
         scale_apply_exp2(scores, mLSE, taccScS_rt,
                          param.scale_softmax_log2);
@@ -1393,8 +1402,8 @@ int main(int argc, char**argv) {
                 SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD);
         }
     }
-    float atol = 5e-3f;
-    float rtol = 5e-3f;
+    float atol = 3e-3f;
+    float rtol = 3e-3f;
 
     std::vector<V> odo_test(odo_npy.num_vals);
     compat::memcpy<V>(odo_test.data(), odo_d, odo_test.size());
