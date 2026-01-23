@@ -37,8 +37,8 @@ from cutlass_cppgen.utils.lazy_import import lazy_import
 
 cuda = lazy_import("cuda.cuda")
 cudart = lazy_import("cuda.cudart")
+dpctl = lazy_import("dpctl")
 import numpy as np
-import dpctl
 import torch
 
 import cutlass_cppgen
