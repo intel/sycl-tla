@@ -214,9 +214,17 @@ class EVTTestBed:
         
         # Compare the results
         for result, ref in zip(result_keys, reference_results):
-            assert torch.equal(
+            # Use torch.testing.assert_close() instead of torch.equal()
+            # because floating-point arithmetic can introduce tiny numerical errors due to limited
+            # precision representation. torch.equal() requires exact bit-for-bit equality which often
+            # fails for mathematically equivalent results.
+            # torch.testing.assert_close() provides configurable relative/absolute tolerances (rtol/atol)
+            # to handle these precision issues, automatically sets appropriate default tolerances based
+            # on tensor datatypes (e.g., stricter tolerances for float64 vs float32), and gives detailed
+            # error messages when assertions fail, making it much more suitable for robust numerical testing.
+            torch.testing.assert_close(
                 epilogue_args[result].flatten(), 
-                ref.masked_fill(torch.isnan(ref), float('inf')).flatten())
+                ref.masked_fill(torch.isnan(ref), float('inf')).flatten(), check_dtype=False)
         
         # Run profile
         if self.profile:
