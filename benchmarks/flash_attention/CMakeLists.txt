@@ -1,4 +1,5 @@
 # Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+# Copyright (c) 2026 Intel Corporation. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,7 +27,61 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
+
+# Create a parent flash_attention suite
 cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention)
-add_subdirectory(flash_attention_prefill)
-add_subdirectory(flash_attention_prefill_cachedKV)
-add_subdirectory(flash_attention_decode)
+
+# Pass these configuration files for the CI
+set(CONFIG_FILE_DECODE_BF16 --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_flash_attention_decode_bf16.in)
+
+set(CONFIG_FILE_PREFILL_BF16 --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_flash_attention_prefill_bf16.in)
+
+# Create the decode subsuite under flash_attention
+cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_decode
+                            SUPERSUITE cutlass_benchmarks_flash_attention)
+
+add_library(decode_lib SHARED
+            benchmarks_decode_bf16.cpp
+)
+
+# Create the prefill subsuite under flash_attention
+cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_prefill
+                            SUPERSUITE cutlass_benchmarks_flash_attention)
+
+set(PREFILL_SOURCES
+    benchmarks_prefill_bf16.cpp
+)
+
+add_library(prefill_lib SHARED ${PREFILL_SOURCES})
+
+set(LIB_LIST decode_lib prefill_lib)
+
+foreach(name IN LISTS LIB_LIST)
+  target_include_directories(${name} PRIVATE ${CUTLASS_APPLICATIONS_DIR})
+  target_link_libraries(${name} PRIVATE CUTLASS cutlass_tools_util_includes benchmark::benchmark)
+  add_onemkl_to_target(TARGET ${name})
+  # Add only SYCL include directories, not the full SYCL flags (to avoid duplication)
+  add_sycl_include_directories_to_target(${name})
+endforeach()
+
+cutlass_benchmark_add_executable(
+    cutlass_benchmarks_flash_attention_decode_xe
+    main.cpp
+    TEST_COMMAND_OPTIONS CONFIG_FILE_DECODE_BF16
+    LIBRARIES decode_lib
+    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}
+    SUITE cutlass_benchmarks_flash_attention_decode
+)
+
+cutlass_benchmark_add_executable(
+    cutlass_benchmarks_flash_attention_prefill_xe
+    main.cpp
+    TEST_COMMAND_OPTIONS CONFIG_FILE_PREFILL_BF16
+    LIBRARIES prefill_lib
+    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}
+    SUITE cutlass_benchmarks_flash_attention_prefill
+)
+
+# Include legacy flash_attention benchmarks
+add_subdirectory(legacy)
