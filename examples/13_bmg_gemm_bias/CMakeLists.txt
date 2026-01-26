@@ -1,4 +1,4 @@
-# Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -25,47 +25,11 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-cmake_policy(SET CMP0112 NEW)
 
-# Include oneMKL support for SYCL builds
-if (CUTLASS_ENABLE_SYCL)
-  include(${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/onemkl.cmake)
-endif()
-
-add_library(cutlass_tools_util_includes INTERFACE)
-add_library(nvidia::cutlass::tools::util ALIAS cutlass_tools_util_includes)
-set_target_properties(cutlass_tools_util_includes PROPERTIES EXPORT_NAME tools::util)
-
-target_include_directories(
-  cutlass_tools_util_includes
-  INTERFACE
-  $<INSTALL_INTERFACE:include>
-  $<BUILD_INTERFACE:${CUTLASS_TOOLS_UTIL_INCLUDE_DIR}>
-  )
-
-target_link_libraries(
-  cutlass_tools_util_includes
-  INTERFACE
- 	$<$<BOOL:${CUTLASS_ENABLE_CUBLAS}>:cublas>
-  )
-
-# Add oneMKL for SYCL builds (sycl_tensor_fill.h needs oneapi/mkl/rng/device.hpp)
-if (CUTLASS_ENABLE_SYCL)
-  if (CUTLASS_USING_SYSTEM_ONEMKL)
-    target_link_libraries(cutlass_tools_util_includes INTERFACE MKL::MKL)
-  else()
-    target_include_directories(cutlass_tools_util_includes INTERFACE 
-      $<BUILD_INTERFACE:${ONEMKL_INCLUDE_DIR}>)
-  endif()
-endif()
-
-install(
-  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/
-  )
-
-install(
-  TARGETS cutlass_tools_util_includes
-  EXPORT NvidiaCutlass
-  )
-
+set(TEST_SHAPE_GEMM_WITH_BIAS --m=512 --n=1024 --k=64 --l=2)
+cutlass_example_add_executable(
+  13_bmg_gemm_bias
+  13_bmg_gemm_bias.cpp
+  TEST_COMMAND_OPTIONS
+  TEST_SHAPE_GEMM_WITH_BIAS
+)
