@@ -43,9 +43,9 @@ from cutlass_cppgen.utils.lazy_import import lazy_import
 cuda = lazy_import("cuda.cuda")
 cudart = lazy_import("cuda.cudart")
 nvrtc = lazy_import("cuda.nvrtc")
+dpctl = lazy_import("dpctl")
 from cutlass_library import SubstituteTemplate
 
-import dpctl
 
 import cutlass_cppgen
 from cutlass_cppgen import CACHE_FILE, CUTLASS_PATH, cuda_install_path, logger
