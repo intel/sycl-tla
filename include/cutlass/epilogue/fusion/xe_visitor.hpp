@@ -130,17 +130,49 @@ xe_signal_final_reduction(
 
 } // namespace detail
 
+/***************************************************************************************************
+ *                                    ----------------
+ *                                       XeAuxStore 
+ *                                    ----------------
+ * Execution Paths:
+ *   1. Scalar/Vectorized Copy Path [DEFAULT] (when CopyOpR2G_ == void AND UseBlock2DCopy == false):
+ *      - Uses copy_if with predicate-based bounds checking
+ *      - Automatically vectorizes using max_common_layout when Alignment allows (V > 1)
+ *      - Falls back to scalar copy if vectorization constraints not met
+ *
+ *   2. Block 2D Copy Path (when CopyOpR2G_ != void OR UseBlock2DCopy == true):
+ *      - Uses Intel Xe block_2d_store operations for optimal bandwidth
+ *      - Tile sizes auto-deduced from MMATile using gcd if CopyOpR2G_ is void
+ *      - Recommended for aligned, contiguous memory access patterns
+ *
+ * Template Parameters:
+ *   Element         Element type of auxiliary tensor (e.g., float, bfloat16_t)
+ *   StrideMNL       Stride type for 3D tensor (M, N, L) layout
+ *   CopyOpR2G_      Copy operation for register-to-global transfer
+ *                           - void (default): Uses scalar/vectorized copy_if path
+ *                           - XE_STORE_2D<...>: Uses Block 2D copy path with explicit tile sizes
+ *   Alignment       Maximum vectorization width in elements (default: 128 bits / sizeof(Element))
+ *                           - Controls vector size V = min(Alignment, max_common_layout_size)
+ *   EnableNullptr   Allow nullptr for aux tensor (uses null_default value if true)
+ *   UseBlock2DCopy  Enable Block 2D copy with auto-deduced tile sizes when CopyOpR2G_ == void
+ *                           - true: Auto-deduce tile sizes and use block_2d_store
+ *                           - false (default): Use scalar/vectorized copy_if path
+ *
+ **************************************************************************************************/
+
 template <
   class Element,
   class StrideMNL,
   class CopyOpR2G_ = void,
-  bool EnableNullptr = true
+  int Alignment = 128 / sizeof_bits_v<Element>,
+  bool EnableNullptr = true,
+  bool UseBlock2DCopy = false
 >
 struct XeAuxStore {
   using SharedStorage = Element;
 
   struct Arguments {
-    Element const* ptr_aux = nullptr;
+    Element* ptr_aux = nullptr;
     Element null_default = Element(0);
     StrideMNL dAux = {};
   };
@@ -148,7 +180,7 @@ struct XeAuxStore {
   static constexpr int CopyBits = cute::min(sizeof_bits_v<Element>, 64);
 
   // Define 3D tensor type for aux tensor (M, N, L)
-  using TensorAux = decltype(make_tensor(make_gmem_ptr(static_cast<Element const*>(nullptr)),
+  using TensorAux = decltype(make_tensor(make_gmem_ptr(static_cast<Element*>(nullptr)),
                                          Layout<Shape<int,int,int>, StrideMNL>{}));
 
   struct Params {
@@ -225,17 +257,20 @@ struct XeAuxStore {
     return EmptyProducerLoadCallbacks{};
   }
 
-  // Callback for epilogue visitor - loads aux data and returns it via visit()
-  template <class CTensor, class RTensor, class AuxCopy>
+  // Scalar/vectorized path callback
+  template <class GTensor, class CTensor, class RTensor>
   struct ConsumerStoreCallbacks : EmptyConsumerStoreCallbacks {
-    CTensor rw_coord;         // Coordinate tensor (atom_v, atom_m, atom_n, epi_m, epi_n)
-    AuxCopy xe_copy_aux;      // Block 2D copy operation
-    RTensor tC_rAux;          // Register fragment (SubgroupTensor)
+    GTensor tCgAux_epi;      // Gmem tensor ((mma_v,mma_m,mma_n),epi_m,epi_n)
+    CTensor gAux_coord;       // Coordinate tensor for bounds checking
+    RTensor tC_rAux;          // Register fragment (mma_v,mma_m,mma_n)
     Params const* params_ptr;
 
     CUTLASS_DEVICE
-    ConsumerStoreCallbacks(CTensor rw_coord, AuxCopy xe_copy_aux, RTensor&& tC_rAux, Params const* params_ptr)
-      : rw_coord(cute::forward<CTensor>(rw_coord)), xe_copy_aux(xe_copy_aux), tC_rAux(cute::forward<RTensor>(tC_rAux)), params_ptr(params_ptr) { }
+    ConsumerStoreCallbacks(GTensor tCgAux_epi, CTensor gAux_coord, RTensor&& tC_rAux, Params const* params_ptr)
+      : tCgAux_epi(tCgAux_epi), 
+        gAux_coord(gAux_coord),
+        tC_rAux(cute::forward<RTensor>(tC_rAux)), 
+        params_ptr(params_ptr) { }
 
     CUTLASS_DEVICE void
     end_loop(int epi_m, int epi_n) {
@@ -243,14 +278,73 @@ struct XeAuxStore {
             if (params_ptr->use_default) {
                 return; // Skip store if pointer is nullptr
             }
-        }      
-        copy(xe_copy_aux, tC_rAux, rw_coord(_, _, _, epi_m, epi_n));
+        }
+
+        auto tCgAux_mn = tCgAux_epi(_,epi_m,epi_n);
+        auto coord_mn = gAux_coord(_,_,epi_m,epi_n);
+        auto [M, N, L] = params_ptr->mAux.shape();
+        auto problem_shape_mn = make_coord(M, N);
+        
+        constexpr auto MCL = decltype(max_common_layout(tCgAux_mn, tC_rAux)){};
+        constexpr int V = cute::min(Alignment, size(MCL));
+        if constexpr (V > 1) {
+          // vectorized store
+          using VecType = uint_bit_t<V * sizeof_bits_v<Element>>;
+          Tensor tCgAux_vec = recast<VecType>(coalesce(tCgAux_mn));
+          Tensor tCrAux_vec = recast<VecType>(coalesce(tC_rAux));
+          Tensor coord_vec = tensor<1>(zipped_divide(coord_mn, MCL.compose(Int<V>{})));
+          
+          auto pred_fn = [&](auto const&... coords) CUTLASS_LAMBDA_FUNC_INLINE {
+            return elem_less(coord_vec(coords...), problem_shape_mn);
+          };
+          copy_if(pred_fn, tCrAux_vec, tCgAux_vec);
+        } else {
+          // scalar store
+          auto pred_fn = [&](auto const&... coords) CUTLASS_LAMBDA_FUNC_INLINE {
+            return elem_less(coord_mn(coords...), problem_shape_mn);
+          };
+          copy_if(pred_fn, tC_rAux, tCgAux_mn);
+        }
     }
 
     template <typename ElementAccumulator, typename ElementInput, int FragmentSize>
     CUTLASS_DEVICE Array<ElementInput, FragmentSize>
     visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, 
       int epi_n, Array<ElementInput, FragmentSize> const& frg_input) {
+      for(int i = 0; i < FragmentSize; ++i) {
+        tC_rAux(epi_v * FragmentSize + i) = static_cast<Element>(frg_input.data()[i]);
+      }
+      return frg_input;
+    }
+  };
+
+  // Block 2D path callback
+  template <class CTensor, class RTensor, class AuxCopy>
+  struct ConsumerStoreCallbacksBlock2D : EmptyConsumerStoreCallbacks {
+    CTensor rw_coord;
+    AuxCopy xe_copy_aux;
+    RTensor tC_rAux;
+    Params const* params_ptr;
+    
+    CUTLASS_DEVICE
+    ConsumerStoreCallbacksBlock2D(CTensor rw_coord_, AuxCopy xe_copy_aux_, 
+                                  RTensor&& tC_rAux_, Params const* params_ptr_)
+      : rw_coord(rw_coord_), xe_copy_aux(xe_copy_aux_), tC_rAux(cute::move(tC_rAux_)), params_ptr(params_ptr_) { }
+    
+    CUTLASS_DEVICE void
+    end_loop(int epi_m, int epi_n) {
+      if constexpr (EnableNullptr) {
+        if (params_ptr->use_default) {
+          return;
+        }
+      }
+      copy(xe_copy_aux, tC_rAux, rw_coord(_, _, _, epi_m, epi_n));
+    }
+    
+    template <typename ElementAccumulator, typename ElementInput, int FragmentSize>
+    CUTLASS_DEVICE Array<ElementInput, FragmentSize>
+    visit(Array<ElementAccumulator, FragmentSize> const& frg_acc, int epi_v, int epi_m, 
+          int epi_n, Array<ElementInput, FragmentSize> const& frg_input) {
       for(int i = 0; i < FragmentSize; ++i) {
         tC_rAux(epi_v * FragmentSize + i) = static_cast<Element>(frg_input.data()[i]);
       }
@@ -269,59 +363,97 @@ struct XeAuxStore {
 
     auto mAux_batch = params_ptr->mAux(_,_,l_coord);
 
-    // use TiledMMA to properly partition coordinates
-    // This ensures we get the correct number of epilogue tiles for the actual problem size
     auto thr_mma = args.tiled_mma.get_slice(args.thread_idx);
-    auto tCDgCD = thr_mma.partition_C(args.cD);  // Use workgroup coord tensor from args
 
     // Calculate MMA tiles per epilogue tile
     using MMATile = decltype(take<0,2>(typename cute::remove_cvref_t<decltype(args.tiled_mma)>::AtomShape_MNK{}));
     
-    // Deduce copy operation tile dimensions to match xe_epilogue's logic:
-    // - Preferred: 8 rows, 512 bits per row (adjusts to element size)
-    // - Use gcd with MMATile to ensure alignment with MMA tile boundaries
-    // - Example for fp16 with 16x16 MMA: gcd(8,16)=8, gcd(32,16)=16 -> 8x16 tile
-    // - Unless user explicitly provided CopyOpR2G_, then use that instead
-    using ActualCopyOpR2G = cute::conditional_t<
-      cute::is_void_v<CopyOpR2G_>,
-      XE_STORE_2D<CopyBits, 
-                 cute::gcd(8, get<0>(MMATile{})), 
-                 cute::gcd(512 / CopyBits, get<1>(MMATile{}))>,
-      CopyOpR2G_
-    >;
-    
     auto mma_per_epi = shape_div(args.epi_tile, MMATile{});
 
-    // Create epilogue-tiled coordinate structure matching xe_epilogue
-    auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
-                              get<0>(tCDgCD.layout()));
+    if constexpr (!cute::is_void_v<CopyOpR2G_> || UseBlock2DCopy) {
+      // Block 2D copy path (explicit CopyOp or auto-deduced)
+      using ActualCopyOpR2G = cute::conditional_t<
+        cute::is_void_v<CopyOpR2G_>,
+        XE_STORE_2D<CopyBits, 
+                   cute::gcd(8, get<0>(MMATile{})), 
+                   cute::gcd(512 / CopyBits, get<1>(MMATile{}))>,
+        CopyOpR2G_
+      >;
+      
+      auto tCDgCD = thr_mma.partition_C(args.cD);
+      auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
+                                get<0>(tCDgCD.layout()));
+      auto gAux_epi_layout = append(append(make_identity_layout(args.epi_tile),
+                                          get<3>(sg_v_coord)), get<4>(sg_v_coord));
+      auto gAux_epi = make_tensor(tCDgCD.data(), gAux_epi_layout);
+      
+      auto xe_copy_aux = make_block_2d_copy(ActualCopyOpR2G{}, mAux_batch);
+      auto thr_copy_aux = xe_copy_aux.get_slice(args.thread_idx % intel::sg_size);
+      auto tCgAux = thr_copy_aux.partition_D(gAux_epi);  // (atom_v,atom_m,atom_n,epi_m,epi_n)
+      auto trAux = thr_copy_aux.partition_sg_fragment_S(gAux_epi(_,_,0,0));  // (atom_v,atom_m,atom_n)
+      
+      return ConsumerStoreCallbacksBlock2D<decltype(tCgAux), decltype(trAux), decltype(xe_copy_aux)>(
+        tCgAux, xe_copy_aux, cute::move(trAux), params_ptr);
+    } else {
+      // Scalar/vectorized copy path (default)
+      auto tCDgCD = thr_mma.partition_C(args.cD);
+      auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
+                                get<0>(tCDgCD.layout()));
+      auto gAux_epi_layout = append(append(make_identity_layout(args.epi_tile),
+                                          get<3>(sg_v_coord)), get<4>(sg_v_coord));
+      auto gAux_epi = make_tensor(tCDgCD.data(), gAux_epi_layout);
+      
+      auto gAux_data = local_tile(mAux_batch, select<0,1>(args.tile_shape_mnk), make_coord(m_coord, n_coord));
+      auto tCgAux = thr_mma.partition_C(gAux_data);  // (mma_v,mma_m,mma_n)
+      auto tiled_tCgAux = group<0,3>(prepend(flat_divide(remove<0>(tCgAux.layout()), mma_per_epi),
+                                             get<0>(tCgAux.layout())));
+      auto tCgAux_epi = make_tensor(tCgAux.data(), tiled_tCgAux);  // ((mma_v,mma_m,mma_n),epi_m,epi_n)
+      auto trAux = make_tensor_like(tCgAux);  // (mma_v,mma_m,mma_n)
 
-    auto gAux_epi_layout = append(append(make_identity_layout(args.epi_tile),
-                                        get<3>(sg_v_coord)), get<4>(sg_v_coord));
-    auto gAux_epi = make_tensor(tCDgCD.data(), gAux_epi_layout);  // (epi_m, epi_n, num_epi_m, num_epi_n)
-
-    // Create copy operation from aux tensor using computed tile dimensions
-    auto xe_copy_aux = make_block_2d_copy(ActualCopyOpR2G{}, mAux_batch);
-    auto thr_copy_aux = xe_copy_aux.get_slice(args.thread_idx % intel::sg_size);
-
-    // Partition coordinates for epilogue iteration (now with correct tile counts)
-    auto tCgAux = thr_copy_aux.partition_D(gAux_epi);  // (atom_v,atom_m,atom_n,epi_m,epi_n)
-
-    // Create register fragment
-    auto trAux = thr_copy_aux.partition_sg_fragment_S(gAux_epi(_,_,0,0));  // (atom_v,atom_m,atom_n)
-
-
-    return ConsumerStoreCallbacks(tCgAux, xe_copy_aux, cute::move(trAux), params_ptr);
+      return ConsumerStoreCallbacks<decltype(tCgAux_epi), decltype(gAux_epi), decltype(trAux)>(
+        tCgAux_epi, gAux_epi, cute::move(trAux), params_ptr);
+    }
   }
 };
 
-// XeAuxLoad
-// Auto-deduces XE_LOAD_2D copy operation from Element type if CopyOpG2R_ is void
+/***************************************************************************************************
+ *                                   -----------------
+ *                                      XeAuxLoad
+ *                                   -----------------
+ * Execution Paths:
+ *   1. Scalar/Vectorized Copy Path [DEFAULT] (when CopyOpG2R_ == void AND UseBlock2DCopy == false):
+ *      - Uses copy_if with predicate-based bounds checking
+ *      - Automatically vectorizes using max_common_layout when Alignment allows (V > 1)
+ *      - Falls back to scalar copy if vectorization constraints not met
+ *      - Zero-fills out-of-bounds elements for safe computation
+ *
+ *   2. Block 2D Copy Path (when CopyOpG2R_ != void OR UseBlock2DCopy == true):
+ *      - Uses Intel Xe block_2d_load operations for optimal bandwidth
+ *      - Tile sizes auto-deduced from MMATile using gcd if CopyOpG2R_ is void
+ *      - Recommended for aligned, contiguous memory access patterns
+ *
+ * Template Parameters:
+ *   Element         Element type of auxiliary tensor (e.g., float, bfloat16_t)
+ *   StrideMNL       Stride type for 3D tensor (M, N, L) layout
+ *   CopyOpG2R_      Copy operation for global-to-register transfer
+ *                           - void (default): Uses scalar/vectorized copy_if path
+ *                           - XE_LOAD_2D<...>: Uses Block 2D copy path with explicit tile sizes
+ *   Alignment       Maximum vectorization width in elements (default: 128 bits / sizeof(Element))
+ *                           - Controls vector size V = min(Alignment, max_common_layout_size)
+ *   EnableNullptr   Allow nullptr for aux tensor (uses null_default value if true)
+ *   UseBlock2DCopy  Enable Block 2D copy with auto-deduced tile sizes when CopyOpG2R_ == void
+ *                           - true: Auto-deduce tile sizes and use block_2d_load
+ *                           - false (default): Use scalar/vectorized copy_if path
+ *
+ **************************************************************************************************/
+
 template <
   class Element,
   class StrideMNL,
   class CopyOpG2R_ = void,
-  bool EnableNullptr = true
+  int Alignment = 128 / sizeof_bits_v<Element>,
+  bool EnableNullptr = true,
+  bool UseBlock2DCopy = false
 >
 struct XeAuxLoad {
   using SharedStorage = Element;
@@ -412,17 +544,20 @@ struct XeAuxLoad {
     return EmptyProducerLoadCallbacks{};
   }
 
-  // Callback for epilogue visitor - loads aux data and returns it via visit()
-  template <class CTensor, class RTensor, class AuxCopy>
+  // Scalar/vectorized path callback
+  template <class GTensor, class CTensor, class RTensor>
   struct ConsumerStoreCallbacks : EmptyConsumerStoreCallbacks {
-    CTensor rw_coord;         // Coordinate tensor (atom_v, atom_m, atom_n, epi_m, epi_n)
-    AuxCopy xe_copy_aux;      // Block 2D copy operation
-    RTensor tC_rAux;          // Register fragment (SubgroupTensor)
+    GTensor tCgAux_epi;      // Gmem tensor ((mma_v,mma_m,mma_n),epi_m,epi_n)
+    CTensor gAux_coord;       // Coordinate tensor for bounds checking
+    RTensor tC_rAux;          // Register fragment (mma_v,mma_m,mma_n)
     Params const* params_ptr;
 
     CUTLASS_DEVICE
-    ConsumerStoreCallbacks(CTensor rw_coord, AuxCopy xe_copy_aux, RTensor&& tC_rAux, Params const* params_ptr)
-      : rw_coord(cute::forward<CTensor>(rw_coord)), xe_copy_aux(xe_copy_aux), tC_rAux(cute::forward<RTensor>(tC_rAux)), params_ptr(params_ptr) { }
+    ConsumerStoreCallbacks(GTensor tCgAux_epi, CTensor gAux_coord, RTensor&& tC_rAux, Params const* params_ptr)
+      : tCgAux_epi(tCgAux_epi), 
+        gAux_coord(gAux_coord),
+        tC_rAux(cute::forward<RTensor>(tC_rAux)), 
+        params_ptr(params_ptr) { }
 
     // Load aux data for epilogue tile (epi_m, epi_n)
     CUTLASS_DEVICE void
@@ -434,16 +569,79 @@ struct XeAuxLoad {
          }
        }
 
-       // Copy using 5-mode coordinates, slice to 3 modes like epilogue does
-       copy(xe_copy_aux, rw_coord(_,_,_,epi_m,epi_n), tC_rAux);
+       // Load from global memory using vectorized copy_if with bounds checking (matches XeRowBroadcastLegacy pattern)
+       auto tCgAux_mn = tCgAux_epi(_,epi_m,epi_n);
+       auto coord_mn = gAux_coord(_,_,epi_m,epi_n);
+       auto [M, N, L] = params_ptr->mAux.shape();
+       auto problem_shape_mn = make_coord(M, N);
+       
+       // Zero-fill out-of-bounds elements first
+       clear(tC_rAux);
+       
+       constexpr auto MCL = decltype(max_common_layout(tCgAux_mn, tC_rAux)){};
+       constexpr int V = cute::min(Alignment, size(MCL));
+       if constexpr (V > 1) {
+        // vectorized load
+         using VecType = uint_bit_t<V * sizeof_bits_v<Element>>;
+         Tensor tCgAux_vec = recast<VecType>(coalesce(tCgAux_mn));
+         Tensor tCrAux_vec = recast<VecType>(coalesce(tC_rAux));
+         Tensor coord_vec = tensor<1>(zipped_divide(coord_mn, MCL.compose(Int<V>{})));
+         
+         auto pred_fn = [&](auto const&... coords) CUTLASS_LAMBDA_FUNC_INLINE {
+           return elem_less(coord_vec(coords...), problem_shape_mn);
+         };
+         copy_if(pred_fn, tCgAux_vec, tCrAux_vec);
+       } else {
+        // scalar load
+         auto pred_fn = [&](auto const&... coords) CUTLASS_LAMBDA_FUNC_INLINE {
+           return elem_less(coord_mn(coords...), problem_shape_mn);
+         };
+         copy_if(pred_fn, tCgAux_mn, tC_rAux);
+       }
     }
 
     // Return loaded aux values for epilogue computation
     template <typename ElementAccumulator, int FragmentSize>
     CUTLASS_DEVICE Array<Element, FragmentSize>
     visit(Array<ElementAccumulator, FragmentSize> const&, int epi_v, int epi_m, int epi_n) {
-       Tensor tC_rAux_frg = recast<Array<Element, FragmentSize>>(coalesce(tC_rAux.tensor()));  // (EPI_V)
-       return tC_rAux_frg(epi_v);
+       Array<Element, FragmentSize> frg_aux;
+       CUTLASS_PRAGMA_UNROLL
+       for (int i = 0; i < FragmentSize; ++i) {
+         frg_aux[i] = tC_rAux(epi_v * FragmentSize + i);
+       }
+       return frg_aux;
+    }
+  };
+
+  // Block 2D path callback
+  template <class CTensor, class RTensor, class AuxCopy>
+  struct ConsumerStoreCallbacksBlock2D : EmptyConsumerStoreCallbacks {
+    CTensor rw_coord;
+    AuxCopy xe_copy_aux;
+    RTensor tC_rAux;
+    Params const* params_ptr;
+    
+    CUTLASS_DEVICE
+    ConsumerStoreCallbacksBlock2D(CTensor rw_coord_, AuxCopy xe_copy_aux_, 
+                                  RTensor&& tC_rAux_, Params const* params_ptr_)
+      : rw_coord(rw_coord_), xe_copy_aux(xe_copy_aux_), tC_rAux(cute::move(tC_rAux_)), params_ptr(params_ptr_) { }
+    
+    CUTLASS_DEVICE void
+    previsit(int epi_m, int epi_n, int load_iteration, bool is_producer_load_needed) {
+      if constexpr (EnableNullptr) {
+        if (params_ptr->use_default) {
+          fill(tC_rAux, params_ptr->null_default);
+          return;
+        }
+      }
+      copy(xe_copy_aux, rw_coord(_,_,_,epi_m,epi_n), tC_rAux);
+    }
+    
+    template <typename ElementAccumulator, int FragmentSize>
+    CUTLASS_DEVICE Array<Element, FragmentSize>
+    visit(Array<ElementAccumulator, FragmentSize> const&, int epi_v, int epi_m, int epi_n) {
+      Tensor tC_rAux_frg = recast<Array<Element, FragmentSize>>(coalesce(tC_rAux.tensor()));  // (EPI_V)
+      return tC_rAux_frg(epi_v);
     }
   };
 
@@ -458,49 +656,56 @@ struct XeAuxLoad {
 
     auto mAux_batch = params_ptr->mAux(_,_,l_coord);
 
-    // use TiledMMA to properly partition coordinates
-    // This ensures we get the correct number of epilogue tiles for the actual problem size
     auto thr_mma = args.tiled_mma.get_slice(args.thread_idx);
-    auto tCDgCD = thr_mma.partition_C(args.cD);  // Use workgroup coord tensor from args
 
     // Calculate MMA tiles per epilogue tile
     using MMATile = decltype(take<0,2>(typename cute::remove_cvref_t<decltype(args.tiled_mma)>::AtomShape_MNK{}));
     
-    // Deduce copy operation tile dimensions to match xe_epilogue's logic:
-    // - Preferred: 8 rows, 512 bits per row (adjusts to element size)
-    // - Use gcd with MMATile to ensure alignment with MMA tile boundaries
-    // - Example for fp16 with 16x16 MMA: gcd(8,16)=8, gcd(32,16)=16 -> 8x16 tile
-    // - Unless user explicitly provided CopyOpG2R_, then use that instead
-    using ActualCopyOpG2R = cute::conditional_t<
-      cute::is_void_v<CopyOpG2R_>,
-      XE_LOAD_2D<CopyBits, 
-                 cute::gcd(8, get<0>(MMATile{})), 
-                 cute::gcd(512 / CopyBits, get<1>(MMATile{}))>,
-      CopyOpG2R_
-    >;
-    
     auto mma_per_epi = shape_div(args.epi_tile, MMATile{});
 
-    // Create epilogue-tiled coordinate structure matching xe_epilogue
-    auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
-                              get<0>(tCDgCD.layout()));
+    if constexpr (!cute::is_void_v<CopyOpG2R_> || UseBlock2DCopy) {
+      // Block 2D copy path (explicit CopyOp or auto-deduced)
+      using ActualCopyOpG2R = cute::conditional_t<
+        cute::is_void_v<CopyOpG2R_>,
+        XE_LOAD_2D<CopyBits, 
+                   cute::gcd(8, get<0>(MMATile{})), 
+                   cute::gcd(512 / CopyBits, get<1>(MMATile{}))>,
+        CopyOpG2R_
+      >;
+      
+      auto tCDgCD = thr_mma.partition_C(args.cD);
+      auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
+                                get<0>(tCDgCD.layout()));
+      auto gAux_epi_layout = append(append(make_identity_layout(args.epi_tile),
+                                          get<3>(sg_v_coord)), get<4>(sg_v_coord));
+      auto gAux_epi = make_tensor(tCDgCD.data(), gAux_epi_layout);
+      
+      auto xe_copy_aux = make_block_2d_copy(ActualCopyOpG2R{}, mAux_batch);
+      auto thr_copy_aux = xe_copy_aux.get_slice(args.thread_idx % intel::sg_size);
+      auto tCgAux = thr_copy_aux.partition_S(gAux_epi);  // (atom_v,atom_m,atom_n,epi_m,epi_n)
+      auto trAux = thr_copy_aux.partition_sg_fragment_D(gAux_epi(_,_,0,0));  // (atom_v,atom_m,atom_n)
+      
+      return ConsumerStoreCallbacksBlock2D<decltype(tCgAux), decltype(trAux), decltype(xe_copy_aux)>(
+        tCgAux, xe_copy_aux, cute::move(trAux), params_ptr);
+    } else {
+      // Scalar/vectorized copy path (default)
+      auto tCDgCD = thr_mma.partition_C(args.cD);
+      auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
+                                get<0>(tCDgCD.layout()));
+      auto gAux_epi_layout = append(append(make_identity_layout(args.epi_tile),
+                                          get<3>(sg_v_coord)), get<4>(sg_v_coord));
+      auto gAux_epi = make_tensor(tCDgCD.data(), gAux_epi_layout);
+      
+      auto gAux_data = local_tile(mAux_batch, select<0,1>(args.tile_shape_mnk), make_coord(m_coord, n_coord));
+      auto tCgAux = thr_mma.partition_C(gAux_data);  // (mma_v,mma_m,mma_n)
+      auto tiled_tCgAux = group<0,3>(prepend(flat_divide(remove<0>(tCgAux.layout()), mma_per_epi),
+                                             get<0>(tCgAux.layout())));
+      auto tCgAux_epi = make_tensor(tCgAux.data(), tiled_tCgAux);  // ((mma_v,mma_m,mma_n),epi_m,epi_n)
+      auto trAux = make_tensor_like(tCgAux);  // (mma_v,mma_m,mma_n)
 
-    auto gAux_epi_layout = append(append(make_identity_layout(args.epi_tile),
-                                        get<3>(sg_v_coord)), get<4>(sg_v_coord));
-    auto gAux_epi = make_tensor(tCDgCD.data(), gAux_epi_layout);  // (epi_m, epi_n, num_epi_m, num_epi_n)
-
-    // Create copy operation from aux tensor using computed tile dimensions
-    auto xe_copy_aux = make_block_2d_copy(ActualCopyOpG2R{}, mAux_batch);
-    auto thr_copy_aux = xe_copy_aux.get_slice(args.thread_idx % intel::sg_size);
-
-    // Partition coordinates for epilogue iteration (now with correct tile counts)
-    auto tCgAux = thr_copy_aux.partition_S(gAux_epi);  // (atom_v,atom_m,atom_n,epi_m,epi_n)
-
-    // Create register fragment
-    auto trAux = thr_copy_aux.partition_sg_fragment_D(gAux_epi(_,_,0,0));  // (atom_v,atom_m,atom_n)
-
-
-    return ConsumerStoreCallbacks(tCgAux, xe_copy_aux, cute::move(trAux), params_ptr);
+      return ConsumerStoreCallbacks<decltype(tCgAux_epi), decltype(gAux_epi), decltype(trAux)>(
+        tCgAux_epi, gAux_epi, cute::move(trAux), params_ptr);
+    }
   }
 };
 
