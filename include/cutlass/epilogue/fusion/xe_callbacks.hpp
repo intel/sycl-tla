@@ -622,6 +622,8 @@ struct FusionCallbacks<
 };
 
 // D = alpha * acc + beta * C + per-column bias
+// XeLinCombPerColBiasLegacy - uses XeRowBroadcastLegacy for backward compatibility with examples
+// EVT tests bypass this and directly instantiate XeRowBroadcast via Python code generation
 template<
   int StagesC,
   class CtaTileShapeMNK,
@@ -634,14 +636,14 @@ template<
   int AlignmentBias = 128 / sizeof_bits_v<ElementBias>,
   FloatRoundStyle RoundStyle = FloatRoundStyle::round_to_nearest
 >
-using XeLinCombPerColBias =
+using XeLinCombPerColBiasLegacy =
   Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementOutput, ElementCompute, RoundStyle>, // beta * C + (alpha * acc + bias)
     Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>, // beta
     Sm90SrcFetch<ElementSource>, // C
     Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle>, // alpha * acc + bias
       Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>, // alpha
       Sm90AccFetch, // acc
-      XeRowBroadcast<0, CtaTileShapeMNK, ElementBias, ElementCompute, Stride<_0,_1,int64_t>, AlignmentBias> // bias
+      XeRowBroadcastLegacy<0, CtaTileShapeMNK, ElementBias, ElementCompute, Stride<_0,_1,int64_t>, AlignmentBias> // bias (legacy version)
     >
   >;
 
@@ -661,9 +663,9 @@ struct FusionCallbacks<
     fusion::LinCombPerColBias<ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_>,
     CtaTileShapeMNK_,
     EpilogueTile_
-> : XeLinCombPerColBias<_1{} /* Stages */, CtaTileShapeMNK_, EpilogueTile_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
+> : XeLinCombPerColBiasLegacy<_1{} /* Stages */, CtaTileShapeMNK_, EpilogueTile_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_> {
 
-  using Impl = XeLinCombPerColBias<
+  using Impl = XeLinCombPerColBiasLegacy<
       _1{},
       CtaTileShapeMNK_,
       EpilogueTile_,
@@ -1017,6 +1019,208 @@ struct FusionCallbacks<
             },                 // end ternary op
             {aux_ptr, ElementAux(0), dAux} // unary args : store
           },                // end unary op
+          activation // unary args : activation
+        };   // end unary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// FusionCallbacks specialization for per-row bias with activation using XeColBroadcast
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementBias_,
+  class ElementSource_,
+  class ElementScalar_,
+  int AlignmentBias_,
+  FloatRoundStyle RoundStyle_,
+  class CtaTileShapeMNK_,
+  class EpilogueTile_
+>
+struct FusionCallbacks<
+     epilogue::IntelXeGeneric,
+    fusion::XeLinCombPerRowBiasEltAct<
+      ActivationFn_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_
+    >,
+    CtaTileShapeMNK_,
+    EpilogueTile_
+> : Sm90EVT<
+      Sm90Compute<ActivationFn_, ElementOutput_, ElementCompute_, RoundStyle_>,
+      Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute_, ElementCompute_, RoundStyle_>,
+        Sm90ScalarBroadcast<ElementScalar_, Stride<_0,_0,int64_t>>,
+        Sm90SrcFetch<ElementSource_>,
+        Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute_, ElementCompute_, RoundStyle_>,
+          Sm90ScalarBroadcast<ElementScalar_, Stride<_0,_0,int64_t>>,
+          Sm90AccFetch,
+          XeColBroadcast<0, CtaTileShapeMNK_, ElementBias_, ElementCompute_, Stride<_1,_0,int64_t>, AlignmentBias_>
+        >
+      >
+    > {
+
+  using ElementOutput = ElementOutput_;
+  using ElementCompute = ElementCompute_;
+  using ElementBias = ElementBias_;
+  using ElementSource = ElementSource_;
+  using ElementScalar = ElementScalar_;
+  static constexpr int AlignmentBias = AlignmentBias_;
+  using Impl =
+    Sm90EVT<
+      Sm90Compute<ActivationFn_, ElementOutput, ElementCompute, RoundStyle_>,
+      Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle_>,
+        Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>,
+        Sm90SrcFetch<ElementSource>,
+        Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle_>,
+          Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>,
+          Sm90AccFetch,
+          XeColBroadcast<0, CtaTileShapeMNK_, ElementBias, ElementCompute, Stride<_1,_0,int64_t>, AlignmentBias_>
+        >
+      >
+    >;
+  using Operation =
+    fusion::XeLinCombPerRowBiasEltAct<
+      ActivationFn_, ElementOutput, ElementCompute, ElementBias, ElementSource, ElementScalar, AlignmentBias, RoundStyle_
+    >;
+
+  struct Arguments {
+    ElementScalar alpha = ElementScalar(1);
+    ElementScalar beta = ElementScalar(0);
+    ElementScalar const* alpha_ptr = nullptr;
+    ElementScalar const* beta_ptr = nullptr;
+
+    using StrideAlpha = Stride<_0,_0,int64_t>;
+    using StrideBeta  = Stride<_0,_0,int64_t>;
+    StrideAlpha dAlpha = {_0{}, _0{}, 0};
+    StrideBeta  dBeta  = {_0{}, _0{}, 0};
+
+    using StrideBias = Stride<_1,_0,int64_t>;
+    ElementBias const* bias_ptr = nullptr;
+    StrideBias dBias = {};
+
+    using ActivationArguments = typename Sm90Compute<ActivationFn_, ElementOutput, ElementCompute, RoundStyle_>::Arguments;
+    ActivationArguments activation = ActivationArguments();
+
+    operator typename Impl::Arguments() const {
+      return
+        {    // unary op : activation(beta * C + (alpha * acc + bias))
+          {    // ternary op : beta * C + (alpha * acc + bias)
+            {{beta}, {beta_ptr}, {dBeta}}, // leaf args : beta
+            {},                   // leaf args : C
+            {                     // ternary op : alpha * acc + bias
+              {{alpha}, {alpha_ptr}, {dAlpha}}, // leaf args : alpha
+              {},                     // leaf args : acc
+              {bias_ptr, ElementBias(0), dBias}, // leaf args : bias
+              {}                  // ternary args : multiply_add
+            },                    // end ternary op
+            {} // ternary args : multiply_add
+          },   // end ternary op
+          activation // unary args : activation
+        };   // end unary op
+    }
+  };
+
+  // Ctor inheritance
+  using Impl::Impl;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// FusionCallbacks specialization for per-column bias with activation using XeRowBroadcast
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <
+  template <class> class ActivationFn_,
+  class ElementOutput_,
+  class ElementCompute_,
+  class ElementBias_,
+  class ElementSource_,
+  class ElementScalar_,
+  int AlignmentBias_,
+  FloatRoundStyle RoundStyle_,
+  class CtaTileShapeMNK_,
+  class EpilogueTile_
+>
+struct FusionCallbacks<
+     epilogue::IntelXeGeneric,
+    fusion::XeLinCombPerColBiasEltAct<
+      ActivationFn_, ElementOutput_, ElementCompute_, ElementBias_, ElementSource_, ElementScalar_, AlignmentBias_, RoundStyle_
+    >,
+    CtaTileShapeMNK_,
+    EpilogueTile_
+> : Sm90EVT<
+      Sm90Compute<ActivationFn_, ElementOutput_, ElementCompute_, RoundStyle_>,
+      Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute_, ElementCompute_, RoundStyle_>,
+        Sm90ScalarBroadcast<ElementScalar_, Stride<_0,_0,int64_t>>,
+        Sm90SrcFetch<ElementSource_>,
+        Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute_, ElementCompute_, RoundStyle_>,
+          Sm90ScalarBroadcast<ElementScalar_, Stride<_0,_0,int64_t>>,
+          Sm90AccFetch,
+          XeRowBroadcast<0, CtaTileShapeMNK_, ElementBias_, ElementCompute_, Stride<_0,_1,int64_t>, AlignmentBias_>
+        >
+      >
+    > {
+
+  using ElementOutput = ElementOutput_;
+  using ElementCompute = ElementCompute_;
+  using ElementBias = ElementBias_;
+  using ElementSource = ElementSource_;
+  using ElementScalar = ElementScalar_;
+  static constexpr int AlignmentBias = AlignmentBias_;
+  using Impl =
+    Sm90EVT<
+      Sm90Compute<ActivationFn_, ElementOutput, ElementCompute, RoundStyle_>,
+      Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle_>,
+        Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>,
+        Sm90SrcFetch<ElementSource>,
+        Sm90EVT<Sm90Compute<homogeneous_multiply_add, ElementCompute, ElementCompute, RoundStyle_>,
+          Sm90ScalarBroadcast<ElementScalar, Stride<_0,_0,int64_t>>,
+          Sm90AccFetch,
+          XeRowBroadcast<0, CtaTileShapeMNK_, ElementBias, ElementCompute, Stride<_0,_1,int64_t>, AlignmentBias_>
+        >
+      >
+    >;
+  using Operation =
+    fusion::XeLinCombPerColBiasEltAct<
+      ActivationFn_, ElementOutput, ElementCompute, ElementBias, ElementSource, ElementScalar, AlignmentBias, RoundStyle_
+    >;
+
+  struct Arguments {
+    ElementScalar alpha = ElementScalar(1);
+    ElementScalar beta = ElementScalar(0);
+    ElementScalar const* alpha_ptr = nullptr;
+    ElementScalar const* beta_ptr = nullptr;
+
+    using StrideAlpha = Stride<_0,_0,int64_t>;
+    using StrideBeta  = Stride<_0,_0,int64_t>;
+    StrideAlpha dAlpha = {_0{}, _0{}, 0};
+    StrideBeta  dBeta  = {_0{}, _0{}, 0};
+
+    using StrideBias = Stride<_0,_1,int64_t>;
+    ElementBias const* bias_ptr = nullptr;
+    StrideBias dBias = {};
+
+    using ActivationArguments = typename Sm90Compute<ActivationFn_, ElementOutput, ElementCompute, RoundStyle_>::Arguments;
+    ActivationArguments activation = ActivationArguments();
+
+    operator typename Impl::Arguments() const {
+      return
+        {    // unary op : activation(beta * C + (alpha * acc + bias))
+          {    // ternary op : beta * C + (alpha * acc + bias)
+            {{beta}, {beta_ptr}, {dBeta}}, // leaf args : beta
+            {},                   // leaf args : C
+            {                     // ternary op : alpha * acc + bias
+              {{alpha}, {alpha_ptr}, {dAlpha}}, // leaf args : alpha
+              {},                     // leaf args : acc
+              {bias_ptr, ElementBias(0), dBias}, // leaf args : bias
+              {}                  // ternary args : multiply_add
+            },                    // end ternary op
+            {} // ternary args : multiply_add
+          },   // end ternary op
           activation // unary args : activation
         };   // end unary op
     }

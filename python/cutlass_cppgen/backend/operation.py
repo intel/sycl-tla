@@ -33,8 +33,8 @@
 import ctypes
 from cutlass_cppgen.utils.lazy_import import lazy_import
 cuda = lazy_import("cuda.cuda")
+dpctl = lazy_import("dpctl")
 
-import dpctl
 
 from cutlass_cppgen.backend.utils.device import device_cc
 
