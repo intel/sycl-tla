@@ -241,7 +241,7 @@ class TestEVTLoad(EVTTestCaseBase):
             D = accum + C + full_tensor + row_bias + col_bias + scalar_alpha + batch_tensor
             return D
 
-        for m, n, k, l in self.get_problem_sizes(4):  # Reduced iterations due to complexity
+        for m, n, k, l in self.get_problem_sizes(8):  # Reduced iterations due to complexity
             example_inputs = {
                 "accum": self.fake_tensor(self.element, (l, m, n)),
                 "C": self.fake_tensor(self.element, (l, m, n)),
