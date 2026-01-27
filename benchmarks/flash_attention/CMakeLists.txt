@@ -27,15 +27,15 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
+set(CUTLASS_APPLICATIONS_DIR ${CUTLASS_DIR}/applications)
 
 # Create a parent flash_attention suite
 cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention)
 
 # Pass these configuration files for the CI
-set(CONFIG_FILE_DECODE_BF16 --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_flash_attention_decode_bf16.in)
+set(CONFIG_FILE_DECODE_BF16 --config_file=${CUTLASS_DIR}/benchmarks/device/bmg/input_files/input_flash_attention_decode_bf16.in)
 
-set(CONFIG_FILE_PREFILL_BF16 --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_flash_attention_prefill_bf16.in)
+set(CONFIG_FILE_PREFILL_BF16 --config_file=${CUTLASS_DIR}/benchmarks/device/bmg/input_files/input_flash_attention_prefill_bf16.in)
 
 # Create the decode subsuite under flash_attention
 cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_decode
