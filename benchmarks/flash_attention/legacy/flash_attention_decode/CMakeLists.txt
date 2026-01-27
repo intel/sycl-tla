@@ -26,10 +26,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
+set(CUTLASS_APPLICATIONS_DIR ${CUTLASS_DIR}/applications)
 
 # Pass these configuration files for the CI
-set(CONFIG_FILE_NO_KV_CACHE --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_decode_nokvcache.in)
+set(CONFIG_FILE_NO_KV_CACHE --config_file=${CUTLASS_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_decode_nokvcache.in)
 
 cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_decode_legacy
                             SUPERSUITE cutlass_benchmarks_flash_attention_legacy)
