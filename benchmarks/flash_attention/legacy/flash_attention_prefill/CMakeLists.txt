@@ -29,46 +29,17 @@
 set(CUTLASS_APPLICATIONS_DIR ${CUTLASS_DIR}/applications)
 
 # Pass these configuration files for the CI
-set(CONFIG_FILE_NO_KV_CACHE --config_file=${CUTLASS_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_decode_nokvcache.in)
+set(CONFIG_FILE_PVC --config_file=${CUTLASS_DIR}/benchmarks/device/pvc/input_files/input_flash_attention_prefill.in)
+set(CONFIG_FILE_BMG --config_file=${CUTLASS_DIR}/benchmarks/device/bmg/input_files/input_sglang_flash_attention_prefill_extend_nokvcache.in)
 
-cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_decode
-                            SUPERSUITE cutlass_benchmarks_flash_attention)
-
-add_library(decode_h64 SHARED
-            benchmarks_h64_512_nonpaged.cpp
-            benchmarks_h64_1024_nonpaged.cpp
-)
-
-add_library(decode_h96 SHARED
-            benchmarks_h96_512_nonpaged.cpp
-            benchmarks_h96_1024_nonpaged.cpp
-)
-
-add_library(decode_h128 SHARED
-            benchmarks_h128_512_nonpaged.cpp
-            benchmarks_h128_1024_nonpaged.cpp
-)
-
-add_library(decode_h192 SHARED
-            benchmarks_h192_512_nonpaged.cpp
-            benchmarks_h192_1024_nonpaged.cpp
-)
-
-set(LIB_LIST decode_h64 decode_h96 decode_h128 decode_h192)
-
-foreach(name IN LISTS LIB_LIST)
-  target_include_directories(${name} PRIVATE ${CUTLASS_APPLICATIONS_DIR})
-  target_link_libraries(${name} PRIVATE CUTLASS cutlass_tools_util_includes benchmark::benchmark)
-  add_onemkl_to_target(TARGET ${name})
-  # Add only SYCL include directories, not the full SYCL flags (to avoid duplication)
-  add_sycl_include_directories_to_target(${name})
-endforeach()
+cutlass_benchmark_add_suite(cutlass_benchmarks_flash_attention_prefill_legacy
+                            SUPERSUITE cutlass_benchmarks_flash_attention_legacy)
 
 cutlass_benchmark_add_executable(
-    cutlass_benchmarks_flash_attention_decode_xe
+    cutlass_benchmarks_flash_attention_prefill_legacy_xe
     main.cpp
-    TEST_COMMAND_OPTIONS CONFIG_FILE_NO_KV_CACHE
-    LIBRARIES decode_h64 decode_h96 decode_h128 decode_h192
-    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}
-    SUITE cutlass_benchmarks_flash_attention_decode
+    TEST_COMMAND_OPTIONS
+    CONFIG_FILE_PVC
+    CONFIG_FILE_BMG
+    SUITE cutlass_benchmarks_flash_attention_prefill_legacy
 )
