@@ -44,33 +44,39 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 |0.3 | 3.9.2 |
 |0.5 | 4.2.0 |
 |0.6 | 4.2.0 |
+|0.7 | 4.2.1 |
 
-# What's New in SYCL*TLA 0.6 
+# What's New in SYCL*TLA 0.7 
 
-## [SYCL*TLA 0.6](https://github.com/intel/sycl-tla/releases/tag/v0.6) (2025-11-03)
+## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla) (2026-01-28)
+ 
 ### Major Architecture Changes
-- **Flash Attention Reimplementation ([#d02c58b](https://github.com/intel/sycl-tla/commit/d02c58b4))**: Complete rewrite of Flash Attention using new Xe atoms
-  - Enhanced performance with optimized memory access patterns
-  - Better integration with Intel Xe hardware capabilities
-- **CUTLASS Library Generation ([#578](https://github.com/intel/sycl-tla/pull/578))**: Full support for CUTLASS library generation and operations
-  - New Xe architecture support in library generation pipeline
-  - Automated kernel instantiation and compilation support
-
+- Epilogue Visitor Tree (EVT):
+  - Extended Xe epilogue fusion support for various post-GEMM computations ([#647](https://github.com/intel/sycl-tla/pull/647), [#650](https://github.com/intel/sycl-tla/pull/650))
+  - Added support for XeAuxLoad ([#674](https://github.com/intel/sycl-tla/pull/674)), XeAuxStore ([#691](https://github.com/intel/sycl-tla/pull/691), [#698](https://github.com/intel/sycl-tla/pull/698), [#704](https://github.com/intel/sycl-tla/pull/704)), XeRow/XeCol broadcast ([#690](https://github.com/intel/sycl-tla/pull/690)) and XeRow/XeCol/XeScalar reduction ([#680](https://github.com/intel/sycl-tla/pull/680), [#694](https://github.com/intel/sycl-tla/pull/694))
+  - Added Python EVT support with comprehensive test coverage
+- Xe Epilogue Rearchitecture ([#621](https://github.com/intel/sycl-tla/pull/621)): redesigned epilogue path for the new Xe architecture.
+ 
 ### Enhancements
-- **Python Operations Support ([#595](https://github.com/intel/sycl-tla/pull/595))**: Enhanced Python bindings with comprehensive test coverage
-  - Improved Python API stability and usability
-  - Enhanced test framework for Python operations
-- **CuTe Subgroup Extensions**: New subgroup-scope operations for Intel Xe
-  - Subgroup broadcast and reduction operations ([#9a6aa27](https://github.com/intel/sycl-tla/commit/9a6aa27c))
-  - `make_subgroup_tensor` helpers for improved tensor manipulation ([#21fb89a](https://github.com/intel/sycl-tla/commit/21fb89a8))
-- **Enhanced 2D Copy Operations**: Extended block 2D copy functionality
-  - New `make_block_2d_copy_{C,D}` variants with subtiling support ([#48d82e8](https://github.com/intel/sycl-tla/commit/48d82e87))
-  - Support for size-1 fragments in block 2D copies ([#2212f1b](https://github.com/intel/sycl-tla/commit/2212f1b9))
-- **4-bit VNNI Reorders ([#593](https://github.com/intel/sycl-tla/pull/593))**: New 4-bit unit stride to VNNI reorder operations
-- **Batch GEMM with new APIs ([#540](https://github.com/intel/sycl-tla/pull/540))**: Enhanced Batch GEMM with new streamlined APIs
-- **Grouped GEMM with new APIs ([#574](https://github.com/intel/sycl-tla/pull/574))**: Enhanced grouped GEMM with new streamlined APIs
-
-  **See the [CHANGELOG](CHANGELOG-SYCL.md) for details of all past releases and updates.**
+- Flash Attention: performance improvements (BF16 speedup headline) and continued feature maturation ([#679](https://github.com/intel/sycl-tla/pull/679)).
+- GEMM: Column Major C bias support ([#656](https://github.com/intel/sycl-tla/pull/656)).
+- Shared Local Memory (SLM): new SLM copy helper functions ([#673](https://github.com/intel/sycl-tla/pull/673)).
+- Build: multi-target builds via `DPCPP_SYCL_TARGET` ([#630](https://github.com/intel/sycl-tla/pull/630)).
+- Reorder: API updates and fixes ([#639](https://github.com/intel/sycl-tla/pull/639)), ([#635](https://github.com/intel/sycl-tla/pull/635))).
+ 
+### Bug Fixes / Notes
+- Flash Attention KV cache / prefill fixes ([#617](https://github.com/intel/sycl-tla/pull/617)).
+- CuTe atom partitioning edge-case fix ([#628](https://github.com/intel/sycl-tla/pull/628)).
+- Fix CMake path issue ([#700](https://github.com/intel/sycl-tla/pull/700)).
+- Unit tests for VNNI load disabled due to driver issue ([#707](https://github.com/intel/sycl-tla/pull/707)).
+ 
+### Known Issues
+- **CuTe Column Major Support**: Column Major support for C matrix may introduce stability issues with older versions of driver. Please update to the latest driver version for optimal stability.
+ 
+### Deprecation Notice
+- Legacy APIs with old CuTe atoms are deprecated and will be removed in future releases. Users are encouraged to migrate to the new CuTe atom APIs for better performance and support. Refer [Xe Rearchitecture](media/docs/cpp/xe_rearchitecture.md) for new APIs.
+ 
+**See the [CHANGELOG](CHANGELOG-SYCL.md) for details of all past releases and updates.**
 
 # CuTe
 
@@ -118,8 +124,8 @@ We are regularly testing following setup in CI.
 
 |**Platform**|**Operating System** | **DPC++ Compiler** | **G++** | **Intel Compute Runtime** |**Intel Graphics Compiler** |
 |-----------------|----------|-----------------|--------|---------------------|-----------------------|
-|Xe-HPC| Ubuntu 22.04 |2025.2+ |G++13  | 25.18 | 2.11 |
-|Xe2| Ubuntu 25.04 |2025.2+  |G++13  | 25.35 | 2.18 |
+|Xe-HPC| Ubuntu 24.04 |2025.3+ |G++13  | 25.48 | 2.24 |
+|Xe2| Ubuntu 25.04 |2025.3+  |G++13  | 26.01 | 2.27 |
 
 
 
