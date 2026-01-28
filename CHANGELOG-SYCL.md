@@ -22,8 +22,8 @@
  
 ### Enhancements
 - **Flash Attention Performance Improvements ([#679](https://github.com/intel/sycl-tla/pull/679))**: Significant performance gains
-  - 1.178x speedup for BF16 Flash Attention
-  - 1.937x speedup for FP8 Flash Attention
+  - 1.17x speedup for BF16 Flash Attention
+  - 1.93x speedup for FP8 Flash Attention
 - **Flash Attention Feature Enhancements**:
   - Support for cached KV and paged KV in new Flash Attention kernel ([#661](https://github.com/intel/sycl-tla/pull/661))
   - VarLen support for new Flash Attention API ([#616](https://github.com/intel/sycl-tla/pull/616))
@@ -36,7 +36,7 @@
 - **KCooperative Dispatch Policy ([#646](https://github.com/intel/sycl-tla/pull/646))**: New dispatch policy with unit tests and CMake changes ([#651](https://github.com/intel/sycl-tla/pull/651))
 - **Build System Improvements**:
   - Support multiple targets in DPCPP_SYCL_TARGET ([#630](https://github.com/intel/sycl-tla/pull/630))
-  - Lazy import DPCTL for improved startup time ([#701](https://github.com/intel/sycl-tla/pull/701))
+  - Lazy import DPCTL remove hard dependency of DPCTL ([#701](https://github.com/intel/sycl-tla/pull/701))
   - Suppress Build warnings ([#624](https://github.com/intel/sycl-tla/pull/624))
 - **Reorder Operations**:
   - Support for broadcasting reorders ([#589](https://github.com/intel/sycl-tla/pull/589))
@@ -80,7 +80,7 @@
 - **CuTe Column Major Support**: Column Major support for C matrix may introduce stability issues with older versions of driver. Please update to the latest driver version for optimal stability.
  
 ### Deprecation Notice
-- Legacy APIs with old CuTe atoms are deprecated and will be removed in future releases. Users are encouraged to migrate to the new CuTe atom APIs for better performance and support. Refer [Xe Rearchitecture](media/docs/cpp/xe_rearchitecture.md) for new APIs
+- Legacy APIs with old CuTe atoms are deprecated and will be removed in future releases. Users are encouraged to migrate to the new CuTe APIs for Xe architecture for better performance and support. Refer [Xe Rearchitecture](media/docs/cpp/xe_rearchitecture.md) for new APIs
 
 ## [SYCL*TLA 0.6](https://github.com/intel/sycl-tla/releases/tag/v0.6) (2025-11-03)
 ### Major Architecture Changes
