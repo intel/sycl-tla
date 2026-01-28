@@ -1,5 +1,93 @@
 # SYCL*TLA (previously referred to as cutlass-sycl) Changelog
 
+## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
+### Major Architecture Improvements
+- **Epilogue Visitor Tree (EVT) Support ([#647](https://github.com/intel/sycl-tla/pull/647))**: EVT support for Intel Xe architecture
+  - Python EVT Compute support ([#650](https://github.com/intel/sycl-tla/pull/650))
+  - XeAuxLoad for EVT support ([#674](https://github.com/intel/sycl-tla/pull/674))
+  - XeAuxStore for EVT C++ support ([#691](https://github.com/intel/sycl-tla/pull/691))
+  - Python EVT AuxStore support ([#698](https://github.com/intel/sycl-tla/pull/698))
+  - XeRowReduction, XeColReduction and XeScalarReduction for EVT ([#680](https://github.com/intel/sycl-tla/pull/680))
+  - XeRowBroadcast and XeColBroadcast for EVT ([#690](https://github.com/intel/sycl-tla/pull/690))
+  - XeTopologicalVisitor for Python EVT ([#694](https://github.com/intel/sycl-tla/pull/694))
+  - EVT Python test caching ([#689](https://github.com/intel/sycl-tla/pull/689))
+  - Enable EVT mixed and layout tests ([#704](https://github.com/intel/sycl-tla/pull/704))
+ 
+- **Rearchitected Xe Epilogue ([#621](https://github.com/intel/sycl-tla/pull/621))**: Complete redesign of epilogue architecture
+  - Updated to use new MMA/Atom APIs ([#643](https://github.com/intel/sycl-tla/pull/643))
+  - Refactored xe_array_epilogue.hpp to inherit from base class ([#688](https://github.com/intel/sycl-tla/pull/688))
+  - Updated epilogue tests to use new MMA/Atom APIs ([#654](https://github.com/intel/sycl-tla/pull/654))
+  - Use newer version of copy_atom in epilogue collective ([#573](https://github.com/intel/sycl-tla/pull/573))
+- **Shared Local Memory (SLM) Support ([#673](https://github.com/intel/sycl-tla/pull/673))**: New SLM copy helper functions
+  - Inline assembly for SLM load/store operations ([#677](https://github.com/intel/sycl-tla/pull/677))
+ - **Rearchitected Xe Epilogue ([#621](https://github.com/intel/sycl-tla/pull/621))**: Complete redesign of epilogue architecture
+  - Updated to use new MMA/Atom APIs ([#643](https://github.com/intel/sycl-tla/pull/643))
+  - Refactored xe_array_epilogue.hpp to inherit from base class ([#688](https://github.com/intel/sycl-tla/pull/688))
+  - Updated epilogue tests to use new MMA/Atom APIs ([#654](https://github.com/intel/sycl-tla/pull/654))
+  - Use newer version of copy_atom in epilogue collective ([#573](https://github.com/intel/sycl-tla/pull/573))
+ 
+### Enhancements
+- **Flash Attention Performance Improvements ([#679](https://github.com/intel/sycl-tla/pull/679))**: Significant performance gains
+  - 1.178x speedup for BF16 Flash Attention
+  - 1.937x speedup for FP8 Flash Attention
+- **Flash Attention Feature Enhancements**:
+  - Support for cached KV and paged KV in new Flash Attention kernel ([#661](https://github.com/intel/sycl-tla/pull/661))
+  - VarLen support for new Flash Attention API ([#616](https://github.com/intel/sycl-tla/pull/616))
+  - CausalMask support with new Flash Attention API ([#604](https://github.com/intel/sycl-tla/pull/604))
+  - FP8 Flash Attention support on BMG ([#613](https://github.com/intel/sycl-tla/pull/613))
+  - Persistent SDPA kernel ([#608](https://github.com/intel/sycl-tla/pull/608))
+- **Column Major Support ([#656](https://github.com/intel/sycl-tla/pull/656))**: Added support for Column Major C [Bias] in GEMM
+- **MoE/Grouped GEMM Enhancements**:
+  - MoE/grouped GEMM refinements ([#638](https://github.com/intel/sycl-tla/pull/638))
+- **KCooperative Dispatch Policy ([#646](https://github.com/intel/sycl-tla/pull/646))**: New dispatch policy with unit tests and CMake changes ([#651](https://github.com/intel/sycl-tla/pull/651))
+- **Build System Improvements**:
+  - Support multiple targets in DPCPP_SYCL_TARGET ([#630](https://github.com/intel/sycl-tla/pull/630))
+  - Lazy import DPCTL for improved startup time ([#701](https://github.com/intel/sycl-tla/pull/701))
+  - Suppress Build warnings ([#624](https://github.com/intel/sycl-tla/pull/624))
+- **Reorder Operations**:
+  - Support for broadcasting reorders ([#589](https://github.com/intel/sycl-tla/pull/589))
+  - Reorder API changes ([#639](https://github.com/intel/sycl-tla/pull/639))
+  - Reorder cleanup ([#614](https://github.com/intel/sycl-tla/pull/614))
+- **Performance Optimizations**:
+  - Improved performance for upconversion cases in xe_gemm ([#605](https://github.com/intel/sycl-tla/pull/605))
+ 
+### Test Improvements
+- **CuTe API Tests ([#658](https://github.com/intel/sycl-tla/pull/658))**: Comprehensive tests for new CuTe APIs
+- **CUTLASS API Tests ([#642](https://github.com/intel/sycl-tla/pull/642))**: Extended CUTLASS API test coverage
+- **MMA Unit Tests ([#557](https://github.com/intel/sycl-tla/pull/557))**: Complete rewrite of MMA unit tests
+- **Prefetch, Transpose and VNNI Tests ([#632](https://github.com/intel/sycl-tla/pull/632))**: Unit tests for prefetch transpose and VNNI operations
+- **CI Infrastructure**:
+  - Updated CI workflows ([#672](https://github.com/intel/sycl-tla/pull/672))
+  - Enabled new runners ([#663](https://github.com/intel/sycl-tla/pull/663))
+  - CI driver issue fixes ([#676](https://github.com/intel/sycl-tla/pull/676))
+- **Benchmark Improvements**:
+  - Enabled GEMM benchmark workflow with new MMA atom ([#659](https://github.com/intel/sycl-tla/pull/659))
+ 
+### Bug Fixes
+- **Flash Attention Fixes**:
+  - Fixed Flash Attention KV cache and prefill issues ([#617](https://github.com/intel/sycl-tla/pull/617))
+- **CuTe Fixes**:
+  - Fixed atom partitioning in some edge cases ([#628](https://github.com/intel/sycl-tla/pull/628))
+- **Build and Compilation**:
+  - Fixed CMake path issue ([#700](https://github.com/intel/sycl-tla/pull/700))
+  - Fixed MMA unit test failure ([#687](https://github.com/intel/sycl-tla/pull/687))
+- **Epilogue Fixes**:
+  - Fixed void ElementC in epilogue ([#590](https://github.com/intel/sycl-tla/pull/590))
+ 
+### Examples
+- **MoE/Grouped GEMM Examples**:
+  - Example of BF16/FP16 MoE Grouped GEMM with CuTe interface ([#600](https://github.com/intel/sycl-tla/pull/600))
+  - Bug fix in CuTe interface MoE GEMM example ([#648](https://github.com/intel/sycl-tla/pull/648))
+- **GEMM Examples**:
+  - StreamK and mixed dtype examples with new atom API ([#665](https://github.com/intel/sycl-tla/pull/665))
+  - Added dimension check to prevent out-of-bounds access in example 05_bmg_gemm_with_epilogue_splitk ([#529](https://github.com/intel/sycl-tla/pull/529))
+ 
+### Known Issues
+- **CuTe Column Major Support**: Column Major support for C matrix may introduce stability issues with older versions of driver. Please update to the latest driver version for optimal stability.
+ 
+### Deprecation Notice
+- Legacy APIs with old CuTe atoms are deprecated and will be removed in future releases. Users are encouraged to migrate to the new CuTe atom APIs for better performance and support. Refer [Xe Rearchitecture](media/docs/cpp/xe_rearchitecture.md) for new APIs
+
 ## [SYCL*TLA 0.6](https://github.com/intel/sycl-tla/releases/tag/v0.6) (2025-11-03)
 ### Major Architecture Changes
 - **Flash Attention Reimplementation ([#d02c58b](https://github.com/intel/sycl-tla/commit/d02c58b4))**: Complete rewrite of Flash Attention using new Xe atoms
