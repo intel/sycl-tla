@@ -48,7 +48,7 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 
 # What's New in SYCL*TLA 0.7 
 
-## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla) (2026-01-28)
+## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
  
 ### Major Architecture Changes
 - Epilogue Visitor Tree (EVT):
