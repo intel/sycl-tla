@@ -12,7 +12,6 @@
   - XeTopologicalVisitor for Python EVT ([#694](https://github.com/intel/sycl-tla/pull/694))
   - EVT Python test caching ([#689](https://github.com/intel/sycl-tla/pull/689))
   - Enable EVT mixed and layout tests ([#704](https://github.com/intel/sycl-tla/pull/704))
- 
 - **Rearchitected Xe Epilogue ([#621](https://github.com/intel/sycl-tla/pull/621))**: Complete redesign of epilogue architecture
   - Updated to use new MMA/Atom APIs ([#643](https://github.com/intel/sycl-tla/pull/643))
   - Refactored xe_array_epilogue.hpp to inherit from base class ([#688](https://github.com/intel/sycl-tla/pull/688))
@@ -21,10 +20,6 @@
 - **Shared Local Memory (SLM) Support ([#673](https://github.com/intel/sycl-tla/pull/673))**: New SLM copy helper functions
   - Inline assembly for SLM load/store operations ([#677](https://github.com/intel/sycl-tla/pull/677))
  - **Rearchitected Xe Epilogue ([#621](https://github.com/intel/sycl-tla/pull/621))**: Complete redesign of epilogue architecture
-  - Updated to use new MMA/Atom APIs ([#643](https://github.com/intel/sycl-tla/pull/643))
-  - Refactored xe_array_epilogue.hpp to inherit from base class ([#688](https://github.com/intel/sycl-tla/pull/688))
-  - Updated epilogue tests to use new MMA/Atom APIs ([#654](https://github.com/intel/sycl-tla/pull/654))
-  - Use newer version of copy_atom in epilogue collective ([#573](https://github.com/intel/sycl-tla/pull/573))
  
 ### Enhancements
 - **Flash Attention Performance Improvements ([#679](https://github.com/intel/sycl-tla/pull/679))**: Significant performance gains
