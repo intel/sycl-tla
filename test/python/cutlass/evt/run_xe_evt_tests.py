@@ -38,7 +38,7 @@ from utils.test_report import write_test_results_to_csv, print_test_summary, Tes
 
 # Define test suites - each suite contains a list of test modules
 TEST_SUITES = {
-    'evt_compute_ci': [
+    'xe_evt_ci': [
         'evt_compute_xe_sm80_90.TestEVTCompute.test_arith',
         'evt_compute_xe_sm80_90.TestEVTCompute.test_func_call',
         'evt_compute_xe_sm80_90.TestEVTCompute.test_func_call2',
@@ -46,6 +46,23 @@ TEST_SUITES = {
         'evt_compute_xe_sm80_90.TestEVTCompute.test_sigmoid',
         'evt_compute_xe_sm80_90.TestEVTCompute.test_tanh',
         'evt_compute_xe_sm80_90.TestEVTCompute.test_exp',
+        'evt_load_xe_sm80_90.TestEVTLoad.test_tensor_load',
+        'evt_load_xe_sm80_90.TestEVTLoad.test_row_broadcast',
+        'evt_load_xe_sm80_90.TestEVTLoad.test_column_broadcast',
+        'evt_load_xe_sm80_90.TestEVTLoad.test_scalar_broadcast',
+        'evt_store_xe_sm80_90.TestEVTStore.test_invalid_store',
+        'evt_store_xe_sm80_90.TestEVTStore.test_aux_store',
+        'evt_store_xe_sm80_90.TestEVTStore.test_col_reduce',
+        'evt_store_xe_sm80_90.TestEVTStore.test_row_reduce',
+        'evt_store_xe_sm80_90.TestEVTStore.test_scalar_reduce',
+        'evt_store_xe_sm80_90.TestEVTStore.test_store_with_multiple_reductions',
+        'evt_mixed_xe_sm80_90.TestEVTMixed.test_same_variable_used_multiple_times',
+        'evt_mixed_xe_sm80_90.TestEVTMixed.test_no_lca',
+        'evt_mixed_xe_sm80_90.TestEVTMixed.test_mixed_dag',
+        'evt_mixed_xe_sm80_90.TestEVTMixed.test_mixed_dag_no_batch',
+        'evt_layout_xe_sm80_90.TestEVTLayout.test_permute_1',
+        'evt_layout_xe_sm80_90.TestEVTLayout.test_reshape',
+        'evt_layout_xe_sm80_90.TestEVTLayout.test_reshape2'
     ],
     'evt_compute': [
         'evt_compute_xe_sm80_90.TestEVTCompute',
@@ -111,7 +128,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python run_xe_evt_tests.py -j evt_compute
+  python run_xe_evt_tests.py -j xe_evt_ci
   python run_xe_evt_tests.py --job evt_layout -o
   python run_xe_evt_tests.py --list
   python run_xe_evt_tests.py -j all --output
