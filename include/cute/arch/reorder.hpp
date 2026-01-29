@@ -43,6 +43,11 @@ struct Universal_Reorder_UU {
   reorder(SrcType const& src0, DstType& dst0) {
     dst0 = DstType(src0);
   }
+
+  CUTE_HOST_DEVICE static void
+  reorder(SrcType const& src0, subbyte_reference<DstType>&& dst0) {
+    dst0 = DstType(src0);
+  }
 };
 
 } // end namespace cute
