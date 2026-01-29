@@ -35,11 +35,7 @@
 #include "cutlass/util/command_line.h"
 
 #include "benchmark_runner.hpp"
-#if defined(SYCL_NVIDIA_TARGET) || !defined(CUTLASS_ENABLE_SYCL)
-#include "benchmarks_cuda.hpp"
-#elif defined(SYCL_INTEL_TARGET)
-#include "benchmarks_sycl.hpp"
-#endif
+#include "benchmarks.hpp"
 
 int main(int argc, const char** argv) {
 
@@ -69,12 +65,12 @@ int main(int argc, const char** argv) {
     return 1;
   }
 
-  register_gemm_benchmarks();
+  register_flash_attention_prefill_benchmarks();
 
   std::string line;
   while (std::getline(file, line)) {
     if (!line.empty() && line.find("#") != 0) {
-      register_benchmarks<cutlass::benchmark::GEMMOptions>(line);
+      register_benchmarks<cutlass::benchmark::FMHAOptions>(line);
     }
   }
   file.close();
