@@ -257,6 +257,7 @@ class TestEVTLoad(EVTTestCaseBase):
             input_keys = ["C", "full_tensor", "row_bias", "col_bias", "scalar_alpha", "batch_tensor"]
             result_keys = ["D"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
+            
     def test_scalar_and_tensor_load_combination(self):
         """
         Combination of scalar broadcast and tensor load
