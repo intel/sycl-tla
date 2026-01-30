@@ -78,7 +78,7 @@ jobs:
           export CUTLASS_USE_SYCL=1
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 
-      - name: Run Python EVT Compute Tests (Xe-compatible)
+      - name: Run Python EVT Tests (Xe-compatible)
         shell: bash
         run: |
           source ~/.venv/bin/activate
