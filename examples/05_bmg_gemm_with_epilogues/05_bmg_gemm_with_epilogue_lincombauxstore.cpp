@@ -151,7 +151,7 @@ using ElementD = cutlass::half_t;
 
 using Accum = cutlass::epilogue::fusion::XeAccFetch;
 
-using Alpha = cutlass::epilogue::fusion::Xe0ScalarBroadcast<
+using Alpha = cutlass::epilogue::fusion::XeScalarBroadcast<
     float, cute::Stride<cute::Int<0>, cute::Int<0>, cute::Int<0>>, 1, cutlass::multiplies
 >;
 
@@ -170,7 +170,7 @@ using F = cutlass::epilogue::fusion::XeAuxStore<
     cute::Stride<int64_t, cute::Int<1>, int64_t>
 >;
 
-    using EVTF = cutlass::epilogue::fusion::XeEVT<
+using EVTF = cutlass::epilogue::fusion::XeEVT<
         F,
         EVTCompute0>;
 
@@ -179,7 +179,7 @@ using Compute1 = cutlass::epilogue::fusion::XeCompute<
     cutlass::FloatRoundStyle::round_to_nearest
 >;
 
-    using EVTCompute1 = cutlass::epilogue::fusion::XeEVT<
+using EVTCompute1 = cutlass::epilogue::fusion::XeEVT<
         Compute1,
         EVTF,
     TensorC>;
