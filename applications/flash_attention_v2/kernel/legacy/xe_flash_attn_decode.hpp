@@ -36,7 +36,7 @@
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/kernel_hardware_info.hpp"
 
-#include "flash_attention_v2/collective/xe_flash_attn_decode_mma.hpp"
+#include "flash_attention_v2/collective/legacy/xe_flash_attn_decode_mma.hpp"
 
 namespace cutlass::flash_attention::kernel {
 
