@@ -95,7 +95,7 @@ auto convert_layout_2d_layout(Layout layout) {
 }
 
 constexpr int tid = 0;
-constexpr int bid = 16;
+constexpr int bid = 8;
 
 const bool
 is_cur_thread() {
@@ -716,7 +716,7 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
                                     param.scale_softmax_log2, tail_m);
         }
         auto rdP = create_reg<V>(trait,
-                                 mdP,
+                                 mdPt,
                                  tiled_mma_sdp);
         // dP=dO*Vt
         gemm_SdP(trait, mVt, mdO, rdP, tiled_mma_sdp);
@@ -972,12 +972,39 @@ convert_dq(T &trait, Param<typename T::DType> &param, int m_block, int bidb, int
     }
 }
 
+template <typename To_type, typename Engine, typename Layout>
+CUTLASS_DEVICE auto convert_type(Tensor<Engine, Layout> const &tensor) {
+    using From_type = typename Engine::value_type;
+    constexpr int numel = decltype(size(tensor))::value;
+    cutlass::NumericArrayConverter<To_type, From_type, numel> convert_op;
+    auto frag = convert_op(*reinterpret_cast<const cutlass::Array<From_type, numel> *>(tensor.data()));
+    return make_tensor(make_rmem_ptr<To_type>(&frag), tensor.layout());
+}
+
+template<class Engine0, class Layout0,
+         class Engine1, class Layout1>
+CUTLASS_DEVICE
+void
+convert_type(Tensor<Engine0, Layout0> const & src,
+             Tensor<Engine1, Layout1> & dst) {
+    using From_type = typename Engine0::value_type;
+    using To_type = typename Engine1::value_type;
+    constexpr int numel = decltype(size(src))::value;
+    cutlass::NumericConverter<To_type, From_type> convert_op;
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < numel; ++i) {
+        dst(i) = convert_op(src(i));
+    }
+}
+
 template <bool Is_even_M, class T>
 void
 convert_dq(T &trait, Param<typename T::DType> &param, int m_block, int bidb, int bidh) {
     constexpr int kBlockM = T::kBlockM;
     constexpr int kBlockN = T::kBlockN;
     constexpr int kHeadDim = T::kHeadDim;
+    constexpr int kNSGs = T::kNSGs;
+    constexpr int SubgroupSize = T::SubgroupSize;
     using DType = typename T::DType;
     using VType = typename T::VType;
     auto sg = compat::get_nd_item<1>().get_sub_group();
@@ -1005,29 +1032,55 @@ convert_dq(T &trait, Param<typename T::DType> &param, int m_block, int bidb, int
                                 shapeQ,
                                 make_stride(param.q_r_stride, _1{})));
 
-    typename T::TiledMmadQ tiled_mma_dq;
-    auto thr_mma_dq = tiled_mma_dq.get_slice(first_thread_in_sg_idx);
+    using ThreadLayout = Layout<Shape<Int<kNSGs>, Int<SubgroupSize>>,
+                                Stride<Int<SubgroupSize>, _1>>;
+    using ValueLayout = std::conditional_t<
+        kHeadDim == 96,
+        Layout<Shape<_1, _2>>,
+        std::conditional_t<
+            kHeadDim == 192,
+            Layout<Shape<_1, _4>>,
+            Layout<Shape<_1, Int<kHeadDim / SubgroupSize>>>>>;
 
-    auto tile_dq = tiled_mma_dq.tile_mnk();
+    using dQaccumType = cutlass::AlignedArray<VType, size(ValueLayout{})>;
+    using dQaccumAtom = Copy_Atom<UniversalCopy<dQaccumType>, VType>;
+    using dQType = cutlass::AlignedArray<DType, size(ValueLayout{})>;
+    using dQAtom = Copy_Atom<UniversalCopy<dQType>, DType>;
 
-    auto tileloaddQ = make_block_2d_copy_C(tiled_mma_dq, mdQaccum);
-    auto tilesavedQ = make_block_2d_copy_D(tiled_mma_dq, mdQ);
+    auto tileload_dQaccum = make_tiled_copy(dQaccumAtom{},
+                                            ThreadLayout{},
+                                            ValueLayout{});
+    auto tilesave_dQ = make_tiled_copy(dQAtom{},
+                                       ThreadLayout{},
+                                       ValueLayout{});
 
-    auto thr_load_dQ = tileloaddQ.get_slice(first_thread_in_sg_idx);
-    auto thr_save_dQ = tilesavedQ.get_slice(first_thread_in_sg_idx);
+    auto thr_load_dQaccum = tileload_dQaccum.get_thread_slice(ThreadIdxX());
+    auto thr_save_dQ = tilesave_dQ.get_thread_slice(ThreadIdxX());
 
-    Tensor gdQaccum = local_tile(make_identity_tensor(mdQaccum.shape()),
-                                 select<0, 1>(tile_dq), make_coord(0,0)); // read dQaccum
-    Tensor gdQ = local_tile(make_identity_tensor(mdQ.shape()),
-                            select<0, 1>(tile_dq), make_coord(0,0)); // dump dQ
-    Tensor tdQgdQaccum = thr_load_dQ.partition_S(gdQaccum); // load from dqaccum
-    auto tdQrdQaccum = thr_load_dQ.partition_sg_fragment_D(gdQaccum); // register for dqaccum
-    auto tdQrdQ = thr_save_dQ.partition_sg_fragment_S(gdQ); // register for dq
-    Tensor tdQgdQ = thr_save_dQ.partition_D(gdQ); // save to dq
+    Tensor thr_tile_dQaccum_S = thr_load_dQaccum.partition_S(mdQaccum);
+    Tensor thr_tile_dQ_D = thr_save_dQ.partition_D(mdQ);
 
-    copy(tileloaddQ, tdQgdQaccum, tdQrdQaccum);
-    reorder(tdQrdQaccum, tdQrdQ);
-    copy(tilesavedQ, tdQrdQ, tdQgdQ);
+    Tensor rdQaccum = make_fragment_like(thr_tile_dQaccum_S);
+
+    copy(tileload_dQaccum, thr_tile_dQaccum_S, rdQaccum);
+    if constexpr(Is_even_M) {
+        Tensor rdQ = convert_type<DType>(rdQaccum);
+        copy(tilesave_dQ, rdQ, thr_tile_dQ_D);
+    } else {
+        Tensor rdQ = make_tensor_like<DType>(rdQaccum);
+        convert_type(rdQaccum, rdQ);
+        Tensor accQ = make_identity_tensor(shapeQ);
+        Tensor taccQ = thr_save_dQ.partition_D(accQ);
+        Tensor taccQ_rc = logical_divide(taccQ, Shape<_1> {})(0, _, 0);
+        for (int m = 0; m < size<1>(thr_tile_dQ_D); ++m) {
+            int row_m = get<0>(taccQ_rc(m));
+            if (row_m < param.tail_m) {
+                auto thr_tile_dq = thr_tile_dQ_D(_, m, _);
+                auto r_dq = rdQ(_, m, _);
+                copy(r_dq, thr_tile_dq);
+            }
+        }
+    }
 }
 
 template<class T>
