@@ -1,6 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,123 +41,76 @@
 #include <cute/tensor.hpp>
 #include <random>
 
-#include "helper.h"
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "sycl_common.hpp"
+#include "../examples/common/sycl_common.hpp"
+#include "../benchmarks/common.hpp"
 
 #include <sycl/ext/intel/experimental/grf_size_properties.hpp>
 
 using namespace cute;
 
+namespace cutlass::benchmark {
+
 // Command line options parsing
-struct Options {
+struct FMHAOptions {
 
-  bool help;
   bool error;
-  bool is_causal;
-  bool varlen = false;
-  bool use_paged_kv = false;
-  std::string scheduler;
 
-  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations, warmup, verify;
+  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk,
+      head_size_vo, iterations, page_size;
   float softmax_scale;
+  std::string bm_name;
 
-  Options()
-      : help(false), error(false), is_causal(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
-        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), iterations(100), warmup(100), softmax_scale(1.f), verify(1), scheduler("Individual") {}
+  FMHAOptions()
+      : error(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
+        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), bm_name("Flash Attention v2") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
     cutlass::CommandLine cmd(argc, args);
 
-    if (cmd.check_cmd_line_flag("help")) {
-      help = true;
-      return;
-    }
-
-    if (cmd.check_cmd_line_flag("is_causal")) {
-      is_causal = true;
-    }
-
-    if (cmd.check_cmd_line_flag("varlen")) {
-      varlen = true;
-    }
-
-    cmd.get_cmd_line_argument("scheduler", scheduler, std::string("Individual"));
-
-#ifdef PERSISTENT
-    cmd.get_cmd_line_argument("batch", batch, 1);
-    cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 8);
-    cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, 1);
-    cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, 4096);
-#else
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
-    cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, 512);
-    cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
-#endif
-#ifdef DECODE
     cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 1);
-#else
-    cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, seq_len_kv);
-#endif
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
+    cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
+    cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
+    cmd.get_cmd_line_argument("page_size", page_size, 128);
+    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
-    cmd.get_cmd_line_argument("warmup", warmup, 100);
-    cmd.get_cmd_line_argument("verify", verify, 1);
+    cmd.get_cmd_line_argument("bm_name", bm_name, std::string("Flash Attention v2"));
 
-    if (cmd.check_cmd_line_flag("use_paged_kv")) {
-        use_paged_kv = true;
-        cmd.get_cmd_line_argument("page_size", page_size, 128);
+    softmax_scale = 1 / std::sqrt(static_cast<float>(head_size_qk));
 
-        if (page_size % 128 != 0) {
-            std::cerr << "Invalid: page_size must be a multiple of 128" << std::endl;
-            return;
-        }
-        if (seq_len_kv_cache % page_size != 0) {
-            std::cerr << "Invalid: seq_len_kv_cache must be divisible by page_size" << std::endl;
-            return;
-        }
+    if (seq_len_kv_cache % page_size != 0) {
+      std::cerr << "Invalid: seq_len_kv_cache must be divisible by page_size" << std::endl;
+      return;
     }
-
-    softmax_scale = 1 / sqrt(static_cast<float>(head_size_qk));
   }
 
-  /// Prints the usage statement.
-  std::ostream &print_usage(std::ostream &out) const {
+  std::string benchmark_name() const {
+    std::stringstream full_name;
+    full_name << bm_name << "/";
+    std::string const test_name_suffix = std::to_string(batch) + "x" +
+                                   std::to_string(num_heads_q) + "x" +
+                                   std::to_string(num_heads_kv) + "x" +
+                                   std::to_string(seq_len_qo) + "x" +
+                                   std::to_string(head_size_qk) + "x" +
+                                   std::to_string(seq_len_kv) + "x" +
+                                   std::to_string(seq_len_kv_cache) + "x" +
+                                   std::to_string(head_size_vo);
+    full_name << test_name_suffix;
 
-    out << "Xe FMHA Example\n\n"
-        << "Options:\n\n"
-        << "  --help                      If specified, displays this usage statement\n\n"
-        << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
-        << "  --varlen                    Enable variable sequence length\n"
-        << "  --scheduler=\"Value\"       Choose between Individual or Persistent Scheduler\n"
-        << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
-        << "  --num_heads_q=<int>         Sets the Number of Attention Heads for Key-Value pair the Multi-Head Self Attention module\n"
-        << "  --num_heads_kv=<int>        Sets the Number of Attention Heads for Query input in the Multi-Head Self Attention module\n"
-        << "  --seq_len_qo=<int>          Sets the Sequence length of the Query input in Multi-Head Self Attention module\n"
-        << "  --seq_len_kv=<int>          Sets the Sequence length of the Key-Value pair in Multi-Head Self Attention module\n"
-        << "  --seq_len_kv_cache=<int>    Sets the Sequence length of the cached Key-Value pair in Multi-Head Self Attention module\n"
-        << "  --use_paged_kv              Use paged (non-contiguous) KV cache. Default is contiguous KV Cache\n"
-        << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
-        << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
-        << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
-        << "  --iterations=<int>          Iterations\n"
-        << "  --warmup=<int>              Warmup iterations before timing\n"
-        << "  --verify=<int>              Specify whether to verify.\n\n";
-    return out;
+    return full_name.str();
   }
 };
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Helpers
-
 template <typename SrcT, typename DstT> class ConvertTensorKernelTag{};
 
 template <typename SrcT, typename DstT>
@@ -182,13 +134,9 @@ template <typename InT> inline auto in_memory(cutlass::DeviceAllocation<InT>& in
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-// 3 input matrices: (K)eys, (Q)ueries and (V)alues.
-using LayoutQ = cutlass::layout::RowMajor;
-using LayoutK = cutlass::layout::ColumnMajor;
-using LayoutV = cutlass::layout::RowMajor;
-using LayoutO = cutlass::layout::RowMajor;
+template <class FMHAConfiguration> struct BenchmarkRunnerFMHA {
 
-template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
+  using FMHAKernel = typename FMHAConfiguration::FMHAKernel;
 
   using StrideQ = typename FMHAKernel::StrideQ;
   using StrideK = typename FMHAKernel::StrideK;
@@ -200,10 +148,22 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
   using ElementV = typename FMHAKernel::ElementV;
   using ElementO = typename FMHAKernel::ElementO;
 
+  using LayoutQ = typename FMHAConfiguration::LayoutQ;
+  using LayoutK = typename FMHAConfiguration::LayoutK;
+  using LayoutV = typename FMHAConfiguration::LayoutV;
+  using LayoutO = typename FMHAConfiguration::LayoutO;
+
   using CollectiveMainloop = typename FMHAKernel::CollectiveMainloop;
   using ElementS = typename CollectiveMainloop::ElementS;
 
-  using ProblemShapeType = cutlass::fmha::kernel::FMHAProblemShape<isVarLen>;
+  using ProblemShapeType = typename FMHAConfiguration::ProblemShapeType;
+  static constexpr bool Causal = FMHAConfiguration::Causal;
+  static constexpr bool isVarLen = FMHAConfiguration::VarLen;
+  static constexpr bool CachedKV = FMHAConfiguration::CachedKV;
+  static constexpr bool PagedKV = FMHAConfiguration::PagedKV;
+  static constexpr bool Persistent = FMHAConfiguration::Persistent;
+
+  int32_t count;
 
   //
   // Data members
@@ -213,9 +173,11 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
   StrideQ stride_Q;
   StrideK stride_K;
   StrideV stride_V;
+  StrideO stride_O;
+
   StrideK stride_K_cache;
   StrideV stride_V_cache;
-  StrideO stride_O;
+
   uint64_t seed = 0;
 
   cutlass::DeviceAllocation<ElementQ> block_Q;
@@ -234,88 +196,11 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
   cutlass::DeviceAllocation<int> device_cumulative_seqlen_kv_cache;
 
   struct PagedKVParams {
-    cutlass::DeviceAllocation<int> page_table;
-    int page_size = 0;
-    cutlass::DeviceAllocation<int> num_pages_per_seq;
+      cutlass::DeviceAllocation<int> page_table;
+      int page_size = 0;
+      cutlass::DeviceAllocation<int> num_pages_per_seq;
   };
   PagedKVParams paged_kv_cache;
-
-  //
-  // Methods
-  //
-
-  template<class ProblemShape>
-  auto initialize_varlen(const ProblemShape& problem_size) {
-    int num_batches = get<0>(problem_size);
-
-    // generate Q as --b times
-    //    gaussian (--Q, --Q / 2) sampled positive
-    //    track cumulative 
-    std::mt19937 rng(0x202305151552ull);
-    std::normal_distribution<double> dist_q(get<3>(problem_size), get<3>(problem_size) / 2);
-    std::normal_distribution<double> dist_kv(get<4>(problem_size), get<4>(problem_size) / 2);
-    std::normal_distribution<double> dist_kv_cache(get<5>(problem_size), get<5>(problem_size) / 2);
-
-    // Use Cacheline Size to calculate alignment
-    constexpr int cacheline_bytes = 64;
-    constexpr int AlignmentQ = cacheline_bytes * 8 /  sizeof_bits_v<ElementQ> ;    // Alignment of Q matrix in units of elements
-    constexpr int AlignmentKV = cacheline_bytes * 8 / sizeof_bits_v<ElementK> ;   // Alignment of Kand V matrix in units of elements
-    constexpr int AlignmentKVCache = 128; //Page size must be a multiple of 128
-    auto generate_positive_int = [](auto& dist, auto& gen) {
-      int result = 0;
-      do {
-        result = static_cast<int>(dist(gen));
-      } while (result <= 0);
-      return result;
-    };
-
-    cumulative_seqlen_q = {0};
-    cumulative_seqlen_kv = {0};
-    cumulative_seqlen_kv_cache = {0};
-
-    int total_seqlen_q = 0;
-    int total_seqlen_kv = 0;
-    int total_seqlen_kv_cache = 0;
-    int max_seqlen_q = 0;
-    int max_seqlen_kv = 0;
-    int max_seqlen_kv_cache = 0;
-
-    for (int i = 0; i < num_batches; i++) {
-      int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
-      int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
-      int seqlen_kv_cache = get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKVCache);
-
-      total_seqlen_q += seqlen_q;
-      total_seqlen_kv += seqlen_kv;
-      total_seqlen_kv_cache += seqlen_kv_cache;
-
-      max_seqlen_q = std::max(max_seqlen_q, seqlen_q);
-      max_seqlen_kv = std::max(max_seqlen_kv, seqlen_kv);
-      max_seqlen_kv_cache = std::max(max_seqlen_kv_cache, seqlen_kv_cache);
-
-      cumulative_seqlen_q.push_back(cumulative_seqlen_q.back() + seqlen_q);
-      cumulative_seqlen_kv.push_back(cumulative_seqlen_kv.back() + seqlen_kv);
-      cumulative_seqlen_kv_cache.push_back(cumulative_seqlen_kv_cache.back() + seqlen_kv_cache);
-    }
-
-    ProblemShape problem_size_for_init = problem_size;
-    get<0>(problem_size_for_init) = 1;
-    get<3>(problem_size_for_init) = total_seqlen_q;
-    get<4>(problem_size_for_init) = total_seqlen_kv;
-    get<5>(problem_size_for_init) = total_seqlen_kv_cache;
-
-    ProblemShapeType problem_size_for_launch;
-    problem_size_for_launch.batch = get<0>(problem_size);
-    problem_size_for_launch.num_heads_q = get<1>(problem_size);
-    problem_size_for_launch.num_heads_kv = get<2>(problem_size);
-    problem_size_for_launch.seq_len_qo = cutlass::fmha::collective::VariableLength{max_seqlen_q};
-    problem_size_for_launch.seq_len_kv = cutlass::fmha::collective::VariableLength{max_seqlen_kv};
-    problem_size_for_launch.seq_len_kv_cache = cutlass::fmha::collective::VariableLength{max_seqlen_kv_cache};
-    problem_size_for_launch.head_size_qk = get<6>(problem_size);
-    problem_size_for_launch.head_size_vo = get<7>(problem_size);
-
-    return cute::make_tuple(problem_size_for_init, problem_size_for_launch);
-  }
 
   bool verify(ProblemShapeType shape, bool is_causal) {
 
@@ -340,9 +225,8 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     auto block_V_ = in_memory(block_V);
     auto block_K_cache_ = in_memory(block_K_cache);
     auto block_V_cache_ = in_memory(block_V_cache);
-
-    using ElementV_ = std::remove_pointer_t<decltype(block_V_.get())>;
-    using ElementK_ = std::remove_pointer_t<decltype(block_K_.get())>;
+    using ElementV_ = ElementV;
+    using ElementK_ = ElementK;
 
     int offset_q = 0;
     int offset_k = 0;
@@ -390,7 +274,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
         if (seq_len_kv_cache > 0) {
             block_K_concat.reset(head_size_qk * seq_len_kv_total);
             block_V_concat.reset(seq_len_kv_total * head_size_vo);
-            
+
             if (paged_kv_cache.page_size > 0) {
               int page_size = paged_kv_cache.page_size;
               int start_page_idx = isVarLen ? num_pages_per_seq_host[b] : b * (seq_len_kv_cache / page_size);
@@ -425,7 +309,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
                   block_K_concat.get() + head_size_qk * seq_len_kv_cache,
                   block_K_.get() + offset_k,
                   head_size_qk * seq_len_kv);
-            
+
             compat::memcpy<ElementV_>(
                   block_V_concat.get() + seq_len_kv_cache * head_size_vo,
                   block_V_.get() + offset_v,
@@ -467,8 +351,8 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
           // apply mask to S
           for (int row = 0; row < seq_len_qo; row++) {
             for (int col = seq_len_kv_cache; col < seq_len_kv_total; col++) {
-                if ((col - seq_len_kv_cache - full_tile_offset) > (row - discard_seq_coord))
-                  host_S[col + row * seq_len_kv_total] = ElementS{-INFINITY};
+              if ((col - seq_len_kv_cache - full_tile_offset) > (row - discard_seq_coord))
+                host_S[col + row * seq_len_kv_total] = ElementS{-INFINITY};
             }
           }
         }
@@ -491,7 +375,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
           int max_idx = row;
           for (int col = 0; col < seq_len_kv_total; col++, idx++) {
             /* FIXME: use softmax_scale instead of assuming its value here */
-            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) / sqrt(static_cast<ElementS>((head_size_qk))));
+            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) / std::sqrt(static_cast<ElementS>((head_size_qk))));
           }
         }
 
@@ -577,9 +461,81 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     return passed;
   }
 
-  /// Initialize operands to be used in the GEMM and reference GEMM
-  ProblemShapeType initialize(const Options &options) {
-    auto problem_shape_in = cute::make_tuple(options.batch, options.num_heads_q, options.num_heads_kv, options.seq_len_qo, options.seq_len_kv, options.seq_len_kv_cache, options.head_size_qk, options.head_size_vo);
+  template<class ProblemShape>
+  auto initialize_varlen(const ProblemShape& problem_size) {
+    int num_batches = get<0>(problem_size);
+
+    // generate Q as --b times
+    //    gaussian (--Q, --Q / 2) sampled positive
+    //    track cumulative 
+    std::mt19937 rng(0x202305151552ull);
+    std::normal_distribution<double> dist_q(get<3>(problem_size), get<3>(problem_size) / 2);
+    std::normal_distribution<double> dist_kv(get<4>(problem_size), get<4>(problem_size) / 2);
+    std::normal_distribution<double> dist_kv_cache(get<5>(problem_size), get<5>(problem_size) / 2);
+
+    // Use Cacheline Size to calculate alignment
+    constexpr int cacheline_bytes = 64;
+    constexpr int AlignmentQ = cacheline_bytes / sizeof(ElementQ);    // Alignment of Q matrix in units of elements
+    constexpr int AlignmentKV = cacheline_bytes / sizeof(ElementK);   // Alignment of Kand V matrix in units of elements
+    constexpr int AlignmentKVCache = 128; // Page size must be a multiple of 128
+    auto generate_positive_int = [](auto& dist, auto& gen) {
+      int result = 0;
+      do {
+        result = static_cast<int>(dist(gen));
+      } while (result <= 0);
+      return result;
+    };
+
+    cumulative_seqlen_q = {0};
+    cumulative_seqlen_kv = {0};
+    cumulative_seqlen_kv_cache = {0};
+
+    int total_seqlen_q = 0;
+    int total_seqlen_kv = 0;
+    int total_seqlen_kv_cache = 0;
+    int max_seqlen_q = 0;
+    int max_seqlen_kv = 0;
+    int max_seqlen_kv_cache = 0;
+
+    for (int i = 0; i < num_batches; i++) {
+      int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
+      int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
+      int seqlen_kv_cache = get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKVCache);
+
+      total_seqlen_q += seqlen_q;
+      total_seqlen_kv += seqlen_kv;
+      total_seqlen_kv_cache += seqlen_kv_cache;
+
+      max_seqlen_q = std::max(max_seqlen_q, seqlen_q);
+      max_seqlen_kv = std::max(max_seqlen_kv, seqlen_kv);
+      max_seqlen_kv_cache = std::max(max_seqlen_kv_cache, seqlen_kv_cache);
+
+      cumulative_seqlen_q.push_back(cumulative_seqlen_q.back() + seqlen_q);
+      cumulative_seqlen_kv.push_back(cumulative_seqlen_kv.back() + seqlen_kv);
+      cumulative_seqlen_kv_cache.push_back(cumulative_seqlen_kv_cache.back() + seqlen_kv_cache);
+    }
+
+    ProblemShape problem_size_for_init = problem_size;
+    get<0>(problem_size_for_init) = 1;
+    get<3>(problem_size_for_init) = total_seqlen_q;
+    get<4>(problem_size_for_init) = total_seqlen_kv;
+    get<5>(problem_size_for_init) = total_seqlen_kv_cache;
+
+    ProblemShapeType problem_size_for_launch;
+    problem_size_for_launch.batch = get<0>(problem_size);
+    problem_size_for_launch.num_heads_q = get<1>(problem_size);
+    problem_size_for_launch.num_heads_kv = get<2>(problem_size);
+    problem_size_for_launch.seq_len_qo = cutlass::fmha::collective::VariableLength{max_seqlen_q};
+    problem_size_for_launch.seq_len_kv = cutlass::fmha::collective::VariableLength{max_seqlen_kv};
+    problem_size_for_launch.seq_len_kv_cache = cutlass::fmha::collective::VariableLength{max_seqlen_kv_cache};
+    problem_size_for_launch.head_size_qk = get<6>(problem_size);
+    problem_size_for_launch.head_size_vo = get<7>(problem_size);
+
+    return cute::make_tuple(problem_size_for_init, problem_size_for_launch);
+  }
+
+  ProblemShapeType initialize(const FMHAOptions &options) {
+    auto problem_shape_in = cute::make_tuple(options.batch, options.num_heads_q, options.num_heads_kv, options.seq_len_qo, options.seq_len_kv, options.seq_len_kv_cache,options.head_size_qk, options.head_size_vo);
     ProblemShapeType shape;
 
     decltype(problem_shape_in) problem_size;
@@ -622,10 +578,11 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     block_V_cache.reset(static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv_cache * head_size_vo);
     block_O.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo);
     block_ref_O.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo);
+
     // Zero-initialize output buffer for the kernel result
     // block_ref_O is fully written in verify() before being read, so no initialization needed
-    compat::memset(block_O.get(), 0, block_O.size() * sizeof_bits_v<ElementO> / 8);
-    if (options.use_paged_kv) {
+    compat::memset(block_O.get(), 0, block_O.size() * sizeof(ElementO));
+    if (PagedKV) {
       paged_kv_cache.page_size = options.page_size;
       std::vector<int> num_pages_per_seq{0};
       int num_pages = 0;
@@ -681,16 +638,15 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
       shape.seq_len_kv.cumulative_length = device_cumulative_seqlen_kv.get();
       shape.seq_len_kv_cache.cumulative_length = device_cumulative_seqlen_kv_cache.get();
     }
+
     return shape;
   }
 
-  // Note that the GemmUniversalAdapter currently doesn't support flash attention, which is why this
-  // secondary `run` function is required to launch the kernel.
-  static void run(typename FMHAKernel::Params params)
-  {
+  static void run(typename FMHAKernel::Params params) {
+   
     namespace syclex = sycl::ext::oneapi::experimental;
     namespace intelex = sycl::ext::intel::experimental;
-
+   
     dim3 const block = FMHAKernel::get_block_shape();
     dim3 const grid = FMHAKernel::get_grid_shape(params);
 
@@ -706,7 +662,11 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     };
     compat::experimental::kernel_properties kernel_props{
       syclex::sub_group_size<cute::intel::sg_size>,
+#if (SYCL_INTEL_TARGET == 35)
+      intelex::grf_size<512>
+#else
       intelex::grf_size<256>
+#endif
     };
     compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
     auto event = compat::experimental::launch<cutlass::device_kernel<FMHAKernel>, FMHAKernel>(policy, params);
@@ -714,259 +674,176 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     EventManager::getInstance().addEvent(event);
   }
 
-  cutlass::Status run(const Options &options, const cutlass::KernelHardwareInfo &hw_info) {
+  void run(::benchmark::State& state, const FMHAOptions &options, const cutlass::KernelHardwareInfo &hw_info) {
 
-    ProblemShapeType shape = initialize(options);
+    ProblemShapeType problem_size = initialize(options);
 
     typename FMHAKernel::Arguments arguments{
       {
-        shape,
-        block_Q.get(), stride_Q,
-        block_K.get(), stride_K,
-        block_V.get(), stride_V,
-        block_O.get(), stride_O,
-        block_K_cache.get(), stride_K_cache,
-        block_V_cache.get(), stride_V_cache,
+      problem_size,
+      block_Q.get(), stride_Q,
+      block_K.get(), stride_K,
+      block_V.get(), stride_V,
+      block_O.get(), stride_O,
+      block_K_cache.get(), stride_K_cache,
+      block_V_cache.get(), stride_V_cache,
       },
       {
-        options.softmax_scale,
-        options.use_paged_kv ? paged_kv_cache.page_table.get() : nullptr,
-        options.use_paged_kv ? paged_kv_cache.page_size : 0,
-        options.use_paged_kv ? paged_kv_cache.num_pages_per_seq.get() : nullptr
+      options.softmax_scale,
+      PagedKV ? paged_kv_cache.page_table.get() : nullptr,
+      PagedKV ? paged_kv_cache.page_size : 0,
+      PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr
       },
       {},
       hw_info
     };
 
-    // Define device-global scratch memory
     size_t workspace_size = FMHAKernel::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    if (!FMHAKernel::can_implement(arguments)) {
-      std::cout << "Invalid Problem Size: " << options.batch << 'x' << options.num_heads_q << 'x' <<
-        options.seq_len_qo << 'x' << options.seq_len_kv << 'x' << options.head_size_qk << 'x'  << options.head_size_vo
-        << (options.is_causal ? "xCausal" : "xNonCausal") << std::endl;
-      return cutlass::Status::kErrorInvalidProblem;
-    }
+    FMHAKernel::can_implement(arguments);
 
     // Initialize the workspace
-    CUTLASS_CHECK(FMHAKernel::initialize_workspace(arguments, workspace.get()));
+    auto status = FMHAKernel::initialize_workspace(arguments, workspace.get());
+    if (status != cutlass::Status::kSuccess) {
+      return;
+    }
 
-    // Convert host-side arguments to device-side arguments to be passed to the kernel
-    auto params = FMHAKernel::to_underlying_arguments(arguments, workspace.get());
+    typename FMHAKernel::Params params = FMHAKernel::to_underlying_arguments(arguments, workspace.get());
 
     // Run the GEMM
-    // Warmup runs
-    for (int i = 0; i < options.warmup; ++i) {
-      run(params);
-    }
+    run(params);
+
     compat::wait();
 
-    if (options.verify != 0) {
-      // Verify that the result is correct
-      bool passed = verify(shape, options.is_causal);
-      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
-
-      if (!passed) {
-        return cutlass::Status::kErrorInternal;
-      }
-    } else {
-      std::cout << "Disposition is skipped." << std::endl;
+    // Verify that the result is correct
+    bool passed = verify(problem_size, Causal);
+    if(not passed) {
+      state.SkipWithError("Disposition Failed.");
     }
-    if (options.iterations > 0) {
+
+    state.counters["batch"] = options.batch;
+    state.counters["num_heads_q"] = options.num_heads_q;
+    state.counters["num_heads_kv"] = options.num_heads_kv;
+    state.counters["seq_len_qo"] = options.seq_len_qo;
+    state.counters["seq_len_kv"] = options.seq_len_kv;
+    state.counters["seq_len_kv_cache"] = options.seq_len_kv_cache;
+    state.counters["head_size_kv"] = options.head_size_qk;
+    state.counters["head_size_vo"] = options.head_size_vo;
+    state.counters["page_size"] = options.page_size;
+    state.counters["scale"] = options.softmax_scale;
+    state.counters["causal"] = Causal;
+    state.counters["varlen"] = isVarLen;
+    state.counters["paged_kv"] = PagedKV;
+
+    std::stringstream extra_label;
+    extra_label << "layoutQ=RowMajor ";
+    extra_label << "layoutK=ColumnMajor ";
+    extra_label << "layoutV=RowMajor ";
+
+    state.SetLabel(extra_label.str());
+    // when seq_len_qo is not equal to seq_len_kv we use bottom up approach for the masking. 
+    // Following changes will adjust the effective_seq_len_kv when masking applied for such cases.
+    auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
+    auto discard_seq_coord = options.seq_len_qo - offset;
+    auto full_tile_offset = options.seq_len_kv - offset;
+    auto effective_seq_len_kv = Causal ? full_tile_offset + ((offset + 1) / 2.0): options.seq_len_kv;
+    auto effective_seq_len_qo = Causal ? options.seq_len_qo - discard_seq_coord  : options.seq_len_qo;
+   
+    double flops_qk = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * effective_seq_len_kv * options.head_size_qk;
+    double flops_pv = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
+    double gflops = (flops_qk + flops_pv) * 1e-9;
+
+    // TODO: Use sizeof_bits_v instead of sizeof if QKVO is smaller than 8 bits, which avoids incorrect bandwidth calculation
+    double gbps_qk =  options.batch * (sizeof(ElementQ) * options.num_heads_q * effective_seq_len_qo * options.head_size_qk + 
+                      sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);    
+    double gbps_pv = sizeof(ElementV) * options.batch * options.num_heads_kv * effective_seq_len_kv * options.head_size_vo +
+                     sizeof(ElementO) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
+    double mega_bytes_transferred = (gbps_qk + gbps_pv) * (1e-6);
+
+    initialize_counters(state);
+    int32_t counter = 1;
+    for(auto _ : state) {
+      state.PauseTiming();
+
+      typename FMHAKernel::Arguments arguments{
+        {
+          problem_size,
+          block_Q.get(), stride_Q,
+          block_K.get(), stride_K,
+          block_V.get(), stride_V,
+          block_O.get(), stride_O,
+          block_K_cache.get(), stride_K_cache,
+          block_V_cache.get(), stride_V_cache,
+        },
+        {
+          options.softmax_scale,
+          PagedKV ? paged_kv_cache.page_table.get() : nullptr,
+          PagedKV ? paged_kv_cache.page_size : 0,
+          PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr,
+        },
+        {},
+        hw_info
+      };
+
+      size_t workspace_size = FMHAKernel::get_workspace_size(arguments);
+      cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
+
+      FMHAKernel::can_implement(arguments);
+
+      // Initialize the workspace
+      auto status = FMHAKernel::initialize_workspace(arguments, workspace.get());
+      if (status != cutlass::Status::kSuccess) {
+        return;
+      }
+
+      typename FMHAKernel::Params params = FMHAKernel::to_underlying_arguments(arguments, workspace.get());
+
+      state.ResumeTiming();
+
       GPU_Clock timer;
       timer.start();
-      for (int i = 0; i < options.iterations; ++i) {
-        run(params);
-      }
-      compat::wait();
-      double cute_time = timer.seconds() / options.iterations;
-      double batched_effective_seq_len_qo_x_kv = 0.0;  // flops_qk and flops_pv
-      double batched_effective_seq_len_qo = 0.0;       // gbps_q and gbps_o
-      double batched_effective_seq_len_kv = 0.0;       // gbps_kv
-      double batched_seq_len_kv_cache = 0.0;           // gbps_kv_cache
-      if constexpr (isVarLen) {
-        // For varlen, we need to iterate over each batch and compute per-batch flops
-        for (int b = 0; b < options.batch; ++b) {
-          int seq_len_qo = cumulative_seqlen_q[b + 1] - cumulative_seqlen_q[b];
-          int seq_len_kv = cumulative_seqlen_kv[b + 1] - cumulative_seqlen_kv[b];
-          int seq_len_kv_cache = 0;
-          if (options.seq_len_kv_cache > 0) {
-            seq_len_kv_cache = cumulative_seqlen_kv_cache[b + 1] - cumulative_seqlen_kv_cache[b];
-          }
-          auto offset = cute::min(seq_len_qo, seq_len_kv);
-          auto discard_seq_coord = seq_len_qo - offset;
-          auto full_tile_offset = seq_len_kv - offset;
-          // offset + 1 is going to be ceil_div
-          auto per_batch_effective_seq_len_kv = options.is_causal ? full_tile_offset + ((offset + 1) / 2.0) : static_cast<double>(seq_len_kv);
-          auto per_batch_effective_seq_len_qo = options.is_causal ? seq_len_qo - discard_seq_coord : seq_len_qo;
-          double per_batch_qo_x_kv_cache = static_cast<double>(seq_len_qo) * seq_len_kv_cache;  // Full attention to cache
-          double per_batch_qo_x_kv_new = per_batch_effective_seq_len_qo * per_batch_effective_seq_len_kv;  // Causal-adjusted for new KV
-
-          batched_effective_seq_len_qo_x_kv += per_batch_qo_x_kv_cache + per_batch_qo_x_kv_new;
-          batched_effective_seq_len_qo += per_batch_effective_seq_len_qo;
-          batched_effective_seq_len_kv += per_batch_effective_seq_len_kv;
-          batched_seq_len_kv_cache += seq_len_kv_cache;
-        }
-      } else {
-        // Non-varlen
-        int seq_len_kv_cache = options.seq_len_kv_cache;
-        auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
-        auto discard_seq_coord = options.seq_len_qo - offset;
-        auto full_tile_offset = options.seq_len_kv - offset;
-        auto effective_seq_len_kv = options.is_causal ? full_tile_offset + ((offset + 1) / 2.0) : static_cast<double>(options.seq_len_kv);
-        auto effective_seq_len_qo = options.is_causal ? options.seq_len_qo - discard_seq_coord : options.seq_len_qo;
-        double qo_x_kv_cache = static_cast<double>(options.seq_len_qo) * seq_len_kv_cache;  // Full attention to cache
-        double qo_x_kv_new = effective_seq_len_qo * effective_seq_len_kv;  // Causal-adjusted for new KV
-
-        batched_effective_seq_len_qo_x_kv = options.batch * (qo_x_kv_cache + qo_x_kv_new);
-        batched_effective_seq_len_qo = options.batch * effective_seq_len_qo;
-        batched_effective_seq_len_kv = options.batch * effective_seq_len_kv;
-        batched_seq_len_kv_cache = options.batch * seq_len_kv_cache;
-      }
-
-      double flops_qk = 2.0 * options.num_heads_q * batched_effective_seq_len_qo_x_kv * options.head_size_qk;
-      double flops_pv = 2.0 * options.num_heads_q * batched_effective_seq_len_qo_x_kv * options.head_size_vo;
-      double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
-      
-      double gbps_qk = options.num_heads_q * batched_effective_seq_len_qo * options.head_size_qk * sizeof_bits_v<ElementQ> / 8 +
-                       options.num_heads_kv * batched_effective_seq_len_kv * options.head_size_qk * sizeof_bits_v<ElementK> / 8;
-      double gbps_pv = options.num_heads_kv * batched_effective_seq_len_kv * options.head_size_vo * sizeof_bits_v<ElementV> / 8 +
-                       options.num_heads_q * batched_effective_seq_len_qo * options.head_size_vo * sizeof_bits_v<ElementO> / 8;
-      double gbps = ((gbps_qk + gbps_pv) * 1e-9) / cute_time;
-      std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q  << "\tNumHeads_kv: " << options.num_heads_kv  << "\tSeq Length QO: " << options.seq_len_qo
-                << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
-                << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false")
-                << "\t Scheduler: " << options.scheduler;
-      printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
+      run(params);
+      auto ms_elapsed = timer.milliseconds();
+      update_counters(state, ms_elapsed);
+      state.SetIterationTime(ms_elapsed / 1000);
+      counter++;
     }
+    finalize_counters(state, gflops, mega_bytes_transferred);
+  }
 
-    return cutlass::Status::kSuccess;
+private:
+  static void initialize_counters(::benchmark::State& state) {
+    state.counters["avg_runtime_ms"] = 0;
+    state.counters["best_runtime_ms"] = std::numeric_limits<double>::max();
+  }
+
+  static void update_counters(::benchmark::State& state, double ms_elapsed) {
+    state.PauseTiming();
+    state.counters["total_runtime_ms"] += ms_elapsed;
+    state.counters["best_runtime_ms"] = std::min<double>(state.counters["best_runtime_ms"], ms_elapsed);
+    state.ResumeTiming();
+  }
+
+  static void finalize_counters(::benchmark::State& state,  double gflop, double mega_bytes_transferred) {
+    state.counters["avg_runtime_ms"] =
+      state.counters["total_runtime_ms"] / static_cast<double>(state.iterations());
+    state.counters["avg_tflops"] = gflop / state.counters["avg_runtime_ms"];
+    state.counters["avg_throughput"] = mega_bytes_transferred / state.counters["avg_runtime_ms"];
+    state.counters["best_tflop"] = gflop / state.counters["best_runtime_ms"];
+    state.counters["best_bandwidth"] = mega_bytes_transferred / state.counters["best_runtime_ms"];
   }
 };
 
-template <bool Causal,
-          typename TileShapeQK,
-          typename TileShapePV,
-          typename TileShapeOutput,
-          typename SubgroupLayoutQK,
-          typename SubgroupLayoutPV_,      /* void -> default */
-          int PipelineStages,
-          bool persistent,
-          typename ElementQ = bfloat16_t,
-          typename ElementK = bfloat16_t,
-          typename ElementV = bfloat16_t,
-          typename ElementO = float,
-          typename MMAOperation_ = void,    /* void -> default */
-          typename StrideQ = Stride<int, _1, int, int>,
-          typename StrideK = Stride<int, _1, int, int>,
-          typename StrideV = Stride<_1, int, int, int>,
-          typename StrideO = Stride<int, _1, int, int>,
-          typename GmemTiledCopyQ = void,   /* void -> default block 2D */
-          typename GmemTiledCopyK = void,
-          typename GmemTiledCopyV = void,
-          typename GmemTiledCopyO = void>
-struct FMHAConfig {
+}
 
-  static constexpr int SGTileQ = get<0>(shape_div(TileShapeQK{}, shape(SubgroupLayoutQK{})))();
-  using MMAOperation = cute::conditional_t<is_void_v<MMAOperation_>,
-                                           typename cute::conditional_t<
-                                               cute::is_same_v<ElementQ, cutlass::float_e5m2_t> || cute::is_same_v<ElementQ, cutlass::float_e4m3_t>,
-                                               XE_DPAS_TT<cute::gcd(SGTileQ, 8), float, half_t>,
-                                               XE_DPAS_TT<cute::gcd(SGTileQ, 8), float, ElementQ> 
-                                           >,
-                                           MMAOperation_>;
-  using SubgroupLayoutPV = cute::conditional_t<is_void_v<SubgroupLayoutPV_>,
-                                               decltype(cutlass::fmha::collective::get_sg_layout_pv(SubgroupLayoutQK{})),
-                                               SubgroupLayoutPV_>;
+#define CUTLASS_FMHA_BENCHMARK(F) cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::FMHAOptions>::Register(#F, &F##_func)
 
-  template <bool isVarLen, bool CachedKV, bool PagedKV, class Scheduler>
-  static int run(const Options &options) {
-    //
-    // Run examples
-    //
-
-    // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
-    // information is used by the underlying kernel.
-    cutlass::KernelHardwareInfo hw_info;
-    hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
-
-    using ProblemShapeType = cutlass::fmha::kernel::FMHAProblemShape<isVarLen>;
-
-    using TiledMMAQK = typename TiledMMAHelper<MMA_Atom<MMAOperation>, Layout<TileShapeQK>, SubgroupLayoutQK>::TiledMMA;
-    using TiledMMAPV = typename TiledMMAHelper<MMA_Atom<MMAOperation>, Layout<TileShapePV>, SubgroupLayoutPV>::TiledMMA;
-
-    static_assert(get<0>(TileShapeOutput{}) == get<0>(TileShapePV{}),
-        "Output tile and P*V tile have different sizes in Q dimension");
-    constexpr int VTiles = get<1>(TileShapeOutput{}) / get<1>(TileShapePV{});
-
-    auto make_dummy_tensor = [&](auto val, auto stride) {
-      return make_tensor(make_gmem_ptr(&val),
-                         make_layout(repeat<rank_v<decltype(stride)>>(1), stride));
-    };
-
-    using TensorQ = decltype(make_dummy_tensor(ElementQ{}, StrideQ{}));
-    using TensorK = decltype(make_dummy_tensor(ElementK{}, StrideK{}));
-    using TensorV = decltype(make_dummy_tensor(ElementV{}, StrideV{}));
-    using TensorO = decltype(make_dummy_tensor(ElementO{}, StrideO{}));
-    using TensorK_cache = TensorK;
-    using TensorV_cache = TensorV;
-    using GmemTiledCopyK_cache = GmemTiledCopyK;
-    using GmemTiledCopyV_cache = GmemTiledCopyV;
-
-    // Mainloop
-    using MainloopDispatchPolicy = cutlass::fmha::XeDefault<PipelineStages>;
-    using CollectiveMainloop = cutlass::fmha::collective::FMHAFwdMainloop<
-        MainloopDispatchPolicy, Causal, CachedKV, PagedKV,
-        TiledMMAQK, TiledMMAPV, VTiles,
-        TensorQ, TensorK, TensorV,
-        TensorK_cache, TensorV_cache,
-        GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV,
-        GmemTiledCopyK_cache, GmemTiledCopyV_cache
-    >;
-
-    // Epilogue
-    using CollectiveEpilogue = cutlass::fmha::collective::FMHAFwdEpilogue<
-        CollectiveMainloop,
-        TileShapeOutput,
-        TensorO,
-        GmemTiledCopyO
-    >;
-
-    static_assert(!(persistent & Causal), "persistent SDPA kernel not support Causal yet");
-    using FMHAKernel = conditional_t<is_same_v<Scheduler, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>,
-      cutlass::fmha::kernel::XeFMHAFwdDynamicSplitKernel<
-        ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>,
-        cutlass::fmha::kernel::XeFMHAFwdKernel<
-        ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>
-        >;
-
-    ExampleRunner<FMHAKernel, isVarLen> runner;
-
-    CUTLASS_CHECK(runner.run(options, hw_info));
-    return 0;
+#define CUTLASS_CREATE_FMHA_BENCHMARK(F)                          \
+  static void F##_func(                                           \
+      ::benchmark::State& state,                                  \
+      cutlass::benchmark::FMHAOptions const& options,                 \
+      cutlass::KernelHardwareInfo const& hw_info) {               \
+    auto bench = cutlass::benchmark::BenchmarkRunnerFMHA<F>();    \
+    bench.run(state, options, hw_info);                           \
   }
-
-  static int run(const Options &options) {
-    bool cached_kv = options.seq_len_kv_cache > 0;
-    if constexpr (persistent) {
-      if (options.use_paged_kv || options.seq_len_kv_cache > 0) {
-        std::cerr << "Error: Persistent kernel does not support paged/cached KV cache (use_paged_kv or seq_len_kv_cache > 0)." << std::endl;
-        return -1;
-      }
-      return run<false, false, false, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>(options);
-    } else if (options.use_paged_kv && !options.varlen) {
-      return run<false, true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
-    } else if(!options.use_paged_kv && options.varlen && !cached_kv) {
-      return run<true, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
-    } else if(!options.use_paged_kv && !options.varlen && !cached_kv) {
-      return run<false, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
-    } else if (!options.use_paged_kv && options.varlen && cached_kv) {
-      return run<true, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
-    } else if (!options.use_paged_kv && !options.varlen && cached_kv) {
-      return run<false, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
-    } else {
-      return run<true, true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
-    }
-  }
-};

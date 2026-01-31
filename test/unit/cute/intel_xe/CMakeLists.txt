@@ -50,7 +50,7 @@ cutlass_test_unit_add_executable(
   xe_copy_2d_test.cpp
   reorder.cpp
   xe_copy_prefetch_2d.cpp
-  xe_vnni_2d.cpp
+  # xe_vnni_2d.cpp # Disabled it due to driver unavailablility
   xe_transpose_2d.cpp
 )
 else()

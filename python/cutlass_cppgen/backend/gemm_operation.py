@@ -38,11 +38,11 @@ import enum
 from cutlass_cppgen.utils.lazy_import import lazy_import
 cuda = lazy_import("cuda.cuda")
 cudart = lazy_import("cuda.cudart")
+dpctl = lazy_import("dpctl")
 from cutlass_library import SubstituteTemplate
 from cutlass_library.arch_constants import is_intel_xe_arch
 import numpy as np
 
-import dpctl
 
 from cutlass_library import (
     ComplexTransformTag,

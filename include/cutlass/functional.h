@@ -946,12 +946,49 @@ struct atomic_add<half2>
 template <typename T>
 using red [[deprecated("use atomic_add instead")]] = atomic_add<T>;
 
+
+// Helper function for SYCL atomic fetch_max operation
+template <typename T>
+CUTLASS_DEVICE
+T atomicMaxSycl(T *ptr, T value) {
+#if defined(SYCL_INTEL_TARGET)
+  auto atm = sycl::atomic_ref<T, sycl::memory_order::acq_rel,
+                               sycl::memory_scope::device,
+                               sycl::access::address_space::global_space>(*ptr);
+  return atm.fetch_max(value);
+#else
+  CUTLASS_UNUSED(ptr);
+  CUTLASS_UNUSED(value);
+  CUTLASS_NOT_IMPLEMENTED();
+  return 0;
+#endif
+}
+
+// Helper function for SYCL atomic fetch_min operation
+template <typename T>
+CUTLASS_DEVICE
+T atomicMinSycl(T *ptr, T value) {
+#if defined(SYCL_INTEL_TARGET)
+  auto atm = sycl::atomic_ref<T, sycl::memory_order::acq_rel,
+                               sycl::memory_scope::device,
+                               sycl::access::address_space::global_space>(*ptr);
+  return atm.fetch_min(value);
+#else
+  CUTLASS_UNUSED(ptr);
+  CUTLASS_UNUSED(value);
+  CUTLASS_NOT_IMPLEMENTED();
+  return 0;
+#endif
+}
+
 template <typename T>
 struct atomic_maximum {
   CUTLASS_DEVICE
   T operator()(T *ptr, T value) const {
 #if defined(__CUDA_ARCH__)
     return atomicMax(ptr, value);
+#elif defined(SYCL_INTEL_TARGET)
+    return atomicMaxSycl(ptr, value);
 #else
     CUTLASS_UNUSED(ptr);
     CUTLASS_UNUSED(value);
@@ -975,6 +1012,10 @@ struct atomic_maximum<float> {
     return ! ::signbit(value) ?
       __int_as_float(atomicMax((int*)ptr, __float_as_int(value))) :
       __uint_as_float(atomicMin((unsigned int*)ptr, __float_as_uint(value)));
+#elif defined(SYCL_INTEL_TARGET)
+    return ! ::signbit(value) ?
+      sycl::bit_cast<float>(atomicMaxSycl((int*)ptr, sycl::bit_cast<int>(value))) :
+      sycl::bit_cast<float>(atomicMinSycl((unsigned int*)ptr, sycl::bit_cast<unsigned int>(value)));
 #else
     CUTLASS_UNUSED(ptr);
     CUTLASS_UNUSED(value);
