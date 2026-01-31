@@ -34,7 +34,22 @@
 
 #include "common/cutlass_unit_test.h"
 
+#if defined(CUTLASS_ENABLE_SYCL)
+namespace {
+void ClearIgcPerfEnv() {
+#if defined(_WIN32)
+  _putenv_s("IGC_VISAOptions", "");
+#else
+  unsetenv("IGC_VISAOptions");
+#endif
+}
+} // namespace
+#endif
+
 int main(int argc, char* arg[]) {
+#if defined(CUTLASS_ENABLE_SYCL)
+  ClearIgcPerfEnv();
+#endif
   FilterArchitecture();
   ::testing::InitGoogleTest(&argc, arg);
   return RUN_ALL_TESTS();

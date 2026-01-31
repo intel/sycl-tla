@@ -34,7 +34,26 @@
 
 #include <gtest/gtest.h>
 
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <cstdlib>
+#if defined(_WIN32)
+#include <stdlib.h>
+#endif
+namespace {
+void ClearIgcPerfEnv() {
+#if defined(_WIN32)
+  _putenv_s("IGC_VISAOptions", "");
+#else
+  unsetenv("IGC_VISAOptions");
+#endif
+}
+} // namespace
+#endif
+
 int main(int argc, char* arg[]) {
+#if defined(CUTLASS_ENABLE_SYCL)
+  ClearIgcPerfEnv();
+#endif
   ::testing::InitGoogleTest(&argc, arg);
   return RUN_ALL_TESTS();
 }
