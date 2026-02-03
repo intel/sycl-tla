@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,53 +38,53 @@
 
 namespace cutlass {
 
-TEST(XE_Flash_Attention_Prefill_bf16_192, causal) {
+TEST(XE_Flash_Attention_Prefill_bf16_64, causal) {
   constexpr int PipelineStages = 2;
-  using ShapeQK = Shape<_256, _64, _64>;
-  using ShapePV = Shape<_256, _32, _64>;
-  using ShapeOutPut = Shape<_256, _192, _64>;
-  using SubgroupLayout = Layout<Shape<_32, _1, _1>, Stride<_1, _1, _1>>; 
+  using ShapeQK = Shape<_128, _64, _64>;
+  using ShapePV = Shape<_128, _32, _64>;
+  using ShapeOutPut = Shape<_128, _64, _64>;
+  using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
   using MMAOperation = XE_8x16x16_F32BF16BF16F32_TT;
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill_CachedKV<bfloat16_t, float, float, ShapeQK, ShapePV,ShapeOutPut, 
                                             SubgroupLayout, MMAOperation, true, false, false, 2>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashPrefillCachedKVAll<Kernel>(192));
+  EXPECT_TRUE(test::flash_attention::TestFlashPrefillCachedKVAll<Kernel>(64));
 }
 
-TEST(XE_Flash_Attention_Prefill_bf16_192, noncausal) {
-	constexpr int PipelineStages = 2;
-  using ShapeQK = Shape<_256, _64, _64>;
-  using ShapePV = Shape<_256, _32, _64>;
-  using ShapeOutPut = Shape<_256, _192, _64>;
-  using SubgroupLayout = Layout<Shape<_32, _1, _1>, Stride<_1, _1, _1>>; 
+TEST(XE_Flash_Attention_Prefill_bf16_64, noncausal) {
+  constexpr int PipelineStages = 2;
+	using ShapeQK = Shape<_128, _64, _64>;
+  using ShapePV = Shape<_128, _32, _64>;
+  using ShapeOutPut = Shape<_128, _64, _64>;
+  using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
   using MMAOperation = XE_8x16x16_F32BF16BF16F32_TT;
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill_CachedKV<bfloat16_t, float, float, ShapeQK, ShapePV,ShapeOutPut, 
                                             SubgroupLayout, MMAOperation, false, false, false, 2>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashPrefillCachedKVAll<Kernel>(192));
+  EXPECT_TRUE(test::flash_attention::TestFlashPrefillCachedKVAll<Kernel>(64));
 }
 
-TEST(XE_Flash_Attention_Prefill_bf16_192, varlen_causal) {
+TEST(XE_Flash_Attention_Prefill_bf16_64, varlen_causal) {
   constexpr int PipelineStages = 2;
-  using ShapeQK = Shape<_256, _64, _64>;
-  using ShapePV = Shape<_256, _32, _64>;
-  using ShapeOutPut = Shape<_256, _192, _64>;
-  using SubgroupLayout = Layout<Shape<_32, _1, _1>, Stride<_1, _1, _1>>;   
+  using ShapeQK = Shape<_128, _64, _64>;
+  using ShapePV = Shape<_128, _32, _64>;
+  using ShapeOutPut = Shape<_128, _64, _64>;
+  using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
   using MMAOperation = XE_8x16x16_F32BF16BF16F32_TT;
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill_CachedKV<bfloat16_t, float, float, ShapeQK, ShapePV,ShapeOutPut, 
                                             SubgroupLayout, MMAOperation, true, false, true, 2>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashPrefillCachedKVAll<Kernel>(192));
+  EXPECT_TRUE(test::flash_attention::TestFlashPrefillCachedKVAll<Kernel>(64));
 
 }
 
-TEST(XE_Flash_Attention_Prefill_bf16_192, varlen_noncausal) {
+TEST(XE_Flash_Attention_Prefill_bf16_64, varlen_noncausal) {
   constexpr int PipelineStages = 2;
-  using ShapeQK = Shape<_256, _64, _64>;
-  using ShapePV = Shape<_256, _32, _64>;
-  using ShapeOutPut = Shape<_256, _192, _64>;
-  using SubgroupLayout = Layout<Shape<_32, _1, _1>, Stride<_1, _1, _1>>;  
+  using ShapeQK = Shape<_128, _64, _64>;
+  using ShapePV = Shape<_128, _32, _64>;
+  using ShapeOutPut = Shape<_128, _64, _64>;
+  using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>; 
   using MMAOperation = XE_8x16x16_F32BF16BF16F32_TT;
   using Kernel = test::flash_attention::XE_Flash_Attention_Prefill_CachedKV<bfloat16_t, float, float, ShapeQK, ShapePV,ShapeOutPut, 
                                             SubgroupLayout, MMAOperation, false, false, true, 2>::Kernel;
-  EXPECT_TRUE(test::flash_attention::TestFlashPrefillCachedKVAll<Kernel>(192));
+  EXPECT_TRUE(test::flash_attention::TestFlashPrefillCachedKVAll<Kernel>(64));
 }
 
 } // namespace cutlass

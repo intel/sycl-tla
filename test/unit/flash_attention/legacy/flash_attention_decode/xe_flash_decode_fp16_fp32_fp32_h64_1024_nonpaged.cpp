@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,30 +43,30 @@ using GmemTiledCopyQ = test::flash_attention::GmemTiledCopyQU16;
 using GmemTiledCopyK = test::flash_attention::GmemTiledCopyKU16;
 using GmemTiledCopyV = test::flash_attention::GmemTiledCopyVU16;
 using GmemTiledCopyStore = test::flash_attention::GmemTiledCopyStoreU32;
-using Shape_h = test::flash_attention::Shape_h64<512, 8>;
+using Shape_h = test::flash_attention::Shape_h64<1024, 16>;
 
-TEST(XE_Flash_Attention_Decode_fp16_fp32_fp32_NonPaged_KVTile512_h64, causal) {
+TEST(XE_Flash_Attention_Decode_fp16_fp32_fp32_NonPaged_KVTile1024_h64, causal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<half_t, float, float, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperationFP16, true, false,
                                             GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, false>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
 }
 
-TEST(XE_Flash_Attention_Decode_fp16_fp32_fp32_NonPaged_KVTile512_h64, noncausal) {
+TEST(XE_Flash_Attention_Decode_fp16_fp32_fp32_NonPaged_KVTile1024_h64, noncausal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<half_t, float, float, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperationFP16, false, false,
                                             GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, false>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
 }
 
-TEST(XE_Flash_Attention_Decode_fp16_fp32_fp32_NonPaged_KVTile512_h64, varlen_causal) {
+TEST(XE_Flash_Attention_Decode_fp16_fp32_fp32_NonPaged_KVTile1024_h64, varlen_causal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<half_t, float, float, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperationFP16, true, true,
                                             GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, false>::Kernel;
   EXPECT_TRUE(test::flash_attention::TestFlashDecodeAll<Kernel>(64));
 }
 
-TEST(XE_Flash_Attention_Decode_fp16_fp32_fp32_NonPaged_KVTile512_h64, varlen_noncausal) {
+TEST(XE_Flash_Attention_Decode_fp16_fp32_fp32_NonPaged_KVTile1024_h64, varlen_noncausal) {
   using Kernel = test::flash_attention::XE_Flash_Attention_Decode<half_t, float, float, typename Shape_h::ShapeQK, typename Shape_h::ShapePV,
                                             typename Shape_h::ShapeOutput, typename Shape_h::SubgroupLayout, MMAOperationFP16, false, true,
                                             GmemTiledCopyQ, GmemTiledCopyK, GmemTiledCopyV, GmemTiledCopyStore, false>::Kernel;
