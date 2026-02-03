@@ -28,65 +28,28 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 if (CUTLASS_ENABLE_SYCL)
-  message(STATUS "Building CuTE tutorial examples with SYCL")
+  message(STATUS "Building CuTe quickstart examples with SYCL")
 
-  # Include quickstart examples subdirectory
-  add_subdirectory(quickstart)
-  # Include layout tutorial examples subdirectory
-  add_subdirectory(layout)
   cutlass_example_add_executable(
-    cute_tutorial_sgemm_1
-    sgemm_1_sycl.cpp
+    cute_quickstart_print
+    print_demo.cpp
   )
 
   cutlass_example_add_executable(
-    cute_tutorial_sgemm_2
-    sgemm_2_sycl.cpp
+    cute_quickstart_print_layout
+    print_layout_demo.cpp
   )
 
   cutlass_example_add_executable(
-    cute_tutorial_tiled_copy
-    tiled_copy_sycl.cpp
+    cute_quickstart_print_tensor
+    print_tensor_demo.cpp
   )
 
   cutlass_example_add_executable(
-    cute_tutorial_tiled_copy_if
-    tiled_copy_if_sycl.cpp
+    cute_quickstart_print_latex
+    print_latex_demo.cpp
   )
-
-  if (SYCL_INTEL_TARGET)
-    message(STATUS "Building CuTE examples for Intel GPU targets")
-    cutlass_example_add_executable(
-      cute_tutorial_bmg
-      bgemm_bmg_legacy.cpp
-    )
-
-    cutlass_example_add_executable(
-      cute_tutorial_xe_gemm
-      xe_gemm.cpp
-    )
-
-    cutlass_example_add_executable(
-      cute_tutorial_xe_gemm_slm
-      xe_gemm_slm.cpp
-    )
-  endif()
-
-  if (SYCL_NVIDIA_TARGET)
-    message(STATUS "Building CuTE examples for NVIDIA GPU targets with SYCL")
-
-    cutlass_example_add_executable(
-      cute_tutorial_sgemm_sm70
-      sgemm_sm70_sycl.cpp
-    )
-
-    cutlass_example_add_executable(
-      cute_tutorial_sgemm_sm80
-      sgemm_sm80_sycl.cpp
-    )
-  endif()
 
 else()
-  message(STATUS "CUTLASS_ENABLE_SYCL is OFF - CuTE tutorial examples will not be built")
-  message(STATUS "Enable SYCL support to build CuTE tutorial examples")
+  message(STATUS "Skipping CuTe quickstart examples (SYCL not enabled)")
 endif()
