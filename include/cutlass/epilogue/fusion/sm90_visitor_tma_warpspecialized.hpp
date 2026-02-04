@@ -750,10 +750,7 @@ struct Sm90TopologicalVisitor : Sm90VisitorImpl<Ops...> {
 
 // Alias for Xe
 template<class ElementCompute, class EdgeTuple, class... Ops>
-using Xe20TopologicalVisitor = Sm90TopologicalVisitor<ElementCompute, EdgeTuple, Ops...>;
-
-template<class ElementCompute, class EdgeTuple, class... Ops>
-using Xe12TopologicalVisitor = Sm90TopologicalVisitor<ElementCompute, EdgeTuple, Ops...>;
+using XeTopologicalVisitor = Sm90TopologicalVisitor<ElementCompute, EdgeTuple, Ops...>;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -145,22 +145,22 @@ using EpilogueDescriptor = cutlass::epilogue::collective::detail::EpilogueDescri
 using ElementC = cutlass::half_t;
 using StrideC = cute::Stride<int64_t, cute::Int<1>, int64_t>; 
 using StrideD = cute::Stride<int64_t, cute::Int<1>, int64_t>; 
-using TensorC = cutlass::epilogue::fusion::Sm90SrcFetch<cutlass::half_t>;
+using TensorC = cutlass::epilogue::fusion::XeSrcFetch<cutlass::half_t>;
 
 using ElementD = cutlass::half_t;
 
-using Accum = cutlass::epilogue::fusion::Sm90AccFetch;
+using Accum = cutlass::epilogue::fusion::XeAccFetch;
 
-using Alpha = cutlass::epilogue::fusion::Sm90ScalarBroadcast<
+using Alpha = cutlass::epilogue::fusion::XeScalarBroadcast<
     float, cute::Stride<cute::Int<0>, cute::Int<0>, cute::Int<0>>, 1, cutlass::multiplies
 >;
 
-using Compute0 = cutlass::epilogue::fusion::Xe20Compute<
+using Compute0 = cutlass::epilogue::fusion::XeCompute<
     cutlass::multiplies, float, float,
     cutlass::FloatRoundStyle::round_to_nearest
 >;
 
-using EVTCompute0 = cutlass::epilogue::fusion::Xe20EVT<
+using EVTCompute0 = cutlass::epilogue::fusion::XeEVT<
     Compute0,
     Alpha,
 Accum>;
@@ -170,16 +170,16 @@ using F = cutlass::epilogue::fusion::XeAuxStore<
     cute::Stride<int64_t, cute::Int<1>, int64_t>
 >;
 
-    using EVTF = cutlass::epilogue::fusion::Xe20EVT<
+using EVTF = cutlass::epilogue::fusion::XeEVT<
         F,
         EVTCompute0>;
 
-using Compute1 = cutlass::epilogue::fusion::Xe20Compute<
+using Compute1 = cutlass::epilogue::fusion::XeCompute<
     cutlass::plus, cutlass::half_t, float,
     cutlass::FloatRoundStyle::round_to_nearest
 >;
 
-    using EVTCompute1 = cutlass::epilogue::fusion::Xe20EVT<
+using EVTCompute1 = cutlass::epilogue::fusion::XeEVT<
         Compute1,
         EVTF,
     TensorC>;
@@ -385,7 +385,7 @@ struct ExampleRunner {
   typename Compute1::Arguments compute1_args{};
     
     // 1. 
-    // Xe20EVT<Compute0(Mul), Alpha, Accum>
+    // XeEVT<Compute0(Mul), Alpha, Accum>
     // {Alpha, Accum, Compute0}
     typename EVTCompute0::Arguments evt0_args{
         alpha_args,            // Child 1: Alpha
@@ -394,7 +394,7 @@ struct ExampleRunner {
     };
 
     // 2. 
-    // Xe20EVT<F(AuxStore), EVTCompute0>
+    // XeEVT<F(AuxStore), EVTCompute0>
     // {EVTCompute0, F}
     typename EVTF::Arguments evtf_args{
         evt0_args,             // Child 1: EVTCompute0
@@ -402,7 +402,7 @@ struct ExampleRunner {
     };
 
     // 3. 
-    // Xe20EVT<Compute1(Plus), EVTF, TensorC>
+    // XeEVT<Compute1(Plus), EVTF, TensorC>
     // {EVTF, TensorC, Compute1}
     typename EVTCompute1::Arguments thread {
       evtf_args,               // Child 1: EVTF
