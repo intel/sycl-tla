@@ -27,4 +27,48 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-add_subdirectory(legacy)
+
+set(CUTLASS_APPLICATIONS_DIR ${CUTLASS_DIR}/applications)
+
+set(TEST_NO_PAGED "")
+set(TEST_PAGED "--use_paged_kv")
+
+foreach(HEAD_DIM 64 96 128 192)
+  cutlass_example_add_executable(
+    06_bmg_prefill_attention_hdim${HEAD_DIM}
+    06_bmg_prefill_attention.cpp
+  )
+
+  cutlass_example_add_executable(
+    06_bmg_prefill_attention_cachedKV_hdim${HEAD_DIM}
+    06_bmg_prefill_attention_prefill_cachedKV.cpp
+    TEST_COMMAND_OPTIONS
+    TEST_PAGED
+  )
+
+  cutlass_example_add_executable(
+    06_bmg_decode_attention_hdim${HEAD_DIM}
+    06_bmg_decode_attention.cpp
+    TEST_COMMAND_OPTIONS
+    TEST_NO_PAGED
+  )
+
+  cutlass_example_add_executable(
+    06_bmg_prefill_attention_fp8_hdim${HEAD_DIM}
+    06_bmg_prefill_attention_fp8.cpp
+    TEST_COMMAND_OPTIONS
+  )
+
+  cutlass_example_add_executable(
+    06_bmg_decode_attention_fp8_hdim${HEAD_DIM}
+    06_bmg_decode_attention_fp8.cpp
+    TEST_COMMAND_OPTIONS
+    TEST_NO_PAGED
+  )
+
+  target_compile_definitions(06_bmg_prefill_attention_hdim${HEAD_DIM} PRIVATE HEAD_DIM=${HEAD_DIM})
+  target_compile_definitions(06_bmg_prefill_attention_cachedKV_hdim${HEAD_DIM} PRIVATE HEAD_DIM=${HEAD_DIM})
+  target_compile_definitions(06_bmg_decode_attention_hdim${HEAD_DIM} PRIVATE HEAD_DIM=${HEAD_DIM})
+  target_compile_definitions(06_bmg_prefill_attention_fp8_hdim${HEAD_DIM} PRIVATE HEAD_DIM=${HEAD_DIM})
+  target_compile_definitions(06_bmg_decode_attention_fp8_hdim${HEAD_DIM} PRIVATE HEAD_DIM=${HEAD_DIM})
+endforeach()

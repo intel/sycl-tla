@@ -27,4 +27,24 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-add_subdirectory(legacy)
+set(CUTLASS_APPLICATIONS_DIR ${CUTLASS_DIR}/applications)
+
+add_subdirectory(flash_attention_prefill)
+add_subdirectory(flash_attention_prefill_cachedkv)
+add_subdirectory(flash_attention_decode)
+
+add_custom_target(
+  cutlass_test_unit_flash_attention
+  DEPENDS
+  cutlass_test_unit_flash_attention_prefill
+  cutlass_test_unit_flash_attention_decode
+  cutlass_test_unit_flash_attention_prefill_cachedkv
+)
+
+add_custom_target(
+  test_unit_flash_attention
+  DEPENDS
+  test_unit_flash_attention_prefill
+  test_unit_flash_attention_decode
+  test_unit_flash_attention_prefill_cachedkv
+)

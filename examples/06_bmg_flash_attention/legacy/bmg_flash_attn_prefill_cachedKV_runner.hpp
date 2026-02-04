@@ -32,118 +32,142 @@
 #pragma once
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
-#include "cutlass/epilogue/fusion/xe_callbacks.hpp"
-#include "flash_attention_v2/kernel/legacy/tile_scheduler.hpp"
-#include "flash_attention_v2/collective/fmha_fusion.hpp"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
+#include "flash_attention_v2/collective/fmha_fusion.hpp"
+#include "flash_attention_v2/kernel/legacy/tile_scheduler_cachedKV.hpp"
 #include "cutlass/util/packed_stride.hpp"
-#include "flash_attention_v2/kernel/legacy/xe_flash_attn_decode.hpp"
-#include "flash_attention_v2/collective/legacy/xe_flash_attn_decode_epilogue.hpp"
-#include "flash_attention_v2/collective/legacy/xe_flash_attn_decode_softmax_epilogue.hpp"
+#include "flash_attention_v2/kernel/legacy/xe_flash_attn_prefill_cachedKV.hpp"
+#include "flash_attention_v2/collective/legacy/xe_flash_attn_prefill_epilogue_cachedKV.hpp"
+#include "flash_attention_v2/collective/legacy/xe_flash_attn_prefill_softmax_epilogue.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
 
 #include <cute/tensor.hpp>
 #include <random>
 
+#include "helper.h"
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "../examples/common/sycl_common.hpp"
-#include "../../../common.hpp"
+#include "sycl_common.hpp"
 
 using namespace cute;
 
-namespace cutlass::benchmark {
-
 // Command line options parsing
-struct FMHADecodeOptions {
+struct Options {
 
+  bool help;
   bool error;
+  bool is_causal;
+  bool varlen = false;
+  bool use_paged_kv = false;
+  std::string scheduler;
 
-  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, head_size_qk,
-      head_size_vo, iterations, page_size;
+  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations;
   float softmax_scale;
-  std::string bm_name;
 
-  FMHADecodeOptions()
-      : error(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
-        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), bm_name("Flash Attention v2 Decode") {}
+  Options()
+      : help(false), error(false), is_causal(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
+        seq_len_kv(512), seq_len_kv_cache(512), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
     cutlass::CommandLine cmd(argc, args);
 
+    if (cmd.check_cmd_line_flag("help")) {
+      help = true;
+      return;
+    }
+
+    if (cmd.check_cmd_line_flag("is_causal")) {
+      is_causal = true;
+    }
+
+    if (cmd.check_cmd_line_flag("varlen")) {
+      varlen = true;
+    }
+
+    cmd.get_cmd_line_argument("scheduler", scheduler, std::string("Individual"));
+
     cmd.get_cmd_line_argument("batch", batch, 32);
     cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
     cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
-    cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 1);
+    cmd.get_cmd_line_argument("seq_len_qo", seq_len_qo, 512);
     cmd.get_cmd_line_argument("seq_len_kv", seq_len_kv, seq_len_qo);
-    cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 0);
-    cmd.get_cmd_line_argument("page_size", page_size, 128);
-    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, 128);
+    cmd.get_cmd_line_argument("seq_len_kv_cache", seq_len_kv_cache, 512);
+    cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
-    cmd.get_cmd_line_argument("bm_name", bm_name, std::string("Flash Attention v2"));
 
-    softmax_scale = 1 / std::sqrt(static_cast<float>(head_size_qk));
+    if (cmd.check_cmd_line_flag("use_paged_kv")) {
+        use_paged_kv = true;
+        cmd.get_cmd_line_argument("page_size", page_size, 128);
 
-    if (seq_len_kv_cache % page_size != 0) {
-      std::cerr << "Invalid: seq_len_kv_cache must be divisible by page_size" << std::endl;
-      return;
+        if (page_size % 128 != 0) {
+            std::cerr << "Invalid: page_size must be a multiple of 128" << std::endl;
+            return;
+        }
+        if (seq_len_kv_cache % page_size != 0) {
+            std::cerr << "Invalid: seq_len_kv_cache must be divisible by page_size" << std::endl;
+            return;
+        }
     }
+
+    softmax_scale = 1 / sqrt(static_cast<float>(head_size_qk));
   }
 
-  std::string benchmark_name() const {
-    std::stringstream full_name;
-    full_name << bm_name << "/";
-    std::string const test_name_suffix = std::to_string(batch) + "x" +
-                                   std::to_string(num_heads_q) + "x" +
-                                   std::to_string(num_heads_kv) + "x" +
-                                   std::to_string(seq_len_qo) + "x" +
-                                   std::to_string(head_size_qk) + "x" +
-                                   std::to_string(seq_len_kv) + "x" +
-                                   std::to_string(seq_len_kv_cache) + "x" +
-                                   std::to_string(head_size_vo);
-    full_name << test_name_suffix;
+  /// Prints the usage statement.
+  std::ostream &print_usage(std::ostream &out) const {
 
-    return full_name.str();
+    out << "BMG Flash Attention v2 Example\n\n"
+        << "Options:\n\n"
+        << "  --help                      If specified, displays this usage statement\n\n"
+        << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
+        << "  --varlen                    Enable variable sequence length\n"
+        << "  --scheduler=\"Value\"       Choose between Individual or Persistent Scheduler\n"
+        << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
+        << "  --num_heads_q=<int>         Sets the Number of Attention Heads for Key-Value pair the Multi-Head Self Attention module\n"
+        << "  --num_heads_kv=<int>        Sets the Number of Attention Heads for Query input in the Multi-Head Self Attention module\n"
+        << "  --seq_len_qo=<int>          Sets the Sequence length of the Query input in Multi-Head Self Attention module\n"
+        << "  --seq_len_kv=<int>          Sets the Sequence length of the Key-Value pair in Multi-Head Self Attention module\n"
+        << "  --seq_len_kv_cache=<int>    Sets the Sequence length of the cached Key-Value pair in Multi-Head Self Attention module\n"
+        << "  --use_paged_kv              Use paged (non-contiguous) KV cache. Default is contiguous KV Cache\n"
+        << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
+        << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
+        << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
+        << "  --iterations=<int>          Iterations\n\n";
+
+    return out;
   }
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
+// Flash Attention takes 3 input matrices: (K)eys, (Q)ueries and (V)alues.
+using LayoutQ = cutlass::layout::RowMajor;
+using LayoutK = cutlass::layout::ColumnMajor;
+using LayoutV = cutlass::layout::RowMajor;
+using LayoutO = cutlass::layout::RowMajor;
 
-  using FMHADecodeKernel = typename FMHADecodeConfiguration::FMHADecodeKernel;
-  
-  using LayoutQ = typename FMHADecodeConfiguration::LayoutQ;
-  using LayoutK = typename FMHADecodeConfiguration::LayoutK;
-  using LayoutV = typename FMHADecodeConfiguration::LayoutV;
-  using LayoutO = typename FMHADecodeConfiguration::LayoutO;
+template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
 
-  using StrideQ = typename FMHADecodeKernel::StrideQ;
-  using StrideK = typename FMHADecodeKernel::StrideK;
-  using StrideV = typename FMHADecodeKernel::StrideV;
-  using StrideO = typename FMHADecodeKernel::StrideO;
+  using StrideQ = typename FMHAPrefillCachedKernel::StrideQ;
+  using StrideK = typename FMHAPrefillCachedKernel::StrideK;
+  using StrideV = typename FMHAPrefillCachedKernel::StrideV;
+  using StrideO = typename FMHAPrefillCachedKernel::StrideO;
 
-  using ElementQ = typename FMHADecodeKernel::ElementQ;
-  using ElementK = typename FMHADecodeKernel::ElementK;
-  using ElementV = typename FMHADecodeKernel::ElementV;
-  using ElementAcc = typename FMHADecodeKernel::ElementAccumulator;
+  using ElementQ = typename FMHAPrefillCachedKernel::ElementQ;
+  using ElementK = typename FMHAPrefillCachedKernel::ElementK;
+  using ElementV = typename FMHAPrefillCachedKernel::ElementV;
+  using ElementAcc = typename FMHAPrefillCachedKernel::ElementAccumulator;
 
-  using CollectiveEpilogue = typename FMHADecodeKernel::CollectiveEpilogue;
+  using CollectiveEpilogue = typename FMHAPrefillCachedKernel::CollectiveEpilogue;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
-  using ProblemShapeType = typename FMHADecodeKernel::ProblemShape;
-  static constexpr bool Causal = FMHADecodeConfiguration::Causal;
-  static constexpr bool isVarLen = FMHADecodeConfiguration::VarLen;
-  static constexpr bool PagedKV = FMHADecodeConfiguration::PagedKV;
-
-  int32_t count;
+  using ProblemShapeType = typename FMHAPrefillCachedKernel::ProblemShape;
 
   //
   // Data members
@@ -153,17 +177,16 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
   StrideQ stride_Q;
   StrideK stride_K;
   StrideV stride_V;
-  StrideO stride_O;
   StrideK stride_K_cache;
   StrideV stride_V_cache;
-
+  StrideO stride_O;
   uint64_t seed = 0;
 
-  std::vector<cutlass::DeviceAllocation<ElementQ>> block_Q;
-  std::vector<cutlass::DeviceAllocation<ElementK>> block_K;
-  std::vector<cutlass::DeviceAllocation<ElementV>> block_V;
-  std::vector<cutlass::DeviceAllocation<ElementK>> block_K_cache;
-  std::vector<cutlass::DeviceAllocation<ElementV>> block_V_cache;
+  cutlass::DeviceAllocation<ElementQ> block_Q;
+  cutlass::DeviceAllocation<ElementK> block_K;
+  cutlass::DeviceAllocation<ElementV> block_V;
+  cutlass::DeviceAllocation<ElementK> block_K_cache;
+  cutlass::DeviceAllocation<ElementV> block_V_cache;
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
 
@@ -185,7 +208,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
   // Methods
   //
 
-  bool verify(ProblemShapeType problem_size) {
+  bool verify(ProblemShapeType problem_size, bool is_causal, bool use_kv_cache) {
     
     if constexpr (isVarLen) {
       int max_seq_len_q = static_cast<int>(get<3>(problem_size));
@@ -207,7 +230,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
     int offset_o = 0;
     // loop over the batch dimension to compute the output
     // to avoid the risk of running out of device memory
-    int q_group_size = num_heads_q / num_heads_kv;
+    int q_group_size = num_heads_q/num_heads_kv;
     for (int b = 0; b < batch; b++) {
       if constexpr (isVarLen) {
         auto logical_problem_shape = cutlass::fmha::collective::apply_variable_length(problem_size, b);
@@ -219,9 +242,9 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
         seq_len_kv = get<4>(problem_size);
         seq_len_kv_cache = get<5>(problem_size);
       }
-
       int seq_len_kv_total = seq_len_kv_cache + seq_len_kv;
       int kv_group_update = 1;
+
       for (int h = 0; h < num_heads_q; h++) {
         cutlass::DeviceAllocation<ElementAccumulator> block_S;
         block_S.reset(seq_len_qo * seq_len_kv_total);
@@ -229,44 +252,42 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
         ElementK* k_ptr;
         ElementV* v_ptr;
 
-        if (seq_len_kv_cache > 0) {
-            cutlass::DeviceAllocation<ElementK> block_K_concat(head_size_qk * seq_len_kv_total);
-            cutlass::DeviceAllocation<ElementV> block_V_concat(seq_len_kv_total * head_size_vo);
+        if (use_kv_cache) {
+          cutlass::DeviceAllocation<ElementK> block_K_concat(head_size_qk * seq_len_kv_total);
+          cutlass::DeviceAllocation<ElementV> block_V_concat(seq_len_kv_total * head_size_vo);
 
-            // Concatenate K_cache and K
-            compat::memcpy<ElementK>(
-                block_K_concat.get(),
-                block_K_cache[0].get() + offset_k_cache,
-                seq_len_kv_cache * head_size_qk
-            );
-            compat::memcpy<ElementK>(
-                block_K_concat.get() + seq_len_kv_cache * head_size_qk,
-                block_K[0].get() + offset_k,
-                seq_len_kv * head_size_qk
-            );
+          // Concatenate K_cache and K
+          compat::memcpy<ElementK>(
+              block_K_concat.get(),
+              block_K_cache.get() + offset_k_cache,
+              seq_len_kv_cache * head_size_qk
+          );
+          compat::memcpy<ElementK>(
+              block_K_concat.get() + seq_len_kv_cache * head_size_qk,
+              block_K.get() + offset_k,
+              seq_len_kv * head_size_qk
+          );
 
-            // Concatenate V_cache and V
-            compat::memcpy<ElementV>(
-                block_V_concat.get(),
-                block_V_cache[0].get() + offset_v_cache,
-                seq_len_kv_cache * head_size_vo
-            );
-            compat::memcpy<ElementV>(
-                block_V_concat.get() + seq_len_kv_cache * head_size_vo,
-                block_V[0].get() + offset_v,
-                seq_len_kv * head_size_vo
-            );
-            compat::wait();
+          // Concatenate V_cache and V
+          compat::memcpy<ElementV>(
+              block_V_concat.get(),
+              block_V_cache.get() + offset_v_cache,
+              seq_len_kv_cache * head_size_vo
+          );
+          compat::memcpy<ElementV>(
+              block_V_concat.get() + seq_len_kv_cache * head_size_vo,
+              block_V.get() + offset_v,
+              seq_len_kv * head_size_vo
+          );
 
-            k_ptr = block_K_concat.get();
-            v_ptr = block_V_concat.get();
-        }
-        else {
-            k_ptr = block_K[0].get() + offset_k;
-            v_ptr = block_V[0].get() + offset_v;
+          k_ptr = block_K_concat.get();
+          v_ptr = block_V_concat.get();
+        } else {
+          k_ptr = block_K.get() + offset_k;
+          v_ptr = block_V.get() + offset_v;
         }
 
-        cutlass::TensorRef ref_Q(block_Q[0].get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
+        cutlass::TensorRef ref_Q(block_Q.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
         cutlass::TensorRef ref_K(k_ptr, LayoutK::packed({head_size_qk, seq_len_kv_total}));
         cutlass::TensorRef ref_V(v_ptr, LayoutV::packed({seq_len_kv_total, head_size_vo}));
         cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
@@ -285,19 +306,18 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
 
         std::vector<ElementAccumulator> host_S(block_S.size());
         compat::memcpy<ElementAccumulator>(host_S.data(), block_S.get(), host_S.size());
-        compat::wait();
 
         // delete this memory as it is no longer needed
         block_S.reset();
-
         auto offset = cute::min(seq_len_qo, seq_len_kv);
         auto discard_seq_coord = seq_len_qo - offset;
         auto full_tile_offset = seq_len_kv - offset;
-        if (Causal) {
+        int start_col = use_kv_cache ? seq_len_kv_cache : 0;
+        if (is_causal) {
           // apply mask to S
           for (int row = 0; row < seq_len_qo; row++) {
-            for (int col = seq_len_kv_cache; col < seq_len_kv_total; col++) {
-              if ((col - full_tile_offset) > (row + seq_len_kv_cache - discard_seq_coord))
+            for (int col = start_col; col < seq_len_kv_total; col++) {
+              if (col - full_tile_offset > row + start_col - discard_seq_coord)
                 host_S[col + row * seq_len_kv_total] = ElementAccumulator{-INFINITY};
             }
           }
@@ -337,7 +357,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
           idx = row * seq_len_kv_total;
           sum_idx = row;
           for (int col = 0; col < seq_len_kv_total; col++, idx++) {
-            if(Causal && row < discard_seq_coord) { 
+            if(is_causal && row < discard_seq_coord) {
               host_S[idx] = 0;
             } else {
               host_S[idx] /= sum_vec[sum_idx];
@@ -353,7 +373,6 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
         block_P.reset(host_P.size());
 
         compat::memcpy<ElementV>(block_P.get(), host_P.data(), host_P.size());
-        compat::wait();
 
         cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
 
@@ -377,7 +396,6 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
 
         std::vector<ElementAccumulator> vec_acc(block_acc.size());
         compat::memcpy<ElementAccumulator>(vec_acc.data(), block_acc.get(), vec_acc.size());
-        compat::wait();
 
         // delete this memory as it is no longer needed
         block_acc.reset();
@@ -386,10 +404,9 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
           vec_out[i] = static_cast<ElementOutput>(vec_acc[i]);
         }
         compat::memcpy<ElementOutput>(block_ref_O.get() + offset_o, vec_out.data(), vec_out.size());
-        compat::wait();
 
         offset_q += seq_len_qo * head_size_qk;
-        if(kv_group_update % q_group_size == 0) {
+        if(kv_group_update % q_group_size==0) {
           offset_k += seq_len_kv * head_size_qk;
           offset_v += seq_len_kv * head_size_vo;
           offset_k_cache += seq_len_kv_cache * head_size_qk;
@@ -412,6 +429,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
   template<class ProblemShape>
   auto initialize_varlen(const ProblemShape& problem_size) {
     int num_batches = get<0>(problem_size);
+    int seq_len_kv_cache = get<5>(problem_size);
 
     // generate Q as --b times
     //    gaussian (--Q, --Q / 2) sampled positive
@@ -446,8 +464,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
     int max_seqlen_kv_cache = 0;
 
     for (int i = 0; i < num_batches; i++) {
-      //seqlen_q is usually set to 1 for decode.
-      int seqlen_q = cute::get<3>(problem_size) == 1 ? 1 : std::min(cute::get<3>(problem_size), cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ));
+      int seqlen_q = cutlass::round_up(generate_positive_int(dist_q, rng), AlignmentQ);
       int seqlen_kv = cutlass::round_up(generate_positive_int(dist_kv, rng), AlignmentKV);
       int seqlen_kv_cache = cute::get<5>(problem_size) == 0 ? 0 : cutlass::round_up(generate_positive_int(dist_kv_cache, rng), AlignmentKV);
 
@@ -475,17 +492,18 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
     get<3>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_q};
     get<4>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv};
     get<5>(problem_size_for_launch) = cutlass::fmha::collective::VariableLength{max_seqlen_kv_cache};
+    get<6>(problem_size_for_launch) = get<6>(problem_size);
+    get<7>(problem_size_for_launch) = get<7>(problem_size);
     get<0>(problem_size_for_launch) = get<0>(problem_size);
     get<1>(problem_size_for_launch) = get<1>(problem_size);
     get<2>(problem_size_for_launch) = get<2>(problem_size);
-    get<6>(problem_size_for_launch) = get<6>(problem_size);
-    get<7>(problem_size_for_launch) = get<7>(problem_size);
+
 
     return cute::make_tuple(problem_size_for_init, problem_size_for_launch);
   }
 
-  /// Initialize operands to be used in the Flash Attention
-  ProblemShapeType initialize(const FMHADecodeOptions &options) {
+  /// Initialize operands to be used in the GEMM and reference GEMM
+  ProblemShapeType initialize(const Options &options) {
     auto problem_shape_in =
         cute::make_tuple(options.batch, options.num_heads_q, options.num_heads_kv, options.seq_len_qo, options.seq_len_kv, options.seq_len_kv_cache, options.head_size_qk, options.head_size_vo);
 
@@ -511,23 +529,19 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
     stride_V_cache = cutlass::make_cute_packed_stride(StrideV{}, cute::make_shape(head_size_vo, seq_len_kv_cache, batch * num_heads_kv));
     stride_O = cutlass::make_cute_packed_stride(StrideO{}, cute::make_shape(seq_len_qo, head_size_vo, batch * num_heads_q));
 
-    std::size_t mem_size_q = static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_qk;
-    std::size_t mem_size_k = static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv * head_size_qk;
-    std::size_t mem_size_v = static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv * head_size_vo;
-    std::size_t mem_size_k_cache = static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv_cache * head_size_qk;
-    std::size_t mem_size_v_cache = static_cast<std::size_t>(batch) * num_heads_kv * seq_len_kv_cache * head_size_vo;
-    std::size_t mem_size_o = static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo;
+    block_Q.reset(batch * num_heads_q * seq_len_qo * head_size_qk);
+    block_K.reset(batch * num_heads_kv * seq_len_kv * head_size_qk);
+    block_V.reset(batch * num_heads_kv * seq_len_kv * head_size_vo);
+    block_K_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_qk);
+    block_V_cache.reset(batch * num_heads_kv * seq_len_kv_cache * head_size_vo);
+    block_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
+    block_ref_O.reset(batch * num_heads_q * seq_len_qo * head_size_vo);
 
-    std::size_t mem_occupied_QKV = (mem_size_q * sizeof(ElementQ)) + ((mem_size_k + mem_size_k_cache) * sizeof(ElementK)) + 
-                                   ((mem_size_v + mem_size_v_cache) * sizeof(ElementV));
-
-    count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_QKV)) + 1;
-
-    if (PagedKV) {
+    if (options.use_paged_kv) {
       paged_kv_cache.page_size = options.page_size;
       std::vector<int> num_pages_per_seq{0};
       int num_pages = 0;
-      for(int b = 0; b < get<0>(problem_shape); b++) {
+      for(int b = 0; b < cute::get<0>(problem_shape); b++) {
         int seq_len_cache = isVarLen ? cumulative_seqlen_kv_cache[b + 1] - cumulative_seqlen_kv_cache[b] : seq_len_kv_cache;
         int pages_per_seq = ceil_div(seq_len_cache, paged_kv_cache.page_size);
         num_pages_per_seq.push_back(num_pages_per_seq.back() + pages_per_seq);
@@ -537,7 +551,7 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
 
       // initialize block table with random mapping for non-contiguous layout
       std::vector<int> page_mapping(num_pages);
-      for (int b = 0; b < get<0>(problem_shape); ++b) {
+      for (int b = 0; b < cute::get<0>(problem_shape); ++b) {
         std::vector<int> physical_pages(num_pages_per_seq[b + 1] - num_pages_per_seq[b]);
         std::iota(physical_pages.begin(), physical_pages.end(), 0);
         // shuffle physical pages
@@ -551,34 +565,13 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
 
       paged_kv_cache.num_pages_per_seq.reset(num_pages_per_seq.size());
       compat::memcpy(paged_kv_cache.num_pages_per_seq.get(), num_pages_per_seq.data(), num_pages_per_seq.size() * sizeof(int));
-      compat::wait();
     }
 
-    for(int i = 0; i < count; i++) {
-      block_Q.emplace_back();
-      block_K.emplace_back();
-      block_V.emplace_back();
-      block_K_cache.emplace_back();
-      block_V_cache.emplace_back();
-    }
-
-    
-    for(int i = 0; i < count; i++) {
-      block_Q[i].reset(mem_size_q);
-      block_K[i].reset(mem_size_k);
-      block_V[i].reset(mem_size_v);
-      block_K_cache[i].reset(mem_size_k_cache);
-      block_V_cache[i].reset(mem_size_v_cache);
-
-      initialize_block(block_Q[i], seed + i);
-      initialize_block(block_K[i], seed + i + 100);
-      initialize_block(block_V[i], seed + i + 101);
-      initialize_block(block_K_cache[i], seed + i + 102);
-      initialize_block(block_V_cache[i], seed + i + 103);
-    }
-
-    block_O.reset(mem_size_o);
-    block_ref_O.reset(mem_size_o);
+    initialize_block(block_Q, seed + 2023);
+    initialize_block(block_K, seed + 2022);
+    initialize_block(block_V, seed + 2021);
+    initialize_block(block_K_cache, seed + 2024);
+    initialize_block(block_V_cache, seed + 2025);
 
     if (!cumulative_seqlen_q.empty()) {
       device_cumulative_seqlen_q.reset(cumulative_seqlen_q.size());
@@ -607,197 +600,192 @@ template <class FMHADecodeConfiguration> struct BenchmarkRunnerFMHADecode {
     return problem_shape;
   }
 
-  static void run(typename FMHADecodeKernel::Params params) {
-    dim3 const block = FMHADecodeKernel::get_block_shape();
-    dim3 const grid = FMHADecodeKernel::get_grid_shape(params);
+  // Note that the GemmUniversalAdapter currently doesn't support flash attention, which is why this
+  // secondary `run` function is required to launch the kernel.
+  static void run(typename FMHAPrefillCachedKernel::Params params) {
+    dim3 const block = FMHAPrefillCachedKernel::get_block_shape();
+    dim3 const grid = FMHAPrefillCachedKernel::get_grid_shape(params);
 
     // configure smem size and carveout
-    int smem_size = FMHADecodeKernel::SharedStorageSize;
+    int smem_size = FMHAPrefillCachedKernel::SharedStorageSize;
 
     const auto sycl_block = compat::dim3(block.x, block.y, block.z);
     const auto sycl_grid = compat::dim3(grid.x, grid.y, grid.z);
 
+// Launch parameters depend on whether SYCL compiler supports work-group scratch memory extension
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
     using namespace compat::experimental;
-    auto event = launch<cutlass::device_kernel<FMHADecodeKernel>, FMHADecodeKernel>(
+    auto event = launch<cutlass::device_kernel<FMHAPrefillCachedKernel>>(
         launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
-                      kernel_properties{sycl_exp::sub_group_size<FMHADecodeKernel::DispatchPolicy::SubgroupSize>}},
+                      kernel_properties{sycl_exp::sub_group_size<FMHAPrefillCachedKernel::DispatchPolicy::SubgroupSize>}},
         params);
 #else
-    compat::experimental::launch_properties launch_props{
-      sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size)
+    compat::experimental::launch_properties launch_props {
+      sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
     };
     compat::experimental::kernel_properties kernel_props{
-      sycl::ext::oneapi::experimental::sub_group_size<FMHADecodeKernel::DispatchPolicy::SubgroupSize>
+      sycl::ext::oneapi::experimental::sub_group_size<FMHAPrefillCachedKernel::DispatchPolicy::SubgroupSize>
     };
     compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
-    auto event = compat::experimental::launch<cutlass::device_kernel<FMHADecodeKernel>, FMHADecodeKernel>(policy, params);
+    auto event = compat::experimental::launch<cutlass::device_kernel<FMHAPrefillCachedKernel>, FMHAPrefillCachedKernel>(policy, params);
 #endif
 
     EventManager::getInstance().addEvent(event);
   }
 
-  void run(::benchmark::State& state, const FMHADecodeOptions &options, const cutlass::KernelHardwareInfo &hw_info) {
+  cutlass::Status run(const Options &options, const cutlass::KernelHardwareInfo &hw_info) {
 
     ProblemShapeType problem_size = initialize(options);
 
-    typename FMHADecodeKernel::Arguments arguments{
+    typename FMHAPrefillCachedKernel::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         problem_size,
-        {block_Q[0].get(), stride_Q,
-        block_K[0].get(), stride_K,
-        block_V[0].get(), stride_V,
-        block_K_cache[0].get(), stride_K_cache,
-        block_V_cache[0].get(), stride_V_cache,
-        PagedKV ? paged_kv_cache.page_table.get() : nullptr,
-        PagedKV ? paged_kv_cache.page_size : 0,
-        PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
+        {block_Q.get(), stride_Q,
+        block_K.get(), stride_K,
+        block_V.get(), stride_V,
+        block_K_cache.get(), stride_K_cache,
+        block_V_cache.get(), stride_V_cache,
+        options.use_paged_kv ? paged_kv_cache.page_table.get() : nullptr,
+        options.use_paged_kv ? paged_kv_cache.page_size : 0,
+        options.use_paged_kv ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
         {options.softmax_scale},
         {block_O.get(), stride_O},
         hw_info};
 
-    size_t workspace_size = FMHADecodeKernel::get_workspace_size(arguments);
+    // Define device-global scratch memory
+    size_t workspace_size = FMHAPrefillCachedKernel::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    FMHADecodeKernel::can_implement(arguments);
-
-    // Initialize the workspace
-    auto status = FMHADecodeKernel::initialize_workspace(arguments, workspace.get());
-    if (status != cutlass::Status::kSuccess) {
-      return;
+    if (!FMHAPrefillCachedKernel::can_implement(arguments)) {
+      std::cout << "Invalid Problem Size: " << options.batch << 'x' << options.num_heads_q << 'x' <<
+        options.seq_len_qo << 'x' << options.seq_len_kv << 'x' << options.head_size_qk << 'x'  << options.head_size_vo 
+        << (options.is_causal ? "xCausal" : "xNonCausal") << std::endl;
+      return cutlass::Status::kErrorInvalidProblem;
     }
 
-    typename FMHADecodeKernel::Params params = FMHADecodeKernel::to_underlying_arguments(arguments, workspace.get());
+    // Initialize the workspace
+    CUTLASS_CHECK(FMHAPrefillCachedKernel::initialize_workspace(arguments, workspace.get()));
 
-    // Run the GEMM
+    // Convert host-side arguments to device-side arguments to be passed to the kernel
+    auto params = FMHAPrefillCachedKernel::to_underlying_arguments(arguments, workspace.get());
+
+    // Run the Flash Attention implementation.
     run(params);
 
     compat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size);
-    if(not passed) {
-      state.SkipWithError("Disposition Failed.");
+    bool use_kv_cache = options.seq_len_kv_cache > 0;
+    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
+    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+
+    if (!passed) {
+      return cutlass::Status::kErrorInternal;
     }
 
-    state.counters["batch"] = options.batch;
-    state.counters["num_heads_q"] = options.num_heads_q;
-    state.counters["num_heads_kv"] = options.num_heads_kv;
-    state.counters["seq_len_qo"] = options.seq_len_qo;
-    state.counters["seq_len_kv"] = options.seq_len_kv;
-    state.counters["seq_len_kv_cache"] = options.seq_len_kv_cache;
-    state.counters["head_size_kv"] = options.head_size_qk;
-    state.counters["head_size_vo"] = options.head_size_vo;
-    state.counters["page_size"] = options.page_size;
-    state.counters["scale"] = options.softmax_scale;
-    state.counters["causal"] = Causal;
-    state.counters["varlen"] = isVarLen;
-    state.counters["paged_kv"] = PagedKV;
-
-    std::stringstream extra_label;
-    extra_label << "layoutQ=RowMajor ";
-    extra_label << "layoutK=ColumnMajor ";
-    extra_label << "layoutV=RowMajor ";
-
-    state.SetLabel(extra_label.str());
-    // when seq_len_qo is not equal to seq_len_kv we use bottom up approach for the masking. 
-    // Following changes will adjust the effective_seq_len_kv when masking applied for such cases.
-    auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
-    auto discard_seq_coord = options.seq_len_qo - offset;
-    auto full_tile_offset = options.seq_len_kv - offset;
-    auto effective_seq_len_kv = Causal ? full_tile_offset + ((offset + 1) / 2.0): options.seq_len_kv;
-    auto effective_seq_len_qo = Causal ? options.seq_len_qo - discard_seq_coord  : options.seq_len_qo;
-   
-    double flops_qk = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * effective_seq_len_kv * options.head_size_qk;
-    double flops_pv = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
-    double gflops = (flops_qk + flops_pv) * 1e-9;
-
-    // TODO: Use sizeof_bits_v instead of sizeof if QKVO is smaller than 8 bits, which avoids incorrect bandwidth calculation
-    double gbps_qk =  options.batch * (sizeof(ElementQ) * options.num_heads_q * effective_seq_len_qo * options.head_size_qk + 
-                      sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);    
-    double gbps_pv = sizeof(ElementV) * options.batch * options.num_heads_kv * effective_seq_len_kv * options.head_size_vo +
-                     sizeof(ElementOutput) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
-    double mega_bytes_transferred = (gbps_qk + gbps_pv) * (1e-6);
-
-    initialize_counters(state);
-    int32_t counter = 1;
-    for(auto _ : state) {
-      state.PauseTiming();
-      int input_num = std::max(int(0), counter % count);
-
-      typename FMHADecodeKernel::Arguments arguments{
-        cutlass::gemm::GemmUniversalMode::kGemm,
-        problem_size,
-        {block_Q[input_num].get(), stride_Q,
-        block_K[input_num].get(), stride_K,
-        block_V[input_num].get(), stride_V,
-        block_K_cache[input_num].get(), stride_K_cache,
-        block_V_cache[input_num].get(), stride_V_cache,
-        PagedKV ? paged_kv_cache.page_table.get() : nullptr,
-        PagedKV ? paged_kv_cache.page_size : 0,
-        PagedKV ? paged_kv_cache.num_pages_per_seq.get() : nullptr},
-        {options.softmax_scale},
-        {block_O.get(), stride_O},
-        hw_info};
-
-      size_t workspace_size = FMHADecodeKernel::get_workspace_size(arguments);
-      cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
-
-      FMHADecodeKernel::can_implement(arguments);
-
-      // Initialize the workspace
-      auto status = FMHADecodeKernel::initialize_workspace(arguments, workspace.get());
-      if (status != cutlass::Status::kSuccess) {
-        return;
-      }
-
-      typename FMHADecodeKernel::Params params = FMHADecodeKernel::to_underlying_arguments(arguments, workspace.get());
-
-      state.ResumeTiming();
-
+    if (options.iterations > 0) {
       GPU_Clock timer;
       timer.start();
-      run(params);
-      auto ms_elapsed = timer.milliseconds();
-      update_counters(state, ms_elapsed);
-      state.SetIterationTime(ms_elapsed / 1000);
-      counter++;
+      for (int i = 0; i < options.iterations; ++i) {
+        run(params);
+      }
+      compat::wait();
+ 
+      auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
+      auto discard_seq_coord = options.seq_len_qo - offset;
+      auto full_tile_offset = options.seq_len_kv - offset;
+      // offset + 1 is going to be ceil_div
+      auto effective_seq_len_kv = options.seq_len_kv_cache + (options.is_causal ? full_tile_offset + ((offset + 1) / 2.0): options.seq_len_kv);
+      auto effective_seq_len_qo = options.is_causal ? options.seq_len_qo - discard_seq_coord : options.seq_len_qo;
+      double cute_time = timer.seconds() / options.iterations;
+      double flops_qk = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * effective_seq_len_kv * options.head_size_qk;
+      double flops_pv = 2.0 *  options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
+      double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
+      double gbps_qk =  options.batch * (sizeof(ElementQ) * options.num_heads_q * effective_seq_len_qo * options.head_size_qk + 
+                                         sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);
+      double gbps_pv = sizeof(ElementV) * options.batch * options.num_heads_kv * effective_seq_len_kv * options.head_size_vo +
+                       sizeof(ElementOutput) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
+      double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
+      std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q << "\tNumHeads_kv: " << options.num_heads_kv << "\tSeq Length QO: " << options.seq_len_qo
+          << "\tSeq Length KV: " << options.seq_len_kv << "\tSeq Length KV Cache: " << options.seq_len_kv_cache 
+          << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
+          << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false")
+          << "\t Scheduler: " << options.scheduler << "\t Paged KV cache: " << (options.use_paged_kv ? "true" : "false");
+      printf("\nPerformance:   %4.3f  GB/s,    %4.3f  TFlop/s,   %6.4f  ms\n\n", gbps, tflops, cute_time * 1000);
     }
-    finalize_counters(state, gflops, mega_bytes_transferred);
-  }
 
-private:
-  static void initialize_counters(::benchmark::State& state) {
-    state.counters["avg_runtime_ms"] = 0;
-    state.counters["best_runtime_ms"] = std::numeric_limits<double>::max();
-  }
-
-  static void update_counters(::benchmark::State& state, double ms_elapsed) {
-    state.PauseTiming();
-    state.counters["total_runtime_ms"] += ms_elapsed;
-    state.counters["best_runtime_ms"] = std::min<double>(state.counters["best_runtime_ms"], ms_elapsed);
-    state.ResumeTiming();
-  }
-
-  static void finalize_counters(::benchmark::State& state,  double gflop, double mega_bytes_transferred) {
-    state.counters["avg_runtime_ms"] =
-      state.counters["total_runtime_ms"] / static_cast<double>(state.iterations());
-    state.counters["avg_tflops"] = gflop / state.counters["avg_runtime_ms"];
-    state.counters["avg_throughput"] = mega_bytes_transferred / state.counters["avg_runtime_ms"];
-    state.counters["best_tflop"] = gflop / state.counters["best_runtime_ms"];
-    state.counters["best_bandwidth"] = mega_bytes_transferred / state.counters["best_runtime_ms"];
+    return cutlass::Status::kSuccess;
   }
 };
 
-}
+// the default value used for the case BF16
+template <bool Causal, 
+          typename TileShapeQK, 
+          typename TileShapePV, 
+          typename TileShapeOutput, 
+          typename SubgroupLayout, 
+          int PipelineStages,
+          typename ElementInputQ = bfloat16_t, 
+          typename ElementInputKV = bfloat16_t, 
+          typename MMAOperation = XE_8x16x16_F32BF16BF16F32_TT,
+          typename GmemTiledCopyQ = XE_2D_U16x8x32_LD_N,
+          typename GmemTiledCopyK = XE_2D_U16x16x16_LD_T, // _T designates a transposed block load operation
+          typename GmemTiledCopyV = XE_2D_U16x16x32_LD_V,
+          typename ElementAccumulator = float,
+          typename ElementComputeEpilogue = float,
+          typename ElementOutput = float,
+          typename GmemTiledCopyStore = XE_2D_U32x8x16_ST_N> struct FMHAConfig {
 
-#define CUTLASS_FMHA_DECODE_BENCHMARK(F) cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::FMHADecodeOptions>::Register(#F, &F##_func)
+  template <bool isVarLen, bool PagedKV, class Scheduler>
+  static int run(const Options &options) {
+    //
+    // Run examples
+    //
 
-#define CUTLASS_CREATE_FMHA_DECODE_BENCHMARK(F)                          \
-  static void F##_func(                                           \
-      ::benchmark::State& state,                                  \
-      cutlass::benchmark::FMHADecodeOptions const& options,                 \
-      cutlass::KernelHardwareInfo const& hw_info) {               \
-    auto bench = cutlass::benchmark::BenchmarkRunnerFMHADecode<F>();    \
-    bench.run(state, options, hw_info);                           \
+    // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
+    // information is used by the underlying kernel.
+    cutlass::KernelHardwareInfo hw_info;
+
+    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
+    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+    using CollectiveEpilogue = cutlass::flash_attention::collective::FlashPrefillCachedEpilogue<
+        EpilogueDispatchPolicy, MMAOperation, TileShapeOutput, SubgroupLayout, ElementComputeEpilogue, ElementOutput, cutlass::gemm::TagToStrideC_t<LayoutO>, ElementOutput,
+        GmemTiledCopyStore>;
+    using CollectiveSoftmaxEpilogue = cutlass::flash_attention::collective::FlashPrefillSoftmaxEpilogue<Causal, EpilogueDispatchPolicy, ElementAccumulator>;
+
+    using ProblemShapeRegular = cute::tuple<int, int, int, int, int, int, int, int>;
+    using namespace cutlass::fmha::collective;
+    using ProblemShapeVarlen = cute::tuple<int, int, int, VariableLength, VariableLength, VariableLength, int, int>;
+    using ProblemShapeType = std::conditional_t<isVarLen, ProblemShapeVarlen, ProblemShapeRegular>;
+
+    // Mainloop
+    using CollectiveMainloop = cutlass::flash_attention::collective::FlashPrefillCachedMma<
+        GEMMDispatchPolicy, ProblemShapeType, ElementInputQ, cutlass::gemm::TagToStrideA_t<LayoutQ>, ElementInputKV,
+        cutlass::gemm::TagToStrideB_t<LayoutK>, ElementInputKV, cutlass::gemm::TagToStrideB_t<LayoutV>, MMAOperation, TileShapeQK, TileShapePV, SubgroupLayout,
+        GmemTiledCopyQ, // Q
+        GmemTiledCopyK, // K
+        GmemTiledCopyV, // V,
+        Causal,
+        PagedKV>;
+
+    using FMHAPrefillCachedKernel = cutlass::flash_attention::kernel::FMHAPrefillCached<ProblemShapeType, CollectiveMainloop,
+                                                                     CollectiveSoftmaxEpilogue, CollectiveEpilogue, Scheduler>;
+
+    ExampleRunner<FMHAPrefillCachedKernel, isVarLen> runner;
+
+    CUTLASS_CHECK(runner.run(options, hw_info));
+    return 0;    
   }
+
+  static int run(const Options &options) {
+    if (options.use_paged_kv && !options.varlen) {
+      return run<false, true, cutlass::flash_attention::IndividualScheduler>(options);
+    } else if(!options.use_paged_kv && options.varlen) {
+      return run<true, false, cutlass::flash_attention::IndividualScheduler>(options);
+    } else if(!options.use_paged_kv && !options.varlen) {
+      return run<false, false, cutlass::flash_attention::IndividualScheduler>(options);
+    } else {
+      return run<true, true, cutlass::flash_attention::IndividualScheduler>(options);
+    }
+  }
+};
