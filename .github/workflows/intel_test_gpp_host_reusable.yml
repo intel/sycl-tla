@@ -26,7 +26,7 @@ jobs:
       matrix:
         compiler: ${{ fromJSON(inputs.compiler) }}
         intel_graphics: ${{ fromJSON(inputs.intel_graphics) }}
-        gpu: [BMG, PVC]
+        gpu: ${{ fromJSON(inputs.gpu) }}
         include:
           - gpu: BMG
             sycl_target: intel_gpu_bmg_g21

@@ -1,0 +1,36 @@
+name: "PVC nightly test"
+
+on:
+  schedule:
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+    inputs:
+      DPCPP_VERSION:
+        description: "DPCPP version to use"
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sycl-test:
+    uses: ./.github/workflows/intel_test_reusable.yml
+    with:
+      compiler: '["RELEASE", "NIGHTLY"]'
+      intel_graphics: '["LTS"]'
+      DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
+      gpu: '["PVC"]'
+
+  gpp-host-test:
+    needs: sycl-test
+    uses: ./.github/workflows/intel_test_gpp.yml
+    with:
+      compiler: '["RELEASE"]'
+      intel_graphics: '["LTS"]'
+      DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
+      gpu: '["PVC"]'
+
+    

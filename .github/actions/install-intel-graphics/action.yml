@@ -5,7 +5,7 @@ inputs:
     description: "Install for PVC or BMG gpu"
     type: string
   IGC:
-    description: "Use ROLLING or STAGING release"
+    description: "Use ROLLING, STAGING, or LTS release"
     type: string
 
 runs:
@@ -17,55 +17,13 @@ runs:
       run: |
         shopt -s expand_aliases
         which sudo || alias sudo=""
-        if [[ "${{ inputs.GPU }}" == "PVC" ]]; then
-          # Purge existing intel graphics packages
+        if [[ "${{ inputs.GPU }}" == "BMG" ]] || [[ "${{ inputs.GPU }}" == "PVC" ]]; then
+          #purge existing intel graphics packages
           sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
           'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
-          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true
+          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true        
           sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
-          sudo rm -f /etc/apt/sources.list.d/intel-gpu-*.list
-          
-          # Install LTS drivers for PVC
-          . /etc/os-release
-          if [[ ! " jammy noble " =~ " ${VERSION_CODENAME} " ]]; then
-            echo "Ubuntu version ${VERSION_CODENAME} not supported"
-            exit 1
-          fi
-          wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
-            sudo gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${VERSION_CODENAME}/lts/2523 unified" | \
-            sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
-          sudo apt update
-          sudo apt install -y \
-            libze1 \
-            intel-media-va-driver-non-free libmfx-gen1 libvpl2 \
-            libegl-mesa0 libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
-            libglapi-mesa libgles2-mesa-dev libglx-mesa0 libxatracker2 mesa-va-drivers \
-            mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo
-          mkdir neo
-          cd neo
-          wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.27.10/intel-igc-core-2_2.27.10+20617_amd64.deb
-          wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.27.10/intel-igc-opencl-2_2.27.10+20617_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/intel-ocloc-dbgsym_26.01.36711.4-0_amd64.ddeb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/intel-ocloc_26.01.36711.4-0_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/intel-opencl-icd-dbgsym_26.01.36711.4-0_amd64.ddeb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/intel-opencl-icd_26.01.36711.4-0_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/libigdgmm12_22.9.0_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/libze-intel-gpu1-dbgsym_26.01.36711.4-0_amd64.ddeb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/libze-intel-gpu1_26.01.36711.4-0_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/ww01.sum
-          sha256sum -c ww01.sum
-          sudo dpkg -i *.deb
 
-        elif [[ "${{ inputs.GPU }}" == "BMG" ]]; then
-          # Purge existing intel graphics packages
-          sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
-          'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
-          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true
-          sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
-          sudo rm -f /etc/apt/sources.list.d/intel-gpu-*.list
-          
-          # Install ROLLING drivers for BMG
           sudo add-apt-repository ppa:kobuk-team/intel-graphics
           sudo apt update
           sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
@@ -80,6 +38,27 @@ runs:
       run: |
         shopt -s expand_aliases
         which sudo || alias sudo=""
+        if [[ "${{ inputs.GPU }}" == "BMG" ]] || [[ "${{ inputs.GPU }}" == "PVC" ]]; then
+          #purge existing intel graphics packages
+          sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
+          'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
+          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true        
+          sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
+
+          sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
+          sudo apt update
+          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+            intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
+          dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
+        else
+          exit 1
+        fi
+    - name: Install Intel graphics drivers
+      if: inputs.IGC == 'LTS'
+      shell: bash
+      run: |
+        shopt -s expand_aliases
+        which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "PVC" ]]; then
           # Purge existing intel graphics packages
           sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
@@ -100,40 +79,23 @@ runs:
             sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
           sudo apt update
           sudo apt install -y \
-            libze1 \
-            intel-media-va-driver-non-free libmfx-gen1 libvpl2 \
-            libegl-mesa0 libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
-            libglapi-mesa libgles2-mesa-dev libglx-mesa0 libxatracker2 mesa-va-drivers \
-            mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo
+              intel-opencl-icd libze-intel-gpu1 libze1 \
+              intel-media-va-driver-non-free libmfx-gen1 libvpl2 \
+              libegl-mesa0 libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
+              libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
+              mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo
+          
           mkdir neo
           cd neo
-          wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.27.10/intel-igc-core-2_2.27.10+20617_amd64.deb
-          wget https://github.com/intel/intel-graphics-compiler/releases/download/v2.27.10/intel-igc-opencl-2_2.27.10+20617_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/intel-ocloc-dbgsym_26.01.36711.4-0_amd64.ddeb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/intel-ocloc_26.01.36711.4-0_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/intel-opencl-icd-dbgsym_26.01.36711.4-0_amd64.ddeb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/intel-opencl-icd_26.01.36711.4-0_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/libigdgmm12_22.9.0_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/libze-intel-gpu1-dbgsym_26.01.36711.4-0_amd64.ddeb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/libze-intel-gpu1_26.01.36711.4-0_amd64.deb
-          wget https://github.com/intel/compute-runtime/releases/download/26.01.36711.4/ww01.sum
-          sha256sum -c ww01.sum
+          # Latest IGC release version
+          IGC_VERSION=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+          echo "Downloading IGC version: ${IGC_VERSION}"
+          wget https://github.com/intel/intel-graphics-compiler/releases/download/v${IGC_VERSION}/intel-igc-core-2_${IGC_VERSION}+*_amd64.deb
+          wget https://github.com/intel/intel-graphics-compiler/releases/download/v${IGC_VERSION}/intel-igc-opencl-2_${IGC_VERSION}+*_amd64.deb
+                    
+          # Install all downloaded packages
           sudo dpkg -i *.deb        
-          
-        elif [[ "${{ inputs.GPU }}" == "BMG" ]]; then
-          # Purge existing intel graphics packages
-          sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
-          'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
-          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true
-          sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
-          sudo rm -f /etc/apt/sources.list.d/intel-gpu-*.list
-          
-          # Install STAGING drivers for BMG
-          sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
-          sudo apt update
-          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
-            intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
-          dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
+
         else
           exit 1
         fi
