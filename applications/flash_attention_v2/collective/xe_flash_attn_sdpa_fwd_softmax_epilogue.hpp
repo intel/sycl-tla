@@ -1,13 +1,12 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (c) 2024 - 2025 Intel Corporation All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  * this list of conditions and the following disclaimer in the documentation
@@ -19,14 +18,15 @@
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ *ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ *LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ *CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ *SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ *CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ *ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ *POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
 /*! \file
@@ -35,12 +35,12 @@
 
 #pragma once
 
-#include <sycl/sycl.hpp>
 #include "cutlass/cutlass.h"
-#include "cutlass/epilogue/dispatch_policy.hpp"
+#include "cutlass/detail/layout.hpp"
 #include "cutlass/epilogue/collective/collective_epilogue.hpp"
 #include "cutlass/epilogue/collective/detail.hpp"
-#include "cutlass/detail/layout.hpp"
+#include "cutlass/epilogue/dispatch_policy.hpp"
+#include <sycl/sycl.hpp>
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -50,15 +50,16 @@ namespace collective {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <bool CausalMask_, class DispatchPolicy, class... Args> class FlashPrefillSoftmaxEpilogue {
-  static_assert(cutlass::detail::dependent_false<DispatchPolicy>, "Could not find an epilogue specialization.");
+template <bool CausalMask_, class DispatchPolicy, class... Args>
+class FlashPrefillSoftmaxEpilogue {
+  static_assert(cutlass::detail::dependent_false<DispatchPolicy>,
+                "Could not find an epilogue specialization.");
 };
 
-
 template <bool CausalMask_, class Element_>
-class FlashPrefillSoftmaxEpilogue<CausalMask_, epilogue::IntelXeXMX16, Element_> {
+class FlashPrefillSoftmaxEpilogue<CausalMask_, epilogue::IntelXeXMX16,
+                                  Element_> {
 public:
-
   //
   // Type Aliases
   //
@@ -87,13 +88,9 @@ public:
     return Params{val};
   }
 
-  template <class ProblemShape>
-  static size_t get_workspace_size() {
-    return 0;
-  }
+  template <class ProblemShape> static size_t get_workspace_size() { return 0; }
 
-  template <class ProblemShape>
-  static cutlass::Status initialize_workspace() {
+  template <class ProblemShape> static cutlass::Status initialize_workspace() {
     return Status::kSuccess;
   }
 
@@ -105,8 +102,10 @@ public:
   CUTLASS_HOST_DEVICE
   FlashPrefillSoftmaxEpilogue(Params const &params_) : params(params_) {}
 
-  template <int Vec, int FragsM, int FragsN, class FragAcc, class FragMax, class FragSum>
-  CUTLASS_DEVICE void scale_exp_log2(FragAcc &frag_s, FragMax const &max, FragSum &sum) {
+  template <int Vec, int FragsM, int FragsN, class FragAcc, class FragMax,
+            class FragSum>
+  CUTLASS_DEVICE void scale_exp_log2(FragAcc &frag_s, FragMax const &max,
+                                     FragSum &sum) {
     auto g = compat::get_nd_item<1>().get_sub_group();
     const auto max_scale = max * params.scale;
     CUTLASS_PRAGMA_UNROLL
@@ -142,7 +141,8 @@ public:
   }
 
   template <class FragAcc, class FragMax, class FragSum, class FragOut>
-  CUTLASS_DEVICE void operator()(bool is_first, FragAcc &frag_s, FragMax &max, FragSum &sum, FragOut &out) {
+  CUTLASS_DEVICE void operator()(bool is_first, FragAcc &frag_s, FragMax &max,
+                                 FragSum &sum, FragOut &out) {
     auto max_prev = max;
     using FragAccLayout = typename FragAcc::layout_type;
     using FragOutLayout = typename FragOut::layout_type;
@@ -151,29 +151,30 @@ public:
     constexpr int FragsNAcc = get<2>(FragAccLayout{}.shape());
     constexpr int FragsNOut = size(select<2,3>(FragOutLayout{}.shape()));
     reduce_max<Vec, FragsM, FragsNAcc>(frag_s, max);
-    static_assert(Vec * FragsM  % 8 ==0, " No. of attention rows per subgroup should be >= 1 MMA Atom worth of rows.");
+    static_assert(Vec * FragsM % 8 == 0,
+                  " No. of attention rows per subgroup should be >= 1 MMA Atom "
+                  "worth of rows.");
     if (!is_first) {
       auto g = compat::get_nd_item<1>().get_sub_group();
       Element max_scale{max * params.scale};
-      Element exp_scale{sycl::native::exp2(max_prev * params.scale - max_scale)};
+      Element exp_scale{
+          sycl::native::exp2(max_prev * params.scale - max_scale)};
       CUTLASS_PRAGMA_UNROLL
-      //Along the sequence length q
-      for (int indx = 0; indx < Vec * FragsM; indx++) {
+      for (int indx = 0; indx < Vec * FragsM; indx++) { // 16 rows in total
         auto max_scale_bcast = group_broadcast(g, max_scale, indx);
         auto exp_scale_bcast = group_broadcast(g, exp_scale, indx);
         sum(indx) *= exp_scale_bcast;
-
-        // Along the seq_len_kv
         CUTLASS_PRAGMA_UNROLL
-        for (int z = 0; z < FragsNAcc; z++) { // FragsNAcc == 4 when hdim64 , 8 when hdim128 
+        for (int z = 0; z < FragsNAcc; z++) {
           auto base_indx = indx + (z * Vec * FragsM);
-          frag_s(base_indx) = sycl::native::exp2((frag_s(base_indx) - max_scale_bcast));
-          sum(indx) += frag_s(base_indx);  
+          frag_s(base_indx) =
+              sycl::native::exp2((frag_s(base_indx) - max_scale_bcast));
+          sum(indx) += frag_s(base_indx);
         }
         CUTLASS_PRAGMA_UNROLL
-        for (int z = 0; z < FragsNOut; z++) { // FragsNOut == 4
-          auto base_indx = indx + (z * Vec * FragsM);
-          out(base_indx) *= exp_scale_bcast;     
+        for (int z = 0; z < FragsNOut; z++) {
+          auto base_indx = indx + (z * Vec * FragsM); // z * 16 rows - 
+          out(base_indx) *= exp_scale_bcast;
         }
       }
     } else {
