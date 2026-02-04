@@ -112,9 +112,9 @@ int main(int argc, const char **argv) {
 // when paged KV cache is enabled. Use NUM_SG=8 / KV_TILE_SIZE=64 instead though
 // may have performance impact.
 #if defined(PERSISTENT) || defined(SPLITKV)
-#define NUM_SG _16
+#define NUM_SG _8
 // when paged KV cached used, page size should be multiple of QK tile size
-#define KV_TILE_SIZE _128
+#define KV_TILE_SIZE _256
 
 // this depends on the max query group size to be supported
 #define Q_PACKED_TILE_SIZE _8

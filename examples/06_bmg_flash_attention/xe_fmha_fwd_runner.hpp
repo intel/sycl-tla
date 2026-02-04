@@ -70,7 +70,7 @@ struct Options {
 
   Options()
       : help(false), error(false), is_causal(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
-        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), , num_kv_splits(1), iterations(100), warmup(100), softmax_scale(1.f), verify(1), scheduler("Individual") {}
+        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), num_kv_splits(1), iterations(100), warmup(100), softmax_scale(1.f), verify(1), scheduler("Individual") {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -1139,7 +1139,7 @@ struct FMHAConfig {
     >;
 
     static_assert(!(persistent & Causal), "persistent SDPA kernel not support Causal yet");
-    using FMHAKernel = conditional_t<is_same_v<Scheduler, cutlass::fmha::kernel::XeFHMAPersistentTileScheduler>,
+    using FMHAKernel = conditional_t<is_same_v<Scheduler, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>,
       cutlass::fmha::kernel::XeFMHAFwdPersistentKernel<
         ProblemShapeType, CollectiveMainloop, CollectiveEpilogue, Scheduler>,
         conditional_t<isSplitKV,
@@ -1169,17 +1169,23 @@ struct FMHAConfig {
       }
       return run<false, false, false, false, cutlass::fmha::kernel::XeFHMAIndividualPersistentTileScheduler>(options);
     } else if (options.use_paged_kv && !options.varlen) {
-      return run<false, true, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<false, true, true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+        run<false, true, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else if(!options.use_paged_kv && options.varlen && !cached_kv) {
-      return run<true, false, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<true, false, false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+        run<true, false, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else if(!options.use_paged_kv && !options.varlen && !cached_kv) {
-      return run<false, false, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<false, false, false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+        run<false, false, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else if (!options.use_paged_kv && options.varlen && cached_kv) {
-      return run<true, true, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<true, true, false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+        run<true, true, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else if (!options.use_paged_kv && !options.varlen && cached_kv) {
-      return run<false, true, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<false, true, false, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+        run<false, true, false, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     } else {
-      return run<true, true, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
+      return splitkv ? run<true, true, true, true, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options) :
+        run<true, true, true, false, cutlass::fmha::kernel::XeFHMAIndividualTileScheduler>(options);
     }
   }
 };

@@ -111,7 +111,7 @@ struct XeFHMAIndividualTileScheduler {
   }
 };
 
-struct XeFHMAPersistentTileScheduler {
+struct XeFHMAIndividualPersistentTileScheduler {
 
   struct Params {
     dim3 grid;
@@ -126,7 +126,7 @@ struct XeFHMAPersistentTileScheduler {
   int num_batch_heads_;
 
   CUTLASS_DEVICE
-  XeFHMAPersistentTileScheduler(Params const& params, int kv_tile_size,
+  XeFHMAIndividualPersistentTileScheduler(Params const& params, int kv_tile_size,
     int local_num_kv_blocks, int num_batch_heads)
     : params(params), kv_tile_size_(kv_tile_size), local_num_kv_blocks_(local_num_kv_blocks), num_batch_heads_(num_batch_heads) {}
 
@@ -173,7 +173,7 @@ struct XeFHMAPersistentTileScheduler {
   }
 
   CUTLASS_DEVICE
-  XeFHMAPersistentTileScheduler& operator++() {
+  XeFHMAIndividualPersistentTileScheduler& operator++() {
     valid_ = false;
     return *this;
   }

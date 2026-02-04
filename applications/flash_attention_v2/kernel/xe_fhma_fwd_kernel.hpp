@@ -344,7 +344,7 @@ public:
   using ElementA = typename CollectiveMainloop::ElementA;
 
   // Tile scheduler derived types
-  static_assert(is_same_v<TileScheduler_, XeFHMAPersistentTileScheduler>);
+  static_assert(is_same_v<TileScheduler_, XeFHMAIndividualPersistentTileScheduler>);
   using TileScheduler = TileScheduler_;
   using TileSchedulerParams = typename TileScheduler::Params;
 
