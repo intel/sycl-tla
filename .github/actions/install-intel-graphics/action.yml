@@ -87,12 +87,13 @@ runs:
           
           mkdir neo
           cd neo
-          # Latest IGC release version
-          IGC_VERSION=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-          echo "Downloading IGC version: ${IGC_VERSION}"
-          wget https://github.com/intel/intel-graphics-compiler/releases/download/v${IGC_VERSION}/intel-igc-core-2_${IGC_VERSION}+*_amd64.deb
-          wget https://github.com/intel/intel-graphics-compiler/releases/download/v${IGC_VERSION}/intel-igc-opencl-2_${IGC_VERSION}+*_amd64.deb
-                    
+          echo "Fetching latest IGC release..."
+          IGC_CORE_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-core-2.*amd64.deb\"" | head -1 | cut -d '"' -f 4)
+          IGC_OPENCL_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-opencl-2.*amd64.deb\"" | grep -v "devel" | head -1 | cut -d '"' -f 4)
+          echo "Downloading IGC packages..."
+          wget "${IGC_CORE_URL}"
+          wget "${IGC_OPENCL_URL}"
+          
           # Install all downloaded packages
           sudo dpkg -i *.deb        
 
