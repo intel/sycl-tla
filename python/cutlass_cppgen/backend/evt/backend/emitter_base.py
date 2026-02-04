@@ -104,16 +104,18 @@ class FusionCallbacks:
         if self.dag_ir.in_degree(node.name) == 0:
             return ""
 
-        if self.cc in [INTEL_XE12, INTEL_XE20]:  
-            evt_tmp = f"""
-    using EVT{node.name_camel} = cutlass::epilogue::{self.namespace}::Xe{self.evt_cc}EVT<
-        {node.name_camel},
-    """ 
+        if self.cc in [INTEL_XE12, INTEL_XE20]:
+            evt_tmp = (
+                f"\nusing EVT{node.name_camel} = cutlass::epilogue::{self.namespace}::"
+                f"XeEVT<\n"
+                f"    {node.name_camel},\n"
+            )
         else:
-            evt_tmp = f"""
-    using EVT{node.name_camel} = cutlass::epilogue::{self.namespace}::Sm{self.evt_cc}EVT<
-        {node.name_camel},
-    """
+           evt_tmp = (
+                f"\nusing EVT{node.name_camel} = cutlass::epilogue::{self.namespace}::"
+                f"Sm{self.evt_cc}EVT<\n"
+                f"    {node.name_camel},\n"
+            )
         sorted_children = self.dag_ir.get_all_inputs(node.name)
         evt_node_strs = [f"    {self.get_visitor_name(child_name)}" for child_name in sorted_children]
         evt_tmp += ",\n".join(evt_node_strs) + ">;\n"
@@ -147,22 +149,24 @@ class FusionCallbacks:
                 dag_node_strs.append(f"    {n_meta.name_camel}")
         dag_nodes = ",\n".join(dag_node_strs)
 
-        if self.cc in [INTEL_XE12, INTEL_XE20]:  
-            return f"""
-            using {node.name_camel} = cutlass::epilogue::{self.namespace}::Xe{self.evt_cc}TopologicalVisitor<
-                {DataTypeTag[node.subgraph.element_compute]},
-                {edge_tuples},
-            {dag_nodes}
-            >;
-            """
+        if self.cc in [INTEL_XE12, INTEL_XE20]:
+            return (
+                f"\nusing {node.name_camel} = cutlass::epilogue::{self.namespace}::"
+                f"XeTopologicalVisitor<\n"
+                f"    {DataTypeTag[node.subgraph.element_compute]},\n"
+                f"    {edge_tuples},\n"
+                f"{dag_nodes}\n"
+                ">;\n"
+            )
         else:
-            return f"""
-            using {node.name_camel} = cutlass::epilogue::{self.namespace}::Sm{self.evt_cc}TopologicalVisitor<
-                {DataTypeTag[node.subgraph.element_compute]},
-                {edge_tuples},
-            {dag_nodes}
-            >;
-            """
+            return (
+                f"\nusing {node.name_camel} = cutlass::epilogue::{self.namespace}::"
+                f"Sm{self.evt_cc}TopologicalVisitor<\n"
+                f"    {DataTypeTag[node.subgraph.element_compute]},\n"
+                f"    {edge_tuples},\n"
+                f"{dag_nodes}\n"
+                ">;\n"
+            )
 
     def emit_node(self, node):
         if isinstance(node, TopoVisitorNode):
