@@ -222,19 +222,6 @@ struct TestbedImpl {
 
   // Flag to print "unsupported" message only once per test instance
   bool printed_unsupported_once = false;
-
-  void log_unsupported_once() {
-    if (printed_unsupported_once) {
-      return;
-    }
-    auto* test_info = ::testing::UnitTest::GetInstance()->current_test_info();
-    if (test_info) {
-      std::cerr << "Test unsupported: " << test_info->test_suite_name() << "." << test_info->name() << "\n";
-    } else {
-      std::cerr << "Test unsupported.\n";
-    }
-    printed_unsupported_once = true;
-  }
   //
   // Methods
   //
@@ -711,7 +698,7 @@ struct TestbedImpl {
     auto can_implement = FlashDecode::can_implement(arguments);
 
         if (!can_implement) {
-      log_unsupported_once();
+      test::unit::LogUnsupportedOnce(printed_unsupported_once);
         }
 
     //

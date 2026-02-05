@@ -2771,23 +2771,6 @@ struct TestbedImpl {
 
   // Flag to print "unsupported" message only once per test instance
   bool printed_unsupported_once = false;
-
-  void log_unsupported_once(char const* reason = nullptr) {
-    if (printed_unsupported_once) {
-      return;
-    }
-    auto* test_info = ::testing::UnitTest::GetInstance()->current_test_info();
-    if (test_info) {
-      std::cerr << "Test unsupported: " << test_info->test_suite_name() << "." << test_info->name();
-    } else {
-      std::cerr << "Test unsupported";
-    }
-    if (reason && reason[0] != '\0') {
-      std::cerr << ": " << reason;
-    }
-    std::cerr << "\n";
-    printed_unsupported_once = true;
-  }
   //
   // Methods
   //
@@ -3085,13 +3068,13 @@ struct TestbedImpl {
 
     if (status != cutlass::Status::kSuccess) {
 #if defined(CUTLASS_ENABLE_SYCL)
-      log_unsupported_once();
+      test::unit::LogUnsupportedOnce(printed_unsupported_once);
       return true;
 #else
       cudaError_t error = cudaGetLastError();
       const auto error_str = cudaGetErrorString(error);
       CUTLASS_TRACE_HOST("TestbedImpl::run: cudaGetLastError() is " << error_str);
-      log_unsupported_once(error_str);
+      test::unit::LogUnsupportedOnce(printed_unsupported_once, error_str);
       return true;
 #endif
     }
@@ -3113,12 +3096,12 @@ struct TestbedImpl {
       status = gemm_op.initialize(arguments, workspace.get());
       if (status != cutlass::Status::kSuccess) {
     #if defined(CUTLASS_ENABLE_SYCL)
-        log_unsupported_once();
+        test::unit::LogUnsupportedOnce(printed_unsupported_once);
     #else
         cudaError_t error = cudaGetLastError();
         const auto error_str = cudaGetErrorString(error);
         CUTLASS_TRACE_HOST("TestbedImpl::run: cudaGetLastError() is " << error_str);
-        log_unsupported_once(error_str);
+        test::unit::LogUnsupportedOnce(printed_unsupported_once, error_str);
     #endif
       }
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
