@@ -77,7 +77,7 @@ class xe12AccumulatorImpl(AccumulatorImpl):
         if self._type_decl is not None:
             return self._type_decl
 
-        self._type_decl = f"""\nusing {self.name_camel} = cutlass::epilogue::fusion::Sm90AccFetch;\n"""
+        self._type_decl = f"""\nusing {self.name_camel} = cutlass::epilogue::fusion::XeAccFetch;\n"""
         return self._type_decl
 
 
@@ -94,7 +94,7 @@ class xe12LoadSrcImpl(LoadSrcImpl):
         self._type_decl = f"""
 using ElementC = {DataTypeTag[self.element]};
 using StrideC = {self.stride_mnl};
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90SrcFetch<{DataTypeTag[self.element]}>;
+using {self.name_camel} = cutlass::epilogue::fusion::XeSrcFetch<{DataTypeTag[self.element]}>;
 """
         return self._type_decl
 
@@ -134,7 +134,7 @@ class xe12ScalarBroadcastImpl(ScalarBroadcastImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90ScalarBroadcast<
+using {self.name_camel} = cutlass::epilogue::fusion::XeScalarBroadcast<
     {DataTypeTag[self.element]}, {self.stride_mnl}, {self.broadcast_count}, {op_tag(self.reduction_fn)}
 >;
 """
@@ -189,7 +189,7 @@ class xe12ComputeImpl(ComputeImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Xe12Compute<
+using {self.name_camel} = cutlass::epilogue::fusion::XeCompute<
     {op_tag(self.fn)}, {DataTypeTag[self.element_output]}, {DataTypeTag[self.element_compute]},
     {FloatRoundStyleTag[self.round_style]}
 >;
