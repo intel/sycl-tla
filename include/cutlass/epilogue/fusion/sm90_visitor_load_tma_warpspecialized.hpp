@@ -787,6 +787,21 @@ private:
   }
 };
 
+// Xe aliases reuse the Sm90 implementations until architecture-specific differences emerge
+using XeAccFetch = Sm90AccFetch;
+
+template <class Element>
+using XeSrcFetch = Sm90SrcFetch<Element>;
+
+template <
+  class Element,
+  class StrideMNL_ = Stride<_0,_0,_0>,
+  int BroadcastCount = 1,
+  template <class> class ReductionFn = multiplies
+>
+using XeScalarBroadcast = Sm90ScalarBroadcast<Element, StrideMNL_, BroadcastCount, ReductionFn>;
+
+
 // Scalar broadcast
 // Supports reduction over multiple broadcasts to support fusions such as fp8 scaling factors
 template<
