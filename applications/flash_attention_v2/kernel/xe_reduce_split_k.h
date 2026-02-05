@@ -262,13 +262,14 @@ public:
         ElementLSE global_exp_sums {0};
         o_accum_buffer[0] = static_cast<ElementLSE>(Oaccum(seq_idx, idx, 0 * num_heads_q + head_q, l_coord));
 
-        #pragma unroll
+        #pragma unroll 2
         for (int i = 0; i < FMHAKernel_::max_num_kv_splits; ++i) {
           if (i * num_blocks_per_split >= k_blocks) {
             break;
           }
           // prefetch next o_accum
-          o_accum_buffer[(i + 1) & 1] = static_cast<ElementLSE>(Oaccum(seq_idx, idx, (i + 1) * num_heads_q + head_q, l_coord));
+          if (i + 1 < FMHAKernel_::max_num_kv_splits && (i + 1) * num_blocks_per_split < k_blocks)
+            o_accum_buffer[(i + 1) & 1] = static_cast<ElementLSE>(Oaccum(seq_idx, idx, (i + 1) * num_heads_q + head_q, l_coord));
 
           ElementLSE local_max_logit = shared_storage.max_logits_slm_array[i];
           ElementLSE local_exp_sum = shared_storage.exp_sums_slm_array[i];
