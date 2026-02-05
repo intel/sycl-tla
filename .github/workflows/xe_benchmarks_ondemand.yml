@@ -44,7 +44,8 @@ jobs:
         uses: ./.github/actions/install-dpcpp
         with:
           DPCPP_RELEASE: ${{ matrix.compiler }}
-          DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
+          #DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
+          DPCPP_PATH: ~/dpcpp
           GPU: ${{ matrix.gpu }}
           IGC: ${{ matrix.intel_graphics }}
       - name: Setup virtual environment
@@ -100,14 +101,14 @@ jobs:
         with:
           name: benchmark-artifacts
           path: logs/
-        retention-days: 3
+          retention-days: 3
       - name: Cleanup DPC++
         if: always()
         shell: bash
         run: |
           echo "Cleaning up DPC++ installation..."
           # Remove DPCPP directory if it exists
-          DPCPP_PATH="${{ inputs.DPCPP_PATH || '~/dpcpp' }}"
+          DPCPP_PATH="~/dpcpp"
           DPCPP_PATH=$(eval echo $DPCPP_PATH)  # Expand ~ to home directory
           if [ -d "$DPCPP_PATH" ]; then
             echo "Removing DPCPP directory: $DPCPP_PATH"
