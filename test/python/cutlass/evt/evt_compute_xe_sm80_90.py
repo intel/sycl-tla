@@ -43,6 +43,7 @@ from cutlass_cppgen import swizzle
 
 from utils.evt_testbed import EVTTestBed, EVTTestCaseBase
 
+
 cutlass_cppgen.set_log_level(logging.WARNING)
 
 
@@ -69,6 +70,72 @@ class TestEVTCompute(EVTTestCaseBase):
 
             launcher = EVTTestBed(self.element, evt_arith_compute, example_inputs)
             input_keys = ["C", "alpha", "beta", "gamma"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_relu_tanh_1(self):
+        """
+        Test combination of relu and tanh ops: relu(alpha * tanh(accum) + beta * data)
+        """
+        def evt_combination(accum, C, alpha, beta):
+            D = relu(alpha * tanh(accum) + beta * C)
+            return D
+
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "beta": 0.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["C", "alpha", "beta"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_relu_tanh_2(self):
+        """
+        Test combination of relu and tanh ops: relu(accum) + tanh(C) * beta)
+        """
+        def evt_combination(accum, C, alpha, beta):
+            D = relu(accum) * alpha + tanh(C) * beta
+            return D
+
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "beta": 0.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["C", "alpha", "beta"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_relu_arith(self):
+        """
+        Test combination of relu and tanh ops: relu(accum) * alpha + C * beta
+        """
+        def evt_combination(accum, C, alpha, beta):
+            D = relu(accum) * alpha + C * beta
+            return D
+
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "beta": 0.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["C", "alpha", "beta"]
             result_keys = ["D"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
 
@@ -117,7 +184,7 @@ class TestEVTCompute(EVTTestCaseBase):
             input_keys = ["C", "alpha", "beta"]
             result_keys = ["D"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
-    
+
     def test_tanh(self):
         """
         Test Tanh op
@@ -136,7 +203,7 @@ class TestEVTCompute(EVTTestCaseBase):
             input_keys = []
             result_keys = ["D"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
-    
+
     def test_sigmoid(self):
         """
         Test Sigmoid op
@@ -155,7 +222,7 @@ class TestEVTCompute(EVTTestCaseBase):
             input_keys = []
             result_keys = ["D"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
-    
+
     def test_gelu(self):
         """
         Test GELU op
@@ -171,6 +238,25 @@ class TestEVTCompute(EVTTestCaseBase):
             }
             
             launcher = EVTTestBed(self.element, evt_gelu, example_inputs)
+            input_keys = []
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_relu(self):
+        """
+        Test RELU op
+        """
+        def evt_relu(accum):
+            D = relu(accum)
+            return D
+
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+
+            launcher = EVTTestBed(self.element, evt_relu, example_inputs)
             input_keys = []
             result_keys = ["D"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
@@ -194,5 +280,209 @@ class TestEVTCompute(EVTTestCaseBase):
             result_keys = ["D"]
             launcher.verify((m, n, k), input_keys, result_keys, l)
 
+    def test_sigmoid_variation1(self):
+        """
+        Test sigmoid(accum) * alpha + C
+        """
+        def evt_combination1(accum, C, alpha):
+            D = sigmoid(accum) * alpha + C
+            return D
+
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+
+            launcher = EVTTestBed(self.element, evt_combination1, example_inputs)
+            input_keys = ["C", "alpha"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_sigmoid_variation2(self):
+        """
+        Test sigmoid(accum) + C * alpha
+        """
+        def evt_combination2(accum, C, alpha):
+            D = sigmoid(accum) + C * alpha
+            return D
+
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+
+            launcher = EVTTestBed(self.element, evt_combination2, example_inputs)
+            input_keys = ["C", "alpha"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_sigmoid_variation3(self):
+        """
+        Test sigmoid(accum + C) * alpha
+        """
+        def evt_combination3(accum, C, alpha):
+            D = sigmoid(accum + C) * alpha
+            return D
+
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+
+            launcher = EVTTestBed(self.element, evt_combination3, example_inputs)
+            input_keys = ["C", "alpha"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_sigmoid_arith(self):
+        """
+        Test sigmoid with arithmetic: sigmoid(accum) * alpha + C * beta
+        """
+        def evt_combination(accum, C, alpha, beta):
+            D = sigmoid(accum) * alpha + C * beta
+            return D
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "beta": 0.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["C", "alpha", "beta"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+    def test_sigmoid_simple_arith(self):
+        """
+        Test simplest sigmoid arithmetic: sigmoid(accum) + C
+        """
+        def evt_combination(accum, C):
+            D = sigmoid(accum) + C
+            return D
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["C"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+
+    def test_sigmoid_scalar_only(self):
+        """
+        Test sigmoid with scalar only: sigmoid(accum) * alpha
+        """
+        def evt_combination(accum, alpha):
+            D = sigmoid(accum) * alpha
+            return D
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["alpha"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+    def test_gelu_sigmoid_simple(self):
+        """
+        Test simple combination: sigmoid(gelu(accum))
+        """
+        def evt_combination(accum):
+            D = sigmoid(gelu(accum))
+            return D
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = []
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+    def test_sigmoid_gelu_combination(self):
+        """
+        Test combination of sigmoid and gelu ops: sigmoid(accum) * alpha + gelu(C) * beta
+        """
+        def evt_combination(accum, C, alpha, beta):
+            D = sigmoid(accum) * alpha + gelu(C) * beta
+            return D
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "beta": 0.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["C", "alpha", "beta"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+    def test_sigmoid_with_add(self):
+        """
+        Test sigmoid with scalar multiplication and addition: sigmoid(accum) * alpha + C
+        """
+        def evt_combination(accum, C, alpha):
+            D = sigmoid(accum) * alpha + C
+            return D
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "alpha": 1.5,
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["C", "alpha"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+    def test_sigmoid_gelu_add(self):
+        """
+        Test addition: sigmoid(accum) + gelu(C)
+        """
+        def evt_combination(accum, C):
+            D = sigmoid(accum) + gelu(C)
+            return D
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["C"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
+    def test_gelu_sigmoid_nested(self):
+        """
+        Test nested: gelu(sigmoid(accum) + C)
+        """
+        def evt_combination(accum, C):
+            D = gelu(sigmoid(accum) + C)
+            return D
+        for m, n, k, l in self.get_problem_sizes(8):
+            example_inputs = {
+                "accum": self.fake_tensor(self.element, (l, m, n)),
+                "C": self.fake_tensor(self.element, (l, m, n)),
+                "D": self.fake_tensor(self.element, (l, m, n))
+            }
+            launcher = EVTTestBed(self.element, evt_combination, example_inputs)
+            input_keys = ["C"]
+            result_keys = ["D"]
+            launcher.verify((m, n, k), input_keys, result_keys, l)
 if __name__ == '__main__':
     unittest.main()
