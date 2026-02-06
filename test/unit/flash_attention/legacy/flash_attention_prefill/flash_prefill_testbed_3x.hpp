@@ -607,9 +607,9 @@ struct TestbedImpl {
 #endif
     auto can_implement = FlashAttention::can_implement(arguments);
 
-        if (!can_implement) {
+    if (!can_implement) {
       test::unit::LogUnsupportedOnce(printed_unsupported_once);
-        }
+    }
 
     //
     // Run Flash attention
