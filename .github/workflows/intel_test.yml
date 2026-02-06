@@ -25,6 +25,7 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     uses: ./.github/workflows/intel_test_reusable.yml
     with:
+      gpu: '["PVC", "BMG"]'
       compiler: '["RELEASE"]'
       intel_graphics: '["ROLLING"]'
       DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
@@ -35,5 +36,6 @@ jobs:
     uses: ./.github/workflows/intel_test_reusable.yml
     with:
       compiler: '["RELEASE", "NIGHTLY"]'
+      gpu: '["PVC", "BMG"]'
       intel_graphics: '["ROLLING", "STAGING"]'
       DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
