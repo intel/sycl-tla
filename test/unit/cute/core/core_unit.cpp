@@ -1,6 +1,5 @@
 /***************************************************************************************************
  * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * Copyright (C) 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,26 +34,7 @@
 
 #include <gtest/gtest.h>
 
-#if defined(CUTLASS_ENABLE_SYCL)
-#include <cstdlib>
-#if defined(_WIN32)
-#include <stdlib.h>
-#endif
-namespace {
-void ClearIgcPerfEnv() {
-#if defined(_WIN32)
-  _putenv_s("IGC_VISAOptions", "");
-#else
-  unsetenv("IGC_VISAOptions");
-#endif
-}
-} // namespace
-#endif
-
 int main(int argc, char* arg[]) {
-#if defined(CUTLASS_ENABLE_SYCL)
-  ClearIgcPerfEnv();
-#endif
   ::testing::InitGoogleTest(&argc, arg);
   return RUN_ALL_TESTS();
 }
