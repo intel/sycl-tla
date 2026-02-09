@@ -1,6 +1,6 @@
 #include "sdpa_kernel.hpp"
 #include "sdpa_util.hpp"
-#include "reference.hpp"
+#include "reference_gpu.hpp"
 
 template<class...> class mhaodoDeviceName;
 template<class...> class mhabwdDeviceName;
@@ -416,7 +416,7 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
     std::vector<T> dk_ref(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_QK);
     std::vector<T> dv_ref(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_VO);
     if (checksum) {
-        sdpa_backward_reference<T, V>(q_h.data(), k_h.data(), v_h.data(),
+        sdpa_backward_reference_gpu<T, V>(q_h.data(), k_h.data(), v_h.data(),
                                       o_h.data(), do_h.data(), lse_h.data(),
                                       is_causal, is_bhsd,
                                       BATCH, NUM_HEAD_Q, NUM_HEAD_KV,

@@ -207,7 +207,7 @@ inline void write_attention_matrix(
 // ========================================
 
 template<typename T, typename V>
-void sdpa_backward_reference(
+void sdpa_backward_reference_cpu(
     // Input pointers
     T* q_ptr,              // [batch, num_head_qo, seq_len_qo, head_size_qk] or [batch, seq_len_qo, num_head_qo, head_size_qk]
     T* k_ptr,              // [batch, num_head_kv, seq_len_kv, head_size_qk] or [batch, seq_len_kv, num_head_kv, head_size_qk]
