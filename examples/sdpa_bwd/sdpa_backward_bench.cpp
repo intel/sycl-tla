@@ -1,13 +1,26 @@
 #include "sdpa_kernel.hpp"
 #include "sdpa_util.hpp"
+#include "reference.hpp"
 
 template<class...> class mhaodoDeviceName;
 template<class...> class mhabwdDeviceName;
 template<class...> class mhacvtDeviceName;
+
 using DurTuple = std::tuple<std::chrono::duration<long, std::nano>,
                             std::chrono::duration<long, std::nano>,
                             std::chrono::duration<long, std::nano>,
                             std::chrono::duration<long, std::nano>>;
+
+template<typename T>
+void
+random_init(int seed, T *dst, size_t N, int a = -1, int b = 1) {
+    std::mt19937 gen(seed);
+    std::uniform_real_distribution<float> dis(a, b);
+    for (int i = 0; i < N; ++i) {
+        dst[i] = static_cast<T>(dis(gen));
+    }
+}
+
 template<typename T, class ProblemShape, int kBlockM, int kBlockN,
          int kHeadDim, int kNSGs, int AtomLayoutMSdP, int AtomLayoutNdKV,
          int AtomLayoutMdQ, bool is_causal, bool is_bhsd>
@@ -265,7 +278,7 @@ launch_mha_backward(ProblemShape problem_shape,
 
 template<typename T, typename V, class ProblemShape>
 DurTuple
-launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int count) {
+launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int count, bool checksum) {
     const int BATCH = get<0>(problem_shape);
     const int NUM_HEAD_Q = get<1>(problem_shape);
     const int NUM_HEAD_KV = get<2>(problem_shape);
@@ -279,14 +292,53 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
     int64_t SEQ_LEN_QO_PAD = ceil_div(SEQ_LEN_QO, kBlockM) * kBlockM;
     int64_t SEQ_LEN_KV_PAD = ceil_div(SEQ_LEN_KV, kBlockN) * kBlockN;
 
+    // alloc host memory for qkv
+    std::vector<T> q_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
+    std::vector<T> k_h(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_QK);
+    std::vector<T> v_h(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_VO);
+
+    // alloc host memory for ps
+    std::vector<T> p_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * SEQ_LEN_KV_PAD);
+    std::vector<T> ds_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * SEQ_LEN_KV_PAD);
+
+    // alloc host memory for lse, odo
+    std::vector<V> lse_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO);
+    std::vector<V> odo_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO);
+
+    // alloc host memory for grad output
+    std::vector<T> do_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_VO);
+    std::vector<T> o_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_VO);
+
+    // alloc host memory for grad test
+    std::vector<T> dq_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
+    std::vector<T> dk_h(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_QK);
+    std::vector<T> dv_h(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_VO);
+
+    std::vector<V> dqaccum_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
+
+    int seed = 123;
+    // init qkv
+    random_init(seed + 1, q_h.data(), q_h.size());
+    random_init(seed + 2, k_h.data(), k_h.size());
+    random_init(seed + 3, v_h.data(), v_h.size());
+
+    // init s and p for debug
+
+    // init lse and odo
+    random_init(seed + 4, lse_h.data(), lse_h.size());
+
+    // init grad output
+    random_init(seed + 5, do_h.data(), do_h.size());
+    random_init(seed + 6, o_h.data(), o_h.size());
+
     // alloc qkv
     T *q_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
     T *k_d = compat::malloc<T>(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_QK);
     T *v_d = compat::malloc<T>(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_VO);
 
     // alloc ps
-    T *s_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * SEQ_LEN_KV_PAD);
-    T *dp_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * SEQ_LEN_KV_PAD);
+    T *p_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * SEQ_LEN_KV_PAD);
+    T *ds_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * SEQ_LEN_KV_PAD);
 
     // alloc lse, odo
     V *lse_d = compat::malloc<V>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO);
@@ -304,6 +356,18 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
     V *dqaccum_d = compat::malloc<V>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * HEAD_SIZE_QK);
     // init dqaccum
     compat::fill(dqaccum_d, 0.0f, BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * HEAD_SIZE_QK);
+
+    // copy qkv
+    compat::memcpy<T>(q_d, q_h.data(), q_h.size());
+    compat::memcpy<T>(k_d, k_h.data(), k_h.size());
+    compat::memcpy<T>(v_d, v_h.data(), v_h.size());
+
+    // copy grad output
+    compat::memcpy<T>(do_d, do_h.data(), do_h.size());
+    compat::memcpy<T>(o_d, o_h.data(), o_h.size());
+
+    // copy lse
+    compat::memcpy<V>(lse_d, lse_h.data(), lse_h.size());
     DurTuple res;
     if (is_bhsd) {
         if (is_causal)
@@ -314,7 +378,7 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
                                     q_d, k_d, v_d,
                                     lse_d, odo_d,
                                     dqaccum_d, dq_d, dk_d, dv_d,
-                                    s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
+                                    p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
         else
             res = launch_mha_backward<T, decltype(problem_shape),
                                 kBlockM, kBlockN, false, true>(
@@ -323,7 +387,7 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
                                     q_d, k_d, v_d,
                                     lse_d, odo_d,
                                     dqaccum_d, dq_d, dk_d, dv_d,
-                                    s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
+                                    p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
     } else {
         if (is_causal) {
             res = launch_mha_backward<T, decltype(problem_shape),
@@ -333,7 +397,7 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
                                     q_d, k_d, v_d,
                                     lse_d, odo_d,
                                     dqaccum_d, dq_d, dk_d, dv_d,
-                                    s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
+                                    p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
         } else {
             res = launch_mha_backward<T, decltype(problem_shape),
                                 kBlockM, kBlockN, false, false>(
@@ -342,15 +406,48 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
                                     q_d, k_d, v_d,
                                     lse_d, odo_d,
                                     dqaccum_d, dq_d, dk_d, dv_d,
-                                    s_d, dp_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
+                                    p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
         }
     }
+
+    std::vector<V> odo_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_QO);
+    std::vector<V> dqaccum_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
+    std::vector<T> dq_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
+    std::vector<T> dk_ref(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_QK);
+    std::vector<T> dv_ref(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_VO);
+    if (checksum) {
+        sdpa_backward_reference<T, V>(q_h.data(), k_h.data(), v_h.data(),
+                                      o_h.data(), do_h.data(), lse_h.data(),
+                                      is_causal, is_bhsd,
+                                      BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
+                                      SEQ_LEN_QO, SEQ_LEN_KV,
+                                      HEAD_SIZE_QK, HEAD_SIZE_VO,
+                                      odo_ref.data(), dqaccum_ref.data(),
+                                      dq_ref.data(), dk_ref.data(), dv_ref.data());
+        float atol = 5e-3f;
+        float rtol = 5e-3f;
+        compat::memcpy<V>(odo_h.data(), odo_d, odo_h.size());
+        compat::memcpy<V>(dqaccum_h.data(), dqaccum_d, dqaccum_h.size());
+        compat::memcpy<T>(dq_h.data(), dq_d, dq_h.size());
+        compat::memcpy<T>(dk_h.data(), dk_d, dk_h.size());
+        compat::memcpy<T>(dv_h.data(), dv_d, dv_h.size());
+        compat::wait_and_throw();
+        printf("odo val: ");
+        verify(odo_ref.data(), odo_h.data(), BATCH, NUM_HEAD_Q, SEQ_LEN_QO, atol, rtol);
+        printf("dq val: ");
+        verify(dq_ref.data(), dq_h.data(), BATCH * NUM_HEAD_Q, SEQ_LEN_QO, HEAD_SIZE_QK, atol, rtol);
+        printf("dk val: ");
+        verify(dk_ref.data(), dk_h.data(), BATCH * NUM_HEAD_KV, SEQ_LEN_KV, HEAD_SIZE_QK, atol, rtol);
+        printf("dv val: ");
+        verify(dv_ref.data(), dv_h.data(), BATCH * NUM_HEAD_KV, SEQ_LEN_KV, HEAD_SIZE_VO, atol, rtol);
+    }
+
     compat::free(q_d);
     compat::free(k_d);
     compat::free(v_d);
 
-    compat::free(s_d);
-    compat::free(dp_d);
+    compat::free(p_d);
+    compat::free(ds_d);
 
     compat::free(lse_d);
     compat::free(odo_d);
@@ -391,13 +488,14 @@ int main(int argc, const char**argv) {
 
     auto problem_shape = ProblemShapeRegular(BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
                                              SEQ_LEN_QO, SEQ_LEN_KV, HEAD_SIZE_QK, HEAD_SIZE_VO);
+
     DurTuple res;
     if (options.is_bf16) {
         using T = cute::bfloat16_t;
-        launch_mha_wrapper<T, V>(problem_shape, is_causal, is_bhsd, 1);
+        launch_mha_wrapper<T, V>(problem_shape, is_causal, is_bhsd, 1, true);
     } else {
         using T = cute::half_t;
-        launch_mha_wrapper<T, V>(problem_shape, is_causal, is_bhsd, 1);
+        launch_mha_wrapper<T, V>(problem_shape, is_causal, is_bhsd, 1, true);
     }
     float atol = 3e-3f;
     float rtol = 3e-3f;
@@ -406,10 +504,10 @@ int main(int argc, const char**argv) {
     int count = options.iterations;
     if (options.is_bf16) {
         using T = cute::bfloat16_t;
-        res = launch_mha_wrapper<T, V>(problem_shape, is_causal, is_bhsd, count);
+        res = launch_mha_wrapper<T, V>(problem_shape, is_causal, is_bhsd, count, false);
     } else {
         using T = cute::half_t;
-        res = launch_mha_wrapper<T, V>(problem_shape, is_causal, is_bhsd, count);
+        res = launch_mha_wrapper<T, V>(problem_shape, is_causal, is_bhsd, count, false);
     }
 
     auto [dur0, dur1, dur2, dur] = res;
