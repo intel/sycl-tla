@@ -1480,7 +1480,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -1545,7 +1545,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
 
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -1614,7 +1614,7 @@ struct XeDefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<ElementOutput, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -1717,7 +1717,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -1819,7 +1819,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<bfloat16_t, bfloat16_t>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -1881,7 +1881,7 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<half_t, half_t>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
@@ -1943,14 +1943,14 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<int32_t, int32_t>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
   >;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     TileShape,
     int32_t, TagToStrideC_t<LayoutC>,
     int32_t, TagToStrideC_t<LayoutC>,
@@ -2044,14 +2044,14 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
   >;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     TileShape,
     float, TagToStrideC_t<LayoutC>,
     float, TagToStrideC_t<LayoutC>,
@@ -2142,14 +2142,14 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
   >;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     TileShape,
     float, TagToStrideC_t<LayoutC>,
     float, TagToStrideC_t<LayoutC>,
@@ -2199,14 +2199,14 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
   >;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     TileShape,
     float, TagToStrideC_t<LayoutC>,
     float, TagToStrideC_t<LayoutC>,
@@ -2259,14 +2259,14 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
   >;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     TileShape,
     float, TagToStrideC_t<LayoutC>,
     float, TagToStrideC_t<LayoutC>,
@@ -2319,14 +2319,14 @@ struct DefaultGemmConfigurationToCutlass3Types<
   using EpilogueOp = epilogue::fusion::LinearCombination<float, float>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     EpilogueOp,
     TileShape,
     decltype(tile_shape(TiledMma()))
   >;
 
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-    epilogue::IntelXeXMX16,
+    epilogue::IntelXeGeneric,
     TileShape,
     float, TagToStrideC_t<LayoutC>,
     float, TagToStrideC_t<LayoutC>,
@@ -2341,3 +2341,4 @@ struct DefaultGemmConfigurationToCutlass3Types<
 } // namespace device
 } // namespace gemm
 } // namespace cutlass
+
