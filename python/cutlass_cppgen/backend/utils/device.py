@@ -38,7 +38,7 @@ from __future__ import annotations
 from cutlass_cppgen.utils.lazy_import import lazy_import
 cuda = lazy_import("cuda.cuda")
 cudart =  lazy_import("cuda.cudart")
-import dpctl
+dpctl = lazy_import("dpctl")
 bmg_indicators = [
            "bmg", "battlemage", "xe20", "arc", "alchemist",
             "dg2", "g21", "b580", "b770", "a770", "a750", "a580"

@@ -1414,7 +1414,7 @@ make_block_2d_copy_C_subtiled(TiledMMA             const& mma,         // TiledM
                               SubtileSGLayout      const& ssg_layout,  // Subtile subgroup layout: SG_K -> (m_subtile,n_subtile)
                               Stride<Strides...>   const& gstride)     // Global memory strides
 {
-  using MMAType = typename TiledMMA::ValTypeA;
+  using MMAType = typename TiledMMA::ValTypeC;
   auto op = block_2d_selector<ValType, MMAType>(stv_layout, gstride);
   return make_block_2d_copy_CD_subtiled<ValType>(op, mma, atuple_coshape(stv_layout), ssg_layout, gstride);
 }
@@ -1430,7 +1430,7 @@ make_block_2d_copy_D_subtiled(TiledMMA             const& mma,         // TiledM
                               SubtileSGLayout      const& ssg_layout,  // Subtile subgroup layout: SG_K -> (m_subtile,n_subtile)
                               Stride<Strides...>   const& gstride)     // Global memory strides
 {
-  using MMAType = typename TiledMMA::ValTypeA;
+  using MMAType = typename TiledMMA::ValTypeD;
   auto op = block_2d_selector<ValType, MMAType, true>(stv_layout, gstride);
   return make_block_2d_copy_CD_subtiled<ValType>(op, mma, atuple_coshape(stv_layout), ssg_layout, gstride);
 }

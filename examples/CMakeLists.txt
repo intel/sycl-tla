@@ -1,5 +1,5 @@
 # Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# Copyright (C) 2025 Intel Corporation, All rights reserved.
+# Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -112,6 +112,7 @@ if(CUTLASS_ENABLE_SYCL)
       05_bmg_gemm_with_epilogues
       05_bmg_gemm_with_epilogues/legacy
       06_bmg_flash_attention
+      06_bmg_flash_attention/legacy
       07_bmg_dual_gemm
       08_bmg_gemm_f8
       09_bmg_grouped_gemm_f8

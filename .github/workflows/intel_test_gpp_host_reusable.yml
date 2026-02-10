@@ -10,7 +10,11 @@ on:
       intel_graphics:
         description: 'Intel graphics driver version'
         required: true
-        type: string 
+        type: string
+      gpu:
+        description: 'GPU type (PVC, BMG)'
+        required: true
+        type: string
       DPCPP_VERSION:
         description: 'DPC++ version'
         required: false
@@ -26,7 +30,7 @@ jobs:
       matrix:
         compiler: ${{ fromJSON(inputs.compiler) }}
         intel_graphics: ${{ fromJSON(inputs.intel_graphics) }}
-        gpu: [BMG, PVC]
+        gpu: ${{ fromJSON(inputs.gpu) }}
         include:
           - gpu: BMG
             sycl_target: intel_gpu_bmg_g21

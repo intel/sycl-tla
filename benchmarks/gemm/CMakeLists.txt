@@ -27,8 +27,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Pass these configuration files for the CI
-set(CONFIG_FILE_INTEL_SMALL --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/bmg/input_files/input_small_gemm.in)
-set(CONFIG_FILE_CUDA --config_file=${CMAKE_SOURCE_DIR}/benchmarks/device/ampere/input_files/input_gemm.in)
+set(CONFIG_FILE_INTEL_SMALL --config_file=${CUTLASS_DIR}/benchmarks/device/bmg/input_files/input_small_gemm.in)
+set(CONFIG_FILE_CUDA --config_file=${CUTLASS_DIR}/benchmarks/device/ampere/input_files/input_gemm.in)
 
 cutlass_benchmark_add_suite(cutlass_benchmarks_gemm)
 

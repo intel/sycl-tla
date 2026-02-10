@@ -1,4 +1,5 @@
 # Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+# Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,24 +27,4 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
-
-add_subdirectory(flash_attention_prefill)
-add_subdirectory(flash_attention_prefill_cachedkv)
-add_subdirectory(flash_attention_decode)
-
-add_custom_target(
-  cutlass_test_unit_flash_attention
-  DEPENDS
-  cutlass_test_unit_flash_attention_prefill
-  cutlass_test_unit_flash_attention_decode
-  cutlass_test_unit_flash_attention_prefill_cachedkv
-)
-
-add_custom_target(
-  test_unit_flash_attention
-  DEPENDS
-  test_unit_flash_attention_prefill
-  test_unit_flash_attention_decode
-  test_unit_flash_attention_prefill_cachedkv
-)
+add_subdirectory(legacy)

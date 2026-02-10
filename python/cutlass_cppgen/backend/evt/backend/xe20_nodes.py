@@ -1,5 +1,5 @@
 ###################################################################################################
-# Copyright (C) 2025 Intel Corporation, All rights reserved.
+# Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -78,7 +78,7 @@ class xe20AccumulatorImpl(AccumulatorImpl):
         if self._type_decl is not None:
             return self._type_decl
 
-        self._type_decl = f"""\nusing {self.name_camel} = cutlass::epilogue::fusion::Sm90AccFetch;\n"""
+        self._type_decl = f"""\nusing {self.name_camel} = cutlass::epilogue::fusion::XeAccFetch;\n"""
         return self._type_decl
 
 
@@ -95,7 +95,7 @@ class xe20LoadSrcImpl(LoadSrcImpl):
         self._type_decl = f"""
 using ElementC = {DataTypeTag[self.element]};
 using StrideC = {self.stride_mnl};
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90SrcFetch<{DataTypeTag[self.element]}>;
+using {self.name_camel} = cutlass::epilogue::fusion::XeSrcFetch<{DataTypeTag[self.element]}>;
 """
         return self._type_decl
 
@@ -103,40 +103,21 @@ using {self.name_camel} = cutlass::epilogue::fusion::Sm90SrcFetch<{DataTypeTag[s
 class xe20AuxLoadImpl(AuxLoadImpl):
 
     @property
-    def descriptor(self) -> str:
-        """
-        Descriptor for Aux Load
-        """
-        return f"{self.name_camel}Descriptor"
-
-    def decl_descriptor(self) -> str:
-        """
-        Declare the descriptor type
-        """
-        return f"\nusing {self.descriptor} = cutlass::epilogue::collective::detail::AuxLoadDescriptor<EpilogueDescriptor, {self.stride_mnl}, {DataTypeTag[self.element]}>;\n"
-
-    @property
     def type_decl(self):
         """
-        Return the string defining the type
+        Return the string defining the type using XeAuxLoad directly (no descriptor needed)
+        XeAuxLoad auto-deduces copy operation from Element type
         """
         if self._type_decl is not None:
             return self._type_decl
 
-        self._type_decl = self.decl_descriptor()
-        self._type_decl += f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90AuxLoad<
-    {self.descriptor}::Stages, typename {self.descriptor}::EpilogueTile, {DataTypeTag[self.element]},
-    {self.stride_mnl}, typename {self.descriptor}::SmemLayoutAtom, typename {self.descriptor}::CopyOpS2R
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeAuxLoad<
+    {DataTypeTag[self.element]},
+    {self.stride_mnl}
 >;
 """
         return self._type_decl
-
-    def get_smem_size(self, cta_tile_mnk, epilogue_tile_mn, stages_c, stages_d, epi_tiles):
-        """
-        Get the shared memory size based on epilogue_tile_mn, stages_c, and stages_d
-        """
-        return (DataTypeSize[self.element] * stages_c * product(epilogue_tile_mn) // 8, 128)
 
 
 class xe20ScalarBroadcastImpl(ScalarBroadcastImpl):
@@ -154,7 +135,7 @@ class xe20ScalarBroadcastImpl(ScalarBroadcastImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90ScalarBroadcast<
+using {self.name_camel} = cutlass::epilogue::fusion::XeScalarBroadcast<
     {DataTypeTag[self.element]}, {self.stride_mnl}, {self.broadcast_count}, {op_tag(self.reduction_fn)}
 >;
 """
@@ -171,7 +152,7 @@ class xe20RowBroadcastImpl(RowBroadcastImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90RowBroadcast<
+using {self.name_camel} = cutlass::epilogue::fusion::XeRowBroadcast<
     0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
     {self.stride_mnl}
 >;
@@ -190,7 +171,7 @@ class xe20ColumnBroadcastImpl(ColumnBroadcastImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90ColBroadcast<
+using {self.name_camel} = cutlass::epilogue::fusion::XeColBroadcast<
     0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
     {self.stride_mnl}
 >;
@@ -209,7 +190,7 @@ class xe20ComputeImpl(ComputeImpl):
             return self._type_decl
 
         self._type_decl = f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Xe20Compute<
+using {self.name_camel} = cutlass::epilogue::fusion::XeCompute<
     {op_tag(self.fn)}, {DataTypeTag[self.element_output]}, {DataTypeTag[self.element_compute]},
     {FloatRoundStyleTag[self.round_style]}
 >;
@@ -220,22 +201,6 @@ using {self.name_camel} = cutlass::epilogue::fusion::Xe20Compute<
 class xe20AuxStoreImpl(AuxStoreImpl):
 
     @property
-    def descriptor(self) -> str:
-        """
-        Descriptor for Aux Load
-        """
-        return f"{self.name_camel}Descriptor"
-
-    def decl_descriptor(self) -> str:
-        """
-        Declare the descriptor type
-        """
-        return f"""
-using {self.descriptor} = cutlass::epilogue::collective::detail::AuxStoreDescriptor<
-    EpilogueDescriptor, {self.stride_mnl}, {DataTypeTag[self.element]}
->;
-"""
-    @property
     def type_decl(self):
         """
         Return the string defining the type
@@ -243,21 +208,13 @@ using {self.descriptor} = cutlass::epilogue::collective::detail::AuxStoreDescrip
         if self._type_decl is not None:
             return self._type_decl
 
-        self._type_decl = self.decl_descriptor()
-        self._type_decl += f"""
-using {self.name_camel} = cutlass::epilogue::fusion::Sm90AuxStore<
-    {self.descriptor}::Stages, typename {self.descriptor}::EpilogueTile, {DataTypeTag[self.element]},
-    {FloatRoundStyleTag[self.round_style]}, {self.stride_mnl}, typename {self.descriptor}::SmemLayoutAtom,
-    typename {self.descriptor}::CopyOpR2S
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeAuxStore<
+    {DataTypeTag[self.element]},
+    {self.stride_mnl}
 >;
 """
         return self._type_decl
-
-    def get_smem_size(self, cta_tile_mnk, epilogue_tile_mn, stages_c, stages_d, epi_tiles):
-        """
-        Get the shared memory size based on epilogue_tile_mn, stages_c, and stages_d
-        """
-        return (DataTypeSize[self.element] * stages_d * product(epilogue_tile_mn) // 8, 128)
 
 
 class xe20StoreDImpl(StoreDImpl):

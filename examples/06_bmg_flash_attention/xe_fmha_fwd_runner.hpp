@@ -1,6 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,7 @@
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/util/packed_stride.hpp"
 #include "flash_attention_v2/collective/fmha_fusion.hpp"
-#include "flash_attention_v2/kernel/xe_fhma_fwd_kernel.hpp"
+#include "flash_attention_v2/kernel/xe_fmha_fwd_kernel.hpp"
 #include "flash_attention_v2/kernel/xe_tile_scheduler.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
@@ -258,8 +258,8 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
 
     // Use Cacheline Size to calculate alignment
     constexpr int cacheline_bytes = 64;
-    constexpr int AlignmentQ = cacheline_bytes / sizeof(ElementQ);    // Alignment of Q matrix in units of elements
-    constexpr int AlignmentKV = cacheline_bytes / sizeof(ElementK);   // Alignment of Kand V matrix in units of elements
+    constexpr int AlignmentQ = cacheline_bytes * 8 /  sizeof_bits_v<ElementQ> ;    // Alignment of Q matrix in units of elements
+    constexpr int AlignmentKV = cacheline_bytes * 8 / sizeof_bits_v<ElementK> ;   // Alignment of Kand V matrix in units of elements
     constexpr int AlignmentKVCache = 128; //Page size must be a multiple of 128
     auto generate_positive_int = [](auto& dist, auto& gen) {
       int result = 0;
@@ -624,7 +624,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     block_ref_O.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo);
     // Zero-initialize output buffer for the kernel result
     // block_ref_O is fully written in verify() before being read, so no initialization needed
-    compat::memset(block_O.get(), 0, block_O.size() * sizeof(ElementO));
+    compat::memset(block_O.get(), 0, block_O.size() * sizeof_bits_v<ElementO> / 8);
     if (options.use_paged_kv) {
       paged_kv_cache.page_size = options.page_size;
       std::vector<int> num_pages_per_seq{0};
@@ -780,23 +780,60 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
         run(params);
       }
       compat::wait();
-    // when seq_len_qo is not equal to seq_len_kv we use bottom up approach for the masking.
-      // Following changes will adjust the effective_seq_len_kv when masking applied for such cases
-      auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
-      auto discard_seq_coord = options.seq_len_qo - offset;
-      auto full_tile_offset = options.seq_len_kv - offset;
-      // offset + 1 is going to be ceil_div
-      auto effective_seq_len_kv = options.is_causal ? full_tile_offset + ((offset + 1) / 2.0): options.seq_len_kv;
-      auto effective_seq_len_qo = options.is_causal ? options.seq_len_qo - discard_seq_coord : options.seq_len_qo;
       double cute_time = timer.seconds() / options.iterations;
-      double flops_qk = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * effective_seq_len_kv * options.head_size_qk;
-      double flops_pv = 2.0 *  options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
+      double batched_effective_seq_len_qo_x_kv = 0.0;  // flops_qk and flops_pv
+      double batched_effective_seq_len_qo = 0.0;       // gbps_q and gbps_o
+      double batched_effective_seq_len_kv = 0.0;       // gbps_kv
+      double batched_seq_len_kv_cache = 0.0;           // gbps_kv_cache
+      if constexpr (isVarLen) {
+        // For varlen, we need to iterate over each batch and compute per-batch flops
+        for (int b = 0; b < options.batch; ++b) {
+          int seq_len_qo = cumulative_seqlen_q[b + 1] - cumulative_seqlen_q[b];
+          int seq_len_kv = cumulative_seqlen_kv[b + 1] - cumulative_seqlen_kv[b];
+          int seq_len_kv_cache = 0;
+          if (options.seq_len_kv_cache > 0) {
+            seq_len_kv_cache = cumulative_seqlen_kv_cache[b + 1] - cumulative_seqlen_kv_cache[b];
+          }
+          auto offset = cute::min(seq_len_qo, seq_len_kv);
+          auto discard_seq_coord = seq_len_qo - offset;
+          auto full_tile_offset = seq_len_kv - offset;
+          // offset + 1 is going to be ceil_div
+          auto per_batch_effective_seq_len_kv = options.is_causal ? full_tile_offset + ((offset + 1) / 2.0) : static_cast<double>(seq_len_kv);
+          auto per_batch_effective_seq_len_qo = options.is_causal ? seq_len_qo - discard_seq_coord : seq_len_qo;
+          double per_batch_qo_x_kv_cache = static_cast<double>(seq_len_qo) * seq_len_kv_cache;  // Full attention to cache
+          double per_batch_qo_x_kv_new = per_batch_effective_seq_len_qo * per_batch_effective_seq_len_kv;  // Causal-adjusted for new KV
+
+          batched_effective_seq_len_qo_x_kv += per_batch_qo_x_kv_cache + per_batch_qo_x_kv_new;
+          batched_effective_seq_len_qo += per_batch_effective_seq_len_qo;
+          batched_effective_seq_len_kv += per_batch_effective_seq_len_kv;
+          batched_seq_len_kv_cache += seq_len_kv_cache;
+        }
+      } else {
+        // Non-varlen
+        int seq_len_kv_cache = options.seq_len_kv_cache;
+        auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
+        auto discard_seq_coord = options.seq_len_qo - offset;
+        auto full_tile_offset = options.seq_len_kv - offset;
+        auto effective_seq_len_kv = options.is_causal ? full_tile_offset + ((offset + 1) / 2.0) : static_cast<double>(options.seq_len_kv);
+        auto effective_seq_len_qo = options.is_causal ? options.seq_len_qo - discard_seq_coord : options.seq_len_qo;
+        double qo_x_kv_cache = static_cast<double>(options.seq_len_qo) * seq_len_kv_cache;  // Full attention to cache
+        double qo_x_kv_new = effective_seq_len_qo * effective_seq_len_kv;  // Causal-adjusted for new KV
+
+        batched_effective_seq_len_qo_x_kv = options.batch * (qo_x_kv_cache + qo_x_kv_new);
+        batched_effective_seq_len_qo = options.batch * effective_seq_len_qo;
+        batched_effective_seq_len_kv = options.batch * effective_seq_len_kv;
+        batched_seq_len_kv_cache = options.batch * seq_len_kv_cache;
+      }
+
+      double flops_qk = 2.0 * options.num_heads_q * batched_effective_seq_len_qo_x_kv * options.head_size_qk;
+      double flops_pv = 2.0 * options.num_heads_q * batched_effective_seq_len_qo_x_kv * options.head_size_vo;
       double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
-      double gbps_qk =  options.batch * (sizeof(ElementQ) * options.num_heads_q * effective_seq_len_qo * options.head_size_qk +
-                                         sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);
-      double gbps_pv = sizeof(ElementV) * options.batch * options.num_heads_kv * effective_seq_len_kv * options.head_size_vo +
-                     sizeof(ElementO) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
-      double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
+      
+      double gbps_qk = options.num_heads_q * batched_effective_seq_len_qo * options.head_size_qk * sizeof_bits_v<ElementQ> / 8 +
+                       options.num_heads_kv * batched_effective_seq_len_kv * options.head_size_qk * sizeof_bits_v<ElementK> / 8;
+      double gbps_pv = options.num_heads_kv * batched_effective_seq_len_kv * options.head_size_vo * sizeof_bits_v<ElementV> / 8 +
+                       options.num_heads_q * batched_effective_seq_len_qo * options.head_size_vo * sizeof_bits_v<ElementO> / 8;
+      double gbps = ((gbps_qk + gbps_pv) * 1e-9) / cute_time;
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q  << "\tNumHeads_kv: " << options.num_heads_kv  << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
                 << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false")

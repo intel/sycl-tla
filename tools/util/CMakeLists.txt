@@ -29,7 +29,7 @@ cmake_policy(SET CMP0112 NEW)
 
 # Include oneMKL support for SYCL builds
 if (CUTLASS_ENABLE_SYCL)
-  include(${CMAKE_SOURCE_DIR}/cmake/onemkl.cmake)
+  include(${CUTLASS_DIR}/cmake/onemkl.cmake)
 endif()
 
 add_library(cutlass_tools_util_includes INTERFACE)
