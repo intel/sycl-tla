@@ -32,6 +32,10 @@
 /*! \file
     \brief CUTLASS Intel BMG MoE API example based on sycl-tla Group GEMM
 
+    Usage:
+      To skip verification, modify the verify parameter in the launcher() calls in main():
+        launcher(total_rows_for_each_expert[i], 5760, 2880, num_experts, 0);  // 0 = skip verify
+        launcher(total_rows_for_each_expert[i], 2880, 2880, num_experts, 1);  // 1 = enable verify (default)
 */
 
 #include "cutlass/util/GPU_Clock.hpp"
@@ -75,6 +79,7 @@ struct VerificationHelper {
   float alpha = 1.f;
   float beta = 0.f;
   int iterations;
+  int verify = 1;
   int m = 0, n = 0, k = 0, groups;
   int *num_rows_per_expert = nullptr;
   std::vector<typename MoE::ProblemShape::UnderlyingProblemShape>
@@ -218,7 +223,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
                      const int gemm_n, const int gemm_k,
                      const int *num_rows_per_expert_device,
                      const int *num_tokens_per_expert_host,
-                     const int num_experts) {
+                     const int num_experts, const bool verify = true) {
   // Change device_id to another value if you are running on a machine with
   // multiple GPUs and wish to use a GPU other than that with device ID 0.
   // For example, in a framework, you could query device ID.
@@ -286,10 +291,11 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
 
   VerificationHelper helper;
   helper.parse(num_experts, num_tokens_per_expert_host, gemm_n, gemm_k);
-  if (helper.verify(activations, weights, outputs) == false) {
-    std::cout << "\n\nFailed accuracy verification :(\n\n";
+  if (verify) {
+    if (helper.verify(activations, weights, outputs) == false) {
+      std::cout << "\n\nFailed accuracy verification :(\n\n";
+    }
   }
-
   auto [gflops, mem_bw_util, projected_time] =
       helper.gflops(cute_average_time / 1000.0, helper.problem_sizes_host);
 
@@ -306,7 +312,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
             << std::endl;
 }
 
-void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
+void launcher(int *M_per_expert, int N, int K, const int &num_experts, const bool verify = true) {
   int n_moe = N;
   int k_moe = K;
   int num_tokens_incl_duplicated = 0;
@@ -343,7 +349,7 @@ void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
   MoEGEMMLauncher<'R', 'R'>(activations_data.get(), weights_data.get(),
                             static_cast<void *>(nullptr), output_data.get(),
                             n_moe, k_moe, num_rows_per_expert_device.get(),
-                            M_per_expert, num_experts);
+                            M_per_expert, num_experts, verify);
 }
 
 int main(int argc, const char **argv) {
@@ -417,8 +423,8 @@ int main(int argc, const char **argv) {
        };
 
   for (int i = 0; i < num_layers; i++) {
-    launcher(total_rows_for_each_expert[i], 5760, 2880, num_experts);
-    launcher(total_rows_for_each_expert[i], 2880, 2880, num_experts);
+    launcher(total_rows_for_each_expert[i], 5760, 2880, num_experts, options.verify);
+    launcher(total_rows_for_each_expert[i], 2880, 2880, num_experts, options.verify);
   }
 
   return 0;

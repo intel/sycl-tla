@@ -201,6 +201,7 @@ struct Options {
 
   int iterations = 1000;
   int m = 16, n = 8, k = 64, l = 1;
+  int verify = 1;
   double eps = 1e-5;
 
   // Parses the command line
@@ -217,6 +218,7 @@ struct Options {
     cmd.get_cmd_line_argument("k", k);
     cmd.get_cmd_line_argument("l", l);
     cmd.get_cmd_line_argument("iterations", iterations);
+    cmd.get_cmd_line_argument("verify", verify, 1);
     cmd.get_cmd_line_argument("eps", eps);
   }
 
@@ -231,7 +233,8 @@ struct Options {
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
       << "  --l=<int>                   Sets the l extent (batch) of the GEMM\n"
-      << "  --iterations=<int>          Number of profiling iterations to perform.\n\n"
+      << "  --iterations=<int>          Number of profiling iterations to perform.\n"
+      << "  --verify=<int>              Specify whether to verify. Default: 1\n"
       << "  --eps=<float>               Threshold of numerical verification. Default: 1e-5.\n\n";
 
     out
@@ -465,11 +468,16 @@ int run(Options &options) {
   // Correctness / Warmup iteration
   CUTLASS_CHECK(gemm.run());
 
-  // Check if output from CUTLASS kernel and reference kernel are equal or not
-  result.passed = result.verify(options);
+  if (options.verify != 0) {
+    // Check if output from CUTLASS kernel and reference kernel are equal or not
+    result.passed = result.verify(options);
+    std::cout << "Disposition: " << (result.passed ? "Passed" : "Failed") << std::endl;
 
-  if (!result.passed) {
-    exit(-1);
+    if (!result.passed) {
+      return -1;
+    }
+  } else {
+    std::cout << "Disposition is skipped." << std::endl;
   }
 
   // Run profiling loop

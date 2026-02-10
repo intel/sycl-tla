@@ -64,12 +64,12 @@ struct Options {
   bool use_paged_kv = false;
   std::string scheduler;
 
-  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations;
+  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations, verify;
   float softmax_scale;
 
   Options()
       : help(false), error(false), is_causal(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
-        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
+        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual"), verify(1) {}
 
   // Parses the command line
   void parse(int argc, char const **args) {
@@ -99,6 +99,7 @@ struct Options {
     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("verify", verify, 1);
 
     if (cmd.check_cmd_line_flag("use_paged_kv")) {
       use_paged_kv = true;
@@ -132,7 +133,8 @@ struct Options {
         << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
         << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
         << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
-        << "  --iterations=<int>          Iterations\n\n";
+        << "  --iterations=<int>          Iterations\n\n"
+        << "  --verify=<int>              Specify whether to verify.\n\n";
 
     return out;
   }
@@ -689,13 +691,17 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
 
     compat::wait();
 
-    // Verify that the result is correct
-    bool use_kv_cache = options.seq_len_kv_cache > 0;
-    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+    if (options.verify != 0) {
+      // Verify that the result is correct
+      bool use_kv_cache = options.seq_len_kv_cache > 0;
+      bool passed = verify(problem_size, options.is_causal, use_kv_cache);
+      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if (!passed) {
-      return cutlass::Status::kErrorInternal;
+      if (!passed) {
+        return cutlass::Status::kErrorInternal;
+      }
+    } else {
+      std::cout << "Disposition is skipped." << std::endl;
     }
 
     if (options.iterations > 0) {

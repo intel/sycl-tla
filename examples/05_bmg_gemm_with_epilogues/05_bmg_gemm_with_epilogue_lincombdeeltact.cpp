@@ -95,14 +95,14 @@ struct Options {
   bool help;
   bool error;
 
-  int m, n, k, l, iterations;
+  int m, n, k, l, iterations, verify;
   float alpha, beta;
   Activation activation;
 
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(100),
+    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
     alpha(1.f), beta(0.f),
     activation(Activation::Sum)
   { }
@@ -123,6 +123,7 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("verify", verify, 1);
     std::string activation_str = "sum";
     cmd.get_cmd_line_argument("activation", activation_str);
     if (activation_str == "sum") {
@@ -147,7 +148,8 @@ struct Options {
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
-      << "  --iterations=<int>          Iterations\n\n"
+      << "  --iterations=<int>          Iterations\n"
+      << "  --verify=<int>              Specify whether to verify.\n\n"
       << "  --activation=[sum|mult]     Elementwise Binary Activation Function\n\n";
 
     return out;
@@ -319,11 +321,15 @@ struct ExampleRunner {
 
     compat::wait();
 
-    // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+    if (options.verify != 0) {
+      // Verify that the result is correct
+      bool passed = verify(problem_size, options.alpha, options.beta);
+      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+      if (!passed) return cutlass::Status::kErrorInternal;
+    } else {
+      std::cout << "Disposition is skipped." << std::endl;
+    }
 
     if (options.iterations > 0) {
       GPU_Clock timer;

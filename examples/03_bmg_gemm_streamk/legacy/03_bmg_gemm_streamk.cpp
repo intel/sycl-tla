@@ -94,7 +94,7 @@ struct Options {
   bool splitk;
   bool dp;
 
-  int m, n, k, l, iterations, splits;
+  int m, n, k, l, iterations, splits, verify;
   float alpha, beta;
 
   Options():
@@ -103,7 +103,7 @@ struct Options {
     splitk(false),
     dp(false),
     m(5120), n(4096), k(4096), l(1), iterations(20), splits(1),
-    alpha(1.f), beta(0.f)
+    alpha(1.f), beta(0.f), verify(1)
   { }
 
   // Parses the command line
@@ -131,6 +131,7 @@ struct Options {
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
     cmd.get_cmd_line_argument("splits", splits, 1);
+    cmd.get_cmd_line_argument("verify", verify, 1);
   }
 
   /// Prints the usage statement.
@@ -148,7 +149,8 @@ struct Options {
       << "  --splits=<int>              Sets the splitting factor for GEMM\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
-      << "  --iterations=<int>          Iterations\n\n";
+      << "  --iterations=<int>          Iterations\n\n"
+      << "  --verify=<int>              Specify whether to verify.\n\n";
 
     return out;
   }
@@ -294,11 +296,15 @@ struct ExampleRunner {
 
     compat::wait();
 
-    // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+    if (options.verify != 0) {
+      // Verify that the result is correct
+      bool passed = verify(problem_size, options.alpha, options.beta);
+      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+      if(!passed) return cutlass::Status::kErrorInternal;
+    } else {
+      std::cout << "Disposition is skipped." << std::endl;
+    }
 
     if (options.iterations > 0) {
       float elapsed_time_seconds = 0.f;
