@@ -221,15 +221,8 @@ template<
   class ElementCompute,
   FloatRoundStyle RoundStyle
 >
-using Xe20Compute = Sm90Compute<ComputeFn, ElementOutput, ElementCompute, RoundStyle>;
+using XeCompute = Sm90Compute<ComputeFn, ElementOutput, ElementCompute, RoundStyle>;
 
-template<
-  template <class> class ComputeFn,
-  class ElementOutput,
-  class ElementCompute,
-  FloatRoundStyle RoundStyle
->
-using Xe12Compute = Sm90Compute<ComputeFn, ElementOutput, ElementCompute, RoundStyle>;
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
