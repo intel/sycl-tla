@@ -417,6 +417,12 @@ int main(int argc, const char **argv) {
   constexpr int num_experts = 32;
   constexpr int max_layers = 24;
 
+  if (options.num_layers > max_layers) {
+    std::cerr << "Error: num_layers (" << options.num_layers 
+              << ") exceeds maximum supported layers (" << max_layers 
+              << "). Using maximum value of " << max_layers << " instead." << std::endl;
+  }
+
   int total_rows_for_each_expert[max_layers][num_experts] = {
       {148, 231, 404, 180, 127, 244, 224, 244, 110, 617, 289,
        845, 191, 424, 30,  97,  57,  324, 62,  77,  75,  144,
