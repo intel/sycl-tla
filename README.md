@@ -107,7 +107,8 @@ Minimum requirements:
 - Architecture: Intel Data Center GPU Max Series (codename: Ponte-Vecchio)
 - Compiler: Must support at least C++17
 - DPC++ Compiler Version: oneAPI 2025.1 and onwards
-- Intel Compute Runtime: 25.13 (with Intel Graphics Compiler 2.10.10)
+- Intel Compute Runtime and Graphics Compiler: 
+  - For Intel Data Center GPU Max Series: Runtime from [LTS driver installation guide](https://dgpu-docs.intel.com/driver/installation-lts2.html), IGC [v2.27.10](https://github.com/intel/intel-graphics-compiler/releases/tag/v2.27.10) or later
 
 ## Hardware Support
 
