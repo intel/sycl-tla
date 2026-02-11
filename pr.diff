@@ -1,0 +1,2592 @@
+diff --git a/examples/00_bmg_gemm/00_bmg_gemm.cpp b/examples/00_bmg_gemm/00_bmg_gemm.cpp
+index b9c77388..7cf07ae5 100644
+--- a/examples/00_bmg_gemm/00_bmg_gemm.cpp
++++ b/examples/00_bmg_gemm/00_bmg_gemm.cpp
+@@ -89,13 +89,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1), 
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -115,6 +115,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -129,7 +130,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -272,11 +274,17 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if (passed && options.iterations > 0) {
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
++
++    if (options.verify != 0 && options.iterations > 0) {
+       GPU_Clock timer;
+       timer.start();
+       for (int i = 0; i < options.iterations; ++i) {
+diff --git a/examples/00_bmg_gemm/00_bmg_gemm_padded.cpp b/examples/00_bmg_gemm/00_bmg_gemm_padded.cpp
+index 4e1905e5..83e0d86d 100644
+--- a/examples/00_bmg_gemm/00_bmg_gemm_padded.cpp
++++ b/examples/00_bmg_gemm/00_bmg_gemm_padded.cpp
+@@ -96,13 +96,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -122,6 +122,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -136,7 +137,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -311,11 +313,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/00_bmg_gemm/00_bmg_gemm_with_sycl_queue.cpp b/examples/00_bmg_gemm/00_bmg_gemm_with_sycl_queue.cpp
+index 4e42e48e..5f7bc51b 100644
+--- a/examples/00_bmg_gemm/00_bmg_gemm_with_sycl_queue.cpp
++++ b/examples/00_bmg_gemm/00_bmg_gemm_with_sycl_queue.cpp
+@@ -71,13 +71,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -97,6 +97,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -111,7 +112,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -274,11 +276,15 @@ struct ExampleRunner {
+ 
+     q.wait_and_throw();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(mem, problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(mem, problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/00_bmg_gemm/legacy/00_bmg_gemm.cpp b/examples/00_bmg_gemm/legacy/00_bmg_gemm.cpp
+index 91139cf0..cbaa6fdd 100644
+--- a/examples/00_bmg_gemm/legacy/00_bmg_gemm.cpp
++++ b/examples/00_bmg_gemm/legacy/00_bmg_gemm.cpp
+@@ -89,14 +89,14 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(20),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -115,6 +115,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -129,7 +130,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -273,11 +275,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/00_bmg_gemm/legacy/00_bmg_gemm_padded.cpp b/examples/00_bmg_gemm/legacy/00_bmg_gemm_padded.cpp
+index 32a7285e..fdf4660a 100644
+--- a/examples/00_bmg_gemm/legacy/00_bmg_gemm_padded.cpp
++++ b/examples/00_bmg_gemm/legacy/00_bmg_gemm_padded.cpp
+@@ -96,14 +96,14 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(20),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -122,6 +122,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -136,7 +137,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -311,11 +313,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/00_bmg_gemm/legacy/00_bmg_gemm_with_sycl_queue.cpp b/examples/00_bmg_gemm/legacy/00_bmg_gemm_with_sycl_queue.cpp
+index 3a4e0fa7..d74c7bba 100644
+--- a/examples/00_bmg_gemm/legacy/00_bmg_gemm_with_sycl_queue.cpp
++++ b/examples/00_bmg_gemm/legacy/00_bmg_gemm_with_sycl_queue.cpp
+@@ -71,14 +71,14 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(20),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -97,6 +97,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -111,7 +112,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -275,11 +277,15 @@ struct ExampleRunner {
+ 
+     q.wait_and_throw();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(mem, problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(mem, problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/01_bmg_gemm_with_collective_builder/01_bmg_gemm_with_collective_builder.cpp b/examples/01_bmg_gemm_with_collective_builder/01_bmg_gemm_with_collective_builder.cpp
+index 1f598965..9e3c6087 100644
+--- a/examples/01_bmg_gemm_with_collective_builder/01_bmg_gemm_with_collective_builder.cpp
++++ b/examples/01_bmg_gemm_with_collective_builder/01_bmg_gemm_with_collective_builder.cpp
+@@ -80,13 +80,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(100),
++    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -106,6 +106,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -120,7 +121,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -266,11 +268,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16.cpp b/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16.cpp
+index f2e9b241..c464eb02 100755
+--- a/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16.cpp
++++ b/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16.cpp
+@@ -105,14 +105,14 @@ struct Options {
+ 
+   bool a_narrower;
+   int mode;
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   int g;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     g(128), mode(2), a_narrower(false),
+     alpha(1.f), beta(0.f)
+   { }
+@@ -135,6 +135,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+     if (cmd.check_cmd_line_flag("a_narrower")) {
+       a_narrower = true;
+     }
+@@ -155,7 +156,8 @@ struct Options {
+       << "  --a_narrower                If specified, make A the narrower type (B is narrower by default).\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -476,11 +478,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_s8_f16_tensorwise.cpp b/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_s8_f16_tensorwise.cpp
+index 37b486f6..0f0c2a8f 100755
+--- a/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_s8_f16_tensorwise.cpp
++++ b/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_s8_f16_tensorwise.cpp
+@@ -85,13 +85,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -111,6 +111,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -125,7 +126,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -314,11 +316,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16.cpp b/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16.cpp
+index b1fdddeb..d54c3f10 100755
+--- a/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16.cpp
++++ b/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16.cpp
+@@ -95,14 +95,14 @@ struct Options {
+ 
+   bool a_narrower;
+   int mode;
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   int g;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     g(128), mode(2), a_narrower(false),
+     alpha(1.f), beta(0.f)
+   { }
+@@ -125,6 +125,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+     if (cmd.check_cmd_line_flag("a_narrower")) {
+       a_narrower = true;
+     }
+@@ -145,7 +146,8 @@ struct Options {
+       << "  --a_narrower                If specified, make A the narrower type (B is narrower by default).\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -558,11 +560,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     float total_time = 0.f;
+ 
+diff --git a/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_s8.cpp b/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_s8.cpp
+index 79014784..8a96a148 100755
+--- a/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_s8.cpp
++++ b/examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_s8.cpp
+@@ -94,15 +94,14 @@ struct Options {
+   bool error;
+ 
+   int mode;
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   int g;
+   int alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
+-    g(128), mode(2),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -124,6 +123,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1);
+     cmd.get_cmd_line_argument("beta", beta, 0);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -140,7 +140,8 @@ struct Options {
+       << "  --mode=<int>                The mode to run the gemm. 0 is Convert Only, 1 is Convert and Scale, 2 is Convert and Scale with Zero Point\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -645,11 +646,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     float total_time = 0.f;
+ 
+diff --git a/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_bf16_s8_bf16.cpp b/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_bf16_s8_bf16.cpp
+index f0e34f39..fcff55b8 100755
+--- a/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_bf16_s8_bf16.cpp
++++ b/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_bf16_s8_bf16.cpp
+@@ -105,7 +105,7 @@ struct Options {
+ 
+   bool a_narrower;
+   int mode;
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   int g;
+   float alpha, beta;
+ 
+@@ -114,7 +114,7 @@ struct Options {
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(20),
+     g(128), mode(2), a_narrower(false),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -135,6 +135,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+     if (cmd.check_cmd_line_flag("a_narrower")) {
+       a_narrower = true;
+     }
+@@ -155,7 +156,8 @@ struct Options {
+       << "  --a_narrower                If specified, make A the narrower type (B is narrower by default).\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -462,11 +464,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_f16_u4_f16.cpp b/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_f16_u4_f16.cpp
+index 335976d8..08318a13 100755
+--- a/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_f16_u4_f16.cpp
++++ b/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_f16_u4_f16.cpp
+@@ -95,7 +95,7 @@ struct Options {
+ 
+   bool a_narrower;
+   int mode;
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   int g;
+   float alpha, beta;
+ 
+@@ -104,7 +104,7 @@ struct Options {
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(20),
+     g(128), mode(2), a_narrower(false),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -125,6 +125,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+     if (cmd.check_cmd_line_flag("a_narrower")) {
+       a_narrower = true;
+     }
+@@ -145,7 +146,8 @@ struct Options {
+       << "  --a_narrower                If specified, make A the narrower type (B is narrower by default).\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -557,11 +559,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     float total_time = 0.f;
+ 
+diff --git a/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_f16_u4_s8.cpp b/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_f16_u4_s8.cpp
+index efd355ee..de0bf23b 100755
+--- a/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_f16_u4_s8.cpp
++++ b/examples/02_bmg_gemm_mixed_dtype/legacy/02_bmg_gemm_f16_u4_s8.cpp
+@@ -94,7 +94,7 @@ struct Options {
+   bool error;
+ 
+   int mode;
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   int g;
+   int alpha, beta;
+ 
+@@ -103,7 +103,7 @@ struct Options {
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(20),
+     g(128), mode(2),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -124,6 +124,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1);
+     cmd.get_cmd_line_argument("beta", beta, 0);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -140,6 +141,7 @@ struct Options {
+       << "  --mode=<int>                The mode to run the gemm. 0 is Convert Only, 1 is Convert and Scale, 2 is Convert and Scale with Zero Point\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n"
+       << "  --iterations=<int>          Iterations\n\n";
+ 
+     return out;
+@@ -644,11 +646,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     float total_time = 0.f;
+ 
+diff --git a/examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk.cpp b/examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk.cpp
+index 27d3513b..12b5d6e2 100644
+--- a/examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk.cpp
++++ b/examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk.cpp
+@@ -94,7 +94,7 @@ struct Options {
+   bool splitk;
+   bool dp;
+ 
+-  int m, n, k, l, iterations, splits;
++  int m, n, k, l, iterations, splits, verify;
+   float alpha, beta;
+ 
+   Options():
+@@ -102,7 +102,7 @@ struct Options {
+     error(false),
+     splitk(false),
+     dp(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20), splits(1),
++    m(5120), n(4096), k(4096), l(1), iterations(20), splits(1), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -131,6 +131,7 @@ struct Options {
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
+     cmd.get_cmd_line_argument("splits", splits, 1);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -148,7 +149,8 @@ struct Options {
+       << "  --splits=<int>              Sets the splitting factor for GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -294,11 +296,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       float elapsed_time_seconds = 0.f;
+diff --git a/examples/03_bmg_gemm_streamk/legacy/03_bmg_gemm_streamk.cpp b/examples/03_bmg_gemm_streamk/legacy/03_bmg_gemm_streamk.cpp
+index 3c0b0a1f..a58a2690 100644
+--- a/examples/03_bmg_gemm_streamk/legacy/03_bmg_gemm_streamk.cpp
++++ b/examples/03_bmg_gemm_streamk/legacy/03_bmg_gemm_streamk.cpp
+@@ -94,7 +94,7 @@ struct Options {
+   bool splitk;
+   bool dp;
+ 
+-  int m, n, k, l, iterations, splits;
++  int m, n, k, l, iterations, splits, verify;
+   float alpha, beta;
+ 
+   Options():
+@@ -103,7 +103,7 @@ struct Options {
+     splitk(false),
+     dp(false),
+     m(5120), n(4096), k(4096), l(1), iterations(20), splits(1),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -131,6 +131,7 @@ struct Options {
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
+     cmd.get_cmd_line_argument("splits", splits, 1);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -148,7 +149,8 @@ struct Options {
+       << "  --splits=<int>              Sets the splitting factor for GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -294,11 +296,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       float elapsed_time_seconds = 0.f;
+diff --git a/examples/04_bmg_grouped_gemm/04_bmg_grouped_gemm.cpp b/examples/04_bmg_grouped_gemm/04_bmg_grouped_gemm.cpp
+index 7b65ae34..d6687d5d 100644
+--- a/examples/04_bmg_grouped_gemm/04_bmg_grouped_gemm.cpp
++++ b/examples/04_bmg_grouped_gemm/04_bmg_grouped_gemm.cpp
+@@ -105,11 +105,11 @@ struct Options {
+   bool help = false;
+ 
+   float alpha, beta;
+-  int iterations;
++  int iterations, verify;
+   int m, n, k, groups;
+   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes_host;
+ 
+-  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100),
++  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100), verify(1),
+               m(5120), n(4096), k(4096), groups(2) {
+     problem_sizes_host.reserve(groups);
+     for(int i = 0; i < groups; i++) {
+@@ -133,6 +133,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta",  beta,  0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+ 
+     assert(groups > 0);
+     problem_sizes_host.clear();
+@@ -154,7 +155,8 @@ struct Options {
+       << "  --groups=<int>              Sets the number of individual GEMM problems for Grouped GEMM\n"
+       << "  --alpha=<f32>               Epilogue scalar alpha\n"
+       << "  --beta=<f32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Number of profiling iterations to perform\n\n";
++      << "  --iterations=<int>          Number of profiling iterations to perform\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     out
+       << "\n\nExamples:\n\n"
+@@ -497,11 +499,15 @@ void initialize(const Options &options) {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/04_bmg_grouped_gemm/legacy/04_bmg_grouped_gemm.cpp b/examples/04_bmg_grouped_gemm/legacy/04_bmg_grouped_gemm.cpp
+index ffc01d08..6d28d9bf 100644
+--- a/examples/04_bmg_grouped_gemm/legacy/04_bmg_grouped_gemm.cpp
++++ b/examples/04_bmg_grouped_gemm/legacy/04_bmg_grouped_gemm.cpp
+@@ -105,11 +105,11 @@ struct Options {
+   bool help = false;
+ 
+   float alpha, beta;
+-  int iterations;
++  int iterations, verify;
+   int m, n, k, groups;
+   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes_host;
+ 
+-  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100),
++  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100), verify(1),
+               m(5120), n(4096), k(4096), groups(2) {
+     problem_sizes_host.reserve(groups);
+     for(int i = 0; i < groups; i++) {
+@@ -133,6 +133,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta",  beta,  0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+ 
+     assert(groups > 0);
+     problem_sizes_host.clear();
+@@ -154,7 +155,8 @@ struct Options {
+       << "  --groups=<int>              Sets the number of individual GEMM problems for Grouped GEMM\n"
+       << "  --alpha=<f32>               Epilogue scalar alpha\n"
+       << "  --beta=<f32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Number of profiling iterations to perform\n\n";
++      << "  --iterations=<int>          Number of profiling iterations to perform\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     out
+       << "\n\nExamples:\n\n"
+@@ -497,11 +499,15 @@ void initialize(const Options &options) {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_single_b_with_per_col_bias.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_single_b_with_per_col_bias.cpp
+index 44851a64..7c575e1c 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_single_b_with_per_col_bias.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_single_b_with_per_col_bias.cpp
+@@ -89,13 +89,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(100),
++    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -115,6 +115,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -129,7 +130,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -302,11 +304,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if (!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_gelu.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_gelu.cpp
+index b11e2312..684c4ae2 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_gelu.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_gelu.cpp
+@@ -85,13 +85,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(100),
++    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -111,6 +111,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -125,7 +126,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -271,11 +273,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombauxstore.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombauxstore.cpp
+index ef7998f1..144e8eb6 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombauxstore.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombauxstore.cpp
+@@ -88,13 +88,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(768), n(768), k(128), l(3), iterations(100),
++    m(768), n(768), k(128), l(3), iterations(100), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -114,6 +114,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -128,7 +129,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -437,11 +439,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombdeeltact.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombdeeltact.cpp
+index 1cdf5d5f..cb856834 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombdeeltact.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombdeeltact.cpp
+@@ -95,14 +95,14 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+   Activation activation;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(100),
++    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
+     alpha(1.f), beta(0.f),
+     activation(Activation::Sum)
+   { }
+@@ -123,6 +123,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+     std::string activation_str = "sum";
+     cmd.get_cmd_line_argument("activation", activation_str);
+     if (activation_str == "sum") {
+@@ -147,7 +148,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n"
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n"
+       << "  --activation=[sum|mult]     Elementwise Binary Activation Function\n\n";
+ 
+     return out;
+@@ -319,11 +321,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux.cpp
+index 4069174b..7a548076 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux.cpp
+@@ -83,13 +83,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(100),
++    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -109,6 +109,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -123,7 +124,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -282,11 +284,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_relu.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_relu.cpp
+index 0f6a25af..b78b872e 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_relu.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_relu.cpp
+@@ -84,13 +84,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(100),
++    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -110,6 +110,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -124,7 +125,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -270,11 +272,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_silu.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_silu.cpp
+index f33cec52..cf2b2e4f 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_silu.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_silu.cpp
+@@ -83,13 +83,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(100),
++    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -109,6 +109,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -123,7 +124,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -269,11 +271,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_softmax.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_softmax.cpp
+index 10508420..650021eb 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_softmax.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_softmax.cpp
+@@ -84,13 +84,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(100),
++    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -110,6 +110,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -124,7 +125,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -327,12 +329,16 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+-    if (!passed) return cutlass::Status::kErrorInternal;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+-    if (passed && options.iterations > 0) {
++    if (options.iterations > 0) {
+       GPU_Clock timer;
+       timer.start();
+       for (int i = 0; i < options.iterations; ++i) {
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_splitk.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_splitk.cpp
+index c61961e6..9860b5cc 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_splitk.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_splitk.cpp
+@@ -59,7 +59,7 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, num_head, nope_dim, rope_dim, iterations;
++  int m, n, k, l, num_head, nope_dim, rope_dim, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+@@ -67,7 +67,7 @@ struct Options {
+     error(false),
+     m(5120), n(4096), k(4096), l(1),
+     num_head(128), nope_dim(128), rope_dim(64),
+-    iterations(100), alpha(1.f), beta(0.f)
++    iterations(100), verify(1), alpha(1.f), beta(0.f)
+   { }
+ 
+   // Parses the command line
+@@ -89,6 +89,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -106,7 +107,8 @@ struct Options {
+       << "  --rope-dim=<int>            Sets the rope_dim for splitk fusion\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -361,12 +363,16 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, splitk_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+-    if (!passed) return cutlass::Status::kErrorInternal;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, splitk_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+-    if (passed && options.iterations > 0) {
++    if (options.iterations > 0) {
+       GPU_Clock timer;
+       timer.start();
+       for (int i = 0; i < options.iterations; ++i) {
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_per_row_bias.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_per_row_bias.cpp
+index fb177c15..8e26bd04 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_per_row_bias.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_per_row_bias.cpp
+@@ -85,13 +85,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(100),
++    m(5120), n(4096), k(4096), l(1), iterations(100), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -111,6 +111,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -125,7 +126,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -298,11 +300,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_topk_and_softmax.cpp b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_topk_and_softmax.cpp
+index f59b5031..794d5b37 100644
+--- a/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_topk_and_softmax.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_topk_and_softmax.cpp
+@@ -201,6 +201,7 @@ struct Options {
+ 
+   int iterations = 1000;
+   int m = 16, n = 8, k = 64, l = 1;
++  int verify = 1;
+   double eps = 1e-5;
+ 
+   // Parses the command line
+@@ -217,6 +218,7 @@ struct Options {
+     cmd.get_cmd_line_argument("k", k);
+     cmd.get_cmd_line_argument("l", l);
+     cmd.get_cmd_line_argument("iterations", iterations);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+     cmd.get_cmd_line_argument("eps", eps);
+   }
+ 
+@@ -231,7 +233,8 @@ struct Options {
+       << "  --n=<int>                   Sets the N extent of the GEMM\n"
+       << "  --k=<int>                   Sets the K extent of the GEMM\n"
+       << "  --l=<int>                   Sets the l extent (batch) of the GEMM\n"
+-      << "  --iterations=<int>          Number of profiling iterations to perform.\n\n"
++      << "  --iterations=<int>          Number of profiling iterations to perform.\n"
++      << "  --verify=<int>              Specify whether to verify. Default: 1\n"
+       << "  --eps=<float>               Threshold of numerical verification. Default: 1e-5.\n\n";
+ 
+     out
+@@ -465,11 +468,16 @@ int run(Options &options) {
+   // Correctness / Warmup iteration
+   CUTLASS_CHECK(gemm.run());
+ 
+-  // Check if output from CUTLASS kernel and reference kernel are equal or not
+-  result.passed = result.verify(options);
++  if (options.verify != 0) {
++    // Check if output from CUTLASS kernel and reference kernel are equal or not
++    result.passed = result.verify(options);
++    std::cout << "Disposition: " << (result.passed ? "Passed" : "Failed") << std::endl;
+ 
+-  if (!result.passed) {
+-    exit(-1);
++    if (!result.passed) {
++      return -1;
++    }
++  } else {
++    std::cout << "Disposition is skipped." << std::endl;
+   }
+ 
+   // Run profiling loop
+diff --git a/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_gelu.cpp b/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_gelu.cpp
+index 0d330b03..cedabe7c 100644
+--- a/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_gelu.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_gelu.cpp
+@@ -84,14 +84,14 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(100),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -110,6 +110,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -124,7 +125,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -271,11 +273,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux.cpp b/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux.cpp
+index 827a1417..4250a342 100644
+--- a/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_lincombperrowbiaseltactaux.cpp
+@@ -83,14 +83,14 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(100),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -109,6 +109,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -123,7 +124,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -283,11 +285,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_relu.cpp b/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_relu.cpp
+index 1a21713b..95a54c89 100644
+--- a/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_relu.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_relu.cpp
+@@ -84,14 +84,14 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(100),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -110,6 +110,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -124,7 +125,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -271,11 +273,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_silu.cpp b/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_silu.cpp
+index d4f040ad..01d88253 100644
+--- a/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_silu.cpp
++++ b/examples/05_bmg_gemm_with_epilogues/legacy/05_bmg_gemm_with_epilogue_silu.cpp
+@@ -83,14 +83,14 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+     m(5120), n(4096), k(4096), l(1), iterations(100),
+-    alpha(1.f), beta(0.f)
++    alpha(1.f), beta(0.f), verify(1)
+   { }
+ 
+   // Parses the command line
+@@ -109,6 +109,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -123,7 +124,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -270,11 +272,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_decode_runner.hpp b/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_decode_runner.hpp
+index ca9c853f..47bd5f28 100644
+--- a/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_decode_runner.hpp
++++ b/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_decode_runner.hpp
+@@ -64,12 +64,12 @@ struct Options {
+   bool use_paged_kv = false;
+   std::string scheduler;
+ 
+-  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations;
++  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations, verify;
+   float softmax_scale;
+ 
+   Options()
+       : help(false), error(false), is_causal(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
+-        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
++        seq_len_kv(512), seq_len_kv_cache(0), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual"), verify(1) {}
+ 
+   // Parses the command line
+   void parse(int argc, char const **args) {
+@@ -99,6 +99,7 @@ struct Options {
+     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
+     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+ 
+     if (cmd.check_cmd_line_flag("use_paged_kv")) {
+       use_paged_kv = true;
+@@ -132,7 +133,8 @@ struct Options {
+         << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
+         << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
+         << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
+-        << "  --iterations=<int>          Iterations\n\n";
++        << "  --iterations=<int>          Iterations\n\n"
++        << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -689,13 +691,17 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool use_kv_cache = options.seq_len_kv_cache > 0;
+-    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool use_kv_cache = options.seq_len_kv_cache > 0;
++      bool passed = verify(problem_size, options.is_causal, use_kv_cache);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if (!passed) {
+-      return cutlass::Status::kErrorInternal;
++      if (!passed) {
++        return cutlass::Status::kErrorInternal;
++      }
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
+     }
+ 
+     if (options.iterations > 0) {
+diff --git a/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_prefill_cachedKV_runner.hpp b/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_prefill_cachedKV_runner.hpp
+index 09eb9def..1b19c290 100644
+--- a/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_prefill_cachedKV_runner.hpp
++++ b/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_prefill_cachedKV_runner.hpp
+@@ -64,12 +64,12 @@ struct Options {
+   bool use_paged_kv = false;
+   std::string scheduler;
+ 
+-  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations;
++  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, seq_len_kv_cache, page_size, head_size_qk, head_size_vo, iterations, verify;
+   float softmax_scale;
+ 
+   Options()
+       : help(false), error(false), is_causal(false), varlen(false), use_paged_kv(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
+-        seq_len_kv(512), seq_len_kv_cache(512), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
++        seq_len_kv(512), seq_len_kv_cache(512), page_size(128), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual"), verify(1) {}
+ 
+   // Parses the command line
+   void parse(int argc, char const **args) {
+@@ -99,6 +99,7 @@ struct Options {
+     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
+     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+ 
+     if (cmd.check_cmd_line_flag("use_paged_kv")) {
+         use_paged_kv = true;
+@@ -136,7 +137,8 @@ struct Options {
+         << "  --page_size=<int>           Block size for paged KV cache. Default is 128\n"
+         << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
+         << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
+-        << "  --iterations=<int>          Iterations\n\n";
++        << "  --iterations=<int>          Iterations\n\n"
++        << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -674,13 +676,17 @@ template <class FMHAPrefillCachedKernel, bool isVarLen> struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool use_kv_cache = options.seq_len_kv_cache > 0;
+-    bool passed = verify(problem_size, options.is_causal, use_kv_cache);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool use_kv_cache = options.seq_len_kv_cache > 0;
++      bool passed = verify(problem_size, options.is_causal, use_kv_cache);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if (!passed) {
+-      return cutlass::Status::kErrorInternal;
++      if (!passed) {
++        return cutlass::Status::kErrorInternal;
++      }
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
+     }
+ 
+     if (options.iterations > 0) {
+diff --git a/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_prefill_runner.hpp b/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_prefill_runner.hpp
+index 808e929f..06a50ae0 100644
+--- a/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_prefill_runner.hpp
++++ b/examples/06_bmg_flash_attention/legacy/bmg_flash_attn_prefill_runner.hpp
+@@ -62,12 +62,12 @@ struct Options {
+   bool varlen = false;
+   std::string scheduler;
+ 
+-  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo, iterations;
++  int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo, iterations, verify;
+   float softmax_scale;
+ 
+   Options()
+       : help(false), error(false), is_causal(false), varlen(false), batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(512), head_size_qk(128),
+-        seq_len_kv(512), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual") {}
++        seq_len_kv(512), head_size_vo(128), iterations(100), softmax_scale(1.f), scheduler("Individual"), verify(1) {}
+ 
+   // Parses the command line
+   void parse(int argc, char const **args) {
+@@ -96,6 +96,7 @@ struct Options {
+     cmd.get_cmd_line_argument("head_size_vo", head_size_vo, HEAD_DIM);
+     cmd.get_cmd_line_argument("head_size_qk", head_size_qk, head_size_vo);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+ 
+     softmax_scale = 1 / sqrt(static_cast<float>(head_size_qk));
+   }
+@@ -116,7 +117,8 @@ struct Options {
+         << "  --seq_len_kv=<int>          Sets the Sequence length of the Key-Value pair in Multi-Head Self Attention module\n"
+         << "  --head_size_qk=<int>        Sets the Attention Head dimension of the 1st Matrix Multiplication in Multi-Head Self Attention module\n"
+         << "  --head_size_vo=<int>        Sets the Attention Head dimension of the 2nd Matrix Multiplication in Multi-Head Self Attention module\n"
+-        << "  --iterations=<int>          Iterations\n\n";
++        << "  --iterations=<int>          Iterations\n\n"
++        << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -548,12 +550,16 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.is_causal);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.is_causal);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if (!passed) {
+-      return cutlass::Status::kErrorInternal;
++      if (!passed) {
++        return cutlass::Status::kErrorInternal;
++      }
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
+     }
+ 
+     if (options.iterations > 0) {
+diff --git a/examples/07_bmg_dual_gemm/07_bmg_dual_gemm.cpp b/examples/07_bmg_dual_gemm/07_bmg_dual_gemm.cpp
+index 2befd7a4..533f0e6d 100644
+--- a/examples/07_bmg_dual_gemm/07_bmg_dual_gemm.cpp
++++ b/examples/07_bmg_dual_gemm/07_bmg_dual_gemm.cpp
+@@ -81,13 +81,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha0, alpha1, beta0, beta1;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     alpha0(1.f), beta0(0.f), alpha1(1.f), beta1(0.f)
+   { }
+ 
+@@ -109,6 +109,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha1", alpha1, 1.f);
+     cmd.get_cmd_line_argument("beta1", beta1, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -125,7 +126,8 @@ struct Options {
+       << "  --alpha1=<s32>               Dual GEMM Epilogue scalar alpha1\n"
+       << "  --beta0=<s32>                Dual GEMM Epilogue scalar beta0\n\n"
+       << "  --beta1=<s32>                Dual GEMM Epilogue scalar beta1\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -425,11 +427,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify<WriteEpilogueOutput0, WriteEpilogueOutput1, UseBias0, UseBias1>(problem_size, options.alpha0, options.alpha1, options.beta0, options.beta1);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify<WriteEpilogueOutput0, WriteEpilogueOutput1, UseBias0, UseBias1>(problem_size, options.alpha0, options.alpha1, options.beta0, options.beta1);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/08_bmg_gemm_f8/08_bmg_gemm_f8.cpp b/examples/08_bmg_gemm_f8/08_bmg_gemm_f8.cpp
+index 67ed9849..715a8bad 100644
+--- a/examples/08_bmg_gemm_f8/08_bmg_gemm_f8.cpp
++++ b/examples/08_bmg_gemm_f8/08_bmg_gemm_f8.cpp
+@@ -79,13 +79,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     alpha(1.f), beta(0.f)
+   { }
+ 
+@@ -105,6 +105,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -119,7 +120,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -278,11 +280,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/08_bmg_gemm_f8/08_bmg_gemm_f8_scaling.cpp b/examples/08_bmg_gemm_f8/08_bmg_gemm_f8_scaling.cpp
+index 61f23602..fdd4bf9b 100644
+--- a/examples/08_bmg_gemm_f8/08_bmg_gemm_f8_scaling.cpp
++++ b/examples/08_bmg_gemm_f8/08_bmg_gemm_f8_scaling.cpp
+@@ -84,14 +84,14 @@ struct Options {
+   bool error;
+ 
+   int mode;
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   int g;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     g(128), mode(0),
+     alpha(1.f), beta(0.f)
+   { }
+@@ -114,6 +114,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -130,7 +131,8 @@ struct Options {
+       << "  --mode=<int>                The mode to run the gemm. 0 is Convert Only, 1 is Convert and Scale\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -425,11 +427,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/09_bmg_grouped_gemm_f8/09_bmg_grouped_gemm_f8.cpp b/examples/09_bmg_grouped_gemm_f8/09_bmg_grouped_gemm_f8.cpp
+index 9c8ef827..91fd7550 100644
+--- a/examples/09_bmg_grouped_gemm_f8/09_bmg_grouped_gemm_f8.cpp
++++ b/examples/09_bmg_grouped_gemm_f8/09_bmg_grouped_gemm_f8.cpp
+@@ -106,11 +106,11 @@ struct Options {
+   bool help = false;
+ 
+   float alpha, beta;
+-  int iterations;
++  int iterations, verify;
+   int m, n, k, groups;
+   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes_host;
+ 
+-  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100),
++  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100), verify(1),
+               m(5120), n(4096), k(4096), groups(2) {
+     problem_sizes_host.reserve(groups);
+     for(int i = 0; i < groups; i++) {
+@@ -134,6 +134,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta",  beta,  0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+ 
+     assert(groups > 0);
+     problem_sizes_host.clear();
+@@ -155,7 +156,8 @@ struct Options {
+       << "  --groups=<int>              Sets the number of individual GEMM problems for Grouped GEMM\n"
+       << "  --alpha=<f32>               Epilogue scalar alpha\n"
+       << "  --beta=<f32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Number of profiling iterations to perform\n\n";
++      << "  --iterations=<int>          Number of profiling iterations to perform\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     out
+       << "\n\nExamples:\n\n"
+@@ -516,11 +518,15 @@ void initialize(const Options &options) {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify<ElementType>(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify<ElementType>(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/09_bmg_grouped_gemm_f8/legacy/09_bmg_grouped_gemm_f8.cpp b/examples/09_bmg_grouped_gemm_f8/legacy/09_bmg_grouped_gemm_f8.cpp
+index c5b0233a..2599865f 100644
+--- a/examples/09_bmg_grouped_gemm_f8/legacy/09_bmg_grouped_gemm_f8.cpp
++++ b/examples/09_bmg_grouped_gemm_f8/legacy/09_bmg_grouped_gemm_f8.cpp
+@@ -106,12 +106,12 @@ struct Options {
+   bool help = false;
+ 
+   float alpha, beta;
+-  int iterations;
++  int iterations, verify;
+   int m, n, k, groups;
+   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes_host;
+ 
+   Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100),
+-              m(5120), n(4096), k(4096), groups(2) {
++              m(5120), n(4096), k(4096), groups(2), verify(1) {
+     problem_sizes_host.reserve(groups);
+     for(int i = 0; i < groups; i++) {
+       problem_sizes_host.push_back({m, n, k});
+@@ -134,6 +134,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta",  beta,  0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+ 
+     assert(groups > 0);
+     problem_sizes_host.clear();
+@@ -155,7 +156,8 @@ struct Options {
+       << "  --groups=<int>              Sets the number of individual GEMM problems for Grouped GEMM\n"
+       << "  --alpha=<f32>               Epilogue scalar alpha\n"
+       << "  --beta=<f32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Number of profiling iterations to perform\n\n";
++      << "  --iterations=<int>          Number of profiling iterations to perform\n\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     out
+       << "\n\nExamples:\n\n"
+@@ -516,11 +518,15 @@ void initialize(const Options &options) {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify<ElementType>(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify<ElementType>(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if(!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/10_bmg_grouped_gemm_mixed_dtype/bmg_grouped_gemm_mixed_dtype_runner.hpp b/examples/10_bmg_grouped_gemm_mixed_dtype/bmg_grouped_gemm_mixed_dtype_runner.hpp
+index 27020418..9a4ef564 100644
+--- a/examples/10_bmg_grouped_gemm_mixed_dtype/bmg_grouped_gemm_mixed_dtype_runner.hpp
++++ b/examples/10_bmg_grouped_gemm_mixed_dtype/bmg_grouped_gemm_mixed_dtype_runner.hpp
+@@ -75,12 +75,12 @@ struct Options {
+ 
+   bool a_narrower;
+   int mode;
+-  int m, n, k, l, iterations, groups;
++  int m, n, k, l, iterations, verify, groups;
+   int g;
+   float alpha, beta;
+   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes_host;
+ 
+-  Options(): help(false), error(false), m(5120), n(4096), k(4096), l(1), iterations(20),
++  Options(): help(false), error(false), m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     g(128), groups(2), mode(2), a_narrower(false), alpha(FLT_MAX), beta(FLT_MAX) {
+ 
+     problem_sizes_host.reserve(groups);
+@@ -108,6 +108,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 0.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+     if (cmd.check_cmd_line_flag("a_narrower")) {
+       a_narrower = true;
+     }
+@@ -135,7 +136,8 @@ struct Options {
+       << "  --a_narrower                If specified, make A the narrower type (B is narrower by default).\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -875,11 +877,15 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(options);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(options);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+ 
+-    if(!passed) return cutlass::Status::kErrorInternal;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+     if (options.iterations > 0) {
+       GPU_Clock timer;
+diff --git a/examples/12_xe20_moe_gemm_cute_interface/12_xe20_moe_gemm_cute_interface.cpp b/examples/12_xe20_moe_gemm_cute_interface/12_xe20_moe_gemm_cute_interface.cpp
+index b223593b..40639597 100644
+--- a/examples/12_xe20_moe_gemm_cute_interface/12_xe20_moe_gemm_cute_interface.cpp
++++ b/examples/12_xe20_moe_gemm_cute_interface/12_xe20_moe_gemm_cute_interface.cpp
+@@ -32,6 +32,10 @@
+ /*! \file
+     \brief CUTLASS Intel BMG MoE API example based on sycl-tla Group GEMM
+ 
++    Usage:
++      To skip verification, modify the verify parameter in the launcher() calls in main():
++        launcher(total_rows_for_each_expert[i], 5760, 2880, num_experts, 0);  // 0 = skip verify
++        launcher(total_rows_for_each_expert[i], 2880, 2880, num_experts, 1);  // 1 = enable verify (default)
+ */
+ 
+ #include "cutlass/util/GPU_Clock.hpp"
+@@ -75,6 +79,7 @@ struct VerificationHelper {
+   float alpha = 1.f;
+   float beta = 0.f;
+   int iterations;
++  int verify = 1;
+   int m = 0, n = 0, k = 0, groups;
+   int *num_rows_per_expert = nullptr;
+   std::vector<typename MoE::ProblemShape::UnderlyingProblemShape>
+@@ -218,7 +223,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
+                      const int gemm_n, const int gemm_k,
+                      const int *num_rows_per_expert_device,
+                      const int *num_tokens_per_expert_host,
+-                     const int num_experts) {
++                     const int num_experts, const bool verify = true) {
+   // Change device_id to another value if you are running on a machine with
+   // multiple GPUs and wish to use a GPU other than that with device ID 0.
+   // For example, in a framework, you could query device ID.
+@@ -286,10 +291,11 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
+ 
+   VerificationHelper helper;
+   helper.parse(num_experts, num_tokens_per_expert_host, gemm_n, gemm_k);
+-  if (helper.verify(activations, weights, outputs) == false) {
+-    std::cout << "\n\nFailed accuracy verification :(\n\n";
++  if (verify) {
++    if (helper.verify(activations, weights, outputs) == false) {
++      std::cout << "\n\nFailed accuracy verification :(\n\n";
++    }
+   }
+-
+   auto [gflops, mem_bw_util, projected_time] =
+       helper.gflops(cute_average_time / 1000.0, helper.problem_sizes_host);
+ 
+@@ -306,7 +312,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
+             << std::endl;
+ }
+ 
+-void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
++void launcher(int *M_per_expert, int N, int K, const int &num_experts, const bool verify = true) {
+   int n_moe = N;
+   int k_moe = K;
+   int num_tokens_incl_duplicated = 0;
+@@ -343,7 +349,7 @@ void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
+   MoEGEMMLauncher<'R', 'R'>(activations_data.get(), weights_data.get(),
+                             static_cast<void *>(nullptr), output_data.get(),
+                             n_moe, k_moe, num_rows_per_expert_device.get(),
+-                            M_per_expert, num_experts);
++                            M_per_expert, num_experts, verify);
+ }
+ 
+ int main(int argc, const char **argv) {
+@@ -417,8 +423,8 @@ int main(int argc, const char **argv) {
+        };
+ 
+   for (int i = 0; i < num_layers; i++) {
+-    launcher(total_rows_for_each_expert[i], 5760, 2880, num_experts);
+-    launcher(total_rows_for_each_expert[i], 2880, 2880, num_experts);
++    launcher(total_rows_for_each_expert[i], 5760, 2880, num_experts, options.verify);
++    launcher(total_rows_for_each_expert[i], 2880, 2880, num_experts, options.verify);
+   }
+ 
+   return 0;
+diff --git a/examples/13_bmg_gemm_bias/13_bmg_gemm_bias.cpp b/examples/13_bmg_gemm_bias/13_bmg_gemm_bias.cpp
+index 621c120a..aef27a5c 100644
+--- a/examples/13_bmg_gemm_bias/13_bmg_gemm_bias.cpp
++++ b/examples/13_bmg_gemm_bias/13_bmg_gemm_bias.cpp
+@@ -89,13 +89,13 @@ struct Options {
+   bool help;
+   bool error;
+ 
+-  int m, n, k, l, iterations;
++  int m, n, k, l, iterations, verify;
+   float alpha, beta;
+ 
+   Options():
+     help(false),
+     error(false),
+-    m(5120), n(4096), k(4096), l(1), iterations(20),
++    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
+     alpha(1.f), beta(1.f)
+   { }
+ 
+@@ -115,6 +115,7 @@ struct Options {
+     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
+     cmd.get_cmd_line_argument("beta", beta, 1.f);
+     cmd.get_cmd_line_argument("iterations", iterations, 100);
++    cmd.get_cmd_line_argument("verify", verify, 1);
+   }
+ 
+   /// Prints the usage statement.
+@@ -129,7 +130,8 @@ struct Options {
+       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+       << "  --alpha=<s32>               Epilogue scalar alpha\n"
+       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+-      << "  --iterations=<int>          Iterations\n\n";
++      << "  --iterations=<int>          Iterations\n"
++      << "  --verify=<int>              Specify whether to verify.\n\n";
+ 
+     return out;
+   }
+@@ -273,11 +275,16 @@ struct ExampleRunner {
+ 
+     compat::wait();
+ 
+-    // Verify that the result is correct
+-    bool passed = verify(problem_size, options.alpha, options.beta);
+-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++    if (options.verify != 0) {
++      // Verify that the result is correct
++      bool passed = verify(problem_size, options.alpha, options.beta);
++      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
++      if (!passed) return cutlass::Status::kErrorInternal;
++    } else {
++      std::cout << "Disposition is skipped." << std::endl;
++    }
+ 
+-    if (passed && options.iterations > 0) {
++    if (options.iterations > 0) {
+       GPU_Clock timer;
+       timer.start();
+       for (int i = 0; i < options.iterations; ++i) {
