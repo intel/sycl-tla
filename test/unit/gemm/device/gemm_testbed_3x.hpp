@@ -1,6 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -2769,6 +2769,8 @@ struct TestbedImpl {
   HostCollectiveMainloopType collective_mma_inputs;
   CollectiveEpilogue collective_epilogue;
 
+  // Flag to print "unsupported" message only once per test instance
+  bool printed_unsupported_once = false;
   //
   // Methods
   //
@@ -3066,13 +3068,13 @@ struct TestbedImpl {
 
     if (status != cutlass::Status::kSuccess) {
 #if defined(CUTLASS_ENABLE_SYCL)
-      std::cerr << "This test is not supported." << "\n";
+      test::unit::LogUnsupportedOnce(printed_unsupported_once);
       return true;
 #else
       cudaError_t error = cudaGetLastError();
       const auto error_str = cudaGetErrorString(error);
       CUTLASS_TRACE_HOST("TestbedImpl::run: cudaGetLastError() is " << error_str);
-      std::cerr << "This test is not supported: " << error_str << "\n";
+      test::unit::LogUnsupportedOnce(printed_unsupported_once, error_str);
       return true;
 #endif
     }
@@ -3093,13 +3095,14 @@ struct TestbedImpl {
 #endif
       status = gemm_op.initialize(arguments, workspace.get());
       if (status != cutlass::Status::kSuccess) {
-#if defined(CUTLASS_ENABLE_SYCL)
-      std::cerr << "This test is not supported." << "\n";
-#else
+    #if defined(CUTLASS_ENABLE_SYCL)
+        test::unit::LogUnsupportedOnce(printed_unsupported_once);
+    #else
         cudaError_t error = cudaGetLastError();
         const auto error_str = cudaGetErrorString(error);
         CUTLASS_TRACE_HOST("TestbedImpl::run: cudaGetLastError() is " << error_str);
-#endif
+        test::unit::LogUnsupportedOnce(printed_unsupported_once, error_str);
+    #endif
       }
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)
       CUTLASS_TRACE_HOST("TestbedImpl::run: Calling gemm_op.run");
