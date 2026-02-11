@@ -34,7 +34,7 @@
 
 #include "cutlass/gemm/dispatch_policy.hpp"
 #include "flash_attention_v2/collective/fmha_fusion.hpp"
-#include "flash_attention_v2/kernel/xe_fhma_fwd_kernel.hpp"
+#include "flash_attention_v2/kernel/xe_fmha_fwd_kernel.hpp"
 #include "flash_attention_v2/kernel/xe_tile_scheduler.hpp"
 
 namespace cutlass {
@@ -261,7 +261,6 @@ template<FMHAMode Mode,
          bool Causal, bool VarLen, bool CachedKV, bool PagedKV, bool Persistent,
          int WgTileQ, int WgTileK, int WgTileV,
          int SgTileQ, int SgTileK,
-         int SgTileP, int SgTileV,
          int HeadDimQK, int HeadDimV>
 struct FMHAConfigGenWithTileShape{
   using ShapeQK = Shape<Int<WgTileQ>, Int<WgTileK>, Int<HeadDimQK>>;
@@ -280,15 +279,12 @@ struct FMHAConfigGenWithTileShape{
     _1
   >>;
 
-  // Derive subgroup counts for PV matmul
-  static_assert(WgTileQ % SgTileP == 0, "WgTileQ must be divisible by SgTileP");
-  static_assert(WgTileV % SgTileV == 0, "WgTileV must be divisible by SgTileV");
-
-  // SubgroupLayoutPV: (num_sg_p, num_sg_v, 1)
+  // SubgroupLayoutPV: (num_sg_p = num_sg_q, 1, num_sg_k)
+  // number of subgroups in PV GEMM equals that in QK GEMM
   using SubgroupLayoutPV = Layout<Shape<
-    Int<WgTileQ / SgTileP>,
-    Int<WgTileV / SgTileV>,
-    _1
+    Int<WgTileQ / SgTileQ>,
+    _1,
+    Int<WgTileK / SgTileK>
   >>;
 
   using type = cutlass::flash_attention::FMHAConfig<

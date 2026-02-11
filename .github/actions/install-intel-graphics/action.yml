@@ -5,7 +5,7 @@ inputs:
     description: "Install for PVC or BMG gpu"
     type: string
   IGC:
-    description: "Use ROLLING or STAGING release"
+    description: "Use ROLLING, STAGING, or LTS release"
     type: string
 
 runs:
@@ -19,9 +19,7 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]] || [[ "${{ inputs.GPU }}" == "PVC" ]]; then
           #purge existing intel graphics packages
-          sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
-          'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
-          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true        
+          dpkg -l | grep -E 'libigc|intel-igc|libigdgmm|libigdfcl|libze-intel-gpu|libze1|libze-dev|intel-opencl-icd|intel-metrics-discovery|intel-gsc|intel-ocloc' | awk '{print $2}' | xargs -r sudo apt-get purge -y || true
           sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
 
           sudo add-apt-repository ppa:kobuk-team/intel-graphics
@@ -40,9 +38,7 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]] || [[ "${{ inputs.GPU }}" == "PVC" ]]; then
           #purge existing intel graphics packages
-          sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
-          'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
-          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true        
+          dpkg -l | grep -E 'libigc|intel-igc|libigdgmm|libigdfcl|libze-intel-gpu|libze1|libze-dev|intel-opencl-icd|intel-metrics-discovery|intel-gsc|intel-ocloc' | awk '{print $2}' | xargs -r sudo apt-get purge -y || true
           sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
 
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
@@ -50,6 +46,55 @@ runs:
           sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
             intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
+        else
+          exit 1
+        fi
+    - name: Install Intel graphics drivers
+      if: inputs.IGC == 'LTS'
+      shell: bash
+      run: |
+        shopt -s expand_aliases
+        which sudo || alias sudo=""
+        if [[ "${{ inputs.GPU }}" == "PVC" ]]; then
+          # Purge existing intel graphics packages
+          sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
+          'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
+          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true
+          sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
+          sudo rm -f /etc/apt/sources.list.d/intel-gpu-*.list
+          
+          # Install LTS drivers for PVC
+          . /etc/os-release
+          if [[ ! " jammy noble " =~ " ${VERSION_CODENAME} " ]]; then
+            echo "Ubuntu version ${VERSION_CODENAME} not supported"
+            exit 1
+          fi
+          wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
+            sudo gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${VERSION_CODENAME}/lts/2523 unified" | \
+            sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
+          sudo apt update
+          sudo apt install -y \
+              intel-opencl-icd libze-intel-gpu1 libze1 \
+              intel-media-va-driver-non-free libmfx-gen1 libvpl2 \
+              libegl-mesa0 libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
+              libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
+              mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo
+          
+          
+          rm -rf igc
+          mkdir igc
+          cd igc
+          echo "Fetching latest IGC release..."
+          IGC_CORE_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-core-2.*amd64.deb\"" | head -1 | cut -d '"' -f 4)
+          IGC_OPENCL_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-opencl-2.*amd64.deb\"" | grep -v "devel" | head -1 | cut -d '"' -f 4)
+          echo "Downloading IGC packages..."
+          wget "${IGC_CORE_URL}"
+          wget "${IGC_OPENCL_URL}"
+          
+          # Install all downloaded packages
+          sudo dpkg -i *.deb        
+
         else
           exit 1
         fi
