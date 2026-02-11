@@ -421,6 +421,7 @@ int main(int argc, const char **argv) {
     std::cerr << "Error: num_layers (" << options.num_layers 
               << ") exceeds maximum supported layers (" << max_layers 
               << ")." << std::endl;
+    std::cerr << "Aborting execution." << std::endl;
     return -1;
   }
 
