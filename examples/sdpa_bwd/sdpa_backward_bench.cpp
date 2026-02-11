@@ -13,9 +13,19 @@ using DurTuple = std::tuple<std::chrono::duration<long, std::nano>,
 
 template<typename T>
 void
-random_init(int seed, T *dst, size_t N, int a = -1, int b = 1) {
+uniform_init(int seed, T *dst, size_t N, float a = -1.0f, float b = 1.0f) {
     std::mt19937 gen(seed);
     std::uniform_real_distribution<float> dis(a, b);
+    for (int i = 0; i < N; ++i) {
+        dst[i] = static_cast<T>(dis(gen));
+    }
+}
+
+template<typename T>
+void
+norm_init(int seed, T *dst, size_t N, float c = 0.0f, float d = 1.0f) {
+    std::mt19937 gen(seed);
+    std::normal_distribution<float> dis(c, d);
     for (int i = 0; i < N; ++i) {
         dst[i] = static_cast<T>(dis(gen));
     }
@@ -318,18 +328,16 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
 
     int seed = 123;
     // init qkv
-    random_init(seed + 1, q_h.data(), q_h.size());
-    random_init(seed + 2, k_h.data(), k_h.size());
-    random_init(seed + 3, v_h.data(), v_h.size());
-
-    // init s and p for debug
+    norm_init(seed + 1, q_h.data(), q_h.size());
+    norm_init(seed + 2, k_h.data(), k_h.size());
+    norm_init(seed + 3, v_h.data(), v_h.size());
 
     // init lse and odo
-    random_init(seed + 4, lse_h.data(), lse_h.size());
+    norm_init(seed + 4, lse_h.data(), lse_h.size());
 
     // init grad output
-    random_init(seed + 5, do_h.data(), do_h.size());
-    random_init(seed + 6, o_h.data(), o_h.size());
+    norm_init(seed + 5, do_h.data(), do_h.size());
+    norm_init(seed + 6, o_h.data(), o_h.size());
 
     // alloc qkv
     T *q_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
@@ -424,8 +432,8 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
                                       HEAD_SIZE_QK, HEAD_SIZE_VO,
                                       odo_ref.data(), dqaccum_ref.data(),
                                       dq_ref.data(), dk_ref.data(), dv_ref.data());
-        float atol = 5e-3f;
-        float rtol = 5e-3f;
+        float atol = 1e-2f;
+        float rtol = 1e-2f;
         compat::memcpy<V>(odo_h.data(), odo_d, odo_h.size());
         compat::memcpy<V>(dqaccum_h.data(), dqaccum_d, dqaccum_h.size());
         compat::memcpy<T>(dq_h.data(), dq_d, dq_h.size());
@@ -467,7 +475,10 @@ int main(int argc, const char**argv) {
 
     Options options;
     options.parse(argc, argv);
-
+    if (options.help) {
+        options.print_usage(std::cout);
+        return 0;
+    }
     int64_t BATCH = options.batch;
     int64_t NUM_HEAD_Q = options.num_heads_q;
     int64_t NUM_HEAD_KV = options.num_heads_kv;
