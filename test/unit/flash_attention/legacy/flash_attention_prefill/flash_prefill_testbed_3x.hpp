@@ -234,6 +234,8 @@ struct TestbedImpl {
   cutlass::DeviceAllocation<ElementOutput> block_O;
   cutlass::DeviceAllocation<ElementOutput> block_ref_O;
 
+  // Flag to print "unsupported" message only once per test instance
+  bool printed_unsupported_once = false;
   //
   // Methods
   //
@@ -606,7 +608,7 @@ struct TestbedImpl {
     auto can_implement = FlashAttention::can_implement(arguments);
 
     if (!can_implement) {
-      std::cerr << "This test is not supported." << "\n";
+      test::unit::LogUnsupportedOnce(printed_unsupported_once);
     }
 
     //
