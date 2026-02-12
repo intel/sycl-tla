@@ -98,20 +98,29 @@ void compute_lse_and_softmax_kernel(
             }
         }
 
-        // Compute sum of exp(S[i,j] - max_val)
-        V sum_exp = 0.0f;
-        for (int j = 0; j < seq_len_k; ++j) {
-            V s_val = S[i * seq_len_k + j];
-            sum_exp += sycl::exp(s_val - max_val);
-        }
+        // Special case: if all elements are -INFINITY (fully masked row)
+        if (max_val == -INFINITY) {
+            lse[i] = -INFINITY;
+            // Set all P values to 0
+            for (int j = 0; j < seq_len_k; ++j) {
+                P[i * seq_len_k + j] = 0.0f;
+            }
+        } else {
+            // Compute sum of exp(S[i,j] - max_val)
+            V sum_exp = 0.0f;
+            for (int j = 0; j < seq_len_k; ++j) {
+                V s_val = S[i * seq_len_k + j];
+                sum_exp += sycl::exp(s_val - max_val);
+            }
 
-        // Compute lse[i] = max_val + log(sum_exp)
-        lse[i] = max_val + sycl::log(sum_exp);
+            // Compute lse[i] = max_val + log(sum_exp)
+            lse[i] = max_val + sycl::log(sum_exp);
 
-        // Compute P[i,j] = exp(S[i,j] - lse[i])
-        for (int j = 0; j < seq_len_k; ++j) {
-            V s_val = S[i * seq_len_k + j];
-            P[i * seq_len_k + j] = sycl::exp(s_val - lse[i]);
+            // Compute P[i,j] = exp(S[i,j] - lse[i])
+            for (int j = 0; j < seq_len_k; ++j) {
+                V s_val = S[i * seq_len_k + j];
+                P[i * seq_len_k + j] = sycl::exp(s_val - lse[i]);
+            }
         }
     }
 }
@@ -134,9 +143,14 @@ void compute_softmax_with_lse_kernel(
 
     if (i < seq_len_q && j < seq_len_k) {
         int idx = i * seq_len_k + j;
-        V s_val = S[idx];
-        V p_val = sycl::exp(s_val - lse[i]);
-        P[idx] = p_val;
+        // Special case: if lse is -INFINITY (fully masked row), set P to 0
+        if (lse[i] == -INFINITY) {
+            P[idx] = 0.0f;
+        } else {
+            V s_val = S[idx];
+            V p_val = sycl::exp(s_val - lse[i]);
+            P[idx] = p_val;
+        }
     }
 }
 
