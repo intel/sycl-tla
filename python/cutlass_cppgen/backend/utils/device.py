@@ -39,10 +39,7 @@ from cutlass_cppgen.utils.lazy_import import lazy_import
 cuda = lazy_import("cuda.cuda")
 cudart =  lazy_import("cuda.cudart")
 dpctl = lazy_import("dpctl")
-bmg_indicators = [
-           "bmg", "battlemage", "xe20", "arc", "alchemist",
-            "dg2", "g21", "b580", "b770", "a770", "a750", "a580"
-        ]
+bmg_indicators = ["bmg", "battlemage", "xe20", "g21", "b580"]
 
 import cutlass_cppgen
 from cutlass_cppgen.utils.datatypes import is_cupy_tensor, is_numpy_tensor, is_torch_tensor
