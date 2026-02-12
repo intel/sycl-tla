@@ -99,14 +99,6 @@ def parse_benchmark_log(log_path):
 
             kernel_name = tokens[0]
             dimensions = tokens[2]
-            dims = dimensions.split("x")
-            if len(dims) < 3:
-                continue
-
-            m = dims[0]
-            n = dims[1]
-            k = dims[2]
-
             result = "Fail"
             reason=""
             avg_tflops = ""
@@ -128,9 +120,7 @@ def parse_benchmark_log(log_path):
             total+=1
             records.append({
                 "Kernel": kernel_name,
-                "M": m,
-                "K": k,
-                "N": n,
+                "Shape": dimensions,
                 "Result": result,
                 "Tflops": avg_tflops,
                 "Throughput": avg_throughput,
@@ -145,7 +135,7 @@ def write_report_csv(path, records):
     with open(path, "w", newline="") as csvfile:
         writer = csv.DictWriter(
             csvfile,
-            fieldnames=["Kernel", "M", "K", "N", "Result", "Tflops", "Throughput","Reason"],
+            fieldnames=["Kernel", "Shape", "Result", "Tflops", "Throughput","Reason"],
         )
         writer.writeheader()
         writer.writerows(records)
