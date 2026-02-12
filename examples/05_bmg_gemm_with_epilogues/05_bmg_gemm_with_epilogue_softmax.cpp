@@ -320,7 +320,10 @@ struct ExampleRunner {
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    gemm_op.can_implement(arguments);
+    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
+      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      std::exit(1);
+    }
 
     gemm_op.initialize(arguments, workspace.get());
 
