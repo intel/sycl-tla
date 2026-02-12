@@ -321,8 +321,8 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
 
     // alloc host memory for grad test
     std::vector<T> dq_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
-    std::vector<T> dk_h(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_QK);
-    std::vector<T> dv_h(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_VO);
+    std::vector<T> dk_h(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_QK);
+    std::vector<T> dv_h(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_VO);
 
     std::vector<V> dqaccum_h(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
 
@@ -332,12 +332,16 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
     norm_init(seed + 2, k_h.data(), k_h.size());
     norm_init(seed + 3, v_h.data(), v_h.size());
 
-    // init lse and odo
-    norm_init(seed + 4, lse_h.data(), lse_h.size());
-
     // init grad output
     norm_init(seed + 5, do_h.data(), do_h.size());
-    norm_init(seed + 6, o_h.data(), o_h.size());
+    
+    // compute o and lse from qkv using forward pass
+    sdpa_forward_reference_gpu<T, V>(q_h.data(), k_h.data(), v_h.data(),
+                                     is_causal, is_bhsd,
+                                     BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
+                                     SEQ_LEN_QO, SEQ_LEN_KV,
+                                     HEAD_SIZE_QK, HEAD_SIZE_VO,
+                                     o_h.data(), lse_h.data());
 
     // alloc qkv
     T *q_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
@@ -358,8 +362,8 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
 
     // alloc grad test on device
     T *dq_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
-    T *dk_d = compat::malloc<T>(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_QK);
-    T *dv_d = compat::malloc<T>(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_VO);
+    T *dk_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_QK);
+    T *dv_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_VO);
 
     V *dqaccum_d = compat::malloc<V>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO_PAD * HEAD_SIZE_QK);
     // init dqaccum
@@ -421,8 +425,8 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
     std::vector<V> odo_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_QO);
     std::vector<V> dqaccum_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
     std::vector<T> dq_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
-    std::vector<T> dk_ref(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_QK);
-    std::vector<T> dv_ref(BATCH * NUM_HEAD_KV * SEQ_LEN_KV * HEAD_SIZE_VO);
+    std::vector<T> dk_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_QK);
+    std::vector<T> dv_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_VO);
     if (checksum) {
         sdpa_backward_reference_gpu<T, V>(q_h.data(), k_h.data(), v_h.data(),
                                       o_h.data(), do_h.data(), lse_h.data(),
@@ -445,9 +449,9 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
         printf("dq val: ");
         verify(dq_ref.data(), dq_h.data(), BATCH * NUM_HEAD_Q, SEQ_LEN_QO, HEAD_SIZE_QK, atol, rtol);
         printf("dk val: ");
-        verify(dk_ref.data(), dk_h.data(), BATCH * NUM_HEAD_KV, SEQ_LEN_KV, HEAD_SIZE_QK, atol, rtol);
+        verify(dk_ref.data(), dk_h.data(), BATCH * NUM_HEAD_Q, SEQ_LEN_KV, HEAD_SIZE_QK, atol, rtol);
         printf("dv val: ");
-        verify(dv_ref.data(), dv_h.data(), BATCH * NUM_HEAD_KV, SEQ_LEN_KV, HEAD_SIZE_VO, atol, rtol);
+        verify(dv_ref.data(), dv_h.data(), BATCH * NUM_HEAD_Q, SEQ_LEN_KV, HEAD_SIZE_VO, atol, rtol);
     }
 
     compat::free(q_d);

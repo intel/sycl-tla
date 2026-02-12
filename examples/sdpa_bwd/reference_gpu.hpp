@@ -75,6 +75,48 @@ void apply_causal_mask_kernel(
 }
 
 // ========================================
+// GPU Kernel: Compute LSE and P = softmax(S)
+// ========================================
+
+template<typename T, typename V>
+void compute_lse_and_softmax_kernel(
+    V* P,
+    V* lse,
+    const V* S,
+    int seq_len_q,
+    int seq_len_k,
+    sycl::nd_item<1> item
+) {
+    int i = item.get_global_id(0);
+    if (i < seq_len_q) {
+        // Find max value in row i for numerical stability
+        V max_val = -INFINITY;
+        for (int j = 0; j < seq_len_k; ++j) {
+            V s_val = S[i * seq_len_k + j];
+            if (s_val > max_val) {
+                max_val = s_val;
+            }
+        }
+
+        // Compute sum of exp(S[i,j] - max_val)
+        V sum_exp = 0.0f;
+        for (int j = 0; j < seq_len_k; ++j) {
+            V s_val = S[i * seq_len_k + j];
+            sum_exp += sycl::exp(s_val - max_val);
+        }
+
+        // Compute lse[i] = max_val + log(sum_exp)
+        lse[i] = max_val + sycl::log(sum_exp);
+
+        // Compute P[i,j] = exp(S[i,j] - lse[i])
+        for (int j = 0; j < seq_len_k; ++j) {
+            V s_val = S[i * seq_len_k + j];
+            P[i * seq_len_k + j] = sycl::exp(s_val - lse[i]);
+        }
+    }
+}
+
+// ========================================
 // GPU Kernel: Compute P = softmax(S) using LSE
 // ========================================
 
@@ -357,39 +399,38 @@ void sdpa_backward_reference_gpu(
     const float scale = 1.0f / sqrtf(static_cast<float>(head_size_qk));
     const int num_group = num_head_qo / num_head_kv;
 
+    // ========================================
+    // Allocate device memory once (reused for all batches and heads)
+    // ========================================
+
+    T* d_Q = compat::malloc<T>(seq_len_qo * head_size_qk);
+    T* d_K = compat::malloc<T>(seq_len_kv * head_size_qk);
+    T* d_V = compat::malloc<T>(seq_len_kv * head_size_vo);
+    T* d_O = compat::malloc<T>(seq_len_qo * head_size_vo);
+    T* d_dO = compat::malloc<T>(seq_len_qo * head_size_vo);
+
+    V* d_S = compat::malloc<V>(seq_len_qo * seq_len_kv);
+    V* d_P = compat::malloc<V>(seq_len_qo * seq_len_kv);
+    T* d_P_T = compat::malloc<T>(seq_len_qo * seq_len_kv);  // T version for GEMM
+    V* d_dS = compat::malloc<V>(seq_len_qo * seq_len_kv);
+    T* d_dS_T = compat::malloc<T>(seq_len_qo * seq_len_kv);  // T version for GEMM
+
+    T* d_dV = compat::malloc<T>(seq_len_kv * head_size_vo);
+    T* d_dQ = compat::malloc<T>(seq_len_qo * head_size_qk);
+    T* d_dK = compat::malloc<T>(seq_len_kv * head_size_qk);
+
+    V* d_oDo = compat::malloc<V>(seq_len_qo);
+    V* d_lse = compat::malloc<V>(seq_len_qo);
+
+    // Allocate V buffers for GEMM outputs
+    V* d_dV_V = compat::malloc<V>(seq_len_kv * head_size_vo);
+    V* d_dP_V = compat::malloc<V>(seq_len_qo * seq_len_kv);
+    V* d_dQ_V = compat::malloc<V>(seq_len_qo * head_size_qk);
+    V* d_dK_V = compat::malloc<V>(seq_len_kv * head_size_qk);
+
     for (int b = 0; b < batch; ++b) {
         for (int h_qo = 0; h_qo < num_head_qo; ++h_qo) {
             int h_kv = h_qo / num_group;
-            bool is_first_in_group = (h_qo % num_group == 0);
-
-            // ========================================
-            // Allocate device memory
-            // ========================================
-
-            T* d_Q = compat::malloc<T>(seq_len_qo * head_size_qk);
-            T* d_K = compat::malloc<T>(seq_len_kv * head_size_qk);
-            T* d_V = compat::malloc<T>(seq_len_kv * head_size_vo);
-            T* d_O = compat::malloc<T>(seq_len_qo * head_size_vo);
-            T* d_dO = compat::malloc<T>(seq_len_qo * head_size_vo);
-
-            V* d_S = compat::malloc<V>(seq_len_qo * seq_len_kv);
-            V* d_P = compat::malloc<V>(seq_len_qo * seq_len_kv);
-            T* d_P_T = compat::malloc<T>(seq_len_qo * seq_len_kv);  // T version for GEMM
-            V* d_dS = compat::malloc<V>(seq_len_qo * seq_len_kv);
-            T* d_dS_T = compat::malloc<T>(seq_len_qo * seq_len_kv);  // T version for GEMM
-
-            T* d_dV = compat::malloc<T>(seq_len_kv * head_size_vo);
-            T* d_dQ = compat::malloc<T>(seq_len_qo * head_size_qk);
-            T* d_dK = compat::malloc<T>(seq_len_kv * head_size_qk);
-
-            V* d_oDo = compat::malloc<V>(seq_len_qo);
-            V* d_lse = compat::malloc<V>(seq_len_qo);
-
-            // Allocate V buffers for GEMM outputs
-            V* d_dV_V = compat::malloc<V>(seq_len_kv * head_size_vo);
-            V* d_dP_V = compat::malloc<V>(seq_len_qo * seq_len_kv);
-            V* d_dQ_V = compat::malloc<V>(seq_len_qo * head_size_qk);
-            V* d_dK_V = compat::malloc<V>(seq_len_kv * head_size_qk);
 
             // ========================================
             // Copy input data from host to device
@@ -544,8 +585,8 @@ void sdpa_backward_reference_gpu(
             // ========================================
 
             write_device_to_strided(dq_ptr, d_dQ, b, h_qo, seq_len_qo, head_size_qk, num_head_qo, is_bhsd, false);
-            write_device_to_strided(dk_ptr, d_dK, b, h_kv, seq_len_kv, head_size_qk, num_head_kv, is_bhsd, !is_first_in_group);
-            write_device_to_strided(dv_ptr, d_dV, b, h_kv, seq_len_kv, head_size_vo, num_head_kv, is_bhsd, !is_first_in_group);
+            write_device_to_strided(dk_ptr, d_dK, b, h_qo, seq_len_kv, head_size_qk, num_head_qo, is_bhsd, false);
+            write_device_to_strided(dv_ptr, d_dV, b, h_qo, seq_len_kv, head_size_vo, num_head_qo, is_bhsd, false);
 
             // Copy oDo back
             int odo_offset = (b * num_head_qo + h_qo) * seq_len_qo;
@@ -564,30 +605,180 @@ void sdpa_backward_reference_gpu(
                     }
                 }
             }
-
-            // ========================================
-            // Free device memory
-            // ========================================
-
-            compat::free(d_Q);
-            compat::free(d_K);
-            compat::free(d_V);
-            compat::free(d_O);
-            compat::free(d_dO);
-            compat::free(d_S);
-            compat::free(d_P);
-            compat::free(d_P_T);
-            compat::free(d_dS);
-            compat::free(d_dS_T);
-            compat::free(d_dV);
-            compat::free(d_dQ);
-            compat::free(d_dK);
-            compat::free(d_oDo);
-            compat::free(d_lse);
-            compat::free(d_dV_V);
-            compat::free(d_dP_V);
-            compat::free(d_dQ_V);
-            compat::free(d_dK_V);
         }
     }
+
+    // ========================================
+    // Free device memory
+    // ========================================
+
+    compat::free(d_Q);
+    compat::free(d_K);
+    compat::free(d_V);
+    compat::free(d_O);
+    compat::free(d_dO);
+    compat::free(d_S);
+    compat::free(d_P);
+    compat::free(d_P_T);
+    compat::free(d_dS);
+    compat::free(d_dS_T);
+    compat::free(d_dV);
+    compat::free(d_dQ);
+    compat::free(d_dK);
+    compat::free(d_oDo);
+    compat::free(d_lse);
+    compat::free(d_dV_V);
+    compat::free(d_dP_V);
+    compat::free(d_dQ_V);
+    compat::free(d_dK_V);
+}
+
+// ========================================
+// SDPA Forward GPU Function (compute O from Q, K, V)
+// ========================================
+
+template<typename T, typename V>
+void sdpa_forward_reference_gpu(
+    // Input pointers (host)
+    T* q_ptr,
+    T* k_ptr,
+    T* v_ptr,
+
+    // Config
+    bool is_causal,
+    bool is_bhsd,
+
+    // Dimensions
+    int batch,
+    int num_head_qo,
+    int num_head_kv,
+    int seq_len_qo,
+    int seq_len_kv,
+    int head_size_qk,
+    int head_size_vo,
+
+    // Output pointers (host)
+    T* o_ptr,
+    V* lse_ptr
+) {
+    // Get default queue
+    auto q = compat::get_default_queue();
+
+    const float scale = 1.0f / sqrtf(static_cast<float>(head_size_qk));
+    const int num_group = num_head_qo / num_head_kv;
+
+    // ========================================
+    // Allocate device memory once (reused for all batches and heads)
+    // ========================================
+
+    T* d_Q = compat::malloc<T>(seq_len_qo * head_size_qk);
+    T* d_K = compat::malloc<T>(seq_len_kv * head_size_qk);
+    T* d_V = compat::malloc<T>(seq_len_kv * head_size_vo);
+    T* d_O = compat::malloc<T>(seq_len_qo * head_size_vo);
+
+    V* d_S = compat::malloc<V>(seq_len_qo * seq_len_kv);
+    V* d_P = compat::malloc<V>(seq_len_qo * seq_len_kv);
+    T* d_P_T = compat::malloc<T>(seq_len_qo * seq_len_kv);  // T version for GEMM
+    V* d_lse = compat::malloc<V>(seq_len_qo);
+    V* d_O_V = compat::malloc<V>(seq_len_qo * head_size_vo);  // V version for GEMM output
+
+    for (int b = 0; b < batch; ++b) {
+        for (int h_qo = 0; h_qo < num_head_qo; ++h_qo) {
+            int h_kv = h_qo / num_group;
+
+            // ========================================
+            // Copy input data from host to device
+            // ========================================
+
+            copy_strided_to_device(d_Q, q_ptr, b, h_qo, seq_len_qo, head_size_qk, num_head_qo, is_bhsd);
+            copy_strided_to_device(d_K, k_ptr, b, h_kv, seq_len_kv, head_size_qk, num_head_kv, is_bhsd);
+            copy_strided_to_device(d_V, v_ptr, b, h_kv, seq_len_kv, head_size_vo, num_head_kv, is_bhsd);
+
+            compat::wait_and_throw();
+
+            // ========================================
+            // Step 1: Compute S = Q @ K^T (scaled)
+            // ========================================
+
+            device_gemm<T, V>(seq_len_qo, seq_len_kv, head_size_qk,
+                              scale, d_Q, head_size_qk, false,
+                              d_K, head_size_qk, true,
+                              0.0f, d_S, seq_len_kv);
+
+            // ========================================
+            // Step 2: Apply causal mask
+            // ========================================
+
+            if (is_causal) {
+                sycl::range<2> grid((seq_len_qo + 15) / 16, (seq_len_kv + 15) / 16);
+                sycl::range<2> block(16, 16);
+
+                q.submit([&](sycl::handler& cgh) {
+                    cgh.parallel_for(
+                        sycl::nd_range<2>(grid * block, block),
+                        [=](sycl::nd_item<2> item) {
+                            apply_causal_mask_kernel<T, V>(d_S, seq_len_qo, seq_len_kv, item);
+                        }
+                    );
+                }).wait();
+            }
+
+            // ========================================
+            // Step 3: Compute LSE and P = softmax(S)
+            // ========================================
+
+            {
+                sycl::range<1> grid((seq_len_qo + 255) / 256);
+                sycl::range<1> block(256);
+
+                q.submit([&](sycl::handler& cgh) {
+                    cgh.parallel_for(
+                        sycl::nd_range<1>(grid * block, block),
+                        [=](sycl::nd_item<1> item) {
+                            compute_lse_and_softmax_kernel<T, V>(d_P, d_lse, d_S, seq_len_qo, seq_len_kv, item);
+                        }
+                    );
+                }).wait();
+            }
+
+            // Convert P from V to T for GEMM (P*V)
+            convert_V_to_T<T, V>(q, d_P_T, d_P, seq_len_qo * seq_len_kv);
+
+            // ========================================
+            // Step 4: Compute O = P @ V (output is V type)
+            // ========================================
+
+            device_gemm<T, V>(seq_len_qo, head_size_vo, seq_len_kv,
+                              1.0f, d_P_T, seq_len_kv, false,
+                              d_V, head_size_vo, false,
+                              0.0f, d_O_V, head_size_vo);
+
+            // Convert O from V to T
+            convert_V_to_T<T, V>(q, d_O, d_O_V, seq_len_qo * head_size_vo);
+
+            // ========================================
+            // Copy results back to host
+            // ========================================
+
+            write_device_to_strided(o_ptr, d_O, b, h_qo, seq_len_qo, head_size_vo, num_head_qo, is_bhsd, false);
+
+            // Copy LSE back
+            int lse_offset = (b * num_head_qo + h_qo) * seq_len_qo;
+            compat::memcpy<V>(lse_ptr + lse_offset, d_lse, seq_len_qo);
+        }
+    }
+
+    // ========================================
+    // Free device memory
+    // ========================================
+
+    compat::free(d_Q);
+    compat::free(d_K);
+    compat::free(d_V);
+    compat::free(d_O);
+    compat::free(d_S);
+    compat::free(d_P);
+    compat::free(d_P_T);
+    compat::free(d_lse);
+    compat::free(d_O_V);
 }
