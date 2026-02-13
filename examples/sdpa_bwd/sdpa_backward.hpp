@@ -1,5 +1,5 @@
 #pragma once
-
+#include "cute_util.hpp"
 template <typename Layout>
 auto convert_layout_2d_layout(Layout layout) {
     auto l = make_layout(make_layout(get<0>(layout),
@@ -8,8 +8,8 @@ auto convert_layout_2d_layout(Layout layout) {
     return l;
 }
 
-constexpr int tid = 0;
-constexpr int bid = 8;
+constexpr int tid = 1;
+constexpr int bid = 1;
 
 const bool
 is_cur_thread() {
@@ -328,6 +328,15 @@ scale_apply_exp2(Tensor<Engine0, Layout0> &tensor,
         rC.data(),
         convert_layout_2d_layout(rC.layout()));
     if constexpr(Is_even_M) {
+#if defined(__SYCL_DEVICE_ONLY__)
+        CUTLASS_PRAGMA_UNROLL
+        for (int ni = 0; ni < size<1>(tensor); ++ni)  {
+            int n = get<1>(rC_2d(0, ni)) + sg_local_id;
+            const float max_scaled = max(n) == -INFINITY ? 0.f : max(n) * M_LOG2E;
+            const float neg_max_scaled = -max_scaled;
+            ScaleExpHelper<decltype(size<0>(tensor))>::apply(tensor, ni, scale, neg_max_scaled);
+        }
+#else
         CUTLASS_PRAGMA_UNROLL
         for (int ni = 0; ni < size<1>(tensor); ++ni)  {
             int n = get<1>(rC_2d(0, ni)) + sg_local_id;
@@ -337,6 +346,7 @@ scale_apply_exp2(Tensor<Engine0, Layout0> &tensor,
                 tensor(mi, ni) = exp2f(tensor(mi, ni) * scale - max_scaled);
             }
         }
+#endif
     } else {
         CUTLASS_PRAGMA_UNROLL
         for (int ni = 0; ni < size<1>(tensor); ++ni)  {
