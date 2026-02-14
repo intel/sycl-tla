@@ -183,6 +183,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
   CUTLASS_DEVICE
   int get_physical_k_tile(int K, int l_coord, int seq_len_kv_cache) {
     int next_page_logical_idx = K * get<1>(TileShapeQK{}) / params.page_size;
+    // TODO: better add a static assert here
     // get<1>(TileShapeQK{}) usually smaller than page_size.
     // assuming page_size is multiple of get<1>(TileShapeQK{})
     int tiles_per_page = params.page_size / get<1>(TileShapeQK{});
