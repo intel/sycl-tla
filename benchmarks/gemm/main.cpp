@@ -1,5 +1,6 @@
 /***************************************************************************************************
 * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +43,7 @@
 
 int main(int argc, const char** argv) {
 
-  BenckmarkOptions options;
+  BenchmarkOptions options;
 
   options.parse(argc, argv);
 

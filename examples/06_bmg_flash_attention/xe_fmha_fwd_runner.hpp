@@ -1,6 +1,6 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,7 @@
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/util/packed_stride.hpp"
 #include "flash_attention_v2/collective/fmha_fusion.hpp"
-#include "flash_attention_v2/kernel/xe_fhma_fwd_kernel.hpp"
+#include "flash_attention_v2/kernel/xe_fmha_fwd_kernel.hpp"
 #include "flash_attention_v2/kernel/xe_tile_scheduler.hpp"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/sycl_event_manager.hpp"
@@ -258,8 +258,8 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
 
     // Use Cacheline Size to calculate alignment
     constexpr int cacheline_bytes = 64;
-    constexpr int AlignmentQ = cacheline_bytes / sizeof(ElementQ);    // Alignment of Q matrix in units of elements
-    constexpr int AlignmentKV = cacheline_bytes / sizeof(ElementK);   // Alignment of Kand V matrix in units of elements
+    constexpr int AlignmentQ = cacheline_bytes * 8 /  sizeof_bits_v<ElementQ> ;    // Alignment of Q matrix in units of elements
+    constexpr int AlignmentKV = cacheline_bytes * 8 / sizeof_bits_v<ElementK> ;   // Alignment of Kand V matrix in units of elements
     constexpr int AlignmentKVCache = 128; //Page size must be a multiple of 128
     auto generate_positive_int = [](auto& dist, auto& gen) {
       int result = 0;
@@ -379,9 +379,6 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
 
       int kv_group_update=1;
       for (int h = 0; h < num_heads_q; h++) {
-        cutlass::DeviceAllocation<ElementS> block_S;
-        block_S.reset(seq_len_qo * seq_len_kv_total);
-
         ElementK_* k_ptr;
         ElementV_* v_ptr;
         cutlass::DeviceAllocation<ElementK_> block_K_concat;
@@ -438,123 +435,134 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
             v_ptr = block_V_.get() + offset_v;
         }
 
-        cutlass::TensorRef ref_Q(block_Q_.get() + offset_q, LayoutQ::packed({seq_len_qo, head_size_qk}));
-        cutlass::TensorRef ref_K(k_ptr, LayoutK::packed({head_size_qk, seq_len_kv_total}));
-        cutlass::TensorRef ref_V(v_ptr, LayoutV::packed({seq_len_kv_total, head_size_vo}));
-        cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
+        int q_chunk_size = 128; // Process 128 rows at a time
+        for (int q_start = 0; q_start < seq_len_qo; q_start += q_chunk_size) {
+            int q_end = std::min(seq_len_qo, q_start + q_chunk_size);
+            int current_q_len = q_end - q_start;
 
-        cutlass::reference::device::GemmComplex({seq_len_qo, seq_len_kv_total, head_size_qk}, 1.f, ref_Q,
-                                                cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
-                                                0.f, ref_S, ref_S, ElementS(0),
-                                                1,                   // batch_count
-                                                seq_len_qo * head_size_qk, // batch_stride_Q
-                                                seq_len_kv_total * head_size_qk, // batch_stride_K
-                                                seq_len_qo * seq_len_kv_total,   // batch_stride_S
-                                                seq_len_qo * seq_len_kv_total    // batch_stride_S
-        );
+            cutlass::DeviceAllocation<ElementS> block_S;
+            block_S.reset(current_q_len * seq_len_kv_total);
 
-        compat::wait();
+            cutlass::TensorRef ref_Q(block_Q_.get() + offset_q + q_start * head_size_qk, LayoutQ::packed({current_q_len, head_size_qk}));
+            cutlass::TensorRef ref_K(k_ptr, LayoutK::packed({head_size_qk, seq_len_kv_total}));
+            cutlass::TensorRef ref_V(v_ptr, LayoutV::packed({seq_len_kv_total, head_size_vo}));
+            cutlass::TensorRef ref_S(block_S.get(), LayoutQ::packed({current_q_len, seq_len_kv_total}));
 
-        std::vector<ElementS> host_S(block_S.size());
-        compat::memcpy<ElementS>(host_S.data(), block_S.get(), host_S.size());
+            // GEMM 1: S = Q_chunk * K^T
+            cutlass::reference::device::GemmComplex({current_q_len, seq_len_kv_total, head_size_qk}, 1.f, ref_Q,
+                                                    cutlass::ComplexTransform::kNone, ref_K, cutlass::ComplexTransform::kNone,
+                                                    0.f, ref_S, ref_S, ElementS(0),
+                                                    1,                               // batch_count
+                                                    current_q_len * head_size_qk,    // batch_stride_Q
+                                                    seq_len_kv_total * head_size_qk, // batch_stride_K
+                                                    current_q_len * seq_len_kv_total,// batch_stride_S
+                                                    current_q_len * seq_len_kv_total // batch_stride_S
+            );
 
-        // delete this memory as it is no longer needed
-        block_S.reset();
-        auto offset = cute::min(seq_len_qo, seq_len_kv);
-        auto discard_seq_coord = seq_len_qo - offset;
-        auto full_tile_offset = seq_len_kv - offset;
-        if (is_causal) {
-          // apply mask to S
-          for (int row = 0; row < seq_len_qo; row++) {
-            for (int col = seq_len_kv_cache; col < seq_len_kv_total; col++) {
-                if ((col - seq_len_kv_cache - full_tile_offset) > (row - discard_seq_coord))
-                  host_S[col + row * seq_len_kv_total] = ElementS{-INFINITY};
+            compat::wait();
+
+            std::vector<ElementS> host_S(block_S.size());
+            compat::memcpy<ElementS>(host_S.data(), block_S.get(), host_S.size());
+
+            // delete this memory as it is no longer needed
+            block_S.reset();
+            auto offset = cute::min(seq_len_qo, seq_len_kv);
+            auto discard_seq_coord = seq_len_qo - offset;
+            auto full_tile_offset = seq_len_kv - offset;
+            if (is_causal) {
+              // apply mask to S
+              for (int row = 0; row < current_q_len; row++) {
+                int global_row = row + q_start; // Use global row index for masking check
+                for (int col = seq_len_kv_cache; col < seq_len_kv_total; col++) {
+                    if ((col - seq_len_kv_cache - full_tile_offset) > (global_row - discard_seq_coord))
+                      host_S[col + row * seq_len_kv_total] = ElementS{-INFINITY};
+                }
+              }
             }
-          }
-        }
 
-        // compute max element per row of S
-        std::vector<ElementS> max_vec(seq_len_qo, ElementS{-INFINITY});
-        for (int row = 0; row < seq_len_qo; row++) {
-          int idx = row * seq_len_kv_total;
-          int max_idx = row;
-          max_vec[max_idx] = host_S[idx++];
-          for (int col = 1; col < seq_len_kv_total; col++, idx++) {
-            if (max_vec[max_idx] < host_S[idx])
-              max_vec[max_idx] = host_S[idx];
-          }
-        }
-
-        // compute exp of S
-        for (int row = 0; row < seq_len_qo; row++) {
-          int idx = row * seq_len_kv_total;
-          int max_idx = row;
-          for (int col = 0; col < seq_len_kv_total; col++, idx++) {
-            /* FIXME: use softmax_scale instead of assuming its value here */
-            host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) / sqrt(static_cast<ElementS>((head_size_qk))));
-          }
-        }
-
-        // compute sum per row of S
-        std::vector<ElementS> sum_vec(seq_len_qo, ElementS{0});
-        for (int row = 0; row < seq_len_qo; row++) {
-          int idx = row * seq_len_kv_total;
-          int sum_idx = row;
-          for (int col = 0; col < seq_len_kv_total; col++, idx++) {
-            sum_vec[sum_idx] += host_S[idx];
-          }
-
-          // scale each row with the sum to compute softmax
-          idx = row * seq_len_kv_total;
-          sum_idx = row;
-          for (int col = 0; col < seq_len_kv_total; col++, idx++) {
-            if(is_causal && row < discard_seq_coord) {
-              host_S[idx] = 0;
-            } else {
-              host_S[idx] /= sum_vec[sum_idx];
+            // compute max element per row of S
+            std::vector<ElementS> max_vec(current_q_len, ElementS{-INFINITY});
+            for (int row = 0; row < current_q_len; row++) {
+              int idx = row * seq_len_kv_total;
+              int max_idx = row;
+              max_vec[max_idx] = host_S[idx++];
+              for (int col = 1; col < seq_len_kv_total; col++, idx++) {
+                if (max_vec[max_idx] < host_S[idx])
+                  max_vec[max_idx] = host_S[idx];
+              }
             }
-          }
+
+            // compute exp of S
+            for (int row = 0; row < current_q_len; row++) {
+              int idx = row * seq_len_kv_total;
+              int max_idx = row;
+              for (int col = 0; col < seq_len_kv_total; col++, idx++) {
+                /* FIXME: use softmax_scale instead of assuming its value here */
+                host_S[idx] = expf((host_S[idx] - max_vec[max_idx]) / sqrt(static_cast<ElementS>((head_size_qk))));
+              }
+            }
+
+            // compute sum per row of S
+            std::vector<ElementS> sum_vec(current_q_len, ElementS{0});
+            for (int row = 0; row < current_q_len; row++) {
+              int idx = row * seq_len_kv_total;
+              int sum_idx = row;
+              for (int col = 0; col < seq_len_kv_total; col++, idx++) {
+                sum_vec[sum_idx] += host_S[idx];
+              }
+
+              // scale each row with the sum to compute softmax
+              idx = row * seq_len_kv_total;
+              sum_idx = row;
+              for (int col = 0; col < seq_len_kv_total; col++, idx++) {
+                int global_row = row + q_start;
+                if(is_causal && global_row < discard_seq_coord) {
+                  host_S[idx] = 0;
+                } else {
+                  host_S[idx] /= sum_vec[sum_idx];
+                }
+              }
+            }
+
+            std::vector<ElementV_> host_P(host_S.size());
+            for (int p = 0; p < host_P.size(); p++)
+              host_P[p] = static_cast<ElementV_>(host_S[p]);
+
+            cutlass::DeviceAllocation<ElementV_> block_P;
+            block_P.reset(host_P.size());
+
+            compat::memcpy<ElementV_>(block_P.get(), host_P.data(), host_P.size());
+
+            cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({current_q_len, seq_len_kv_total}));
+
+            cutlass::DeviceAllocation<ElementS> block_acc;
+            block_acc.reset(current_q_len * head_size_vo);
+            cutlass::TensorRef ref_acc(block_acc.get(), LayoutO::packed({current_q_len, head_size_vo}));
+
+            // GEMM 2: O = P_chunk * V
+            cutlass::reference::device::GemmComplex({current_q_len, head_size_vo, seq_len_kv_total}, ElementS{1}, ref_P,
+                                                    cutlass::ComplexTransform::kNone, ref_V, cutlass::ComplexTransform::kNone,
+                                                    ElementS{0}, ref_acc, ref_acc, ElementS{0},
+                                                    1,                               // batch_count
+                                                    current_q_len * seq_len_kv_total,// batch_stride_P
+                                                    seq_len_kv_total * head_size_vo, // batch_stride_V
+                                                    current_q_len * head_size_vo,    // batch_stride_O
+                                                    current_q_len * head_size_vo     // batch_stride_O
+            );
+
+            compat::wait();
+            block_P.reset();
+
+            std::vector<ElementS> vec_acc(block_acc.size());
+            compat::memcpy<ElementS>(vec_acc.data(), block_acc.get(), vec_acc.size());
+
+            block_acc.reset();
+            std::vector<ElementO> vec_out(vec_acc.size());
+            for(int i = 0; i < vec_out.size(); i++) {
+              vec_out[i] = static_cast<ElementO>(vec_acc[i]);
+            }
+            compat::memcpy<ElementO>(block_ref_O.get() + offset_o + q_start * head_size_vo, vec_out.data(), vec_out.size());
         }
-
-        std::vector<ElementV_> host_P(host_S.size());
-        for (int p = 0; p < host_P.size(); p++)
-          host_P[p] = static_cast<ElementV_>(host_S[p]);
-
-        cutlass::DeviceAllocation<ElementV_> block_P;
-        block_P.reset(host_P.size());
-
-        compat::memcpy<ElementV_>(block_P.get(), host_P.data(), host_P.size());
-
-        cutlass::TensorRef ref_P(block_P.get(), LayoutQ::packed({seq_len_qo, seq_len_kv_total}));
-
-        cutlass::DeviceAllocation<ElementS> block_acc;
-        block_acc.reset(seq_len_qo * head_size_vo);
-        cutlass::TensorRef ref_acc(block_acc.get(), LayoutO::packed({seq_len_qo, head_size_vo}));
-
-        cutlass::reference::device::GemmComplex({seq_len_qo, head_size_vo, seq_len_kv_total}, ElementS{1}, ref_P,
-                                                cutlass::ComplexTransform::kNone, ref_V, cutlass::ComplexTransform::kNone,
-                                                ElementS{0}, ref_acc, ref_acc, ElementS{0},
-                                                1,                   // batch_count
-                                                seq_len_qo * seq_len_kv_total,   // batch_stride_P
-                                                seq_len_kv_total * head_size_vo, // batch_stride_V
-                                                seq_len_qo * head_size_vo, // batch_stride_O
-                                                seq_len_qo * head_size_vo  // batch_stride_O
-        );
-
-        compat::wait();
-        // delete this memory as it is no longer needed
-        block_P.reset();
-
-        std::vector<ElementS> vec_acc(block_acc.size());
-        compat::memcpy<ElementS>(vec_acc.data(), block_acc.get(), vec_acc.size());
-
-        // delete this memory as it is no longer needed
-        block_acc.reset();
-        std::vector<ElementO> vec_out(vec_acc.size());
-        for(int i = 0; i < vec_out.size(); i++) {
-          vec_out[i] = static_cast<ElementO>(vec_acc[i]);
-        }
-        compat::memcpy<ElementO>(block_ref_O.get() + offset_o, vec_out.data(), vec_out.size());
 
         offset_q += seq_len_qo * head_size_qk;
         if(kv_group_update % q_group_size==0) {
@@ -624,7 +632,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     block_ref_O.reset(static_cast<std::size_t>(batch) * num_heads_q * seq_len_qo * head_size_vo);
     // Zero-initialize output buffer for the kernel result
     // block_ref_O is fully written in verify() before being read, so no initialization needed
-    compat::memset(block_O.get(), 0, block_O.size() * sizeof(ElementO));
+    compat::memset(block_O.get(), 0, block_O.size() * sizeof_bits_v<ElementO> / 8);
     if (options.use_paged_kv) {
       paged_kv_cache.page_size = options.page_size;
       std::vector<int> num_pages_per_seq{0};
@@ -780,23 +788,60 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
         run(params);
       }
       compat::wait();
-    // when seq_len_qo is not equal to seq_len_kv we use bottom up approach for the masking.
-      // Following changes will adjust the effective_seq_len_kv when masking applied for such cases
-      auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
-      auto discard_seq_coord = options.seq_len_qo - offset;
-      auto full_tile_offset = options.seq_len_kv - offset;
-      // offset + 1 is going to be ceil_div
-      auto effective_seq_len_kv = options.is_causal ? full_tile_offset + ((offset + 1) / 2.0): options.seq_len_kv;
-      auto effective_seq_len_qo = options.is_causal ? options.seq_len_qo - discard_seq_coord : options.seq_len_qo;
       double cute_time = timer.seconds() / options.iterations;
-      double flops_qk = 2.0 * options.batch * options.num_heads_q * effective_seq_len_qo * effective_seq_len_kv * options.head_size_qk;
-      double flops_pv = 2.0 *  options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo * effective_seq_len_kv;
+      double batched_effective_seq_len_qo_x_kv = 0.0;  // flops_qk and flops_pv
+      double batched_effective_seq_len_qo = 0.0;       // gbps_q and gbps_o
+      double batched_effective_seq_len_kv = 0.0;       // gbps_kv
+      double batched_seq_len_kv_cache = 0.0;           // gbps_kv_cache
+      if constexpr (isVarLen) {
+        // For varlen, we need to iterate over each batch and compute per-batch flops
+        for (int b = 0; b < options.batch; ++b) {
+          int seq_len_qo = cumulative_seqlen_q[b + 1] - cumulative_seqlen_q[b];
+          int seq_len_kv = cumulative_seqlen_kv[b + 1] - cumulative_seqlen_kv[b];
+          int seq_len_kv_cache = 0;
+          if (options.seq_len_kv_cache > 0) {
+            seq_len_kv_cache = cumulative_seqlen_kv_cache[b + 1] - cumulative_seqlen_kv_cache[b];
+          }
+          auto offset = cute::min(seq_len_qo, seq_len_kv);
+          auto discard_seq_coord = seq_len_qo - offset;
+          auto full_tile_offset = seq_len_kv - offset;
+          // offset + 1 is going to be ceil_div
+          auto per_batch_effective_seq_len_kv = options.is_causal ? full_tile_offset + ((offset + 1) / 2.0) : static_cast<double>(seq_len_kv);
+          auto per_batch_effective_seq_len_qo = options.is_causal ? seq_len_qo - discard_seq_coord : seq_len_qo;
+          double per_batch_qo_x_kv_cache = static_cast<double>(seq_len_qo) * seq_len_kv_cache;  // Full attention to cache
+          double per_batch_qo_x_kv_new = per_batch_effective_seq_len_qo * per_batch_effective_seq_len_kv;  // Causal-adjusted for new KV
+
+          batched_effective_seq_len_qo_x_kv += per_batch_qo_x_kv_cache + per_batch_qo_x_kv_new;
+          batched_effective_seq_len_qo += per_batch_effective_seq_len_qo;
+          batched_effective_seq_len_kv += per_batch_effective_seq_len_kv;
+          batched_seq_len_kv_cache += seq_len_kv_cache;
+        }
+      } else {
+        // Non-varlen
+        int seq_len_kv_cache = options.seq_len_kv_cache;
+        auto offset = cute::min(options.seq_len_qo, options.seq_len_kv);
+        auto discard_seq_coord = options.seq_len_qo - offset;
+        auto full_tile_offset = options.seq_len_kv - offset;
+        auto effective_seq_len_kv = options.is_causal ? full_tile_offset + ((offset + 1) / 2.0) : static_cast<double>(options.seq_len_kv);
+        auto effective_seq_len_qo = options.is_causal ? options.seq_len_qo - discard_seq_coord : options.seq_len_qo;
+        double qo_x_kv_cache = static_cast<double>(options.seq_len_qo) * seq_len_kv_cache;  // Full attention to cache
+        double qo_x_kv_new = effective_seq_len_qo * effective_seq_len_kv;  // Causal-adjusted for new KV
+
+        batched_effective_seq_len_qo_x_kv = options.batch * (qo_x_kv_cache + qo_x_kv_new);
+        batched_effective_seq_len_qo = options.batch * effective_seq_len_qo;
+        batched_effective_seq_len_kv = options.batch * effective_seq_len_kv;
+        batched_seq_len_kv_cache = options.batch * seq_len_kv_cache;
+      }
+
+      double flops_qk = 2.0 * options.num_heads_q * batched_effective_seq_len_qo_x_kv * options.head_size_qk;
+      double flops_pv = 2.0 * options.num_heads_q * batched_effective_seq_len_qo_x_kv * options.head_size_vo;
       double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
-      double gbps_qk =  options.batch * (sizeof(ElementQ) * options.num_heads_q * effective_seq_len_qo * options.head_size_qk +
-                                         sizeof(ElementK) * options.num_heads_kv * effective_seq_len_kv * options.head_size_qk);
-      double gbps_pv = sizeof(ElementV) * options.batch * options.num_heads_kv * effective_seq_len_kv * options.head_size_vo +
-                     sizeof(ElementO) * options.batch * options.num_heads_q * effective_seq_len_qo * options.head_size_vo;
-      double gbps = ((gbps_qk + gbps_pv)  * 1e-9) / (cute_time);
+      
+      double gbps_qk = options.num_heads_q * batched_effective_seq_len_qo * options.head_size_qk * sizeof_bits_v<ElementQ> / 8 +
+                       options.num_heads_kv * batched_effective_seq_len_kv * options.head_size_qk * sizeof_bits_v<ElementK> / 8;
+      double gbps_pv = options.num_heads_kv * batched_effective_seq_len_kv * options.head_size_vo * sizeof_bits_v<ElementV> / 8 +
+                       options.num_heads_q * batched_effective_seq_len_qo * options.head_size_vo * sizeof_bits_v<ElementO> / 8;
+      double gbps = ((gbps_qk + gbps_pv) * 1e-9) / cute_time;
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q  << "\tNumHeads_kv: " << options.num_heads_kv  << "\tSeq Length QO: " << options.seq_len_qo
                 << "\tSeq Length KV: " << options.seq_len_kv << "\tHead Size QK: " << options.head_size_qk << "\tHead Size VO: " << options.head_size_vo
                 << "\tCausal Mask: " << (options.is_causal ? "true" : "false") << "\tVariable Sequence Length: " << (options.varlen ? "true" : "false")

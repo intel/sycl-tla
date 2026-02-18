@@ -33,9 +33,9 @@ from __future__ import annotations
 
 from cutlass_cppgen.utils.lazy_import import lazy_import
 cuda = lazy_import("cuda.cuda")
+dpctl = lazy_import("dpctl")
 import numpy as np
 
-import dpctl
 
 from cutlass_cppgen.backend.memory_manager import device_mem_alloc, todevice
 from cutlass_cppgen.utils.datatypes import (

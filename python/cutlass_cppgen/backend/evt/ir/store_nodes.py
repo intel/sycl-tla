@@ -94,14 +94,18 @@ class AuxStoreImpl(StoreImplBase):
         stride_mnl = self.get_stride_mnl()
         name = self.name
         tuple_type = tuple_factory(stride_mnl, self.stride_dtype)
+        element_type = self.element
+        null_default = to_ctype_value(0, element_type)
         class _Argument(ctypes.Structure):
             _fields_ = [
                 ("ptr_aux", ctypes.c_void_p),
+                ("null_default", dtype2ctype[element_type]),
                 ("dAux", tuple_type)
             ]
             def __init__(self, kwargs) -> None:
                 ptr = kwargs[name]
                 self.ptr_aux = ptr
+                self.null_default = null_default
                 self.dAux = tuple_type(stride_mnl)
 
         return _Argument

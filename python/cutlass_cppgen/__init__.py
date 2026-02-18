@@ -213,9 +213,9 @@ def initialize_cuda_context():
     this._device_id = int(device_id)
 
 
-import dpctl
+dpctl = lazy_import("dpctl")
 
-this._sycl_device: dpctl.SyclDevice = None
+this._sycl_device = None
 
 def initialize_sycl_context():
     check_cuda_versions()
@@ -243,6 +243,6 @@ def device_id() -> int:
     return this._device_id
 
 
-def sycl_device() -> dpctl.SyclDevice:
+def sycl_device():
     initialize_sycl_context()
     return this._sycl_device

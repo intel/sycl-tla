@@ -1,6 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -95,13 +95,13 @@ namespace benchmark {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Command line options parsing
-struct BenckmarkOptions {
+struct BenchmarkOptions {
 
   bool help;
   bool error;
   std::string config_file;
 
-  BenckmarkOptions():
+  BenchmarkOptions():
           help(false),
           error(false)
   { }

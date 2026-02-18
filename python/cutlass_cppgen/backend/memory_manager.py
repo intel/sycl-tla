@@ -41,7 +41,7 @@ if cutlass_cppgen.use_rmm:
 else:
     cudart = lazy_import("cuda.cudart")
 
-from dpctl.memory import MemoryUSMDevice
+dpctl = lazy_import("dpctl")
 
 
 class PoolMemoryManager:
@@ -125,7 +125,7 @@ def device_mem_alloc(size, stream = None):
     if cutlass_cppgen.use_rmm:
         return rmm.DeviceBuffer(size=size)
     elif cutlass_cppgen._use_sycl:
-        device_usm = MemoryUSMDevice(size, queue=stream)
+        device_usm = dpctl.memory.MemoryUSMDevice(size, queue=stream)
         return SYCLPtrWrapper(device_usm)
     else:
         err, ptr = cudart.cudaMalloc(size)
