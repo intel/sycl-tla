@@ -175,6 +175,8 @@ struct TestbedImpl {
   };
   PagedKVParams paged_kv_cache;
 
+  // Flag to print "unsupported" message only once per test instance
+  bool printed_unsupported_once = false;
   //
   // Methods
   //
@@ -645,7 +647,7 @@ struct TestbedImpl {
     auto can_implement = FlashPrefillCachedKV::can_implement(arguments);
 
     if (!can_implement) {
-      std::cerr << "This test is not supported." << "\n";
+      test::unit::LogUnsupportedOnce(printed_unsupported_once);
     }
 
     //
