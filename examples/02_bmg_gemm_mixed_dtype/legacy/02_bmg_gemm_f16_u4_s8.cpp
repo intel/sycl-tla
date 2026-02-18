@@ -1,6 +1,6 @@
 /***************************************************************************************************
- * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -94,7 +94,7 @@ struct Options {
   bool error;
 
   int mode;
-  int m, n, k, l, iterations;
+  int m, n, k, l, iterations, verify;
   int g;
   int alpha, beta;
 
@@ -103,7 +103,7 @@ struct Options {
     error(false),
     m(5120), n(4096), k(4096), l(1), iterations(20),
     g(128), mode(2),
-    alpha(1.f), beta(0.f)
+    alpha(1.f), beta(0.f), verify(1)
   { }
 
   // Parses the command line
@@ -124,6 +124,7 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1);
     cmd.get_cmd_line_argument("beta", beta, 0);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("verify", verify, 1);
   }
 
   /// Prints the usage statement.
@@ -140,6 +141,7 @@ struct Options {
       << "  --mode=<int>                The mode to run the gemm. 0 is Convert Only, 1 is Convert and Scale, 2 is Convert and Scale with Zero Point\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+      << "  --verify=<int>              Specify whether to verify.\n\n"
       << "  --iterations=<int>          Iterations\n\n";
 
     return out;
@@ -644,11 +646,15 @@ struct ExampleRunner {
 
     compat::wait();
 
-    // Verify that the result is correct
-    bool passed = verify(options);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+    if (options.verify != 0) {
+      // Verify that the result is correct
+      bool passed = verify(options);
+      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+      if(!passed) return cutlass::Status::kErrorInternal;
+    } else {
+      std::cout << "Disposition is skipped." << std::endl;
+    }
 
     float total_time = 0.f;
 

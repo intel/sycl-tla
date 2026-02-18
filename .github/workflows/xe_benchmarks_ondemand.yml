@@ -1,6 +1,9 @@
 name: "SYCL-TLA Benchmarks"
 
 on:
+  schedule:
+    # Runs at 00:00 AM UTC on Wednesday and Friday
+    - cron: '0 0 * * 3,5'
   workflow_dispatch:
 
 permissions: {}
