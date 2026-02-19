@@ -54,7 +54,7 @@ jobs:
           env >> $GITHUB_ENV
 
       - name: Download PyTorch wheel artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.7
         with:
           run-id: ${{ matrix.config.run_id }}
           repository: ${{ matrix.config.pytorch_repo }}
