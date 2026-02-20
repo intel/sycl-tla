@@ -54,6 +54,7 @@ jobs:
       - name: Download PyTorch wheel artifact
         uses: actions/download-artifact@v4.1.7
         with:
+          github-token: ${{ secrets.PYTORCH_ARTIFACT_READ_TOKEN }}
           run-id: ${{ matrix.config.run_id }}
           repository: ${{ matrix.config.pytorch_repo }}
           name: ${{ matrix.config.artifact_name }}
