@@ -47,12 +47,12 @@ if (CUTLASS_ENABLE_SYCL)
 
   cutlass_example_add_executable(
     cute_layout_hierarchical_vs_flat
-    hierarchical_vs_flat_demo.cpp
+    09_hierarchical_vs_flat_demo.cpp
   )
 
    cutlass_example_add_executable(
     cute_layout_static_vs_dynamic
-    static_vs_dynamic_demo.cpp
+    10_static_vs_dynamic_demo.cpp
   )
 
 else()

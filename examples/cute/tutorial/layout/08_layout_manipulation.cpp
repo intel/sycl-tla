@@ -1,7 +1,32 @@
 /***************************************************************************************************
- * Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ * list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
  **************************************************************************************************/
 
 // Tutorial 8: Layout Manipulation
@@ -14,80 +39,124 @@ using namespace cute;
 void easy_examples() {
   printf("\n=== EASY EXAMPLES: Basic Manipulation ===\n\n");
   
-  printf("Example 1: Composition of layouts\n");
-  // Inner layout: 4×3 = 12 elements with column-major strides (4,3):(_1,4)
-  auto inner = make_layout(make_shape(4, 3));
-  // Outer layout: 6×5 = 30 elements with column-major strides (6,5):(_1,6)
-  auto outer = make_layout(make_shape(6, 5));
-  printf("  Inner: "); print(inner); printf(" [12 elements]\n");
-  printf("  Outer: "); print(outer); printf(" [30 elements]\n");
-  
-  // Composition: composition(inner, outer)(coord) = outer[inner(coord)]
-  // Step 1: Inner maps (i,j) → offset ∈ [0,12)
-  // Step 2: That offset is reinterpreted as coordinate in outer's space
-  // Step 3: Outer maps that coordinate → final memory address
-  //
-  // Visual comparison:
-  //   Outer's full (6,5) space:     Inner's 12 offsets in outer:
-  //     j=0  j=1  j=2  j=3  j=4       j=0  j=1  j=2  j=3  j=4
-  //   i=0  0    6   12   18   24   i=0  0    6    ·    ·    ·
-  //   i=1  1    7   13   19   25   i=1  1    7    ·    ·    ·
-  //   i=2  2    8   14   20   26   i=2  2    8    ·    ·    ·
-  //   i=3  3    9   15   21   27   i=3  3    9    ·    ·    ·
-  //   i=4  4   10   16   22   28   i=4  4   10    ·    ·    ·
-  //   i=5  5   11   17   23   29   i=5  5   11    ·    ·    ·
-  //
-  // Result: Composed layout ((4,1),(1,5)) describes a 4×5 = 20 element coordinate space
-  //   - Inner's 12 coordinates index into this 20-element composed layout
-  //   - Composed layout size: 20 coordinate positions
-  //   - If further nested (composed as outer for another 12-element inner):
-  //     Total scalars = 20 × 12 = 240 elements
-  //
-  // CUTLASS Use Cases - When to use composition:
-  // =============================================
-  // 1. Thread → Warp → Block Hierarchy:
-  //    inner = thread_layout(8)         // 8 threads per warp
-  //    outer = warp_layout(4)           // 4 warps per block
-  //    composed = composition(inner, outer)  // Maps thread_id → block-level position
-  //    Use: Determine which thread in the block handles which data element
-  //
-  // 2. Register → Shared Memory → Global Memory:
-  //    inner = register_tile(8,8)       // 8×8 elements in registers per thread
-  //    outer = smem_layout(16,16)       // 16×16 shared memory tile
-  //    composed = composition(inner, outer)  // Maps register coords → smem addresses
-  //    Use: Each thread's register tile maps to a sub-region of shared memory
-  //
-  // 3. Logical Tile → Physical Swizzle Pattern:
-  //    inner = logical_tile(16,16)      // Logical 16×16 data tile
-  //    outer = swizzle_pattern(...)     // Bank-conflict-free memory pattern
-  //    composed = composition(inner, outer)  // Maps logical → physical with swizzle
-  //    Use: Access data logically but store it in a bank-conflict-avoiding pattern
-  //
-  // 4. MMA Fragment → Thread Distribution:
-  //    inner = mma_fragment(16,8)       // MMA instruction's output shape
-  //    outer = thread_distribution(32)  // How 32 threads collectively own MMA results
-  //    composed = composition(inner, outer)  // Maps fragment coord → owning thread
-  //    Use: Determine which thread owns each element of the matrix multiply result
-  //
-  // 5. Multi-level Tiling (GEMM K-loop):
-  //    inner = k_tile(32)               // 32 elements per K-iteration
-  //    outer = total_k_layout(128)      // 128 total K elements
-  //    composed = composition(inner, outer)  // Maps tile_iteration → K-range
-  //    Use: Track which K-tile iteration accesses which slice of global K dimension
-  //
-  // Benefits:
-  // - Separates logical indexing from physical memory layout
-  // - Enables modular changes (swap swizzle pattern without changing tile logic)
-  // - Compile-time composition ensures zero runtime overhead
-  // - Reuse same inner layout with different outer layouts for different memory spaces
-  
-  auto composed = composition(inner, outer);
-  auto composed_size = size(composed);  // Shape product: (4×1)×(1×5) = 20
-  printf("  composition(inner, outer): "); print(composed); 
-  printf(" [%d coordinate positions]\n", (int)composed_size);
-  printf("  Composed layout size: %d (not inner's 12 or outer's 30)\n", (int)composed_size);
-  printf("  If nested further: %d × 12 = %d total scalar elements\n\n",
-         (int)composed_size, (int)composed_size * 12);
+  // ---------------------------------------------------------------------------
+  // Example 1: Step-by-step composition walkthrough
+  //   Functional composition R := A o B,  R(c) := A(B(c))
+  //   A = (6,2):(8,2)   B = (4,3):(3,1)
+  //   (Follows the Layout Algebra doc, Example 1 exactly)
+  // ---------------------------------------------------------------------------
+  printf("Example 1: Step-by-step composition  A=(6,2):(8,2)  o  B=(4,3):(3,1)\n");
+  printf("  R(c) := A(B(c))\n\n");
+
+  auto A1 = make_layout(make_shape(6, 2), make_stride(8, 2));
+  auto B1 = make_layout(make_shape(4, 3), make_stride(3, 1));
+  printf("  A = "); print(A1); printf("\n");
+  printf("  B = "); print(B1); printf("\n\n");
+
+  // Step 1 — left-distributive split of B into its sublayouts
+  printf("  Step 1) Left-distributive split over B's modes:\n");
+  printf("    B = (4:3, 3:1)\n");
+  printf("    A o B = (A o 4:3,  A o 3:1)\n\n");
+
+  // Branch 1 — A o 4:3   (s=4, d=3)
+  printf("  Step 2) Compute A o 4:3\n");
+  printf("    a) Strided layout (A / d=3):\n");
+  printf("       (6,2):(8,2)  /  3  =  (6/3, 2):(8*3, 2)  =  (2,2):(24,2)\n");
+  printf("          shape[0]=6 is divisible by d=3  =>  6/3=2  and  stride[0]=8*3=24\n");
+  printf("          shape[1] and stride[1] are unchanged\n");
+  printf("    b) Shape-compatible keep (A / 3) %% s=4:\n");
+  printf("       (2,2):(24,2)  %%  4  =  (2,2):(24,2)\n");
+  printf("          need 4 elements total: 2*2=4 exactly spans both modes, no truncation\n");
+  auto B1_m0 = make_layout(make_shape(4), make_stride(3));        // sublayout B mode-0: 4:3
+  auto r1_branch0 = composition(A1, B1_m0);
+  printf("    CuTe: composition(A, 4:3) = "); print(r1_branch0); printf("\n\n");
+
+  // Branch 2 — A o 3:1   (s=3, d=1)
+  printf("  Step 3) Compute A o 3:1\n");
+  printf("    a) Strided layout (A / d=1):  trivial\n");
+  printf("       (6,2):(8,2)  /  1  =  (6,2):(8,2)\n");
+  printf("    b) Shape-compatible keep (A / 1) %% s=3:\n");
+  printf("       (6,2):(8,2)  %%  3  =  (3,1):(8,2)\n");
+  printf("          3 < shape[0]=6, so keep only first 3 from mode-0; mode-1 collapses to 1\n");
+  auto B1_m1 = make_layout(make_shape(3), make_stride(1));        // sublayout B mode-1: 3:1
+  auto r1_branch1 = composition(A1, B1_m1);
+  printf("    CuTe: composition(A, 3:1) = "); print(r1_branch1); printf("\n\n");
+
+  // Reassemble and coalesce
+  printf("  Step 4) Reassemble branches and coalesce each mode:\n");
+  printf("    R = ((2,2), 3) : ((24,2), 8)\n");
+  printf("    Coalesced mode-0: (2,2):(24,2) stays as-is (strides not contiguous)\n");
+  printf("    Coalesced mode-1:  3:8  (scalar — already coalesced)\n\n");
+  auto R1 = composition(A1, B1);
+  printf("  CuTe direct: composition(A, B) = "); print(R1);
+  printf("\n  Expected from docs:  ((2,2),3):((24,2),8)\n\n");
+
+  // Verify a few values
+  printf("  Spot-check  R(c) = A(B(c)):\n");
+  for (int c = 0; c < 4; ++c) {
+    printf("    R(%2d) = A(B(%2d)) = A(%2d) = %2d  |  layout: %2d\n",
+           c, c, (int)B1(c), (int)A1(B1(c)), (int)R1(c));
+  }
+  printf("\n");
+
+  // ---------------------------------------------------------------------------
+  // Example 1b: Composition with clear shape/stride divisibility
+  //   A = (10,2):(16,4)   B = (5,4):(1,5)
+  //   (Follows the Layout Algebra doc, Example 3 exactly)
+  // ---------------------------------------------------------------------------
+  printf("Example 1b: Step-by-step composition  A=(10,2):(16,4)  o  B=(5,4):(1,5)\n");
+  printf("  Demonstrates clean divisibility: 5 divides 10, stride 5 divides 10\n\n");
+
+  auto A2 = make_layout(make_shape(10, 2), make_stride(16, 4));
+  auto B2 = make_layout(make_shape( 5, 4), make_stride( 1, 5));
+  printf("  A = "); print(A2); printf("\n");
+  printf("  B = "); print(B2); printf("\n\n");
+
+  printf("  Step 1) Left-distributive split over B's modes:\n");
+  printf("    B = (5:1, 4:5)\n");
+  printf("    A o B = (A o 5:1,  A o 4:5)\n\n");
+
+  // Branch 1 — A o 5:1   (s=5, d=1)
+  printf("  Step 2) Compute A o 5:1\n");
+  printf("    a) Strided layout (A / d=1):  trivial\n");
+  printf("       (10,2):(16,4)  /  1  =  (10,2):(16,4)\n");
+  printf("    b) Shape-compatible keep %% s=5:\n");
+  printf("       (10,2):(16,4)  %%  5  =  (5,1):(16,4)\n");
+  printf("          5 < shape[0]=10, keep first 5 from mode-0; mode-1 collapses to 1\n");
+  auto B2_m0 = make_layout(make_shape(5), make_stride(1));
+  auto r2_branch0 = composition(A2, B2_m0);
+  printf("    CuTe: composition(A, 5:1) = "); print(r2_branch0);
+  printf("  =>  coalesced: 5:16\n\n");
+
+  // Branch 2 — A o 4:5   (s=4, d=5)
+  printf("  Step 3) Compute A o 4:5\n");
+  printf("    a) Strided layout (A / d=5):\n");
+  printf("       shape[0]=10 is divisible by d=5  =>  10/5=2, stride[0]=16*5=80\n");
+  printf("       (10,2):(16,4)  /  5  =  (2,2):(80,4)\n");
+  printf("    b) Shape-compatible keep %% s=4:\n");
+  printf("       (2,2):(80,4)  %%  4  =  (2,2):(80,4)\n");
+  printf("          2*2=4 exactly spans both modes, no truncation\n");
+  auto B2_m1 = make_layout(make_shape(4), make_stride(5));
+  auto r2_branch1 = composition(A2, B2_m1);
+  printf("    CuTe: composition(A, 4:5) = "); print(r2_branch1); printf("\n\n");
+
+  // Reassemble
+  printf("  Step 4) Reassemble and by-mode coalesce:\n");
+  printf("    R = ((5,1):(16,4),  (2,2):(80,4))\n");
+  printf("    Coalesce mode-0:  (5,1):(16,4)  =>  5:16  (mode-1 is size-1, drops)\n");
+  printf("    Mode-1 stays:     (2,2):(80,4)  (non-contiguous, cannot coalesce further)\n");
+  printf("    Final: (5,(2,2)):(16,(80,4))\n\n");
+  auto R2 = composition(A2, B2);
+  printf("  CuTe direct: composition(A, B) = "); print(R2);
+  printf("\n  Expected from docs:  (5,(2,2)):(16,(80,4))\n\n");
+
+  // Spot-check
+  printf("  Spot-check  R(c) = A(B(c)):\n");
+  for (int c = 0; c < 5; ++c) {
+    printf("    R(%2d) = A(B(%2d)) = A(%2d) = %3d  |  layout: %3d\n",
+           c, c, (int)B2(c), (int)A2(B2(c)), (int)R2(c));
+  }
+  printf("\n");
   
   printf("Example 2: Complement (find remaining space). \n when a sub-group processes a tile [0, N), complement generates the layout for the next sub-group to process [N, 2N), \n ensuring no overlap and complete coverage of data.\n");
 
@@ -135,7 +204,7 @@ void easy_examples() {
   printf("      Data/thread:    "); print(data_per_thread); printf("\n");
   printf("      Each of 128 threads gets 1 element\n\n");
   
-  printf("  WHY USE COMPOSITION IN CUTLASS (Intel Xe2/Xe4 Architecture):\n");
+  printf("  WHY USE COMPOSITION IN CUTLASS (Intel Xe2 Architecture):\n");
   printf("  • Work-item hierarchy: (work-item → sub-group → work-group → grid) addressing\n");
   printf("  • Tiled memory access: (element → vector → tile → matrix)\n");
   printf("  • Register partitioning: (register → work-item → sub-group fragment)\n");
@@ -146,7 +215,7 @@ void easy_examples() {
   printf("  1. Work-group tile composition:\n");
   printf("     auto wg_tile = composition(sg_tile, wg_layout);\n");
   printf("     Maps sub-group-local coords → work-group-wide tile offsets\n");
-  printf("     (Xe2: 16 work-items/sub-group, Xe4: SIMT-style execution)\n\n");
+  printf("     (Xe2: 16 work-items/sub-group)\n\n");
   
   printf("  2. Shared Local Memory (SLM) swizzle:\n");
   printf("     auto slm_layout = composition(unswizzled, swizzle_pattern);\n");
@@ -384,17 +453,6 @@ void hard_examples() {
   printf("  4. Block Load/Store:\n");
   printf("     • Intel Xe 2D block load (16×16 or 8×32 blocks)\n");
   printf("     • Swizzle ensures uniform bank utilization\n\n");
-  
-  printf("  HOW TO IMPLEMENT IN CUTLASS:\n");
-  printf("  auto unswizzled_slm = make_layout(shape, stride);\n");
-  printf("  auto swizzle = Swizzle<3,0,3>{}; // CuTe swizzle: B=3 bits, M=0, S=3\n");
-  printf("  auto swizzled_slm = composition(unswizzled_slm, swizzle);\n\n");
-  
-  printf("  PERFORMANCE IMPACT:\n");
-  printf("  • Without swizzle: Up to 32× slowdown (worst case)\n");
-  printf("  • With swizzle: Near-theoretical bandwidth\n");
-  printf("  • Xe2 (BMG): 128 KB SLM @ ~1 TB/s (conflict-free)\n");
-  printf("  • Xe4: Similar architecture, SIMT benefits from swizzle\n\n");
   
   printf("Example 13: Zipped layouts for interleaving\n");
   auto layout_a = make_layout(make_shape(8), make_stride(2));  // Even indices
