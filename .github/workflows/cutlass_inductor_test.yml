@@ -1,8 +1,6 @@
 name: "TorchInductor CUTLASS UTs"
 
 on:
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 permissions: {}
