@@ -1,6 +1,7 @@
 #include "sdpa_kernel.hpp"
 #include "sdpa_util.hpp"
 #include "reference_gpu.hpp"
+#include "reference_cpu.hpp"
 
 template<class...> class mhaodoDeviceName;
 template<class...> class mhabwdDeviceName;
@@ -335,8 +336,8 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
     // init grad output
     norm_init(seed + 5, do_h.data(), do_h.size());
     
-    // compute o and lse from qkv using forward pass
-    sdpa_forward_reference_gpu<T, V>(q_h.data(), k_h.data(), v_h.data(),
+    // compute o and lse from qkv using forward pass (CPU to avoid GPU thermal throttling)
+    sdpa_forward_reference_cpu<T, V>(q_h.data(), k_h.data(), v_h.data(),
                                      is_causal, is_bhsd,
                                      BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
                                      SEQ_LEN_QO, SEQ_LEN_KV,
