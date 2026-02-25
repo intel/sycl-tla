@@ -9,7 +9,7 @@ auto convert_layout_2d_layout(Layout layout) {
 }
 
 constexpr int tid = 1;
-constexpr int bid = 1;
+constexpr int bid = 0;
 
 const bool
 is_cur_thread() {
@@ -328,15 +328,6 @@ scale_apply_exp2(Tensor<Engine0, Layout0> &tensor,
         rC.data(),
         convert_layout_2d_layout(rC.layout()));
     if constexpr(Is_even_M) {
-#if defined(__SYCL_DEVICE_ONLY__)
-        CUTLASS_PRAGMA_UNROLL
-        for (int ni = 0; ni < size<1>(tensor); ++ni)  {
-            int n = get<1>(rC_2d(0, ni)) + sg_local_id;
-            const float max_scaled = max(n) == -INFINITY ? 0.f : max(n) * M_LOG2E;
-            const float neg_max_scaled = -max_scaled;
-            ScaleExpHelper<decltype(size<0>(tensor))>::apply(tensor, ni, scale, neg_max_scaled);
-        }
-#else
         CUTLASS_PRAGMA_UNROLL
         for (int ni = 0; ni < size<1>(tensor); ++ni)  {
             int n = get<1>(rC_2d(0, ni)) + sg_local_id;
@@ -346,7 +337,6 @@ scale_apply_exp2(Tensor<Engine0, Layout0> &tensor,
                 tensor(mi, ni) = exp2f(tensor(mi, ni) * scale - max_scaled);
             }
         }
-#endif
     } else {
         CUTLASS_PRAGMA_UNROLL
         for (int ni = 0; ni < size<1>(tensor); ++ni)  {
@@ -381,10 +371,10 @@ softmax_backward(Tensor<Engine0, Layout0> &P,
         CUTLASS_PRAGMA_UNROLL
         for (int ni = 0; ni < size<1>(dP); ++ni) {
             int n = get<1>(rC_2d(0, ni)) + sg_local_id;
-            const float dpsum = dP_sum(n);
+            const float neg_dpsum_scaled = -(dP_sum(n) * scale);
             CUTLASS_PRAGMA_UNROLL
             for (int mi = 0; mi < size<0>(dP); ++mi) {
-                dP(mi, ni) = P(mi, ni) * (dP(mi, ni) - dpsum) * scale;
+                dP(mi, ni) = P(mi, ni) * fmaf(dP(mi, ni), scale, neg_dpsum_scaled);
             }
         }
     } else {
@@ -392,10 +382,10 @@ softmax_backward(Tensor<Engine0, Layout0> &P,
         for (int ni = 0; ni < size<1>(dP); ++ni) {
             int n = get<1>(rC_2d(0, ni)) + sg_local_id;
             if (n < tail_m) {
-                const float dpsum = dP_sum(n);
+                const float neg_dpsum_scaled = -(dP_sum(n) * scale);
                 CUTLASS_PRAGMA_UNROLL
                 for (int mi = 0; mi < size<0>(dP); ++mi) {
-                    dP(mi, ni) = P(mi, ni) * (dP(mi, ni) - dpsum) * scale;
+                    dP(mi, ni) = P(mi, ni) * fmaf(dP(mi, ni), scale, neg_dpsum_scaled);
                 }
             }
         }
@@ -634,10 +624,11 @@ dq_dk_dv_1colblock(Trait &trait, Param<typename Trait::DType> &param,
         // P=softmax(S,lse)
         if (Is_even_M) {
             scale_apply_exp2<true>(scores, mLSE, taccScS_rt,
-                             param.scale_softmax_log2);
+                                   param.scale_softmax_log2);
         } else {
             scale_apply_exp2<false>(scores, mLSE, taccScS_rt,
-                                    param.scale_softmax_log2, tail_m);
+                                    param.scale_softmax_log2,
+                                    tail_m);
         }
         auto rdP = create_reg<V>(trait,
                                  mdPt,
