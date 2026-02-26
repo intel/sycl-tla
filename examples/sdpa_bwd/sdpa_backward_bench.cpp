@@ -1,7 +1,6 @@
 #include "sdpa_kernel.hpp"
 #include "sdpa_util.hpp"
 #include "reference_gpu.hpp"
-#include "reference_cpu.hpp"
 
 template<class...> class mhaodoDeviceName;
 template<class...> class mhabwdDeviceName;
@@ -77,6 +76,7 @@ launch_mha_backward_headdim(ProblemShape problem_shape,
     param.seq_len_q = SEQ_LEN_Q;
     param.seq_len_kv = SEQ_LEN_KV;
     param.head_dim = kHeadDim;
+    param.num_nb_per_blk = std::max(N_BLOCK * NUM_HEAD_Q * BATCH / 1024, 1);
     param.n_block = N_BLOCK;
     param.tail_n = tail_n;
     param.m_block = M_BLOCK;
@@ -114,7 +114,7 @@ launch_mha_backward_headdim(ProblemShape problem_shape,
         dur0 += end0 - start0;
 
         auto start1 = std::chrono::high_resolution_clock::now();
-        auto dimGrid1 = compat::dim3(size(param.n_block),
+        auto dimGrid1 = compat::dim3(size(ceil_div(param.n_block, param.num_nb_per_blk)),
                                      size(param.num_head_q), size(param.batch));
         assert((param.num_head_q % param.num_head_kv == 0) && "num_head_q must be dividable by num_head_kv");
         assert((param.num_head_q >= param.num_head_kv) && "num_head_q must be bigger than or equal to num_head_kv");
@@ -127,7 +127,7 @@ launch_mha_backward_headdim(ProblemShape problem_shape,
             sycl::ext::oneapi::experimental::sub_group_size<trait.SubgroupSize>};
         compat::experimental::launch_policy policy1{dimGrid1, dimBlock1, launch_props1, kernel_props1};
         auto event1 = compat::experimental::launch<
-            mha_backward_parallel<decltype(trait)>,
+            mha_backward_seq<decltype(trait)>,
             mhabwdDeviceName<decltype(trait)>>(policy1,
                                                trait,
                                                param);
@@ -227,7 +227,7 @@ launch_mha_backward(ProblemShape problem_shape,
         constexpr int kHeadDim = 128;
         constexpr int kNSGs = 8;
         constexpr int AtomLayoutMSdP = 2;
-        constexpr int AtomLayoutNdKV = 4;
+        constexpr int AtomLayoutNdKV = 2;
         constexpr int AtomLayoutMdQ = 4;
         static_assert(kBlockM <=  kMPad, "kBlockM must be less than or equal to kMPad");
         static_assert(kBlockN <=  kNPad, "kBlockN must be less than or equal to kNPad");
@@ -334,15 +334,7 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
     norm_init(seed + 3, v_h.data(), v_h.size());
 
     // init grad output
-    norm_init(seed + 5, do_h.data(), do_h.size());
-    
-    // compute o and lse from qkv using forward pass (CPU to avoid GPU thermal throttling)
-    sdpa_forward_reference_cpu<T, V>(q_h.data(), k_h.data(), v_h.data(),
-                                     is_causal, is_bhsd,
-                                     BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
-                                     SEQ_LEN_QO, SEQ_LEN_KV,
-                                     HEAD_SIZE_QK, HEAD_SIZE_VO,
-                                     o_h.data(), lse_h.data());
+    norm_init(seed + 4, do_h.data(), do_h.size());
 
     // alloc qkv
     T *q_d = compat::malloc<T>(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
@@ -377,51 +369,8 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
 
     // copy grad output
     compat::memcpy<T>(do_d, do_h.data(), do_h.size());
-    compat::memcpy<T>(o_d, o_h.data(), o_h.size());
 
-    // copy lse
-    compat::memcpy<V>(lse_d, lse_h.data(), lse_h.size());
     DurTuple res;
-    if (is_bhsd) {
-        if (is_causal)
-            res = launch_mha_backward<T, decltype(problem_shape),
-                                kBlockM, kBlockN, true, true>(
-                                    problem_shape,
-                                    do_d, o_d,
-                                    q_d, k_d, v_d,
-                                    lse_d, odo_d,
-                                    dqaccum_d, dq_d, dk_d, dv_d,
-                                    p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
-        else
-            res = launch_mha_backward<T, decltype(problem_shape),
-                                kBlockM, kBlockN, false, true>(
-                                    problem_shape,
-                                    do_d, o_d,
-                                    q_d, k_d, v_d,
-                                    lse_d, odo_d,
-                                    dqaccum_d, dq_d, dk_d, dv_d,
-                                    p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
-    } else {
-        if (is_causal) {
-            res = launch_mha_backward<T, decltype(problem_shape),
-                                kBlockM, kBlockN, true, false>(
-                                    problem_shape,
-                                    do_d, o_d,
-                                    q_d, k_d, v_d,
-                                    lse_d, odo_d,
-                                    dqaccum_d, dq_d, dk_d, dv_d,
-                                    p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
-        } else {
-            res = launch_mha_backward<T, decltype(problem_shape),
-                                kBlockM, kBlockN, false, false>(
-                                    problem_shape,
-                                    do_d, o_d,
-                                    q_d, k_d, v_d,
-                                    lse_d, odo_d,
-                                    dqaccum_d, dq_d, dk_d, dv_d,
-                                    p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
-        }
-    }
 
     std::vector<V> odo_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_QO);
     std::vector<V> dqaccum_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_QO * HEAD_SIZE_QK);
@@ -429,16 +378,70 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
     std::vector<T> dk_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_QK);
     std::vector<T> dv_ref(BATCH * NUM_HEAD_Q * SEQ_LEN_KV * HEAD_SIZE_VO);
     if (checksum) {
+        // compute o and lse from qkv using forward pass
+        sdpa_forward_reference_gpu<T, V>(q_h.data(), k_h.data(), v_h.data(),
+                                         is_causal, is_bhsd,
+                                         BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
+                                         SEQ_LEN_QO, SEQ_LEN_KV,
+                                         HEAD_SIZE_QK, HEAD_SIZE_VO,
+                                         o_h.data(), lse_h.data());
+
+        // copy output
+        compat::memcpy<T>(o_d, o_h.data(), o_h.size());
+
+        // copy lse
+        compat::memcpy<V>(lse_d, lse_h.data(), lse_h.size());
+        if (is_bhsd) {
+            if (is_causal)
+                res = launch_mha_backward<T, decltype(problem_shape),
+                                          kBlockM, kBlockN, true, true>(
+                                              problem_shape,
+                                              do_d, o_d,
+                                              q_d, k_d, v_d,
+                                              lse_d, odo_d,
+                                              dqaccum_d, dq_d, dk_d, dv_d,
+                                              p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, 1);
+            else
+                res = launch_mha_backward<T, decltype(problem_shape),
+                                          kBlockM, kBlockN, false, true>(
+                                              problem_shape,
+                                              do_d, o_d,
+                                              q_d, k_d, v_d,
+                                              lse_d, odo_d,
+                                              dqaccum_d, dq_d, dk_d, dv_d,
+                                              p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, 1);
+        } else {
+            if (is_causal) {
+                res = launch_mha_backward<T, decltype(problem_shape),
+                                          kBlockM, kBlockN, true, false>(
+                                              problem_shape,
+                                              do_d, o_d,
+                                              q_d, k_d, v_d,
+                                              lse_d, odo_d,
+                                              dqaccum_d, dq_d, dk_d, dv_d,
+                                              p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, 1);
+            } else {
+                res = launch_mha_backward<T, decltype(problem_shape),
+                                          kBlockM, kBlockN, false, false>(
+                                              problem_shape,
+                                              do_d, o_d,
+                                              q_d, k_d, v_d,
+                                              lse_d, odo_d,
+                                              dqaccum_d, dq_d, dk_d, dv_d,
+                                              p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, 1);
+            }
+        }
+
         sdpa_backward_reference_gpu<T, V>(q_h.data(), k_h.data(), v_h.data(),
-                                      o_h.data(), do_h.data(), lse_h.data(),
-                                      is_causal, is_bhsd,
-                                      BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
-                                      SEQ_LEN_QO, SEQ_LEN_KV,
-                                      HEAD_SIZE_QK, HEAD_SIZE_VO,
-                                      odo_ref.data(), dqaccum_ref.data(),
-                                      dq_ref.data(), dk_ref.data(), dv_ref.data());
-        float atol = 1e-2f;
-        float rtol = 1e-2f;
+                                          o_h.data(), do_h.data(), lse_h.data(),
+                                          is_causal, is_bhsd,
+                                          BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
+                                          SEQ_LEN_QO, SEQ_LEN_KV,
+                                          HEAD_SIZE_QK, HEAD_SIZE_VO,
+                                          odo_ref.data(), dqaccum_ref.data(),
+                                          dq_ref.data(), dk_ref.data(), dv_ref.data());
+        float atol = 1e-3f;
+        float rtol = 1e-3f;
         compat::memcpy<V>(odo_h.data(), odo_d, odo_h.size());
         compat::memcpy<V>(dqaccum_h.data(), dqaccum_d, dqaccum_h.size());
         compat::memcpy<T>(dq_h.data(), dq_d, dq_h.size());
@@ -453,6 +456,87 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
         verify(dk_ref.data(), dk_h.data(), BATCH * NUM_HEAD_Q, SEQ_LEN_KV, HEAD_SIZE_QK, atol, rtol);
         printf("dv val: ");
         verify(dv_ref.data(), dv_h.data(), BATCH * NUM_HEAD_Q, SEQ_LEN_KV, HEAD_SIZE_VO, atol, rtol);
+    } else {
+        if (is_bhsd) {
+            if (is_causal)
+                launch_mha_backward<T, decltype(problem_shape),
+                                    kBlockM, kBlockN, true, true>(
+                                        problem_shape,
+                                        do_d, o_d,
+                                        q_d, k_d, v_d,
+                                        lse_d, odo_d,
+                                        dqaccum_d, dq_d, dk_d, dv_d,
+                                        p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, 3);
+            else
+                launch_mha_backward<T, decltype(problem_shape),
+                                    kBlockM, kBlockN, false, true>(
+                                        problem_shape,
+                                        do_d, o_d,
+                                        q_d, k_d, v_d,
+                                        lse_d, odo_d,
+                                        dqaccum_d, dq_d, dk_d, dv_d,
+                                        p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, 3);
+        } else {
+            if (is_causal) {
+                launch_mha_backward<T, decltype(problem_shape),
+                                    kBlockM, kBlockN, true, false>(
+                                        problem_shape,
+                                        do_d, o_d,
+                                        q_d, k_d, v_d,
+                                        lse_d, odo_d,
+                                        dqaccum_d, dq_d, dk_d, dv_d,
+                                        p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, 3);
+            } else {
+                launch_mha_backward<T, decltype(problem_shape),
+                                    kBlockM, kBlockN, false, false>(
+                                        problem_shape,
+                                        do_d, o_d,
+                                        q_d, k_d, v_d,
+                                        lse_d, odo_d,
+                                        dqaccum_d, dq_d, dk_d, dv_d,
+                                        p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, 3);
+            }
+        }
+        if (is_bhsd) {
+            if (is_causal)
+                res = launch_mha_backward<T, decltype(problem_shape),
+                                          kBlockM, kBlockN, true, true>(
+                                              problem_shape,
+                                              do_d, o_d,
+                                              q_d, k_d, v_d,
+                                              lse_d, odo_d,
+                                              dqaccum_d, dq_d, dk_d, dv_d,
+                                              p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
+            else
+                res = launch_mha_backward<T, decltype(problem_shape),
+                                          kBlockM, kBlockN, false, true>(
+                                              problem_shape,
+                                              do_d, o_d,
+                                              q_d, k_d, v_d,
+                                              lse_d, odo_d,
+                                              dqaccum_d, dq_d, dk_d, dv_d,
+                                              p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
+        } else {
+            if (is_causal) {
+                res = launch_mha_backward<T, decltype(problem_shape),
+                                          kBlockM, kBlockN, true, false>(
+                                              problem_shape,
+                                              do_d, o_d,
+                                              q_d, k_d, v_d,
+                                              lse_d, odo_d,
+                                              dqaccum_d, dq_d, dk_d, dv_d,
+                                              p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
+            } else {
+                res = launch_mha_backward<T, decltype(problem_shape),
+                                          kBlockM, kBlockN, false, false>(
+                                              problem_shape,
+                                              do_d, o_d,
+                                              q_d, k_d, v_d,
+                                              lse_d, odo_d,
+                                              dqaccum_d, dq_d, dk_d, dv_d,
+                                              p_d, ds_d, SEQ_LEN_QO_PAD, SEQ_LEN_KV_PAD, count);
+            }
+        }
     }
 
     compat::free(q_d);
