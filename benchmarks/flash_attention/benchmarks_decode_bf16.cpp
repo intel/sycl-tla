@@ -46,17 +46,17 @@ CUTLASS_CREATE_FMHA_BENCHMARK(BmgFMHADecode_BF16_BF16_BF16_FP32_RCR_h64_Causal_V
 
 /* ---------------------------------------- Custom Tiles ------------------------------------------ */
 
-using BmgFMHADecode_BF16_BF16_BF16_FP32_RCR_h64_WgQ128K64V32_SgQ8K64P8V32_NonCausal_FixedLen = FMHAConfigGenWithTileShape</*Mode*/FMHAMode::Decode,
+using BmgFMHADecode_BF16_BF16_BF16_FP32_RCR_WgQ128K64V32_SgQ8K64_HDimQK32V64_NonCausal_FixedLen = FMHAConfigGenWithTileShape</*Mode*/FMHAMode::Decode,
   /*ElementQ*/ cutlass::bfloat16_t, /*ElementK*/ cutlass::bfloat16_t, /*ElementV*/ cutlass::bfloat16_t, /*ElementO*/ float,
   /*LayoutQ*/ cutlass::layout::RowMajor, /*LayoutK*/ cutlass::layout::ColumnMajor, /*LayoutV*/ cutlass::layout::RowMajor, /*LayoutO*/ cutlass::layout::RowMajor,
   /*Causal*/ false, /*VarLen*/ false, /*CachedKV*/ false, /*PagedKV*/ false, /*Persistent*/ false, /*WgTileQ*/ 128, /*WgTileK*/ 64, /*WgTileV*/ 32,
-  /*SgTileQ*/ 8, /*SgTileK*/ 64, /*SgTileP*/ 8, /*SgTileV*/ 32, /*HeadDimQK*/ 32, /*HeadDimV*/ 64
+  /*SgTileQ*/ 8, /*SgTileK*/ 64, /*HeadDimQK*/ 32, /*HeadDimV*/ 64
 >::type;
 
-CUTLASS_CREATE_FMHA_BENCHMARK(BmgFMHADecode_BF16_BF16_BF16_FP32_RCR_h64_WgQ128K64V32_SgQ8K64P8V32_NonCausal_FixedLen);
+CUTLASS_CREATE_FMHA_BENCHMARK(BmgFMHADecode_BF16_BF16_BF16_FP32_RCR_WgQ128K64V32_SgQ8K64_HDimQK32V64_NonCausal_FixedLen);
 
 static void register_flash_attention_decode_benchmarks_bf16() {
   CUTLASS_FMHA_BENCHMARK(BmgFMHADecode_BF16_BF16_BF16_FP32_RCR_h64_Causal_VarLen);
 
-  CUTLASS_FMHA_BENCHMARK(BmgFMHADecode_BF16_BF16_BF16_FP32_RCR_h64_WgQ128K64V32_SgQ8K64P8V32_NonCausal_FixedLen);
+  CUTLASS_FMHA_BENCHMARK(BmgFMHADecode_BF16_BF16_BF16_FP32_RCR_WgQ128K64V32_SgQ8K64_HDimQK32V64_NonCausal_FixedLen);
 }

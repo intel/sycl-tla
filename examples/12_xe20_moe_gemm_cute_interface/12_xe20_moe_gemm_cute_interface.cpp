@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2025 Intel Corporation. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,10 @@
 /*! \file
     \brief CUTLASS Intel BMG MoE API example based on sycl-tla Group GEMM
 
+    Usage:
+      To skip verification, modify the verify parameter in the launcher() calls in main():
+        launcher(total_rows_for_each_expert[i], 5760, 2880, num_experts, 0);  // 0 = skip verify
+        launcher(total_rows_for_each_expert[i], 2880, 2880, num_experts, 1);  // 1 = enable verify (default)
 */
 
 #include "cutlass/util/GPU_Clock.hpp"
@@ -48,6 +52,7 @@
 #include "cutlass/kernel_hardware_info.h"
 #include "cutlass/platform/platform.h"
 #include "cutlass/tensor_ref.h"
+#include "cutlass/util/command_line.h"
 #include "cutlass/util/GPU_Clock.hpp"
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/initialize_block.hpp"
@@ -66,6 +71,54 @@ using namespace cute;
 using namespace MoE;
 
 using ElementAccumulator = float; // <- data type of accumulator
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Command line options parsing
+struct Options {
+
+  bool help;
+  bool error;
+
+  int n, k, num_layers, verify;
+
+  Options():
+    help(false),
+    error(false),
+    n(2880), k(2880), num_layers(24), verify(1)
+  { }
+
+  // Parses the command line
+  void parse(int argc, char const **args) {
+    cutlass::CommandLine cmd(argc, args);
+
+    if (cmd.check_cmd_line_flag("help")) {
+      help = true;
+      return;
+    }
+
+    cmd.get_cmd_line_argument("n", n, 2880);
+    cmd.get_cmd_line_argument("k", k, 2880);
+    cmd.get_cmd_line_argument("num_layers", num_layers, 24);
+    cmd.get_cmd_line_argument("verify", verify, 1);
+  }
+
+  /// Prints the usage statement.
+  std::ostream & print_usage(std::ostream &out) const {
+
+    out << "MoE GEMM Example\n\n"
+      << "Options:\n\n"
+      << "  --help                      If specified, displays this usage statement\n\n"
+      << "  --n=<int>                   Sets the N extent of the MoE GEMM (default: 2880)\n"
+      << "  --k=<int>                   Sets the K extent of the MoE GEMM (default: 2880)\n"
+      << "  --num_layers=<int>          Number of layers to test (default: 24)\n"
+      << "  --verify=<int>              Specify whether to verify (0=no, 1=yes, default: 1)\n\n";
+
+    return out;
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct VerificationHelper {
 
@@ -218,7 +271,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
                      const int gemm_n, const int gemm_k,
                      const int *num_rows_per_expert_device,
                      const int *num_tokens_per_expert_host,
-                     const int num_experts) {
+                     const int num_experts, const bool verify = true) {
   // Change device_id to another value if you are running on a machine with
   // multiple GPUs and wish to use a GPU other than that with device ID 0.
   // For example, in a framework, you could query device ID.
@@ -263,7 +316,12 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
   namespace intelex = sycl::ext::intel::experimental;
 
   syclex::properties kernel_props{syclex::sub_group_size<16>,
-                                  intelex::grf_size<256>};
+#if (defined(SYCL_INTEL_TARGET) && (SYCL_INTEL_TARGET == 35))
+                                  intelex::grf_size<512>
+#else
+                                  intelex::grf_size<256>
+#endif
+  };
   sycl::queue Q = compat::get_default_queue();
 
   GPU_Clock timer;
@@ -286,10 +344,11 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
 
   VerificationHelper helper;
   helper.parse(num_experts, num_tokens_per_expert_host, gemm_n, gemm_k);
-  if (helper.verify(activations, weights, outputs) == false) {
-    std::cout << "\n\nFailed accuracy verification :(\n\n";
+  if (verify) {
+    if (helper.verify(activations, weights, outputs) == false) {
+      std::cout << "\n\nFailed accuracy verification :(\n\n";
+    }
   }
-
   auto [gflops, mem_bw_util, projected_time] =
       helper.gflops(cute_average_time / 1000.0, helper.problem_sizes_host);
 
@@ -306,7 +365,7 @@ void MoEGEMMLauncher(const ElementA *activations, const ElementB *weights,
             << std::endl;
 }
 
-void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
+void launcher(int *M_per_expert, int N, int K, const int &num_experts, const bool verify = true) {
   int n_moe = N;
   int k_moe = K;
   int num_tokens_incl_duplicated = 0;
@@ -343,14 +402,30 @@ void launcher(int *M_per_expert, int N, int K, const int &num_experts) {
   MoEGEMMLauncher<'R', 'R'>(activations_data.get(), weights_data.get(),
                             static_cast<void *>(nullptr), output_data.get(),
                             n_moe, k_moe, num_rows_per_expert_device.get(),
-                            M_per_expert, num_experts);
+                            M_per_expert, num_experts, verify);
 }
 
 int main(int argc, const char **argv) {
-  constexpr int num_experts = 32;
-  constexpr int num_layers = 24;
+  Options options;
+  options.parse(argc, argv);
 
-  int total_rows_for_each_expert[num_layers][num_experts] = {
+  if (options.help) {
+    options.print_usage(std::cout) << std::endl;
+    return 0;
+  }
+
+  constexpr int num_experts = 32;
+  constexpr int max_layers = 24;
+
+  if (options.num_layers > max_layers) {
+    std::cerr << "Error: num_layers (" << options.num_layers 
+              << ") exceeds maximum supported layers (" << max_layers 
+              << ")." << std::endl;
+    std::cerr << "Aborting execution." << std::endl;
+    return -1;
+  }
+
+  int total_rows_for_each_expert[max_layers][num_experts] = {
       {148, 231, 404, 180, 127, 244, 224, 244, 110, 617, 289,
        845, 191, 424, 30,  97,  57,  324, 62,  77,  75,  144,
        250, 287, 629, 370, 161, 101, 215, 113, 224, 35},
@@ -413,12 +488,13 @@ int main(int argc, const char **argv) {
       {6, 13, 123, 28, 197,  0, 202, 69,   0, 6,  0,  21, 1434, 1582, 11, 0, 6,
        0, 7,  190, 4,  1700, 6, 434, 1886, 0, 14, 28, 8,  30,   25,   18},
       {5,  27, 1442, 18, 0,  6, 0, 73,  6,    781, 0,  1915, 291, 649, 98,  4,
-       33, 77, 6,    22, 73, 9, 8, 587, 1486, 32,  10, 244,  37,  0,   100, 9}
-       };
+       33, 77, 6,    22, 73, 9, 8, 587, 1486, 32,  10, 244,  37,  0,   100, 9}};
 
+  int num_layers = std::min(options.num_layers, max_layers);
+  
   for (int i = 0; i < num_layers; i++) {
-    launcher(total_rows_for_each_expert[i], 5760, 2880, num_experts);
-    launcher(total_rows_for_each_expert[i], 2880, 2880, num_experts);
+    launcher(total_rows_for_each_expert[i], 2 * options.n, options.k, num_experts, options.verify);
+    launcher(total_rows_for_each_expert[i], options.n, options.k, num_experts, options.verify);
   }
 
   return 0;

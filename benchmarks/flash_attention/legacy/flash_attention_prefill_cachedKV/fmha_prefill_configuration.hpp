@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +30,7 @@
  *
  **************************************************************************************************/
 #pragma once
-#include "../../../applications/flash_attention_v2/kernel/xe_flash_attn_prefill_cachedKV.hpp"
+#include "flash_attention_v2/kernel/legacy/xe_flash_attn_prefill_cachedKV.hpp"
 #include "cutlass/gemm/dispatch_policy.hpp"
 
 namespace cutlass {

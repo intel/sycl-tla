@@ -88,13 +88,13 @@ struct Options {
   bool help;
   bool error;
 
-  int m, n, k, l, iterations;
+  int m, n, k, l, iterations, verify;
   float alpha, beta;
 
   Options():
     help(false),
     error(false),
-    m(768), n(768), k(128), l(3), iterations(100),
+    m(768), n(768), k(128), l(3), iterations(100), verify(1),
     alpha(1.f), beta(0.f)
   { }
 
@@ -114,6 +114,7 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("verify", verify, 1);
   }
 
   /// Prints the usage statement.
@@ -128,7 +129,8 @@ struct Options {
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
-      << "  --iterations=<int>          Iterations\n\n";
+      << "  --iterations=<int>          Iterations\n"
+      << "  --verify=<int>              Specify whether to verify.\n\n";
 
     return out;
   }
@@ -145,22 +147,22 @@ using EpilogueDescriptor = cutlass::epilogue::collective::detail::EpilogueDescri
 using ElementC = cutlass::half_t;
 using StrideC = cute::Stride<int64_t, cute::Int<1>, int64_t>; 
 using StrideD = cute::Stride<int64_t, cute::Int<1>, int64_t>; 
-using TensorC = cutlass::epilogue::fusion::Sm90SrcFetch<cutlass::half_t>;
+using TensorC = cutlass::epilogue::fusion::XeSrcFetch<cutlass::half_t>;
 
 using ElementD = cutlass::half_t;
 
-using Accum = cutlass::epilogue::fusion::Sm90AccFetch;
+using Accum = cutlass::epilogue::fusion::XeAccFetch;
 
-using Alpha = cutlass::epilogue::fusion::Sm90ScalarBroadcast<
+using Alpha = cutlass::epilogue::fusion::XeScalarBroadcast<
     float, cute::Stride<cute::Int<0>, cute::Int<0>, cute::Int<0>>, 1, cutlass::multiplies
 >;
 
-using Compute0 = cutlass::epilogue::fusion::Xe20Compute<
+using Compute0 = cutlass::epilogue::fusion::XeCompute<
     cutlass::multiplies, float, float,
     cutlass::FloatRoundStyle::round_to_nearest
 >;
 
-using EVTCompute0 = cutlass::epilogue::fusion::Xe20EVT<
+using EVTCompute0 = cutlass::epilogue::fusion::XeEVT<
     Compute0,
     Alpha,
 Accum>;
@@ -170,16 +172,16 @@ using F = cutlass::epilogue::fusion::XeAuxStore<
     cute::Stride<int64_t, cute::Int<1>, int64_t>
 >;
 
-    using EVTF = cutlass::epilogue::fusion::Xe20EVT<
+using EVTF = cutlass::epilogue::fusion::XeEVT<
         F,
         EVTCompute0>;
 
-using Compute1 = cutlass::epilogue::fusion::Xe20Compute<
+using Compute1 = cutlass::epilogue::fusion::XeCompute<
     cutlass::plus, cutlass::half_t, float,
     cutlass::FloatRoundStyle::round_to_nearest
 >;
 
-    using EVTCompute1 = cutlass::epilogue::fusion::Xe20EVT<
+using EVTCompute1 = cutlass::epilogue::fusion::XeEVT<
         Compute1,
         EVTF,
     TensorC>;
@@ -385,7 +387,7 @@ struct ExampleRunner {
   typename Compute1::Arguments compute1_args{};
     
     // 1. 
-    // Xe20EVT<Compute0(Mul), Alpha, Accum>
+    // XeEVT<Compute0(Mul), Alpha, Accum>
     // {Alpha, Accum, Compute0}
     typename EVTCompute0::Arguments evt0_args{
         alpha_args,            // Child 1: Alpha
@@ -394,7 +396,7 @@ struct ExampleRunner {
     };
 
     // 2. 
-    // Xe20EVT<F(AuxStore), EVTCompute0>
+    // XeEVT<F(AuxStore), EVTCompute0>
     // {EVTCompute0, F}
     typename EVTF::Arguments evtf_args{
         evt0_args,             // Child 1: EVTCompute0
@@ -402,7 +404,7 @@ struct ExampleRunner {
     };
 
     // 3. 
-    // Xe20EVT<Compute1(Plus), EVTF, TensorC>
+    // XeEVT<Compute1(Plus), EVTF, TensorC>
     // {EVTF, TensorC, Compute1}
     typename EVTCompute1::Arguments thread {
       evtf_args,               // Child 1: EVTF
@@ -437,11 +439,15 @@ struct ExampleRunner {
 
     compat::wait();
 
-    // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+    if (options.verify != 0) {
+      // Verify that the result is correct
+      bool passed = verify(problem_size, options.alpha, options.beta);
+      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+      if (!passed) return cutlass::Status::kErrorInternal;
+    } else {
+      std::cout << "Disposition is skipped." << std::endl;
+    }
 
     if (options.iterations > 0) {
       GPU_Clock timer;
