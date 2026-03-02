@@ -3,6 +3,17 @@
 CuTe
 ====================
 
+Start Here (Intel-first)
+------------------------
+
+.. toctree::
+  :maxdepth: 1
+
+  Intel CuTe Overview<intel_overview.md>
+
+Core CuTe Tutorial
+------------------
+
 .. toctree::
   :maxdepth: 1
 
@@ -15,3 +26,13 @@ CuTe
   0x_gemm_tutorial<0x_gemm_tutorial.md>
   0y_predication<0y_predication.md>
   0z_tma_tensors<0z_tma_tensors.md>
+
+Intel GPU Extensions
+--------------------
+
+.. toctree::
+  :maxdepth: 1
+
+  Xe 2D Copy Operations<xe_2d_copy.md>
+  Intel Performance Tuning Guide<intel_performance_guide.md>
+  Intel SYCL GEMM Companion<intel_gemm_companion.md>
