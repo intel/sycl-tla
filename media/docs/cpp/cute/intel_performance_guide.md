@@ -93,6 +93,48 @@ Common tile sizes in this codebase:
 - Reduce M or N if register spill is observed (check with Intel VTune or compiler `-v` output).
 - Increase K-depth for memory-bound kernels to amortize the 2D block load overhead.
 
+#### Real-world example: Flash Attention BF16 tile-size tuning on Intel Xe BMG
+
+An improvement to the BF16 Flash Attention prefill kernel on Intel Arc BMG demonstrated that
+doubling the K-tile in the QK GEMM stage meaningfully improves performance by amortizing 2D block
+load overhead over more XMX compute.
+
+**Before** (conservative K-tile = 32):
+
+```cpp
+// HEAD_DIM = 64 or 128
+using ShapeQK = Shape<_128, _64, _32>;      // K-tile is 32 elements wide
+using ShapePV = Shape<_128, _32, _64>;
+using SubgroupLayout = Layout<Shape<_8, _1, _1>>;
+```
+
+**After** (doubled K-tile = 64, from `examples/06_bmg_flash_attention/06_bmg_prefill_attention.cpp`):
+
+```cpp
+// HEAD_DIM = 64
+using ShapeQK = Shape<_128, _64, _64>;      // K-tile doubled to 64 elements
+using ShapePV = Shape<_128, _32, _64>;
+using ShapeOutPut = Shape<_128, _64, _64>;
+using SubgroupLayout = Layout<Shape<_8, _1, _1>, Stride<_1, _1, _1>>;
+
+// HEAD_DIM = 128
+using ShapeQK = Shape<_128, _64, _64>;      // K-tile doubled to 64 elements
+using ShapePV = Shape<_128, _32, _64>;
+using ShapeOutPut = Shape<_128, _128, _64>;
+using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
+```
+
+**Why it helped:**  Each `XE_2D_*_LD_T` / `XE_2D_*_LD_V` 2D block load carries a fixed issue
+overhead.  With K-tile = 32, loads were issued frequently relative to the XMX work they fed.
+Doubling to K-tile = 64 halves the number of block loads per K-loop iteration, giving XMX more
+sustained work per memory transaction and improving bandwidth utilization.
+
+**When to apply this pattern:**
+- The kernel is memory-bound (XMX utilization is low relative to bandwidth utilization).
+- The head dimension (or K extent) is large enough that the larger K-tile does not overflow the
+  GRF budget (verify with Intel VTune or `-v` compiler output; register spill negates the gain).
+- The K dimension of the problem is a multiple of the new tile size.
+
 ### Pipeline stages
 
 `PipelineStages = 2` is the standard starting point.  It overlaps one iteration of loads with the
