@@ -20,8 +20,8 @@ primitives plug in.
 ## Translating tutorial concepts to SYCL
 
 The GEMM tutorial uses CUDA terminology.  The table below maps each concept to its SYCL equivalent
-as used in SYCL\*TLA examples (e.g., `examples/sgemm_1_sycl.cpp`,
-`examples/bgemm_bmg_legacy.cpp`).
+as used in SYCL\*TLA examples (e.g., `examples/cute/tutorial/sgemm_1_sycl.cpp`,
+`examples/cute/tutorial/bgemm_bmg_legacy.cpp`).
 
 | Tutorial concept | SYCL\*TLA equivalent | Notes |
 |-----------------|---------------------|-------|
@@ -100,7 +100,7 @@ make_tiled_copy  →  partition  →  cute::copy  →  TiledMMA  →  cute::gemm
 ```
 
 For Intel Xe, the copy atoms and MMA atom are replaced with Xe hardware primitives.
-The pattern from `bgemm_bmg_legacy.cpp`:
+The pattern from `examples/cute/tutorial/bgemm_bmg_legacy.cpp`:
 
 ```cpp
 // A-matrix: load with transposed layout (LD_T) for XMX A operand
