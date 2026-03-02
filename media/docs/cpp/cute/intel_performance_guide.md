@@ -85,7 +85,7 @@ Common tile sizes in this codebase:
 | Data type | Typical tile shape (M × N × K) | Notes |
 |-----------|-------------------------------|-------|
 | BF16 / FP16 | `Shape<_256, _256, _32>` | Standard large tile for BMG and PVC |
-| FP8 | `Shape<_256, _256, _32>` | Use with `F32F8F8F32` atom |
+| FP8 | `Shape<_256, _256, _32>` | See `include/cute/arch/mma_xe_legacy.hpp` for available FP8 atoms |
 | INT8 | `Shape<_32, _128, _32>` | Mixed-precision; smaller tile is common |
 
 **Rules of thumb:**

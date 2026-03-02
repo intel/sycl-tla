@@ -32,16 +32,16 @@ the upstream NVIDIA CUTLASS CuTe:
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| **Xe 2D block loads/stores/prefetch** | `xe_2d_copy.md`, `include/cute/arch/copy_xe.hpp` | Hardware 2D block operations (XE_2D_*_LD_N/T/V, XE_2D_*_ST_N) |
-| **XMX MMA atoms** (`XE_8x16x16_*`) | `include/cute/arch/mma_xe.hpp`, `include/cute/arch/mma_xe_bfloat16.hpp` | Xe Matrix Extension compute atoms for BF16, FP16, FP8, INT8 |
+| **Xe 2D block loads/stores/prefetch** | `xe_2d_copy.md`, `include/cute/arch/copy_xe_legacy_U16.hpp`, `include/cute/arch/copy_xe_legacy_U32.hpp`, `include/cute/arch/copy_xe_2d.hpp` (new unified API) | Hardware 2D block operations (XE_2D_*_LD_N/T/V, XE_2D_*_ST_N) |
+| **XMX MMA atoms** (`XE_8x16x16_*`) | `include/cute/arch/mma_xe_legacy.hpp` | Xe Matrix Extension compute atoms for BF16, FP16, FP8, INT8 |
 | **`SubgroupTensor`** | `include/cute/tensor_sg.hpp` | Intel-specific tensor type that scatters/gathers across subgroup lanes |
-| **`TiledMMAHelper`** | `include/cute/atom/mma_atom_xe.hpp` | Helper that constructs a `TiledMMA` from an Xe MMA atom and subgroup tile shape |
+| **`TiledMMAHelper`** | `include/cute/atom/mma_atom.hpp` | Helper that constructs a `TiledMMA` from an Xe MMA atom and subgroup tile shape |
 
 ### Intel Xe MMA atoms
 
 Xe MMA atoms follow the naming convention `XE_8x16x16_<AccumType><AType><BType><CType>_<Layout>`.
 For example `XE_8x16x16_F32BF16BF16F32_TT` accumulates FP32 from BF16 A and BF16 B operands.
-These are defined in `include/cute/arch/mma_xe*.hpp`.
+These are defined in `include/cute/arch/mma_xe_legacy.hpp`.
 
 ### SubgroupTensor
 
@@ -50,7 +50,7 @@ an Intel subgroup.  It is the Intel equivalent of the per-thread register tile u
 
 ### TiledMMAHelper
 
-`TiledMMAHelper` (from `include/cute/atom/mma_atom_xe.hpp`) wraps the low-level `MMA_Atom` with
+`TiledMMAHelper` (from `include/cute/atom/mma_atom.hpp`) wraps the low-level `MMA_Atom` with
 subgroup tile size information to produce the `TiledMMA` object used in GEMM kernels.
 
 ## Choose your path (engineer navigation)

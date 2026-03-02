@@ -21,9 +21,9 @@ as used in SYCL\*TLA examples (e.g., `examples/sgemm_1_sycl.cpp`,
 
 | Tutorial concept | SYCL\*TLA equivalent | Notes |
 |-----------------|---------------------|-------|
-| `__global__ void kernel(...)` | SYCL kernel submitted via `compat::launch<gemm_kernel>(queue, grid, block, ...)` | The `compat` shim maps CUDA launch parameters to `sycl::nd_range`. |
-| `blockIdx.x`, `blockIdx.y` | `compat::work_group_id::x()`, `compat::work_group_id::y()` | Called inside the kernel body. |
-| `threadIdx.x` | `compat::local_id::x()` | Local lane index within the work-group. |
+| `__global__ void kernel(...)` | SYCL kernel submitted via `compat::launch<gemm_kernel, GemmKernelName>(grid, block, ...)` | Two template params: kernel function and kernel name type (for SYCL named kernels). Queue defaults to `get_default_queue()`; pass explicitly as 3rd arg if needed. |
+| `blockIdx.x`, `blockIdx.y` | `BlockIdxX()`, `BlockIdxY()` (from `include/cutlass/gpu_generics.h`) | Portable wrappers over `compat::work_group_id::x/y()`. Used in all Xe kernel examples. |
+| `threadIdx.x` | `ThreadIdxX()` (from `include/cutlass/gpu_generics.h`) | Portable wrapper over `compat::local_id::x()`. |
 | `__shared__ T smem[N]` | `sycl::ext::oneapi::experimental::work_group_scratch_size<sizeof(T[N])>` | Declared via a kernel property; accessed through a pointer obtained from `sycl::ext::oneapi::experimental::get_work_group_scratch_memory()`. |
 | `dim3 grid(gx, gy)` | `compat::dim3{gx, gy, 1}` | Passed to `compat::launch<>`. |
 | `__launch_bounds__(N)` | `sycl::ext::oneapi::experimental::sub_group_size<16>` + work-group size in `nd_range` | Intel Xe always uses 16-wide subgroups for XMX dispatch. |
@@ -31,11 +31,15 @@ as used in SYCL\*TLA examples (e.g., `examples/sgemm_1_sycl.cpp`,
 ### Kernel submission skeleton
 
 ```cpp
-// Host side
+// Host side — two template parameters: kernel function + kernel name type
 auto grid  = compat::dim3{ceil_div(N, BLK_N), ceil_div(M, BLK_M), 1};
 auto block = compat::dim3{SubgroupSize * SubgroupsPerGroup, 1, 1};
 
-compat::launch<gemm_kernel>(queue, grid, block, args...);
+// Without explicit queue (uses get_default_queue()):
+compat::launch<gemm_kernel, GemmKernelName>(grid, block, args...);
+
+// With explicit queue:
+compat::launch<gemm_kernel, GemmKernelName>(grid, block, queue, args...);
 ```
 
 ```cpp
@@ -113,7 +117,7 @@ Layout ──► Tensor ──► Tile ──► Copy ──► MMA ──► St
 |-----------|------------------------|---------|
 | BF16 | `(256, 256, 32)` | `XE_8x16x16_F32BF16BF16F32_TT` |
 | FP16 | `(256, 256, 32)` | `XE_8x16x16_F32F16F16F32_TT` |
-| FP8 | `(256, 256, 32)` | `XE_8x16x16_F32F8F8F32_TT` |
+| FP8 | `(256, 256, 32)` | See `include/cute/arch/mma_xe_legacy.hpp` for available FP8 atoms |
 
 Start with `(256, 256, 32)` for BF16 on BMG and PVC.  Reduce M or N if the compiler reports
 register spill.
