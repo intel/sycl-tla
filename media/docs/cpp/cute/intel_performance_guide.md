@@ -88,6 +88,28 @@ Common tile sizes in this codebase:
 | FP8 | `Shape<_256, _256, _32>` | See `include/cute/arch/mma_xe_legacy.hpp` for available FP8 atoms |
 | INT8 | `Shape<_32, _128, _32>` | Mixed-precision; smaller tile is common |
 
+> **FP8 implementation detail:** There is no dedicated FP8 MMA atom in the current codebase.
+> FP8 GEMM kernels (`float_e4m3_t`, `float_e5m2_t`) use the **FP16 MMA atom**
+> (`XE_8x16x16_F32F16F16F32_TT`) with implicit type promotion, combined with **U8 copy atoms**
+> (`XE_2D_U8x32x32_LD_N` for A, `XE_2D_U8x32x32_LD_V` for B) and the
+> `MainloopIntelXeXMX16FP8Scaling` dispatch policy.  The pattern from
+> `test/unit/gemm/device/gemm_universal_fp_scaling.cpp`:
+>
+> ```cpp
+> using ElementA = float_e4m3_t;  // FP8
+> using ElementB = float_e4m3_t;  // FP8
+> using TiledMma = TiledMMAHelper<
+>     MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,   // FP16 atom — handles FP8 with promotion
+>     Layout<TileShape>,
+>     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>
+> >::TiledMMA;
+> using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;  // U8 copies for 8-bit data
+> using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
+> using DispatchPolicy = gemm::MainloopIntelXeXMX16FP8Scaling<PipelineStages>;
+> ```
+>
+> If you are looking for an `F8`-named atom and cannot find one, this is why.
+
 **Rules of thumb:**
 - Start with `(256, 256, 32)` for BF16 on BMG/PVC.
 - Reduce M or N if register spill is observed (check with Intel VTune or compiler `-v` output).
@@ -175,3 +197,36 @@ Increasing to 3 or 4 can help on high-latency HBM systems, but raises register p
 5. **Subgroup size matches kernel attributes?**
    Mismatched subgroup sizes cause silent correctness issues on Xe.  Always set
    `sub_group_size<16>` explicitly.
+
+## Recommended starting point: CollectiveBuilder
+
+For standard GEMM patterns, prefer `CollectiveBuilder` over manual `TiledMMAHelper` +
+`Copy_Atom` wiring.  `CollectiveBuilder` auto-selects copy atoms, tile sizes, and dispatch
+policies based on your element types and layout:
+
+```cpp
+#include "cutlass/gemm/collective/collective_builder.hpp"
+
+using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+    cutlass::arch::IntelXe,
+    cutlass::arch::OpClassTensorOp,
+    ElementA, LayoutA_Tag, AlignmentA,
+    ElementB, LayoutB_Tag, AlignmentB,
+    ElementAccumulator,
+    TileShape, Shape<_1, _1, _1>,
+    cutlass::gemm::collective::StageCountAutoCarveout<
+        static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
+    cutlass::gemm::collective::KernelScheduleAuto
+>::CollectiveOp;
+```
+
+See `examples/01_bmg_gemm_with_collective_builder/` for a complete working example.
+
+**Use manual wiring when:**
+- You need a non-standard copy atom combination (e.g., mixed A/B element widths)
+- You need custom prefetch or pipeline scheduling
+- You are implementing a fused kernel (e.g., Flash Attention) that doesn't fit the standard GEMM pattern
+
+**Use CollectiveBuilder when:**
+- Standard dense GEMM with uniform element types
+- You want the library to pick optimal copy atoms and tile shapes for your target architecture

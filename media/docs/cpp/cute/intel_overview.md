@@ -37,6 +37,18 @@ the upstream NVIDIA CUTLASS CuTe:
 | **`SubgroupTensor`** | `include/cute/tensor_sg.hpp` | Intel-specific tensor type that scatters/gathers across subgroup lanes |
 | **`TiledMMAHelper`** | `include/cute/atom/mma_atom.hpp` | Helper that constructs a `TiledMMA` from an Xe MMA atom and subgroup tile shape |
 
+> **Legacy vs. new 2D copy API:** The table above lists both the legacy and new copy headers.
+>
+> - **Legacy API** (`copy_xe_legacy_U16.hpp`, `copy_xe_legacy_U32.hpp`): Uses named structs per
+>   size/type/layout combination — e.g., `XE_2D_U16x32x32_LD_V`, `XE_2D_U32x8x16_ST_N`.
+>   All existing examples and tests in this repository use the legacy API.
+> - **New unified API** (`copy_xe_2d.hpp`): Parameterized templates —
+>   e.g., `XE_LOAD_2D<Bits, Height, Width>`. This is the future direction and supports
+>   new atom features like subtiling and size-1 fragments.
+>
+> For new kernel development, check whether the new API covers your use case.  For understanding
+> existing code and examples, refer to the legacy headers.
+
 ### Intel Xe MMA atoms
 
 Xe MMA atoms follow the naming convention `XE_8x16x16_<AccumType><AType><BType><CType>_<Layout>`.
@@ -63,6 +75,11 @@ subgroup tile size information to produce the `TiledMMA` object used in GEMM ker
 | **Optimize memory movement on Intel** | [xe_2d_copy.md](xe_2d_copy.md) |
 | **Tune for Intel GPU performance** | [intel_performance_guide.md](intel_performance_guide.md) |
 | **SYCL GEMM companion notes** | [intel_gemm_companion.md](intel_gemm_companion.md) |
+
+> **Key concept:** Layout algebra ([02_layout_algebra.md](02_layout_algebra.md)) is the most important
+> concept in CuTe — it powers all tiling, partitioning, and thread-to-data mapping. Functions like
+> `logical_divide`, `composition`, and `complement` are how CuTe slices a global problem into
+> per-subgroup work. If you read only one concept page, make it that one.
 
 If you are new to CuTe, start with the
 [quickstart](00_quickstart.md) before reading this overview.

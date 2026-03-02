@@ -49,6 +49,42 @@ auto props = sycl::ext::oneapi::experimental::properties{
 };
 ```
 
+### Production kernel launch (with kernel properties)
+
+The skeleton above uses the tutorial-style `compat::launch` API, which is suitable for simple
+kernels like `sgemm_1_sycl.cpp`.  Production Intel Xe GEMM kernels (e.g.,
+`examples/00_bmg_gemm/`, all `GemmUniversalAdapter`-based examples) use the **experimental
+launch API** which bundles kernel properties (subgroup size, scratch memory) into a launch policy:
+
+```cpp
+namespace sycl_exp = sycl::ext::oneapi::experimental;
+
+auto sycl_grid  = compat::dim3{grid_x, grid_y, 1};
+auto sycl_block = compat::dim3{block_x, 1, 1};
+
+compat::experimental::launch_properties launch_props{
+    sycl_exp::work_group_scratch_size(shared_mem_bytes),
+};
+auto kernel_props = compat::experimental::kernel_properties{
+    sycl_exp::sub_group_size<16>
+};
+compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
+
+// Two template params: device_kernel wrapper + kernel name type
+auto event = compat::experimental::launch<
+    cutlass::device_kernel<GemmKernel>, GemmKernel>(policy, kernel_params);
+```
+
+**When to use which:**
+
+| Pattern | Use when |
+|---------|----------|
+| `compat::launch<K, KName>(grid, block, args...)` | Simple CuTe tutorial kernels, custom one-file kernels |
+| `compat::experimental::launch<device_kernel<K>, K>(policy, params)` | `GemmUniversalAdapter`-based kernels, production GEMM/attention, any kernel needing SLM scratch or kernel properties |
+
+The experimental API is what all `examples/00_bmg_gemm/` through `examples/13_bmg_gemm_bias/`
+and Flash Attention examples use internally via `GemmUniversalAdapter`.
+
 ---
 
 ## Where Intel-specific copy primitives plug in
@@ -90,6 +126,49 @@ TiledMMA mmaC = TiledMMAHelper<
 
 Using `LD_N` for the B matrix is a common mistake that produces incorrect results or severe
 performance degradation.  Always use `LD_V` for B on Intel Xe.
+
+### Epilogue wiring
+
+The CuTe GEMM flow ends with an epilogue that reads the accumulator, optionally loads C, applies
+a fusion (e.g., linear combination, bias, activation), and stores D.  The standard Intel Xe
+epilogue pattern from `examples/00_bmg_gemm/legacy/00_bmg_gemm.cpp`:
+
+```cpp
+using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+
+// Epilogue fusion — D = alpha * acc + beta * C
+using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<
+    ElementOutput, ElementComputeEpilogue,
+    ElementAccumulator, ElementAccumulator,
+    cutlass::FloatRoundStyle::round_to_nearest>;
+
+using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<
+    EpilogueDispatchPolicy,    // dispatch policy — must match mainloop
+    EpilogueOp,
+    TileShape,
+    decltype(tile_shape(TiledMma()))>;
+
+using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
+    EpilogueDispatchPolicy,
+    TileShape,
+    ElementAccumulator, cutlass::gemm::TagToStrideC_t<LayoutC>,  // C
+    ElementOutput,      cutlass::gemm::TagToStrideC_t<LayoutD>,  // D
+    FusionCallBacks,
+    XE_2D_U32x8x16_LD_N, void, void,   // C load atom (for beta * C)
+    XE_2D_U32x8x16_ST_N, void, void>;  // D store atom
+```
+
+Key points:
+- The epilogue dispatch policy (`IntelXeXMX16`) must match the mainloop dispatch policy.
+- `FusionCallbacks` wraps the epilogue operation and connects it to the tile shape.
+- C is loaded with `XE_2D_U32x8x16_LD_N` (row-major read) and D is stored with
+  `XE_2D_U32x8x16_ST_N` (row-major write).
+- For grouped GEMM, use `IntelXeXMX16Group` and the array epilogue variant.
+- For fused epilogues (bias + activation, softmax, etc.), replace `LinearCombination` with
+  the appropriate fusion op from `cutlass/epilogue/fusion/xe_callbacks.hpp`.
+
+See `examples/05_bmg_gemm_with_epilogues/` for fused epilogue examples (bias+ReLU, split-K,
+dequantization).
 
 ---
 
