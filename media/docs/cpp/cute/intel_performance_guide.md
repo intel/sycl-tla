@@ -1,5 +1,11 @@
 # Intel GPU Performance Tuning Guide for SYCL\*TLA
 
+> **Prerequisites:** This guide assumes familiarity with CuTe concepts
+> ([intel_overview.md](intel_overview.md)) and the GEMM tutorial
+> ([0x_gemm_tutorial.md](0x_gemm_tutorial.md)).
+> For SYCL-specific execution model details (kernel launch, copy atom wiring, epilogue patterns),
+> see the [Intel SYCL GEMM Companion](intel_gemm_companion.md).
+
 ## Why tuning matters
 
 Out-of-the-box tile sizes and pipeline depths may leave significant performance on the table.
@@ -40,7 +46,43 @@ Many SYCL\*TLA GEMM kernels on Intel Xe use **direct Global→Register** 2D bloc
 bypassing SLM entirely.  This is valid when the tile size fits in the GRF budget and avoids the
 extra SLM round-trip.
 
-## Optimization strategies
+## Start simple: CollectiveBuilder
+
+Before diving into manual tuning, check if `CollectiveBuilder` handles your use case.
+It auto-selects copy atoms, tile sizes, and dispatch policies based on your element types and
+layout:
+
+```cpp
+#include "cutlass/gemm/collective/collective_builder.hpp"
+
+using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+    cutlass::arch::IntelXe,
+    cutlass::arch::OpClassTensorOp,
+    ElementA, LayoutA_Tag, AlignmentA,
+    ElementB, LayoutB_Tag, AlignmentB,
+    ElementAccumulator,
+    TileShape, Shape<_1, _1, _1>,
+    cutlass::gemm::collective::StageCountAutoCarveout<
+        static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
+    cutlass::gemm::collective::KernelScheduleAuto
+>::CollectiveOp;
+```
+
+See `examples/01_bmg_gemm_with_collective_builder/` for a complete working example.
+
+**Use CollectiveBuilder when:**
+- Standard dense GEMM with uniform element types
+- You want the library to pick optimal copy atoms and tile shapes for your target architecture
+
+**Use manual wiring when:**
+- You need a non-standard copy atom combination (e.g., mixed A/B element widths)
+- You need custom prefetch or pipeline scheduling
+- You are implementing a fused kernel (e.g., Flash Attention) that doesn't fit the standard GEMM pattern
+
+If `CollectiveBuilder` doesn't fit your use case, the following sections explain manual tuning
+knobs in detail.
+
+## Manual optimization strategies
 
 ### Subgroup sizing
 
@@ -197,36 +239,3 @@ Increasing to 3 or 4 can help on high-latency HBM systems, but raises register p
 5. **Subgroup size matches kernel attributes?**
    Mismatched subgroup sizes cause silent correctness issues on Xe.  Always set
    `sub_group_size<16>` explicitly.
-
-## Recommended starting point: CollectiveBuilder
-
-For standard GEMM patterns, prefer `CollectiveBuilder` over manual `TiledMMAHelper` +
-`Copy_Atom` wiring.  `CollectiveBuilder` auto-selects copy atoms, tile sizes, and dispatch
-policies based on your element types and layout:
-
-```cpp
-#include "cutlass/gemm/collective/collective_builder.hpp"
-
-using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
-    cutlass::arch::IntelXe,
-    cutlass::arch::OpClassTensorOp,
-    ElementA, LayoutA_Tag, AlignmentA,
-    ElementB, LayoutB_Tag, AlignmentB,
-    ElementAccumulator,
-    TileShape, Shape<_1, _1, _1>,
-    cutlass::gemm::collective::StageCountAutoCarveout<
-        static_cast<int>(sizeof(typename CollectiveEpilogue::SharedStorage))>,
-    cutlass::gemm::collective::KernelScheduleAuto
->::CollectiveOp;
-```
-
-See `examples/01_bmg_gemm_with_collective_builder/` for a complete working example.
-
-**Use manual wiring when:**
-- You need a non-standard copy atom combination (e.g., mixed A/B element widths)
-- You need custom prefetch or pipeline scheduling
-- You are implementing a fused kernel (e.g., Flash Attention) that doesn't fit the standard GEMM pattern
-
-**Use CollectiveBuilder when:**
-- Standard dense GEMM with uniform element types
-- You want the library to pick optimal copy atoms and tile shapes for your target architecture

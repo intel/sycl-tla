@@ -6,6 +6,10 @@ This document provides **SYCL execution model notes** that complement the CuTe G
 Read the tutorial first:
 
 > 📖 [0x_gemm_tutorial.md](0x_gemm_tutorial.md)
+>
+> **Also useful:**
+> [intel_overview.md](intel_overview.md) for Intel-specific component map
+> · [xe_2d_copy.md](xe_2d_copy.md) for copy atom naming reference
 
 This companion does **not** repeat tutorial content.  It explains how to translate each tutorial
 concept into a SYCL submission structure for Intel Xe and shows where Intel-specific copy and MMA
@@ -188,45 +192,27 @@ Layout ──► Tensor ──► Tile ──► Copy ──► MMA ──► St
 
 ---
 
-## Performance notes: tile sizes and subgroup layout
+## Performance notes
 
-### Common tile shapes
+For detailed tile-size selection, pipeline depth guidance, subgroup sizing, and common pitfalls, see the
+[Intel Performance Tuning Guide](intel_performance_guide.md).
 
-| Data type | Tile shape (M × N × K) | MMA atom |
-|-----------|------------------------|---------|
-| BF16 | `(256, 256, 32)` | `XE_8x16x16_F32BF16BF16F32_TT` |
-| FP16 | `(256, 256, 32)` | `XE_8x16x16_F32F16F16F32_TT` |
-| FP8 | `(256, 256, 32)` | See `include/cute/arch/mma_xe_legacy.hpp` for available FP8 atoms |
+**Quick reference for this GEMM flow:**
 
-Start with `(256, 256, 32)` for BF16 on BMG and PVC.  Reduce M or N if the compiler reports
-register spill.
-
-### Subgroup layout
-
-The subgroup layout tensor controls how subgroups tile the output:
-
-```cpp
-// Example: 8 subgroups along M × 4 subgroups along N
-Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>
-```
-
-This means 32 subgroups per work-group.  Combined with `SubgroupSize = 16` this gives a
-work-group size of `32 × 16 = 512` threads, which is a typical Xe GEMM work-group.
-
-### Pipeline stages
-
-```cpp
-static constexpr int PipelineStages = 2;
-```
-
-`PipelineStages = 2` is the standard starting point.  It overlaps one iteration of 2D block loads
-with the XMX compute of the previous iteration.  Increase to 3 for higher-latency HBM
-configurations, but verify that register pressure remains acceptable.
+- **Tile shape:** Start with `Shape<_256, _256, _32>` for BF16 on BMG/PVC.
+- **Subgroup layout:** `Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>` gives 32 subgroups per
+  work-group (512 threads with `SubgroupSize = 16`).
+- **Pipeline stages:** `PipelineStages = 2` is the standard starting point.
+- **CollectiveBuilder:** For standard GEMM, prefer `CollectiveBuilder` over manual wiring —
+  see the [performance guide](intel_performance_guide.md#start-simple-collectivebuilder).
 
 ---
 
 ## Further reading
 
 - [xe_2d_copy.md](xe_2d_copy.md) — Full reference for all `XE_2D_*` copy atoms
-- [intel_performance_guide.md](intel_performance_guide.md) — Tuning checklist and common pitfalls
+- [intel_performance_guide.md](intel_performance_guide.md) — Tuning checklist, CollectiveBuilder, and common pitfalls
 - [0t_mma_atom.md](0t_mma_atom.md) — CuTe MMA atom concept background
+- [examples/README.md](../../../../examples/README.md) — Full SYCL\*TLA example directory (Intel GPU, device-agnostic, NVIDIA SYCL)
+- [examples/cute/tutorial/](../../../../examples/cute/tutorial/) — CuTe tutorial examples (including `sgemm_1_sycl.cpp`)
+- [test/unit/cute/intel_xe/](../../../../test/unit/cute/intel_xe/) — CuTe unit tests for Xe copy and MMA atoms

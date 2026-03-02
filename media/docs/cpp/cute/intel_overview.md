@@ -2,6 +2,13 @@
 
 ## CuTe in SYCL\*TLA (What it is)
 
+> **Prerequisite:** If you are brand new to CuTe, read the
+> [quickstart](00_quickstart.md) first for a high-level orientation.
+> Note: the quickstart currently uses CUDA/NVCC terminology inherited from upstream CUTLASS —
+> the concepts apply identically to SYCL. Substitute `sub_group` for `warp`,
+> `work-group` for `threadblock`, and Intel DPC++ for NVCC.  A SYCL-first rewrite of the
+> quickstart is planned.
+
 CuTe in SYCL\*TLA is a collection of C++ SYCL template abstractions for defining and operating on
 hierarchically multidimensional layouts of threads and data.
 
@@ -25,6 +32,9 @@ Layout ──► Layout Algebra ──► Tensor ──► Algorithms ──► 
                                                (xe_2d_copy, XMX atoms)
 ```
 
+> See the [Intel SYCL GEMM Companion](intel_gemm_companion.md#gemm-flow-diagram-with-intel-primitives)
+> for this flow annotated with specific Intel Xe atom names.
+
 ## What's Intel-specific
 
 The following components are unique to the Intel Xe path in this repository and are **not** part of
@@ -32,8 +42,8 @@ the upstream NVIDIA CUTLASS CuTe:
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| **Xe 2D block loads/stores/prefetch** | `xe_2d_copy.md`, `include/cute/arch/copy_xe_legacy_U16.hpp`, `include/cute/arch/copy_xe_legacy_U32.hpp`, `include/cute/arch/copy_xe_2d.hpp` (new unified API) | Hardware 2D block operations (XE_2D_*_LD_N/T/V, XE_2D_*_ST_N) |
-| **XMX MMA atoms** (`XE_8x16x16_*`) | `include/cute/arch/mma_xe_legacy.hpp` | Xe Matrix Extension compute atoms for BF16, FP16, FP8, INT8 |
+| **Xe 2D block loads/stores/prefetch** | `xe_2d_copy.md`, `include/cute/arch/copy_xe_legacy_U16.hpp`, `include/cute/arch/copy_xe_legacy_U32.hpp`, `include/cute/arch/copy_xe_2d.hpp` (new unified API) | Hardware 2D block operations — see [xe_2d_copy.md](xe_2d_copy.md) for naming reference, [intel_gemm_companion.md](intel_gemm_companion.md) for usage patterns |
+| **XMX MMA atoms** (`XE_8x16x16_*`) | `include/cute/arch/mma_xe_legacy.hpp` | Xe Matrix Extension compute atoms — see [intel_gemm_companion.md](intel_gemm_companion.md) for wiring patterns |
 | **`SubgroupTensor`** | `include/cute/tensor_sg.hpp` | Intel-specific tensor type that scatters/gathers across subgroup lanes |
 | **`TiledMMAHelper`** | `include/cute/atom/mma_atom.hpp` | Helper that constructs a `TiledMMA` from an Xe MMA atom and subgroup tile shape |
 
@@ -65,7 +75,20 @@ an Intel subgroup.  It is the Intel equivalent of the per-thread register tile u
 `TiledMMAHelper` (from `include/cute/atom/mma_atom.hpp`) wraps the low-level `MMA_Atom` with
 subgroup tile size information to produce the `TiledMMA` object used in GEMM kernels.
 
-## Choose your path (engineer navigation)
+## Recommended reading order
+
+For engineers new to SYCL\*TLA CuTe, we recommend this sequence:
+
+1. **[00_quickstart.md](00_quickstart.md)** — What CuTe is (see CUDA-first note above)
+2. **This page** — Intel-specific context and concept map
+3. **[01_layout.md](01_layout.md)** → **[02_layout_algebra.md](02_layout_algebra.md)** — The foundation (layout algebra is the most critical concept)
+4. **[03_tensor.md](03_tensor.md)** → **[04_algorithms.md](04_algorithms.md)** — Tensors and copy/gemm algorithms
+5. **[0x_gemm_tutorial.md](0x_gemm_tutorial.md)** — How GEMM works in CuTe
+6. **[intel_gemm_companion.md](intel_gemm_companion.md)** — Translating the tutorial to SYCL / Intel Xe
+7. **[xe_2d_copy.md](xe_2d_copy.md)** — Intel copy atom reference
+8. **[intel_performance_guide.md](intel_performance_guide.md)** — Tuning and optimization
+
+## Quick navigation (jump to any topic)
 
 | Goal | Start here |
 |------|-----------|
@@ -80,6 +103,3 @@ subgroup tile size information to produce the `TiledMMA` object used in GEMM ker
 > concept in CuTe — it powers all tiling, partitioning, and thread-to-data mapping. Functions like
 > `logical_divide`, `composition`, and `complement` are how CuTe slices a global problem into
 > per-subgroup work. If you read only one concept page, make it that one.
-
-If you are new to CuTe, start with the
-[quickstart](00_quickstart.md) before reading this overview.
