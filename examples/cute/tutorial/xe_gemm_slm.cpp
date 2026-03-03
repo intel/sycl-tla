@@ -342,9 +342,7 @@ gemm_verify(sycl::queue &Q,
 
     auto tol = AccType(1e-5f * k);
     if (std::abs(SignedAccType(c - AccType(C(i,j)))) > tol) {
-#ifdef SHOW_DIFF
       printf("Error at (%d,%d): got %f, expected %f\n", i, j, double(C(i,j)), double(c));
-#endif
       *ok = false;
     }
   }).wait();

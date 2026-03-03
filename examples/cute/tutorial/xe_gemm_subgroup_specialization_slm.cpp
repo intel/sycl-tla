@@ -99,9 +99,9 @@ struct Options {
   }
 };
 
-enum role {
+enum class role {
   producer = 0,
-  consumer = 1,  
+  consumer = 1,
 };
 
 template <class ATensor, class BTensor, class CTensor,
@@ -209,9 +209,9 @@ gemm_device(ATensor   const& A,         // (M,K)
   clear(tCrC);
 
   /* Warm up loops with prefetch to SLM */
-  CUTE_UNROLL
-  for (; k_tile_prefetch < stages; k_tile_prefetch++) {
-    if(role_id == role::producer) {
+  if(role_id == role::producer) {
+    CUTE_UNROLL
+    for (; k_tile_prefetch < stages - 2; k_tile_prefetch++) {
       // Global -> registers load
       copy(coop_copy_a, tAgA(_,_,_,k_tile_prefetch), tArA_in);
       copy(coop_copy_b, tBgB(_,_,_,k_tile_prefetch), tBrB_in);
@@ -221,12 +221,11 @@ gemm_device(ATensor   const& A,         // (M,K)
       reorder(tBrB_in, tBrB_in_);
       copy(r2s_A, tArA_out, tAsA_out(_,_,_,k_tile_prefetch));
       copy(r2s_B, tBrB_out, tBsB_out(_,_,_,k_tile_prefetch));
-      // Barrier, with memory fence
-      barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
-      barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
     }
   }
-
+  // Barrier, with memory fence
+  barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
+  barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
   /* Main loop */
   for (int k_tile = 0; k_tile < k_tile_count; k_tile++, k_tile_prefetch++) {
     if(k_tile_prefetch < k_tile_count && role_id == role::producer) {
@@ -239,24 +238,25 @@ gemm_device(ATensor   const& A,         // (M,K)
       reorder(tBrB_in, tBrB_in_);
       copy(r2s_A, tArA_out, tAsA_out(_,_,_,k_tile_prefetch%stages));
       copy(r2s_B, tBrB_out, tBsB_out(_,_,_,k_tile_prefetch%stages));
-      // Barrier, with memory fence
-      barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
-      barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
     }
-    if(role_id == role::producer) {
+    // Barrier, with memory fence
+    barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
+    barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
+    if(role_id == role::consumer) {
       // Load SLM -> registers
       copy(s2r_A, tAsA_in(_,_,_,k_tile%stages), tCrA_in);
       copy(s2r_B, tBsB_in(_,_,_,k_tile%stages), tCrB_in);
 
       // Multiply
       gemm(mma, tCrA, tCrB, tCrC);
-      barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
-      barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
     }
+    barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
+    barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
   }
-
-  /* Write C to global memory */
-  copy(copy_c, tCrC, tCgC);
+  if(role_id == role::consumer) {
+    /* Write C to global memory */
+    copy(copy_c, tCrC, tCgC);
+  }
 }
 
 template <typename TA, typename TB, typename TC>
@@ -465,25 +465,25 @@ int main(int argc, const char** argv)
   sycl::queue Q = compat::get_default_queue();
 
   // Native compute
-//   test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
-//   test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-//   test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
 
   test_case<half_t, half_t, float, 'R', 'R'>(Q,  options.m, options.n, options.k, options.iterations);
-//   test_case<half_t, half_t, float, 'R', 'C'>(Q,  options.m, options.n, options.k, options.iterations);
-//   test_case<half_t, half_t, float, 'C', 'R'>(Q,  options.m, options.n, options.k, options.iterations);
+  test_case<half_t, half_t, float, 'R', 'C'>(Q,  options.m, options.n, options.k, options.iterations);
+  test_case<half_t, half_t, float, 'C', 'R'>(Q,  options.m, options.n, options.k, options.iterations);
 
-//   test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
-//   test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-//   test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
 
-//   test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
-//   test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-//   test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
 
-//   test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-//   test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
 
-//   test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-//   test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
 }
