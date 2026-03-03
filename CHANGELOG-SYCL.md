@@ -1,5 +1,13 @@
 # SYCL*TLA (previously referred to as cutlass-sycl) Changelog
 
+## [SYCL*TLA 0.7.1](https://github.com/intel/sycl-tla/releases/tag/v0.7.1) (2026-02-04)
+
+### Bug Fixes / Code Quality
+- **EVT Code Formatting ([#717](https://github.com/intel/sycl-tla/pull/717))**: Fixed code formatting issues in PyTorch Inductor-generated EVT code
+  - Corrected improper indentation and spacing to conform to coding standards
+  - Added Xe typedefs for compute nodes (SrcFetch, AccFetch, ScalarBroadCast) to improve API consistency
+  - Improved code generation quality for PyTorch integration
+
 ## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
 ### Major Architecture Improvements
 - **Epilogue Visitor Tree (EVT) Support ([#647](https://github.com/intel/sycl-tla/pull/647))**: EVT support for Intel Xe architecture

@@ -45,8 +45,17 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 |0.5 | 4.2.0 |
 |0.6 | 4.2.0 |
 |0.7 | 4.2.1 |
+|0.7.1 | 4.2.1 |
 
-# What's New in SYCL*TLA 0.7 
+# What's New in SYCL*TLA 0.7.1
+
+## [SYCL*TLA 0.7.1](https://github.com/intel/sycl-tla/releases/tag/v0.7.1) (2026-02-04)
+
+### Bug Fixes / Code Quality
+- Epilogue Visitor Tree (EVT): ([#717](https://github.com/intel/sycl-tla/pull/717))
+  - Corrected improper indentation and spacing to conform to coding standards
+  - Added Xe typedefs for compute nodes (SrcFetch, AccFetch, ScalarBroadCast) to improve API consistency
+  - Improved code generation quality for PyTorch integration
 
 ## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
  
