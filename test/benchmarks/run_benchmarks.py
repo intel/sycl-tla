@@ -35,6 +35,8 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 import sys
+import argparse
+from utils.grafana_push import push_results
 
 TEST_SUITES = [
     {
@@ -141,7 +143,22 @@ def write_report_csv(path, records):
         writer.writerows(records)
         print(f"csv written to: {path}")
 
-def run_tests(logs_dir, branch, build_dir, repo_root):
+def get_git_commit_id(repo_root):
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            text=True,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
+def run_tests(logs_dir, branch, build_dir, repo_root, grafana, git_commit_id):
     for test_suite in TEST_SUITES:
         run_cmd = [
             test_suite["executable"],
@@ -152,9 +169,20 @@ def run_tests(logs_dir, branch, build_dir, repo_root):
         test_report = logs_dir / f"{test_name}_report_{branch}.csv"
         run_command(run_cmd, cwd=Path(repo_root, build_dir), log_path=test_log)
         main_records = parse_benchmark_log(test_log)
+        if grafana:
+            push_results(main_records, test_name, git_commit_id=git_commit_id)
         write_report_csv(test_report, main_records)
 
 def main():
+    parser = argparse.ArgumentParser(description="Benchmarking script for cutlass kernels.")
+    parser.add_argument(
+        "--push-to-dashboard",
+        dest="grafana",
+        action="store_true",
+        help="Increase output verbosity"
+    )
+    args = parser.parse_args()
+
     build_dir = "build"
     branch = "main"
     # This file is expected to be run from the root of the repository,
@@ -165,7 +193,8 @@ def main():
     workdir = f"{datetime.now().strftime('%Y%m%d%I%M')}_benchmarks_{branch}"
     logs_dir = logs_root / workdir
     logs_dir.mkdir(parents=True, exist_ok=True)
-    run_tests(logs_dir, branch, build_dir, repo_root)
+    git_commit_id = get_git_commit_id(repo_root)
+    run_tests(logs_dir, branch, build_dir, repo_root, args.grafana, git_commit_id)
 
 if __name__ == "__main__":
     main()
