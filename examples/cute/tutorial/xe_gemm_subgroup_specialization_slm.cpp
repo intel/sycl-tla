@@ -239,9 +239,7 @@ gemm_device(ATensor   const& A,         // (M,K)
       copy(r2s_A, tArA_out, tAsA_out(_,_,_,k_tile_prefetch%stages));
       copy(r2s_B, tBrB_out, tBsB_out(_,_,_,k_tile_prefetch%stages));
     }
-    // Barrier, with memory fence
-    barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
-    barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
+
     if(role_id == role::consumer) {
       // Load SLM -> registers
       copy(s2r_A, tAsA_in(_,_,_,k_tile%stages), tCrA_in);
