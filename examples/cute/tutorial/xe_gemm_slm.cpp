@@ -66,7 +66,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(4096), n(4096), k(4096), iterations(100)
+    m(4096), n(4096), k(4096), iterations(100), verify(1)
   { }
 
   // Parses the command line
@@ -82,6 +82,7 @@ struct Options {
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("verify", verify, 1);
   }
 
   /// Prints the usage statement.
@@ -93,8 +94,8 @@ struct Options {
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
-      << "  --iterations=<int>          Iterations\n\n";
-
+      << "  --iterations=<int>          Iterations\n\n"
+      << "  --verify=<int>              Specify whether to verify.\n\n";
     return out;
   }
 };
@@ -337,8 +338,9 @@ gemm_verify(sycl::queue &Q,
     using SignedAccType = ensure_signed_t<AccType>;
 
     auto c = AccType(0);
-    for (int h = 0; h < k; h++)
+    for (int h = 0; h < k; h++) {
       c += AccType(A(i,h)) * AccType(B(j,h));
+    }
 
     auto tol = AccType(1e-5f * k);
     if (std::abs(SignedAccType(c - AccType(C(i,j)))) > tol) {
@@ -357,7 +359,7 @@ gemm_verify(sycl::queue &Q,
 template <typename TA, typename TB, typename TC,
           char layoutA = 'R', char layoutB = 'R'>
 void
-test_case(sycl::queue &Q, int m, int n, int k, int iterations)
+test_case(sycl::queue &Q, int m, int n, int k, int iterations, int verify)
 {
   std::cout << type_str<TA>() << " (" << layoutA << ") x "
             << type_str<TB>() << " (" << layoutB << ") -> "
@@ -388,17 +390,23 @@ test_case(sycl::queue &Q, int m, int n, int k, int iterations)
   gemm_cute<decltype(A), decltype(B), decltype(C), TA, TB, layoutA, layoutB>(Q, A, B, C);
   Q.wait_and_throw();
 
-  bool ok = gemm_verify(Q, A_ref, B_ref, C);
-  std::cout << (ok ? "passed" : "failed");
-
+  bool ok = true;
+  if (verify) {
+    ok = gemm_verify(Q, A_ref, B_ref, C);
+    std::cout << (ok ? "passed" : "failed");
+  } else {
+    std::cout << "skipped verification";
+  }
+  
   if (ok) {
     // Test performance:
     const int timing_iterations = iterations;
     GPU_Clock timer;
 
     timer.start();
-    for (int i = 0; i < timing_iterations; ++i)
+    for (int i = 0; i < timing_iterations; ++i) {
       gemm_cute<decltype(A), decltype(B), decltype(C), TA, TB, layoutA, layoutB>(Q, A, B, C);
+    }
     Q.wait_and_throw();
 
     double avg = timer.seconds() / timing_iterations;
@@ -448,25 +456,24 @@ int main(int argc, const char** argv)
   sycl::queue Q = compat::get_default_queue();
 
   // Native compute
-  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
 
-  test_case<half_t, half_t, float, 'R', 'R'>(Q,  options.m, options.n, options.k, options.iterations);
-  test_case<half_t, half_t, float, 'R', 'C'>(Q,  options.m, options.n, options.k, options.iterations);
-  test_case<half_t, half_t, float, 'C', 'R'>(Q,  options.m, options.n, options.k, options.iterations);
+  test_case<half_t, half_t, float, 'R', 'R'>(Q,  options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<half_t, half_t, float, 'R', 'C'>(Q,  options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<half_t, half_t, float, 'C', 'R'>(Q,  options.m, options.n, options.k, options.iterations, options.verify);
 
-  test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
 
-  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
 
-  test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
 }
