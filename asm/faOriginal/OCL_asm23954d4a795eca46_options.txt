@@ -1,0 +1,1 @@
+ -device bmg_g21 -ze-opt-level=O2 -device bmg_g21 -ze-opt-level=O2 -cl-intel-256-GRF-per-thread

@@ -1,0 +1,245 @@
+.version 4.1
+
+.kernel "_ZTSZZN6compat6detailL6memcpyEN4sycl3_V15queueEPvPKvNS2_5rangeILi3EEES8_NS2_2idILi3EEESA_S8_RKSt6vectorINS2_5eventESaISC_EEENKUlRNS2_7handlerEE_clESI_E16memcpy_3d_detail"
+
+/// VISA Predefined Variables
+// .decl V0 v_type=G v_name=%null
+// .decl V1 v_type=G v_name=%thread_x
+// .decl V2 v_type=G v_name=%thread_y
+// .decl V3 v_type=G v_name=%group_id_x
+// .decl V4 v_type=G v_name=%group_id_y
+// .decl V5 v_type=G v_name=%group_id_z
+// .decl V6 v_type=G v_name=%tsc
+// .decl V7 v_type=G v_name=%r0
+// .decl V8 v_type=G v_name=%arg
+// .decl V9 v_type=G v_name=%retval
+// .decl V10 v_type=G v_name=%sp
+// .decl V11 v_type=G v_name=%fp
+// .decl V12 v_type=G v_name=%hw_id
+// .decl V13 v_type=G v_name=%sr0
+// .decl V14 v_type=G v_name=%cr0
+// .decl V15 v_type=G v_name=%ce0
+// .decl V16 v_type=G v_name=%dbg0
+// .decl V17 v_type=G v_name=%color
+// .decl V18 v_type=G v_name=%impl_arg_buf_ptr
+// .decl V19 v_type=G v_name=%local_id_buf_ptr
+// .decl V20 v_type=G v_name=%msg0
+// .decl V21 v_type=G v_name=%scratchloc
+// .decl T0 v_type=T v_name=%slm
+// .decl T1 v_type=T v_name=T1
+// .decl T2 v_type=T v_name=T2
+// .decl T3 v_type=T v_name=TSS
+// .decl T4 v_type=T v_name=%bss
+// .decl T5 v_type=T v_name=%scratch
+
+.decl V0032 v_type=G type=d num_elts=16 align=wordx32
+.decl V0033 v_type=G type=d num_elts=16 align=wordx32 alias=<%r0, 0>
+.decl V0034 v_type=G type=uq num_elts=1 align=qword
+.decl V0035 v_type=G type=q num_elts=1 align=qword
+.decl V0036 v_type=G type=uq num_elts=1 align=qword
+.decl V0037 v_type=G type=q num_elts=1 align=qword
+.decl V0038 v_type=G type=d num_elts=8 align=hword
+.decl V0039 v_type=G type=d num_elts=8 align=wordx32 alias=<%r0, 0>
+.decl V0040 v_type=G type=d num_elts=3 align=dword
+.decl V0041 v_type=G type=d num_elts=3 align=dword
+.decl V0042 v_type=G type=w num_elts=32 align=hword
+.decl V0043 v_type=G type=w num_elts=32 align=hword
+.decl V0044 v_type=G type=w num_elts=32 align=hword
+.decl V0045 v_type=G type=uq num_elts=1 align=qword
+.decl V0046 v_type=G type=uq num_elts=1 align=qword
+.decl V0047 v_type=G type=q num_elts=1 align=qword
+.decl V0048 v_type=G type=q num_elts=1 align=qword
+.decl V0049 v_type=G type=q num_elts=1 align=qword
+.decl V0050 v_type=G type=q num_elts=1 align=qword
+.decl V0051 v_type=G type=q num_elts=1 align=qword
+.decl V0052 v_type=G type=q num_elts=1 align=qword
+.decl V0053 v_type=G type=d num_elts=1 align=dword
+.decl V0054 v_type=G type=d num_elts=1 align=dword
+.decl V0055 v_type=G type=d num_elts=1 align=dword
+.decl V0056 v_type=G type=d num_elts=1 align=dword
+.decl V0057 v_type=G type=d num_elts=1 align=dword
+.decl V0058 v_type=G type=d num_elts=2 align=dword
+.decl V0059 v_type=G type=d num_elts=2 align=qword alias=<V0035, 0>
+.decl V0060 v_type=G type=d num_elts=2 align=dword
+.decl V0061 v_type=G type=d num_elts=2 align=qword alias=<V0037, 0>
+.decl V0062 v_type=G type=d num_elts=2 align=dword
+.decl V0063 v_type=G type=d num_elts=2 align=qword alias=<V0047, 0>
+.decl V0064 v_type=G type=d num_elts=2 align=dword
+.decl V0065 v_type=G type=d num_elts=2 align=qword alias=<V0050, 0>
+.decl V0066 v_type=G type=d num_elts=1 align=dword
+.decl V0067 v_type=G type=d num_elts=32 align=wordx32
+.decl V0068 v_type=G type=uw num_elts=32 align=hword alias=<V0044, 0>
+.decl V0069 v_type=G type=d num_elts=32 align=wordx32
+.decl V0070 v_type=G type=d num_elts=1 align=dword
+.decl V0071 v_type=G type=d num_elts=32 align=wordx32
+.decl V0072 v_type=G type=uw num_elts=32 align=hword alias=<V0043, 0>
+.decl V0073 v_type=G type=d num_elts=32 align=wordx32
+.decl V0074 v_type=G type=d num_elts=1 align=dword
+.decl V0075 v_type=G type=d num_elts=32 align=wordx32
+.decl V0076 v_type=G type=uw num_elts=32 align=hword alias=<V0042, 0>
+.decl V0077 v_type=G type=d num_elts=32 align=wordx32
+.decl V0078 v_type=G type=d num_elts=32 align=wordx32
+.decl V0079 v_type=G type=d num_elts=32 align=wordx32
+.decl V0080 v_type=G type=ud num_elts=32 align=wordx32 alias=<V0078, 0>
+.decl V0081 v_type=G type=ud num_elts=32 align=wordx32 alias=<V0077, 0>
+.decl V0082 v_type=G type=ud num_elts=2 align=dword alias=<V0060, 0>
+.decl V0083 v_type=G type=d num_elts=32 align=wordx32
+.decl V0084 v_type=G type=ud num_elts=32 align=wordx32
+.decl V0085 v_type=G type=d num_elts=32 align=wordx32
+.decl V0086 v_type=G type=d num_elts=64 align=wordx32
+.decl V0087 v_type=G type=q num_elts=32 align=wordx32
+.decl V0088 v_type=G type=d num_elts=64 align=wordx32 alias=<V0087, 0>
+.decl V0089 v_type=G type=d num_elts=32 align=wordx32
+.decl V0090 v_type=G type=d num_elts=32 align=wordx32
+.decl V0091 v_type=G type=ud num_elts=32 align=wordx32 alias=<V0089, 0>
+.decl V0092 v_type=G type=ud num_elts=32 align=wordx32 alias=<V0073, 0>
+.decl V0093 v_type=G type=ud num_elts=2 align=dword alias=<V0064, 0>
+.decl V0094 v_type=G type=d num_elts=32 align=wordx32
+.decl V0095 v_type=G type=ud num_elts=32 align=wordx32
+.decl V0096 v_type=G type=d num_elts=32 align=wordx32
+.decl V0097 v_type=G type=d num_elts=64 align=wordx32
+.decl V0098 v_type=G type=q num_elts=32 align=wordx32
+.decl V0099 v_type=G type=d num_elts=64 align=wordx32 alias=<V0098, 0>
+.decl V0100 v_type=G type=q num_elts=1 align=qword alias=<V0036, 0>
+.decl V0101 v_type=G type=q num_elts=32 align=wordx32
+.decl V0102 v_type=G type=q num_elts=32 align=wordx32
+.decl V0103 v_type=G type=q num_elts=32 align=wordx32
+.decl V0104 v_type=G type=ud num_elts=32 align=wordx32 alias=<V0069, 0>
+.decl V0105 v_type=G type=q num_elts=32 align=wordx32
+.decl V0106 v_type=G type=uq num_elts=32 align=wordx32 alias=<V0105, 0>
+.decl V0107 v_type=G type=b num_elts=32 align=wordx32
+.decl V0108 v_type=G type=ud num_elts=32 align=wordx64
+.decl V0109 v_type=G type=b num_elts=128 align=wordx64 alias=<V0108, 0>
+.decl V0110 v_type=G type=d num_elts=32 align=wordx32
+.decl V0111 v_type=G type=d num_elts=32 align=wordx32
+.decl V0112 v_type=G type=ud num_elts=32 align=wordx32 alias=<V0110, 0>
+.decl V0113 v_type=G type=ud num_elts=2 align=dword alias=<V0058, 0>
+.decl V0114 v_type=G type=d num_elts=32 align=wordx32
+.decl V0115 v_type=G type=ud num_elts=32 align=wordx32
+.decl V0116 v_type=G type=d num_elts=32 align=wordx32
+.decl V0117 v_type=G type=d num_elts=64 align=wordx32
+.decl V0118 v_type=G type=q num_elts=32 align=wordx32
+.decl V0119 v_type=G type=d num_elts=64 align=wordx32 alias=<V0118, 0>
+.decl V0120 v_type=G type=d num_elts=32 align=wordx32
+.decl V0121 v_type=G type=d num_elts=32 align=wordx32
+.decl V0122 v_type=G type=ud num_elts=32 align=wordx32 alias=<V0120, 0>
+.decl V0123 v_type=G type=ud num_elts=2 align=dword alias=<V0062, 0>
+.decl V0124 v_type=G type=d num_elts=32 align=wordx32
+.decl V0125 v_type=G type=ud num_elts=32 align=wordx32
+.decl V0126 v_type=G type=d num_elts=32 align=wordx32
+.decl V0127 v_type=G type=d num_elts=64 align=wordx32
+.decl V0128 v_type=G type=q num_elts=32 align=wordx32
+.decl V0129 v_type=G type=d num_elts=64 align=wordx32 alias=<V0128, 0>
+.decl V0130 v_type=G type=q num_elts=1 align=qword alias=<V0034, 0>
+.decl V0131 v_type=G type=q num_elts=32 align=wordx32
+.decl V0132 v_type=G type=q num_elts=32 align=wordx32
+.decl V0133 v_type=G type=q num_elts=32 align=wordx32
+.decl V0134 v_type=G type=uq num_elts=32 align=wordx32 alias=<V0133, 0>
+.decl V0135 v_type=G type=ub num_elts=32 align=wordx32 alias=<V0107, 0>
+.decl V0136 v_type=G type=ud num_elts=32 align=wordx32
+.decl S0 v_type=S num_elts=1 v_name=S000
+.decl T6 v_type=T num_elts=1 v_name=T006
+.input V0042 offset=64 size=64
+.input V0043 offset=128 size=64
+.input V0044 offset=192 size=64
+.input V0040 offset=256 size=12
+.input V0041 offset=268 size=12
+.input V0034 offset=280 size=8
+.input V0036 offset=320 size=8
+.input V0035 offset=328 size=8
+.input V0037 offset=336 size=8
+.input V0047 offset=344 size=8
+.input V0048 offset=352 size=8
+.input V0049 offset=360 size=8
+.input V0050 offset=368 size=8
+.input V0051 offset=376 size=8
+.input V0052 offset=384 size=8
+.input V0045 offset=392 size=8
+.input V0046 offset=400 size=8
+.kernel_attr Target="3d"
+.kernel_attr SimdSize=32
+.kernel_attr PerThreadInputSize=192    
+
+.function "_main_0"
+_main_0:
+    or (M1_NM, 1) %cr0(0,0)<1> %cr0(0,0)<0;1,0> 0x400004c0:ud                    /// $1
+    mov (M1_NM, 2) V0058(0,0)<1> V0059(0,0)<1;1,0>                               /// $2
+    mov (M1_NM, 2) V0060(0,0)<1> V0061(0,0)<1;1,0>                               /// $3
+    mov (M1_NM, 2) V0062(0,0)<1> V0063(0,0)<1;1,0>                               /// $4
+    mov (M1_NM, 2) V0064(0,0)<1> V0065(0,0)<1;1,0>                               /// $5
+    mul (M1_NM, 1) V0066(0,0)<1> V0041(0,2)<0;1,0> V0039(0,7)<0;1,0>             /// $6
+    mov (M1, 32) V0067(0,0)<1> V0068(0,0)<1;1,0>                                 /// $7
+    add3 (M1, 32) V0069(0,0)<1> V0066(0,0)<0;1,0> V0067(0,0)<1;1,0> V0040(0,2)<0;1,0> /// $8
+    mul (M1_NM, 1) V0070(0,0)<1> V0041(0,1)<0;1,0> V0039(0,6)<0;1,0>             /// $9
+    mov (M1, 32) V0071(0,0)<1> V0072(0,0)<1;1,0>                                 /// $10
+    add3 (M1, 32) V0073(0,0)<1> V0070(0,0)<0;1,0> V0071(0,0)<1;1,0> V0040(0,1)<0;1,0> /// $11
+    mul (M1_NM, 1) V0074(0,0)<1> V0041(0,0)<0;1,0> V0039(0,1)<0;1,0>             /// $12
+    mov (M1, 32) V0075(0,0)<1> V0076(0,0)<1;1,0>                                 /// $13
+    add3 (M1, 32) V0077(0,0)<1> V0074(0,0)<0;1,0> V0075(0,0)<1;1,0> V0040(0,0)<0;1,0> /// $14
+    mul (M1, 32) V0084(0,0)<1> V0081(0,0)<1;1,0> V0082(0,0)<0;1,0>               /// $15
+    mulh (M1, 32) V0083(0,0)<1> V0081(0,0)<1;1,0> V0082(0,0)<0;1,0>              /// $16
+    mul (M1, 32) V0085(0,0)<1> V0081(0,0)<1;1,0> V0060(0,1)<0;1,0>               /// $17
+    add (M1, 32) V0083(0,0)<1> V0083(0,0)<1;1,0> V0085(0,0)<1;1,0>               /// $18
+    mul (M1, 32) V0085(0,0)<1> V0082(0,0)<0;1,0> 0x0:d                           /// $19
+    mov (M1, 32) V0080(0,0)<1> V0084(0,0)<1;1,0>                                 /// $20
+    add (M1, 32) V0079(0,0)<1> V0083(0,0)<1;1,0> V0085(0,0)<1;1,0>               /// $21
+    mov (M1, 32) V0086(0,0)<1> V0078(0,0)<1;1,0>                                 /// $22
+    mov (M1, 32) V0086(2,0)<1> V0079(0,0)<1;1,0>                                 /// $23
+    mov (M1, 16) V0088(0,0)<2> V0086(0,0)<1;1,0>                                 /// $24
+    mov (M5, 16) V0088(2,0)<2> V0086(1,0)<1;1,0>                                 /// $25
+    mov (M1, 16) V0088(0,1)<2> V0086(2,0)<1;1,0>                                 /// $26
+    mov (M5, 16) V0088(2,1)<2> V0086(3,0)<1;1,0>                                 /// $27
+    mul (M1, 32) V0095(0,0)<1> V0092(0,0)<1;1,0> V0093(0,0)<0;1,0>               /// $28
+    mulh (M1, 32) V0094(0,0)<1> V0092(0,0)<1;1,0> V0093(0,0)<0;1,0>              /// $29
+    mul (M1, 32) V0096(0,0)<1> V0092(0,0)<1;1,0> V0064(0,1)<0;1,0>               /// $30
+    add (M1, 32) V0094(0,0)<1> V0094(0,0)<1;1,0> V0096(0,0)<1;1,0>               /// $31
+    mul (M1, 32) V0096(0,0)<1> V0093(0,0)<0;1,0> 0x0:d                           /// $32
+    mov (M1, 32) V0091(0,0)<1> V0095(0,0)<1;1,0>                                 /// $33
+    add (M1, 32) V0090(0,0)<1> V0094(0,0)<1;1,0> V0096(0,0)<1;1,0>               /// $34
+    mov (M1, 32) V0097(0,0)<1> V0089(0,0)<1;1,0>                                 /// $35
+    mov (M1, 32) V0097(2,0)<1> V0090(0,0)<1;1,0>                                 /// $36
+    mov (M1, 16) V0099(0,0)<2> V0097(0,0)<1;1,0>                                 /// $37
+    mov (M5, 16) V0099(2,0)<2> V0097(1,0)<1;1,0>                                 /// $38
+    mov (M1, 16) V0099(0,1)<2> V0097(2,0)<1;1,0>                                 /// $39
+    mov (M5, 16) V0099(2,1)<2> V0097(3,0)<1;1,0>                                 /// $40
+    add (M1, 32) V0101(0,0)<1> V0087(0,0)<1;1,0> V0100(0,0)<0;1,0>               /// $41
+    add (M1, 32) V0102(0,0)<1> V0101(0,0)<1;1,0> V0098(0,0)<1;1,0>               /// $42
+    mov (M1, 32) V0103(0,0)<1> V0104(0,0)<1;1,0>                                 /// $43
+    add (M1, 32) V0105(0,0)<1> V0102(0,0)<1;1,0> V0103(0,0)<1;1,0>               /// $44
+    lsc_load.ugm (M1, 32)  V0108:d8u32  flat[V0106]:a64                          /// $45
+    mov (M1, 32) V0107(0,0)<1> V0109(0,0)<4;1,0>                                 /// $46
+    mul (M1, 32) V0115(0,0)<1> V0081(0,0)<1;1,0> V0113(0,0)<0;1,0>               /// $47
+    mulh (M1, 32) V0114(0,0)<1> V0081(0,0)<1;1,0> V0113(0,0)<0;1,0>              /// $48
+    mul (M1, 32) V0116(0,0)<1> V0081(0,0)<1;1,0> V0058(0,1)<0;1,0>               /// $49
+    add (M1, 32) V0114(0,0)<1> V0114(0,0)<1;1,0> V0116(0,0)<1;1,0>               /// $50
+    mul (M1, 32) V0116(0,0)<1> V0113(0,0)<0;1,0> 0x0:d                           /// $51
+    mov (M1, 32) V0112(0,0)<1> V0115(0,0)<1;1,0>                                 /// $52
+    add (M1, 32) V0111(0,0)<1> V0114(0,0)<1;1,0> V0116(0,0)<1;1,0>               /// $53
+    mov (M1, 32) V0117(0,0)<1> V0110(0,0)<1;1,0>                                 /// $54
+    mov (M1, 32) V0117(2,0)<1> V0111(0,0)<1;1,0>                                 /// $55
+    mov (M1, 16) V0119(0,0)<2> V0117(0,0)<1;1,0>                                 /// $56
+    mov (M5, 16) V0119(2,0)<2> V0117(1,0)<1;1,0>                                 /// $57
+    mov (M1, 16) V0119(0,1)<2> V0117(2,0)<1;1,0>                                 /// $58
+    mov (M5, 16) V0119(2,1)<2> V0117(3,0)<1;1,0>                                 /// $59
+    mul (M1, 32) V0125(0,0)<1> V0092(0,0)<1;1,0> V0123(0,0)<0;1,0>               /// $60
+    mulh (M1, 32) V0124(0,0)<1> V0092(0,0)<1;1,0> V0123(0,0)<0;1,0>              /// $61
+    mul (M1, 32) V0126(0,0)<1> V0092(0,0)<1;1,0> V0062(0,1)<0;1,0>               /// $62
+    add (M1, 32) V0124(0,0)<1> V0124(0,0)<1;1,0> V0126(0,0)<1;1,0>               /// $63
+    mul (M1, 32) V0126(0,0)<1> V0123(0,0)<0;1,0> 0x0:d                           /// $64
+    mov (M1, 32) V0122(0,0)<1> V0125(0,0)<1;1,0>                                 /// $65
+    add (M1, 32) V0121(0,0)<1> V0124(0,0)<1;1,0> V0126(0,0)<1;1,0>               /// $66
+    mov (M1, 32) V0127(0,0)<1> V0120(0,0)<1;1,0>                                 /// $67
+    mov (M1, 32) V0127(2,0)<1> V0121(0,0)<1;1,0>                                 /// $68
+    mov (M1, 16) V0129(0,0)<2> V0127(0,0)<1;1,0>                                 /// $69
+    mov (M5, 16) V0129(2,0)<2> V0127(1,0)<1;1,0>                                 /// $70
+    mov (M1, 16) V0129(0,1)<2> V0127(2,0)<1;1,0>                                 /// $71
+    mov (M5, 16) V0129(2,1)<2> V0127(3,0)<1;1,0>                                 /// $72
+    add (M1, 32) V0131(0,0)<1> V0118(0,0)<1;1,0> V0130(0,0)<0;1,0>               /// $73
+    add (M1, 32) V0132(0,0)<1> V0131(0,0)<1;1,0> V0128(0,0)<1;1,0>               /// $74
+    add (M1, 32) V0133(0,0)<1> V0132(0,0)<1;1,0> V0103(0,0)<1;1,0>               /// $75
+    mov (M1, 32) V0136(0,0)<1> V0135(0,0)<1;1,0>                                 /// $76
+    lsc_store.ugm (M1, 32)  flat[V0134]:a64  V0136:d8u32                         /// $77
+    ret (M1, 1)                                                                  /// $78
+
+//Platform: XE2
+//Build option: "-emitLocation -wideMulMadOpsEn -enableCoalesceScalarMoves -supportLSCImmScale 0 -samplerHeaderWA -enablePreemptionR0Only -hasRNEandDenorm -noStitchExternFunc -useInlineData -emitCrossThreadOffR0Reloc -abortonspill -TotalGRFNum 256 -abortOnSpill 4 -enableBCR -forceBCR -enableBundleCR 3 -perfmodel -freqBasedSpillCost 8 -freqBasedSpillCostFunc 1 -boundsChecking -presched-ctrl 6 -presched-rp 100 -nodpsendreorder -SBIDDepLoc -PVCSendWARWA -output -binary -dumpcommonisa -dumpcombinedcisa -dumpvisa -printHexFloatInAsm -noverifyCISA -enableHalfLSC -partialInt64 -activeThreadsOnlyBarrier -hashmovs 596987210 2036255302 -hashmovs1 0 2 "

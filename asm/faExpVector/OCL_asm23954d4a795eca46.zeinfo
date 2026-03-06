@@ -1,0 +1,1386 @@
+---
+version:         '1.62'
+kernels:
+  - name:            _ZTSN4sycl3_V16detail19__pf_kernel_wrapperIZZN6compat6detailL6memcpyENS0_5queueEPvPKvNS0_5rangeILi3EEESA_NS0_2idILi3EEESC_SA_RKSt6vectorINS0_5eventESaISE_EEENKUlRNS0_7handlerEE_clESK_E16memcpy_3d_detailEE
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        global_id_offset
+        offset:          0
+        size:            12
+      - arg_type:        enqueued_local_size
+        offset:          12
+        size:            12
+      - arg_type:        arg_byvalue
+        offset:          24
+        size:            24
+        arg_index:       0
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            8
+        arg_index:       1
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          56
+        size:            32
+        arg_index:       1
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          88
+        size:            8
+        arg_index:       1
+        source_offset:   40
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          96
+        size:            32
+        arg_index:       1
+        source_offset:   48
+      - arg_type:        const_base
+        offset:          128
+        size:            8
+      - arg_type:        private_base_stateless
+        offset:          136
+        size:            8
+      - arg_type:        global_size
+        offset:          144
+        size:            12
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            _ZTSZZN6compat6detailL6memcpyEN4sycl3_V15queueEPvPKvNS2_5rangeILi3EEES8_NS2_2idILi3EEESA_S8_RKSt6vectorINS2_5eventESaISC_EEENKUlRNS2_7handlerEE_clESI_E16memcpy_3d_detail
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        global_id_offset
+        offset:          0
+        size:            12
+      - arg_type:        enqueued_local_size
+        offset:          12
+        size:            12
+      - arg_type:        arg_bypointer
+        offset:          24
+        size:            8
+        arg_index:       0
+        addrmode:        stateless
+        addrspace:       global
+        access_type:     readwrite
+      - arg_type:        arg_bypointer
+        offset:          32
+        size:            8
+        arg_index:       3
+        addrmode:        stateless
+        addrspace:       global
+        access_type:     readwrite
+      - arg_type:        arg_byvalue
+        offset:          40
+        size:            8
+        arg_index:       1
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            8
+        arg_index:       4
+      - arg_type:        arg_byvalue
+        offset:          56
+        size:            24
+        arg_index:       2
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          80
+        size:            24
+        arg_index:       5
+        source_offset:   0
+      - arg_type:        const_base
+        offset:          104
+        size:            8
+      - arg_type:        private_base_stateless
+        offset:          112
+        size:            8
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            _ZTSN4sycl3_V16detail18RoundedRangeKernelINS0_4itemILi1ELb1EEELi1EZNS0_7handler4fillItEEvPvRKT_mEUlNS0_2idILi1EEEE_EE
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        global_id_offset
+        offset:          0
+        size:            12
+      - arg_type:        enqueued_local_size
+        offset:          12
+        size:            12
+      - arg_type:        arg_byvalue
+        offset:          24
+        size:            8
+        arg_index:       0
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            8
+        arg_index:       1
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          40
+        size:            2
+        arg_index:       1
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          44
+        size:            1
+        arg_index:       1
+        source_offset:   10
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            1
+        arg_index:       1
+        source_offset:   11
+      - arg_type:        arg_byvalue
+        offset:          52
+        size:            1
+        arg_index:       1
+        source_offset:   12
+      - arg_type:        arg_byvalue
+        offset:          56
+        size:            1
+        arg_index:       1
+        source_offset:   13
+      - arg_type:        arg_byvalue
+        offset:          60
+        size:            1
+        arg_index:       1
+        source_offset:   14
+      - arg_type:        arg_byvalue
+        offset:          64
+        size:            1
+        arg_index:       1
+        source_offset:   15
+      - arg_type:        const_base
+        offset:          72
+        size:            8
+      - arg_type:        private_base_stateless
+        offset:          80
+        size:            8
+      - arg_type:        global_size
+        offset:          96
+        size:            12
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            _ZTSZN4sycl3_V17handler4fillItEEvPvRKT_mEUlNS0_2idILi1EEEE_
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        global_id_offset
+        offset:          0
+        size:            12
+      - arg_type:        enqueued_local_size
+        offset:          12
+        size:            12
+      - arg_type:        arg_bypointer
+        offset:          24
+        size:            8
+        arg_index:       0
+        addrmode:        stateless
+        addrspace:       global
+        access_type:     readwrite
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            2
+        arg_index:       1
+      - arg_type:        const_base
+        offset:          40
+        size:            8
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            _ZTSN4sycl3_V16detail18RoundedRangeKernelINS0_4itemILi1ELb1EEELi1EZNS0_7handler4fillIjEEvPvRKT_mEUlNS0_2idILi1EEEE_EE
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        global_id_offset
+        offset:          0
+        size:            12
+      - arg_type:        enqueued_local_size
+        offset:          12
+        size:            12
+      - arg_type:        arg_byvalue
+        offset:          24
+        size:            8
+        arg_index:       0
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            8
+        arg_index:       1
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          40
+        size:            5
+        arg_index:       1
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            1
+        arg_index:       1
+        source_offset:   13
+      - arg_type:        arg_byvalue
+        offset:          52
+        size:            1
+        arg_index:       1
+        source_offset:   14
+      - arg_type:        arg_byvalue
+        offset:          56
+        size:            1
+        arg_index:       1
+        source_offset:   15
+      - arg_type:        const_base
+        offset:          64
+        size:            8
+      - arg_type:        private_base_stateless
+        offset:          72
+        size:            8
+      - arg_type:        global_size
+        offset:          80
+        size:            12
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            _ZTSZN4sycl3_V17handler4fillIjEEvPvRKT_mEUlNS0_2idILi1EEEE_
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        global_id_offset
+        offset:          0
+        size:            12
+      - arg_type:        enqueued_local_size
+        offset:          12
+        size:            12
+      - arg_type:        arg_bypointer
+        offset:          24
+        size:            8
+        arg_index:       0
+        addrmode:        stateless
+        addrspace:       global
+        access_type:     readwrite
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            4
+        arg_index:       1
+      - arg_type:        const_base
+        offset:          40
+        size:            8
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            _ZTSN4sycl3_V16detail18RoundedRangeKernelINS0_4itemILi1ELb1EEELi1EZNS0_7handler4fillIhEEvPvRKT_mEUlNS0_2idILi1EEEE_EE
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        global_id_offset
+        offset:          0
+        size:            12
+      - arg_type:        enqueued_local_size
+        offset:          12
+        size:            12
+      - arg_type:        arg_byvalue
+        offset:          24
+        size:            8
+        arg_index:       0
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            8
+        arg_index:       1
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          40
+        size:            1
+        arg_index:       1
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          44
+        size:            1
+        arg_index:       1
+        source_offset:   9
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            1
+        arg_index:       1
+        source_offset:   10
+      - arg_type:        arg_byvalue
+        offset:          52
+        size:            1
+        arg_index:       1
+        source_offset:   11
+      - arg_type:        arg_byvalue
+        offset:          56
+        size:            1
+        arg_index:       1
+        source_offset:   12
+      - arg_type:        arg_byvalue
+        offset:          60
+        size:            1
+        arg_index:       1
+        source_offset:   13
+      - arg_type:        arg_byvalue
+        offset:          64
+        size:            1
+        arg_index:       1
+        source_offset:   14
+      - arg_type:        arg_byvalue
+        offset:          68
+        size:            1
+        arg_index:       1
+        source_offset:   15
+      - arg_type:        const_base
+        offset:          72
+        size:            8
+      - arg_type:        private_base_stateless
+        offset:          80
+        size:            8
+      - arg_type:        global_size
+        offset:          96
+        size:            12
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            _ZTSZN4sycl3_V17handler4fillIhEEvPvRKT_mEUlNS0_2idILi1EEEE_
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        global_id_offset
+        offset:          0
+        size:            12
+      - arg_type:        enqueued_local_size
+        offset:          12
+        size:            12
+      - arg_type:        arg_bypointer
+        offset:          24
+        size:            8
+        arg_index:       0
+        addrmode:        stateless
+        addrspace:       global
+        access_type:     readwrite
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            1
+        arg_index:       1
+      - arg_type:        const_base
+        offset:          40
+        size:            8
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            _ZTSN7cutlass9reference6device22BlockForEachKernelNameINS_10bfloat16_tENS1_6detail17RandomUniformFuncIS3_EEEE
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      indirect_stateless_count: 1
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      private_size:    3584
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        arg_bypointer
+        offset:          0
+        size:            8
+        arg_index:       0
+        addrmode:        stateless
+        addrspace:       global
+        access_type:     readwrite
+      - arg_type:        arg_byvalue
+        offset:          8
+        size:            8
+        arg_index:       1
+      - arg_type:        arg_byvalue
+        offset:          16
+        size:            29
+        arg_index:       2
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            1
+        arg_index:       2
+        source_offset:   29
+      - arg_type:        arg_byvalue
+        offset:          52
+        size:            1
+        arg_index:       2
+        source_offset:   30
+      - arg_type:        arg_byvalue
+        offset:          56
+        size:            1
+        arg_index:       2
+        source_offset:   31
+      - arg_type:        const_base
+        offset:          64
+        size:            8
+      - arg_type:        private_base_stateless
+        offset:          72
+        size:            8
+      - arg_type:        group_count
+        offset:          80
+        size:            12
+      - arg_type:        local_size
+        offset:          96
+        size:            12
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+    per_thread_memory_buffers:
+      - type:            global
+        usage:           private_space
+        size:            112
+        is_simt_thread:  true
+  - name:            _ZTSN7cutlass9reference6device21GemmComplexKernelNameIJNS_10bfloat16_tENS_6layout8RowMajorES3_NS4_11ColumnMajorEfS5_fffS5_NS_16NumericConverterIffLNS_15FloatRoundStyleE2EEENS_12multiply_addIfffEEKiSC_EEE
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        arg_byvalue
+        offset:          0
+        size:            4
+        arg_index:       1
+      - arg_type:        arg_byvalue
+        offset:          4
+        size:            4
+        arg_index:       4
+      - arg_type:        arg_byvalue
+        offset:          8
+        size:            4
+        arg_index:       7
+      - arg_type:        arg_byvalue
+        offset:          12
+        size:            4
+        arg_index:       8
+      - arg_type:        arg_byvalue
+        offset:          16
+        size:            8
+        arg_index:       9
+      - arg_type:        arg_byvalue
+        offset:          24
+        size:            8
+        arg_index:       10
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            8
+        arg_index:       11
+      - arg_type:        arg_byvalue
+        offset:          40
+        size:            8
+        arg_index:       12
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            12
+        arg_index:       0
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          64
+        size:            8
+        arg_index:       2
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          72
+        size:            8
+        arg_index:       2
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          80
+        size:            8
+        arg_index:       3
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          88
+        size:            8
+        arg_index:       3
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          96
+        size:            8
+        arg_index:       5
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          104
+        size:            8
+        arg_index:       5
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          112
+        size:            8
+        arg_index:       6
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          120
+        size:            8
+        arg_index:       6
+        source_offset:   8
+      - arg_type:        const_base
+        offset:          128
+        size:            8
+      - arg_type:        private_base_stateless
+        offset:          136
+        size:            8
+      - arg_type:        group_count
+        offset:          144
+        size:            12
+      - arg_type:        local_size
+        offset:          160
+        size:            12
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            _ZTSN7cutlass9reference6device21GemmComplexKernelNameIJNS_10bfloat16_tENS_6layout8RowMajorES3_S5_fS5_fffS5_NS_16NumericConverterIffLNS_15FloatRoundStyleE2EEENS_12multiply_addIfffEEKiSB_EEE
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        arg_byvalue
+        offset:          0
+        size:            4
+        arg_index:       1
+      - arg_type:        arg_byvalue
+        offset:          4
+        size:            4
+        arg_index:       4
+      - arg_type:        arg_byvalue
+        offset:          8
+        size:            4
+        arg_index:       7
+      - arg_type:        arg_byvalue
+        offset:          12
+        size:            4
+        arg_index:       8
+      - arg_type:        arg_byvalue
+        offset:          16
+        size:            8
+        arg_index:       9
+      - arg_type:        arg_byvalue
+        offset:          24
+        size:            8
+        arg_index:       10
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            8
+        arg_index:       11
+      - arg_type:        arg_byvalue
+        offset:          40
+        size:            8
+        arg_index:       12
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            12
+        arg_index:       0
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          64
+        size:            8
+        arg_index:       2
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          72
+        size:            8
+        arg_index:       2
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          80
+        size:            8
+        arg_index:       3
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          88
+        size:            8
+        arg_index:       3
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          96
+        size:            8
+        arg_index:       5
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          104
+        size:            8
+        arg_index:       5
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          112
+        size:            8
+        arg_index:       6
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          120
+        size:            8
+        arg_index:       6
+        source_offset:   8
+      - arg_type:        const_base
+        offset:          128
+        size:            8
+      - arg_type:        private_base_stateless
+        offset:          136
+        size:            8
+      - arg_type:        group_count
+        offset:          144
+        size:            12
+      - arg_type:        local_size
+        offset:          160
+        size:            12
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+  - name:            Intel_Symbol_Table_Void_Program
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      inline_data_payload_size: 32
+      simd_size:       32
+      subgroup_independent_forward_progress: true
+      work_group_walk_order_dimensions: [ 0, 0, 0 ]
+      eu_thread_count: 4
+  - name:            _ZTSN7cutlass9reference6device21GemmComplexKernelNameIJNS_10bfloat16_tENS_6layout8RowMajorES3_NS4_11ColumnMajorEfS5_fffS5_NS_16NumericConverterIffLNS_15FloatRoundStyleE2EEENS_12multiply_addIfffEEEEE
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      indirect_stateless_count: 320
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      private_size:    1536
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        arg_byvalue
+        offset:          0
+        size:            4
+        arg_index:       1
+      - arg_type:        arg_byvalue
+        offset:          4
+        size:            4
+        arg_index:       4
+      - arg_type:        arg_byvalue
+        offset:          8
+        size:            4
+        arg_index:       7
+      - arg_type:        arg_byvalue
+        offset:          12
+        size:            4
+        arg_index:       8
+      - arg_type:        arg_byvalue
+        offset:          16
+        size:            8
+        arg_index:       9
+      - arg_type:        arg_byvalue
+        offset:          24
+        size:            8
+        arg_index:       10
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            8
+        arg_index:       11
+      - arg_type:        arg_byvalue
+        offset:          40
+        size:            8
+        arg_index:       12
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            12
+        arg_index:       0
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          64
+        size:            8
+        arg_index:       2
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          72
+        size:            8
+        arg_index:       2
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          80
+        size:            8
+        arg_index:       3
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          88
+        size:            8
+        arg_index:       3
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          96
+        size:            8
+        arg_index:       5
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          104
+        size:            8
+        arg_index:       5
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          112
+        size:            8
+        arg_index:       6
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          120
+        size:            8
+        arg_index:       6
+        source_offset:   8
+      - arg_type:        private_base_stateless
+        offset:          128
+        size:            8
+      - arg_type:        group_count
+        offset:          136
+        size:            12
+      - arg_type:        local_size
+        offset:          148
+        size:            12
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+    per_thread_memory_buffers:
+      - type:            global
+        usage:           private_space
+        size:            48
+        is_simt_thread:  true
+  - name:            _ZTSN7cutlass9reference6device21GemmComplexKernelNameIJNS_10bfloat16_tENS_6layout8RowMajorES3_S5_fS5_fffS5_NS_16NumericConverterIffLNS_15FloatRoundStyleE2EEENS_12multiply_addIfffEEEEE
+    user_attributes:
+      intel_reqd_workgroup_walk_order: [ 0, 1, 2 ]
+    execution_env:
+      grf_count:       256
+      has_4gb_buffers: true
+      has_no_stateless_write: true
+      indirect_stateless_count: 320
+      inline_data_payload_size: 32
+      offset_to_skip_per_thread_data_load: 192
+      simd_size:       32
+      private_size:    1536
+      subgroup_independent_forward_progress: true
+      eu_thread_count: 4
+    payload_arguments:
+      - arg_type:        arg_byvalue
+        offset:          0
+        size:            4
+        arg_index:       1
+      - arg_type:        arg_byvalue
+        offset:          4
+        size:            4
+        arg_index:       4
+      - arg_type:        arg_byvalue
+        offset:          8
+        size:            4
+        arg_index:       7
+      - arg_type:        arg_byvalue
+        offset:          12
+        size:            4
+        arg_index:       8
+      - arg_type:        arg_byvalue
+        offset:          16
+        size:            8
+        arg_index:       9
+      - arg_type:        arg_byvalue
+        offset:          24
+        size:            8
+        arg_index:       10
+      - arg_type:        arg_byvalue
+        offset:          32
+        size:            8
+        arg_index:       11
+      - arg_type:        arg_byvalue
+        offset:          40
+        size:            8
+        arg_index:       12
+      - arg_type:        arg_byvalue
+        offset:          48
+        size:            12
+        arg_index:       0
+        source_offset:   0
+      - arg_type:        arg_byvalue
+        offset:          64
+        size:            8
+        arg_index:       2
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          72
+        size:            8
+        arg_index:       2
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          80
+        size:            8
+        arg_index:       3
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          88
+        size:            8
+        arg_index:       3
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          96
+        size:            8
+        arg_index:       5
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          104
+        size:            8
+        arg_index:       5
+        source_offset:   8
+      - arg_type:        arg_byvalue
+        offset:          112
+        size:            8
+        arg_index:       6
+        source_offset:   0
+        is_ptr:          true
+      - arg_type:        arg_byvalue
+        offset:          120
+        size:            8
+        arg_index:       6
+        source_offset:   8
+      - arg_type:        private_base_stateless
+        offset:          128
+        size:            8
+      - arg_type:        group_count
+        offset:          136
+        size:            12
+      - arg_type:        local_size
+        offset:          148
+        size:            12
+    per_thread_payload_arguments:
+      - arg_type:        local_id
+        offset:          0
+        size:            192
+    per_thread_memory_buffers:
+      - type:            global
+        usage:           private_space
+        size:            48
+        is_simt_thread:  true
+kernels_misc_info:
+  - name:            _ZTSN4sycl3_V16detail19__pf_kernel_wrapperIZZN6compat6detailL6memcpyENS0_5queueEPvPKvNS0_5rangeILi3EEESA_NS0_2idILi3EEESC_SA_RKSt6vectorINS0_5eventESaISE_EEENKUlRNS0_7handlerEE_clESK_E16memcpy_3d_detailEE
+    args_info:
+      - index:           0
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.sycl::_V1::range;24'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.__generated_;80'
+        type_qualifiers: NONE
+  - name:            _ZTSZZN6compat6detailL6memcpyEN4sycl3_V15queueEPvPKvNS2_5rangeILi3EEES8_NS2_2idILi3EEESA_S8_RKSt6vectorINS2_5eventESaISC_EEENKUlRNS2_7handlerEE_clESI_E16memcpy_3d_detail
+    args_info:
+      - index:           0
+        address_qualifier: __global
+        access_qualifier: NONE
+        type_name:       'char*;8'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           2
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.sycl::_V1::range;24'
+        type_qualifiers: NONE
+      - index:           3
+        address_qualifier: __global
+        access_qualifier: NONE
+        type_name:       'char*;8'
+        type_qualifiers: NONE
+      - index:           4
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           5
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.sycl::_V1::range;24'
+        type_qualifiers: NONE
+  - name:            _ZTSN4sycl3_V16detail18RoundedRangeKernelINS0_4itemILi1ELb1EEELi1EZNS0_7handler4fillItEEvPvRKT_mEUlNS0_2idILi1EEEE_EE
+    args_info:
+      - index:           0
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.sycl::_V1::range.0;8'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.__generated_.2;16'
+        type_qualifiers: NONE
+  - name:            _ZTSZN4sycl3_V17handler4fillItEEvPvRKT_mEUlNS0_2idILi1EEEE_
+    args_info:
+      - index:           0
+        address_qualifier: __global
+        access_qualifier: NONE
+        type_name:       'short*;8'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'ushort;2'
+        type_qualifiers: NONE
+  - name:            _ZTSN4sycl3_V16detail18RoundedRangeKernelINS0_4itemILi1ELb1EEELi1EZNS0_7handler4fillIjEEvPvRKT_mEUlNS0_2idILi1EEEE_EE
+    args_info:
+      - index:           0
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.sycl::_V1::range.0;8'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.__generated_.9;16'
+        type_qualifiers: NONE
+  - name:            _ZTSZN4sycl3_V17handler4fillIjEEvPvRKT_mEUlNS0_2idILi1EEEE_
+    args_info:
+      - index:           0
+        address_qualifier: __global
+        access_qualifier: NONE
+        type_name:       'int*;8'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'int;4'
+        type_qualifiers: NONE
+  - name:            _ZTSN4sycl3_V16detail18RoundedRangeKernelINS0_4itemILi1ELb1EEELi1EZNS0_7handler4fillIhEEvPvRKT_mEUlNS0_2idILi1EEEE_EE
+    args_info:
+      - index:           0
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.sycl::_V1::range.0;8'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.__generated_.12;16'
+        type_qualifiers: NONE
+  - name:            _ZTSZN4sycl3_V17handler4fillIhEEvPvRKT_mEUlNS0_2idILi1EEEE_
+    args_info:
+      - index:           0
+        address_qualifier: __global
+        access_qualifier: NONE
+        type_name:       'char*;8'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'uchar;1'
+        type_qualifiers: NONE
+  - name:            _ZTSN7cutlass9reference6device22BlockForEachKernelNameINS_10bfloat16_tENS1_6detail17RandomUniformFuncIS3_EEEE
+    args_info:
+      - index:           0
+        address_qualifier: __global
+        access_qualifier: NONE
+        type_name:       'short*;8'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           2
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'struct cutlass::reference::device::detail::RandomUniformFunc<cutlass::bfloat16_t>::Params;32'
+        type_qualifiers: NONE
+  - name:            _ZTSN7cutlass9reference6device21GemmComplexKernelNameIJNS_10bfloat16_tENS_6layout8RowMajorES3_NS4_11ColumnMajorEfS5_fffS5_NS_16NumericConverterIffLNS_15FloatRoundStyleE2EEENS_12multiply_addIfffEEKiSC_EEE
+    args_info:
+      - index:           0
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'struct cutlass::gemm::GemmCoord;12'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           2
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           3
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           4
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           5
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           6
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           7
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           8
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'int;4'
+        type_qualifiers: NONE
+      - index:           9
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           10
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           11
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           12
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+  - name:            _ZTSN7cutlass9reference6device21GemmComplexKernelNameIJNS_10bfloat16_tENS_6layout8RowMajorES3_S5_fS5_fffS5_NS_16NumericConverterIffLNS_15FloatRoundStyleE2EEENS_12multiply_addIfffEEKiSB_EEE
+    args_info:
+      - index:           0
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'struct cutlass::gemm::GemmCoord;12'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           2
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           3
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           4
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           5
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           6
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           7
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           8
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'int;4'
+        type_qualifiers: NONE
+      - index:           9
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           10
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           11
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           12
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+  - name:            _ZTSN7cutlass9reference6device21GemmComplexKernelNameIJNS_10bfloat16_tENS_6layout8RowMajorES3_NS4_11ColumnMajorEfS5_fffS5_NS_16NumericConverterIffLNS_15FloatRoundStyleE2EEENS_12multiply_addIfffEEEEE
+    args_info:
+      - index:           0
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'struct cutlass::gemm::GemmCoord;12'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           2
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           3
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           4
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           5
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           6
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           7
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           8
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'int;4'
+        type_qualifiers: NONE
+      - index:           9
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           10
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           11
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           12
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+  - name:            _ZTSN7cutlass9reference6device21GemmComplexKernelNameIJNS_10bfloat16_tENS_6layout8RowMajorES3_S5_fS5_fffS5_NS_16NumericConverterIffLNS_15FloatRoundStyleE2EEENS_12multiply_addIfffEEEEE
+    args_info:
+      - index:           0
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'struct cutlass::gemm::GemmCoord;12'
+        type_qualifiers: NONE
+      - index:           1
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           2
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           3
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           4
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           5
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           6
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'class.cutlass::__generated_TensorRef;16'
+        type_qualifiers: NONE
+      - index:           7
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'float;4'
+        type_qualifiers: NONE
+      - index:           8
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'int;4'
+        type_qualifiers: NONE
+      - index:           9
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           10
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           11
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+      - index:           12
+        address_qualifier: __private
+        access_qualifier: NONE
+        type_name:       'long;8'
+        type_qualifiers: NONE
+...

@@ -1,0 +1,17 @@
+Loop 5 @ level 1: 6 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 4 @ level 1: 20 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 1 @ level 1: 792 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 3 @ level 2: 53 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 2 @ level 2: 6 total, 0 fill, 0 spill, 0 subroutine calls
+Kernel name: OCL_asm02a05bd857049a6b_simd16_entry_0009
+ # BBs : 50
+ # Asm Insts: 1631
+ # RA Iters = 1
+ Spill Size = 0
+ # Spills: 0
+ # Fills : 0
+Total dyn inst: 14303
+Fill dyn inst: 0
+Spill dyn inst: 0
+Percent Fill/Total dyn inst: 0.000000
+LL1(#3): {S-0, F-0}, LL2(#2): {S-0, F-0}, 
