@@ -404,6 +404,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
 
       /* Apply softmax and scaling */
       softmax(K == blk_k0, tSrS, tA_max, tA_sum, tArA);
+
       reorder(tSrS, tArP);
 
       /* GEMM 2: A += P * V, split in v dimension */
@@ -455,7 +456,7 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
   }
 
   // Single step of blocked softmax.
-  CUTLASS_DEVICE
+  CUTLASS_DEVICE __attribute__((always_inline))
   void
   softmax(bool       first_block, // First softmax block?
           FragS    & tS,          // Softmax src/dst block
@@ -466,18 +467,40 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
     /* Compute row-wise maxima for this block */
     auto tS_bmax = reduce<1>(tS, sycl::maximum{});
 
+    /* Compute rescale factors */
     FragSRow rescale;
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < tS_max.size(); i++) {
       ElementS new_max = sycl::max(tS_max(i), params.scale * tS_bmax(i));
+#if CUTLASS_ENABLE_VECTORIZED_EXP2_ASM
+      // Vectorized exp2 path: store exponent argument, apply vectorized exp2 later
+      rescale(i) = tS_max(i) - new_max;
+#else
+      // Scalar exp2 path: compute immediately
       rescale(i) = sycl::native::exp2(tS_max(i) - new_max);
+#endif
       tS_max(i) = new_max;
     }
+    
+#if CUTLASS_ENABLE_VECTORIZED_EXP2_ASM
+    // Apply vectorized exp2 to rescale factors
+    cute::apply_vectorized_exp2(rescale);
+#endif
 
     /* Scale S and subtract maxima, then exponentiate */
+#if CUTLASS_ENABLE_VECTORIZED_EXP2_ASM
+    // Vectorized exp2 path: compute scaled/shifted values, then apply vectorized exp2
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS.size(); i++)
+      tS(i) = params.scale * tS(i) - broadcast<0>(tS_max, tS, i);
+    
+    cute::apply_vectorized_exp2(tS);
+#else
+    // Scalar exp2 path: compute and exponentiate in one step
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < tS.size(); i++)
       tS(i) = sycl::native::exp2(params.scale * tS(i) - broadcast<0>(tS_max, tS, i));
+#endif
 
     /* Rescale existing S sums and O accumulator */
     if (!first_block) {
