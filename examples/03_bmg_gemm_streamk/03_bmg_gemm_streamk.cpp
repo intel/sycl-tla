@@ -102,7 +102,7 @@ struct Options {
     error(false),
     splitk(false),
     dp(false),
-    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),splits(1), 
+    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1), splits(1),
     alpha(1.f), beta(0.f)
   { }
 

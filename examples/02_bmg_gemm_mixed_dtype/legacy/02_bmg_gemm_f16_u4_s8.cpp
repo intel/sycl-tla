@@ -101,7 +101,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(20),verify(1),
+    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
     g(128), mode(2),
     alpha(1.f), beta(0.f)
   { }

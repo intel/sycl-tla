@@ -132,7 +132,6 @@ struct Options {
     cmd.get_cmd_line_argument("iterations", iterations, 100);
     cmd.get_cmd_line_argument("verify", verify, 1);
     cmd.get_cmd_line_argument("splits", splits, 1);
-    
   }
 
   /// Prints the usage statement.
