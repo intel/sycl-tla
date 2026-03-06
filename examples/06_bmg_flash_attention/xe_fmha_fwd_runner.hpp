@@ -537,7 +537,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
 
             cutlass::DeviceAllocation<ElementS> block_acc;
             block_acc.reset(current_q_len * head_size_vo);
-            cutlass::TensorRef ref_acc(block_acc.get(), LayoutO::packed({current_q_len, head_size_vo}));
+            utlass::TensorRef ref_acc(block_acc.get(), LayoutO::packed({current_q_len, head_size_vo}));
 
             // GEMM 2: O = P_chunk * V
             cutlass::reference::device::GemmComplex({current_q_len, head_size_vo, seq_len_kv_total}, ElementS{1}, ref_P,

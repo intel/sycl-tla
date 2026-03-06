@@ -106,12 +106,12 @@ struct Options {
   bool help = false;
 
   float alpha, beta;
-  int iterations, verify;
-  int m, n, k, groups;
+  int iterations, verify,m, n, k, groups;
+
   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes_host;
 
-  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100),
-              m(5120), n(4096), k(4096), groups(2), verify(1) {
+  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100), verify(1),
+              m(5120), n(4096), k(4096), groups(2) {
     problem_sizes_host.reserve(groups);
     for(int i = 0; i < groups; i++) {
       problem_sizes_host.push_back({m, n, k});

@@ -105,8 +105,8 @@ struct Options {
   bool help = false;
 
   float alpha, beta;
-  int iterations, verify;
-  int m, n, k, groups;
+  int iterations, verify,m, n, k, groups;
+
   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes_host;
 
   Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100), verify(1),
