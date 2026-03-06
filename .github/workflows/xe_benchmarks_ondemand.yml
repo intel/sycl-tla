@@ -92,6 +92,7 @@ jobs:
       - name: Run Benchmarks
         shell: bash
         run: |
+          export no_proxy=$no_proxy,${{ secrets.INFLUX_SERVER_IP }}
           export INFLUX_URL=${{ secrets.INFLUX_URL }}
           export INFLUX_ORG="cutlass"
           export INFLUX_BUCKET="benchmarks"
