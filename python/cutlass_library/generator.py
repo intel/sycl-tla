@@ -200,12 +200,10 @@ def CreateGemmUniversal3xOperator(
 
   operations = []
 
-  # by default, only generate the largest tile and largest alignment
-  # but generate all tiles when --kernels=all is specified
+  # generate all tiles when --kernels=all is specified
   if manifest.kernel_filter == '' or manifest.kernel_filter == 'all':
     if len(tile_descriptions) == 0:
       return operations
-    tile_descriptions = [tile_descriptions[0]]
   
   combinations = product(layouts, tile_descriptions, data_types, complex_transforms, schedules, tile_schedulers)
   for layout, tile_description, data_type, complex_transform, schedules, tile_scheduler in combinations:
