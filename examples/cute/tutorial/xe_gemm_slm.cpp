@@ -94,7 +94,7 @@ struct Options {
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
-      << "  --iterations=<int>          Iterations\n\n"
+      << "  --iterations=<int>          Iterations\n"
       << "  --verify=<int>              Specify whether to verify.\n\n";
     return out;
   }
@@ -443,6 +443,12 @@ int main(int argc, const char** argv)
 
   options.parse(argc, argv);
 
+  auto m = options.m;
+  auto n = options.n;
+  auto k = options.k;
+  auto iterations = options.iterations;
+  auto verify = options.verify;
+
   if (options.help) {
     options.print_usage(std::cout) << std::endl;
     return 0;
@@ -456,24 +462,24 @@ int main(int argc, const char** argv)
   sycl::queue Q = compat::get_default_queue();
 
   // Native compute
-  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, m, n, k, iterations, verify);
 
-  test_case<half_t, half_t, float, 'R', 'R'>(Q,  options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<half_t, half_t, float, 'R', 'C'>(Q,  options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<half_t, half_t, float, 'C', 'R'>(Q,  options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<half_t, half_t, float, 'R', 'R'>(Q,  m, n, k, iterations, verify);
+  test_case<half_t, half_t, float, 'R', 'C'>(Q,  m, n, k, iterations, verify);
+  test_case<half_t, half_t, float, 'C', 'R'>(Q,  m, n, k, iterations, verify);
 
-  test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, m, n, k, iterations, verify);
 
-  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
 
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations, options.verify);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, m, n, k, iterations, verify);
 }
