@@ -464,6 +464,103 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
           FragSRow & tS_sum,      // Softmax row-wise sum accumulator
           FragA    & tA) {        // O accumulator (for rescaling)
 
+#if CUTLASS_SOFTMAX_VARIANT == 3
+    // ========================================================================
+    // Option 1C: Fused Softmax — mad + exp2 + hreduce_add in single asm block
+    // ========================================================================
+    // Fuses scale-subtract, exp2, and row-sum into one inline asm pass.
+    // Saves register pressure by avoiding separate read/write passes for
+    // scale-subtract, exp2, and sum reduction.
+
+    /* Compute row-wise maxima for this block */
+    auto tS_bmax = reduce<1>(tS, sycl::maximum{});
+
+    /* Compute rescale factors */
+    FragSRow rescale;
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS_max.size(); i++) {
+      ElementS new_max = sycl::max(tS_max(i), params.scale * tS_bmax(i));
+      rescale(i) = tS_max(i) - new_max;
+      tS_max(i) = new_max;
+    }
+
+    // Apply exp2 to rescale factors via inline assembly
+    cute::apply_inline_asm_exp(rescale);
+
+    /* Rescale existing S sums and O accumulator BEFORE fused block */
+    if (!first_block) {
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < tS_sum.size(); i++) {
+        tS_sum(i) *= rescale(i);
+      }
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < tA.size(); i++)
+        tA(i) *= broadcast<0>(rescale, tA, i);
+    }
+
+    /* FUSED: scale-subtract, exp2, and row-sum in single asm pass */
+    auto tS_bsum = cute::fused_softmax_scale_exp_sum<1>(
+        tS, params.scale, tS_max);
+
+    /* Update sums */
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS_sum.size(); i++)
+      tS_sum(i) += tS_bsum(i);
+
+#elif CUTLASS_SOFTMAX_VARIANT == 1
+    // ========================================================================
+    // Option 1A: Inline Assembly exp2 using vISA exp instruction
+    // ========================================================================
+    // Same correct algorithm as variants 0/2 (separate reduce for max, then
+    // scale-subtract-exp2), but applies exp2 via direct vISA inline assembly.
+
+    /* Compute row-wise maxima for this block */
+    auto tS_bmax = reduce<1>(tS, sycl::maximum{});
+
+    /* Compute rescale factors */
+    FragSRow rescale;
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS_max.size(); i++) {
+      ElementS new_max = sycl::max(tS_max(i), params.scale * tS_bmax(i));
+      rescale(i) = tS_max(i) - new_max;
+      tS_max(i) = new_max;
+    }
+
+    // Apply exp2 to rescale factors via inline assembly
+    cute::apply_inline_asm_exp(rescale);
+
+    /* Scale S and subtract maxima, then exponentiate via inline asm */
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS.size(); i++)
+      tS(i) = params.scale * tS(i) - broadcast<0>(tS_max, tS, i);
+
+    cute::apply_inline_asm_exp(tS);
+
+    /* Rescale existing S sums and O accumulator */
+    if (!first_block) {
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < tS_sum.size(); i++) {
+        tS_sum(i) *= rescale(i);
+      }
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < tA.size(); i++)
+        tA(i) *= broadcast<0>(rescale, tA, i);
+    }
+
+    /* Update sums */
+    auto tS_bsum = reduce<1>(tS, sycl::plus<void>{});
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS_sum.size(); i++)
+      tS_sum(i) += tS_bsum(i);
+
+#elif CUTLASS_SOFTMAX_VARIANT == 2
+    // ========================================================================
+    // Option 1B: Vectorized Exp2 with ext_vector_type
+    // ========================================================================
+    // Uses ext_vector_type hints to enable compiler SIMD optimizations
+
     /* Compute row-wise maxima for this block */
     auto tS_bmax = reduce<1>(tS, sycl::maximum{});
 
@@ -519,6 +616,69 @@ struct FMHAFwdMainloop<XeDefault<Stages>, CausalMask_, CachedKV_, PagedKV_,
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < tS_sum.size(); i++)
       tS_sum(i) += tS_bsum(i);
+
+#else
+    // ========================================================================
+    // Variant 0: Scalar Baseline (separate operations)
+    // ========================================================================
+    // Standard implementation with scalar exp2 operations
+
+    /* Compute row-wise maxima for this block */
+    auto tS_bmax = reduce<1>(tS, sycl::maximum{});
+
+    /* Compute rescale factors */
+    FragSRow rescale;
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS_max.size(); i++) {
+      ElementS new_max = sycl::max(tS_max(i), params.scale * tS_bmax(i));
+#if CUTLASS_ENABLE_VECTORIZED_EXP2_ASM
+      // Vectorized exp2 path: store exponent argument, apply vectorized exp2 later
+      rescale(i) = tS_max(i) - new_max;
+#else
+      // Scalar exp2 path: compute immediately
+      rescale(i) = sycl::native::exp2(tS_max(i) - new_max);
+#endif
+      tS_max(i) = new_max;
+    }
+    
+#if CUTLASS_ENABLE_VECTORIZED_EXP2_ASM
+    // Apply vectorized exp2 to rescale factors
+    cute::apply_vectorized_exp2(rescale);
+#endif
+
+    /* Scale S and subtract maxima, then exponentiate */
+#if CUTLASS_ENABLE_VECTORIZED_EXP2_ASM
+    // Vectorized exp2 path: compute scaled/shifted values, then apply vectorized exp2
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS.size(); i++)
+      tS(i) = params.scale * tS(i) - broadcast<0>(tS_max, tS, i);
+    
+    cute::apply_vectorized_exp2(tS);
+#else
+    // Scalar exp2 path: compute and exponentiate in one step
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS.size(); i++)
+      tS(i) = sycl::native::exp2(params.scale * tS(i) - broadcast<0>(tS_max, tS, i));
+#endif
+
+    /* Rescale existing S sums and O accumulator */
+    if (!first_block) {
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < tS_sum.size(); i++) {
+        tS_sum(i) *= rescale(i);
+      }
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < tA.size(); i++)
+        tA(i) *= broadcast<0>(rescale, tA, i);
+    }
+
+    /* Update sums */
+    auto tS_bsum = reduce<1>(tS, sycl::plus<void>{});
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < tS_sum.size(); i++)
+      tS_sum(i) += tS_bsum(i);
+#endif // CUTLASS_SOFTMAX_VARIANT
   }
 };
 

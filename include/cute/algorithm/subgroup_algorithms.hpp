@@ -376,13 +376,454 @@ reduce(SubgroupTensor<Engine,FragLayout,SubgroupTVLayout> const& src, BinaryOp o
   return out;
 }
 
-// Control flag for vectorized exp2 optimization
-// 0 = Use scalar fallback (safe, accurate, compiler may auto-vectorize)
-// 1 = Use ext_vector_type-based implementation (lets compiler optimize vector operations)
+// Control flag for softmax optimization variant
+// 0 = Scalar baseline (separate max, scale, exp2 operations)
+// 1 = ASM Options (inline asm exp2, separate loops)
+// 2 = Vector Hint option (Forcing IGC to use SIMD16 with ext_vector_type)
+// 3 = Fused Softmax ASM (mad + exp2 + hreduce_add in single asm block)
+#ifndef CUTLASS_SOFTMAX_VARIANT
+#define CUTLASS_SOFTMAX_VARIANT 3
+#endif
+
 #ifndef CUTLASS_ENABLE_VECTORIZED_EXP2_ASM
 #define CUTLASS_ENABLE_VECTORIZED_EXP2_ASM 1
 #endif
 
+// ============================================================================
+// ASM Option: Write 16 element vector assembly for Exp2. Apply scalar fall back for remaining elements.
+// ============================================================================
+
+#if defined(__SYCL_DEVICE_ONLY__) && defined(SYCL_INTEL_TARGET)
+
+// Apply base-2 exponential to 16 float elements using vISA inline assembly.
+// Each element is independently exponentiated: data[i] = exp2(data[i])
+CUTE_DEVICE
+void inline_asm_exp2_16(float& d0,  float& d1,  float& d2,  float& d3,
+                        float& d4,  float& d5,  float& d6,  float& d7,
+                        float& d8,  float& d9,  float& d10, float& d11,
+                        float& d12, float& d13, float& d14, float& d15) {
+  asm volatile (
+    "{\n"
+    ".decl V0_%=  v_type=G type=F num_elts=16 alias=<%0,0>\n"
+    ".decl V1_%=  v_type=G type=F num_elts=16 alias=<%1,0>\n"
+    ".decl V2_%=  v_type=G type=F num_elts=16 alias=<%2,0>\n"
+    ".decl V3_%=  v_type=G type=F num_elts=16 alias=<%3,0>\n"
+    ".decl V4_%=  v_type=G type=F num_elts=16 alias=<%4,0>\n"
+    ".decl V5_%=  v_type=G type=F num_elts=16 alias=<%5,0>\n"
+    ".decl V6_%=  v_type=G type=F num_elts=16 alias=<%6,0>\n"
+    ".decl V7_%=  v_type=G type=F num_elts=16 alias=<%7,0>\n"
+    ".decl V8_%=  v_type=G type=F num_elts=16 alias=<%8,0>\n"
+    ".decl V9_%=  v_type=G type=F num_elts=16 alias=<%9,0>\n"
+    ".decl V10_%= v_type=G type=F num_elts=16 alias=<%10,0>\n"
+    ".decl V11_%= v_type=G type=F num_elts=16 alias=<%11,0>\n"
+    ".decl V12_%= v_type=G type=F num_elts=16 alias=<%12,0>\n"
+    ".decl V13_%= v_type=G type=F num_elts=16 alias=<%13,0>\n"
+    ".decl V14_%= v_type=G type=F num_elts=16 alias=<%14,0>\n"
+    ".decl V15_%= v_type=G type=F num_elts=16 alias=<%15,0>\n"
+    "exp (M1_NM,16) V0_%=(0,0)<1>  V0_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V1_%=(0,0)<1>  V1_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V2_%=(0,0)<1>  V2_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V3_%=(0,0)<1>  V3_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V4_%=(0,0)<1>  V4_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V5_%=(0,0)<1>  V5_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V6_%=(0,0)<1>  V6_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V7_%=(0,0)<1>  V7_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V8_%=(0,0)<1>  V8_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V9_%=(0,0)<1>  V9_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V10_%=(0,0)<1> V10_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V11_%=(0,0)<1> V11_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V12_%=(0,0)<1> V12_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V13_%=(0,0)<1> V13_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V14_%=(0,0)<1> V14_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V15_%=(0,0)<1> V15_%=(0,0)<1;1,0>\n"
+    "}\n"
+    : "+rw"(d0),  "+rw"(d1),  "+rw"(d2),  "+rw"(d3),
+      "+rw"(d4),  "+rw"(d5),  "+rw"(d6),  "+rw"(d7),
+      "+rw"(d8),  "+rw"(d9),  "+rw"(d10), "+rw"(d11),
+      "+rw"(d12), "+rw"(d13), "+rw"(d14), "+rw"(d15)
+  );
+}
+
+// Apply base-2 exponential to 8 float elements using vISA inline assembly.
+CUTE_DEVICE
+void inline_asm_exp2_8(float& d0, float& d1, float& d2, float& d3,
+                       float& d4, float& d5, float& d6, float& d7) {
+  asm volatile (
+    "{\n"
+    ".decl V0_%= v_type=G type=F num_elts=16 alias=<%0,0>\n"
+    ".decl V1_%= v_type=G type=F num_elts=16 alias=<%1,0>\n"
+    ".decl V2_%= v_type=G type=F num_elts=16 alias=<%2,0>\n"
+    ".decl V3_%= v_type=G type=F num_elts=16 alias=<%3,0>\n"
+    ".decl V4_%= v_type=G type=F num_elts=16 alias=<%4,0>\n"
+    ".decl V5_%= v_type=G type=F num_elts=16 alias=<%5,0>\n"
+    ".decl V6_%= v_type=G type=F num_elts=16 alias=<%6,0>\n"
+    ".decl V7_%= v_type=G type=F num_elts=16 alias=<%7,0>\n"
+    "exp (M1_NM,16) V0_%=(0,0)<1> V0_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V1_%=(0,0)<1> V1_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V2_%=(0,0)<1> V2_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V3_%=(0,0)<1> V3_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V4_%=(0,0)<1> V4_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V5_%=(0,0)<1> V5_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V6_%=(0,0)<1> V6_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) V7_%=(0,0)<1> V7_%=(0,0)<1;1,0>\n"
+    "}\n"
+    : "+rw"(d0), "+rw"(d1), "+rw"(d2), "+rw"(d3),
+      "+rw"(d4), "+rw"(d5), "+rw"(d6), "+rw"(d7)
+  );
+}
+
+// Apply inline asm exp2 to all elements of a fragment, processing in chunks
+// of 16 (or 8 for remainder). Falls back to sycl::native::exp2 for odd sizes.
+template <typename Fragment>
+CUTE_DEVICE
+void apply_inline_asm_exp(Fragment& frag) {
+  constexpr int N = size(typename Fragment::layout_type{});
+
+  int i = 0;
+  // Process full chunks of 16
+  CUTE_UNROLL
+  for (; i + 16 <= N; i += 16) {
+    inline_asm_exp2_16(
+      frag(i+0),  frag(i+1),  frag(i+2),  frag(i+3),
+      frag(i+4),  frag(i+5),  frag(i+6),  frag(i+7),
+      frag(i+8),  frag(i+9),  frag(i+10), frag(i+11),
+      frag(i+12), frag(i+13), frag(i+14), frag(i+15));
+  }
+  // Process remaining chunk of 8
+  if constexpr ((N % 16) >= 8) {
+    if (i + 8 <= N) {
+      inline_asm_exp2_8(
+        frag(i+0), frag(i+1), frag(i+2), frag(i+3),
+        frag(i+4), frag(i+5), frag(i+6), frag(i+7));
+      i += 8;
+    }
+  }
+  // Scalar fallback for any remaining elements
+  CUTE_UNROLL
+  for (; i < N; i++) {
+    frag(i) = sycl::native::exp2(frag(i));
+  }
+}
+
+#else
+// Fallback: apply_inline_asm_exp uses scalar exp2 on non-Intel targets
+template <typename Fragment>
+CUTE_DEVICE
+void apply_inline_asm_exp(Fragment& frag) {
+  constexpr int N = size(typename Fragment::layout_type{});
+  CUTE_UNROLL
+  for (int i = 0; i < N; i++) {
+    frag(i) = sycl::native::exp2(frag(i));
+  }
+}
+#endif // __SYCL_DEVICE_ONLY__ && SYCL_INTEL_TARGET
+
+// ============================================================================
+// Option 1C: Fused Softmax — mad + exp2 + horizontal sum in single asm block
+// ============================================================================
+// Fuses scale-subtract, exp2, and row-sum reduction into one inline asm pass.
+// Each element: d[i] = exp2(scale * d[i] - max_val), and returns sum(d[0..15]).
+// The d[i] values are modified in-place (needed for P*V GEMM).
+
+#if defined(__SYCL_DEVICE_ONLY__) && defined(SYCL_INTEL_TARGET)
+
+// Fused mad + exp2 + hreduce16_add for 16 elements.
+// Computes d[i] = exp2(scale * d[i] - max_val) in-place and returns the sum.
+CUTE_DEVICE
+float fused_mad_exp2_hsum16(
+    float& d0,  float& d1,  float& d2,  float& d3,
+    float& d4,  float& d5,  float& d6,  float& d7,
+    float& d8,  float& d9,  float& d10, float& d11,
+    float& d12, float& d13, float& d14, float& d15,
+    float scale, float max_val)
+{
+  float sum;
+  asm volatile (
+    "{\n"
+    // Float aliases for d0-d15 (mad + exp targets)
+    ".decl D0_%=  v_type=G type=F num_elts=16 alias=<%0,0>\n"
+    ".decl D1_%=  v_type=G type=F num_elts=16 alias=<%1,0>\n"
+    ".decl D2_%=  v_type=G type=F num_elts=16 alias=<%2,0>\n"
+    ".decl D3_%=  v_type=G type=F num_elts=16 alias=<%3,0>\n"
+    ".decl D4_%=  v_type=G type=F num_elts=16 alias=<%4,0>\n"
+    ".decl D5_%=  v_type=G type=F num_elts=16 alias=<%5,0>\n"
+    ".decl D6_%=  v_type=G type=F num_elts=16 alias=<%6,0>\n"
+    ".decl D7_%=  v_type=G type=F num_elts=16 alias=<%7,0>\n"
+    ".decl D8_%=  v_type=G type=F num_elts=16 alias=<%8,0>\n"
+    ".decl D9_%=  v_type=G type=F num_elts=16 alias=<%9,0>\n"
+    ".decl D10_%= v_type=G type=F num_elts=16 alias=<%10,0>\n"
+    ".decl D11_%= v_type=G type=F num_elts=16 alias=<%11,0>\n"
+    ".decl D12_%= v_type=G type=F num_elts=16 alias=<%12,0>\n"
+    ".decl D13_%= v_type=G type=F num_elts=16 alias=<%13,0>\n"
+    ".decl D14_%= v_type=G type=F num_elts=16 alias=<%14,0>\n"
+    ".decl D15_%= v_type=G type=F num_elts=16 alias=<%15,0>\n"
+    // Scale and max_val aliases (input-only)
+    ".decl SCALE_%= v_type=G type=F num_elts=16 alias=<%17,0>\n"
+    ".decl MAXV_%=  v_type=G type=F num_elts=16 alias=<%18,0>\n"
+    // UD aliases for hreduce sel (same registers as D0-D15, reinterpreted as UD)
+    ".decl IN0_%=  v_type=G type=UD num_elts=16 alias=<%0,0>\n"
+    ".decl IN1_%=  v_type=G type=UD num_elts=16 alias=<%1,0>\n"
+    ".decl IN2_%=  v_type=G type=UD num_elts=16 alias=<%2,0>\n"
+    ".decl IN3_%=  v_type=G type=UD num_elts=16 alias=<%3,0>\n"
+    ".decl IN4_%=  v_type=G type=UD num_elts=16 alias=<%4,0>\n"
+    ".decl IN5_%=  v_type=G type=UD num_elts=16 alias=<%5,0>\n"
+    ".decl IN6_%=  v_type=G type=UD num_elts=16 alias=<%6,0>\n"
+    ".decl IN7_%=  v_type=G type=UD num_elts=16 alias=<%7,0>\n"
+    ".decl IN8_%=  v_type=G type=UD num_elts=16 alias=<%8,0>\n"
+    ".decl IN9_%=  v_type=G type=UD num_elts=16 alias=<%9,0>\n"
+    ".decl IN10_%= v_type=G type=UD num_elts=16 alias=<%10,0>\n"
+    ".decl IN11_%= v_type=G type=UD num_elts=16 alias=<%11,0>\n"
+    ".decl IN12_%= v_type=G type=UD num_elts=16 alias=<%12,0>\n"
+    ".decl IN13_%= v_type=G type=UD num_elts=16 alias=<%13,0>\n"
+    ".decl IN14_%= v_type=G type=UD num_elts=16 alias=<%14,0>\n"
+    ".decl IN15_%= v_type=G type=UD num_elts=16 alias=<%15,0>\n"
+    // Interleave predicate masks
+    ".decl INTERLEAVE_2_%= v_type=P num_elts=16\n"
+    ".decl INTERLEAVE_4_%= v_type=P num_elts=16\n"
+    ".decl INTERLEAVE_8_%= v_type=P num_elts=16\n"
+    // Temp registers for hreduce tree reduction
+    ".decl RA0_%=  v_type=G type=UD num_elts=32 align=64\n"
+    ".decl RA2_%=  v_type=G type=UD num_elts=32 align=64\n"
+    ".decl RA4_%=  v_type=G type=UD num_elts=32 align=64\n"
+    ".decl RA6_%=  v_type=G type=UD num_elts=32 align=64\n"
+    ".decl RA8_%=  v_type=G type=UD num_elts=32 align=64\n"
+    ".decl RA10_%= v_type=G type=UD num_elts=32 align=64\n"
+    ".decl RA12_%= v_type=G type=UD num_elts=32 align=64\n"
+    ".decl RA14_%= v_type=G type=UD num_elts=32 align=64\n"
+    ".decl RF0_%=  v_type=G type=F num_elts=16 alias=<RA0_%=,0>\n"
+    ".decl RF1_%=  v_type=G type=F num_elts=16 alias=<RA0_%=,64>\n"
+    ".decl RF2_%=  v_type=G type=F num_elts=16 alias=<RA2_%=,0>\n"
+    ".decl RF3_%=  v_type=G type=F num_elts=16 alias=<RA2_%=,64>\n"
+    ".decl RF4_%=  v_type=G type=F num_elts=16 alias=<RA4_%=,0>\n"
+    ".decl RF5_%=  v_type=G type=F num_elts=16 alias=<RA4_%=,64>\n"
+    ".decl RF6_%=  v_type=G type=F num_elts=16 alias=<RA6_%=,0>\n"
+    ".decl RF7_%=  v_type=G type=F num_elts=16 alias=<RA6_%=,64>\n"
+    ".decl RF8_%=  v_type=G type=F num_elts=16 alias=<RA8_%=,0>\n"
+    ".decl RF9_%=  v_type=G type=F num_elts=16 alias=<RA8_%=,64>\n"
+    ".decl RF10_%= v_type=G type=F num_elts=16 alias=<RA10_%=,0>\n"
+    ".decl RF11_%= v_type=G type=F num_elts=16 alias=<RA10_%=,64>\n"
+    ".decl RF12_%= v_type=G type=F num_elts=16 alias=<RA12_%=,0>\n"
+    ".decl RF13_%= v_type=G type=F num_elts=16 alias=<RA12_%=,64>\n"
+    ".decl RF14_%= v_type=G type=F num_elts=16 alias=<RA14_%=,0>\n"
+    ".decl RF15_%= v_type=G type=F num_elts=16 alias=<RA14_%=,64>\n"
+    //
+    // === Phase 1: MAD — d[i] = scale * d[i] - max_val ===
+    //
+    "mad (M1_NM,16) D0_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D0_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D1_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D1_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D2_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D2_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D3_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D3_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D4_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D4_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D5_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D5_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D6_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D6_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D7_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D7_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D8_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D8_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D9_%=(0,0)<1>  SCALE_%=(0,0)<0;1,0> D9_%=(0,0)<1;1,0>  (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D10_%=(0,0)<1> SCALE_%=(0,0)<0;1,0> D10_%=(0,0)<1;1,0> (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D11_%=(0,0)<1> SCALE_%=(0,0)<0;1,0> D11_%=(0,0)<1;1,0> (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D12_%=(0,0)<1> SCALE_%=(0,0)<0;1,0> D12_%=(0,0)<1;1,0> (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D13_%=(0,0)<1> SCALE_%=(0,0)<0;1,0> D13_%=(0,0)<1;1,0> (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D14_%=(0,0)<1> SCALE_%=(0,0)<0;1,0> D14_%=(0,0)<1;1,0> (-)MAXV_%=(0,0)<0;1,0>\n"
+    "mad (M1_NM,16) D15_%=(0,0)<1> SCALE_%=(0,0)<0;1,0> D15_%=(0,0)<1;1,0> (-)MAXV_%=(0,0)<0;1,0>\n"
+    //
+    // === Phase 2: EXP — d[i] = exp2(d[i]) ===
+    //
+    "exp (M1_NM,16) D0_%=(0,0)<1>  D0_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D1_%=(0,0)<1>  D1_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D2_%=(0,0)<1>  D2_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D3_%=(0,0)<1>  D3_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D4_%=(0,0)<1>  D4_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D5_%=(0,0)<1>  D5_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D6_%=(0,0)<1>  D6_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D7_%=(0,0)<1>  D7_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D8_%=(0,0)<1>  D8_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D9_%=(0,0)<1>  D9_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D10_%=(0,0)<1> D10_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D11_%=(0,0)<1> D11_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D12_%=(0,0)<1> D12_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D13_%=(0,0)<1> D13_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D14_%=(0,0)<1> D14_%=(0,0)<1;1,0>\n"
+    "exp (M1_NM,16) D15_%=(0,0)<1> D15_%=(0,0)<1;1,0>\n"
+    //
+    // === Phase 3: HREDUCE ADD — sum the 16 exp2'd values ===
+    // IN aliases read exp2'd values from D registers (non-destructive).
+    //
+    "setp (M1_NM,16) INTERLEAVE_2_%= 0x5555:uw\n"
+    "setp (M1_NM,16) INTERLEAVE_4_%= 0x3333:uw\n"
+    "setp (M1_NM,16) INTERLEAVE_8_%= 0x0F0F:uw\n"
+    // Round 1: interleave pairs
+    "(!INTERLEAVE_2_%=) sel (M1_NM,16) RA0_%=(0,0)<1>   IN1_%=(0,0)<2;2,0>   IN0_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_2_%=) sel (M1_NM,16) RA0_%=(1,0)<1>   IN0_%=(0,1)<2;2,0>   IN1_%=(0,0)<1;1,0>\n"
+    "(!INTERLEAVE_2_%=) sel (M1_NM,16) RA2_%=(0,0)<1>   IN3_%=(0,0)<2;2,0>   IN2_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_2_%=) sel (M1_NM,16) RA2_%=(1,0)<1>   IN2_%=(0,1)<2;2,0>   IN3_%=(0,0)<1;1,0>\n"
+    "(!INTERLEAVE_2_%=) sel (M1_NM,16) RA4_%=(0,0)<1>   IN5_%=(0,0)<2;2,0>   IN4_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_2_%=) sel (M1_NM,16) RA4_%=(1,0)<1>   IN4_%=(0,1)<2;2,0>   IN5_%=(0,0)<1;1,0>\n"
+    "(!INTERLEAVE_2_%=) sel (M1_NM,16) RA6_%=(0,0)<1>   IN7_%=(0,0)<2;2,0>   IN6_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_2_%=) sel (M1_NM,16) RA6_%=(1,0)<1>   IN6_%=(0,1)<2;2,0>   IN7_%=(0,0)<1;1,0>\n"
+    "(!INTERLEAVE_2_%=) sel (M1_NM,16) RA8_%=(0,0)<1>   IN9_%=(0,0)<2;2,0>   IN8_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_2_%=) sel (M1_NM,16) RA8_%=(1,0)<1>   IN8_%=(0,1)<2;2,0>   IN9_%=(0,0)<1;1,0>\n"
+    "(!INTERLEAVE_2_%=) sel (M1_NM,16) RA10_%=(0,0)<1>  IN11_%=(0,0)<2;2,0>  IN10_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_2_%=) sel (M1_NM,16) RA10_%=(1,0)<1>  IN10_%=(0,1)<2;2,0>  IN11_%=(0,0)<1;1,0>\n"
+    "(!INTERLEAVE_2_%=) sel (M1_NM,16) RA12_%=(0,0)<1>  IN13_%=(0,0)<2;2,0>  IN12_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_2_%=) sel (M1_NM,16) RA12_%=(1,0)<1>  IN12_%=(0,1)<2;2,0>  IN13_%=(0,0)<1;1,0>\n"
+    "(!INTERLEAVE_2_%=) sel (M1_NM,16) RA14_%=(0,0)<1>  IN15_%=(0,0)<2;2,0>  IN14_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_2_%=) sel (M1_NM,16) RA14_%=(1,0)<1>  IN14_%=(0,1)<2;2,0>  IN15_%=(0,0)<1;1,0>\n"
+    // Reduce round 1
+    "add (M1_NM,16) RF0_%=(0,0)<1>  RF0_%=(0,0)<1;1,0>  RF1_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF3_%=(0,0)<1>  RF2_%=(0,0)<1;1,0>  RF3_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF4_%=(0,0)<1>  RF4_%=(0,0)<1;1,0>  RF5_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF7_%=(0,0)<1>  RF6_%=(0,0)<1;1,0>  RF7_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF8_%=(0,0)<1>  RF8_%=(0,0)<1;1,0>  RF9_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF11_%=(0,0)<1> RF10_%=(0,0)<1;1,0> RF11_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF12_%=(0,0)<1> RF12_%=(0,0)<1;1,0> RF13_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF15_%=(0,0)<1> RF14_%=(0,0)<1;1,0> RF15_%=(0,0)<1;1,0>\n"
+    // Round 2: interleave quads
+    "(!INTERLEAVE_4_%=) sel (M1_NM,16) RA0_%=(1,0)<1>   RA2_%=(0,14)<1;1,0>  RA0_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_4_%=) sel (M1_NM,16) RA0_%=(0,0)<1>   RA0_%=(0,2)<1;1,0>   RA2_%=(1,0)<1;1,0>\n"
+    "(!INTERLEAVE_4_%=) sel (M1_NM,16) RA4_%=(1,0)<1>   RA6_%=(0,14)<1;1,0>  RA4_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_4_%=) sel (M1_NM,16) RA4_%=(0,0)<1>   RA4_%=(0,2)<1;1,0>   RA6_%=(1,0)<1;1,0>\n"
+    "(!INTERLEAVE_4_%=) sel (M1_NM,16) RA8_%=(1,0)<1>   RA10_%=(0,14)<1;1,0> RA8_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_4_%=) sel (M1_NM,16) RA8_%=(0,0)<1>   RA8_%=(0,2)<1;1,0>   RA10_%=(1,0)<1;1,0>\n"
+    "(!INTERLEAVE_4_%=) sel (M1_NM,16) RA12_%=(1,0)<1>  RA14_%=(0,14)<1;1,0> RA12_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_4_%=) sel (M1_NM,16) RA12_%=(0,0)<1>  RA12_%=(0,2)<1;1,0>  RA14_%=(1,0)<1;1,0>\n"
+    // Reduce round 2
+    "add (M1_NM,16) RF0_%=(0,0)<1>  RF0_%=(0,0)<1;1,0>  RF1_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF5_%=(0,0)<1>  RF4_%=(0,0)<1;1,0>  RF5_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF8_%=(0,0)<1>  RF8_%=(0,0)<1;1,0>  RF9_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF13_%=(0,0)<1> RF12_%=(0,0)<1;1,0> RF13_%=(0,0)<1;1,0>\n"
+    // Round 3: interleave octets
+    "(!INTERLEAVE_8_%=) sel (M1_NM,16) RA0_%=(1,0)<1>  RA4_%=(0,12)<1;1,0>  RA0_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_8_%=) sel (M1_NM,16) RA0_%=(0,0)<1>  RA0_%=(0,4)<1;1,0>   RA4_%=(1,0)<1;1,0>\n"
+    "(!INTERLEAVE_8_%=) sel (M1_NM,16) RA8_%=(1,0)<1>  RA12_%=(0,12)<1;1,0> RA8_%=(0,0)<1;1,0>\n"
+    " (INTERLEAVE_8_%=) sel (M1_NM,16) RA8_%=(0,0)<1>  RA8_%=(0,4)<1;1,0>   RA12_%=(1,0)<1;1,0>\n"
+    // Reduce round 3
+    "add (M1_NM,16) RF0_%=(0,0)<1>  RF0_%=(0,0)<1;1,0>  RF1_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,16) RF8_%=(0,0)<1>  RF8_%=(0,0)<1;1,0>  RF9_%=(0,0)<1;1,0>\n"
+    // Round 4: final half reduction
+    "mov (M1_NM, 8) RA0_%=(1,0)<1>  RA0_%=(0,8)<1;1,0>\n"
+    "mov (M1_NM, 8) RA8_%=(1,8)<1>  RA8_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,8) %16(0,0)<1> RF0_%=(0,0)<1;1,0> RF1_%=(0,0)<1;1,0>\n"
+    "add (M1_NM,8) %16(0,8)<1> RF8_%=(0,8)<1;1,0> RF9_%=(0,8)<1;1,0>\n"
+    "}\n"
+    : "+rw"(d0),  "+rw"(d1),  "+rw"(d2),  "+rw"(d3),
+      "+rw"(d4),  "+rw"(d5),  "+rw"(d6),  "+rw"(d7),
+      "+rw"(d8),  "+rw"(d9),  "+rw"(d10), "+rw"(d11),
+      "+rw"(d12), "+rw"(d13), "+rw"(d14), "+rw"(d15),
+      "=rw"(sum)
+    : "rw"(scale), "rw"(max_val)
+  );
+  return sum;
+}
+
+// Fused softmax: applies scale-subtract-exp2 in-place and reduces by sum.
+// Mirrors reduce<1> layout logic but fuses scale*x-max, exp2, and hreduce add.
+// Requirements: Mode=1, horizontal reduce, float type, align16.
+// Falls back to separate ops if requirements not met.
+template <int Mode, class Engine, class FragLayout, class SubgroupTVLayout,
+          class FragRow>
+CUTE_DEVICE
+auto
+fused_softmax_scale_exp_sum(
+    SubgroupTensor<Engine,FragLayout,SubgroupTVLayout>& src,
+    float scale,
+    FragRow const& row_max)
+{
+  using T = typename Engine::value_type;
+  using TVToV = Layout<Shape<intel::_SGSize,int>, Stride<_0,_1>>;
+
+  constexpr auto shape = atuple_coshape(SubgroupTVLayout{});
+  constexpr auto coord_to_tv = right_inverse(project_strides(SubgroupTVLayout{})).with_shape(shape);
+
+  constexpr auto rcoord_to_tv = make_layout(select<Mode>(coord_to_tv), remove<Mode>(coord_to_tv));
+  constexpr auto rcoord_to_v = filter(composition(TVToV{}, rcoord_to_tv), Step<_1,_1>{});
+
+  Tensor src_r = make_tensor(src.data(), rcoord_to_v);
+
+  auto rshape = replace<Mode>(shape, _1{});
+  Tensor out = make_subgroup_tensor(make_tensor<T>(ceil_div(size(rshape), intel::_SGSize{})),
+                                    make_identity_layout(rshape));
+
+  constexpr bool horizontal = (size<0>(rcoord_to_tv) == intel::_SGSize{} * size<0>(rcoord_to_v));
+  constexpr bool align16 = is_constant_v<0, decltype(size<1>(rcoord_to_v) % _16{})>;
+  constexpr bool can_fuse = (horizontal && is_same_v<T, float> && align16 &&
+                             size<0>(rcoord_to_v) == 1);
+
+  if constexpr (can_fuse) {
+    // Optimal path: fused mad+exp2+hsum in single asm block per 16-element row
+    CUTE_UNROLL
+    for (int j = 0; j < size<1>(rcoord_to_v); j += 16) {
+      T row_max_val = row_max(j / 16);
+      out(j / 16) = fused_mad_exp2_hsum16(
+        src_r(0, j+0),  src_r(0, j+1),  src_r(0, j+2),  src_r(0, j+3),
+        src_r(0, j+4),  src_r(0, j+5),  src_r(0, j+6),  src_r(0, j+7),
+        src_r(0, j+8),  src_r(0, j+9),  src_r(0, j+10), src_r(0, j+11),
+        src_r(0, j+12), src_r(0, j+13), src_r(0, j+14), src_r(0, j+15),
+        scale, row_max_val);
+    }
+  } else {
+    // Fallback: separate scale-subtract, exp2, and reduce
+    auto sg = sycl::ext::oneapi::this_work_item::get_sub_group();
+    T temp[size<1>(rcoord_to_v)];
+
+    CUTE_UNROLL
+    for (int j = 0; j < size<1>(rcoord_to_v); j++) {
+      // Apply scale-subtract and exp2 per element
+      CUTE_UNROLL
+      for (int i = 0; i < size<0>(rcoord_to_v); i++) {
+        // Determine row index for this element
+        // For the fallback path, use scalar operations
+        src_r(i, j) = sycl::native::exp2(scale * src_r(i, j) - row_max(j / 16));
+      }
+      T acc = src_r(0, j);
+      CUTE_UNROLL
+      for (int i = 1; i < size<0>(rcoord_to_v); i++) {
+        acc = acc + src_r(i, j);
+      }
+
+      if constexpr (horizontal && is_same_v<T, float> && align16)
+        temp[j] = acc;
+      else if constexpr (horizontal)
+        set_single_value(out, j, reduce_over_group(sg, acc, sycl::plus<void>{}));
+      else
+        out(j) = acc;
+    }
+
+    if constexpr (horizontal && is_same_v<T, float> && align16) {
+      CUTE_UNROLL
+      for (int j = 0; j < size<1>(rcoord_to_v); j += 16) {
+        out(j/16) = hreduce16_float_add(&temp[j]);
+      }
+    }
+  }
+
+  return out;
+}
+
+#else
+// Fallback for non-Intel targets: scalar fused softmax
+template <int Mode, class Engine, class FragLayout, class SubgroupTVLayout,
+          class FragRow>
+CUTE_DEVICE
+auto
+fused_softmax_scale_exp_sum(
+    SubgroupTensor<Engine,FragLayout,SubgroupTVLayout>& src,
+    float scale,
+    FragRow const& row_max)
+{
+  using T = typename Engine::value_type;
+  // Apply scale-subtract-exp2 in-place
+  constexpr int N = size(typename SubgroupTensor<Engine,FragLayout,SubgroupTVLayout>::layout_type{});
+  CUTE_UNROLL
+  for (int i = 0; i < N; i++) {
+    src(i) = sycl::native::exp2(scale * src(i) - row_max(i / 16));  // approximate
+  }
+  return reduce<Mode>(src, sycl::plus<void>{});
+}
+#endif // __SYCL_DEVICE_ONLY__ && SYCL_INTEL_TARGET
+
+// ============================================================================
+// Option 1B: Vectorized Exp2 Operations
+// ============================================================================
 // Vectorized exp2 operations using Intel GPU ext_vector_type
 #if defined(__SYCL_DEVICE_ONLY__) && defined(SYCL_INTEL_TARGET) && CUTLASS_ENABLE_VECTORIZED_EXP2_ASM
 
