@@ -103,7 +103,6 @@ jobs:
         with:
           name: benchmark-artifacts
           path: logs/
-          retention-days: 3
       - name: Cleanup DPC++
         if: always()
         shell: bash
