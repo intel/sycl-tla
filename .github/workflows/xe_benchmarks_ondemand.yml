@@ -92,7 +92,11 @@ jobs:
       - name: Run Benchmarks
         shell: bash
         run: |
-          python3 test/benchmarks/run_benchmarks.py
+          export INFLUX_URL=${{ secrets.INFLUX_URL }}
+          export INFLUX_ORG="cutlass"
+          export INFLUX_BUCKET="benchmarks"
+          export INFLUX_TOKEN=${{ secrets.INFLUX_TOKEN }}
+          python3 test/benchmarks/run_benchmarks.py --push-to-dashboard
       - name: Upload logs
         uses: actions/upload-artifact@v4
         with:

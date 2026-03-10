@@ -102,8 +102,8 @@ struct Options {
     error(false),
     splitk(false),
     dp(false),
-    m(5120), n(4096), k(4096), l(1), iterations(20), splits(1),
-    alpha(1.f), beta(0.f), verify(1)
+    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1), splits(1),
+    alpha(1.f), beta(0.f)
   { }
 
   // Parses the command line
@@ -130,8 +130,8 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
-    cmd.get_cmd_line_argument("splits", splits, 1);
     cmd.get_cmd_line_argument("verify", verify, 1);
+    cmd.get_cmd_line_argument("splits", splits, 1);
   }
 
   /// Prints the usage statement.

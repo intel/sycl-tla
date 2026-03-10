@@ -431,7 +431,6 @@ struct ExampleRunner {
       // Verify that the result is correct
       bool passed = verify<WriteEpilogueOutput0, WriteEpilogueOutput1, UseBias0, UseBias1>(problem_size, options.alpha0, options.alpha1, options.beta0, options.beta1);
       std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
-
       if (!passed) return cutlass::Status::kErrorInternal;
     } else {
       std::cout << "Disposition is skipped." << std::endl;
