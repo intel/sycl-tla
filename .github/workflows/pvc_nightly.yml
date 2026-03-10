@@ -26,7 +26,7 @@ jobs:
 
   gpp-host-test:
     needs: sycl-test
-    uses: ./.github/workflows/intel_test_gpp.yml
+    uses: ./.github/workflows/intel_test_gpp_host_reusable.yml
     with:
       compiler: '["RELEASE"]'
       intel_graphics: '["LTS"]'
