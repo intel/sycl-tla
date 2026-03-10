@@ -41,7 +41,7 @@
 #include "cute/algorithm/subgroup_algorithms.hpp"
 #include "cute/algorithm/tensor_algorithms.hpp"
 
-#include "copy_block_slm.hpp"
+#include "cute/atom/copy_block_slm.hpp"
 
 namespace cutlass::fmha::collective {
 
