@@ -100,6 +100,11 @@ struct Options {
   }
 };
 
+enum class role {
+  producer = 0,
+  consumer = 1,
+};
+
 template <class ATensor, class BTensor, class CTensor,
           class TiledMMA>
 void
@@ -117,6 +122,9 @@ gemm_device(ATensor   const& A,         // (M,K)
   auto wg_m = int(item.get_group(1));
   auto wg_n = int(item.get_group(0));
   auto local_id = int(item.get_local_id(0));
+  auto consumer_nums = size(mma);
+  role role_id = local_id < consumer_nums ? role::consumer : role::producer; 
+  local_id = role_id == role::consumer ? local_id : local_id - consumer_nums;
 
   /* Create proxy coordinate tensors for each global tensor */
   Tensor cA = make_identity_tensor(A.shape());   // (M,K)
@@ -144,7 +152,7 @@ gemm_device(ATensor   const& A,         // (M,K)
   auto copy_c = make_block_2d_copy_D(mma, C);
 
   // Shared memory buffers
-  constexpr auto stages = 2;
+  constexpr auto stages = 3;
   Layout a_slm_layout = make_layout(append<3>(typename decltype(r2s_A)::Tiler_MN{}, Int<stages>{}));
   Layout b_slm_layout = make_layout(append<3>(typename decltype(r2s_B)::Tiler_MN{}, Int<stages>{}));
 
@@ -165,7 +173,6 @@ gemm_device(ATensor   const& A,         // (M,K)
   auto thr_s2r_A = s2r_A.get_slice(local_id);
   auto thr_s2r_B = s2r_B.get_slice(local_id);
   
-
   /* Register fragments for MMA */
   auto tCrA = thr_mma.partition_sg_fragment_A(gA(_,_,0));
   auto tCrB = thr_mma.partition_sg_fragment_B(gB(_,_,0));
@@ -202,33 +209,26 @@ gemm_device(ATensor   const& A,         // (M,K)
   clear(tCrC);
 
   /* Warm up loops with prefetch to SLM */
-  CUTE_UNROLL
-  for (; k_tile_prefetch < stages; k_tile_prefetch++) {
-    // Global -> registers load
-    copy(coop_copy_a, tAgA(_,_,_,k_tile_prefetch), tArA_in);
-    copy(coop_copy_b, tBgB(_,_,_,k_tile_prefetch), tBrB_in);
-
-    // Reorder input to output fragments, and write to SLM
-    reorder(tArA_in, tArA_in_);
-    reorder(tBrB_in, tBrB_in_);
-    copy(r2s_A, tArA_out, tAsA_out(_,_,_,k_tile_prefetch));
-    copy(r2s_B, tBrB_out, tBsB_out(_,_,_,k_tile_prefetch));
-    // Barrier, with memory fence
-    barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
-    barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
+  if(role_id == role::producer) {
+    CUTE_UNROLL
+    for (; k_tile_prefetch < stages - 2; k_tile_prefetch++) {
+      // Global -> registers load
+      copy(coop_copy_a, tAgA(_,_,_,k_tile_prefetch), tArA_in);
+      copy(coop_copy_b, tBgB(_,_,_,k_tile_prefetch), tBrB_in);
+  
+      // Reorder input to output fragments, and write to SLM
+      reorder(tArA_in, tArA_in_);
+      reorder(tBrB_in, tBrB_in_);
+      copy(r2s_A, tArA_out, tAsA_out(_,_,_,k_tile_prefetch));
+      copy(r2s_B, tBrB_out, tBsB_out(_,_,_,k_tile_prefetch));
+    }
   }
+  // Barrier, with memory fence
+  barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
+  barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
   /* Main loop */
   for (int k_tile = 0; k_tile < k_tile_count; k_tile++, k_tile_prefetch++) {
-    // Load SLM -> registers
-    copy(s2r_A, tAsA_in(_,_,_,k_tile%stages), tCrA_in);
-    copy(s2r_B, tBsB_in(_,_,_,k_tile%stages), tCrB_in);
-
-    // // Multiply
-    gemm(mma, tCrA, tCrB, tCrC);
-    // Barrier, with memory fence
-    barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
-    barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
-    if(k_tile_prefetch < k_tile_count) {
+    if(k_tile_prefetch < k_tile_count && role_id == role::producer) {
       // Global -> registers load
       copy(coop_copy_a, tAgA(_,_,_,k_tile_prefetch), tArA_in);
       copy(coop_copy_b, tBgB(_,_,_,k_tile_prefetch), tBrB_in);
@@ -239,10 +239,22 @@ gemm_device(ATensor   const& A,         // (M,K)
       copy(r2s_A, tArA_out, tAsA_out(_,_,_,k_tile_prefetch%stages));
       copy(r2s_B, tBrB_out, tBsB_out(_,_,_,k_tile_prefetch%stages));
     }
-  }
 
-  /* Write C to global memory */
-  copy(copy_c, tCrC, tCgC);
+    if(role_id == role::consumer) {
+      // Load SLM -> registers
+      copy(s2r_A, tAsA_in(_,_,_,k_tile%stages), tCrA_in);
+      copy(s2r_B, tBsB_in(_,_,_,k_tile%stages), tCrB_in);
+
+      // Multiply
+      gemm(mma, tCrA, tCrB, tCrC);
+    }
+    barrier_arrive(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsRelease | SPIRVMemorySemantics::SemanticsWGMemory);
+    barrier_wait(SPIRVScope::ScopeWorkgroup, SPIRVMemorySemantics::SemanticsAcquire | SPIRVMemorySemantics::SemanticsWGMemory);
+  }
+  if(role_id == role::consumer) {
+    /* Write C to global memory */
+    copy(copy_c, tCrC, tCgC);
+  }
 }
 
 template <typename TA, typename TB, typename TC>
@@ -275,8 +287,8 @@ choose_tiled_mma(ATensor const& A, BTensor const& B, CTensor const&)
                                   && !(is_same_v<TB, cute::float_e5m2_t>))
                            || (b_n && sizeof_bits_v<TB> < 8);
 
-  using WGTile = Shape<_256, _256,  C<op.K * 2>>;                               // 256x256 WG tile size
-  using SGLayout8x4 = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>;  // 8x4 SG tiling, n-major
+  using WGTile = Shape<_128, _128,  C<op.K * 2>>;                               // 256x256 WG tile size
+  using SGLayout8x4 = Layout<Shape<_4, _4, _1>, Stride<_4, _1, _0>>;  // 8x4 SG tiling, n-major
 
   using SGLayout = SGLayout8x4;
 
@@ -295,7 +307,7 @@ gemm_cute(sycl::queue &Q,
 {
   auto mma = choose_tiled_mma(A, B, C);
 
-  sycl::range<2> local = {size(mma), 1};
+  sycl::range<2> local = {size(mma) * 2, 1};
   sycl::range<2> global = {local[0] * ceil_div(shape<0>(B), get<1>(mma.tile_mnk())),
                            local[1] * ceil_div(shape<0>(A), get<0>(mma.tile_mnk()))};
 
@@ -397,7 +409,7 @@ test_case(sycl::queue &Q, int m, int n, int k, int iterations, int verify)
   } else {
     std::cout << "skipped verification";
   }
-  
+
   if (ok) {
     // Test performance:
     const int timing_iterations = iterations;
