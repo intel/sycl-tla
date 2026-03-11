@@ -124,6 +124,25 @@ If these environment variables are not set, the installation process will infer 
 * `CUTLASS_PATH`: either one directory level above the current directory (i.e., `$(pwd)/..`) if installed locally or in the `source` directory of the location in which `cutlass_library` was installed
 * `ONEAPI_ROOT`: the default Intel oneAPI installation path
 
+#### Performance related environment variables
+
+For improving performance on Intel PVC/BMG you could try the following:
+
+* `export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"`
+
+Please refer to [Building with Sycl Support](../media/docs/cpp/build/building_with_sycl_support.md#building-with-sycl-for-intel-gpu-support) for the omplete environment setup.
+
+* `CUTLASS_SYCL_ADDITIONAL_TILE_SHAPES` : Path to JSON file containing workgroup and subgroup tile sizes meant for Intel Xe architecture. Expected format s a list of dictionaries like [{"wg": [256, 256, 32], "sg": [8,4,1]}, ...]. Here `wg` refers to the workgroup tile shape and `sg` refers to the subgroup tile layout. This is enabled only for BF16/FP16 kernels.
+
+Sample JSON file that may be used for adding tile shapes.
+```
+[{"wg":[512, 256, 32],"sg":[8,4,1]},
+ {"wg":[256, 128, 16],"sg":[8,4,1]}]
+```
+> Note: This feature is meant for advanced users and should be used only if the existing tile shapes don't match desired performance. We recommend you first validate and benchmark any custom tile shapes with SYCL-TLA GEMM examples which can be found [here](../examples/).
+Please note additional tile shapes also increase the torch inductor's autotune benchmarking duration.
+
+
 #### Installation
 
 Stable releases of the SYCL*TLA Python interface are available via the `sycl-tla` PyPI package.
