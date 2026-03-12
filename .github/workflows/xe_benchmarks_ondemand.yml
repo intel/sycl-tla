@@ -70,11 +70,11 @@ jobs:
           export IGC_VectorAliasBBThreshold=100000000000
           export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
           export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
-          export no_proxy=$no_proxy,${{ secrets.INFLUX_SERVER_IP }}
           export INFLUX_URL=${{ secrets.INFLUX_URL }}
           export INFLUX_ORG="cutlass"
           export INFLUX_BUCKET="benchmarks"
           export INFLUX_TOKEN=${{ secrets.INFLUX_TOKEN }}
+          export no_proxy=$no_proxy,${{ secrets.INFLUX_SERVER_IP }}
           # Persist environment variables to following steps
           env >> $GITHUB_ENV
           which $CXX
