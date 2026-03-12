@@ -18,7 +18,7 @@ Understanding whether a kernel is **bandwidth-bound** (memory throughput is the 
 |---------|------------------|-------------|
 | Low memory bandwidth utilization | Register/SLM staging mismatch | Check tile size vs cache line size |
 | Low XMX utilization | Tile too small, pipeline too shallow | Increase tile M/N, add pipeline stage |
-| Frequent barrier stalls | Over-synchronisation | Audit `barrier()` calls in epilogue |
+| Frequent barrier stalls | Over-synchronization | Audit `barrier()` calls in epilogue |
 | High register spill | Tile too large | Reduce tile M or tile N |
 
 ## Memory hierarchy overview
@@ -215,7 +215,7 @@ Increasing to 3 or 4 can help on high-latency HBM systems, but raises register p
 | Pitfall | Description | Fix |
 |---------|-------------|-----|
 | **Alignment** | `XE_2D_*` loads require the base pointer to be 64-byte aligned and the row stride to be a multiple of 16 elements. Unaligned access silently produces garbage. | Pad matrices to alignment boundaries. |
-| **Over-synchronisation** | Inserting `barrier()` after every copy wastes throughput. The epilogue often only needs one barrier. | Audit barrier placement; consolidate where possible. |
+| **Over-synchronization** | Inserting `barrier()` after every copy wastes throughput. The epilogue often only needs one barrier. | Audit barrier placement; consolidate where possible. |
 | **Register pressure** | Large tiles (`512×512×32`) can exceed the 256-GRF budget per thread. The compiler will spill to SLM, hurting performance. | Reduce tile M or N; use `-cl-intel-256-GRF-per-thread` with awareness. |
 | **VNNI format** | B-matrix loads for XMX must use `_LD_V` (VNNI-packed) layout. Using `_LD_N` for the B matrix causes wrong results or poor performance. | Use `XE_2D_U16x*x*_LD_V` for B-matrix loads. |
 
@@ -230,7 +230,7 @@ Increasing to 3 or 4 can help on high-latency HBM systems, but raises register p
    Consider a "residue" kernel or smaller tiles for non-multiple sizes.
 
 3. **Pipeline depth sufficient?**
-   If memory latency is high and XMX utilisation is low, increase `PipelineStages` by one and
+   If memory latency is high and XMX utilization is low, increase `PipelineStages` by one and
    re-benchmark.
 
 4. **Alignment verified?**
