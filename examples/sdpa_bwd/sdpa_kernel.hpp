@@ -94,12 +94,14 @@ struct Options {
     bool is_causal;
     bool is_bhsd;
     bool is_bf16;
+    bool accuracy_test;  // run multi-config accuracy sweep instead of benchmark
 
     int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo, iterations;
     float softmax_scale;
 
     Options()
         : help(false), error(false), is_causal(false), is_bhsd(true), is_bf16(false),
+          accuracy_test(false),
           batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
           seq_len_kv(512), head_size_vo(128), iterations(100), softmax_scale(1.f) {}
 
@@ -130,6 +132,12 @@ struct Options {
             is_bf16 = false;
         }
 
+        if (cmd.check_cmd_line_flag("accuracy_test")) {
+            accuracy_test = true;
+        } else {
+            accuracy_test = false;
+        }
+
         cmd.get_cmd_line_argument("batch", batch, 32);
         cmd.get_cmd_line_argument("num_heads_q", num_heads_q, 16);
         cmd.get_cmd_line_argument("num_heads_kv", num_heads_kv, num_heads_q);
@@ -150,7 +158,8 @@ struct Options {
             << "  --help                      If specified, displays this usage statement\n\n"
             << "  --is_causal                 Apply Causal Mask to the output of first Matmul\n"
             << "  --is_bhsd                   Use Batch, Head, Seq, Dim layout for Q/K/V/O\n"
-            << "  --is_bf16                   Use bf16 for input and output data type"
+            << "  --is_bf16                   Use bf16 for input and output data type\n"
+            << "  --accuracy_test             Run accuracy sweep over corner cases (seqlens, causal, layouts)\n"
             << "  --batch=<int>               Sets the Batch Size of the Multi-Head Self Attention module\n"
             << "  --num_heads_q=<int>         Sets the Number of Attention Heads for Key-Value pair the Multi-Head Self Attention module\n"
             << "  --num_heads_kv=<int>        Sets the Number of Attention Heads for Query input in the Multi-Head Self Attention module\n"

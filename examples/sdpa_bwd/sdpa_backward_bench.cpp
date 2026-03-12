@@ -589,6 +589,35 @@ int main(int argc, const char**argv) {
     auto problem_shape = ProblemShapeRegular(BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
                                              SEQ_LEN_QO, SEQ_LEN_KV, HEAD_SIZE_QK, HEAD_SIZE_VO);
 
+    if (options.accuracy_test) {
+        const int test_seqlens[]   = {64, 512, 513, 523, 528, 543};
+        const int test_headdims[]  = {64, 96, 128, 192, 256};
+        const bool test_causals[]  = {false, true};
+        const bool test_bhsds[]    = {true, false};
+
+        for (int sq : test_seqlens) {
+          for (int hd : test_headdims) {
+            for (bool causal : test_causals) {
+              for (bool bhsd : test_bhsds) {
+                auto ps = ProblemShapeRegular(BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
+                                             sq, sq, hd, hd);
+                printf("\n[accuracy_test] batch=%d nh_q=%d nh_kv=%d sq=%d hd=%d causal=%d bhsd=%d\n",
+                       (int)BATCH, (int)NUM_HEAD_Q, (int)NUM_HEAD_KV, sq, hd, (int)causal, (int)bhsd);
+                if (options.is_bf16) {
+                    using T = cute::bfloat16_t;
+                    launch_mha_wrapper<T, V>(ps, causal, bhsd, 1, /*checksum=*/true);
+                } else {
+                    using T = cute::half_t;
+                    launch_mha_wrapper<T, V>(ps, causal, bhsd, 1, /*checksum=*/true);
+                }
+              }
+            }
+          }
+        }
+        printf("\n[accuracy_test] Done.\n");
+        return 0;
+    }
+
     DurTuple res;
     if (options.is_bf16) {
         using T = cute::bfloat16_t;
