@@ -110,7 +110,7 @@ struct Xe2DTraitsBase
   template <typename SEngine, typename SLayout>
   CUTE_DEVICE
   Xe2DTraitsBase(Tensor<SEngine, SLayout> const& src)
-      : base_ptr((uint64_t) &*src.data()),
+      : base_ptr((uint64_t) &*raw_pointer_cast(src.data())),
         tiled_strides(replace<XMode::value>(replace<YMode::value>(src.stride(), _0{}), _0{}))
   {
     constexpr auto SBits = sizeof_bits_v<typename SEngine::value_type>;
