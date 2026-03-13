@@ -10912,8 +10912,8 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
 
     # Expecting JSON of format i.e list of dictionaries [{"wg": [256, 256, 32], "sg": [8,4,1]}, ...]
     custom_tile_shapes = []
-    if os.getenv("CUTLASS_SYCL_ADDITIONAL_TILE_SHAPES"):
-      custom_json = os.getenv("CUTLASS_SYCL_ADDITIONAL_TILE_SHAPES")
+    if os.getenv("SYCL_TLA_ADDITIONAL_TILE_SHAPES"):
+      custom_json = os.getenv("SYCL_TLA_ADDITIONAL_TILE_SHAPES")
       with open(custom_json, "r") as f:
           try:
             custom_tile_shapes = json.load(f)
