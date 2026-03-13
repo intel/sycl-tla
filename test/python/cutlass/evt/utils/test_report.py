@@ -30,7 +30,8 @@
 #################################################################################################
 
 import csv
-from datetime import datetime
+import datetime
+import os
 import unittest
 
 
@@ -79,27 +80,22 @@ def print_test_summary(test_results, suite_name):
     print(f"{'='*70}\n")
 
 
-def write_test_results_to_csv(test_results, suite_name):
-    """
-    Write test results to a CSV file.
+def write_test_results_to_csv(results, suite_name, output_dir='.'):
+    """Write test results to CSV file in the specified directory."""
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f'test_results_{suite_name}_{timestamp}.csv'
+    filepath = os.path.join(output_dir, filename)
     
-    Args:
-        test_results: unittest.TestResult object containing test results
-        suite_name: Name of the test suite that was run
-    
-    Returns:
-        str: Path to the generated CSV file
-    """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"test_results_{suite_name}_{timestamp}.csv"
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
     
     # Collect all test results
     all_tests = []
     
     # Check if test_results has successes attribute (custom result class)
-    if hasattr(test_results, 'successes'):
+    if hasattr(results, 'successes'):
         # Add successful tests
-        for test in test_results.successes:
+        for test in results.successes:
             test_name = str(test)
             all_tests.append({
                 'test_name': test_name,
@@ -108,7 +104,7 @@ def write_test_results_to_csv(test_results, suite_name):
             })
     
     # Add failed tests
-    for test, traceback in test_results.failures:
+    for test, traceback in results.failures:
         test_name = str(test)
         # Extract just the error message (first line of traceback)
         message = traceback.split('\n')[-2] if traceback else 'Failed'
@@ -119,7 +115,7 @@ def write_test_results_to_csv(test_results, suite_name):
         })
     
     # Add error tests
-    for test, traceback in test_results.errors:
+    for test, traceback in results.errors:
         test_name = str(test)
         # Extract just the error message (first line of traceback)
         message = traceback.split('\n')[-2] if traceback else 'Error'
@@ -130,7 +126,7 @@ def write_test_results_to_csv(test_results, suite_name):
         })
     
     # Add skipped tests
-    for test, reason in test_results.skipped:
+    for test, reason in results.skipped:
         test_name = str(test)
         all_tests.append({
             'test_name': test_name,
@@ -139,7 +135,7 @@ def write_test_results_to_csv(test_results, suite_name):
         })
     
     # Write to CSV
-    with open(output_file, 'w', newline='') as csvfile:
+    with open(filepath, 'w', newline='') as csvfile:
         fieldnames = ['test_name', 'status', 'message']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
@@ -147,7 +143,5 @@ def write_test_results_to_csv(test_results, suite_name):
         for test_result in all_tests:
             writer.writerow(test_result)
     
-    print(f"Results written to: {output_file}\n")
-    
-    return output_file
+    print(f"\nTest results written to: {filepath}")
 
