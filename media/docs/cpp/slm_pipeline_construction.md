@@ -124,7 +124,7 @@ auto make_A_slm_copies(TiledMMA const& tiled_mma,
 
 #### Generic SLM $\leftrightarrow$ Register Copies
 
-Copying data between registers (represented by `SubgroupTensor`s) and SLM buffers is a very common operation, and it will be useful to have a generic implementation. For instance, FlashAttention currently has a [set of utilities](../applications/flash_attention_v2/collective/copy_block_slm.hpp) that cover some limited cases used during cross-subgroup softmax reduction.
+Copying data between registers (represented by `SubgroupTensor`s) and SLM buffers is a very common operation, and it will be useful to have a generic implementation. For instance, FlashAttention currently has a [set of utilities](../../../include/cute/atom/copy_block_slm.hpp) that cover some limited cases used during cross-subgroup softmax reduction.
 
 Accordingly, let's introduce some generic routines for copying data between registers and SLM, which can be used internally by `make_{A,B}_slm_copies`, attention fusions, and other users of SLM.
 
