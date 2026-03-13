@@ -44,6 +44,7 @@ import shutil
 import sys
 import copy
 from typing import Any, Dict, Optional, Sequence, Tuple
+import json
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -200,12 +201,10 @@ def CreateGemmUniversal3xOperator(
 
   operations = []
 
-  # by default, only generate the largest tile and largest alignment
-  # but generate all tiles when --kernels=all is specified
+  # generate all tiles when --kernels=all is specified
   if manifest.kernel_filter == '' or manifest.kernel_filter == 'all':
     if len(tile_descriptions) == 0:
       return operations
-    tile_descriptions = [tile_descriptions[0]]
   
   combinations = product(layouts, tile_descriptions, data_types, complex_transforms, schedules, tile_schedulers)
   for layout, tile_description, data_type, complex_transform, schedules, tile_scheduler in combinations:
@@ -10901,21 +10900,33 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
             MathOperation.multiply_add)
     ]
 
+    default_tiles_wg_sg = [
+        ([256, 256, 32],[8,4,1]),
+        ([128, 256, 32],[4,8,1]),
+        ([256, 128, 32],[8,4,1]),
+        ([128, 128, 32],[4,4,1]),
+        ([64, 128, 32],[2,4,1]),
+    ]
+
     max_cc = min_cc
 
+    # Expecting JSON of format i.e list of dictionaries [{"wg": [256, 256, 32], "sg": [8,4,1]}, ...]
+    custom_tile_shapes = []
+    if os.getenv("SYCL_TLA_ADDITIONAL_TILE_SHAPES"):
+      custom_json = os.getenv("SYCL_TLA_ADDITIONAL_TILE_SHAPES")
+      with open(custom_json, "r") as f:
+          try:
+            custom_tile_shapes = json.load(f)
+          except json.JSONDecodeError:
+            raise ValueError(f"Error decoding JSON : {custom_json}")
+    for tile in custom_tile_shapes:
+      default_tiles_wg_sg.append((tile["wg"],tile["sg"]))
+
+    tile_descriptions=[]
     for math_inst in math_instructions:
-        tile_descriptions = [
-            TileDescription([256, 256, 32],
-                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([128, 256, 32],
-                0, [4, 8, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([256, 128, 32],
-                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([128, 128, 32],
-                0, [4, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([64, 128, 32],
-                0, [2, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-        ]
+        for wg_tile,sg_tile in default_tiles_wg_sg:
+          tile_descriptions.append(TileDescription(wg_tile,
+                  0, sg_tile, math_inst, min_cc, max_cc, [1, 1, 1]))
 
         # Generate kernels for different output (D) types
         # Default: accumulator type (FP32 for mixed precision, same as input for native precision)
