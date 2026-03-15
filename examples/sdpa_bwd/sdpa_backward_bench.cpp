@@ -222,25 +222,52 @@ launch_mha_backward(ProblemShape problem_shape,
                                         s_d, dp_d,
                                         seq_len_q_pad, seq_len_kv_pad, count);
     } else if (headdim == 128) {
-        constexpr int kBlockM = 64;
-        constexpr int kBlockN = 64;
         constexpr int kHeadDim = 128;
-        constexpr int kNSGs = 8;
-        constexpr int AtomLayoutMSdP = 2;
-        constexpr int AtomLayoutNdKV = 2;
-        constexpr int AtomLayoutMdQ = 4;
-        static_assert(kBlockM <=  kMPad, "kBlockM must be less than or equal to kMPad");
-        static_assert(kBlockN <=  kNPad, "kBlockN must be less than or equal to kNPad");
-        return launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
-                                    kHeadDim, kNSGs,
-                                    AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
-                                    is_causal, is_bhsd>(
-                                        problem_shape,
-                                        do_d, o_d, q_d, k_d, v_d,
-                                        lse_d, odo_d,
-                                        dqaccum_d, dq_d, dk_d, dv_d,
-                                        s_d, dp_d,
-                                        seq_len_q_pad, seq_len_kv_pad, count);
+        const int batch = get<0>(problem_shape);
+        const int num_heads = get<1>(problem_shape);
+        const int seq_len = get<3>(problem_shape);
+        const int bh = batch * num_heads;
+        const int64_t work = (int64_t)bh * seq_len;
+        bool use_xl_tile = (bh <= 2) || (work >= 393216);
+        if (use_xl_tile) {
+            constexpr int kBlockM = 128;
+            constexpr int kBlockN = 128;
+            constexpr int kNSGs = 32;
+            constexpr int AtomLayoutMSdP = 4;
+            constexpr int AtomLayoutNdKV = 4;
+            constexpr int AtomLayoutMdQ = 4;
+            static_assert(kBlockM <=  kMPad, "kBlockM must be less than or equal to kMPad");
+            static_assert(kBlockN <=  kNPad, "kBlockN must be less than or equal to kNPad");
+            return launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
+                                        kHeadDim, kNSGs,
+                                        AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
+                                        is_causal, is_bhsd>(
+                                            problem_shape,
+                                            do_d, o_d, q_d, k_d, v_d,
+                                            lse_d, odo_d,
+                                            dqaccum_d, dq_d, dk_d, dv_d,
+                                            s_d, dp_d,
+                                            seq_len_q_pad, seq_len_kv_pad, count);
+        } else {
+            constexpr int kBlockM = 64;
+            constexpr int kBlockN = 64;
+            constexpr int kNSGs = 8;
+            constexpr int AtomLayoutMSdP = 2;
+            constexpr int AtomLayoutNdKV = 2;
+            constexpr int AtomLayoutMdQ = 4;
+            static_assert(kBlockM <=  kMPad, "kBlockM must be less than or equal to kMPad");
+            static_assert(kBlockN <=  kNPad, "kBlockN must be less than or equal to kNPad");
+            return launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
+                                        kHeadDim, kNSGs,
+                                        AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
+                                        is_causal, is_bhsd>(
+                                            problem_shape,
+                                            do_d, o_d, q_d, k_d, v_d,
+                                            lse_d, odo_d,
+                                            dqaccum_d, dq_d, dk_d, dv_d,
+                                            s_d, dp_d,
+                                            seq_len_q_pad, seq_len_kv_pad, count);
+        }
     } else if (headdim == 192) {
         constexpr int kBlockM = 64;
         constexpr int kBlockN = 32;
@@ -298,8 +325,8 @@ launch_mha_wrapper(ProblemShape problem_shape, bool is_causal, bool is_bhsd, int
     const int HEAD_SIZE_QK = get<5>(problem_shape);
     const int HEAD_SIZE_VO = get<6>(problem_shape);
 
-    constexpr int kBlockN = 64;
-    constexpr int kBlockM = 64;
+    constexpr int kBlockN = 128;
+    constexpr int kBlockM = 128;
     int64_t SEQ_LEN_QO_PAD = ceil_div(SEQ_LEN_QO, kBlockM) * kBlockM;
     int64_t SEQ_LEN_KV_PAD = ceil_div(SEQ_LEN_KV, kBlockN) * kBlockN;
 
@@ -577,8 +604,8 @@ int main(int argc, const char**argv) {
     int64_t HEAD_SIZE_VO = options.head_size_vo;
     bool is_causal = options.is_causal;
     bool is_bhsd = options.is_bhsd;
-    constexpr int kBlockN = 64;
-    constexpr int kBlockM = 64;
+    constexpr int kBlockN = 128;
+    constexpr int kBlockM = 128;
     int64_t SEQ_LEN_QO_PAD = ceil_div(SEQ_LEN_QO, kBlockM) * kBlockM;
     int64_t SEQ_LEN_KV_PAD = ceil_div(SEQ_LEN_KV, kBlockN) * kBlockN;
     assert(HEAD_SIZE_QK == HEAD_SIZE_VO && "only support head_size_qk==head_size_vo");
@@ -588,6 +615,35 @@ int main(int argc, const char**argv) {
 
     auto problem_shape = ProblemShapeRegular(BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
                                              SEQ_LEN_QO, SEQ_LEN_KV, HEAD_SIZE_QK, HEAD_SIZE_VO);
+
+    if (options.accuracy_test) {
+        const int test_seqlens[]   = {64, 512, 513, 523, 528, 543};
+        const int test_headdims[]  = {64, 96, 128, 192, 256};
+        const bool test_causals[]  = {false, true};
+        const bool test_bhsds[]    = {true, false};
+
+        for (int sq : test_seqlens) {
+          for (int hd : test_headdims) {
+            for (bool causal : test_causals) {
+              for (bool bhsd : test_bhsds) {
+                auto ps = ProblemShapeRegular(BATCH, NUM_HEAD_Q, NUM_HEAD_KV,
+                                             sq, sq, hd, hd);
+                printf("\n[accuracy_test] batch=%d nh_q=%d nh_kv=%d sq=%d hd=%d causal=%d bhsd=%d\n",
+                       (int)BATCH, (int)NUM_HEAD_Q, (int)NUM_HEAD_KV, sq, hd, (int)causal, (int)bhsd);
+                if (options.is_bf16) {
+                    using T = cute::bfloat16_t;
+                    launch_mha_wrapper<T, V>(ps, causal, bhsd, 1, /*checksum=*/true);
+                } else {
+                    using T = cute::half_t;
+                    launch_mha_wrapper<T, V>(ps, causal, bhsd, 1, /*checksum=*/true);
+                }
+              }
+            }
+          }
+        }
+        printf("\n[accuracy_test] Done.\n");
+        return 0;
+    }
 
     if (options.accuracy_test) {
         const int test_seqlens[]   = {64, 512, 513, 523, 528, 543};
