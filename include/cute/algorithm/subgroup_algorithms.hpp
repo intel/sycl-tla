@@ -346,7 +346,7 @@ reduce(SubgroupTensor<Engine,FragLayout,SubgroupTVLayout> const& src, BinaryOp o
     for (int i = 1; i < size<0>(rcoord_to_v); i++) {
       // Use built-in max instruction for better performance
       if constexpr (is_same_v<BinaryOp, sycl::maximum<void>>)
-        acc = sycl::fmax(acc, src_r(i, j));
+        acc = sycl::max(acc, src_r(i, j));
       else
         acc = op(acc, src_r(i, j));
     }
