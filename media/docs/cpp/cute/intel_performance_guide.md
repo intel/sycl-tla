@@ -26,18 +26,18 @@ Understanding whether a kernel is **bandwidth-bound** (memory throughput is the 
 ```
 Global Memory (HBM)
     │
-    │  2D block loads: XE_2D_*_LD_N / _LD_T / _LD_V
+    │  2D block loads: XE_LOAD_2D / XE_LOAD_2D_TRANSPOSE / XE_LOAD_2D_VNNI
     ▼
 Shared Local Memory (SLM)       ← optional staging; many Xe kernels skip SLM
     │                               and go directly Global → Register
     ▼
 Registers (GRF)
     │
-    │  XMX compute: XE_8x16x16_* atoms
+    │  XMX compute: XE_DPAS_TT atoms
     ▼
 Compute
     │
-    │  2D block stores: XE_2D_*_ST_N
+    │  2D block stores: XE_STORE_2D
     ▼
 Global Memory (HBM)
 ```
@@ -104,7 +104,7 @@ data directly into registers.
 - Multiple subgroups need to share the same loaded tile.
 
 **Skip SLM when:**
-- Each subgroup loads its own tile from global memory using `XE_2D_*_LD_*` operations.
+- Each subgroup loads its own tile from global memory using `XE_LOAD_2D` / `XE_LOAD_2D_TRANSPOSE` / `XE_LOAD_2D_VNNI` operations.
 - Pipeline stages are used instead (`PipelineStages ≥ 2`) to hide latency.
 
 ### Prefetch strategy
@@ -117,7 +117,7 @@ ahead of actual loads to hide HBM latency:
 cute::copy(prefetchA, tAgA(_, _, _, k + 1), tAsA(_, _, _, (k + 1) % Stages));
 ```
 
-The `PREFETCH` struct for a given copy trait (e.g., `XE_2D_U16x8x16_LD_N::PREFETCH`) issues a
+The `PREFETCH` struct for a given copy trait (e.g., `XE_LOAD_2D<16, 8, 16>::PREFETCH`) issues a
 non-blocking prefetch request.
 
 ### Tile size selection
@@ -136,7 +136,7 @@ Common tile sizes in this codebase:
 > (`XE_2D_U8x32x32_LD_N` for A, `XE_2D_U8x32x32_LD_V` for B) and the
 > `MainloopIntelXeXMX16FP8Scaling` dispatch policy.  The pattern from
 > `test/unit/gemm/device/gemm_universal_fp_scaling.cpp`:
->
+> 
 > ```cpp
 > using ElementA = float_e4m3_t;  // FP8
 > using ElementB = float_e4m3_t;  // FP8
@@ -149,7 +149,7 @@ Common tile sizes in this codebase:
 > using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 > using DispatchPolicy = gemm::MainloopIntelXeXMX16FP8Scaling<PipelineStages>;
 > ```
->
+> 
 > If you are looking for an `F8`-named atom and cannot find one, this is why.
 
 **Rules of thumb:**
@@ -188,7 +188,7 @@ using ShapeOutPut = Shape<_128, _128, _64>;
 using SubgroupLayout = Layout<Shape<_16, _1, _1>, Stride<_1, _1, _1>>;
 ```
 
-**Why it helped:**  Each `XE_2D_*_LD_T` / `XE_2D_*_LD_V` 2D block load carries a fixed issue
+**Why it helped:**  Each `XE_LOAD_2D_TRANSPOSE` / `XE_LOAD_2D_VNNI` 2D block load carries a fixed issue
 overhead.  With K-tile = 32, loads were issued frequently relative to the XMX work they fed.
 Doubling to K-tile = 64 halves the number of block loads per K-loop iteration, giving XMX more
 sustained work per memory transaction and improving bandwidth utilization.
@@ -214,10 +214,10 @@ Increasing to 3 or 4 can help on high-latency HBM systems, but raises register p
 
 | Pitfall | Description | Fix |
 |---------|-------------|-----|
-| **Alignment** | `XE_2D_*` loads require the base pointer to be 64-byte aligned and the row stride to be a multiple of 16 elements. Unaligned access silently produces garbage. | Pad matrices to alignment boundaries. |
+| **Alignment** | `XE_LOAD_2D` / `XE_STORE_2D` operations require the base pointer to be 64-byte aligned and the row stride to be a multiple of 16 elements. Unaligned access silently produces garbage. | Pad matrices to alignment boundaries. |
 | **Over-synchronization** | Inserting `barrier()` after every copy wastes throughput. The epilogue often only needs one barrier. | Audit barrier placement; consolidate where possible. |
 | **Register pressure** | Large tiles (`512×512×32`) can exceed the 256-GRF budget per thread. The compiler will spill to SLM, hurting performance. | Reduce tile M or N; use `-cl-intel-256-GRF-per-thread` with awareness. |
-| **VNNI format** | B-matrix loads for XMX must use `_LD_V` (VNNI-packed) layout. Using `_LD_N` for the B matrix causes wrong results or poor performance. | Use `XE_2D_U16x*x*_LD_V` for B-matrix loads. |
+| **VNNI format** | B-matrix loads for XMX must use VNNI-packed layout. Using a non-VNNI load for the B matrix causes wrong results or poor performance. | Use `XE_LOAD_2D_VNNI<Bits, H, W>` for B-matrix loads. |
 
 ## Fast diagnosis — what to check first
 
