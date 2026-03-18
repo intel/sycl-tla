@@ -344,7 +344,11 @@ reduce(SubgroupTensor<Engine,FragLayout,SubgroupTVLayout> const& src, BinaryOp o
     T acc = src_r(0, j);
     CUTE_UNROLL
     for (int i = 1; i < size<0>(rcoord_to_v); i++) {
-      acc = op(acc, src_r(i, j));
+      // Use built-in max instruction for better performance
+      if constexpr (is_same_v<BinaryOp, sycl::maximum<void>>)
+        acc = sycl::max(acc, src_r(i, j));
+      else
+        acc = op(acc, src_r(i, j));
     }
 
     if constexpr (hadd16 || hmax16 || hadd8 || hmax8)
