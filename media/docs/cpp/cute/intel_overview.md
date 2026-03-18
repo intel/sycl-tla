@@ -87,6 +87,7 @@ For engineers new to SYCL\*TLA CuTe, we recommend this sequence:
 6. **[intel_gemm_companion.md](intel_gemm_companion.md)** — Translating the tutorial to SYCL / Intel Xe
 7. **[xe_2d_copy.md](xe_2d_copy.md)** — Intel copy atom reference
 8. **[intel_performance_guide.md](intel_performance_guide.md)** — Tuning and optimization
+9. **[Intel Examples](../../../../../examples/README.md)** — Runnable Intel GEMM examples (`00_bmg_gemm` through `13_bmg_gemm_bias`)
 
 ## Quick navigation (jump to any topic)
 
@@ -98,6 +99,7 @@ For engineers new to SYCL\*TLA CuTe, we recommend this sequence:
 | **Optimize memory movement on Intel** | [xe_2d_copy.md](xe_2d_copy.md) |
 | **Tune for Intel GPU performance** | [intel_performance_guide.md](intel_performance_guide.md) |
 | **SYCL GEMM companion notes** | [intel_gemm_companion.md](intel_gemm_companion.md) |
+| **Run Intel examples** | [examples/README.md](../../../../../examples/README.md) — start with `00_bmg_gemm` or `01_bmg_gemm_with_collective_builder` |
 
 > **Key concept:** Layout algebra ([02_layout_algebra.md](02_layout_algebra.md)) is the most important
 > concept in CuTe — it powers all tiling, partitioning, and thread-to-data mapping. Functions like
