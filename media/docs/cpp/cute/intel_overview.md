@@ -43,7 +43,7 @@ the upstream NVIDIA CUTLASS CuTe:
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | **Xe 2D block loads/stores/prefetch** | `xe_2d_copy.md`, `include/cute/arch/copy_xe_2d.hpp` | Hardware 2D block operations (`XE_LOAD_2D`, `XE_STORE_2D`, `XE_LOAD_2D_TRANSPOSE`, `XE_LOAD_2D_VNNI`, `XE_PREFETCH_2D`) — see [xe_2d_copy.md](xe_2d_copy.md) for naming reference, [intel_gemm_companion.md](intel_gemm_companion.md) for usage patterns |
-| **XMX MMA atoms** (`XE_8x16x16_*`) | `include/cute/arch/mma_xe_legacy.hpp` | Xe Matrix Extension compute atoms — see [intel_gemm_companion.md](intel_gemm_companion.md) for wiring patterns |
+| **XMX MMA atoms** (`XE_DPAS_TT`) | `include/cute/arch/mma_xe.hpp` (current), `include/cute/arch/mma_xe_legacy.hpp` (legacy `XE_8x16x16_*` structs) | Xe Matrix Extension compute atoms — see [intel_gemm_companion.md](intel_gemm_companion.md) for wiring patterns |
 | **`SubgroupTensor`** | `include/cute/tensor_sg.hpp` | Intel-specific tensor type that scatters/gathers across subgroup lanes |
 | **`TiledMMAHelper`** | `include/cute/atom/mma_atom.hpp` | Helper that constructs a `TiledMMA` from an Xe MMA atom and subgroup tile shape |
 
@@ -52,9 +52,18 @@ the upstream NVIDIA CUTLASS CuTe:
 
 ### Intel Xe MMA atoms
 
-Xe MMA atoms follow the naming convention `XE_8x16x16_<AccumType><AType><BType><CType>_<Layout>`.
-For example `XE_8x16x16_F32BF16BF16F32_TT` accumulates FP32 from BF16 A and BF16 B operands.
-These are defined in `include/cute/arch/mma_xe_legacy.hpp`.
+Xe MMA atoms use the `XE_DPAS_TT<M, TypeD, TypeA, TypeB, TypeC>` template
+(defined in `include/cute/arch/mma_xe.hpp`), where `M` is the number of output rows
+and types use the `dpas_type` namespace aliases (`f`, `bf`, `hf`, `tf32`, `u8`, `s8`, `u4`, `s4`).
+K is computed automatically as `256 / max(sizeof_bits(TypeA), sizeof_bits(TypeB))`.
+
+For example, `XE_DPAS_TT<8, dpas_type::f, dpas_type::bf, dpas_type::bf, dpas_type::f>` performs
+a BF16 × BF16 → FP32 DPAS with 8 output rows.
+
+> **Legacy note:** Existing examples may use the older named structs
+> (`XE_8x16x16_F32BF16BF16F32_TT`, `XE_4x16x16_F32BF16BF16F32_TT`, etc.)
+> from `include/cute/arch/mma_xe_legacy.hpp`. These continue to work but
+> `XE_DPAS_TT` is the current API for new development.
 
 ### SubgroupTensor
 
