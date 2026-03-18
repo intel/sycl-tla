@@ -342,7 +342,7 @@ gh pr create --template .github/PULL_REQUEST_TEMPLATE/refactoring.md
 - 🔨 **Refactoring** → `refactoring.md` - Refactored/Redesigned code
 - 📝 **Mixed/Other** → Default template
 
-See [`.github/PULL_REQUEST_TEMPLATE/README.md`](https://github.com/intel/sycl-tla/blob/main/.github/PULL_REQUEST_TEMPLATE) for details.
+See [`.github/PULL_REQUEST_TEMPLATE`](https://github.com/intel/sycl-tla/tree/main/.github/PULL_REQUEST_TEMPLATE) for details.
 
 # Copyright
 
