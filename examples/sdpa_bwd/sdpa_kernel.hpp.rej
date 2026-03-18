@@ -1,0 +1,17 @@
+--- examples/sdpa_bwd/sdpa_kernel.hpp
++++ examples/sdpa_bwd/sdpa_kernel.hpp
+@@ -94,12 +94,13 @@ struct Options {
+     bool is_causal;
+     bool is_bhsd;
+     bool is_bf16;
++    bool accuracy_test;
+ 
+     int batch, num_heads_q, num_heads_kv, seq_len_qo, seq_len_kv, head_size_qk, head_size_vo, iterations;
+     float softmax_scale;
+ 
+     Options()
+-        : help(false), error(false), is_causal(false), is_bhsd(true), is_bf16(false),
++        : help(false), error(false), is_causal(false), is_bhsd(true), is_bf16(false), accuracy_test(false),
+           batch(32), num_heads_q(16), num_heads_kv(16), seq_len_qo(1), head_size_qk(128),
+           seq_len_kv(512), head_size_vo(128), iterations(100), softmax_scale(1.f) {}
+ 

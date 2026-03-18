@@ -169,50 +169,24 @@ void launch_mha_backward(ProblemShape problem_shape,
             dqaccum_d, dq_d, dk_d, dv_d,
             seq_len_q_pad, seq_len_kv_pad);
     } else if (headdim == 128) {
+        constexpr int kBlockM = 128;
+        constexpr int kBlockN = 128;
         constexpr int kHeadDim = 128;
-        const int batch = get<0>(problem_shape);
-        const int num_heads = get<1>(problem_shape);
-        const int seq_len = get<3>(problem_shape);
-        const int bh = batch * num_heads;
-        const int64_t work = (int64_t)bh * seq_len;
-        bool use_xl_tile = (bh <= 2) || (work >= 393216);
-        if (use_xl_tile) {
-            constexpr int kBlockM = 128;
-            constexpr int kBlockN = 128;
-            constexpr int kNSGs = 32;
-            constexpr int AtomLayoutMSdP = 4;
-            constexpr int AtomLayoutNdKV = 4;
-            constexpr int AtomLayoutMdQ = 4;
-            static_assert(kBlockM <=  kMPad, "kBlockM must be less than or equal to kMPad");
-            static_assert(kBlockN <=  kNPad, "kBlockN must be less than or equal to kNPad");
-            launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
-                                        kHeadDim, kNSGs,
-                                        AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
-                                        is_causal, is_bhsd>(
-                problem_shape,
-                do_d, o_d, q_d, k_d, v_d,
-                lse_d, odo_d,
-                dqaccum_d, dq_d, dk_d, dv_d,
-                seq_len_q_pad, seq_len_kv_pad);
-        } else {
-            constexpr int kBlockM = 64;
-            constexpr int kBlockN = 64;
-            constexpr int kNSGs = 8;
-            constexpr int AtomLayoutMSdP = 2;
-            constexpr int AtomLayoutNdKV = 2;
-            constexpr int AtomLayoutMdQ = 4;
-            static_assert(kBlockM <=  kMPad, "kBlockM must be less than or equal to kMPad");
-            static_assert(kBlockN <=  kNPad, "kBlockN must be less than or equal to kNPad");
-            launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
-                                        kHeadDim, kNSGs,
-                                        AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
-                                        is_causal, is_bhsd>(
-                problem_shape,
-                do_d, o_d, q_d, k_d, v_d,
-                lse_d, odo_d,
-                dqaccum_d, dq_d, dk_d, dv_d,
-                seq_len_q_pad, seq_len_kv_pad);
-        }
+        constexpr int kNSGs = 32;
+        constexpr int AtomLayoutMSdP = 4;
+        constexpr int AtomLayoutNdKV = 4;
+        constexpr int AtomLayoutMdQ = 4;
+        static_assert(kBlockM <=  kMPad, "kBlockM must be less than or equal to kMPad");
+        static_assert(kBlockN <=  kNPad, "kBlockN must be less than or equal to kNPad");
+        launch_mha_backward_headdim<T, ProblemShape, kBlockM, kBlockN,
+                                    kHeadDim, kNSGs,
+                                    AtomLayoutMSdP, AtomLayoutNdKV, AtomLayoutMdQ,
+                                    is_causal, is_bhsd>(
+            problem_shape,
+            do_d, o_d, q_d, k_d, v_d,
+            lse_d, odo_d,
+            dqaccum_d, dq_d, dk_d, dv_d,
+            seq_len_q_pad, seq_len_kv_pad);
     } else if (headdim == 192) {
         constexpr int kBlockM = 64;
         constexpr int kBlockN = 32;

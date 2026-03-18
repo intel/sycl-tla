@@ -1,0 +1,33 @@
+Loop 1 @ level 1: 5776 total, 307 fill, 199 spill, 0 subroutine calls
+Loop 16 @ level 2: 1961 total, 75 fill, 31 spill, 0 subroutine calls
+Loop 21 @ level 3: 9 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 20 @ level 3: 5 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 18 @ level 3: 5 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 19 @ level 3: 9 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 12 @ level 3: 46 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 13 @ level 3: 45 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 14 @ level 3: 40 total, 5 fill, 2 spill, 0 subroutine calls
+Loop 15 @ level 3: 82 total, 33 fill, 16 spill, 0 subroutine calls
+Loop 17 @ level 3: 139 total, 11 fill, 6 spill, 0 subroutine calls
+Loop 7 @ level 2: 1812 total, 73 fill, 36 spill, 0 subroutine calls
+Loop 8 @ level 3: 5 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 9 @ level 3: 9 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 10 @ level 3: 5 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 11 @ level 3: 9 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 3 @ level 3: 45 total, 0 fill, 0 spill, 0 subroutine calls
+Loop 4 @ level 3: 40 total, 5 fill, 2 spill, 0 subroutine calls
+Loop 5 @ level 3: 82 total, 33 fill, 16 spill, 0 subroutine calls
+Loop 6 @ level 3: 146 total, 9 fill, 7 spill, 0 subroutine calls
+Loop 2 @ level 3: 46 total, 0 fill, 0 spill, 0 subroutine calls
+Kernel name: kernel
+ # BBs : 99
+ # Asm Insts: 5970
+ # RA Iters = 4
+ Spill Size = 7488
+ # Spills: 201
+ # Fills : 308
+Total dyn inst: 1087682
+Fill dyn inst: 102791
+Spill dyn inst: 52122
+Percent Fill/Total dyn inst: 9.450464
+LL1(#1): {S-199, F-307}, LL2(#2): {S-67, F-148}, LL3(#18): {S-49, F-96}, 

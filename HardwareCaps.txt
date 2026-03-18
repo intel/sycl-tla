@@ -1,0 +1,161 @@
+// ------------------------------------------------
+// HardwareCaps.txt
+// ------------------------------------------------
+// Hardware Caps :
+EUCount 		= 	64
+ThreadCount 		= 	512
+SliceCount 		= 	2
+SubSliceCount 		= 	8
+TotalPsThreadsWindowerRange 		= 	0
+TotalVsThreads 		= 	0
+TotalVsThreads_Pocs 		= 	0
+TotalGsThreads 		= 	0
+TotalDsThreads 		= 	0
+TotalHsThreads 		= 	0
+MaxEuPerSubSlice 		= 	8
+EuCountPerPoolMax 		= 	0
+EuCountPerPoolMin 		= 	0
+MaxSlicesSupported 		= 	2
+MaxSubSlicesSupported 		= 	8
+UsDeviceID 		= 	0xe202
+UsRevId 		= 	0x0
+UsDeviceID_PCH 		= 	0x0
+UsRevId_PCH 		= 	0x0
+// ------------------------------------------------
+// HardwareCaps.txt
+// ------------------------------------------------
+// Hardware Caps :
+EUCount 		= 	64
+ThreadCount 		= 	512
+SliceCount 		= 	2
+SubSliceCount 		= 	8
+TotalPsThreadsWindowerRange 		= 	0
+TotalVsThreads 		= 	0
+TotalVsThreads_Pocs 		= 	0
+TotalGsThreads 		= 	0
+TotalDsThreads 		= 	0
+TotalHsThreads 		= 	0
+MaxEuPerSubSlice 		= 	8
+EuCountPerPoolMax 		= 	0
+EuCountPerPoolMin 		= 	0
+MaxSlicesSupported 		= 	2
+MaxSubSlicesSupported 		= 	8
+UsDeviceID 		= 	0xe202
+UsRevId 		= 	0x0
+UsDeviceID_PCH 		= 	0x0
+UsRevId_PCH 		= 	0x0
+// ------------------------------------------------
+// HardwareCaps.txt
+// ------------------------------------------------
+// Hardware Caps :
+EUCount 		= 	64
+ThreadCount 		= 	512
+SliceCount 		= 	2
+SubSliceCount 		= 	8
+TotalPsThreadsWindowerRange 		= 	0
+TotalVsThreads 		= 	0
+TotalVsThreads_Pocs 		= 	0
+TotalGsThreads 		= 	0
+TotalDsThreads 		= 	0
+TotalHsThreads 		= 	0
+MaxEuPerSubSlice 		= 	8
+EuCountPerPoolMax 		= 	0
+EuCountPerPoolMin 		= 	0
+MaxSlicesSupported 		= 	2
+MaxSubSlicesSupported 		= 	8
+UsDeviceID 		= 	0xe202
+UsRevId 		= 	0x0
+UsDeviceID_PCH 		= 	0x0
+UsRevId_PCH 		= 	0x0
+// ------------------------------------------------
+// HardwareCaps.txt
+// ------------------------------------------------
+// Hardware Caps :
+EUCount 		= 	64
+ThreadCount 		= 	512
+SliceCount 		= 	2
+SubSliceCount 		= 	8
+TotalPsThreadsWindowerRange 		= 	0
+TotalVsThreads 		= 	0
+TotalVsThreads_Pocs 		= 	0
+TotalGsThreads 		= 	0
+TotalDsThreads 		= 	0
+TotalHsThreads 		= 	0
+MaxEuPerSubSlice 		= 	8
+EuCountPerPoolMax 		= 	0
+EuCountPerPoolMin 		= 	0
+MaxSlicesSupported 		= 	2
+MaxSubSlicesSupported 		= 	8
+UsDeviceID 		= 	0xe202
+UsRevId 		= 	0x0
+UsDeviceID_PCH 		= 	0x0
+UsRevId_PCH 		= 	0x0
+// ------------------------------------------------
+// HardwareCaps.txt
+// ------------------------------------------------
+// Hardware Caps :
+EUCount 		= 	64
+ThreadCount 		= 	512
+SliceCount 		= 	2
+SubSliceCount 		= 	8
+TotalPsThreadsWindowerRange 		= 	0
+TotalVsThreads 		= 	0
+TotalVsThreads_Pocs 		= 	0
+TotalGsThreads 		= 	0
+TotalDsThreads 		= 	0
+TotalHsThreads 		= 	0
+MaxEuPerSubSlice 		= 	8
+EuCountPerPoolMax 		= 	0
+EuCountPerPoolMin 		= 	0
+MaxSlicesSupported 		= 	2
+MaxSubSlicesSupported 		= 	8
+UsDeviceID 		= 	0xe202
+UsRevId 		= 	0x0
+UsDeviceID_PCH 		= 	0x0
+UsRevId_PCH 		= 	0x0
+// ------------------------------------------------
+// HardwareCaps.txt
+// ------------------------------------------------
+// Hardware Caps :
+EUCount 		= 	64
+ThreadCount 		= 	512
+SliceCount 		= 	2
+SubSliceCount 		= 	8
+TotalPsThreadsWindowerRange 		= 	0
+TotalVsThreads 		= 	0
+TotalVsThreads_Pocs 		= 	0
+TotalGsThreads 		= 	0
+TotalDsThreads 		= 	0
+TotalHsThreads 		= 	0
+MaxEuPerSubSlice 		= 	8
+EuCountPerPoolMax 		= 	0
+EuCountPerPoolMin 		= 	0
+MaxSlicesSupported 		= 	2
+MaxSubSlicesSupported 		= 	8
+UsDeviceID 		= 	0xe202
+UsRevId 		= 	0x0
+UsDeviceID_PCH 		= 	0x0
+UsRevId_PCH 		= 	0x0
+// ------------------------------------------------
+// HardwareCaps.txt
+// ------------------------------------------------
+// Hardware Caps :
+EUCount 		= 	64
+ThreadCount 		= 	512
+SliceCount 		= 	2
+SubSliceCount 		= 	8
+TotalPsThreadsWindowerRange 		= 	0
+TotalVsThreads 		= 	0
+TotalVsThreads_Pocs 		= 	0
+TotalGsThreads 		= 	0
+TotalDsThreads 		= 	0
+TotalHsThreads 		= 	0
+MaxEuPerSubSlice 		= 	8
+EuCountPerPoolMax 		= 	0
+EuCountPerPoolMin 		= 	0
+MaxSlicesSupported 		= 	2
+MaxSubSlicesSupported 		= 	8
+UsDeviceID 		= 	0xe202
+UsRevId 		= 	0x0
+UsDeviceID_PCH 		= 	0x0
+UsRevId_PCH 		= 	0x0
