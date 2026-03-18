@@ -73,6 +73,12 @@ if (CUTLASS_ENABLE_SYCL)
     )
 
     cutlass_example_add_executable(
+      cute_tutorial_xe_slm_throughput_bench
+      xe_slm_throughput_bench.cpp
+    )
+    target_link_libraries(cute_tutorial_xe_slm_throughput_bench PRIVATE ze_loader)
+
+    cutlass_example_add_executable(
       cute_tutorial_xe_two_gemm_fusion
       xe_two_gemm_fusion.cpp
     )
