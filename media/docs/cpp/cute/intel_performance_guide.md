@@ -149,12 +149,14 @@ sustained work per memory transaction and improving bandwidth utilization.
 
 For Flash Attention Prefill and many manual GEMM kernels, `PipelineStages = 2` is a common
 starting point — it overlaps one iteration of loads with the compute of the previous iteration.
-The `CollectiveBuilder` defaults to `PipelineStages = 3` for standard (non-grouped) GEMM
-(`MainloopXeL1Staged`) and `2` for grouped GEMM.  Flash Attention Decode typically uses
-`PipelineStages = 1`.
+The `CollectiveBuilder` typically selects `PipelineStages = 3` for common BF16 GEMM
+configurations via `StageCountAuto` (see
+[`examples/01_bmg_gemm_with_collective_builder/`](../../../../examples/01_bmg_gemm_with_collective_builder/)
+for the default setup).  The actual stage count may vary depending on tile shape, data types, and
+available hardware resources.  Flash Attention Decode typically uses `PipelineStages = 1`.
 
 ```cpp
-static constexpr int PipelineStages = 2;  // one common value; CollectiveBuilder defaults to 3 for standard GEMM
+static constexpr int PipelineStages = 2;  // one common value; CollectiveBuilder typically selects 3 via StageCountAuto
 ```
 
 Increasing to 3 or 4 can help on high-latency HBM systems, but raises register pressure.
@@ -181,8 +183,8 @@ Increasing to 3 or 4 can help on high-latency HBM systems, but raises register p
    Consider a "residue" kernel or smaller tiles for non-multiple sizes.
 
 3. **Pipeline depth sufficient?**
-   The `CollectiveBuilder` defaults to `PipelineStages = 3` for standard GEMM; Flash Attention
-   Prefill uses `2`, and Decode uses `1`.  If memory latency is high and XMX utilization is low
+   See [Pipeline stages](#pipeline-stages) above for typical defaults.  Flash Attention Prefill
+   commonly uses `2`, and Decode uses `1`.  If memory latency is high and XMX utilization is low
    in a GEMM or Prefill kernel, try increasing `PipelineStages` by one and re-benchmark — but
    verify register spill has not increased (use Intel VTune, [PTI for GPU](https://github.com/intel/pti-gpu),
    or compiler `-v` output), as each additional stage raises GRF pressure.  Decode kernels with
