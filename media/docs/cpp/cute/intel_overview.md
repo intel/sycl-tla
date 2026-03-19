@@ -223,8 +223,13 @@ using GmemCopyB = cute::XE_LOAD_2D_VNNI<16, 32, 32>;
 using GmemStoreC = cute::XE_STORE_2D<32, 8, 16>;
 ```
 
-> **Full reference:** See [xe_2d_copy.md](xe_2d_copy.md) for the complete naming
-> conventions, layout rules, and hardware constraints.
+> **Full reference:** See [xe_2d_copy.md](xe_2d_copy.md) for the data distribution model,
+> layout rules, and hardware constraints.
+> **Note:** `xe_2d_copy.md` currently documents the legacy `XE_2D_*` naming convention
+> (e.g., `XE_2D_U16x32x16_LD_N`). The new parameterized API (`XE_LOAD_2D`, `XE_STORE_2D`,
+> `XE_LOAD_2D_TRANSPOSE`, `XE_LOAD_2D_VNNI`, `XE_PREFETCH_2D`) described in this section
+> is defined in `include/cute/arch/copy_xe_2d.hpp` and supersedes the legacy naming.
+> The data distribution and layout concepts in `xe_2d_copy.md` still apply to both APIs.
 
 ---
 
