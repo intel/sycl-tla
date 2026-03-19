@@ -1,6 +1,6 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -94,9 +94,9 @@ int main(int argc, const char **argv) {
   using SubgroupLayoutQK = Layout<Shape<_8, _1, _1>>;
 
 #elif HEAD_DIM == 128
-  using ShapeQK = Shape<_128, _64, _32>;
-  using ShapePV = Shape<_128, _32, _64>;
-  using ShapeOut = Shape<_128, _128>;
+  using ShapeQK = Shape<_256, _32, _32>;
+  using ShapePV = Shape<_256, _32, _32>;
+  using ShapeOut = Shape<_256, _128>;
   using SubgroupLayoutQK = Layout<Shape<_16, _1, _1>>;
 
 #elif HEAD_DIM == 192

@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright 2025 Intel corporation. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel corporation. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without

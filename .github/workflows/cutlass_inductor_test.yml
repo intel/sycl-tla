@@ -1,0 +1,105 @@
+name: "TorchInductor CUTLASS UTs"
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  run-cutlass-test:
+    name: Run TorchInductor CUTLASS test
+    runs-on: bmg
+    timeout-minutes: 120
+    strategy:
+      matrix:
+        config:
+          - run_id: "22046026054"
+            artifact_name: "manywheel-py3_12-xpu"
+            pytorch_repo: "pytorch/pytorch"
+            pytorch_fork: "etaf/pytorch-inductor-xpu"
+  
+    steps:
+      - name: Checkout sycl-tla repo
+        uses: actions/checkout@v4
+
+      - name: Install Python venv package
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv
+
+      - name: Install Intel graphics drivers
+        uses: ./.github/actions/install-intel-graphics
+        with:
+          GPU: 'BMG'
+          IGC: 'ROLLING'
+
+      - name: Install DPC++
+        id: install_dpcpp
+        uses: ./.github/actions/install-dpcpp
+        with:
+          DPCPP_RELEASE: RELEASE
+          DPCPP_PATH: ~/dpcpp
+
+      - name: Setup virtual environment
+        shell: bash
+        run: |
+          python3 -m venv ~/.venv
+          source ~/.venv/bin/activate
+          . setvars.sh
+          env >> $GITHUB_ENV
+
+      - name: Download PyTorch wheel artifact
+        uses: actions/download-artifact@v4.1.7
+        with:
+          github-token: ${{ secrets.PYTORCH_ARTIFACT_READ_TOKEN }}
+          run-id: ${{ matrix.config.run_id }}
+          repository: ${{ matrix.config.pytorch_repo }}
+          name: ${{ matrix.config.artifact_name }}
+          path: /tmp/torch-wheel
+
+      - name: Print IGC2 version
+        shell: bash
+        run: |
+          dpkg-query --show libigc2
+
+      - name: Print PyTorch wheel sha256sum
+        shell: bash
+        run: |
+          ls -la /tmp/torch-wheel
+          sha256sum /tmp/torch-wheel/*.whl
+
+      - name: Install PyTorch wheel
+        shell: bash
+        run: |
+          source ~/.venv/bin/activate
+          pip install /tmp/torch-wheel/*.whl --index-url https://download.pytorch.org/whl/nightly/xpu
+
+      - name: Clone PyTorch fork
+        shell: bash
+        run: |
+          git clone https://github.com/${{ matrix.config.pytorch_fork }}.git ~/pytorch
+
+      - name: Run TorchInductor CUTLASS test
+        shell: bash
+        run: |
+          source ~/.venv/bin/activate
+          export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
+          cd ~/pytorch/pytorch-inductor-xpu
+          python test/inductor/test_cutlass_backend.py -v
+
+      - name: Run TorchInductor EVT test
+        shell: bash
+        run: |
+          source ~/.venv/bin/activate
+          export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
+          cd ~/pytorch/pytorch-inductor-xpu
+          python test/inductor/test_cutlass_evt.py -v
+
+      - name: Cleanup PyTorch repo and wheel
+        if: always()
+        shell: bash
+        run: |
+          rm -rf ~/pytorch
+          rm -rf /tmp/torch-wheel
+
