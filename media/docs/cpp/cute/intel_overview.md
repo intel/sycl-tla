@@ -9,6 +9,26 @@
 > `work-group` for `threadblock`, and Intel DPC++ for NVCC.  A SYCL-first rewrite of the
 > quickstart is planned.
 
+### CUDA → Intel / SYCL terminology
+
+| CUDA / CUTLASS Term | Intel / SYCL\*TLA Equivalent | Description |
+|---|---|---|
+| warp (32 threads) | sub_group (16 work-items) | Smallest lockstep execution unit on the GPU; Intel Xe sub-groups are 16-wide versus CUDA's 32-wide warps |
+| threadblock / CTA | work-group | A group of work-items that can synchronize and share local memory; launched via `nd_range` in SYCL |
+| grid | nd_range | The full launch domain of work-groups across the device |
+| thread | work-item | A single unit of execution within a work-group |
+| shared memory (SMEM) | Shared Local Memory (SLM) | On-chip scratchpad memory shared by all work-items in a work-group; accessed via `sycl::local_accessor` |
+| register file | General Register File (GRF) | Per-thread private storage closest to compute; Xe provides 256 registers per thread |
+| Tensor Core | XMX (Xe Matrix Extensions) | Dedicated hardware matrix engine that accelerates small matrix multiply-accumulate operations |
+| `mma.sync` / HMMA | DPAS (`XE_DPAS_TT`) | The matrix multiply-accumulate instruction issued to XMX; computes an M×N×K tile in one instruction |
+| `cp.async` / TMA | 2D block load (`XE_LOAD_2D`, `XE_LOAD_2D_VNNI`, `XE_LOAD_2D_TRANSPOSE`) | Hardware-accelerated data movement from global memory to registers; Xe uses 2D block operations instead of CUDA's async copy or TMA |
+| NVCC / nvcc | Intel DPC++ (`icpx`) | The device compiler that compiles SYCL kernels for Intel GPUs |
+| SM (Streaming Multiprocessor) | Xe-core / EU (Execution Unit) | The fundamental compute unit on the GPU that hosts multiple warps/sub-groups |
+| `NumThreadsPerWarp` (= 32) | `SubgroupSize` (= 16) | Compile-time constant for the number of work-items executing in lockstep |
+| Fragment | `SubgroupTensor` | Register-resident tile of data; on Intel Xe, collectively owned by the 16 lanes of a sub-group rather than independently per-thread |
+| `TiledMMA` (NVIDIA path) | `TiledMMAHelper` → `TiledMMA` | Intel path uses `TiledMMAHelper` to construct the `TiledMMA` from an Xe MMA atom and a subgroup layout |
+| Sm80 / Sm90 (arch tag) | `IntelXeXMX16` / `IntelXeGeneric` | Architecture dispatch tag used to select the correct mainloop, epilogue, and dispatch policy |
+
 CuTe in SYCL\*TLA is a collection of C++ SYCL template abstractions for defining and operating on
 hierarchically multidimensional layouts of threads and data.
 
