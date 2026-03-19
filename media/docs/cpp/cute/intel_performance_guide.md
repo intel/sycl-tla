@@ -147,11 +147,14 @@ sustained work per memory transaction and improving bandwidth utilization.
 
 ### Pipeline stages
 
-`PipelineStages = 2` is the standard starting point.  It overlaps one iteration of loads with the
-compute of the previous iteration.
+For Flash Attention Prefill and many manual GEMM kernels, `PipelineStages = 2` is a common
+starting point — it overlaps one iteration of loads with the compute of the previous iteration.
+The `CollectiveBuilder` defaults to `PipelineStages = 3` for standard (non-grouped) GEMM
+(`MainloopXeL1Staged`) and `2` for grouped GEMM.  Flash Attention Decode typically uses
+`PipelineStages = 1`.
 
 ```cpp
-static constexpr int PipelineStages = 2;
+static constexpr int PipelineStages = 2;  // one common value; CollectiveBuilder defaults to 3 for standard GEMM
 ```
 
 Increasing to 3 or 4 can help on high-latency HBM systems, but raises register pressure.
@@ -178,8 +181,12 @@ Increasing to 3 or 4 can help on high-latency HBM systems, but raises register p
    Consider a "residue" kernel or smaller tiles for non-multiple sizes.
 
 3. **Pipeline depth sufficient?**
-   If memory latency is high and XMX utilization is low, increase `PipelineStages` by one and
-   re-benchmark.
+   The `CollectiveBuilder` defaults to `PipelineStages = 3` for standard GEMM; Flash Attention
+   Prefill uses `2`, and Decode uses `1`.  If memory latency is high and XMX utilization is low
+   in a GEMM or Prefill kernel, try increasing `PipelineStages` by one and re-benchmark — but
+   verify register spill has not increased (use Intel VTune, [PTI for GPU](https://github.com/intel/pti-gpu),
+   or compiler `-v` output), as each additional stage raises GRF pressure.  Decode kernels with
+   `PipelineStages = 1` should not be blindly increased without reworking the mainloop structure.
 
 4. **Alignment verified?**
    Print or assert `reinterpret_cast<uintptr_t>(ptr) % 64 == 0` in a debug build.
