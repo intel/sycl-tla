@@ -100,7 +100,7 @@ Common tile sizes in this codebase:
 
 **Rules of thumb:**
 - Start with `(256, 256, 32)` for BF16 on BMG/PVC.
-- Reduce M or N if register spill is observed (check with Intel VTune or compiler `-v` output).
+- Reduce M or N if register spill is observed (check with [Intel VTune](https://www.intel.com/content/www/us/en/developer/tools/oneapi/vtune-profiler.html), [PTI for GPU](https://github.com/intel/pti-gpu), or compiler `-v` output).
 - Increase K-depth for memory-bound kernels to amortize the 2D block load overhead.
 
 #### Real-world example: Flash Attention BF16 tile-size tuning on Intel Xe BMG
@@ -142,7 +142,7 @@ sustained work per memory transaction and improving bandwidth utilization.
 **When to apply this pattern:**
 - The kernel is memory-bound (XMX utilization is low relative to bandwidth utilization).
 - The head dimension (or K extent) is large enough that the larger K-tile does not overflow the
-  GRF budget (verify with Intel VTune or `-v` compiler output; register spill negates the gain).
+  GRF budget (verify with [Intel VTune](https://www.intel.com/content/www/us/en/developer/tools/oneapi/vtune-profiler.html), [PTI for GPU](https://github.com/intel/pti-gpu), or `-v` compiler output; register spill negates the gain).
 - The K dimension of the problem is a multiple of the new tile size.
 
 ### Pipeline stages
@@ -168,8 +168,10 @@ Increasing to 3 or 4 can help on high-latency HBM systems, but raises register p
 ## Fast diagnosis — what to check first
 
 1. **Bandwidth-bound or compute-bound?**
-   Run with Intel VTune "GPU Hotspot" analysis.  Compare achieved memory bandwidth to HBM peak and
-   achieved XMX TFLOPS to peak.
+   Run with Intel VTune "GPU Hotspot" analysis or
+   [Intel PTI for GPU](https://github.com/intel/pti-gpu) (`unitrace` with `--device-timing` and
+   metric collection).  Compare achieved memory bandwidth to HBM peak and achieved XMX TFLOPS
+   to peak.
 
 2. **Tile sizes appropriate for problem dimensions?**
    If M or N < tile size, many subgroups will be idle or padding-dominated.
