@@ -81,13 +81,12 @@ For engineers new to SYCL\*TLA CuTe, we recommend this sequence:
 
 1. **[00_quickstart.md](00_quickstart.md)** — What CuTe is (see CUDA-first note above)
 2. **This page** — Intel-specific context and concept map
-3. **[01_layout.md](01_layout.md)** → **[02_layout_algebra.md](02_layout_algebra.md)** — The foundation (layout algebra is the most critical concept)
-4. **[03_tensor.md](03_tensor.md)** → **[04_algorithms.md](04_algorithms.md)** — Tensors and copy/gemm algorithms
-5. **[0x_gemm_tutorial.md](0x_gemm_tutorial.md)** — How GEMM works in CuTe
-6. **[intel_gemm_companion.md](intel_gemm_companion.md)** — Translating the tutorial to SYCL / Intel Xe
-7. **[xe_2d_copy.md](xe_2d_copy.md)** — Intel copy atom reference
-8. **[intel_performance_guide.md](intel_performance_guide.md)** — Tuning and optimization
-9. **[Intel Examples](../../../../../examples/README.md)** — Runnable Intel GEMM examples (`00_bmg_gemm` through `13_bmg_gemm_bias`)
+3. **[examples/00_bmg_gemm](../../../../../examples/00_bmg_gemm/)** — Basic Intel GEMM example (start here for runnable code)
+4. **[examples/01_bmg_gemm_with_collective_builder](../../../../../examples/01_bmg_gemm_with_collective_builder/)** — GEMM using the CollectiveBuilder API
+5. **[intel_gemm_companion.md](intel_gemm_companion.md)** — SYCL / Intel Xe companion notes explaining the GEMM flow
+6. **[xe_2d_copy.md](xe_2d_copy.md)** — Intel copy atom reference
+7. **[intel_performance_guide.md](intel_performance_guide.md)** — Tuning and optimization
+8. **[All examples](../../../../../examples/README.md)** — Full list of Intel programming examples
 
 ## Quick navigation (jump to any topic)
 
