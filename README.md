@@ -146,6 +146,14 @@ Or
 cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" 
 ```
 
+Or
+
+```
+cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g31" 
+```
+
+> Note: `-DDPCPP_SYCL_TARGET="bmg"` will compile for both `intel_gpu_bmg_g21`, `intel_gpu_bmg_g31` targets.
+
 Please refer to the [functionality documentation](https://github.com/intel/sycl-tla/blob/main/media/docs/cpp/functionality.md)
 for details on which kernels require which target architectures.
 
