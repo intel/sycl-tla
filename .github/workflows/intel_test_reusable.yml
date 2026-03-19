@@ -44,6 +44,7 @@ jobs:
             runner: pvc
 
     name: Run Intel ${{ matrix.compiler }} tests on ${{ matrix.gpu }} with intel-graphics ${{ matrix.intel_graphics }}
+    if: contains(fromJSON(inputs.gpu), matrix.gpu)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
