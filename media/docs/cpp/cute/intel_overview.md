@@ -63,12 +63,9 @@ the upstream NVIDIA CUTLASS CuTe:
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | **Xe 2D block loads/stores/prefetch** | `xe_2d_copy.md`, `include/cute/arch/copy_xe_2d.hpp` | Hardware 2D block operations (`XE_LOAD_2D`, `XE_STORE_2D`, `XE_LOAD_2D_TRANSPOSE`, `XE_LOAD_2D_VNNI`, `XE_PREFETCH_2D`) — see [xe_2d_copy.md](xe_2d_copy.md) for naming reference, [intel_gemm_companion.md](intel_gemm_companion.md) for usage patterns |
-| **XMX MMA atoms** (`XE_DPAS_TT`) | `include/cute/arch/mma_xe.hpp` (current), `include/cute/arch/mma_xe_legacy.hpp` (legacy `XE_8x16x16_*` structs) | Xe Matrix Extension compute atoms — see [intel_gemm_companion.md](intel_gemm_companion.md) for wiring patterns |
+| **XMX MMA atoms** (`XE_DPAS_TT`) | `include/cute/arch/mma_xe.hpp` | Xe Matrix Extension compute atoms — see [intel_gemm_companion.md](intel_gemm_companion.md) for wiring patterns |
 | **`SubgroupTensor`** | `include/cute/tensor_sg.hpp` | Intel-specific tensor type that scatters/gathers across subgroup lanes |
 | **`TiledMMAHelper`** | `include/cute/atom/mma_atom.hpp` | Helper that constructs a `TiledMMA` from an Xe MMA atom and subgroup tile shape |
-
-> **Legacy 2D copy API:** The legacy per-type-and-shape named structs (e.g., `XE_2D_U32x8x16_LD_N`)
-> are documented in the [Legacy 2D Copy API](#legacy-2d-copy-api) section below.
 
 ## Intel Xe atoms and GEMM helpers
 
@@ -165,11 +162,6 @@ using MmaOp = cute::XE_DPAS_TT<8, cute::dpas_type::f,
 using Atom = cute::MMA_Atom<MmaOp>;
 ```
 
-> **Legacy note:** Existing examples may use the older named structs
-> (`XE_8x16x16_F32BF16BF16F32_TT`, `XE_4x16x16_F32BF16BF16F32_TT`, etc.)
-> from `include/cute/arch/mma_xe_legacy.hpp`.  These continue to work but
-> `XE_DPAS_TT` is the current API for all new development.
-
 ---
 
 ### 2. Copy atoms — 2D block operations
@@ -233,10 +225,6 @@ using GmemStoreC = cute::XE_STORE_2D<32, 8, 16>;
 
 > **Full reference:** See [xe_2d_copy.md](xe_2d_copy.md) for the complete naming
 > conventions, layout rules, and hardware constraints.
-
-> **Legacy API:** The older per-type-and-shape named structs (e.g.,
-> `XE_2D_U16x32x32_LD_N`, `XE_2D_U16x32x32_LD_V`) are documented in the
-> [Legacy 2D Copy API](#legacy-2d-copy-api) section below.
 
 ---
 
@@ -354,4 +342,13 @@ The legacy copy atoms use per-type-and-shape named structs (e.g., `XE_2D_U32x8x1
 Traits for these atoms live in `include/cute/atom/copy_traits_xe_legacy.hpp`. Existing code using
 `XE_2D_*` atoms (e.g., in `xe_epilogue_legacy.hpp`) continues to work but should be migrated to
 the new API when possible.
+
+## Legacy MMA atoms
+
+> ⚠️ **Deprecation notice:** The legacy MMA atom structs described below may be deprecated in a future
+> release. New code should use the current API (`XE_DPAS_TT`) defined in `include/cute/arch/mma_xe.hpp`.
+
+The legacy MMA atoms use per-shape named structs (e.g., `XE_8x16x16_F32BF16BF16F32_TT`,
+`XE_4x16x16_F32BF16BF16F32_TT`) defined in `include/cute/arch/mma_xe_legacy.hpp`. Existing code
+using these structs continues to work but should be migrated to `XE_DPAS_TT` when possible.
 
