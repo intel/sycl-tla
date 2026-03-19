@@ -160,10 +160,10 @@ Increasing to 3 or 4 can help on high-latency HBM systems, but raises register p
 
 | Pitfall | Description | Fix |
 |---------|-------------|-----|
-| **Alignment** | `XE_LOAD_2D` / `XE_STORE_2D` operations require the base pointer to be 64-byte aligned and the row stride to be a multiple of 16 elements. Unaligned access silently produces garbage. | Pad matrices to alignment boundaries. |
+| **Alignment** | `XE_LOAD_2D` / `XE_STORE_2D` operations require the base pointer to be 64-byte aligned and the row pitch (stride in bytes) to be a multiple of 64 bytes. Unaligned access silently produces garbage. | Pad matrices to alignment boundaries. |
 | **Over-synchronization** | Inserting `barrier()` after every copy wastes throughput. The epilogue often only needs one barrier. | Audit barrier placement; consolidate where possible. |
 | **Register pressure** | Large tiles (`512×512×32`) can exceed the 256-GRF budget per thread. The compiler will spill to SLM, hurting performance. | Reduce tile M or N; use `-cl-intel-256-GRF-per-thread` with awareness. |
-| **VNNI format** | B-matrix loads for XMX must use VNNI-packed layout. Using a non-VNNI load for the B matrix causes wrong results or poor performance. | Use `XE_LOAD_2D_VNNI<Bits, H, W>` for B-matrix loads. |
+| **VNNI format** | B-matrix loads for XMX must use VNNI-packed layout. Using a non-VNNI load for the B matrix causes wrong results or poor performance. | Use `XE_LOAD_2D_VNNI<Bits, Height, Width>` for B-matrix loads. |
 
 ## Fast diagnosis — what to check first
 
