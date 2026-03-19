@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
   sycl::queue q(sycl::default_selector_v);
   
   q.submit([&](sycl::handler& h) {
-    h.parallel_for(sycl::nd_range<1>(sycl::range<1>(32), sycl::range<1>(32)),
+    h.parallel_for<class print_demo_kernel>(sycl::nd_range<1>(sycl::range<1>(32), sycl::range<1>(32)),
                    [=](sycl::nd_item<1> item) {
       print_kernel(item);
     });
