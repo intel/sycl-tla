@@ -45,37 +45,36 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 |0.5 | 4.2.0 |
 |0.6 | 4.2.0 |
 |0.7 | 4.2.1 |
+|0.8 | 4.2.1 |
 
-# What's New in SYCL*TLA 0.7 
+# What's New in SYCL*TLA 0.8
 
-## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
- 
+## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-20)
+
 ### Major Architecture Changes
-- Epilogue Visitor Tree (EVT):
-  - Extended Xe epilogue fusion support for various post-GEMM computations ([#647](https://github.com/intel/sycl-tla/pull/647), [#650](https://github.com/intel/sycl-tla/pull/650))
-  - Added support for XeAuxLoad ([#674](https://github.com/intel/sycl-tla/pull/674)), XeAuxStore ([#691](https://github.com/intel/sycl-tla/pull/691), [#698](https://github.com/intel/sycl-tla/pull/698), [#704](https://github.com/intel/sycl-tla/pull/704)), XeRow/XeCol broadcast ([#690](https://github.com/intel/sycl-tla/pull/690)) and XeRow/XeCol/XeScalar reduction ([#680](https://github.com/intel/sycl-tla/pull/680), [#694](https://github.com/intel/sycl-tla/pull/694))
-  - Added Python EVT support with comprehensive test coverage
-- Xe Epilogue Rearchitecture ([#621](https://github.com/intel/sycl-tla/pull/621)): redesigned epilogue path for the new Xe architecture.
- 
+- **SLM Pipeline with Subgroup Specialization ([#735](https://github.com/intel/sycl-tla/pull/735), [#747](https://github.com/intel/sycl-tla/pull/747))**: Subgroup specialization with SLM pipeline for fine-grained workload distribution and fusion of 2 matmul operations through SLM
+- **1D LDSM/STSM with vISA ([#753](https://github.com/intel/sycl-tla/pull/753))**: Extended CuTe copy engine to support 1D Load/Store Shared Memory operations using vISA
+- **Sub-byte Reorder Support ([#709](https://github.com/intel/sycl-tla/pull/709))**: Added sub-byte type support in the default reorder path for low-precision data types
+- **Legacy Flash Attention Migration ([#716](https://github.com/intel/sycl-tla/pull/716))**: Moved old Flash Attention kernels to legacy, completing transition to new architecture
+
 ### Enhancements
-- Flash Attention: performance improvements (BF16 speedup headline) and continued feature maturation ([#679](https://github.com/intel/sycl-tla/pull/679)).
-- GEMM: Column Major C bias support ([#656](https://github.com/intel/sycl-tla/pull/656)).
-- Shared Local Memory (SLM): new SLM copy helper functions ([#673](https://github.com/intel/sycl-tla/pull/673)).
-- Build: multi-target builds via `DPCPP_SYCL_TARGET` ([#630](https://github.com/intel/sycl-tla/pull/630)).
-- Reorder: API updates and fixes ([#639](https://github.com/intel/sycl-tla/pull/639)), ([#635](https://github.com/intel/sycl-tla/pull/635))).
- 
-### Bug Fixes / Notes
-- Flash Attention KV cache / prefill fixes ([#617](https://github.com/intel/sycl-tla/pull/617)).
-- CuTe atom partitioning edge-case fix ([#628](https://github.com/intel/sycl-tla/pull/628)).
-- Fix CMake path issue ([#700](https://github.com/intel/sycl-tla/pull/700)).
-- Unit tests for VNNI load disabled due to driver issue ([#707](https://github.com/intel/sycl-tla/pull/707)).
- 
-### Known Issues
-- **CuTe Column Major Support**: Column Major support for C matrix may introduce stability issues with older versions of driver. Please update to the latest driver version for optimal stability.
- 
-### Deprecation Notice
-- Legacy APIs with old CuTe atoms are deprecated and will be removed in future releases. Users are encouraged to migrate to the new CuTe atom APIs for better performance and support. Refer [Xe Rearchitecture](https://github.com/intel/sycl-tla/blob/main/media/docs/cpp/xe_rearchitecture.md) for new APIs.
- 
+- **Flash Attention Performance Improvements ([#715](https://github.com/intel/sycl-tla/pull/715), [#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743), [#749](https://github.com/intel/sycl-tla/pull/749), [#750](https://github.com/intel/sycl-tla/pull/750))**: Series of optimizations bringing BF16 MFU from ~60% to ~78% through pipeline refinement, softmax rescale-o overlap with PV GEMM, and built-in max instruction in reduce function
+- **EVT SIGMOID and Relu Support ([#686](https://github.com/intel/sycl-tla/pull/686), [#693](https://github.com/intel/sycl-tla/pull/693))**: Combination with SIGMOID function and Relu variation test cases
+- **EVT Load and Naming Enhancements ([#703](https://github.com/intel/sycl-tla/pull/703), [#717](https://github.com/intel/sycl-tla/pull/717))**: Test case enhancements for load in EVT and standardized indentation and node naming conventions
+- **GEMM Tile Shape and Example Enhancements ([#738](https://github.com/intel/sycl-tla/pull/738), [#726](https://github.com/intel/sycl-tla/pull/726))**: Allow all GEMM tile shapes and add verify variables to all BMG examples
+- **Python Version Compatibility ([#714](https://github.com/intel/sycl-tla/pull/714))**: Python version changes for compatibility
+- **BMG Codename Cleanup ([#730](https://github.com/intel/sycl-tla/pull/730))**: Cleanup unwanted BMG codenames
+
+### Test Improvements
+- **Unit Test Cleanup ([#722](https://github.com/intel/sycl-tla/pull/722))**: Unit test cleanup and consolidation
+
+### Bug Fixes
+- **CuTe Static Assert Fix ([#751](https://github.com/intel/sycl-tla/pull/751))**: Fixed `static_assert (cute::C<4>&& and cute::C<4>)`
+- **Flash Attention OOM Fix ([#728](https://github.com/intel/sycl-tla/pull/728))**: Fixed long context OOM issue in Flash Attention
+- **Flash Attention Benchmark Fix ([#720](https://github.com/intel/sycl-tla/pull/720))**: Fixed PV GEMM's subgroup layout setting in benchmark
+- **Flash Attention Pipeline Fix ([#715](https://github.com/intel/sycl-tla/pull/715))**: Refined Flash Attention pipeline and fixed bugs
+- **Code Formatting Fix ([#741](https://github.com/intel/sycl-tla/pull/741), [#742](https://github.com/intel/sycl-tla/pull/742))**: Fixed formatting issues in examples
+
 **See the [CHANGELOG](https://github.com/intel/sycl-tla/blob/main/CHANGELOG-SYCL.md) for details of all past releases and updates.**
 
 # CuTe
