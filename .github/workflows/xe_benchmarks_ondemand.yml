@@ -1,6 +1,12 @@
 name: "SYCL-TLA Benchmarks"
 
 on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  merge_group:
+    branches: [ "main" ]
   schedule:
     # Runs at 00:00 AM UTC on Wednesday and Friday
     - cron: '0 0 * * 3,5'
@@ -30,6 +36,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+        with:
+          ref: v0.7
       # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
       # for example using the tag: 'nightly-2024-04-22'
       - name: Install Intel graphics drivers
