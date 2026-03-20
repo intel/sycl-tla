@@ -52,28 +52,44 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 ## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-20)
 
 ### Major Architecture Changes
-- **SLM Pipeline with Subgroup Specialization ([#735](https://github.com/intel/sycl-tla/pull/735), [#747](https://github.com/intel/sycl-tla/pull/747))**: Subgroup specialization with SLM pipeline for fine-grained workload distribution and fusion of 2 matmul operations through SLM
-- **1D LDSM/STSM with vISA ([#753](https://github.com/intel/sycl-tla/pull/753))**: Extended CuTe copy engine to support 1D Load/Store Shared Memory operations using vISA
-- **Sub-byte Reorder Support ([#709](https://github.com/intel/sycl-tla/pull/709))**: Added sub-byte type support in the default reorder path for low-precision data types
-- **Legacy Flash Attention Migration ([#716](https://github.com/intel/sycl-tla/pull/716))**: Moved old Flash Attention kernels to legacy, completing transition to new architecture
+- **Subgroup specialization with SLM pipeline for fine-grained workload distribution ([#735](https://github.com/intel/sycl-tla/pull/735))**
+  - Fusion of 2 matmul operations through SLM ([#747](https://github.com/intel/sycl-tla/pull/747))
+- **CuTe copy engine support for 1D LDSM/STSM operations using vISA ([#753](https://github.com/intel/sycl-tla/pull/753))**
+- **Sub-byte type support in default reorder for low-precision data types ([#709](https://github.com/intel/sycl-tla/pull/709))**
+- **Moved old Flash Attention kernels to legacy, completing transition to new architecture ([#716](https://github.com/intel/sycl-tla/pull/716))**
 
 ### Enhancements
-- **Flash Attention Performance Improvements ([#715](https://github.com/intel/sycl-tla/pull/715), [#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743), [#749](https://github.com/intel/sycl-tla/pull/749), [#750](https://github.com/intel/sycl-tla/pull/750))**: Series of optimizations bringing BF16 MFU from ~60% to ~78% through pipeline refinement, softmax rescale-o overlap with PV GEMM, and built-in max instruction in reduce function
-- **EVT SIGMOID and Relu Support ([#686](https://github.com/intel/sycl-tla/pull/686), [#693](https://github.com/intel/sycl-tla/pull/693))**: Combination with SIGMOID function and Relu variation test cases
-- **EVT Load and Naming Enhancements ([#703](https://github.com/intel/sycl-tla/pull/703), [#717](https://github.com/intel/sycl-tla/pull/717))**: Test case enhancements for load in EVT and standardized indentation and node naming conventions
-- **GEMM Tile Shape and Example Enhancements ([#738](https://github.com/intel/sycl-tla/pull/738), [#726](https://github.com/intel/sycl-tla/pull/726))**: Allow all GEMM tile shapes and add verify variables to all BMG examples
-- **Python Version Compatibility ([#714](https://github.com/intel/sycl-tla/pull/714))**: Python version changes for compatibility
-- **BMG Codename Cleanup ([#730](https://github.com/intel/sycl-tla/pull/730))**: Cleanup unwanted BMG codenames
+- **Flash Attention Performance Improvements**: Series of optimizations bringing BF16 MFU from ~60% to ~78%
+  - Improve FA BF16 performance by 6.4% and fix long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
+  - Improve hdim128 Flash Attention performance from MFU 60.51% to 65.12% ([#743](https://github.com/intel/sycl-tla/pull/743))
+  - Overlap softmax rescale-o to PV GEMM, improving MFU from 65% to 73% ([#749](https://github.com/intel/sycl-tla/pull/749))
+  - Use built-in max instruction in reduce function, improving BF16 MFU from 73% to 78% ([#750](https://github.com/intel/sycl-tla/pull/750))
+  - Refine Flash Attention pipeline and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715))
+- **Epilogue Visitor Tree (EVT) Enhancements**:
+  - Combination with SIGMOID function ([#686](https://github.com/intel/sycl-tla/pull/686))
+  - Relu variation test cases ([#693](https://github.com/intel/sycl-tla/pull/693))
+  - Test case enhancements for load in EVT ([#703](https://github.com/intel/sycl-tla/pull/703))
+  - Standardize indentation and node naming conventions ([#717](https://github.com/intel/sycl-tla/pull/717))
+- **GEMM Enhancements**:
+  - Fix to allow all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
+  - Add verify variables to all BMG examples ([#726](https://github.com/intel/sycl-tla/pull/726))
+- **Build and Python**:
+  - Python version changes for compatibility ([#714](https://github.com/intel/sycl-tla/pull/714))
+  - Cleanup unwanted BMG codenames ([#730](https://github.com/intel/sycl-tla/pull/730))
 
 ### Test Improvements
-- **Unit Test Cleanup ([#722](https://github.com/intel/sycl-tla/pull/722))**: Unit test cleanup and consolidation
+- Unit test cleanup and consolidation ([#722](https://github.com/intel/sycl-tla/pull/722))
 
 ### Bug Fixes
-- **CuTe Static Assert Fix ([#751](https://github.com/intel/sycl-tla/pull/751))**: Fixed `static_assert (cute::C<4>&& and cute::C<4>)`
-- **Flash Attention OOM Fix ([#728](https://github.com/intel/sycl-tla/pull/728))**: Fixed long context OOM issue in Flash Attention
-- **Flash Attention Benchmark Fix ([#720](https://github.com/intel/sycl-tla/pull/720))**: Fixed PV GEMM's subgroup layout setting in benchmark
-- **Flash Attention Pipeline Fix ([#715](https://github.com/intel/sycl-tla/pull/715))**: Refined Flash Attention pipeline and fixed bugs
-- **Code Formatting Fix ([#741](https://github.com/intel/sycl-tla/pull/741), [#742](https://github.com/intel/sycl-tla/pull/742))**: Fixed formatting issues in examples
+- **CuTe Fixes**:
+  - Fixed `static_assert (cute::C<4>&& and cute::C<4>)` ([#751](https://github.com/intel/sycl-tla/pull/751))
+- **Flash Attention Fixes**:
+  - Fixed long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
+  - Fixed PV GEMM's subgroup layout setting in benchmark ([#720](https://github.com/intel/sycl-tla/pull/720))
+  - Refined Flash Attention pipeline and fixed bugs ([#715](https://github.com/intel/sycl-tla/pull/715))
+- **Code Quality**:
+  - Fixed formatting issues in examples ([#741](https://github.com/intel/sycl-tla/pull/741))
+  - Delete unnecessary file pr.diff ([#742](https://github.com/intel/sycl-tla/pull/742))
 
 **See the [CHANGELOG](https://github.com/intel/sycl-tla/blob/main/CHANGELOG-SYCL.md) for details of all past releases and updates.**
 
