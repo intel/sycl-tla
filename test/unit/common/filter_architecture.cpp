@@ -111,7 +111,8 @@ void FilterArchitecture() {
     {architecture::nvidia_gpu_sm_90, 90},
     {architecture::nvidia_gpu_sm_90a, 90},
     {architecture::intel_gpu_pvc, 0},
-    {architecture::intel_gpu_bmg_g21, 1}
+    {architecture::intel_gpu_bmg_g21, 1},
+    {architecture::intel_gpu_bmg_g31, 2}
   };
   auto device_architecture =
         compat::get_default_queue().get_device().get_info<info::device::architecture>();
@@ -168,7 +169,7 @@ void FilterArchitecture() {
     { "SM90*",                      90, 90},
     { "SM100*",                    100, 100},
     { "XE_*",                        0, 1},
-    { "XE2_*",                       1, 1},
+    { "XE2_*",                       1, 2},
     { "*sm100_*",                  100, 100},
     { 0, 0, false }
   };
