@@ -27,7 +27,7 @@
 | `NumThreadsPerWarp` (= 32) | `SubgroupSize` (= 16) | Compile-time constant for the number of work-items executing in lockstep |
 | Fragment | `SubgroupTensor` | Register-resident tile of data; on Intel Xe, collectively owned by the 16 lanes of a sub-group rather than independently per-thread |
 | `TiledMMA` (NVIDIA path) | `TiledMMAHelper` → `TiledMMA` | Intel path uses `TiledMMAHelper` to construct the `TiledMMA` from an Xe MMA atom and a subgroup layout |
-| Sm80 / Sm90 (arch tag) | `IntelXeXMX16` / `IntelXeGeneric` | Architecture dispatch tag used to select the correct mainloop, epilogue, and dispatch policy |
+| Sm80 / Sm90 (arch tag) | `Xe20` / `Xe12` (`cutlass::arch::Xe20`, `cutlass::arch::Xe12`) | Architecture dispatch tag used to select the correct mainloop, epilogue, and dispatch policy; `Xe12` targets PVC, `Xe20` targets BMG |
 
 CuTe in SYCL\*TLA is a collection of C++ SYCL template abstractions for defining and operating on
 hierarchically multidimensional layouts of threads and data.
