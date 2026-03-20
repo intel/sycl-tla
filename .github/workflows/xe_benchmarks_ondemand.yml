@@ -1,5 +1,4 @@
 name: "SYCL-TLA Benchmarks"
-
 on:
   push: 
     branches: [ "main" ]
