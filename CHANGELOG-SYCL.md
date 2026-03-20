@@ -2,45 +2,30 @@
 
 ## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-20)
 ### Major Architecture Changes
-- **Subgroup specialization with SLM pipeline for fine-grained workload distribution ([#735](https://github.com/intel/sycl-tla/pull/735))**
-  - Fusion of 2 matmul operations through SLM ([#747](https://github.com/intel/sycl-tla/pull/747))
-- **CuTe copy engine support for 1D LDSM/STSM operations using vISA ([#753](https://github.com/intel/sycl-tla/pull/753))**
-- **Sub-byte type support in default reorder for low-precision data types ([#709](https://github.com/intel/sycl-tla/pull/709))**
-- **Moved old Flash Attention kernels to legacy, completing transition to new architecture ([#716](https://github.com/intel/sycl-tla/pull/716))**
+- **SLM Copy API functionalities and examples**
+  - Support CuTe copy engines for 1D LDSM/STSM operations with vISA ([#753](https://github.com/intel/sycl-tla/pull/753))
+  - Enable fusion example of 2 matmul operations through SLM Copoy API ([#747](https://github.com/intel/sycl-tla/pull/747))
+  - Enable subgroup specialization example with SLM Copy API ([#735](https://github.com/intel/sycl-tla/pull/735))
+- **Support default sub-byte reorder for low-precision data types ([#709](https://github.com/intel/sycl-tla/pull/709))**
 
 ### Enhancements
-- **Flash Attention Performance Improvements**: Series of optimizations bringing BF16 MFU from ~60% to ~78%
-  - Improve FA BF16 performance by 6.4% and fix long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
-  - Improve hdim128 Flash Attention performance from MFU 60.51% to 65.12% ([#743](https://github.com/intel/sycl-tla/pull/743))
-  - Overlap softmax rescale-o to PV GEMM, improving MFU from 65% to 73% ([#749](https://github.com/intel/sycl-tla/pull/749))
-  - Use built-in max instruction in reduce function, improving BF16 MFU from 73% to 78% ([#750](https://github.com/intel/sycl-tla/pull/750))
-  - Refine Flash Attention pipeline and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715))
+- **Flash Attention Performance Improvements (for BMG and BF16)**:  
+  - Overall performance improved from ~48% to ~78% of peak
+  - Fix long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
+  - Improve from 48% to 65% by changing tile shape ([#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743))
+  - Improve from 65% to 73% by overlaping softmax rescale-o to PV GEMM ([#749](https://github.com/intel/sycl-tla/pull/749))
+  - Improve from 73% to 78% by using built-in max instruction in reduction function ([#750](https://github.com/intel/sycl-tla/pull/750))
+  - Refine Flash Attention code and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715), [#716](https://github.com/intel/sycl-tla/pull/716),[#720](https://github.com/intel/sycl-tla/pull/720))
 - **Epilogue Visitor Tree (EVT) Enhancements**:
-  - Combination with SIGMOID function ([#686](https://github.com/intel/sycl-tla/pull/686))
-  - Relu variation test cases ([#693](https://github.com/intel/sycl-tla/pull/693))
-  - Test case enhancements for load in EVT ([#703](https://github.com/intel/sycl-tla/pull/703))
-  - Standardize indentation and node naming conventions ([#717](https://github.com/intel/sycl-tla/pull/717))
+  - Combine with SIGMOID function ([#686](https://github.com/intel/sycl-tla/pull/686))
+  - Add Relu variation test cases ([#693](https://github.com/intel/sycl-tla/pull/693))
+  - Enhance and refine code and test case([#703](https://github.com/intel/sycl-tla/pull/703), [#717](https://github.com/intel/sycl-tla/pull/717))
 - **GEMM Enhancements**:
-  - Fix to allow all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
-  - Add verify variables to all BMG examples ([#726](https://github.com/intel/sycl-tla/pull/726))
+  - Support all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
+  - Enhance examples ([#726](https://github.com/intel/sycl-tla/pull/726))
 - **Build and Python**:
   - Python version changes for compatibility ([#714](https://github.com/intel/sycl-tla/pull/714))
-  - Cleanup unwanted BMG codenames ([#730](https://github.com/intel/sycl-tla/pull/730))
-
-### Test Improvements
-- Unit test cleanup and consolidation ([#722](https://github.com/intel/sycl-tla/pull/722))
-
-### Bug Fixes
-- **CuTe Fixes**:
-  - Fixed `static_assert (cute::C<4>&& and cute::C<4>)` ([#751](https://github.com/intel/sycl-tla/pull/751))
-- **Flash Attention Fixes**:
-  - Fixed long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
-  - Fixed PV GEMM's subgroup layout setting in benchmark ([#720](https://github.com/intel/sycl-tla/pull/720))
-  - Refined Flash Attention pipeline and fixed bugs ([#715](https://github.com/intel/sycl-tla/pull/715))
-- **Code Quality**:
-  - Fixed formatting issues in examples ([#741](https://github.com/intel/sycl-tla/pull/741))
-  - Delete unnecessary file pr.diff ([#742](https://github.com/intel/sycl-tla/pull/742))
-
+  
 ## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
 ### Major Architecture Improvements
 - **Epilogue Visitor Tree (EVT) Support ([#647](https://github.com/intel/sycl-tla/pull/647))**: EVT support for Intel Xe architecture
