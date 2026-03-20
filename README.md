@@ -73,8 +73,6 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 - **GEMM Enhancements**:
   - Support all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
   - Enhance examples ([#726](https://github.com/intel/sycl-tla/pull/726))
-- **Build and Python**:
-  - Python version changes for compatibility ([#714](https://github.com/intel/sycl-tla/pull/714))
   
 **See the [CHANGELOG](https://github.com/intel/sycl-tla/blob/main/CHANGELOG-SYCL.md) for details of all past releases and updates.**
 
