@@ -48,7 +48,7 @@ and epilogue fusions without hand-writing index calculations.
 Layout ──► Layout Algebra ──► Tensor ──► Algorithms ──► Atoms ──► GEMM tutorial
                                                            │
                                                            ▼
-                                                  Intel Xe Extensions
+                                                  Intel Xe CuTe APIs
                                                (xe_2d_copy, XMX atoms)
 ```
 
