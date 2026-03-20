@@ -5,10 +5,9 @@
 > [intel_gemm_companion.md](intel_gemm_companion.md) for a step-by-step GEMM walkthrough
 > before diving into tuning.
 >
-> **Scope:** CuTe-level tuning — tile sizes, copy atom selection, prefetch depth,
-> barrier placement, and the `reorder` step.  For automatic configuration via CUTLASS
-> `CollectiveBuilder`, see
-> [`examples/01_bmg_gemm_with_collective_builder/`](../../../../examples/01_bmg_gemm_with_collective_builder/).
+> **Note:** This guide focuses on **CuTe-level manual tuning** — choosing tile sizes, pipeline
+> depths, and copy/MMA atoms directly.  For a complete CuTe GEMM walkthrough, see
+> [intel_gemm_companion.md](intel_gemm_companion.md).
 
 ---
 
@@ -84,7 +83,7 @@ Global Memory ──[XE_PREFETCH_2D]──► L1/L2 cache   (no register allocat
 ## The mainloop K-loop
 
 The reference mainloop implementation lives in
-`include/cutlass/gemm/collective/xe_mma.hpp`.  Understanding this loop is essential for
+`examples/cute/tutorial/xe_gemm.cpp`.  Understanding this loop is essential for
 tuning.  Below is the annotated structure:
 
 ```cpp
@@ -146,8 +145,7 @@ for (int k_tile = 0; k_tile < k_tile_count; k_tile++, prefetch_k++) {
 
 ### 1. Subgroup sizing
 
-Intel Xe always uses **16-wide subgroups**.  Both `MainloopXeL1Staged` and `IntelXeGeneric`
-set `SubgroupSize = 16`.
+Intel Xe always uses **16-wide subgroups**.  The subgroup size must be set to 16 in all kernel configurations.
 
 **Checklist:**
 - [ ] `sycl::ext::oneapi::experimental::sub_group_size<16>` is set in kernel properties.
@@ -194,19 +192,13 @@ using TiledMma = typename TiledMMAHelper<
 
 `PipelineStages` controls how many K-blocks ahead to prefetch.
 
-| Configuration | Typical `PipelineStages` |
-|---|---|
-| Manual GEMM (`00_bmg_gemm`) | **2** |
-| `CollectiveBuilder` (standard) | **3** |
-| `CollectiveBuilder` (group) | **2** |
+A common default is `PipelineStages = 3` for standard GEMM and `2` for grouped GEMM.
+Flash Attention Decode typically uses `PipelineStages = 1`.
 
-> **References:**
-> [`00_bmg_gemm.cpp`](../../../../examples/00_bmg_gemm/00_bmg_gemm.cpp),
-> [`xe_mma_builder.inl`](../../../../include/cutlass/gemm/collective/builders/xe_mma_builder.inl) (`IsGroup ? 2 : 3`)
+> **Reference:** [`00_bmg_gemm.cpp`](../../../../examples/00_bmg_gemm/00_bmg_gemm.cpp)
 
 ```cpp
-constexpr int PipelineStages = 2;
-using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
+constexpr int PipelineStages = 2;  // 00_bmg_gemm starting point; try 3 for more latency hiding
 ```
 
 **Tradeoff:** Each additional stage keeps one more K-block's worth of copy fragments live in
@@ -310,7 +302,7 @@ All Width/Pitch values below are **in bytes** unless otherwise noted.
 | Subgroup size | **16** (always) | Must match `sub_group_size<16>` kernel attribute |
 | GRF per thread | **256 registers** | Exceeding this causes compiler to spill to SLM |
 | DPAS M range | 1–8 | `XE_DPAS_TT<M, ...>` |
-| DPAS N | 16 (fixed) | All CUTLASS-supported Intel GPUs |
+| DPAS N | 16 (fixed) | All Intel Xe GPUs |
 | DPAS K | Derived: `256 / max(sizeof_bits(TypeA), sizeof_bits(TypeB))` | BF16→16, TF32→8, INT8→32, INT4→64 |
 
 ### Enabling runtime alignment checks
@@ -363,4 +355,3 @@ cmake .. -G Ninja \
 - [`intel_gemm_companion.md`](intel_gemm_companion.md) — Step-by-step GEMM walkthrough
 - [`xe_2d_copy.md`](xe_2d_copy.md) — Full 2D copy atom reference
 - [`examples/00_bmg_gemm/`](../../../../examples/00_bmg_gemm/) — Reference GEMM example
-- [`examples/01_bmg_gemm_with_collective_builder/`](../../../../examples/01_bmg_gemm_with_collective_builder/) — CollectiveBuilder example
