@@ -9,9 +9,9 @@ as the narrative thread.  Every code snippet comes directly from that tutorial; 
 CUTLASS collective or kernel-level abstractions here — only CuTe atoms, tensors, and primitives.
 
 > **Related reading:**
-> [intel_overview.md](intel_overview.md) — Intel component map and recommended reading order
+> [10_intel_overview.md](10_intel_overview.md) — Intel component map and recommended reading order
 > [xe_2d_copy.md](xe_2d_copy.md) — Full reference for all 2D block copy atoms
-> [intel_performance_guide.md](intel_performance_guide.md) — Tile-size and pipeline-depth tuning
+> [12_intel_performance_guide.md](12_intel_performance_guide.md) — Tile-size and pipeline-depth tuning
 
 ---
 
@@ -53,7 +53,7 @@ Global Memory ──prefetch──▶ L1 cache ──copy (2D block load)──�
 The 2D block load instructions read a rectangular sub-matrix from global memory (or L1 if
 prefetched) directly into registers, with optional VNNI packing or transposition.
 
-> For full architecture details see [intel_overview.md](intel_overview.md).
+> For full architecture details see [10_intel_overview.md](10_intel_overview.md).
 
 ---
 
@@ -319,8 +319,8 @@ and `gemm()`.  The underlying hardware atoms (`XE_PREFETCH_2D`, `XE_LOAD_2D_*`,
 ## Further reading
 
 - [xe_2d_copy.md](xe_2d_copy.md) — Full reference for `XE_LOAD_2D` / `XE_STORE_2D` atoms
-- [intel_performance_guide.md](intel_performance_guide.md) — Tuning checklist (tile sizes, pipeline depth, register pressure)
-- [intel_overview.md](intel_overview.md) — Intel component map and reading order
+- [12_intel_performance_guide.md](12_intel_performance_guide.md) — Tuning checklist (tile sizes, pipeline depth, register pressure)
+- [10_intel_overview.md](10_intel_overview.md) — Intel component map and reading order
 - [0t_mma_atom.md](0t_mma_atom.md) — CuTe MMA atom concept background
 - [`examples/cute/tutorial/xe_gemm.cpp`](../../../../examples/cute/tutorial/xe_gemm.cpp) — The tutorial walked through here
 - [`examples/cute/tutorial/xe_gemm_slm.cpp`](../../../../examples/cute/tutorial/xe_gemm_slm.cpp) — SLM (shared local memory) variant with double-buffering

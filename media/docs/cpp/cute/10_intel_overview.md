@@ -52,7 +52,7 @@ Layout ──► Layout Algebra ──► Tensor ──► Algorithms ──► 
                                                (xe_2d_copy, XMX atoms)
 ```
 
-> See the [Intel SYCL GEMM Companion](intel_gemm_companion.md#gemm-flow-diagram-with-intel-primitives)
+> See the [Intel SYCL GEMM Companion](11_intel_gemm_companion.md#gemm-flow-diagram-with-intel-primitives)
 > for this flow annotated with specific Intel Xe atom names.
 
 ## What's Intel-specific
@@ -62,8 +62,8 @@ the upstream NVIDIA CUTLASS CuTe:
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| **Xe 2D block loads/stores/prefetch** | `xe_2d_copy.md`, `include/cute/arch/copy_xe_2d.hpp` | Hardware 2D block operations (`XE_LOAD_2D`, `XE_STORE_2D`, `XE_LOAD_2D_TRANSPOSE`, `XE_LOAD_2D_VNNI`, `XE_PREFETCH_2D`) — see [xe_2d_copy.md](xe_2d_copy.md) for naming reference, [intel_gemm_companion.md](intel_gemm_companion.md) for usage patterns |
-| **XMX MMA atoms** (`XE_DPAS_TT`) | `include/cute/arch/mma_xe.hpp` | Xe Matrix Extension compute atoms — see [intel_gemm_companion.md](intel_gemm_companion.md) for wiring patterns |
+| **Xe 2D block loads/stores/prefetch** | `xe_2d_copy.md`, `include/cute/arch/copy_xe_2d.hpp` | Hardware 2D block operations (`XE_LOAD_2D`, `XE_STORE_2D`, `XE_LOAD_2D_TRANSPOSE`, `XE_LOAD_2D_VNNI`, `XE_PREFETCH_2D`) — see [xe_2d_copy.md](xe_2d_copy.md) for naming reference, [11_intel_gemm_companion.md](11_intel_gemm_companion.md) for usage patterns |
+| **XMX MMA atoms** (`XE_DPAS_TT`) | `include/cute/arch/mma_xe.hpp` | Xe Matrix Extension compute atoms — see [11_intel_gemm_companion.md](11_intel_gemm_companion.md) for wiring patterns |
 | **`SubgroupTensor`** | `include/cute/tensor_sg.hpp` | Intel-specific tensor type that scatters/gathers across subgroup lanes |
 | **`TiledMMAHelper`** | `include/cute/atom/mma_atom.hpp` | Helper that constructs a `TiledMMA` from an Xe MMA atom and subgroup tile shape |
 
@@ -305,9 +305,9 @@ For engineers new to SYCL\*TLA CuTe, we recommend this sequence:
 2. **This page** — Intel-specific context and concept map
 3. **[examples/00_bmg_gemm](../../../../examples/00_bmg_gemm/)** — Basic Intel GEMM example (start here for runnable code)
 4. **[examples/01_bmg_gemm_with_collective_builder](../../../../examples/01_bmg_gemm_with_collective_builder/)** — GEMM using the CollectiveBuilder API
-5. **[intel_gemm_companion.md](intel_gemm_companion.md)** — SYCL / Intel Xe companion notes explaining the GEMM flow
+5. **[11_intel_gemm_companion.md](11_intel_gemm_companion.md)** — SYCL / Intel Xe companion notes explaining the GEMM flow
 6. **[xe_2d_copy.md](xe_2d_copy.md)** — Intel copy atom reference
-7. **[intel_performance_guide.md](intel_performance_guide.md)** — Tuning and optimization
+7. **[12_intel_performance_guide.md](12_intel_performance_guide.md)** — Tuning and optimization
 8. **[All examples](../../../../examples/README.md)** — Full list of Intel programming examples
 
 ## Quick navigation (jump to any topic)
@@ -318,8 +318,8 @@ For engineers new to SYCL\*TLA CuTe, we recommend this sequence:
 | **Implement a GEMM** | [0x_gemm_tutorial.md](0x_gemm_tutorial.md) |
 | **Explore compute atoms** | [0t_mma_atom.md](0t_mma_atom.md) |
 | **Optimize memory movement on Intel** | [xe_2d_copy.md](xe_2d_copy.md) |
-| **Tune for Intel GPU performance** | [intel_performance_guide.md](intel_performance_guide.md) |
-| **SYCL GEMM companion notes** | [intel_gemm_companion.md](intel_gemm_companion.md) |
+| **Tune for Intel GPU performance** | [12_intel_performance_guide.md](12_intel_performance_guide.md) |
+| **SYCL GEMM companion notes** | [11_intel_gemm_companion.md](11_intel_gemm_companion.md) |
 | **Run Intel examples** | [examples/README.md](../../../../examples/README.md) — start with `00_bmg_gemm` or `01_bmg_gemm_with_collective_builder` |
 
 > **Key concept:** Layout algebra ([02_layout_algebra.md](02_layout_algebra.md)) is the most important

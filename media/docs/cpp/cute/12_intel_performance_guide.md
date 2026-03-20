@@ -1,13 +1,13 @@
 # Intel GPU Performance Tuning Guide for CuTe on Xe
 
 > **Prerequisites:** This guide assumes you are writing or modifying a CuTe mainloop kernel
-> for Intel Xe GPUs.  Read [intel_overview.md](intel_overview.md) for the API map, and
-> [intel_gemm_companion.md](intel_gemm_companion.md) for a step-by-step GEMM walkthrough
+> for Intel Xe GPUs.  Read [10_intel_overview.md](10_intel_overview.md) for the API map, and
+> [11_intel_gemm_companion.md](11_intel_gemm_companion.md) for a step-by-step GEMM walkthrough
 > before diving into tuning.
 >
 > **Note:** This guide focuses on **CuTe-level manual tuning** — choosing tile sizes, pipeline
 > depths, and copy/MMA atoms directly.  For a complete CuTe GEMM walkthrough, see
-> [intel_gemm_companion.md](intel_gemm_companion.md).
+> [11_intel_gemm_companion.md](11_intel_gemm_companion.md).
 
 ---
 
@@ -351,7 +351,7 @@ cmake .. -G Ninja \
 ## Further reading
 
 - [`xe_rearchitecture.md`](../xe_rearchitecture.md) — Xe CuTe architecture redesign (authoritative reference for atoms and data flow)
-- [`intel_overview.md`](intel_overview.md) — Intel CuTe API map and terminology
-- [`intel_gemm_companion.md`](intel_gemm_companion.md) — Step-by-step GEMM walkthrough
+- [`10_intel_overview.md`](10_intel_overview.md) — Intel CuTe API map and terminology
+- [`11_intel_gemm_companion.md`](11_intel_gemm_companion.md) — Step-by-step GEMM walkthrough
 - [`xe_2d_copy.md`](xe_2d_copy.md) — Full 2D copy atom reference
 - [`examples/00_bmg_gemm/`](../../../../examples/00_bmg_gemm/) — Reference GEMM example

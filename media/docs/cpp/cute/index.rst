@@ -9,7 +9,7 @@ Start Here (Intel-first)
 .. toctree::
   :maxdepth: 1
 
-  Intel CuTe Overview<intel_overview.md>
+  Intel CuTe Overview<10_intel_overview.md>
 
 Core CuTe Tutorial
 ------------------
@@ -34,5 +34,5 @@ Intel GPU Extensions
   :maxdepth: 1
 
   Xe 2D Copy Operations<xe_2d_copy.md>
-  Intel Performance Tuning Guide<intel_performance_guide.md>
-  Intel SYCL GEMM Companion<intel_gemm_companion.md>
+  Intel Performance Tuning Guide<12_intel_performance_guide.md>
+  Intel SYCL GEMM Companion<11_intel_gemm_companion.md>
