@@ -32,9 +32,14 @@
 import argparse
 import sys
 import unittest
+import os
 
 from utils.test_report import write_test_results_to_csv, print_test_summary, TestResultWithSuccesses
 
+# Define logs directory at repository root level (sycl-tla/logs/)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '../../../../'))
+LOGS_DIR = os.path.join(REPO_ROOT, 'logs')
 
 # Define test suites - each suite contains a list of test modules
 TEST_SUITES = {
@@ -105,6 +110,11 @@ def run_test_suite(suite_name, write_csv=False):
         print("\nUse --list to see available test suites.")
         return False, None
     
+    # Create logs directory if it doesn't exist
+    if write_csv:
+        os.makedirs(LOGS_DIR, exist_ok=True)
+        print(f"Output will be saved to: {LOGS_DIR}")
+    
     test_modules = TEST_SUITES[suite_name]
     loader = unittest.TestLoader()
     
@@ -117,7 +127,7 @@ def run_test_suite(suite_name, write_csv=False):
     
     # Write results to CSV if requested
     if write_csv:
-        write_test_results_to_csv(results, suite_name)
+        write_test_results_to_csv(results, suite_name, output_dir=LOGS_DIR)
     
     return results.wasSuccessful(), results
 
