@@ -79,8 +79,12 @@ runs:
           mkdir igc
           cd igc
           echo "Fetching latest IGC release..."
-          IGC_CORE_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-core-2.*amd64.deb\"" | head -1 | cut -d '"' -f 4)
-          IGC_OPENCL_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-opencl-2.*amd64.deb\"" | grep -v "devel" | head -1 | cut -d '"' -f 4)
+          # IGC_CORE_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-core-2.*amd64.deb\"" | head -1 | cut -d '"' -f 4)
+          # IGC_OPENCL_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-opencl-2.*amd64.deb\"" | grep -v "devel" | head -1 | cut -d '"' -f 4)
+
+          IGC_CORE_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/tags/v2.27.10 | grep "browser_download_url.*intel-igc-core-2.*amd64.deb\"" | head -1 | cut -d '"' -f 4)
+          IGC_OPENCL_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/tags/v2.27.10 | grep "browser_download_url.*intel-igc-opencl-2.*amd64.deb\"" | grep -v "devel" | head -1 | cut -d '"' -f 4)
+
           echo "Downloading IGC packages..."
           wget "${IGC_CORE_URL}"
           wget "${IGC_OPENCL_URL}"

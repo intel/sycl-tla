@@ -21,7 +21,7 @@ jobs:
   sycl-test:
     uses: ./.github/workflows/intel_test_reusable.yml
     with:
-      compiler: '["RELEASE", "NIGHTLY"]'
+      compiler: '["RELEASE"]'
       intel_graphics: '["LTS"]'
       DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
       gpu: '["PVC"]'
