@@ -52,6 +52,7 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 ## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-20)
 
 ### Major Architecture Changes
+- **Support BMG G31 Platform ([#755](https://github.com/intel/sycl-tla/pull/755))**
 - **SLM Copy API functionalities and examples**
   - Support CuTe copy engines for 1D LDSM/STSM operations with vISA ([#753](https://github.com/intel/sycl-tla/pull/753))
   - Enable fusion example of 2 matmul operations through SLM Copoy API ([#747](https://github.com/intel/sycl-tla/pull/747))
