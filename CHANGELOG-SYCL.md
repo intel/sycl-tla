@@ -16,11 +16,11 @@
   - Improve from 48% to 65% by changing tile shape ([#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743))
   - Improve from 65% to 73% by overlaping softmax rescale-o to PV GEMM ([#749](https://github.com/intel/sycl-tla/pull/749))
   - Improve from 73% to 78% by using built-in max instruction in reduction function ([#750](https://github.com/intel/sycl-tla/pull/750))
-  - Refine Flash Attention code and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715), [#716](https://github.com/intel/sycl-tla/pull/716),[#720](https://github.com/intel/sycl-tla/pull/720))
+  - Refine code and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715), [#716](https://github.com/intel/sycl-tla/pull/716),[#720](https://github.com/intel/sycl-tla/pull/720))
 - **Epilogue Visitor Tree (EVT) Enhancements**:
   - Combine with SIGMOID function ([#686](https://github.com/intel/sycl-tla/pull/686))
   - Add Relu variation test cases ([#693](https://github.com/intel/sycl-tla/pull/693))
-  - Enhance and refine code and test case([#703](https://github.com/intel/sycl-tla/pull/703), [#717](https://github.com/intel/sycl-tla/pull/717))
+  - Refine code ([#703](https://github.com/intel/sycl-tla/pull/703), [#717](https://github.com/intel/sycl-tla/pull/717))
 - **GEMM Enhancements**:
   - Support all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
   - Enhance examples ([#726](https://github.com/intel/sycl-tla/pull/726))
