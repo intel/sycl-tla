@@ -24,8 +24,6 @@
 - **GEMM Enhancements**:
   - Support all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
   - Enhance examples ([#726](https://github.com/intel/sycl-tla/pull/726))
-- **Build and Python**:
-  - Python version changes for compatibility ([#714](https://github.com/intel/sycl-tla/pull/714))
   
 ## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
 ### Major Architecture Improvements
