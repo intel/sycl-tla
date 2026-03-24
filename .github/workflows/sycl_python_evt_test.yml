@@ -81,6 +81,12 @@ jobs:
           export CUTLASS_USE_SYCL=1
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 
+      - name: Clear cache if it exists
+        shell: bash
+        run: |
+          ls -al | grep db
+          rm -rf compiled_cache.db
+
       - name: Run Python EVT Tests (Xe-compatible)
         shell: bash
         run: |
