@@ -49,7 +49,7 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 
 # What's New in SYCL*TLA 0.8
 
-## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-20)
+## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-25)
 
 ### Major Architecture Changes
 - **Support BMG G31 Platform ([#755](https://github.com/intel/sycl-tla/pull/755))**
@@ -61,12 +61,9 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 
 ### Enhancements
 - **Flash Attention Performance Improvements (for BMG and BF16)**:  
-  - Overall performance improved from ~48% to ~78% of peak
   - Fix long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
-  - Improve from 48% to 65% by changing tile shape ([#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743))
-  - Improve from 65% to 73% by overlaping softmax rescale-o to PV GEMM ([#749](https://github.com/intel/sycl-tla/pull/749))
-  - Improve from 73% to 78% by using built-in max instruction in reduction function ([#750](https://github.com/intel/sycl-tla/pull/750))
-  - Refine Flash Attention code and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715), [#716](https://github.com/intel/sycl-tla/pull/716),[#720](https://github.com/intel/sycl-tla/pull/720))
+  - Overall performance improved from ~45% to ~78% of peak([#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743),[#749](https://github.com/intel/sycl-tla/pull/749),[#750](https://github.com/intel/sycl-tla/pull/750))
+  - Refine code and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715), [#716](https://github.com/intel/sycl-tla/pull/716),[#720](https://github.com/intel/sycl-tla/pull/720))
 - **Epilogue Visitor Tree (EVT) Enhancements**:
   - Combine with SIGMOID function ([#686](https://github.com/intel/sycl-tla/pull/686))
   - Add Relu variation test cases ([#693](https://github.com/intel/sycl-tla/pull/693))
