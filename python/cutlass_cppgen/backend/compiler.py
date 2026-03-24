@@ -488,7 +488,7 @@ class ArtifactManager:
             if cc == 12:
                 arch = "intel_gpu_pvc"
             elif cc == 20:
-                arch = "intel_gpu_bmg_g21"
+                arch = "intel_gpu_bmg_g21,intel_gpu_bmg_g31"
             else:
                 arch = "intel_gpu_bmg_g21"  
             host_compile_options = CompilationOptions(
