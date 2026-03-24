@@ -1,6 +1,6 @@
 # SYCL*TLA (previously referred to as cutlass-sycl) Changelog
 
-## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-20)
+## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-25)
 ### Major Architecture Changes
 - **Support BMG G31 Platform ([#755](https://github.com/intel/sycl-tla/pull/755))**
 - **SLM Copy API functionalities and examples**
