@@ -140,11 +140,19 @@ The target architecture information is passed on to SYCL*TLA via the cmake flag
 ```
 cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_pvc"
 ```
-Or 
+Or
 
 ```
 cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" 
 ```
+
+Or
+
+```
+cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g31" 
+```
+
+> Note: `-DDPCPP_SYCL_TARGET="bmg"` will compile for both `intel_gpu_bmg_g21`, `intel_gpu_bmg_g31` targets.
 
 Please refer to the [functionality documentation](https://github.com/intel/sycl-tla/blob/main/media/docs/cpp/functionality.md)
 for details on which kernels require which target architectures.
@@ -189,6 +197,7 @@ Create a build directory within the SYCL*TLA project, then run CMake. You need t
 the target Intel GPU architecture using the `DPCPP_SYCL_TARGET` flag.
 For Intel Data Center GPU Max Series (Ponte Vecchio), use `intel_gpu_pvc`.
 For Intel Arc GPU B580 Graphics, use `intel_gpu_bmg_g21`.
+For Intel Arc GPU Battlemage (G31), use `intel_gpu_bmg_g31`.
 
 ```bash
 $ mkdir build && cd build
@@ -200,6 +209,12 @@ Or for Intel Arc GPU B580 Graphics:
 
 ```bash
 $  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics
+```
+
+Or for Intel Arc GPU Battlemage (G31):
+
+```bash
+$  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g31" # compiles for Intel Arc GPU Battlemage (G31)
 ```
 
 To compile with G++ as host compiler, add the flag `-DDPCPP_HOST_COMPILER=g++-13` to the cmake command. Please note that the build system must be able to find `g++-13` in your PATH.
