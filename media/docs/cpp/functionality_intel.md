@@ -51,16 +51,16 @@ Hyperlinks to relevant unit tests and examples demonstrate how specific template
 
 |**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Test / Example**    |
 |-----------------|---------------|--------------------------------|------------------------|-----------------------|
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32.cpp), [example](examples/00_bmg_gemm/00_bmg_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => bf16`    | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_bf16.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => bf16`   | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_bf16.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => f32`    | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp), [example](examples/01_bmg_gemm_with_collective_builder/01_bmg_gemm_with_collective_builder.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f16 => f16`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp16.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f16 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `tf32 * tf32 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_tf32_tf32_fp32_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `s8 * s8 + s32 => s32`         | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_s8_s8_s32_tensor_op_s32.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f8(e4m3) * f8(e4m3) + f32 => f32` | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_f8_f8_fp32_tensor_op_fp32.cpp), [example](examples/08_bmg_gemm_f8/08_bmg_gemm_f8.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32.cpp), [example](../../../examples/00_bmg_gemm/00_bmg_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => bf16`    | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_bf16.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => bf16`   | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_bf16.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => f32`    | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp), [example](../../../examples/01_bmg_gemm_with_collective_builder/01_bmg_gemm_with_collective_builder.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f16 => f16`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp16.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f16 => f32`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `tf32 * tf32 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_tf32_tf32_fp32_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `s8 * s8 + s32 => s32`         | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_s8_s8_s32_tensor_op_s32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f8(e4m3) * f8(e4m3) + f32 => f32` | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_f8_f8_fp32_tensor_op_fp32.cpp), [example](../../../examples/08_bmg_gemm_f8/08_bmg_gemm_f8.cpp) |
 
 ### Cooperative GEMM Kernels
 
@@ -68,10 +68,10 @@ Cooperative kernels split load and MMA threads to reduce L1 cache conflicts and 
 
 |**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
 |-----------------|---------------|--------------------------------|------------------------|------------------|
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_cooperative.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32_cooperative.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `tf32 * tf32 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_tf32_tf32_fp32_tensor_op_fp32_cooperative.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `s8 * s8 + s32 => s32`         | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_s8_s8_s32_tensor_op_s32_cooperative.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_cooperative.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32_cooperative.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `tf32 * tf32 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_tf32_tf32_fp32_tensor_op_fp32_cooperative.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `s8 * s8 + s32 => s32`         | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_s8_s8_s32_tensor_op_s32_cooperative.cpp) |
 
 ### Mixed Precision GEMM Kernels
 
@@ -79,11 +79,11 @@ Mixed precision kernels support different data types for A and B operands.
 
 |**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Test / Example**    |
 |-----------------|---------------|--------------------------------|------------------------|-----------------------|
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * s8 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_s8_fp32_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * s4 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/gemm_universal_f16t_s4n_f32t_mixed_input_tensor_op_f32_xe.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `s8 * bf16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/gemm_universal_s8t_bf16n_f32t_mixed_input_tensor_op_f32_xe.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f8(e4m3) + f32 => f32`  | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_f16_f8_fp32_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * s8 + f32 => bf16`      | {N,T} x {N,T} => {N,T} | [example](examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * s8 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_s8_fp32_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * s4 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/gemm_universal_f16t_s4n_f32t_mixed_input_tensor_op_f32_xe.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `s8 * bf16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/gemm_universal_s8t_bf16n_f32t_mixed_input_tensor_op_f32_xe.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f8(e4m3) + f32 => f32`  | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_f16_f8_fp32_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * s8 + f32 => bf16`      | {N,T} x {N,T} => {N,T} | [example](../../../examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16.cpp) |
 
 ### Grouped GEMM Kernels
 
@@ -91,23 +91,23 @@ Grouped GEMM (batched with different sizes) is supported for efficient MoE and m
 
 |**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Test / Example**    |
 |-----------------|---------------|--------------------------------|------------------------|-----------------------|
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_group_gemm.cpp), [example](examples/04_bmg_grouped_gemm/04_bmg_grouped_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => f32`    | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f16 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * s8 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_s8_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * u4 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_u4_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * s8 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_s8_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * u4 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_u4_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f8(e4m3) + f32 => f32`  | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp8_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * s8 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](examples/10_bmg_grouped_gemm_mixed_dtype/) |
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f8 * f8 + f32 => f32`         | {N,T} x {N,T} => {N,T} | [example](examples/09_bmg_grouped_gemm_f8/) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_group_gemm.cpp), [example](../../../examples/04_bmg_grouped_gemm/04_bmg_grouped_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => f32`    | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f16 => f32`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * s8 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_s8_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * u4 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_u4_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * s8 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_s8_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * u4 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_u4_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f8(e4m3) + f32 => f32`  | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_fp8_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * s8 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](../../../examples/10_bmg_grouped_gemm_mixed_dtype/) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f8 * f8 + f32 => f32`         | {N,T} x {N,T} => {N,T} | [example](../../../examples/09_bmg_grouped_gemm_f8/) |
 
 ### Ptr-Array Cooperative GEMM
 
 |**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
 |-----------------|---------------|--------------------------------|------------------------|------------------|
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_f32_ptr_array_cooperative.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_fp16_fp16_f32_ptr_array_cooperative.cpp) |
 
 ### Epilogue Visitor Tree (EVT) GEMM
 
@@ -115,19 +115,19 @@ EVT enables fused epilogue operations such as ReLU activation, bias addition, so
 
 |**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
 |-----------------|---------------|--------------------------------|------------------------|------------------|
-| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_evt.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](../../../test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_evt.cpp) |
 
 ### Additional Advanced Features
 
 |**Feature** | **Toolchain** | **Data Type**                  | **Example**    |
 |------------|---------------|--------------------------------|----------------|
-| **Stream-K GEMM**      | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk.cpp) |
-| **Dual GEMM**          | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/07_bmg_dual_gemm/07_bmg_dual_gemm.cpp) |
-| **MoE GEMM**           | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/12_xe20_moe_gemm_cute_interface/12_xe20_moe_gemm_cute_interface.cpp) |
-| **Flash Attention V2**  | oneAPI 2025.0+ | `bf16 / f16`                  | [example](examples/06_bmg_flash_attention/06_xe_fmha_fwd.cpp) |
-| **Epilogue Fusion (ReLU, Bias)** | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32` | [example](examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_relu.cpp) |
-| **CUTLASS Library**     | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/11_xe20_cutlass_library/xe20_cutlass_library_b16.cpp) |
-| **Bias Addition**       | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/13_bmg_gemm_bias/13_bmg_gemm_bias.cpp) |
+| **Stream-K GEMM**      | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](../../../examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk.cpp) |
+| **Dual GEMM**          | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](../../../examples/07_bmg_dual_gemm/07_bmg_dual_gemm.cpp) |
+| **MoE GEMM**           | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](../../../examples/12_xe20_moe_gemm_cute_interface/12_xe20_moe_gemm_cute_interface.cpp) |
+| **Flash Attention V2**  | oneAPI 2025.0+ | `bf16 / f16`                  | [example](../../../examples/06_bmg_flash_attention/06_xe_fmha_fwd.cpp) |
+| **Epilogue Fusion (ReLU, Bias)** | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32` | [example](../../../examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_relu.cpp) |
+| **CUTLASS Library**     | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](../../../examples/11_xe20_cutlass_library/xe20_cutlass_library_b16.cpp) |
+| **Bias Addition**       | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](../../../examples/13_bmg_gemm_bias/13_bmg_gemm_bias.cpp) |
 
 
 ## Subgroup-level Matrix Multiply with DPAS (Intel Xe Matrix Extensions)
