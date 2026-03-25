@@ -31,6 +31,7 @@
  **************************************************************************************************/
 
 #include "cutlass/detail/layout.hpp"
+#include "cutlass/array.h"
 
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
@@ -283,6 +284,173 @@ TEST(PVC_1d_copy, copy_double) {
     auto blockDim = compat::dim3(subgroup_size);
 
     launch<copy_kernel_vectorized<decltype(S), decltype(D)>, CopyKernelVectorizedName<decltype(S), decltype(D)>>(
+        launch_policy{
+            compat::dim3(1), blockDim,
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D);
+
+    compat::wait_and_throw();
+    host_output = device_output;
+    for (int i = 0; i < M * N; ++i) {
+      EXPECT_EQ(host_output[i], host_src[i]);
+    }
+  }
+}
+
+// Kernel for testing packed XE_1D_LDSM / XE_1D_STSM with 128-bit/64-bit SLM access.
+// Uses XE_1D_LDSM<PackedType, PackedType> and XE_1D_STSM<PackedType, PackedType>
+// through the standard TiledCopy framework.
+template<class...> class CopyKernelPackedSlmName;
+
+template <class TensorS, class TensorD, int PackedBytes>
+void copy_kernel_packed_slm(TensorS tile_S, TensorD tile_D) {
+  using namespace cute;
+
+  using Element = typename TensorS::value_type;
+
+  // SLM buffer
+  auto smem = compat::local_mem<Element[size(tile_S)]>();
+  Tensor sTensor = make_tensor(make_smem_ptr(smem), tile_S.layout());
+
+  using ElementUint = typename uint_bit<sizeof_bits_v<Element>>::type;
+  using GmemAccessType = conditional_t<(sizeof(Element) < 2), uint64_t, cutlass::uint128_t>;
+
+  // GMEM copy atoms
+  using traits_load = Copy_Traits<XE_1D_LOAD_GLOBAL<ElementUint, GmemAccessType>>;
+  using Atom_load = Copy_Atom<traits_load, Element>;
+  using traits_store = Copy_Traits<XE_1D_STORE_GLOBAL<GmemAccessType, ElementUint>>;
+  using Atom_store = Copy_Atom<traits_store, Element>;
+
+  // PackedType: 128-bit aligned array used as both S and D for LDSM/STSM
+  static constexpr int PackedElems = PackedBytes / sizeof(ElementUint);
+  using PackedType = cutlass::AlignedArray<ElementUint, PackedElems>;
+
+  // Packed SLM copy atoms using XE_1D_LDSM / XE_1D_STSM explicitly.
+  using traits_ldsm = Copy_Traits<XE_1D_LDSM<PackedType, PackedType>>;
+  using Atom_ldsm = Copy_Atom<traits_ldsm, Element>;
+  using traits_stsm = Copy_Traits<XE_1D_STSM<PackedType, PackedType>>;
+  using Atom_stsm = Copy_Atom<traits_stsm, Element>;
+
+  // GMEM tiled copy
+  auto GmemVecLayout = make_layout(
+      make_shape(_1{}, Int<sizeof(GmemAccessType) / sizeof(Element)>{}),
+      Stride<Int<sizeof(GmemAccessType) / sizeof(Element)>, _1>{});
+  auto ThreadLayout = make_layout(make_shape(_1{}, _16{}));
+  auto tiled_copy_load = make_tiled_copy(Atom_load{}, ThreadLayout, GmemVecLayout);
+  auto tiled_copy_store = make_tiled_copy(Atom_store{}, ThreadLayout, GmemVecLayout);
+
+  // Packed SLM tiled copy: each thread handles PackedElems elements per atom
+  auto SlmVecLayout = make_layout(
+      make_shape(_1{}, Int<PackedElems>{}),
+      Stride<Int<PackedElems>, _1>{});
+  auto tiled_ldsm = make_tiled_copy(Atom_ldsm{}, ThreadLayout, SlmVecLayout);
+  auto tiled_stsm = make_tiled_copy(Atom_stsm{}, ThreadLayout, SlmVecLayout);
+
+  // Partition for GMEM
+  auto thr_copy_load = tiled_copy_load.get_thread_slice(ThreadIdxX());
+  auto thr_copy_store = tiled_copy_store.get_thread_slice(ThreadIdxX());
+
+  Tensor thr_tile_load_S = thr_copy_load.partition_S(tile_S);
+  Tensor thr_tile_store_D = thr_copy_store.partition_D(tile_D);
+
+  Tensor fragment = make_fragment_like(thr_copy_load.partition_D(tile_S));
+
+  // Partition for packed SLM
+  auto thr_copy_ldsm = tiled_ldsm.get_thread_slice(ThreadIdxX());
+  auto thr_copy_stsm = tiled_stsm.get_thread_slice(ThreadIdxX());
+
+  Tensor thr_tile_ldsm_S = thr_copy_ldsm.partition_S(sTensor);
+  Tensor thr_tile_stsm_D = thr_copy_stsm.partition_D(sTensor);
+
+  // Copy: GMEM -> registers
+  prefetch(tiled_copy_load, thr_tile_load_S);
+  copy(tiled_copy_load, thr_tile_load_S, fragment);
+
+  // Copy: registers -> SLM via packed STSM
+  // retile_S reshapes fragment's layout to match tiled_stsm's expected source
+  copy(tiled_stsm, thr_copy_stsm.retile_S(fragment), thr_tile_stsm_D);
+
+  clear(fragment);
+
+  // Copy: SLM -> registers via packed LDSM
+  // retile_D reshapes fragment's layout to match tiled_ldsm's expected destination
+  copy(tiled_ldsm, thr_tile_ldsm_S, thr_copy_ldsm.retile_D(fragment));
+
+  // Copy: registers -> GMEM
+  copy(tiled_copy_store, fragment, thr_tile_store_D);
+}
+
+TEST(PVC_1d_copy, packed_slm_copy) {
+  // Test 16-bit elements packed into 128-bit (uint16_t, 8 elements per packed access)
+  {
+    constexpr int M = 1;
+    constexpr int N = 128;
+    using Element = uint16_t;
+    constexpr int PackedBytes = 16; // 128 bits = 16 bytes
+
+    cutlass::host_vector<Element> host_src(M * N);
+    cutlass::host_vector<Element> host_output(M * N);
+
+    for (size_t i = 0; i < host_src.size(); ++i) {
+      host_src[i] = static_cast<Element>(i);
+    }
+
+    cutlass::device_vector<Element> device_src = host_src;
+    cutlass::device_vector<Element> device_output(M * N);
+
+    Tensor S =
+        make_tensor(make_gmem_ptr(device_src.data()),
+                    make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
+    Tensor D =
+        make_tensor(make_gmem_ptr(device_output.data()),
+                    make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
+
+    static constexpr auto subgroup_size = 16;
+    auto blockDim = compat::dim3(subgroup_size);
+
+    launch<copy_kernel_packed_slm<decltype(S), decltype(D), PackedBytes>,
+           CopyKernelPackedSlmName<decltype(S), decltype(D), Int<PackedBytes>>>(
+        launch_policy{
+            compat::dim3(1), blockDim,
+            kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
+        S, D);
+
+    compat::wait_and_throw();
+    host_output = device_output;
+    for (int i = 0; i < M * N; ++i) {
+      EXPECT_EQ(host_output[i], host_src[i]);
+    }
+  }
+
+  // Test 8-bit elements packed into 128-bit (uint8_t, 16 elements per packed access)
+  {
+    constexpr int M = 1;
+    constexpr int N = 256;
+    using Element = uint8_t;
+    constexpr int PackedBytes = 16; // 128 bits = 16 bytes
+
+    cutlass::host_vector<Element> host_src(M * N);
+    cutlass::host_vector<Element> host_output(M * N);
+
+    for (size_t i = 0; i < host_src.size(); ++i) {
+      host_src[i] = static_cast<Element>(i & 0xFF);
+    }
+
+    cutlass::device_vector<Element> device_src = host_src;
+    cutlass::device_vector<Element> device_output(M * N);
+
+    Tensor S =
+        make_tensor(make_gmem_ptr(device_src.data()),
+                    make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
+    Tensor D =
+        make_tensor(make_gmem_ptr(device_output.data()),
+                    make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
+
+    static constexpr auto subgroup_size = 16;
+    auto blockDim = compat::dim3(subgroup_size);
+
+    launch<copy_kernel_packed_slm<decltype(S), decltype(D), PackedBytes>,
+           CopyKernelPackedSlmName<decltype(S), decltype(D), Int<PackedBytes>>>(
         launch_policy{
             compat::dim3(1), blockDim,
             kernel_properties{sycl_exp::sub_group_size<SUBGROUP_SIZE>}},
