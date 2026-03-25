@@ -33,9 +33,9 @@
 // 
 // This example demonstrates the fundamental properties of CuTe layouts:
 // - rank: number of elements in a layout (Tuple)
-// - depth: level of hierarchical nesting. For example: Number of tuple layers. For ingle integer layouts, depth is 0.
+// - depth: level of hierarchical nesting. For example: Number of tuple layers. For single integer layouts, depth is 0.
 // - shape: the coordinate space dimensions
-// - stride: how coordinates map to indices / Space betweeen indices
+// - stride: how coordinates map to indices / Space between indices
 // - size: product of all shape dimensions (domain size)
 // - cosize: size of the codomain (maximum index + 1)
 
