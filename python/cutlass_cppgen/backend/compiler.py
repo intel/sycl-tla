@@ -61,7 +61,8 @@ IncludeTemplate = r"""#include "${include}"
 def compile_with_nvcc(cmd, source, error_file):
     succeed = True
     try:
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        # There's a quoted option for BMG, which needs shell=True
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True)
     except subprocess.CalledProcessError as e:
         error_message = e.output.decode()
         with open(error_file, "w") as error_out:
@@ -83,12 +84,13 @@ class CompilationOptions:
     Compilation options.
     """
 
-    def __init__(self, flags, arch, include_paths=[], for_sycl=False):
+    def __init__(self, flags, arch, include_paths=[], for_sycl=False, quoted_device_flag=None):
         self.includes = []
         self.include_paths = include_paths
         self.flags = flags
         self.arch = arch
         self.for_sycl = for_sycl
+        self.quoted_device_flag = quoted_device_flag
 
     def _encode(self):
         opts = []
@@ -109,6 +111,7 @@ class CompilationOptions:
                arch_flag += "a"
 
         opts.append(arch_flag)
+        opts.append(self.quoted_device_flag)
 
         return opts
 
@@ -378,7 +381,7 @@ class ArtifactManager:
                     "tmpdir": temp_dump_dir
                 }
                 cmd = SubstituteTemplate(cmd_template, values)
-                compile_with_nvcc(cmd.split(" "), source_buffer_device,
+                compile_with_nvcc(cmd, source_buffer_device,
                                   "./cutlass_python_compilation_device_error.txt")
 
                 # Find SPIR-V device code in temporary directory
@@ -423,7 +426,7 @@ class ArtifactManager:
                 "tarfile": temp_cubin.name,
             }
             cmd = SubstituteTemplate(cmd_template, values)
-            compile_with_nvcc(cmd.split(" "), source_buffer_device,
+            compile_with_nvcc(" ".join(cmd), source_buffer_device,
                               "./cutlass_python_compilation_device_error.txt")
 
             # load the cubin image
@@ -459,7 +462,7 @@ class ArtifactManager:
             cmd.extend(["-shared", "-o", temp_dst.name, temp_src.name])
 
         # Comile and load the library
-        compile_with_nvcc(cmd, source_buffer_host,
+        compile_with_nvcc(" ".join(cmd), source_buffer_host,
                           error_file="./cutlass_python_compilation_host_error.txt")
         host_lib = ctypes.CDLL(temp_dst.name)
 
@@ -475,6 +478,7 @@ class ArtifactManager:
             CUTLASS_PATH + "/python/cutlass/cpp/include",
         ]
 
+        quoted_device_flag = None
         if not self._is_sycl():
             include_paths.append(cuda_install_path() + "/include")
 
@@ -488,16 +492,20 @@ class ArtifactManager:
             if cc == 12:
                 arch = "intel_gpu_pvc"
             elif cc == 20:
-                arch = "intel_gpu_bmg_g21,intel_gpu_bmg_g31"
+                # Multi target case i.e G21, G31
+                arch = "spir64_gen -Xsycl-target-backend=spir64_gen"
+                quoted_device_flag = "\"-device bmg-g21,bmg-g31\""
             else:
-                arch = "intel_gpu_bmg_g21"  
+                arch = "intel_gpu_bmg_g21"
+            flags = ["-std=c++17", "-DCUTLASS_ENABLE_SYCL", "-DSYCL_INTEL_TARGET"]
+
             host_compile_options = CompilationOptions(
-                ["-std=c++17", "-DCUTLASS_ENABLE_SYCL", "-DSYCL_INTEL_TARGET"],
-                arch, include_paths, True)
+                flags,
+                arch, include_paths, True, quoted_device_flag)
 
         if compile_options is None:
             compile_options = CompilationOptions(
-                self.default_compile_options, arch, include_paths, self._is_sycl())
+                self.default_compile_options, arch, include_paths, self._is_sycl(), quoted_device_flag)
         # save the cubin
         operation_key = []
         operation_list = []
