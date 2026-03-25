@@ -16,10 +16,8 @@ Note: SYCL*TLA requires Intel oneAPI 2025.0 or newer, and Intel Xe architecture 
 - tf32 - tfloat32
 - f8 (e4m3) - 8-bit float (E4M3 format)
 - f8 (e5m2) - 8-bit float (E5M2 format)
-- e2m1 - 8-bit float (E2M1 format, Xe35+)
 - XMX16 - Use Intel Xe Matrix Extensions (XMX) with subgroup size 16
 - DPAS - Dot Product Accumulate Systolic instruction
-- BDPAS - Block Dot Product Accumulate Systolic instruction (Xe35+)
 
 ## Intel Xe Architecture Hierarchy
 
@@ -39,118 +37,97 @@ Device (GPU)
 | **Architecture** | **Code Name** | **GPU Examples** | **Arch ID** | **Key Feature** |
 |------------------|---------------|------------------|-------------|-----------------|
 | **Xe12 (PVC)**   | Ponte Vecchio | Data Center Max 1550/1100 | 12 | DPAS, 2D Block Copy |
-| **Xe20 (BMG)**   | Battlemage    | Intel Arc B580    | 20 | DPAS, 2D Block Copy, DMA Warp-Specialized |
-| **Xe35 (CRI)**   | Future        | —                 | 35 | BDPAS, Block-Scaled GEMM |
+| **Xe20 (BMG)**   | Battlemage    | Intel Arc B580    | 20 | DPAS, 2D Block Copy |
+
+PVC and BMG share the same DPAS instruction set and 2D block copy capabilities. All GEMM kernels and features listed below are supported on both architectures.
 
 
 ## Device-level GEMM
 
 The following tables summarize device-level GEMM kernels for Intel Xe, organized by opcode class, data type, and layout.
-Hyperlinks to relevant unit tests demonstrate how specific template instances may be defined.
+Hyperlinks to relevant unit tests and examples demonstrate how specific template instances may be defined.
 
-### Standard GEMM Kernels (PVC / Xe12)
+### Standard GEMM Kernels
 
-|**Opcode Class** | **Architecture** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
-|-----------------|------------------|---------------|--------------------------------|------------------------|------------------|
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * bf16 + f32 => bf16`    | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_bf16.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => bf16`   | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_bf16.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => f32`    | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * f16 + f16 => f16`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp16.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * f16 + f16 => f32`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `tf32 * tf32 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_tf32_tf32_fp32_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `s8 * s8 + s32 => s32`         | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_s8_s8_s32_tensor_op_s32.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f8(e4m3) * f8(e4m3) + f32 => f32` | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_f8_f8_fp32_tensor_op_fp32.cpp) |
+|**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Test / Example**    |
+|-----------------|---------------|--------------------------------|------------------------|-----------------------|
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32.cpp), [example](examples/00_bmg_gemm/00_bmg_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => bf16`    | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_bf16.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => bf16`   | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_bf16.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => f32`    | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp), [example](examples/01_bmg_gemm_with_collective_builder/01_bmg_gemm_with_collective_builder.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f16 => f16`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp16.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f16 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `tf32 * tf32 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_tf32_tf32_fp32_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `s8 * s8 + s32 => s32`         | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_s8_s8_s32_tensor_op_s32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f8(e4m3) * f8(e4m3) + f32 => f32` | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_f8_f8_fp32_tensor_op_fp32.cpp), [example](examples/08_bmg_gemm_f8/08_bmg_gemm_f8.cpp) |
 
-### Cooperative GEMM Kernels (PVC / Xe12)
+### Cooperative GEMM Kernels
 
 Cooperative kernels split load and MMA threads to reduce L1 cache conflicts and improve performance.
 
-|**Opcode Class** | **Architecture** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
-|-----------------|------------------|---------------|--------------------------------|------------------------|------------------|
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_cooperative.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32_cooperative.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `tf32 * tf32 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_tf32_tf32_fp32_tensor_op_fp32_cooperative.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `s8 * s8 + s32 => s32`         | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_s8_s8_s32_tensor_op_s32_cooperative.cpp) |
+|**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
+|-----------------|---------------|--------------------------------|------------------------|------------------|
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_cooperative.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32_cooperative.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `tf32 * tf32 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_tf32_tf32_fp32_tensor_op_fp32_cooperative.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `s8 * s8 + s32 => s32`         | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_s8_s8_s32_tensor_op_s32_cooperative.cpp) |
 
 ### Mixed Precision GEMM Kernels
 
 Mixed precision kernels support different data types for A and B operands.
 
-|**Opcode Class** | **Architecture** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
-|-----------------|------------------|---------------|--------------------------------|------------------------|------------------|
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * s8 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_s8_fp32_tensor_op_fp32.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * s4 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/gemm_universal_f16t_s4n_f32t_mixed_input_tensor_op_f32_xe.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `s8 * bf16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/gemm_universal_s8t_bf16n_f32t_mixed_input_tensor_op_f32_xe.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * f8(e4m3) + f32 => f32`  | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_f16_f8_fp32_tensor_op_fp32.cpp) |
+|**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Test / Example**    |
+|-----------------|---------------|--------------------------------|------------------------|-----------------------|
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * s8 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_s8_fp32_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * s4 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/gemm_universal_f16t_s4n_f32t_mixed_input_tensor_op_f32_xe.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `s8 * bf16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/gemm_universal_s8t_bf16n_f32t_mixed_input_tensor_op_f32_xe.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f8(e4m3) + f32 => f32`  | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_f16_f8_fp32_tensor_op_fp32.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * s8 + f32 => bf16`      | {N,T} x {N,T} => {N,T} | [example](examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16.cpp) |
 
 ### Grouped GEMM Kernels
 
 Grouped GEMM (batched with different sizes) is supported for efficient MoE and multi-head attention workloads.
 
-|**Opcode Class** | **Architecture** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
-|-----------------|------------------|---------------|--------------------------------|------------------------|------------------|
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => f32`    | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * f16 + f16 => f32`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * s8 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_s8_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * u4 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_u4_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * s8 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_s8_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * u4 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_u4_fp32_tensor_op_fp32_group_gemm.cpp) |
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * f8(e4m3) + f32 => f32`  | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_fp8_fp32_tensor_op_fp32_group_gemm.cpp) |
+|**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Test / Example**    |
+|-----------------|---------------|--------------------------------|------------------------|-----------------------|
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_group_gemm.cpp), [example](examples/04_bmg_grouped_gemm/04_bmg_grouped_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + bf16 => f32`    | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_bf16_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f16 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp16_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * s8 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_s8_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * u4 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_u4_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * s8 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_s8_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * u4 + f32 => f32`        | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_u4_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f8(e4m3) + f32 => f32`  | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp8_fp32_tensor_op_fp32_group_gemm.cpp) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * s8 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](examples/10_bmg_grouped_gemm_mixed_dtype/) |
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f8 * f8 + f32 => f32`         | {N,T} x {N,T} => {N,T} | [example](examples/09_bmg_grouped_gemm_f8/) |
 
 ### Ptr-Array Cooperative GEMM
 
-|**Opcode Class** | **Architecture** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
-|-----------------|------------------|---------------|--------------------------------|------------------------|------------------|
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_fp16_fp16_f32_ptr_array_cooperative.cpp) |
+|**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
+|-----------------|---------------|--------------------------------|------------------------|------------------|
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `f16 * f16 + f32 => f32`       | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_fp16_fp16_f32_ptr_array_cooperative.cpp) |
 
 ### Epilogue Visitor Tree (EVT) GEMM
 
 EVT enables fused epilogue operations such as ReLU activation, bias addition, softmax reduction, and split-K.
 
-|**Opcode Class** | **Architecture** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
-|-----------------|------------------|---------------|--------------------------------|------------------------|------------------|
-| **XMX16 (DPAS)**  | Xe12+ (PVC)    | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [example](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_evt.cpp) |
-
-### Xe20 (BMG) GEMM Kernels
-
-BMG (Xe20) provides DPAS-based GEMM with DMA warp-specialized pipelines for high-performance workloads.
-
-|**Opcode Class** | **Architecture** | **Toolchain** | **Data Type**                  | **Layouts**            | **Example**    |
-|-----------------|------------------|---------------|--------------------------------|------------------------|----------------|
-| **XMX16 (DPAS)**   | Xe20 (BMG)    | oneAPI 2025.0+ | `bf16 * bf16 + f32 => { bf16, f32 }` | {N,T} x {N,T} => {N,T} | [example](examples/00_bmg_gemm/00_bmg_gemm.cpp) |
-| **XMX16 (DPAS)**   | Xe20 (BMG)    | oneAPI 2025.0+ | `f16 * f16 + f32 => { f16, f32 }`    | {N,T} x {N,T} => {N,T} | [example](examples/01_bmg_gemm_with_collective_builder/01_bmg_gemm_with_collective_builder.cpp) |
-| **XMX16 (DPAS)**   | Xe20 (BMG)    | oneAPI 2025.0+ | `f8(e4m3) * f8(e4m3) + f32 => f32`   | {N,T} x {N,T} => {N,T} | [example](examples/08_bmg_gemm_f8/08_bmg_gemm_f8.cpp) |
-| **XMX16 (DPAS)**   | Xe20 (BMG)    | oneAPI 2025.0+ | `s8 * s8 + s32 => s32`               | {N,T} x {N,T} => {N,T} | — |
-
-### Xe35 Block-Scaled GEMM (Future)
-
-Block-scaled GEMM uses BDPAS instructions with hardware-assisted scale factors for quantized inference workloads.
-
-|**Opcode Class** | **Architecture** | **Toolchain** | **Data Type**                  | **Layouts**            | **Example**    |
-|-----------------|------------------|---------------|--------------------------------|------------------------|----------------|
-| **BDPAS**          | Xe35 (CRI)    | oneAPI 2025.0+ | `f16 * f8(e4m3) + f32 => f32`         | {N,T} x {N,T} => {N,T} | [example](examples/50_xe35_block_scaled_gemm/50_xe35_block_scaled_gemm_fp16_e4m3.cpp) |
-| **BDPAS**          | Xe35 (CRI)    | oneAPI 2025.0+ | `bf16 * f8(e4m3) + f32 => f32`        | {N,T} x {N,T} => {N,T} | [example](examples/50_xe35_block_scaled_gemm/) |
-| **BDPAS**          | Xe35 (CRI)    | oneAPI 2025.0+ | `e2m1 * e2m1 + f32 => { bf16, f32 }`  | {N,T} x {N,T} => {N,T} | — |
+|**Opcode Class** | **Toolchain** | **Data Type**                  | **Layouts**            | **Unit Test**    |
+|-----------------|---------------|--------------------------------|------------------------|------------------|
+| **XMX16 (DPAS)**  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`     | {N,T} x {N,T} => {N,T} | [test](test/unit/gemm/device/xe_gemm_bf16_bf16_fp32_tensor_op_fp32_evt.cpp) |
 
 ### Additional Advanced Features
 
-|**Feature** | **Architecture** | **Toolchain** | **Data Type**                  | **Example**    |
-|------------|------------------|---------------|--------------------------------|----------------|
-| **Stream-K GEMM**      | Xe20 (BMG)  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk.cpp) |
-| **Dual GEMM**          | Xe20 (BMG)  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/07_bmg_dual_gemm/07_bmg_dual_gemm.cpp) |
-| **MoE GEMM**           | Xe20 (BMG)  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/12_xe20_moe_gemm_cute_interface/12_xe20_moe_gemm_cute_interface.cpp) |
-| **Flash Attention V2**  | Xe20 (BMG)  | oneAPI 2025.0+ | `bf16 / f16`                  | [example](examples/06_bmg_flash_attention/06_xe_fmha_fwd.cpp) |
-| **Epilogue Fusion (ReLU, Bias)** | Xe20 (BMG) | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32` | [example](examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_relu.cpp) |
-| **CUTLASS Library**     | Xe20 (BMG)  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/11_xe20_cutlass_library/xe20_cutlass_library_b16.cpp) |
-| **Bias Addition**       | Xe20 (BMG)  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/13_bmg_gemm_bias/13_bmg_gemm_bias.cpp) |
-| **Mixed Dtype GEMM**    | Xe20 (BMG)  | oneAPI 2025.0+ | `bf16 * s8 + f32 => bf16`     | [example](examples/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16.cpp) |
-| **Grouped GEMM**        | Xe20 (BMG)  | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/04_bmg_grouped_gemm/04_bmg_grouped_gemm.cpp) |
-| **Grouped GEMM FP8**    | Xe20 (BMG)  | oneAPI 2025.0+ | `f8 * f8 + f32 => f32`        | [example](examples/09_bmg_grouped_gemm_f8/) |
-| **Grouped GEMM Mixed**  | Xe20 (BMG)  | oneAPI 2025.0+ | `bf16 * s8 + f32 => f32`      | [example](examples/10_bmg_grouped_gemm_mixed_dtype/) |
+|**Feature** | **Toolchain** | **Data Type**                  | **Example**    |
+|------------|---------------|--------------------------------|----------------|
+| **Stream-K GEMM**      | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk.cpp) |
+| **Dual GEMM**          | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/07_bmg_dual_gemm/07_bmg_dual_gemm.cpp) |
+| **MoE GEMM**           | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/12_xe20_moe_gemm_cute_interface/12_xe20_moe_gemm_cute_interface.cpp) |
+| **Flash Attention V2**  | oneAPI 2025.0+ | `bf16 / f16`                  | [example](examples/06_bmg_flash_attention/06_xe_fmha_fwd.cpp) |
+| **Epilogue Fusion (ReLU, Bias)** | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32` | [example](examples/05_bmg_gemm_with_epilogues/05_bmg_gemm_with_epilogue_relu.cpp) |
+| **CUTLASS Library**     | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/11_xe20_cutlass_library/xe20_cutlass_library_b16.cpp) |
+| **Bias Addition**       | oneAPI 2025.0+ | `bf16 * bf16 + f32 => f32`    | [example](examples/13_bmg_gemm_bias/13_bmg_gemm_bias.cpp) |
 
 
 ## Subgroup-level Matrix Multiply with DPAS (Intel Xe Matrix Extensions)
@@ -195,26 +172,20 @@ The following table summarizes supported DPAS configurations:
 | **DPAS**        | {1-8} × 16 × 64              | `s32, s4, u4, s32`                                           |
 | **DPAS**        | {1-8} × 16 × 64              | `s32, s4, s4, s32`                                           |
 
-### BDPAS (Block DPAS) Instruction — Xe35 Only
-
-Block DPAS includes hardware-assisted scale factors for quantized inference. M is fixed at 8.
+Additionally, mixed 8-bit/4-bit DPAS configurations are supported for asymmetric quantized GEMM:
 
 |**Opcode Class** | **Instruction Shape (M×N×K)** | **Data Types (D, A, B, C)**                                  |
 |-----------------|-------------------------------|--------------------------------------------------------------|
-| **BDPAS**       | 8 × 16 × 32                  | `f32, bf8(e5m2), bf8(e5m2), f32`                             |
-| **BDPAS**       | 8 × 16 × 32                  | `bf16, bf8(e5m2), bf8(e5m2), bf16`                           |
-| **BDPAS**       | 8 × 16 × 32                  | `f32, hf8(e4m3), hf8(e4m3), f32`                             |
-| **BDPAS**       | 8 × 16 × 32                  | `bf16, hf8(e4m3), hf8(e4m3), bf16`                           |
-| **BDPAS**       | 8 × 16 × 32                  | `bf16, hf8(e4m3), bf8(e5m2), bf16`                           |
-| **BDPAS**       | 8 × 16 × 32                  | `bf16, bf8(e5m2), hf8(e4m3), bf16`                           |
-| **BDPAS**       | 8 × 16 × 32                  | `f32, hf8(e4m3), bf8(e5m2), f32`                             |
-| **BDPAS**       | 8 × 16 × 32                  | `f32, bf8(e5m2), hf8(e4m3), f32`                             |
-| **BDPAS**       | 8 × 16 × 64                  | `f32, e2m1, e2m1, f32`                                       |
-| **BDPAS**       | 8 × 16 × 64                  | `bf16, e2m1, e2m1, bf16`                                     |
-| **BDPAS**       | 8 × 16 × 16                  | `f32, bf16, bf16, f32`                                       |
-| **BDPAS**       | 8 × 16 × 16                  | `bf16, bf16, bf16, bf16`                                     |
-| **BDPAS**       | 8 × 16 × 16                  | `f32, f16, f16, f32`                                         |
-| **BDPAS**       | 8 × 16 × 16                  | `f16, f16, f16, f16`                                         |
+| **DPAS**        | {1-8} × 16 × 64              | `u32, u8, u4, u32`                                           |
+| **DPAS**        | {1-8} × 16 × 64              | `s32, u8, u4, s32`                                           |
+| **DPAS**        | {1-8} × 16 × 64              | `s32, u8, s4, s32`                                           |
+| **DPAS**        | {1-8} × 16 × 64              | `s32, s8, u4, s32`                                           |
+| **DPAS**        | {1-8} × 16 × 64              | `s32, s8, s4, s32`                                           |
+| **DPAS**        | {1-8} × 16 × 64              | `u32, u4, u8, u32`                                           |
+| **DPAS**        | {1-8} × 16 × 64              | `s32, u4, u8, s32`                                           |
+| **DPAS**        | {1-8} × 16 × 64              | `s32, u4, s8, s32`                                           |
+| **DPAS**        | {1-8} × 16 × 64              | `s32, s4, u8, s32`                                           |
+| **DPAS**        | {1-8} × 16 × 64              | `s32, s4, s8, s32`                                           |
 
 
 ## DPAS Register Layout
@@ -236,42 +207,34 @@ DPAS instructions require specific register layouts for operands. These layouts 
 
 Intel Xe GPUs feature hardware-accelerated 2D block copy operations for efficient data movement between global memory and registers. All 2D block operations are executed at the **subgroup level** with 16 work-items cooperating.
 
-### Naming Convention
+### Parameterized 2D Block Copy Templates
+
+The current (non-legacy) 2D block copy operations use parameterized templates:
 
 ```
-XE_2D_[Packed_]<DataType>x<Height>x<Width>_<LD|ST>_<N|T|V>
+XE_LOAD_2D<Bits, Height, Width, BlockWidth>       // Row-major load
+XE_LOAD_2D_VNNI<Bits, Height, Width, BlockWidth>  // VNNI-transformed load
+XE_LOAD_2D_TRANSPOSE<Bits, Height, Width>          // Transpose load
+XE_PREFETCH_2D<Bits, Height, Width>                // Prefetch to cache
+XE_STORE_2D<Bits, Height, Width>                   // Row-major store
 ```
 
-| Component   | Meaning                                                  |
-|-------------|----------------------------------------------------------|
-| `Packed_`   | Optional: packed format for narrow types (U4, U8)        |
-| `DataType`  | U4, U8, U16, U32, U64 (element width, not actual type)  |
-| `Height`    | Block height in elements                                 |
-| `Width`     | Block width in elements                                  |
-| `LD/ST`     | Load from / Store to global memory                       |
-| `N/T/V`     | Row-major / Transpose / VNNI format                      |
+| Parameter    | Meaning                                                  |
+|--------------|----------------------------------------------------------|
+| `Bits`       | Element width in bits (8, 16, 32, 64)                    |
+| `Height`     | Block height in elements                                 |
+| `Width`      | Block width in elements                                  |
+| `BlockWidth` | Optional: number of blocks for wide loads                |
 
-### Supported 2D Block Load Operations
+### Supported 2D Block Operations
 
-|**Operation Type** | **Data Width** | **Block Dimensions** | **Use Case**                |
-|-------------------|----------------|----------------------|-----------------------------|
-| `XE_2D_LOAD_N`    | 8/16/32/64-bit | H×W (variable)       | Row-major load from GMEM    |
-| `XE_2D_LOAD_V`    | 8/16-bit       | H×W (variable)       | VNNI-transformed load       |
-| `XE_2D_LOAD_T`    | 32/64-bit      | H×W (variable)       | Transpose load from GMEM    |
-| `XE_2D_PREFETCH`  | All            | H×W (variable)       | Prefetch data to cache      |
-| `XE_2D_STORE`     | 8/16/32/64-bit | H×W (variable)       | Row-major store to GMEM     |
-
-### Copy Atom Data Width Selection
-
-The copy atom is selected based on the element data type:
-
-|**Element Size** | **Copy Atom Example**            | **Elements per Work-Item** |
-|-----------------|----------------------------------|----------------------------|
-| 4-bit           | `XE_2D_Packed_U4x1x128_LD_N`    | 8 elements per U32 word    |
-| 8-bit           | `XE_2D_U8x1x32_LD_N`            | 2 packed in U16            |
-| 16-bit          | `XE_2D_U16x1x32_LD_N`           | 1 element per slot         |
-| 32-bit          | `XE_2D_U32x1x16_LD_N`           | 1 element per slot         |
-| 64-bit          | `XE_2D_U64x1x16_LD_N`           | 1 element per slot         |
+|**Operation Template** | **Data Width** | **Use Case**                              |
+|-----------------------|----------------|-------------------------------------------|
+| `XE_LOAD_2D`          | 8/16/32/64-bit | Row-major load from global memory         |
+| `XE_LOAD_2D_VNNI`     | 8/16-bit       | VNNI-transformed load for B operand       |
+| `XE_LOAD_2D_TRANSPOSE`| 32/64-bit      | Transpose load from global memory         |
+| `XE_PREFETCH_2D`      | All            | Prefetch data to cache                    |
+| `XE_STORE_2D`         | 8/16/32/64-bit | Row-major store to global memory          |
 
 ### 2D Block Copy Alignment Requirements
 
@@ -290,32 +253,31 @@ Intel Xe kernels use specialized dispatch policies that configure the mainloop a
 
 ### Mainloop Dispatch Policies
 
-|**Policy**                                  | **Architecture** | **Description**                                          |
-|--------------------------------------------|------------------|----------------------------------------------------------|
-| `MainloopIntelXeXMX16<Stages>`             | Xe12+ (PVC)      | Standard XMX16 mainloop with configurable pipeline depth |
-| `MainloopIntelXeXMX16Group<Stages>`        | Xe12+ (PVC)      | Grouped GEMM mainloop variant                            |
-| `MainloopIntelXeXMX16MixedPrecision<Stages>` | Xe12+ (PVC)   | Mixed precision operand support                          |
-| `MainloopIntelXeXMX16BlockScaled<Stages, GroupSize>` | Xe35+  | Block-scaled with quantization                           |
-| `MainloopIntelXeXMX16FP8Scaling<Stages>`   | Xe12+ (PVC)      | FP8 with hardware scaling factors                        |
-| `MainloopIntelW8A8<Stages>`                | Xe12+ (PVC)      | Weight-8 Activation-8 specific mainloop                  |
-| `MainloopXeL1Staged<Stages>`               | Xe12+ (PVC)      | L1 cache staged pipeline                                 |
+|**Policy**                                     | **Description**                                          |
+|-----------------------------------------------|----------------------------------------------------------|
+| `MainloopIntelXeXMX16<Stages>`                | Standard XMX16 mainloop with configurable pipeline depth |
+| `MainloopIntelXeXMX16Group<Stages>`           | Grouped GEMM mainloop variant                            |
+| `MainloopIntelXeXMX16MixedPrecision<Stages>`  | Mixed precision operand support                          |
+| `MainloopIntelXeXMX16GroupMixedPrecision<Stages>` | Grouped GEMM with mixed precision                    |
+| `MainloopIntelXeXMX16FP8Scaling<Stages>`      | FP8 with hardware scaling factors                        |
+| `MainloopIntelW8A8<Stages>`                   | Weight-8 Activation-8 specific mainloop                  |
+| `MainloopXeL1Staged<Stages>`                  | L1 cache staged pipeline                                 |
+| `MainloopXeL1StagedGroup<Stages>`             | L1 cache staged pipeline for grouped GEMM                |
 
 ### Epilogue Dispatch Policies
 
-|**Policy**                  | **Architecture** | **Description**                                          |
-|----------------------------|------------------|----------------------------------------------------------|
-| `IntelXeGeneric`           | Xe12+ (PVC)      | Standard Intel Xe epilogue (subgroup size = 16)          |
-| `IntelXeGenericGroup`      | Xe12+ (PVC)      | Array-based epilogue for grouped operations              |
-| `IntelXeXMX16`             | Xe12+ (PVC)      | Legacy XMX16 epilogue                                    |
-| `IntelXeXMX16Group`        | Xe12+ (PVC)      | Legacy grouped XMX16 epilogue                            |
+|**Policy**                  | **Description**                                          |
+|----------------------------|----------------------------------------------------------|
+| `IntelXeGeneric`           | Standard Intel Xe epilogue (subgroup size = 16)          |
+| `IntelXeGenericGroup`      | Array-based epilogue for grouped operations              |
 
 ### Kernel Schedule Tags
 
-|**Tag**                           | **Architecture** | **Description**                                   |
-|----------------------------------|------------------|---------------------------------------------------|
-| `KernelXe`                       | Xe12+ (PVC)      | Base warp kernel policy                           |
-| `KernelXeCooperative`            | Xe12+ (PVC)      | Cooperative kernel with split load/MMA threads    |
-| `KernelXePtrArrayCooperative`    | Xe12+ (PVC)      | Pointer-array cooperative (batched/grouped)       |
+|**Tag**                           | **Description**                                   |
+|----------------------------------|---------------------------------------------------|
+| `KernelXe`                       | Base warp kernel policy                           |
+| `KernelXeCooperative`            | Cooperative kernel with split load/MMA threads    |
+| `KernelXePtrArrayCooperative`    | Pointer-array cooperative (batched/grouped)       |
 
 
 ## Epilogue Fusion Operations (Intel Xe)
@@ -341,14 +303,13 @@ Intel Xe supports Epilogue Visitor Tree (EVT) for fusing post-GEMM operations in
 
 | **Component**         | **Header File**                                                             |
 |-----------------------|-----------------------------------------------------------------------------|
-| GEMM Kernel (PVC)     | `include/cutlass/gemm/kernel/xe_gemm.hpp`                                  |
+| GEMM Kernel           | `include/cutlass/gemm/kernel/xe_gemm.hpp`                                  |
 | Cooperative Kernel    | `include/cutlass/gemm/kernel/xe_gemm_cooperative.hpp`                      |
 | Collective MMA        | `include/cutlass/gemm/collective/xe_mma.hpp`                               |
 | Mixed Input MMA       | `include/cutlass/gemm/collective/xe_mma_mixed_input.hpp`                   |
 | FP8 Scaling MMA       | `include/cutlass/gemm/collective/xe_mma_fp8_scaling.hpp`                   |
-| Block-Scaled MMA      | `include/cutlass/gemm/collective/xe_blockscaled_mma.hpp`                   |
 | W8A8 MMA              | `include/cutlass/gemm/collective/xe_mma_w8a8.hpp`                          |
-| Epilogue (PVC)        | `include/cutlass/epilogue/collective/xe_epilogue.hpp`                      |
+| Epilogue              | `include/cutlass/epilogue/collective/xe_epilogue.hpp`                      |
 | DPAS MMA Atoms        | `include/cute/atom/mma_traits_xe.hpp`                                      |
 | DPAS Architecture     | `include/cute/arch/mma_xe.hpp`                                             |
 | 2D Block Copy         | `include/cute/arch/copy_xe_2d.hpp`                                         |
