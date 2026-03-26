@@ -1,5 +1,27 @@
 # SYCL*TLA (previously referred to as cutlass-sycl) Changelog
 
+## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-25)
+### Major Architecture Changes
+- **Support BMG G31 Platform ([#755](https://github.com/intel/sycl-tla/pull/755))**
+- **SLM Copy API functionalities and examples**
+  - Support CuTe copy engines for 1D LDSM/STSM operations with vISA ([#753](https://github.com/intel/sycl-tla/pull/753))
+  - Enable fusion example of 2 matmul operations through SLM Copoy API ([#747](https://github.com/intel/sycl-tla/pull/747))
+  - Enable subgroup specialization example with SLM Copy API ([#735](https://github.com/intel/sycl-tla/pull/735))
+- **Support default sub-byte reorder for low-precision data types ([#709](https://github.com/intel/sycl-tla/pull/709))**
+
+### Enhancements
+- **Flash Attention Performance Improvements (for BMG and BF16)**:  
+  - Fix long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
+  - Overall performance improved from ~45% to ~78% of peak([#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743),[#749](https://github.com/intel/sycl-tla/pull/749),[#750](https://github.com/intel/sycl-tla/pull/750))
+  - Refine code and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715), [#716](https://github.com/intel/sycl-tla/pull/716),[#720](https://github.com/intel/sycl-tla/pull/720))
+- **Epilogue Visitor Tree (EVT) Enhancements**:
+  - Combine with SIGMOID function ([#686](https://github.com/intel/sycl-tla/pull/686))
+  - Add Relu variation test cases ([#693](https://github.com/intel/sycl-tla/pull/693))
+  - Refine code ([#703](https://github.com/intel/sycl-tla/pull/703), [#717](https://github.com/intel/sycl-tla/pull/717))
+- **GEMM Enhancements**:
+  - Support all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
+  - Enhance examples ([#726](https://github.com/intel/sycl-tla/pull/726))
+  
 ## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
 ### Major Architecture Improvements
 - **Epilogue Visitor Tree (EVT) Support ([#647](https://github.com/intel/sycl-tla/pull/647))**: EVT support for Intel Xe architecture

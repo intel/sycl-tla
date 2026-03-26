@@ -39,7 +39,9 @@ from cutlass_cppgen.utils.lazy_import import lazy_import
 cuda = lazy_import("cuda.cuda")
 cudart =  lazy_import("cuda.cudart")
 dpctl = lazy_import("dpctl")
-bmg_indicators = ["bmg", "battlemage", "xe20", "g21", "b580"]
+
+# These are checked against the dpctl API equivalent of sycl-ls | grep level_zero:gpu
+bmg_indicators = ["bmg", "battlemage", "xe20", "g21", "b580", "b60", "b70", "g31","20.2.0"]
 
 import cutlass_cppgen
 from cutlass_cppgen.utils.datatypes import is_cupy_tensor, is_numpy_tensor, is_torch_tensor
