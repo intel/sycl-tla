@@ -1,5 +1,3 @@
-#################################################################################################
-#
 # Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # Copyright (C) 2025 Intel Corporation, All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
@@ -28,47 +26,30 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-#################################################################################################
 
+if (CUTLASS_ENABLE_SYCL)
+  message(STATUS "Building CuTe quickstart examples with SYCL")
 
-import copy
-import os
-import setuptools
-from setuptools import setup
-from setuptools.command.build_ext import build_ext
+  cutlass_example_add_executable(
+    cute_quickstart_print
+    print_demo.cpp
+  )
 
-import setup_pycute
-import setup_library
+  cutlass_example_add_executable(
+    cute_quickstart_print_layout
+    print_layout_demo.cpp
+  )
 
+  cutlass_example_add_executable(
+    cute_quickstart_print_tensor
+    print_tensor_demo.cpp
+  )
 
-# Install cutlass_library package
-setup_library.perform_setup()
+  cutlass_example_add_executable(
+    cute_quickstart_print_latex
+    print_latex_demo.cpp
+  )
 
-
-# Install the PyCuTe package
-setup_pycute.perform_setup()
-
-
-setup(
-    name='sycl_tla_cppgen',
-    version='0.8.0',
-    description='SYCL*TLA Pythonic Interface based on CUTLASS',
-    package_dir={'': '.'},
-    packages=[
-        'cutlass_cppgen',
-        'cutlass_cppgen.emit',
-        'cutlass_cppgen.op',
-        'cutlass_cppgen.utils',
-        'cutlass_cppgen.backend',
-        'cutlass_cppgen.backend.utils'
-        ],
-    setup_requires=['pybind11'],
-    install_requires=[
-        'bfloat16',
-        'pybind11',
-        'scikit-build',
-        'treelib',
-        'pydot'
-        ]
-)
+else()
+  message(STATUS "Skipping CuTe quickstart examples (SYCL not enabled)")
+endif()

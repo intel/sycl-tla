@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,15 +54,14 @@ struct Copy_Traits<XE_ATOMIC<S, D>> {
 
 template<class S, class D>
 struct Copy_Traits<XE_1D_LDSM<S, D>> {
-    // Logical thread id to thread idx
-    using ThrID = Layout<_16>;
+    // Logical thread id to thread idx (one-thread)
+    using ThrID = Layout<_1>;
     // Map from (src-thr,src-val) to bit
-    using SrcLayout = Layout<Shape<_16, Int<sizeof_bits<S>::value>>, Stride<_0, _1>>;
+    using SrcLayout = Layout<Shape<_1,Int<sizeof_bits<D>::value>>>;
     // Map from (dst-thr,dst-val) to bit
-    using DstLayout = Layout<Shape<_16, Shape<Int<sizeof_bits<D>::value / sizeof_bits<S>::value>, Int<sizeof_bits<S>::value>>>,
-                             Stride<Int<sizeof_bits<S>::value>, Stride<Int<sizeof_bits<S>::value * 16>, _1>>>;
+    using DstLayout = Layout<Shape<_1,Int<sizeof_bits<D>::value>>>;
     // Reference map from (thr,val) to bit
-    using RefLayout = DstLayout;
+    using RefLayout = SrcLayout;
 };
 
 template<class S, class D>
@@ -79,13 +79,12 @@ struct Copy_Traits<XE_1D_LOAD_GLOBAL<S, D>> {
 
 template<class S, class D>
 struct Copy_Traits<XE_1D_STSM<S, D>> {
-    // Logical thread id to thread idx
-    using ThrID = Layout<_16>;
+    // Logical thread id to thread idx (one-thread)
+    using ThrID = Layout<_1>;
     // Map from (src-thr,src-val) to bit
-    using SrcLayout = Layout<Shape<_16, Shape<Int<sizeof_bits<S>::value / sizeof_bits<D>::value>, Int<sizeof_bits<D>::value>>>,
-                             Stride<Int<sizeof_bits<D>::value>, Stride<Int<sizeof_bits<D>::value * 16>, _1>>>;
+    using SrcLayout = Layout<Shape<_1,Int<sizeof_bits<S>::value>>>;
     // Map from (dst-thr,dst-val) to bit
-    using DstLayout = Layout<Shape<_16, Int<sizeof_bits<D>::value>>, Stride<_0, _1>>;
+    using DstLayout = Layout<Shape<_1,Int<sizeof_bits<S>::value>>>;
     // Reference map from (thr,val) to bit
     using RefLayout = SrcLayout;
 };
