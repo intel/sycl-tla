@@ -24,7 +24,7 @@ runs:
 
           sudo add-apt-repository ppa:kobuk-team/intel-graphics
           sudo apt update
-          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+          sudo apt-get install --reinstall -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
             intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         else
@@ -43,7 +43,7 @@ runs:
 
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           sudo apt update
-          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+          sudo apt-get install --reinstall -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
             intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         else
@@ -72,7 +72,7 @@ runs:
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${VERSION_CODENAME}/lts/2523 unified" | \
             sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
           sudo apt update
-          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+          sudo apt-get install --reinstall -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
             intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
 
