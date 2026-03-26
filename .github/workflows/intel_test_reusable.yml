@@ -52,9 +52,6 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
-        with:
-          ref: 0ff7ac3f1a08bbc5651facfdd33acc376099e09e
-
       
       - name: Install Intel graphics drivers
         uses: ./.github/actions/install-intel-graphics
