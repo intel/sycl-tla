@@ -88,7 +88,7 @@ jobs:
           export CUTLASS_USE_SYCL=1
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           python test/python/cutlass/evt/run_xe_evt_tests.py -j xe_evt_ci -o
-      - name: Upload logs
+      - name: Upload logs_1
         uses: actions/upload-artifact@v4
         with:
           name: EVT-artifacts
