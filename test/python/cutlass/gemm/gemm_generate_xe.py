@@ -32,7 +32,6 @@
 
 import json
 import os
-import time
 from argparse import Namespace
 import unittest
 from unittest import mock
@@ -46,30 +45,29 @@ DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 class GenerateXe(unittest.TestCase):
     def _run_generate_xe(self, arch_name, arch_const, reference_file):
         args = {
-            'operations': 'all',
-            'build_dir': '',
-            'curr_build_dir': ".",
-            'generator_target': 'library',
-            'architectures': arch_name,
-            'kernels': '',
-            'ignore_kernels': '',
-            'exclude_kernels': '',
-            'filter_by_cc': 'True',
-            'cuda_version': '11.0.0',
-            'kernel_filter_file': None,
-            'heuristics_configs_per_problem': 10,
-            'heuristics_restrict_kernels': False,
-            'disable_full_archs_compilation': False,
-            'instantiation_level': '',
-            'disable_cutlass_package_imports': False
+            "operations": "all",
+            "build_dir": "",
+            "curr_build_dir": ".",
+            "generator_target": "library",
+            "architectures": arch_name,
+            "kernels": "",
+            "ignore_kernels": "",
+            "exclude_kernels": "",
+            "filter_by_cc": "True",
+            "cuda_version": "11.0.0",
+            "kernel_filter_file": None,
+            "heuristics_configs_per_problem": 10,
+            "heuristics_restrict_kernels": False,
+            "disable_full_archs_compilation": False,
+            "instantiation_level": "",
+            "disable_cutlass_package_imports": False
         }
         manifest = cutlass_manifest.Manifest(Namespace(**args))
-        start_time = time.time()
         try:
-            cutlass_generator.GenerateIntelXe(manifest, cuda_version='_', arch=arch_const)
+            cutlass_generator.GenerateIntelXe(manifest, cuda_version="_", arch=arch_const)
         except AttributeError as e:
             raise NotImplementedError(
-                f'Arch {arch_name} is not supported by current cutlass lib.'
+                f"Arch {arch_name} is not supported by current cutlass lib."
             ) from e
         xe_ops = pytree.tree_flatten(manifest.operations)[0]
 
@@ -91,14 +89,14 @@ class GenerateXe(unittest.TestCase):
         assert reference_data == total_ops, f"{arch_name.upper()}: Generated operations do not match reference data"
 
     def test_generate_xe12(self):
-        self._run_generate_xe('pvc', INTEL_XE12, "data/generated_xe12_ops.json")
+        self._run_generate_xe("pvc", INTEL_XE12, "data/generated_xe12_ops.json")
 
     def test_generate_xe20(self):
-        self._run_generate_xe('bmg', INTEL_XE20, "data/generated_xe20_ops.json")
+        self._run_generate_xe("bmg", INTEL_XE20, "data/generated_xe20_ops.json")
 
-    @mock.patch.dict(os.environ, {"SYCL_TLA_ADDITIONAL_TILE_SHAPES": os.path.join(DIR_PATH,"data/custom_tile_shape.json")})
+    @mock.patch.dict(os.environ, {"SYCL_TLA_ADDITIONAL_TILE_SHAPES": os.path.join(DIR_PATH, "data/custom_tile_shape.json")})
     def test_generate_xe20_with_custom_shapes(self):
-        self._run_generate_xe('bmg', INTEL_XE20, "data/custom_generated_xe20_ops.json")
+        self._run_generate_xe("bmg", INTEL_XE20, "data/custom_generated_xe20_ops.json")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
