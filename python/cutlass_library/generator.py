@@ -11273,7 +11273,7 @@ if __name__ == "__main__":
   # Both architectures share the same generation code, just different arch numbers
   
   # Check for BMG (architecture INTEL_XE20)
-  bmg_arch_list = [str(INTEL_XE20), "bmg", "xe2", "intel_gpu_bmg_g21"]
+  bmg_arch_list = [str(INTEL_XE20), "bmg", "xe2", "intel_gpu_bmg_g21", "intel_gpu_bmg_g31"]
   bmg_enabled_arch = any(arch.lower() in [x.lower() for x in bmg_arch_list] for arch in archs)
   if bmg_enabled_arch:
     GenerateIntelXe(manifest, args.cuda_version, arch=INTEL_XE20)

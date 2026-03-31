@@ -45,37 +45,33 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 |0.5 | 4.2.0 |
 |0.6 | 4.2.0 |
 |0.7 | 4.2.1 |
+|0.8 | 4.2.1 |
 
-# What's New in SYCL*TLA 0.7 
+# What's New in SYCL*TLA 0.8
 
-## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
- 
+## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-25)
+
 ### Major Architecture Changes
-- Epilogue Visitor Tree (EVT):
-  - Extended Xe epilogue fusion support for various post-GEMM computations ([#647](https://github.com/intel/sycl-tla/pull/647), [#650](https://github.com/intel/sycl-tla/pull/650))
-  - Added support for XeAuxLoad ([#674](https://github.com/intel/sycl-tla/pull/674)), XeAuxStore ([#691](https://github.com/intel/sycl-tla/pull/691), [#698](https://github.com/intel/sycl-tla/pull/698), [#704](https://github.com/intel/sycl-tla/pull/704)), XeRow/XeCol broadcast ([#690](https://github.com/intel/sycl-tla/pull/690)) and XeRow/XeCol/XeScalar reduction ([#680](https://github.com/intel/sycl-tla/pull/680), [#694](https://github.com/intel/sycl-tla/pull/694))
-  - Added Python EVT support with comprehensive test coverage
-- Xe Epilogue Rearchitecture ([#621](https://github.com/intel/sycl-tla/pull/621)): redesigned epilogue path for the new Xe architecture.
- 
+- **Support BMG G31 Platform ([#755](https://github.com/intel/sycl-tla/pull/755))**
+- **SLM Copy API functionalities and examples**
+  - Support CuTe copy engines for 1D LDSM/STSM operations with vISA ([#753](https://github.com/intel/sycl-tla/pull/753))
+  - Enable fusion example of 2 matmul operations through SLM Copy API ([#747](https://github.com/intel/sycl-tla/pull/747))
+  - Enable subgroup specialization example with SLM Copy API ([#735](https://github.com/intel/sycl-tla/pull/735))
+- **Support default sub-byte reorder for low-precision data types ([#709](https://github.com/intel/sycl-tla/pull/709))**
+
 ### Enhancements
-- Flash Attention: performance improvements (BF16 speedup headline) and continued feature maturation ([#679](https://github.com/intel/sycl-tla/pull/679)).
-- GEMM: Column Major C bias support ([#656](https://github.com/intel/sycl-tla/pull/656)).
-- Shared Local Memory (SLM): new SLM copy helper functions ([#673](https://github.com/intel/sycl-tla/pull/673)).
-- Build: multi-target builds via `DPCPP_SYCL_TARGET` ([#630](https://github.com/intel/sycl-tla/pull/630)).
-- Reorder: API updates and fixes ([#639](https://github.com/intel/sycl-tla/pull/639)), ([#635](https://github.com/intel/sycl-tla/pull/635))).
- 
-### Bug Fixes / Notes
-- Flash Attention KV cache / prefill fixes ([#617](https://github.com/intel/sycl-tla/pull/617)).
-- CuTe atom partitioning edge-case fix ([#628](https://github.com/intel/sycl-tla/pull/628)).
-- Fix CMake path issue ([#700](https://github.com/intel/sycl-tla/pull/700)).
-- Unit tests for VNNI load disabled due to driver issue ([#707](https://github.com/intel/sycl-tla/pull/707)).
- 
-### Known Issues
-- **CuTe Column Major Support**: Column Major support for C matrix may introduce stability issues with older versions of driver. Please update to the latest driver version for optimal stability.
- 
-### Deprecation Notice
-- Legacy APIs with old CuTe atoms are deprecated and will be removed in future releases. Users are encouraged to migrate to the new CuTe atom APIs for better performance and support. Refer [Xe Rearchitecture](https://github.com/intel/sycl-tla/blob/main/media/docs/cpp/xe_rearchitecture.md) for new APIs.
- 
+- **Flash Attention Performance Improvements (for BMG and BF16)**:  
+  - Fix long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
+  - Overall performance improved from ~45% to ~78% of peak([#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743),[#749](https://github.com/intel/sycl-tla/pull/749),[#750](https://github.com/intel/sycl-tla/pull/750))
+  - Refine code and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715), [#716](https://github.com/intel/sycl-tla/pull/716),[#720](https://github.com/intel/sycl-tla/pull/720))
+- **Epilogue Visitor Tree (EVT) Enhancements**:
+  - Combine with SIGMOID function ([#686](https://github.com/intel/sycl-tla/pull/686))
+  - Add Relu variation test cases ([#693](https://github.com/intel/sycl-tla/pull/693))
+  - Enhance and refine code and test case([#703](https://github.com/intel/sycl-tla/pull/703), [#717](https://github.com/intel/sycl-tla/pull/717))
+- **GEMM Enhancements**:
+  - Support all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
+  - Enhance examples ([#726](https://github.com/intel/sycl-tla/pull/726))
+  
 **See the [CHANGELOG](https://github.com/intel/sycl-tla/blob/main/CHANGELOG-SYCL.md) for details of all past releases and updates.**
 
 # CuTe
@@ -140,11 +136,19 @@ The target architecture information is passed on to SYCL*TLA via the cmake flag
 ```
 cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_pvc"
 ```
-Or 
+Or
 
 ```
 cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" 
 ```
+
+Or
+
+```
+cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g31" 
+```
+
+> Note: `-DDPCPP_SYCL_TARGET="bmg"` will compile for both `intel_gpu_bmg_g21`, `intel_gpu_bmg_g31` targets.
 
 Please refer to the [functionality documentation](https://github.com/intel/sycl-tla/blob/main/media/docs/cpp/functionality.md)
 for details on which kernels require which target architectures.
@@ -189,6 +193,7 @@ Create a build directory within the SYCL*TLA project, then run CMake. You need t
 the target Intel GPU architecture using the `DPCPP_SYCL_TARGET` flag.
 For Intel Data Center GPU Max Series (Ponte Vecchio), use `intel_gpu_pvc`.
 For Intel Arc GPU B580 Graphics, use `intel_gpu_bmg_g21`.
+For Intel Arc GPU Battlemage (G31), use `intel_gpu_bmg_g31`.
 
 ```bash
 $ mkdir build && cd build
@@ -200,6 +205,12 @@ Or for Intel Arc GPU B580 Graphics:
 
 ```bash
 $  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics
+```
+
+Or for Intel Arc GPU Battlemage (G31):
+
+```bash
+$  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g31" # compiles for Intel Arc GPU Battlemage (G31)
 ```
 
 To compile with G++ as host compiler, add the flag `-DDPCPP_HOST_COMPILER=g++-13` to the cmake command. Please note that the build system must be able to find `g++-13` in your PATH.

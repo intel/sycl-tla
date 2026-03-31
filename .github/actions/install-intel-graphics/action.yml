@@ -19,12 +19,13 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]] || [[ "${{ inputs.GPU }}" == "PVC" ]]; then
           #purge existing intel graphics packages
-          dpkg -l | grep -E 'libigc|intel-igc|libigdgmm|libigdfcl|libze-intel-gpu|libze1|libze-dev|intel-opencl-icd|intel-metrics-discovery|intel-gsc|intel-ocloc' | awk '{print $2}' | xargs -r sudo apt-get purge -y || true
+          dpkg -l | grep -E 'libigc|libigsc0|intel-igc|libigdgmm|libigdfcl|libze-intel-gpu|libze1|libze-dev|intel-opencl-icd|intel-metrics-discovery|intel-gsc|intel-ocloc' | awk '{print $2}' | xargs -r sudo apt-get purge -y || true
+          sudo apt autoremove -y
           sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
 
           sudo add-apt-repository ppa:kobuk-team/intel-graphics
           sudo apt update
-          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+          sudo apt-get install --reinstall -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
             intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         else
@@ -38,12 +39,13 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "BMG" ]] || [[ "${{ inputs.GPU }}" == "PVC" ]]; then
           #purge existing intel graphics packages
-          dpkg -l | grep -E 'libigc|intel-igc|libigdgmm|libigdfcl|libze-intel-gpu|libze1|libze-dev|intel-opencl-icd|intel-metrics-discovery|intel-gsc|intel-ocloc' | awk '{print $2}' | xargs -r sudo apt-get purge -y || true
+          dpkg -l | grep -E 'libigc|libigsc0|intel-igc|libigdgmm|libigdfcl|libze-intel-gpu|libze1|libze-dev|intel-opencl-icd|intel-metrics-discovery|intel-gsc|intel-ocloc' | awk '{print $2}' | xargs -r sudo apt-get purge -y || true
+          sudo apt autoremove -y
           sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
 
           sudo add-apt-repository ppa:kobuk-team/intel-graphics-staging
           sudo apt update
-          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+          sudo apt-get install --reinstall -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
             intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
         else
@@ -57,7 +59,8 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "PVC" ]]; then
           # Purge existing intel graphics packages
-          dpkg -l | grep -E 'libigc|intel-igc|libigdgmm|libigdfcl|libze-intel-gpu|libze1|libze-dev|intel-opencl-icd|intel-metrics-discovery|intel-gsc|intel-ocloc' | awk '{print $2}' | xargs -r sudo apt-get purge -y || true
+          dpkg -l | grep -E 'libigc|libigsc0|intel-igc|libigdgmm|libigdfcl|libze-intel-gpu|libze1|libze-dev|intel-opencl-icd|intel-metrics-discovery|intel-gsc|intel-ocloc' | awk '{print $2}' | xargs -r sudo apt-get purge -y || true
+          sudo apt autoremove -y
           sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
           sudo rm -f /etc/apt/sources.list.d/intel-gpu-*.list
           
@@ -72,22 +75,15 @@ runs:
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${VERSION_CODENAME}/lts/2523 unified" | \
             sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
           sudo apt update
-          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+          sudo apt-get install --reinstall -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
             intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
           dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
-          rm -rf igc
-          mkdir igc
-          cd igc
-          echo "Fetching latest IGC release..."
-          IGC_CORE_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-core-2.*amd64.deb\"" | head -1 | cut -d '"' -f 4)
-          IGC_OPENCL_URL=$(curl -s https://api.github.com/repos/intel/intel-graphics-compiler/releases/latest | grep "browser_download_url.*intel-igc-opencl-2.*amd64.deb\"" | grep -v "devel" | head -1 | cut -d '"' -f 4)
-          echo "Downloading IGC packages..."
-          wget "${IGC_CORE_URL}"
-          wget "${IGC_OPENCL_URL}"
-          
-          # Install all downloaded packages
-          sudo dpkg -i *.deb        
 
+        #Install Latest IGC
+        sudo rm -f /etc/apt/sources.list.d/intel-gpu-*.list
+        sudo add-apt-repository ppa:kobuk-team/intel-graphics
+        sudo apt update
+        sudo apt install libigc2 -y
         else
           exit 1
         fi
