@@ -83,12 +83,13 @@ class CompilationOptions:
     Compilation options.
     """
 
-    def __init__(self, flags, arch, include_paths=[], for_sycl=False):
+    def __init__(self, flags, arch, include_paths=[], for_sycl=False, device_flag=None):
         self.includes = []
         self.include_paths = include_paths
         self.flags = flags
         self.arch = arch
         self.for_sycl = for_sycl
+        self.device_flag = device_flag
 
     def _encode(self):
         opts = []
@@ -109,6 +110,10 @@ class CompilationOptions:
                arch_flag += "a"
 
         opts.append(arch_flag)
+        if self.device_flag:
+            if self.for_sycl:
+                opts.append("-Xs")
+            opts.append(self.device_flag)
 
         return opts
 
@@ -172,7 +177,7 @@ class ArtifactManager:
                                        "-DCUTLASS_SYCL_BUILTIN_ENABLE",
                                        "-shared", "-fPIC",
                                        "-fno-sycl-dead-args-optimization",
-                                       "-Xspirv-translator -spirv-ext=+SPV_INTEL_split_barrier",
+                                       "-Xspirv-translator", "-spirv-ext=+SPV_INTEL_split_barrier",
                                        "-fno-sycl-instrument-device-code",
                                        "-fsycl-range-rounding=disable"]
         try:
@@ -370,15 +375,11 @@ class ArtifactManager:
                     file.write(source_buffer_device)
 
                 # Compile with DPC++
-                cmd_template = "icpx ${options} ${srcfile} -o ${outfile} -fsycl-dump-device-code=${tmpdir}"
-                values = {
-                    "options": compilation_options.get_str(),
-                    "srcfile": temp_cpp.name,
-                    "outfile": ignore_out.name,
-                    "tmpdir": temp_dump_dir
-                }
-                cmd = SubstituteTemplate(cmd_template, values)
-                compile_with_nvcc(cmd.split(" "), source_buffer_device,
+                cmd = ["icpx"]
+                cmd.extend(compilation_options._encode())
+                cmd.extend([temp_cpp.name, "-o", ignore_out.name,
+                            f"-fsycl-dump-device-code={temp_dump_dir}"])
+                compile_with_nvcc(cmd, source_buffer_device,
                                   "./cutlass_python_compilation_device_error.txt")
 
                 # Find SPIR-V device code in temporary directory
@@ -455,7 +456,7 @@ class ArtifactManager:
             cmd.append("icpx")
             # Clang does not support "-fpermissive"
             cmd.extend(["-fsycl", "-w", "-fPIC"])
-            cmd.extend(host_compilation_options.get_str().split(" "))
+            cmd.extend(host_compilation_options._encode())
             cmd.extend(["-shared", "-o", temp_dst.name, temp_src.name])
 
         # Comile and load the library
@@ -475,6 +476,7 @@ class ArtifactManager:
             CUTLASS_PATH + "/python/cutlass/cpp/include",
         ]
 
+        device_flag = None
         if not self._is_sycl():
             include_paths.append(cuda_install_path() + "/include")
 
@@ -488,16 +490,20 @@ class ArtifactManager:
             if cc == 12:
                 arch = "intel_gpu_pvc"
             elif cc == 20:
-                arch = "intel_gpu_bmg_g21"
+                # Multi target case i.e G21, G31
+                arch = "spir64_gen"
+                device_flag = "-device bmg-g21,bmg-g31"
             else:
-                arch = "intel_gpu_bmg_g21"  
+                arch = "intel_gpu_bmg_g21"
+
+            flags = ["-std=c++17", "-DCUTLASS_ENABLE_SYCL", "-DSYCL_INTEL_TARGET"]
             host_compile_options = CompilationOptions(
-                ["-std=c++17", "-DCUTLASS_ENABLE_SYCL", "-DSYCL_INTEL_TARGET"],
-                arch, include_paths, True)
+                flags,
+                arch, include_paths, True, device_flag)
 
         if compile_options is None:
             compile_options = CompilationOptions(
-                self.default_compile_options, arch, include_paths, self._is_sycl())
+                self.default_compile_options, arch, include_paths, self._is_sycl(), device_flag)
         # save the cubin
         operation_key = []
         operation_list = []
