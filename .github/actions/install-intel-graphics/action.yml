@@ -57,9 +57,7 @@ runs:
         which sudo || alias sudo=""
         if [[ "${{ inputs.GPU }}" == "PVC" ]]; then
           # Purge existing intel graphics packages
-          sudo apt-get purge -y 'libigc*' 'intel-igc*' 'libigdgmm*' 'libigdfcl*' \
-          'libze-intel-gpu*' 'libze1' 'libze-dev' 'intel-opencl-icd' \
-          'intel-metrics-discovery' 'intel-gsc' 'intel-ocloc' || true
+          dpkg -l | grep -E 'libigc|intel-igc|libigdgmm|libigdfcl|libze-intel-gpu|libze1|libze-dev|intel-opencl-icd|intel-metrics-discovery|intel-gsc|intel-ocloc' | awk '{print $2}' | xargs -r sudo apt-get purge -y || true
           sudo rm -f /etc/apt/sources.list.d/kobuk-team-ubuntu-intel-graphics-*
           sudo rm -f /etc/apt/sources.list.d/intel-gpu-*.list
           
@@ -74,14 +72,9 @@ runs:
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu ${VERSION_CODENAME}/lts/2523 unified" | \
             sudo tee /etc/apt/sources.list.d/intel-gpu-${VERSION_CODENAME}.list
           sudo apt update
-          sudo apt install -y \
-              intel-opencl-icd libze-intel-gpu1 libze1 \
-              intel-media-va-driver-non-free libmfx-gen1 libvpl2 \
-              libegl-mesa0 libegl1-mesa-dev libgbm1 libgl1-mesa-dev libgl1-mesa-dri \
-              libglapi-mesa libgles2-mesa-dev libglx-mesa0 libigdgmm12 libxatracker2 mesa-va-drivers \
-              mesa-vdpau-drivers mesa-vulkan-drivers va-driver-all vainfo hwinfo clinfo
-          
-          
+          sudo apt-get install -y libze-intel-gpu1 libze-dev intel-metrics-discovery \
+            intel-opencl-icd ocl-icd-opencl-dev clinfo intel-gsc intel-ocloc g++
+          dpkg -l | grep libhwloc15 > /dev/null || sudo apt install -y libhwloc15
           rm -rf igc
           mkdir igc
           cd igc

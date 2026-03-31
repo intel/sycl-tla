@@ -7,6 +7,9 @@ on:
     branches: [ "main" ]
   merge_group:
     branches: [ "main" ]
+  schedule:
+    # Runs at 05:30 AM UTC on Monday
+    - cron: '30 5 * * 1'
   workflow_dispatch:
 
 permissions: {}
@@ -84,8 +87,13 @@ jobs:
           source ~/.venv/bin/activate
           export CUTLASS_USE_SYCL=1
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-          python test/python/cutlass/evt/run_xe_evt_tests.py -j xe_evt_ci
-
+          python test/python/cutlass/evt/run_xe_evt_tests.py -j xe_evt_ci -o
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: EVT-artifacts
+          path: logs/
+          retention-days: 7
       - name: Cleanup DPC++
         if: always()
         shell: bash
