@@ -27,7 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-set(CUTLASS_APPLICATIONS_DIR ${CMAKE_SOURCE_DIR}/applications)
+set(CUTLASS_APPLICATIONS_DIR ${CUTLASS_DIR}/applications)
 
 cutlass_example_add_executable(
   07_bmg_dual_gemm

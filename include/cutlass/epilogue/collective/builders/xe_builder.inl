@@ -1,5 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,92 +40,10 @@
 
 namespace cutlass::epilogue::collective {
 
-namespace detail {
-  template <class FusionOp>
-  struct FusionOpInfo {
-    static_assert(cutlass::detail::dependent_false<FusionOp>,
-      "Could not find a builder specialization.");
-  };
-
-  template <
-    class ElementD,
-    class ElementCompute,
-    class ElementC
-  >
-  struct FusionOpInfo<cutlass::epilogue::fusion::LinearCombination<
-    ElementD, ElementCompute, ElementC, ElementCompute
-  >> {
-      constexpr static bool HasBuilder = true;
-
-      template <
-        class DispatchPolicy,
-        class TileShape_MNK,
-        class EpilogueTile,
-        class>
-      using FusionCallbacks = cutlass::epilogue::fusion::FusionCallbacks<
-        DispatchPolicy,
-        cutlass::epilogue::fusion::LinearCombination<ElementD, ElementCompute, ElementC, ElementCompute>,
-        TileShape_MNK,
-        EpilogueTile
-      >;
-  };
-
-  template <
-    template <class> class ActivationFn,
-    class ElementD,
-    class ElementCompute,
-    class ElementC
-  >
-  struct FusionOpInfo<cutlass::epilogue::fusion::LinCombEltAct<
-    ActivationFn, ElementD, ElementCompute, ElementC, ElementCompute
-  >> {
-      constexpr static bool HasBuilder = true;
-      template <
-        class DispatchPolicy,
-        class TileShape_MNK,
-        class EpilogueTile,
-        class>
-
-      using FusionCallbacks = cutlass::epilogue::fusion::FusionCallbacks<
-        DispatchPolicy,
-        cutlass::epilogue::fusion::LinCombEltAct<ActivationFn, ElementD, ElementCompute, ElementC, ElementCompute>,
-        TileShape_MNK,
-        EpilogueTile
-      >;
-  };
-
-  template <
-    class GmemLayoutTagC,
-    template <class> class ActivationFn,
-    class ElementD,
-    class ElementCompute,
-    class ElementC
-  >
-  struct FusionOpInfo<cutlass::epilogue::fusion::LinCombDeEltAct<
-    GmemLayoutTagC, ActivationFn, ElementD, ElementCompute, ElementC, ElementCompute
-  >> {
-      constexpr static bool HasBuilder = true;
-
-      template <
-        class DispatchPolicy,
-        class TileShape_MNK,
-        class EpilogueTile,
-        class CopyOpG2R>
-      using FusionCallbacks = cutlass::epilogue::fusion::FusionCallbacks<
-        DispatchPolicy,
-        cutlass::epilogue::fusion::LinCombDeEltAct<GmemLayoutTagC, ActivationFn, ElementD, ElementCompute, ElementC, ElementCompute>,
-        TileShape_MNK,
-        EpilogueTile,
-        CopyOpG2R
-      >;
-  };
-} // namespace detail
-
-
-// Intel epilogue builder
+// Xe epilogue builder
 template <
   class TileShape_MNK,
-  class EpilogueTileType,
+  class EpilogueTile_MN,
   class ElementAccumulator,
   class ElementCompute,
   class ElementC,
@@ -136,79 +55,108 @@ template <
   class EpilogueScheduleType,
   class FusionOpOrCallbacks
   >
-  struct CollectiveBuilder<
-      arch::IntelXe,
-      arch::OpClassTensorOp,
-      TileShape_MNK,
-      Shape<_1, _1, _1>,    // Cluster Shape
-      EpilogueTileType,
-      ElementAccumulator,
-      ElementCompute,
-      ElementC,
-      GmemLayoutTagC,
-      AlignmentC,
-      ElementD,
-      GmemLayoutTagD,
-      AlignmentD,
-      EpilogueScheduleType,
+struct CollectiveBuilder<
+    arch::IntelXe,
+    arch::OpClassTensorOp,
+    TileShape_MNK,
+    Shape<_1, _1, _1>,    // Cluster Shape
+    EpilogueTile_MN,
+    ElementAccumulator,
+    ElementCompute,
+    ElementC,
+    GmemLayoutTagC,
+    AlignmentC,
+    ElementD,
+    GmemLayoutTagD,
+    AlignmentD,
+    EpilogueScheduleType,
+    FusionOpOrCallbacks,
+    cute::enable_if_t<
+      cute::is_same_v<EpilogueTile_MN, EpilogueTileAuto> &&
+      cute::is_any_of_v<EpilogueScheduleType, EpilogueScheduleAuto, IntelXeGeneric, IntelXeGenericGroup>
+    >
+> {
+#ifdef SYCL_NVIDIA_TARGET
+  static_assert(cutlass::detail::dependent_false<arch::IntelXe>,
+    "Trying to use Intel pipeline on Non Intel hardware");
+#endif
+  static_assert(is_static<TileShape_MNK>::value);
+  static_assert(cute::is_any_of_v<ElementC, float, bfloat16_t, half_t, int32_t, void>,
+    "ElementC needs to be one of: float, bfloat, half, int32, or void for the Intel pipeline");
+
+  using EpilogueSchedule = std::conditional_t<cute::is_same_v<EpilogueScheduleType, EpilogueScheduleAuto>,
+                                              IntelXeGeneric,
+                                              EpilogueScheduleType>;
+  static constexpr bool IsGroup = cute::is_same_v<EpilogueSchedule, IntelXeGenericGroup>;
+  using DispatchPolicy = std::conditional_t<IsGroup,
+                                            IntelXeGenericGroup,
+                                            IntelXeGeneric>;
+
+  using StrideC = std::conditional_t<cute::is_tuple_v<std::remove_pointer_t<GmemLayoutTagC>>,
+                                     GmemLayoutTagC,
+                                     cutlass::detail::TagToStrideC_t<std::conditional_t<IsGroup, GmemLayoutTagC*, GmemLayoutTagC>>>;
+  using StrideD = std::conditional_t<cute::is_tuple_v<std::remove_pointer_t<GmemLayoutTagD>>,
+                                     GmemLayoutTagD,
+                                     cutlass::detail::TagToStrideC_t<std::conditional_t<IsGroup, GmemLayoutTagD*, GmemLayoutTagD>>>;
+
+  static_assert(IsGroup == std::is_pointer_v<StrideC>, "Group GEMM should have a pointer to strides");
+  static_assert(IsGroup == std::is_pointer_v<StrideD>, "Group GEMM should have a pointer to strides");
+  static_assert(get<1>(std::remove_pointer_t<StrideD>{}) == 1, "Only N-major/row-major layouts for D are supported in the Xe epilogue collective builder");
+
+  // Use default copy operations.
+  using CopyOpG2R = void;
+  using CopyOpR2G = void;
+
+  using FusionCallbacks =
+    typename detail::CallbacksBuilder<
+      DispatchPolicy,
       FusionOpOrCallbacks,
-      cute::enable_if_t<
-        cute::is_same_v<EpilogueTileType, EpilogueTileAuto> &&
-        cute::is_any_of_v<EpilogueScheduleType, EpilogueScheduleAuto, IntelXeXMX16, IntelXeXMX16Group> &&
-        detail::FusionOpInfo<FusionOpOrCallbacks>::HasBuilder
-      >
-    >{
-      #ifdef SYCL_NVIDIA_TARGET
-        static_assert(cutlass::detail::dependent_false<arch::IntelXe>,
-          "Trying to use Intel pipeline on Non Intel hardware");
-      #endif
-      static_assert(is_static<TileShape_MNK>::value);
-      static_assert(cute::is_any_of_v<ElementC, float, bfloat16_t, half_t, void>,
-        "ElementC needs to be one of: float, bfloat, half for the Intel pipeline");
-      
-      using EpilogueSchedule = std::conditional_t<cute::is_same_v<EpilogueScheduleType, EpilogueScheduleAuto>, 
-                                                  IntelXeXMX16,
-                                                  EpilogueScheduleType>;
-      static constexpr bool IsGroup = cute::is_same_v<EpilogueSchedule, IntelXeXMX16Group>;
-      using DispatchPolicy = std::conditional_t<IsGroup,
-                                                IntelXeXMX16Group,
-                                                IntelXeXMX16>;
+      TileShape_MNK,
+      EpilogueTile_MN,
+      ElementAccumulator
+    >::Callbacks;
 
-      using StrideC = std::conditional_t<cute::is_tuple_v<std::remove_pointer_t<GmemLayoutTagC>>, GmemLayoutTagC, cutlass::detail::TagToStrideC_t<std::conditional_t<IsGroup, GmemLayoutTagC*, GmemLayoutTagC>>>;
-      using StrideD = std::conditional_t<cute::is_tuple_v<std::remove_pointer_t<GmemLayoutTagD>>, GmemLayoutTagD, cutlass::detail::TagToStrideC_t<std::conditional_t<IsGroup, GmemLayoutTagD*, GmemLayoutTagD>>>;
+  using CollectiveOp = cutlass::epilogue::collective::CollectiveEpilogue<
+      DispatchPolicy,
+      TileShape_MNK,      // xxx
+      EpilogueTile_MN,
+      ElementC,
+      StrideC,
+      ElementD,
+      StrideD,
+      FusionCallbacks,
+      CopyOpG2R,
+      CopyOpR2G
+  >;
+};
 
-      static_assert(IsGroup == std::is_pointer_v<StrideC>, "Group GEMM should have a pointer to strides");
-      static_assert(IsGroup == std::is_pointer_v<StrideD>, "Group GEMM should have a pointer to strides");
-      static_assert(get<1>(std::remove_pointer_t<StrideC>{}) == 1, "Only N-Major/Row-Major layouts for C are supported in the xe epilogue collective builder");
-      static_assert(get<1>(std::remove_pointer_t<StrideD>{}) == 1, "Only N-Major/Row-Major layouts for D are supported in the xe epilogue collective builder");
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Forward Xe12/Xe20 builders to IntelXe
+/////////////////////////////////////////////////////////////////////////////////////////////////
 
-      using CopyOpG2R = std::conditional_t<is_void_v<ElementC>, void, std::conditional_t<cutlass::sizeof_bits_v<ElementC> == 32, XE_2D_U32x8x16_LD_N, XE_2D_U16x8x16_LD_N>>;
-      using CopyOpR2G = std::conditional_t<cutlass::sizeof_bits_v<ElementD> == 32, XE_2D_U32x8x16_ST_N, XE_2D_U16x8x16_ST_N>;
+#define CUTLASS_FORWARD_XE_EPI_BUILDER(Arch)                                \
+template <class TileShape_MNK, class EpilogueTile_MN,                       \
+          class ElementAccumulator, class ElementCompute,                   \
+          class ElementC, class GmemLayoutTagC, int AlignmentC,             \
+          class ElementD, class GmemLayoutTagD, int AlignmentD,             \
+          class EpilogueScheduleType, class FusionOpOrCallbacks>            \
+struct CollectiveBuilder<arch::Arch, arch::OpClassTensorOp,                 \
+                         TileShape_MNK, Shape<_1, _1, _1>, EpilogueTile_MN, \
+                         ElementAccumulator, ElementCompute,                \
+                         ElementC, GmemLayoutTagC, AlignmentC,              \
+                         ElementD, GmemLayoutTagD, AlignmentD,              \
+                         EpilogueScheduleType, FusionOpOrCallbacks>         \
+     : CollectiveBuilder<arch::IntelXe, arch::OpClassTensorOp,              \
+                         TileShape_MNK, Shape<_1, _1, _1>, EpilogueTile_MN, \
+                         ElementAccumulator, ElementCompute,                \
+                         ElementC, GmemLayoutTagC, AlignmentC,              \
+                         ElementD, GmemLayoutTagD, AlignmentD,              \
+                         EpilogueScheduleType, FusionOpOrCallbacks> {};
 
-      // Intel Epilogue with Linear Combination does not use shared memory
-      using SmemLayoutAtomC_ = void;
-      using CopyOpS2R_ = void;
-      using SmemLayoutAtomD_ = void;
-      using CopyOpR2S_ = void;
+CUTLASS_FORWARD_XE_EPI_BUILDER(Xe12)
+CUTLASS_FORWARD_XE_EPI_BUILDER(Xe20)
 
-      //TODO(Codeplay): Should FusionCallbacks use DispatchPolicy IntelXeGroupEpilogue for group gemm? That does not work.
-      using FusionCallbacks = typename detail::FusionOpInfo<FusionOpOrCallbacks>::template FusionCallbacks<
-                                  IntelXeXMX16, TileShape_MNK, TileShape_MNK, CopyOpG2R>;
+#undef CUTLASS_FORWARD_XE_EPI_BUILDER
 
-      using CollectiveOp = cutlass::epilogue::collective::CollectiveEpilogue<
-            DispatchPolicy,
-            TileShape_MNK,
-            ElementAccumulator,
-            StrideC,
-            ElementD,
-            StrideD,
-            FusionCallbacks,
-            CopyOpG2R,
-            SmemLayoutAtomC_,
-            CopyOpS2R_,
-            CopyOpR2G,
-            SmemLayoutAtomD_,
-            CopyOpR2S_
-        >;
-    };
 } // namespace cutlass::epilogue::collective
+

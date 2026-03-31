@@ -96,8 +96,6 @@ public:
   using StrideD  = typename CollectiveEpilogue::StrideD;
   using EpilogueArguments = typename CollectiveEpilogue::Arguments;
   using EpilogueParams = typename CollectiveEpilogue::Params;
-  static_assert(cute::is_same_v<ElementAccumulator, typename CollectiveEpilogue::ElementAccumulator>,
-    "Mainloop and epilogue do not agree on accumulator value type.");
 
   // MSVC requires the cast to fix a warning-as-error.
   static constexpr int SharedStorageSize = 0;
@@ -109,7 +107,7 @@ public:
 
   // Kernel level shared memory storage
   struct SharedStorage {
-    using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;
+    using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;   // FIXME: rename to SharedStorage
     EpilogueTensorStorage epilogue;
   };
 
@@ -238,11 +236,11 @@ public:
     constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     constexpr auto subgroup_shape = SubgroupTileShape{};                   
 
-    Tensor mA_mkl = cute::get_xe_tensor(make_shape(M,K,L));   //(m,k,l)
-    Tensor mB_nkl = cute::get_xe_tensor(make_shape(N,K,L));   //(n,k,l)
+    Tensor cA = make_identity_tensor(make_shape(M,K,L));   // (M,K,L)
+    Tensor cB = make_identity_tensor(make_shape(N,K,L));   // (N,K,L)
 
-    Tensor gA = local_tile(mA_mkl, select<0,2>(blk_shape), make_coord(m_coord,_,l_coord));
-    Tensor gB = local_tile(mB_nkl, select<1,2>(blk_shape), make_coord(n_coord,_,l_coord));
+    Tensor gA = local_tile(cA, select<0,2>(blk_shape), make_coord(m_coord,_,l_coord));
+    Tensor gB = local_tile(cB, select<1,2>(blk_shape), make_coord(n_coord,_,l_coord));
 
     // Allocate the tiled_mma and the accumulators for the (M,N) subgroup_shape
     TiledMma tiled_mma;

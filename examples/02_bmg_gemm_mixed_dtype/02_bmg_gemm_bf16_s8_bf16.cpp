@@ -1,6 +1,6 @@
 /***************************************************************************************************
- * Copyright (c) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2025 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -105,14 +105,14 @@ struct Options {
 
   bool a_narrower;
   int mode;
-  int m, n, k, l, iterations;
+  int m, n, k, l, iterations, verify;
   int g;
   float alpha, beta;
 
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(20),
+    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1),
     g(128), mode(2), a_narrower(false),
     alpha(1.f), beta(0.f)
   { }
@@ -135,6 +135,7 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("verify", verify, 1);
     if (cmd.check_cmd_line_flag("a_narrower")) {
       a_narrower = true;
     }
@@ -155,7 +156,8 @@ struct Options {
       << "  --a_narrower                If specified, make A the narrower type (B is narrower by default).\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
-      << "  --iterations=<int>          Iterations\n\n";
+      << "  --iterations=<int>          Iterations\n"
+      << "  --verify=<int>              Specify whether to verify.\n\n";
 
     return out;
   }
@@ -208,7 +210,7 @@ struct ExampleRunner {
 
   using ElementA = typename Gemm::ElementA;
   using ElementB = typename Gemm::ElementB;
-  using ElementAcc = typename Gemm::ElementAccumulator;
+  using ElementAccumulator = typename Gemm::ElementAccumulator;
   using ElementMMA = std::conditional_t<AIsNarrower, ElementB, ElementA>;
   using ElementQuant = std::conditional_t<AIsNarrower, ElementA, ElementB>;
 
@@ -221,7 +223,6 @@ struct ExampleRunner {
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
-  using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
@@ -260,19 +261,35 @@ struct ExampleRunner {
     // Compute reference output (default gemm kernel w/ ElementA == ElementB)
     //
 
-    using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-    using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+    // [New Copy Atom] When left unspecified (void), MainloopXeL1Staged automatically selects
+    // appropriate 2D block copy operations for matrices A and B. Alternatively, you can
+    // explicitly specify new copy atom operations such as XE_LOAD_2D, XE_LOAD_2D_VNNI,
+    // or XE_LOAD_2D_TRANSPOSE.
+    // Refer https://github.com/intel/sycl-tla/blob/main/media/docs/cpp/xe_rearchitecture.md
+
+    using GmemTiledCopyA = void;
+    using GmemTiledCopyB = void;
 
     // Workgroup-level tile
     using TileShape = Shape<_256, _256, _32>;
-
+    // A TiledMMA struct defines a tiling of an MMA atom over M, N and K, combining both additional
+    // hardware (sub-groups for Intel BMG) and iterations by each sub-group.
+    //
+    // The TiledMMAHelper struct defines a specific TiledMMA for a given MMA atom. This example uses
+    // the XE_DPAS_TT<8, float, cute::bfloat16_t> atom, which represents an 8x16x16 DPAS operation with
+    // float32 accumulation and bfloat16 inputs, TileShape (<256, 256, 32>) and sub-group layout (8x4x1).
+    // The TiledMMA constructed using TiledMMAHelper has the property that each sub-group operates on a
+    // single contiguous chunk of the work-group TileShape. For this configuration, this implies that
+    // each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations). See
+    // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 4,1,0) for
+    // performance reasons.
     using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+        typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, Layout<TileShape>,
                                       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
     constexpr int PipelineStages = 3;
-    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
-    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+    using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
+    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
 
     using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementCompute,
             ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
@@ -283,15 +300,14 @@ struct ExampleRunner {
     using CollectiveEpilogueRef = cutlass::epilogue::collective::CollectiveEpilogue<
             EpilogueDispatchPolicy,
             TileShape,
+            void,   // Epilogue tile (void = automatic)
             ElementAccumulator,
             cutlass::gemm::TagToStrideC_t<LayoutC>,
             ElementOutput,
             cutlass::gemm::TagToStrideC_t<LayoutD>,
             FusionCallBacks,
-            XE_2D_U32x8x16_LD_N,
-            void, void,
-            XE_2D_U32x8x16_ST_N,
-            void, void>;
+            void,   // The copy atom used to load matrix C  (void = automatic)
+            void>;    // The copy atom used to store matrix D (void = automatic)
 
     // Mainloop
     using CollectiveMainloopRef = cutlass::gemm::collective::CollectiveMma<
@@ -462,11 +478,15 @@ struct ExampleRunner {
 
     compat::wait();
 
-    // Verify that the result is correct
-    bool passed = verify(options);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+    if (options.verify != 0) {
+      // Verify that the result is correct
+      bool passed = verify(options);
+      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+      if (!passed) return cutlass::Status::kErrorInternal;
+    } else {
+      std::cout << "Disposition is skipped." << std::endl;
+    }
 
     if (options.iterations > 0) {
       GPU_Clock timer;
@@ -539,8 +559,9 @@ int main(int argc, const char** argv)
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
   using StrideZero = StrideScale;
 
-  using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;  // U8  (1-byte) block copy for A (narrower type)
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V; // U16 (2-byte) block copy for B (wider type)
+  // The 2D block copy operations used for the A and B matrices
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;   // U8  (1-byte) block copy for A (narrower type)
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;  // U16 (2-byte) block copy for B (wider type)
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile

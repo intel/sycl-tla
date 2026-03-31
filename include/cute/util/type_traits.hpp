@@ -327,4 +327,22 @@ struct is_any_of {
 template <class T, class... Us>
 inline constexpr bool is_any_of_v = is_any_of<T, Us...>::value;
 
+//
+// replace_void_t
+//
+template <class T, class ReplacementTypeIfVoid>
+using replace_void_t = conditional_t<is_void_v<T>, ReplacementTypeIfVoid, T>;
+
+//
+// is_complete -- check for complete types
+//
+template <typename T, size_t = 0>
+struct is_complete : CUTE_STL_NAMESPACE::false_type {};
+
+template <typename T>
+struct is_complete<T, 0 * sizeof(T)> : std::true_type {};
+
+template <typename T>
+static constexpr bool is_complete_v = is_complete<T>::value;
+
 } // end namespace cute

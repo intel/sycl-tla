@@ -1,6 +1,6 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -105,11 +105,11 @@ struct Options {
   bool help = false;
 
   float alpha, beta;
-  int iterations;
-  int m, n, k, groups;
+  int m, n, k, groups, iterations, verify;
+
   std::vector<typename ProblemShape::UnderlyingProblemShape> problem_sizes_host;
 
-  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100),
+  Options() : error(false), help(false), alpha(FLT_MAX), beta(FLT_MAX), iterations(100), verify(1),
               m(5120), n(4096), k(4096), groups(2) {
     problem_sizes_host.reserve(groups);
     for(int i = 0; i < groups; i++) {
@@ -133,6 +133,7 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta",  beta,  0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("verify", verify, 1);
 
     assert(groups > 0);
     problem_sizes_host.clear();
@@ -154,7 +155,8 @@ struct Options {
       << "  --groups=<int>              Sets the number of individual GEMM problems for Grouped GEMM\n"
       << "  --alpha=<f32>               Epilogue scalar alpha\n"
       << "  --beta=<f32>                Epilogue scalar beta\n\n"
-      << "  --iterations=<int>          Number of profiling iterations to perform\n\n";
+      << "  --iterations=<int>          Number of profiling iterations to perform\n"
+      << "  --verify=<int>              Specify whether to verify.\n\n";
 
     out
       << "\n\nExamples:\n\n"
@@ -497,11 +499,15 @@ void initialize(const Options &options) {
 
     compat::wait();
 
-    // Verify that the result is correct
-    bool passed = verify(options);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+    if (options.verify != 0) {
+      // Verify that the result is correct
+      bool passed = verify(options);
+      std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+      if (!passed) return cutlass::Status::kErrorInternal;
+    } else {
+      std::cout << "Disposition is skipped." << std::endl;
+    }
 
     if (options.iterations > 0) {
       GPU_Clock timer;
@@ -567,22 +573,18 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopyA = void; //XE_LOAD_2D<16, 32, 32>;
+  using GmemTiledCopyB = void; //XE_LOAD_2D_VNNI<16, 32, 32>;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
-  using TiledMma =
-      TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
-               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                    Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
+  using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, ElementAccumulator, ElementA>>, Layout<TileShape>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
   // Dispatch to grouped gemm algorithm
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16Group<PipelineStages>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16Group;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1StagedGroup<PipelineStages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGenericGroup;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
           ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
@@ -592,15 +594,14 @@ int main(int argc, const char** argv)
   using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
           EpilogueDispatchPolicy,
           TileShape,
+          void,               // Epilogue tile (void = automatic)
           ElementAccumulator,
           cutlass::gemm::TagToStrideC_t<LayoutC*>,
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD*>,
           FusionCallBacks,
-          XE_2D_U32x8x16_LD_N,
-          void, void,
-          XE_2D_U32x8x16_ST_N,
-          void, void>;
+          void,               // The copy atom used to load matrix C  (void = automatic)
+          void>;              // The copy atom used to store matrix D (void = automatic)
 
 // Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<

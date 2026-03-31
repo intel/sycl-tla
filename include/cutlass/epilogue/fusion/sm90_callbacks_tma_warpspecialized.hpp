@@ -57,6 +57,9 @@ namespace cutlass::epilogue::fusion {
 template <class NodeOp, class... ChildOps>
 using Sm90EVT = Sm90TreeVisitor<NodeOp, ChildOps...>;
 
+template <class NodeOp, class... ChildOps>
+using XeEVT = Sm90EVT<NodeOp, ChildOps...>;
+
 // D = alpha * acc
 template <
   int StagesC,

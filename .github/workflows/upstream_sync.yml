@@ -1,0 +1,166 @@
+name: Sync from Upstream 
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_branch:
+        description: 'Upstream branch to sync from'
+        required: false
+        default: 'main'
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Add and fetch upstream
+        run: |
+          git remote add upstream https://github.com/NVIDIA/cutlass || true
+          git fetch upstream ${{ inputs.upstream_branch || 'main' }}
+          
+          UPSTREAM_COMMIT=$(git rev-parse upstream/${{ inputs.upstream_branch || 'main' }})
+          echo "UPSTREAM_COMMIT=${UPSTREAM_COMMIT}" >> $GITHUB_ENV
+          echo "UPSTREAM_SHORT=${UPSTREAM_COMMIT:0:7}" >> $GITHUB_ENV
+      
+      - name: Create sync branch
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          BRANCH_NAME="sync/upstream-${TIMESTAMP}"
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
+          git checkout -b "${BRANCH_NAME}"
+      
+      - name: Attempt merge
+        id: merge
+        continue-on-error: true
+        run: |
+          if git merge upstream/${{ inputs.upstream_branch || 'main' }} --no-edit; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "Clean merge succeeded"
+          else
+            echo "status=conflict" >> $GITHUB_OUTPUT
+            echo "Merge conflicts detected"
+            
+            # Save conflict info
+            git diff --name-only --diff-filter=U > /tmp/conflicts.txt
+            echo "conflicts<<EOF" >> $GITHUB_OUTPUT
+            cat /tmp/conflicts.txt >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT            
+          fi
+      
+      - name: Push clean merge and create PR
+        if: steps.merge.outputs.status == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push origin ${{ env.BRANCH_NAME }}
+          
+          cat > pr_body.md << 'EOF'
+          ## Automated Upstream Sync
+          
+          This PR merges changes from the upstream NVIDIA/cutlass repository.
+          
+          ### Upstream Details
+          - **Repository:** `NVIDIA/cutlass`
+          - **Branch:** `${{ inputs.upstream_branch || 'main' }}`
+          - **Commit:** [`${{ env.UPSTREAM_SHORT }}`](https://github.com/NVIDIA/cutlass/commit/${{ env.UPSTREAM_COMMIT }})
+          
+          ### Status
+          **Clean merge** - No conflicts detected
+                    
+          *Automatically created by upstream sync workflow*
+          EOF
+          
+          gh pr create \
+            --title "Sync with NVIDIA/cutlass (${{ env.UPSTREAM_SHORT }})" \
+            --body-file pr_body.md \
+            --base main \
+            --head ${{ env.BRANCH_NAME }} \
+            --repo intel/sycl-tla
+      
+      
+      
+      - name: Notify user for manual resolution
+        if: steps.merge.outputs.status == 'conflict'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::notice title=Manual Intervention Required::Upstream sync from NVIDIA/cutlass has merge conflicts that need manual resolution"
+          echo "::warning::Conflicted files: ${{ steps.merge.outputs.conflicts }}"
+          
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # Manual Intervention Required
+          
+          Automated sync from **NVIDIA/cutlass** failed due to merge conflicts.
+          
+          ## Upstream Details
+          - **Repository:** `NVIDIA/cutlass`
+          - **Branch:** `${{ inputs.upstream_branch || 'main' }}`
+          - **Commit:** [`${{ env.UPSTREAM_SHORT }}`](https://github.com/NVIDIA/cutlass/commit/${{ env.UPSTREAM_COMMIT }})
+          
+          ## Conflicted Files
+          ```
+          ${{ steps.merge.outputs.conflicts }}
+          ```
+          
+          ## Resolution Steps
+          
+          ```bash
+          # 1. Fetch and checkout
+          git fetch origin
+          git checkout ${{ env.BRANCH_NAME }}
+          
+          # 2. Add upstream and merge
+          git remote add upstream https://github.com/NVIDIA/cutlass.git
+          git fetch upstream ${{ inputs.upstream_branch || 'main' }}
+          git merge upstream/${{ inputs.upstream_branch || 'main' }}
+          
+          # 3. Resolve conflicts manually and commit
+          git add .
+          git commit -m "Resolve merge conflicts with upstream ${{ env.UPSTREAM_SHORT }}"
+          git push origin ${{ env.BRANCH_NAME }}
+          
+          # 4. Create PR
+          gh pr create --base main --head ${{ env.BRANCH_NAME }} \
+            --title "Sync with NVIDIA/cutlass (Manual) - ${{ env.UPSTREAM_SHORT }}" \
+            --repo intel/sycl-tla
+          ```
+          EOF
+                
+      - name: Cleanup on failure
+        if: failure() && steps.merge.outputs.status != 'conflict' && env.BRANCH_NAME != ''        
+        run: |
+          git push origin --delete ${{ env.BRANCH_NAME }} || true
+      
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## Upstream Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${{ env.BRANCH_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Upstream Commit:** [\`${{ env.UPSTREAM_SHORT }}\`](https://github.com/NVIDIA/cutlass/commit/${{ env.UPSTREAM_COMMIT }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.merge.outputs.status }}" == "success" ]; then
+            echo "**Status:** Clean merge - PR created" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.merge.outputs.status }}" == "conflict" ]; then
+            echo "**Status:** Manual resolution required - See notification above" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status:** Merge did not complete - Check workflow logs" >> $GITHUB_STEP_SUMMARY
+          fi

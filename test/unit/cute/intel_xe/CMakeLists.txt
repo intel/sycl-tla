@@ -26,6 +26,18 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+if(NOT DEFINED IGC_VERSION_MAJOR)
+  set(IGC_VERSION_MAJOR 2)
+endif()
+if(NOT DEFINED IGC_VERSION_MINOR)
+  set(IGC_VERSION_MINOR 18)
+endif()
+
+add_compile_definitions(
+    IGC_VERSION_MAJOR=${IGC_VERSION_MAJOR}
+    IGC_VERSION_MINOR=${IGC_VERSION_MINOR}
+)
+
 if(SYCL_INTEL_TARGET)
 cutlass_test_unit_add_executable(
   cutlass_test_unit_cute_intel_xe
@@ -35,6 +47,11 @@ cutlass_test_unit_add_executable(
   copy_scatter.cpp
   mma.cpp
   tiled_mma.cpp
+  xe_copy_2d_test.cpp
+  reorder.cpp
+  xe_copy_prefetch_2d.cpp
+  # xe_vnni_2d.cpp # Disabled it due to driver unavailablility
+  xe_transpose_2d.cpp
 )
 else()
 cutlass_test_unit_add_executable(

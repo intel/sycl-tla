@@ -215,6 +215,16 @@ public:
 
 };
 
+template<
+  template <class> class ComputeFn,
+  class ElementOutput,
+  class ElementCompute,
+  FloatRoundStyle RoundStyle
+>
+using XeCompute = Sm90Compute<ComputeFn, ElementOutput, ElementCompute, RoundStyle>;
+
+
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Performance Optimized Specializations

@@ -991,7 +991,7 @@ public:
           mainloop_sf_pipeline,
           mainloop_sf_pipe_producer_state,
           load_inputs,
-          cta_coord_mnkl,
+          cta_coord_mnk,
           k_tile_iter_next, k_tile_count - k_tile_prologue, 
           false, /* did_batch_change - prologue loads handle tensormap acquire */
           enable_prefetch ? k_tile_count - k_tile_prologue : 0
@@ -1164,7 +1164,7 @@ public:
           }
 
           bool reverse_epi_n = IsOverlappingAccum && (current_wave % 2 == 0);
-          epi_load_pipe_producer_state = collective_epilogue.load<IsOverlappingAccum>(
+          epi_load_pipe_producer_state = collective_epilogue.template load<IsOverlappingAccum>(
             epi_load_pipeline,
             epi_load_pipe_producer_state,
             problem_shape_MNKL,

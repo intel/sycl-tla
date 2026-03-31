@@ -1,5 +1,5 @@
-# Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # Copyright (c) 2025 INTEL CORPORATION. All rights reserved.
+# Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -34,6 +34,7 @@ if(CUTLASS_ENABLE_SYCL)
       xe_gemm_bf16_bf16_bf16_tensor_op_bf16.cpp
       xe_gemm_fp16_fp16_fp16_tensor_op_fp16.cpp
       xe_gemm_bf16_bf16_bf16_tensor_op_fp32.cpp
+      xe_gemm_bf16_bf16_fp32_tensor_op_bf16.cpp
       xe_gemm_bf16_bf16_fp32_tensor_op_fp32.cpp
       xe_gemm_fp16_fp16_fp16_tensor_op_fp32.cpp
       xe_gemm_fp16_fp16_fp32_tensor_op_fp32.cpp
@@ -42,12 +43,14 @@ if(CUTLASS_ENABLE_SYCL)
       xe_gemm_f8_f8_fp32_tensor_op_fp32.cpp
       xe_gemm_fp16_s8_fp32_tensor_op_fp32.cpp
       gemm_universal_bf16n_bf16t_f32n_tensor_op_f32_xe.cpp
+      gemm_universal_fp8_fp8_fp32_tensor_op_f32_xe_models.cpp
     )
 
     cutlass_test_unit_add_executable(
       cutlass_test_unit_gemm_device_tensorop_cooperative_xe
       xe_gemm_bf16_bf16_fp32_tensor_op_fp32_cooperative.cpp
       xe_gemm_fp16_fp16_fp32_tensor_op_fp32_cooperative.cpp
+      # xe_gemm_fp16_fp16_f32_ptr_array_cooperative.cpp
       # TODO (Codeplay): fix gemm cooperative tests for s8 and tf32
       # xe_gemm_s8_s8_s32_tensor_op_s32_cooperative.cpp
       # xe_gemm_tf32_tf32_fp32_tensor_op_fp32_cooperative.cpp
@@ -83,6 +86,16 @@ if(CUTLASS_ENABLE_SYCL)
       xe_gemm_fp16_fp8_fp32_tensor_op_fp32_group_gemm.cpp
     )
 
+    # Single unified test executable combining all new test files
+    cutlass_test_unit_add_executable(
+      cutlass_test_unit_gemm_device_unified_tests
+      gemm_universal_lincomb_per_rowbias_eltact.cpp
+      gemm_universal_mainloopintelxexmx16group.cpp
+      gemm_universal_mainloopintelxexmx16_group_fp8.cpp
+      gemm_universal_mainloopintelxexmx16group_precision.cpp
+      gemm_universal_fp_scaling.cpp
+    )
+
     add_custom_target(
       cutlass_test_unit_gemm_device
       DEPENDS
@@ -93,6 +106,7 @@ if(CUTLASS_ENABLE_SYCL)
       cutlass_test_unit_gemm_device_tensorop_xe_group_gemm
       cutlass_test_unit_gemm_device_mixed_dtype_tensorop_xe_group_gemm
       cutlass_test_unit_gemm_device_tensorop_xe
+      cutlass_test_unit_gemm_device_unified_tests
     )
 
     add_custom_target(

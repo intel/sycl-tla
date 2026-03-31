@@ -1,9 +1,9 @@
-# CUTLASS SYCL - Programming Examples
+# SYCL*TLA - Programming Examples
 
 > [!IMPORTANT]
 > ### ⚠️ **Not for Benchmarking!** ⚠️
 > 
-> These examples are designed **solely for demonstrating CUTLASS-SYCL functionality** and may **NOT be optimized for performance benchmarking**.
+> These examples are designed **solely for demonstrating SYCL*TLA functionality** and may **NOT be optimized for performance benchmarking**.
 > 
 
 ### Build Requirements
@@ -19,7 +19,7 @@ examples/
 ├── 00_bmg_gemm/                     # Intel GPU examples
 ├── 01_bmg_gemm_with_collective_builder/
 ├── ...
-├── 10_bmg_grouped_gemm_mixed_dtype/
+├── 13_bmg_gemm_bias/
 ├── cute/                            # CuTe tutorial examples
 │   └── tutorial/                    
 ├── generics/                        # Device-agnostic SYCL examples
@@ -29,7 +29,7 @@ examples/
     └── 01_gemm_softmax/
 ```
 
-## CUTLASS-SYCL Examples for Intel GPUs
+## SYCL*TLA Examples for Intel GPUs
 
 The following examples are optimized for Intel GPU architectures using SYCL:
 
@@ -76,6 +76,10 @@ The following examples are optimized for Intel GPU architectures using SYCL:
 * [10_bmg_grouped_gemm_mixed_dtype](10_bmg_grouped_gemm_mixed_dtype/)
 
     Mixed precision Grouped GEMM operations on Intel PVC/BMG
+
+* [13_bmg_gemm_bias](13_bmg_gemm_bias/)
+
+    Examples for testing simple GEMM with bias addition on Intel PVC/BMG
 
 ## Device-Agnostic SYCL Examples
 
