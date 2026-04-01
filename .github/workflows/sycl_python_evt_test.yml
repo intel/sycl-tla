@@ -120,4 +120,4 @@ jobs:
             echo "Removing DPCTL directory: $DPCTL_PATH"
             sudo rm -rf "$DPCTL_PATH"
           fi
-          echo "DPCTL cleanup completed"
+          echo "DPCTL cleanup completed successfully"
