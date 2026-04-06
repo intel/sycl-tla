@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   run-evt-tests:
-    name: Run Python EVT tests on Intel BMG
+    name: Run Python EVT tests on Intel BMG machine
     runs-on: bmg
     timeout-minutes: 90
 
