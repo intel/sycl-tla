@@ -67,7 +67,8 @@ struct Options {
     error(false),
     m(5120), n(4096), k(4096), l(1),
     num_head(128), nope_dim(128), rope_dim(64),
-    iterations(100), verify(1), alpha(1.f), beta(0.f)
+    iterations(100), verify(1), 
+    alpha(1.f), beta(0.f)
   { }
 
   // Parses the command line
@@ -106,7 +107,7 @@ struct Options {
       << "  --nope-dim=<int>            Sets the nope_dim for splitk fusion\n"
       << "  --rope-dim=<int>            Sets the rope_dim for splitk fusion\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
-      << "  --beta=<s32>                Epilogue scalar beta\n\n"
+      << "  --beta=<s32>                Epilogue scalar beta\n"
       << "  --iterations=<int>          Iterations\n"
       << "  --verify=<int>              Specify whether to verify.\n\n";
 

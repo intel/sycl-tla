@@ -30,6 +30,10 @@
 if (CUTLASS_ENABLE_SYCL)
   message(STATUS "Building CuTE tutorial examples with SYCL")
 
+  # Include quickstart examples subdirectory
+  add_subdirectory(quickstart)
+  # Include layout tutorial examples subdirectory
+  add_subdirectory(layout)
   cutlass_example_add_executable(
     cute_tutorial_sgemm_1
     sgemm_1_sycl.cpp
@@ -65,6 +69,16 @@ if (CUTLASS_ENABLE_SYCL)
     cutlass_example_add_executable(
       cute_tutorial_xe_gemm_slm
       xe_gemm_slm.cpp
+    )
+
+    cutlass_example_add_executable(
+      cute_tutorial_xe_gemm_subgroup_specialization_slm
+      xe_gemm_subgroup_specialization_slm.cpp
+    )
+
+    cutlass_example_add_executable(
+      cute_tutorial_xe_two_gemm_fusion
+      xe_two_gemm_fusion.cpp
     )
   endif()
 
