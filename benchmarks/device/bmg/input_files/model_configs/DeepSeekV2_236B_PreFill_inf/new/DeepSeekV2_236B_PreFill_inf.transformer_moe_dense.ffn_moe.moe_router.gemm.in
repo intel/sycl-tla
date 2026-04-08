@@ -1,0 +1,7 @@
+# Network Name: DeepSeekV2_236B_PreFill_inf.transformer_moe_dense.ffn_moe.moe_router
+# Suite: new
+# Config Group: gemm
+
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_moe_dense.ffn_moe.moe_router.gate --m=131072 --n=160 --k=5120 --l=1
+# BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_moe_dense.ffn_moe.expert.up_gate_proj --m=4915 --n=3072 --k=5120 --l=20
+# BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_moe_dense.ffn_moe.expert.down_proj --m=4915 --n=5120 --k=1536 --l=20
