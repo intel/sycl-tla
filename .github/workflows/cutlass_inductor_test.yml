@@ -63,13 +63,15 @@ jobs:
         run: |
           pip list | grep -i torch
 
-      - name: Clone PyTorch fork
+      - name: Clone PyTorch fork and install requirements
         shell: bash
         run: |
+          source ~/.venv/bin/activate
           cd ${{ runner.temp }}
           git clone https://github.com/pytorch/pytorch.git
           cd pytorch
           git checkout origin/nightly
+          pip install -r requirements.txt
 
       - name: Run TorchInductor EVT test
         shell: bash
