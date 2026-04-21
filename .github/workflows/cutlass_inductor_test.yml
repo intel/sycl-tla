@@ -67,7 +67,9 @@ jobs:
         shell: bash
         run: |
           cd ${{ runner.temp }}
-          git clone https://github.com/pytorch/pytorch.git -b origin/nightly
+          git clone https://github.com/pytorch/pytorch.git
+          cd pytorch
+          git checkout origin/nightly
 
       - name: Run TorchInductor CUTLASS test
         shell: bash
