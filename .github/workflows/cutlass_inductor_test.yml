@@ -78,7 +78,7 @@ jobs:
           export CUTLASS_USE_SYCL=1
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
-          cd ${{ runner.temp }}
+          cd ${{ runner.temp }}/pytorch/
           python test/inductor/test_cutlass_backend.py -v
 
       - name: Run TorchInductor EVT test
