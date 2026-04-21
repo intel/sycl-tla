@@ -51,7 +51,8 @@ jobs:
         shell: bash
         run: |
           source ~/.venv/bin/activate
-          pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/xpu
+          python3 --version
+          python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/xpu
 
       - name: Print IGC2 version
         shell: bash
@@ -71,7 +72,7 @@ jobs:
           git clone https://github.com/pytorch/pytorch.git
           cd pytorch
           git checkout origin/nightly
-          pip install -r requirements.txt
+          python3 -m pip install -r requirements.txt
 
       - name: Run TorchInductor EVT test
         shell: bash
