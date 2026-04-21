@@ -62,7 +62,7 @@ jobs:
       - name: Print PyTorch package version
         shell: bash
         run: |
-          pip list | grep -i torch
+          python3 -m pip list | grep -i torch
 
       - name: Clone PyTorch fork and install requirements
         shell: bash
@@ -82,7 +82,7 @@ jobs:
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           mkdir ${GITHUB_WORKSPACE}/logs/
           cd ${{ runner.temp }}/pytorch
-          python test/inductor/test_cutlass_evt.py -v 2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_evt.log
+          python3 test/inductor/test_cutlass_evt.py -v 2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_evt.log
 
       - name: Upload logs
         uses: actions/upload-artifact@v4
