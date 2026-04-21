@@ -75,6 +75,7 @@ jobs:
         shell: bash
         run: |
           source ~/.venv/bin/activate
+          export USE_XPU=1
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           mkdir ${GITHUB_WORKSPACE}/logs/
           cd ${{ runner.temp }}/pytorch
