@@ -74,6 +74,7 @@ jobs:
           cd pytorch
           git checkout origin/nightly
           python3 -m pip install -r requirements.txt
+          python3 -m pip install unittest-xml-reporting
 
       - name: Run TorchInductor EVT test
         shell: bash
