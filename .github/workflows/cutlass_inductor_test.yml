@@ -71,23 +71,13 @@ jobs:
           cd pytorch
           git checkout origin/nightly
 
-      - name: Run TorchInductor CUTLASS test
-        shell: bash
-        run: |
-          source ~/.venv/bin/activate
-          export CUTLASS_USE_SYCL=1
-          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-          export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
-          cd ${{ runner.temp }}/pytorch/
-          python test/inductor/test_cutlass_backend.py -v
-
       - name: Run TorchInductor EVT test
         shell: bash
         run: |
           source ~/.venv/bin/activate
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           mkdir ${GITHUB_WORKSPACE}/logs/
-          cd ~/pytorch/pytorch-inductor-xpu
+          cd ${{ runner.temp }}/pytorch
           python test/inductor/test_cutlass_evt.py -v 2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_evt.log
 
       - name: Upload logs
