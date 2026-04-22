@@ -75,11 +75,29 @@ if (SYCL_INTEL_TARGET)
 
   set(SYCL_DEVICES)
 
+  # For multitarget build, set target as spir64_gen and if user gave spir64, then overwrite it.
+  set(SYCL_TARGET "spir64_gen")
+
+  list(LENGTH DPCPP_SYCL_TARGET_LIST SYCL_TARGET_COUNT)
+  if(SYCL_TARGET_COUNT GREATER 1)
+    list(FIND DPCPP_SYCL_TARGET_LIST "spir64" _spir64_index)
+    if(_spir64_index GREATER -1)
+      message(FATAL_ERROR "MultiTarget Build is not supported if one of target is spir64.")
+    endif()
+  endif()
+
   foreach(TGT IN LISTS DPCPP_SYCL_TARGET_LIST)
-    if(TGT STREQUAL "intel_gpu_bmg_g21" OR TGT STREQUAL "bmg")
-      list(APPEND SYCL_DEVICES "bmg_g21")
+    if(TGT STREQUAL "bmg")
+      list(APPEND SYCL_DEVICES "bmg-g21")
+      list(APPEND SYCL_DEVICES "bmg-g31")
+    elseif(TGT STREQUAL "intel_gpu_bmg_g21")
+      list(APPEND SYCL_DEVICES "bmg-g21")
+    elseif(TGT STREQUAL "intel_gpu_bmg_g31")
+      list(APPEND SYCL_DEVICES "bmg-g31")
     elseif(TGT STREQUAL "intel_gpu_pvc" OR TGT STREQUAL "pvc")
       list(APPEND SYCL_DEVICES "pvc")
+    elseif(TGT STREQUAL "spir64")
+      set(SYCL_TARGET "spir64")
     endif()
   endforeach()
 
@@ -87,8 +105,8 @@ if (SYCL_INTEL_TARGET)
 
   string(JOIN "," SYCL_DEVICES_STR ${SYCL_DEVICES})
 
-  list(APPEND DPCPP_LINK_ONLY_FLAGS "-fsycl-targets=spir64")
-  list(APPEND DPCPP_LINK_ONLY_FLAGS "-Xs;-device ${SYCL_DEVICES_STR}")
+  list(APPEND DPCPP_FLAGS "-fsycl-targets=${SYCL_TARGET}")
+  list(APPEND DPCPP_LINK_ONLY_FLAGS "-Xsycl-target-backend=${SYCL_TARGET};-device ${SYCL_DEVICES_STR}")
 
   list(APPEND DPCPP_LINK_ONLY_FLAGS "-Xspirv-translator")
 

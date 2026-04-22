@@ -62,7 +62,7 @@ target_link_libraries(xe20_cutlass_library_bf16 PRIVATE
 target_compile_definitions(xe20_cutlass_library_bf16 PRIVATE
   CUTLASS_ENABLE_SYCL=1
   SYCL_INTEL_TARGET=1
-  DPCPP_SYCL_TARGET=intel_gpu_bmg_g21
+  DPCPP_SYCL_TARGET=bmg
 )
 
 # Add Intel-specific SYCL link flags for XE20 optimization

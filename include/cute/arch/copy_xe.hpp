@@ -1,6 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,37 +61,53 @@ struct XE_1D_LDSM {
   using SRegisters = S[1];
   using DRegisters = D[1];
 
-  CUTE_STATIC_ASSERT(sizeof(D) % sizeof(S) == 0,
-    "dst failed to vectorize into registers");
-  static constexpr size_t N = sizeof(D) / sizeof(S);
-  CUTE_STATIC_ASSERT(N == 1 || N == 2 || N == 4 || N == 8,
-    "register vector only supports 1, 2, 4, 8");
-  static constexpr size_t N_d32 = sizeof(D) / sizeof(uint32_t);
-  using StorageT = intel::vector_t<uint32_t, N_d32>;
-  
+  CUTE_STATIC_ASSERT(sizeof(D) >= sizeof(S), "Dst must be same size or larger than src for slm->reg copy");
+
   template<class S_, class D_>
   CUTE_HOST_DEVICE static void
   copy(const S_ &src, D_ &dst) {
     #if defined(__SYCL_DEVICE_ONLY__) && defined(SYCL_INTEL_TARGET)
-      CUTE_STATIC_ASSERT(sizeof(S_) == sizeof(S));
       uint32_t smem_int_ptr = cast_smem_ptr_to_uint(&src);
-      int thr_id_in_subgroup = int(ThreadIdxX()) % intel::sg_size;
-      smem_int_ptr += thr_id_in_subgroup * sizeof(D);
-      auto& data_vec = *reinterpret_cast<StorageT *>(&dst);
-      if constexpr (N_d32 > 1) {
+      if constexpr (sizeof(D) >= sizeof(uint32_t)) {
+        // 32-bit path: use d32 / d32xN
+        static constexpr size_t N_d32 = sizeof(D) / sizeof(uint32_t);
+        using StorageT = intel::vector_t<uint32_t, N_d32>;
+        auto& data_vec = *reinterpret_cast<StorageT *>(&dst);
+        if constexpr (N_d32 > 1) {
+          asm volatile(
+              "{\n"
+              "lsc_load.slm (M1, 16) %0:d32x%2 flat[%1]:a32 \n"
+              "}\n" : "=rw"(data_vec)
+              : "rw"(smem_int_ptr), "P"(N_d32)
+            );
+        } else {
+          asm volatile(
+              "{\n"
+              "lsc_load.slm (M1, 16) %0:d32 flat[%1]:a32 \n"
+              "}\n" : "=rw"(data_vec)
+              : "rw"(smem_int_ptr)
+            );
+        }
+      } else if constexpr (sizeof(D) == sizeof(uint16_t)) {
+        // 16-bit path: use d16u32 (load 16-bit, zero-extend to 32-bit in GRF)
+        intel::vector_t<uint32_t, 1> data_vec32;
         asm volatile(
             "{\n"
-            "lsc_load.slm (M1, 16) %0:d32x%2 flat[%1]:a32 \n"
-            "}\n" : "=rw"(data_vec)
-            : "rw"(smem_int_ptr), "P"(N_d32)
-          );
-      } else {
-        asm volatile(
-            "{\n"
-            "lsc_load.slm (M1, 16) %0:d32 flat[%1]:a32 \n"
-            "}\n" : "=rw"(data_vec)
+            "lsc_load.slm (M1, 16) %0:d16u32 flat[%1]:a32 \n"
+            "}\n" : "=rw"(data_vec32)
             : "rw"(smem_int_ptr)
           );
+        *reinterpret_cast<uint16_t*>(&dst) = static_cast<uint16_t>(data_vec32[0]);
+      } else {
+        // 8-bit path: use d8u32 (load 8-bit, zero-extend to 32-bit in GRF)
+        intel::vector_t<uint32_t, 1> data_vec32;
+        asm volatile(
+            "{\n"
+            "lsc_load.slm (M1, 16) %0:d8u32 flat[%1]:a32 \n"
+            "}\n" : "=rw"(data_vec32)
+            : "rw"(smem_int_ptr)
+          );
+        *reinterpret_cast<uint8_t*>(&dst) = static_cast<uint8_t>(data_vec32[0]);
       }
     #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
@@ -133,36 +149,52 @@ struct XE_1D_STSM {
   using SRegisters = S[1];
   using DRegisters = D[1];
 
-  CUTE_STATIC_ASSERT(sizeof(S) % sizeof(D) == 0,
-      "src failed to vectorize into registers");
-  static constexpr size_t N = sizeof(S) / sizeof(D);
-  CUTE_STATIC_ASSERT(N == 1 || N == 2 || N == 4 || N == 8,
-      "register vector only supports 1, 2, 4, 8");
-  static constexpr size_t N_d32 = sizeof(S) / sizeof(uint32_t);
-  using StorageT = intel::vector_t<uint32_t, N_d32>;
+  CUTE_STATIC_ASSERT(sizeof(S) >= sizeof(D), "Src must be same size or larger than dst for reg->slm copy");
 
   template<class S_, class D_>
   CUTE_HOST_DEVICE static void
   copy(S_ const& src, D_ & dst) {
     #if defined(__SYCL_DEVICE_ONLY__) && defined(SYCL_INTEL_TARGET)
           uint32_t smem_int_ptr = cast_smem_ptr_to_uint(&dst);
-          int thr_id_in_subgroup = int(ThreadIdxX()) % intel::sg_size;
-          smem_int_ptr += thr_id_in_subgroup * sizeof(S);
-          auto& data_vec = *reinterpret_cast<StorageT const*>(&src);
-          if constexpr (N_d32 > 1) {
+          if constexpr (sizeof(S) >= sizeof(uint32_t)) {
+            // 32-bit path: use d32 / d32xN
+            static constexpr size_t N_d32 = sizeof(S) / sizeof(uint32_t);
+            using StorageT = intel::vector_t<uint32_t, N_d32>;
+            auto& data_vec = *reinterpret_cast<StorageT const*>(&src);
+            if constexpr (N_d32 > 1) {
+              asm volatile(
+                  "{\n"
+                  "lsc_store.slm (M1, 16) flat[%1]:a32 %0:d32x%2 \n"
+                  "}\n" ::
+                      "rw"(data_vec),
+                  "rw"(smem_int_ptr), "P"(N_d32)
+                );
+            } else {
+              asm volatile(
+                  "{\n"
+                  "lsc_store.slm (M1, 16) flat[%1]:a32 %0:d32 \n"
+                  "}\n" ::"rw"(data_vec),
+                  "rw"(smem_int_ptr)
+                );
+            }
+          } else if constexpr (sizeof(S) == sizeof(uint16_t)) {
+            // 16-bit path: use d16u32 (store lower 16 bits of 32-bit GRF)
+            intel::vector_t<uint32_t, 1> data_vec32;
+            data_vec32[0] = static_cast<uint32_t>(*reinterpret_cast<const uint16_t*>(&src));
             asm volatile(
                 "{\n"
-                "lsc_store.slm (M1, 16) flat[%1]:a32 %0:d32x%2 \n"
-                "}\n" ::
-                    "rw"(data_vec),
-                "rw"(smem_int_ptr), "P"(N_d32)
-                // , "P"(shift_l)
+                "lsc_store.slm (M1, 16) flat[%1]:a32 %0:d16u32 \n"
+                "}\n" ::"rw"(data_vec32),
+                "rw"(smem_int_ptr)
               );
           } else {
+            // 8-bit path: use d8u32 (store lower 8 bits of 32-bit GRF)
+            intel::vector_t<uint32_t, 1> data_vec32;
+            data_vec32[0] = static_cast<uint32_t>(*reinterpret_cast<const uint8_t*>(&src));
             asm volatile(
                 "{\n"
-                "lsc_store.slm (M1, 16) flat[%1]:a32 %0:d32 \n"
-                "}\n" ::"rw"(data_vec),
+                "lsc_store.slm (M1, 16) flat[%1]:a32 %0:d8u32 \n"
+                "}\n" ::"rw"(data_vec32),
                 "rw"(smem_int_ptr)
               );
           }
