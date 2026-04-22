@@ -80,6 +80,16 @@ jobs:
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           python test/python/cutlass/gemm/gemm_bf16_pvc.py
 
+      - name: Run Python Generation Tests
+        shell: bash
+        run: |
+          source ~/.venv/bin/activate
+          pip install -e .
+          export CUTLASS_USE_SYCL=1
+          export SYCL_UR_TRACE=2
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          python test/python/cutlass/gemm/gemm_generate_xe.py
+
       - name: Cleanup DPC++
         if: always()
         shell: bash
