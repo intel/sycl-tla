@@ -1171,7 +1171,9 @@ make_slm_copy(SubgroupTensor<SEngine, SLayoutWI, SLayout> const& src,
   static_assert(rank(DLayout{}) >= 2, "Rank of dst tensor should be greater than 2");
   auto src_tv = composition(src.tv_layout(), make_layout(layout<0,0>(dst),layout<1,0>(dst)));
   constexpr uint32_t frg_size = size<1>(src_tv);
-  using XType = typename SEngine::value_type;
+  // Use the destination (SLM) element type for the copy atom: after reorder/convert,
+  // data in registers is always in the SLM element type regardless of the original copy type.
+  using XType = typename DEngine::value_type;
   using PackedType = cutlass::AlignedArray<XType, frg_size>;
   using namespace intel;
   auto atom_r2s = Copy_Atom<UniversalCopy<PackedType>, XType>{};
@@ -1298,8 +1300,9 @@ make_A_slm_copies(TiledMMA  const& tiled_mma,
   auto sv_layout_t_ = make_layout(get<0>(sv_layout_t0_),
                                  filter(get<1>(sv_layout_t0_)));               // (SG,V') -> (M tile, K tile)
   auto tCrA = tiled_mma.get_slice(0).partition_sg_fragment_A(make_identity_tensor(tile_mk));
-  auto r2s = make_slm_copy(global_copy.get_slice(0).partition_sg_fragment_D(make_identity_tensor(tile_mk)), dummy_tensor,
-                         sv_layout_t_);
+  // Use MMA-typed fragment for r2s: after reorder/convert, register data is always in MMA type,
+  // regardless of whether the copy and MMA types differ.
+  auto r2s = make_slm_copy(tCrA, dummy_tensor, sv_layout_t_);
   auto s2r = make_slm_copy(dummy_tensor, tCrA, sv_layout_t);
   return std::tuple(r2s, s2r);
 }
@@ -1308,7 +1311,7 @@ template<class TiledMMA, class TiledCopy>
 CUTE_HOST_DEVICE
 constexpr auto
 make_B_slm_copies(TiledMMA  const& tiled_mma,
-                  TiledCopy const& global_copy)  // input TiledCopy for global A load
+                  TiledCopy const& global_copy)  // input TiledCopy for global B load
 {
   using SLM_Layout = decltype(make_B_slm_layout(tiled_mma));
   using ValType = typename TiledMMA::ValTypeB;
@@ -1348,8 +1351,9 @@ make_B_slm_copies(TiledMMA  const& tiled_mma,
   auto sv_layout_t_ = make_layout(get<0>(sv_layout_t0_),
                                  filter(get<1>(sv_layout_t0_)));                 // (SG,V') -> (M tile, K tile)
   auto tCrB = tiled_mma.get_slice(0).partition_sg_fragment_B(make_identity_tensor(tile_nk));
-  auto r2s = make_slm_copy(global_copy.get_slice(0).partition_sg_fragment_D(make_identity_tensor(tile_nk)), dummy_tensor,
-                           sv_layout_t_);
+  // Use MMA-typed fragment for r2s: after reorder/convert, register data is always in MMA type,
+  // regardless of whether the copy and MMA types differ.
+  auto r2s = make_slm_copy(tCrB, dummy_tensor, sv_layout_t_);
   auto s2r = make_slm_copy(dummy_tensor, tCrB, sv_layout_t);
   return std::tuple(r2s, s2r);
 }
@@ -1491,8 +1495,11 @@ make_block_2d_copy_CD_subtiled(CopyOp             const& op,          // Copy op
   //   - SubtileSGLayout must have a subtile for each ThrK, OR ThrK must be the last mode.
   decltype(coalesce(get<0>(svC))) sC{};
   constexpr auto mode_thr_k = find_if(stride(sC), [](auto const &x) { return C<is_constant_v<0, decltype(x)>>{}; });
-  static_assert(shape<mode_thr_k>(sC) == shape<3>(thr_vmnk), "ThrK split into multiple modes; unsupported");
 
+  using SCThrKShape = remove_cvref_t<decltype(shape<mode_thr_k>(sC))>;
+  using MMAThrKShape = remove_cvref_t<decltype(shape<3>(thr_vmnk))>;
+  static_assert(SCThrKShape::value == MMAThrKShape::value,
+                "ThrK split into multiple modes; unsupported");
   auto k_to_mn = composition(make_layout(tile_mn), xssg_layout);                    // ThrK -> (M,N)
 
   static_assert(size(SubtileSGLayout{}) == shape<3>(thr_vmnk) || mode_thr_k + 1 >= rank(sC),

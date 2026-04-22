@@ -66,7 +66,7 @@ struct Options {
   Options():
     help(false),
     error(false),
-    m(4096), n(4096), k(4096), iterations(100)
+    m(4096), n(4096), k(4096), iterations(100), verify(1)
   { }
 
   // Parses the command line
@@ -82,6 +82,7 @@ struct Options {
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("verify", verify, 1);
   }
 
   /// Prints the usage statement.
@@ -93,8 +94,8 @@ struct Options {
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
-      << "  --iterations=<int>          Iterations\n\n";
-
+      << "  --iterations=<int>          Iterations\n"
+      << "  --verify=<int>              Specify whether to verify.\n\n";
     return out;
   }
 };
@@ -133,11 +134,14 @@ gemm_device(ATensor   const& A,         // (M,K)
   /* Create block 2D TiledCopies */
   using TA = typename ATensor::element_type;
   using TB = typename BTensor::element_type;
+  using MMA_TA = typename TiledMMA::ValTypeA;
+  using MMA_TB = typename TiledMMA::ValTypeB;
   auto coop_copy_a = make_coop_block_2d_copy_A(mma, A);
   auto coop_copy_b = make_coop_block_2d_copy_B(mma, B);
-  // TODO: generate proper subgroup tensors
-  auto coop_copy_a_ = make_coop_block_2d_copy_A(mma, make_tensor(A.data(), make_layout(shape(A), LayoutRight{})));
-  auto coop_copy_b_ = make_coop_block_2d_copy_B(mma, make_tensor(B.data(), make_layout(shape(B), LayoutRight{})));
+  // Build MMA-typed dummy tensor for the reorder destination coop copy (layout deduction only;
+  // the pointer is never dereferenced — actual loads go through coop_copy_a/b).
+  auto coop_copy_a_ = make_coop_block_2d_copy_A(mma, make_tensor(make_gmem_ptr(static_cast<MMA_TA const*>(nullptr)), make_layout(shape(A), LayoutRight{})));
+  auto coop_copy_b_ = make_coop_block_2d_copy_B(mma, make_tensor(make_gmem_ptr(static_cast<MMA_TB const*>(nullptr)), make_layout(shape(B), LayoutRight{})));
   auto [r2s_A, s2r_A] = make_A_slm_copies(mma, coop_copy_a);
   auto [r2s_B, s2r_B] = make_B_slm_copies(mma, coop_copy_b);
   auto copy_c = make_block_2d_copy_D(mma, C);
@@ -147,8 +151,9 @@ gemm_device(ATensor   const& A,         // (M,K)
   Layout a_slm_layout = make_layout(append<3>(typename decltype(r2s_A)::Tiler_MN{}, Int<stages>{}));
   Layout b_slm_layout = make_layout(append<3>(typename decltype(r2s_B)::Tiler_MN{}, Int<stages>{}));
 
-  auto smemA = compat::local_mem<TA[size(a_slm_layout)]>();
-  auto smemB = compat::local_mem<TB[size(b_slm_layout)]>();
+  // SLM stores data in MMA type (after reorder/convert from copy type).
+  auto smemA = compat::local_mem<MMA_TA[size(a_slm_layout)]>();
+  auto smemB = compat::local_mem<MMA_TB[size(b_slm_layout)]>();
 
   Tensor sA = make_tensor(make_smem_ptr(smemA), a_slm_layout);
   Tensor sB = make_tensor(make_smem_ptr(smemB), b_slm_layout);
@@ -337,14 +342,13 @@ gemm_verify(sycl::queue &Q,
     using SignedAccType = ensure_signed_t<AccType>;
 
     auto c = AccType(0);
-    for (int h = 0; h < k; h++)
+    for (int h = 0; h < k; h++) {
       c += AccType(A(i,h)) * AccType(B(j,h));
+    }
 
     auto tol = AccType(1e-5f * k);
     if (std::abs(SignedAccType(c - AccType(C(i,j)))) > tol) {
-#ifdef SHOW_DIFF
       printf("Error at (%d,%d): got %f, expected %f\n", i, j, double(C(i,j)), double(c));
-#endif
       *ok = false;
     }
   }).wait();
@@ -359,7 +363,7 @@ gemm_verify(sycl::queue &Q,
 template <typename TA, typename TB, typename TC,
           char layoutA = 'R', char layoutB = 'R'>
 void
-test_case(sycl::queue &Q, int m, int n, int k, int iterations)
+test_case(sycl::queue &Q, int m, int n, int k, int iterations, int verify)
 {
   std::cout << type_str<TA>() << " (" << layoutA << ") x "
             << type_str<TB>() << " (" << layoutB << ") -> "
@@ -390,17 +394,23 @@ test_case(sycl::queue &Q, int m, int n, int k, int iterations)
   gemm_cute<decltype(A), decltype(B), decltype(C), TA, TB, layoutA, layoutB>(Q, A, B, C);
   Q.wait_and_throw();
 
-  bool ok = gemm_verify(Q, A_ref, B_ref, C);
-  std::cout << (ok ? "passed" : "failed");
-
+  bool ok = true;
+  if (verify) {
+    ok = gemm_verify(Q, A_ref, B_ref, C);
+    std::cout << (ok ? "passed" : "failed");
+  } else {
+    std::cout << "skipped verification";
+  }
+  
   if (ok) {
     // Test performance:
     const int timing_iterations = iterations;
     GPU_Clock timer;
 
     timer.start();
-    for (int i = 0; i < timing_iterations; ++i)
+    for (int i = 0; i < timing_iterations; ++i) {
       gemm_cute<decltype(A), decltype(B), decltype(C), TA, TB, layoutA, layoutB>(Q, A, B, C);
+    }
     Q.wait_and_throw();
 
     double avg = timer.seconds() / timing_iterations;
@@ -437,6 +447,12 @@ int main(int argc, const char** argv)
 
   options.parse(argc, argv);
 
+  auto m = options.m;
+  auto n = options.n;
+  auto k = options.k;
+  auto iterations = options.iterations;
+  auto verify = options.verify;
+
   if (options.help) {
     options.print_usage(std::cout) << std::endl;
     return 0;
@@ -450,25 +466,26 @@ int main(int argc, const char** argv)
   sycl::queue Q = compat::get_default_queue();
 
   // Native compute
-  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, m, n, k, iterations, verify);
 
-  test_case<half_t, half_t, float, 'R', 'R'>(Q,  options.m, options.n, options.k, options.iterations);
-  test_case<half_t, half_t, float, 'R', 'C'>(Q,  options.m, options.n, options.k, options.iterations);
-  test_case<half_t, half_t, float, 'C', 'R'>(Q,  options.m, options.n, options.k, options.iterations);
+  test_case<half_t, half_t, float, 'R', 'R'>(Q,  m, n, k, iterations, verify);
+  test_case<half_t, half_t, float, 'R', 'C'>(Q,  m, n, k, iterations, verify);
+  test_case<half_t, half_t, float, 'C', 'R'>(Q,  m, n, k, iterations, verify);
 
-  test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, m, n, k, iterations, verify);
 
-  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
 
-  test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, options.m, options.n, options.k, options.iterations);
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, options.m, options.n, options.k, options.iterations);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
+  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<float_e4m3_t, float_e4m3_t, float, 'R', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<float_e4m3_t, float_e4m3_t, float, 'R', 'C'>(Q, m, n, k, iterations, verify);
 }

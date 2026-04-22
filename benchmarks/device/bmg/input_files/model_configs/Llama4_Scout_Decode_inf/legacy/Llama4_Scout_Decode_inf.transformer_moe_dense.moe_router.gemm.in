@@ -1,0 +1,7 @@
+# Network Name: Llama4_Scout_Decode_inf.transformer_moe_dense.moe_router
+# Suite: legacy
+# Config Group: gemm
+
+PvcGemmBF16BF16FP32_RCR_5 --bm_name=transformer_moe_dense.moe_router.gate --m=128 --n=16 --k=5120 --l=1
+# PvcGemmBF16BF16FP32_RCR_5 --bm_name=transformer_moe_dense.expert.up_gate_proj --m=8 --n=16384 --k=5120 --l=16
+PvcGemmBF16BF16FP32_RCR_5 --bm_name=transformer_moe_dense.expert.down_proj --m=8 --n=5120 --k=8192 --l=16

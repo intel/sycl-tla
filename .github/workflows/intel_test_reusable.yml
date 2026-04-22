@@ -10,7 +10,11 @@ on:
       intel_graphics:
         description: 'Intel graphics driver version'
         required: true
-        type: string 
+        type: string
+      gpu:
+        description: 'GPU type (PVC, BMG)'
+        required: true
+        type: string
       DPCPP_VERSION:
         description: 'DPC++ version'
         required: false
@@ -26,24 +30,26 @@ jobs:
       matrix:
         compiler: ${{ fromJSON(inputs.compiler) }}
         intel_graphics: ${{ fromJSON(inputs.intel_graphics) }}
-        gpu: [BMG, PVC]
-        include:
-          - gpu: BMG
-            sycl_target: intel_gpu_bmg_g21
-            igc_version_major: 2
-            igc_version_minor: 18
-            runner: bmg
-          - gpu: PVC
-            sycl_target: intel_gpu_pvc
-            igc_version_major: 2
-            igc_version_minor: 11
-            runner: pvc
-
+        gpu: ${{ fromJSON(inputs.gpu) }}
+          
     name: Run Intel ${{ matrix.compiler }} tests on ${{ matrix.gpu }} with intel-graphics ${{ matrix.intel_graphics }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.gpu == 'BMG' && 'bmg' || 'pvc' }}
     timeout-minutes: 120
 
     steps:
+      - name: Set GPU config
+        shell: bash
+        run: |
+          if [ "${{ matrix.gpu }}" = "BMG" ]; then
+            echo "SYCL_TARGET=intel_gpu_bmg_g21" >> $GITHUB_ENV
+            echo "IGC_VERSION_MAJOR=2" >> $GITHUB_ENV
+            echo "IGC_VERSION_MINOR=18" >> $GITHUB_ENV
+          else
+            echo "SYCL_TARGET=intel_gpu_pvc" >> $GITHUB_ENV
+            echo "IGC_VERSION_MAJOR=2" >> $GITHUB_ENV
+            echo "IGC_VERSION_MINOR=11" >> $GITHUB_ENV
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       
@@ -86,9 +92,9 @@ jobs:
         run: |
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
-            -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
-            -DIGC_VERSION_MAJOR=${{ matrix.igc_version_major }} \
-            -DIGC_VERSION_MINOR=${{ matrix.igc_version_minor }} \
+            -DDPCPP_SYCL_TARGET=${{ env.SYCL_TARGET }} \
+            -DIGC_VERSION_MAJOR=${{ env.IGC_VERSION_MAJOR }} \
+            -DIGC_VERSION_MINOR=${{ env.IGC_VERSION_MINOR }} \
             -DCMAKE_CXX_FLAGS="-Werror" \
             -DCUTLASS_SYCL_RUNNING_CI=ON
           cmake --build . 
