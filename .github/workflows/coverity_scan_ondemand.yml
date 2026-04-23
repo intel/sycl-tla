@@ -67,9 +67,29 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+
+          ensure_icpx_on_path() {
+            # oneAPI packages install under /opt/intel/oneapi but do not always update PATH for non-login shells.
+            if command -v icpx &> /dev/null; then
+              return 0
+            fi
+
+            if [[ -f /opt/intel/oneapi/setvars.sh ]]; then
+              # setvars may return non-zero depending on shell state; ignore and validate via command -v.
+              . /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 || true
+            fi
+
+            # Fallback when setvars is unavailable or does not export compiler paths in this shell.
+            for dir in /opt/intel/oneapi/compiler/*/bin /opt/intel/oneapi/compiler/*/bin-llvm; do
+              [[ -d "${dir}" ]] && export PATH="${dir}:${PATH}"
+            done
+
+            command -v icpx &> /dev/null
+          }
+
           # OPTIMIZATION: Conditional check to skip redundant installation
           # Subsequent runs reuse existing installation (~5-10 min saved)
-          if command -v icpx &> /dev/null; then
+          if ensure_icpx_on_path; then
             echo "[INFO] Intel oneAPI DPC++ compiler (icpx) already installed"
             icpx --version | head -n 2
           else
@@ -78,6 +98,11 @@ jobs:
             echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list > /dev/null
             sudo apt-get update -y
             sudo apt-get install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp
+            if ! ensure_icpx_on_path; then
+              echo "[ERROR] oneAPI installation completed but icpx is still not in PATH"
+              ls -la /opt/intel/oneapi/compiler || true
+              exit 1
+            fi
             echo "[INFO] Intel oneAPI DPC++ compiler installed successfully"
             icpx --version | head -n 2
           fi
