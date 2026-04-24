@@ -283,7 +283,7 @@ jobs:
           cmake .. -G Ninja \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DCUTLASS_SYCL_PROFILING_ENABLED=OFF \
-            -DDPCPP_SYCL_TARGET=${{ github.event.inputs.sycl_target || 'intel_gpu_bmg_g21' }} \
+            -DDPCPP_SYCL_TARGET=${{ inputs.sycl_target }} \
             -DCUTLASS_ENABLE_BENCHMARKS=ON \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=icpx
