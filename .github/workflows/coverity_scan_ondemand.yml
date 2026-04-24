@@ -1,12 +1,6 @@
 name: "Coverity Scan On Demand"
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  merge_group:
-    branches: [ "main" ]
   workflow_dispatch:
     inputs:
       sycl_target:
@@ -55,13 +49,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
+      - name: Check Coverity prerequisites
+        shell: bash
+        env:
+          ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
+          ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ARTIFACTORY_USER}" || -z "${ARTIFACTORY_TOKEN}" ]]; then
+            echo "[WARN] Artifactory credentials are unavailable. Skipping Coverity steps."
+            echo "COVERITY_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if ! getent hosts af-amr01.devtools.intel.com > /dev/null; then
+            echo "[WARN] Artifactory host is not resolvable from this runner. Skipping Coverity steps."
+            echo "COVERITY_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          echo "COVERITY_SKIP=0" >> "$GITHUB_ENV"
+
       - name: Install Intel graphics drivers
+        if: env.COVERITY_SKIP != '1'
         uses: ./.github/actions/install-intel-graphics
         with:
           GPU: BMG
           IGC: ROLLING
 
       - name: Install DPC++
+        if: env.COVERITY_SKIP != '1'
         uses: ./.github/actions/install-dpcpp
         with:
           DPCPP_RELEASE: RELEASE
@@ -70,6 +87,7 @@ jobs:
           IGC: ROLLING
 
       - name: Check and install OneAPI
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         run: |
           set -euxo pipefail
@@ -83,7 +101,10 @@ jobs:
             # setvars.sh may call exit under strict shells; avoid sourcing it here.
             # Discover likely compiler bin paths directly and prepend to PATH.
             for dir in /opt/intel/oneapi/compiler/*/bin /opt/intel/oneapi/compiler/*/bin-llvm; do
-              [[ -d "${dir}" ]] && export PATH="${dir}:${PATH}"
+                if [[ -d "${dir}" ]]; then
+                  export PATH="${dir}:${PATH}"
+                  echo "${dir}" >> "$GITHUB_PATH"
+                fi
             done
 
             command -v icpx &> /dev/null
@@ -110,19 +131,10 @@ jobs:
           fi
 
       - name: Prepare build tools and environment
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         run: |
           set -euxo pipefail
-
-          ensure_icpx_on_path() {
-            if command -v icpx &> /dev/null; then
-              return 0
-            fi
-            for dir in /opt/intel/oneapi/compiler/*/bin /opt/intel/oneapi/compiler/*/bin-llvm; do
-              [[ -d "${dir}" ]] && export PATH="${dir}:${PATH}"
-            done
-            command -v icpx &> /dev/null
-          }
 
           if ! command -v cmake &> /dev/null || ! command -v ninja &> /dev/null; then
             sudo apt-get update -y
@@ -133,7 +145,7 @@ jobs:
             sudo apt-get update -y && sudo apt-get install -y curl
           fi
 
-          if ! ensure_icpx_on_path; then
+          if ! command -v icpx &> /dev/null; then
             echo "[ERROR] icpx is not available on PATH after OneAPI setup"
             ls -la /opt/intel/oneapi/compiler || true
             exit 1
@@ -152,27 +164,6 @@ jobs:
           "$CXX" --version
           sycl-ls
 
-      - name: Check Coverity prerequisites
-        shell: bash
-        env:
-          ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
-          ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
-        run: |
-          set -euxo pipefail
-          if [[ -z "${ARTIFACTORY_USER}" || -z "${ARTIFACTORY_TOKEN}" ]]; then
-            echo "[WARN] Artifactory credentials are unavailable. Skipping Coverity steps."
-            echo "COVERITY_SKIP=1" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          if ! getent hosts af-amr01.devtools.intel.com > /dev/null; then
-            echo "[WARN] Artifactory host is not resolvable from this runner. Skipping Coverity steps."
-            echo "COVERITY_SKIP=1" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          echo "COVERITY_SKIP=0" >> "$GITHUB_ENV"
-
       - name: Download Coverity license file from Artifactory
         if: env.COVERITY_SKIP != '1'
         shell: bash
@@ -180,7 +171,7 @@ jobs:
           ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
           ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           # OPTIMIZATION: Skip download if Coverity already installed (~1 sec saved)
           # Reuses license from previous run when available
           if test -x "${COVERITY_INSTALL_DIR}/bin/cov-build"; then
@@ -204,7 +195,7 @@ jobs:
           ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
           ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           # OPTIMIZATION: Skip download if Coverity already installed (~3-5 min saved)
           # Avoids repeated 2.7GB download on subsequent runs
           if test -x "${COVERITY_INSTALL_DIR}/bin/cov-build"; then
