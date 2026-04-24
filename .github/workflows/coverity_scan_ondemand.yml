@@ -31,8 +31,8 @@ env:
 
 jobs:
   coverity-scan:
-    name: Coverity scan on ${{ github.event.inputs.runner || 'bmg' }}
-    runs-on: ${{ github.event.inputs.runner || 'bmg' }}
+    name: Coverity scan on ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 240
 
     steps:
