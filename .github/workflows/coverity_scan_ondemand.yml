@@ -1,6 +1,12 @@
 name: "Coverity Scan On Demand"
 
 on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  merge_group:
+    branches: [ "main" ]
   workflow_dispatch:
     inputs:
       sycl_target:
@@ -31,8 +37,8 @@ env:
 
 jobs:
   coverity-scan:
-    name: Coverity scan on ${{ inputs.runner }}
-    runs-on: ${{ inputs.runner }}
+    name: Coverity scan on ${{ github.event.inputs.runner || 'bmg' }}
+    runs-on: ${{ github.event.inputs.runner || 'bmg' }}
     timeout-minutes: 240
 
     steps:
@@ -74,12 +80,8 @@ jobs:
               return 0
             fi
 
-            if [[ -f /opt/intel/oneapi/setvars.sh ]]; then
-              # setvars may return non-zero depending on shell state; ignore and validate via command -v.
-              . /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 || true
-            fi
-
-            # Fallback when setvars is unavailable or does not export compiler paths in this shell.
+            # setvars.sh may call exit under strict shells; avoid sourcing it here.
+            # Discover likely compiler bin paths directly and prepend to PATH.
             for dir in /opt/intel/oneapi/compiler/*/bin /opt/intel/oneapi/compiler/*/bin-llvm; do
               [[ -d "${dir}" ]] && export PATH="${dir}:${PATH}"
             done
@@ -111,6 +113,17 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+
+          ensure_icpx_on_path() {
+            if command -v icpx &> /dev/null; then
+              return 0
+            fi
+            for dir in /opt/intel/oneapi/compiler/*/bin /opt/intel/oneapi/compiler/*/bin-llvm; do
+              [[ -d "${dir}" ]] && export PATH="${dir}:${PATH}"
+            done
+            command -v icpx &> /dev/null
+          }
+
           if ! command -v cmake &> /dev/null || ! command -v ninja &> /dev/null; then
             sudo apt-get update -y
             sudo apt-get install -y cmake ninja-build curl
@@ -120,7 +133,11 @@ jobs:
             sudo apt-get update -y && sudo apt-get install -y curl
           fi
 
-          . /opt/intel/oneapi/setvars.sh || . setvars.sh || true
+          if ! ensure_icpx_on_path; then
+            echo "[ERROR] icpx is not available on PATH after OneAPI setup"
+            ls -la /opt/intel/oneapi/compiler || true
+            exit 1
+          fi
           export CC=icx
           export CXX=icpx
           export CUTLASS_SYCL_PROFILING_ENABLED=ON
@@ -135,7 +152,29 @@ jobs:
           "$CXX" --version
           sycl-ls
 
+      - name: Check Coverity prerequisites
+        shell: bash
+        env:
+          ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
+          ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+        run: |
+          set -euxo pipefail
+          if [[ -z "${ARTIFACTORY_USER}" || -z "${ARTIFACTORY_TOKEN}" ]]; then
+            echo "[WARN] Artifactory credentials are unavailable. Skipping Coverity steps."
+            echo "COVERITY_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if ! getent hosts af-amr01.devtools.intel.com > /dev/null; then
+            echo "[WARN] Artifactory host is not resolvable from this runner. Skipping Coverity steps."
+            echo "COVERITY_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          echo "COVERITY_SKIP=0" >> "$GITHUB_ENV"
+
       - name: Download Coverity license file from Artifactory
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         env:
           ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
@@ -151,7 +190,7 @@ jobs:
           LICENSE_URL="${ARTIFACTORY_BASE_URL}/license.dat"
           echo "[INFO] Downloading license.dat from ${LICENSE_URL}"
           curl -fSL \
-            --user "${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}" \
+            -u "${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}" \
             --retry 3 --retry-delay 5 \
             -o license.dat \
             "${LICENSE_URL}"
@@ -159,6 +198,7 @@ jobs:
           echo "[INFO] license.dat downloaded successfully ($(wc -c < license.dat) bytes)"
 
       - name: Download Coverity installer from Artifactory
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         env:
           ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
@@ -171,12 +211,12 @@ jobs:
             echo "[INFO] Coverity already installed. Skipping installer download."
             exit 0
           fi
-          VERSION="${{ inputs.coverity_version }}"
+          VERSION="${{ github.event.inputs.coverity_version || '2025.9.0' }}"
           INSTALLER="cov-analysis-linux64-${VERSION}.sh"
           INSTALLER_URL="${ARTIFACTORY_BASE_URL}/${VERSION}/${INSTALLER}"
           echo "[INFO] Downloading ${INSTALLER} from ${INSTALLER_URL}"
           curl -fSL \
-            --user "${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}" \
+            -u "${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}" \
             --retry 3 --retry-delay 5 \
             -o "${INSTALLER}" \
             "${INSTALLER_URL}"
@@ -184,10 +224,11 @@ jobs:
           echo "[INFO] ${INSTALLER} downloaded successfully ($(wc -c < "${INSTALLER}") bytes)"
 
       - name: Check and install Coverity analysis tool
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         run: |
           set -euxo pipefail
-          VERSION="${{ inputs.coverity_version }}"
+          VERSION="${{ github.event.inputs.coverity_version || '2025.9.0' }}"
           INSTALLER="cov-analysis-linux64-${VERSION}.sh"
 
           # OPTIMIZATION: Skip install if Coverity already installed (~3-5 min saved)
@@ -223,6 +264,7 @@ jobs:
           echo "${COVERITY_INSTALL_DIR}/bin" >> "$GITHUB_PATH"
 
       - name: Verify Coverity tools
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         run: |
           set -euxo pipefail
@@ -230,6 +272,7 @@ jobs:
           cov-configure --list-compiler-types
 
       - name: Generate Coverity compiler config XML
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         run: |
           set -euxo pipefail
@@ -238,6 +281,7 @@ jobs:
           test -f "${COVERITY_INSTALL_DIR}/config/coverity_config.xml"
 
       - name: Clean and configure project
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         run: |
           set -euxo pipefail
@@ -248,12 +292,13 @@ jobs:
           cmake .. -G Ninja \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DCUTLASS_SYCL_PROFILING_ENABLED=OFF \
-            -DDPCPP_SYCL_TARGET=${{ inputs.sycl_target }} \
+            -DDPCPP_SYCL_TARGET=${{ github.event.inputs.sycl_target || 'intel_gpu_bmg_g21' }} \
             -DCUTLASS_ENABLE_BENCHMARKS=ON \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=icpx
 
       - name: Capture build with Coverity
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         run: |
           set -euxo pipefail
@@ -278,6 +323,7 @@ jobs:
           done
 
       - name: Analyze captured build
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         run: |
           set -euxo pipefail
@@ -293,6 +339,7 @@ jobs:
             --strip-path "$GITHUB_WORKSPACE"
 
       - name: Format Coverity HTML report
+        if: env.COVERITY_SKIP != '1'
         shell: bash
         run: |
           set -euxo pipefail
@@ -303,13 +350,14 @@ jobs:
             --html-output "${COVERITY_REPORT_DIR}"
 
       - name: Upload Coverity report artifact
+        if: env.COVERITY_SKIP != '1'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.COVERITY_REPORT_DIR }}
           path: build/${{ env.COVERITY_REPORT_DIR }}/
 
       - name: Upload Coverity intermediate directory
-        if: always()
+        if: always() && env.COVERITY_SKIP != '1'
         uses: actions/upload-artifact@v4
         with:
           name: coverity-cov-build-dir
