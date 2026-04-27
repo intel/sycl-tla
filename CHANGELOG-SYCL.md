@@ -2,16 +2,16 @@
 
 ## [SYCL*TLA 0.9](https://github.com/intel/sycl-tla/releases/tag/v0.9) (2026-04-30)
 ### Enhancements
-- **Support FP8 upconversion case for SLM copy in CuTe copy engine ([#772](https://github.com/intel/sycl-tla/pull/772))**
-- **Add vectorized SLM copy test cases for CuTe ([#766](https://github.com/intel/sycl-tla/pull/766))**
-- **Support AOT (Ahead-Of-Time) compilation instead of JIT compilation ([#763](https://github.com/intel/sycl-tla/pull/763))**
+- **Support FP8 upconversion for SLM Copy in CuTe Copy Engine ([#772](https://github.com/intel/sycl-tla/pull/772))**
+- **Support AOT (Ahead-Of-Time) compilation instead of JIT ([#763](https://github.com/intel/sycl-tla/pull/763))**
+- **Add vectorized CuTe SLM Copy test cases ([#766](https://github.com/intel/sycl-tla/pull/766))**
 - **Add more benchmark cases ([#773](https://github.com/intel/sycl-tla/pull/773))**
 
 ### Bug Fixes
-- **Fix Flash Attention decode memory bandwidth computation in example ([#778](https://github.com/intel/sycl-tla/pull/778))**
-- **Fix for python gemm generation ([#768](https://github.com/intel/sycl-tla/pull/768))**
-- **Fix for python EVT BMG tests ([#762](https://github.com/intel/sycl-tla/pull/762))**
-- **Fix for multitarget bug with AOT ([#765](https://github.com/intel/sycl-tla/pull/765))**
+- **Fix example06 memory bandwidth computation ([#778](https://github.com/intel/sycl-tla/pull/778))**
+- **Fix Python GEMM Generation ([#768](https://github.com/intel/sycl-tla/pull/768))**
+- **Fix Python EVT test cases ([#762](https://github.com/intel/sycl-tla/pull/762))**
+- **Fix AOT multitarget support bugs ([#765](https://github.com/intel/sycl-tla/pull/765))**
 
 ## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-25)
 ### Major Architecture Changes
