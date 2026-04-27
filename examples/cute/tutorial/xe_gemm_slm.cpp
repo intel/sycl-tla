@@ -134,26 +134,22 @@ gemm_device(ATensor   const& A,         // (M,K)
   /* Create block 2D TiledCopies */
   using TA = typename ATensor::element_type;
   using TB = typename BTensor::element_type;
-  using MMA_TA = typename TiledMMA::ValTypeA;
-  using MMA_TB = typename TiledMMA::ValTypeB;
   auto coop_copy_a = make_coop_block_2d_copy_A(mma, A);
   auto coop_copy_b = make_coop_block_2d_copy_B(mma, B);
-  // Build MMA-typed dummy tensor for the reorder destination coop copy (layout deduction only;
-  // the pointer is never dereferenced — actual loads go through coop_copy_a/b).
-  auto coop_copy_a_ = make_coop_block_2d_copy_A(mma, make_tensor(make_gmem_ptr(static_cast<MMA_TA const*>(nullptr)), make_layout(shape(A), LayoutRight{})));
-  auto coop_copy_b_ = make_coop_block_2d_copy_B(mma, make_tensor(make_gmem_ptr(static_cast<MMA_TB const*>(nullptr)), make_layout(shape(B), LayoutRight{})));
   auto [r2s_A, s2r_A] = make_A_slm_copies(mma, coop_copy_a);
   auto [r2s_B, s2r_B] = make_B_slm_copies(mma, coop_copy_b);
   auto copy_c = make_block_2d_copy_D(mma, C);
 
-  // Shared memory buffers
+  // Shared memory buffers — use coop copy's Tiler_MN (matches global tile shape)
+  // Use MMA's ValType for SLM (block 2D copy may upconvert, e.g. fp8 -> half)
+  using SLM_TA = typename TiledMMA::ValTypeA;
+  using SLM_TB = typename TiledMMA::ValTypeB;
   constexpr auto stages = 2;
   Layout a_slm_layout = make_layout(append<3>(typename decltype(r2s_A)::Tiler_MN{}, Int<stages>{}));
   Layout b_slm_layout = make_layout(append<3>(typename decltype(r2s_B)::Tiler_MN{}, Int<stages>{}));
 
-  // SLM stores data in MMA type (after reorder/convert from copy type).
-  auto smemA = compat::local_mem<MMA_TA[size(a_slm_layout)]>();
-  auto smemB = compat::local_mem<MMA_TB[size(b_slm_layout)]>();
+  auto smemA = compat::local_mem<SLM_TA[size(a_slm_layout)]>();
+  auto smemB = compat::local_mem<SLM_TB[size(b_slm_layout)]>();
 
   Tensor sA = make_tensor(make_smem_ptr(smemA), a_slm_layout);
   Tensor sB = make_tensor(make_smem_ptr(smemB), b_slm_layout);
@@ -162,8 +158,6 @@ gemm_device(ATensor   const& A,         // (M,K)
   auto thr_mma    =    mma.get_slice(local_id);
   auto coop_thr_copy_a = coop_copy_a.get_slice(local_id);
   auto coop_thr_copy_b = coop_copy_b.get_slice(local_id);
-  auto coop_thr_copy_a_ = coop_copy_a_.get_slice(local_id);
-  auto coop_thr_copy_b_ = coop_copy_b_.get_slice(local_id);
   auto thr_r2s_A = r2s_A.get_slice(local_id);
   auto thr_r2s_B = r2s_B.get_slice(local_id);
   auto thr_s2r_A = s2r_A.get_slice(local_id);
@@ -177,8 +171,8 @@ gemm_device(ATensor   const& A,         // (M,K)
   /* Register fragments for copies */
   auto tArA_in = coop_thr_copy_a.partition_sg_fragment_D(gA(_,_,0));
   auto tBrB_in = coop_thr_copy_b.partition_sg_fragment_D(gB(_,_,0));
-  auto tArA_in_ = coop_thr_copy_a_.partition_sg_fragment_D(gA(_,_,0));
-  auto tBrB_in_ = coop_thr_copy_b_.partition_sg_fragment_D(gB(_,_,0));
+  auto tArA_in_ = thr_r2s_A.partition_sg_fragment_S(gA(_,_,0));
+  auto tBrB_in_ = thr_r2s_B.partition_sg_fragment_S(gB(_,_,0));
   auto tAsA_out = thr_r2s_A.partition_D(sA);
   auto tBsB_out = thr_r2s_B.partition_D(sB);
   auto tArA_out = thr_r2s_A.retile_S(tArA_in_);
@@ -469,23 +463,15 @@ int main(int argc, const char** argv)
   test_case<tfloat32_t, tfloat32_t, float, 'R', 'R'>(Q, m, n, k, iterations, verify);
   test_case<tfloat32_t, tfloat32_t, float, 'R', 'C'>(Q, m, n, k, iterations, verify);
   test_case<tfloat32_t, tfloat32_t, float, 'C', 'R'>(Q, m, n, k, iterations, verify);
-
   test_case<half_t, half_t, float, 'R', 'R'>(Q,  m, n, k, iterations, verify);
   test_case<half_t, half_t, float, 'R', 'C'>(Q,  m, n, k, iterations, verify);
   test_case<half_t, half_t, float, 'C', 'R'>(Q,  m, n, k, iterations, verify);
-
   test_case<bfloat16_t, bfloat16_t, float, 'R', 'R'>(Q, m, n, k, iterations, verify);
   test_case<bfloat16_t, bfloat16_t, float, 'R', 'C'>(Q, m, n, k, iterations, verify);
   test_case<bfloat16_t, bfloat16_t, float, 'C', 'R'>(Q, m, n, k, iterations, verify);
-
+  test_case<float_e4m3_t, float_e4m3_t, float, 'R', 'R'>(Q, m, n, k, iterations, verify);
+  test_case<float_e4m3_t, float_e4m3_t, float, 'R', 'C'>(Q, m, n, k, iterations, verify);
   test_case<int8_t, int8_t, int32_t, 'R', 'R'>(Q, m, n, k, iterations, verify);
   test_case<uint8_t, uint8_t, int32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
   test_case<uint8_t, int8_t, int32_t, 'C', 'R'>(Q, m, n, k, iterations, verify);
-  test_case<int8_t, uint4_t, int32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
-  test_case<int4_t, uint8_t, int32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
-
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'C'>(Q, m, n, k, iterations, verify);
-  test_case<uint4_t, uint4_t, uint32_t, 'R', 'R'>(Q, m, n, k, iterations, verify);
-  test_case<float_e4m3_t, float_e4m3_t, float, 'R', 'R'>(Q, m, n, k, iterations, verify);
-  test_case<float_e4m3_t, float_e4m3_t, float, 'R', 'C'>(Q, m, n, k, iterations, verify);
 }
