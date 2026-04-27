@@ -1,5 +1,20 @@
 # SYCL*TLA (previously referred to as cutlass-sycl) Changelog
 
+## [SYCL*TLA 0.9](https://github.com/intel/sycl-tla/releases/tag/v0.9) (2026-05-28)
+### Enhancements
+- **Support FP8 upconversion case for SLM copy in CuTe copy engine ([#772](https://github.com/intel/sycl-tla/pull/772))**
+- **Use AOT (Ahead-Of-Time) compilation instead of JIT compilation ([#763](https://github.com/intel/sycl-tla/pull/763))**
+- **Configs generated using model traces ([#773](https://github.com/intel/sycl-tla/pull/773))**
+
+### Bug Fixes
+- **Fixed FA decode memory bandwidth computation in 06_bmg_flash_attention example ([#778](https://github.com/intel/sycl-tla/pull/778))**
+- **Fix for python gemm generation ([#768](https://github.com/intel/sycl-tla/pull/768))**
+- **Fix for python EVT BMG tests ([#762](https://github.com/intel/sycl-tla/pull/762))**
+- **Fix for multitarget bug with AOT ([#765](https://github.com/intel/sycl-tla/pull/765))**
+
+### Test Improvements
+- **Add vectorized SLM copy test cases for CuTe ([#766](https://github.com/intel/sycl-tla/pull/766))**
+
 ## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-25)
 ### Major Architecture Changes
 - **Support BMG G31 Platform ([#755](https://github.com/intel/sycl-tla/pull/755))**
