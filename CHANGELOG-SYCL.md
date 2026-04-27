@@ -1,6 +1,6 @@
 # SYCL*TLA (previously referred to as cutlass-sycl) Changelog
 
-## [SYCL*TLA 0.9](https://github.com/intel/sycl-tla/releases/tag/v0.9) (2026-05-28)
+## [SYCL*TLA 0.9](https://github.com/intel/sycl-tla/releases/tag/v0.9) (2026-04-30)
 ### Enhancements
 - **Support FP8 upconversion case for SLM copy in CuTe copy engine ([#772](https://github.com/intel/sycl-tla/pull/772))**
 - **Add vectorized SLM copy test cases for CuTe ([#766](https://github.com/intel/sycl-tla/pull/766))**
