@@ -93,6 +93,38 @@ using BmgTile_1 = TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, T
 using BmgGemmBF16BF16FP32_RCR_6 = Gemm_Bench_BF16FP32_RCR<Shape<_256, _256, _32>, BmgTile_1, void, void>;
 CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_6);
 
+using MMAAtomF16 = MMA_Atom<XE_8x16x16_F32F16F16F32_TT>;
+
+template <
+  typename TileShape,
+  typename Tiler,
+  typename GmemTiledCopyA,
+  typename GmemTiledCopyB>
+using Gemm_Bench_F16FP32_RCR = cutlass::gemm::device::GemmConfiguration<
+    cutlass::arch::IntelXe,
+    cutlass::half_t, cutlass::layout::RowMajor,
+    cutlass::half_t, cutlass::layout::ColumnMajor,
+    float, cutlass::layout::RowMajor,
+    float,
+    TileShape, Scheduler::Gemm, Tiler,
+    GmemTiledCopyA, GmemTiledCopyB>;
+
+using BmgF16Tile_6 = TiledMMAHelper<MMAAtomF16, Layout<BmgGemm_BF16FP32_TileShape_8_128_32>, Layout<Shape<_1, _4, _1>, Stride<_0, _1, _0>>>::TiledMMA;
+using BmgGemmFP16FP16FP32_RCR_5 = Gemm_Bench_F16FP32_RCR<BmgGemm_BF16FP32_TileShape_8_128_32, BmgF16Tile_6, void, void>;
+CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmFP16FP16FP32_RCR_5);
+
+using BmgF16Tile_7 = TiledMMAHelper<MMAAtomF16, Layout<BmgGemm_BF16FP32_TileShape_8_128_32>, Layout<Shape<_1, _8, _1>, Stride<_8, _1, _0>>>::TiledMMA;
+using BmgGemmFP16FP16FP32_RCR_7 = Gemm_Bench_F16FP32_RCR<BmgGemm_BF16FP32_TileShape_8_128_32, BmgF16Tile_7, void, void>;
+CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmFP16FP16FP32_RCR_7);
+
+using BmgF16Tile_8 = TiledMMAHelper<MMAAtomF16, Layout<BmgGemm_BF16FP32_TileShape_8_64_32>, Layout<Shape<_1, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+using BmgGemmFP16FP16FP32_RCR_9 = Gemm_Bench_F16FP32_RCR<BmgGemm_BF16FP32_TileShape_8_64_32, BmgF16Tile_8, void, void>;
+CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmFP16FP16FP32_RCR_9);
+
+using BmgF16Tile_9 = TiledMMAHelper<MMAAtomF16, Layout<BmgGemm_BF16FP32_TileShape_16_64_32>, Layout<Shape<_2, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+using BmgGemmFP16FP16FP32_RCR_16 = Gemm_Bench_F16FP32_RCR<BmgGemm_BF16FP32_TileShape_16_64_32, BmgF16Tile_9, void, void>;
+CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmFP16FP16FP32_RCR_16);
+
 static void register_gemm_benchmarks() {
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_5);
@@ -100,4 +132,8 @@ static void register_gemm_benchmarks() {
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_7);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_9);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_16);
+  CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_5);
+  CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_7);
+  CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_9);
+  CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_16);
 }
