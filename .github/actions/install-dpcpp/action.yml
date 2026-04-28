@@ -119,7 +119,7 @@ runs:
         echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
           sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo apt update
-        sudo apt install -y intel-oneapi-runtime-libs=2025.3.0-177 intel-oneapi-compiler-dpcpp-cpp=2025.3.3-30
+        sudo apt install -y intel-oneapi-runtime-libs=2025.3.0-177 intel-oneapi-compiler-dpcpp-cpp=2025.3.3-30 --allow-downgrades
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh

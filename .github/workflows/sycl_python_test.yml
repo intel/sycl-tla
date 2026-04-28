@@ -52,7 +52,6 @@ jobs:
           . setvars.sh
           # Persist environment variables to following steps
           env >> $GITHUB_ENV
-          sycl-ls
 
       - name: Install DPCTL
         id: install_dpctl
