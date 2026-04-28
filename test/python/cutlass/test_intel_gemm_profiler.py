@@ -52,11 +52,11 @@ class TestIntelGemmProfiler(unittest.TestCase):
                 "m": 1,
                 "n": 4096,
                 "k": 14336,
-                "kernel_name": "PvcGemmBF16BF16FP32_RCR_5",
+                "kernel_name": "BmgGemmBF16BF16FP32_RCR_5",
             }
         }
         line = (
-            "PvcGemmBF16BF16FP32_RCR_5/"
+            "BmgGemmBF16BF16FP32_RCR_5/"
             "rcr_bf16bf16f32_tm8_tn128_tk32_sg1x4_st2_sk1__rcr_bf16_1_4096_14336__screening__0/"
             "1x4096x14336x1/manual_time avg_runtime_ms=0.412 best_runtime_ms=0.398 "
             "worst_runtime_ms=0.437 avg_tflops=1.13 avg_throughput=287.4\n"

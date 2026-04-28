@@ -23,7 +23,7 @@ SCHEMA_VERSION = "1.0"
 SEED_KERNELS = {
     "bf16": [
         {
-            "kernel_name": "PvcGemmBF16BF16FP32_RCR_5",
+            "kernel_name": "BmgGemmBF16BF16FP32_RCR_5",
             "layout": "rcr",
             "dtype_a": "bf16",
             "dtype_b": "bf16",
@@ -38,7 +38,7 @@ SEED_KERNELS = {
             "split_k": 1,
         },
         {
-            "kernel_name": "PvcGemmBF16BF16FP32_RCR_7",
+            "kernel_name": "BmgGemmBF16BF16FP32_RCR_7",
             "layout": "rcr",
             "dtype_a": "bf16",
             "dtype_b": "bf16",
@@ -53,7 +53,7 @@ SEED_KERNELS = {
             "split_k": 1,
         },
         {
-            "kernel_name": "PvcGemmBF16BF16FP32_RCR_9",
+            "kernel_name": "BmgGemmBF16BF16FP32_RCR_9",
             "layout": "rcr",
             "dtype_a": "bf16",
             "dtype_b": "bf16",
@@ -68,7 +68,7 @@ SEED_KERNELS = {
             "split_k": 1,
         },
         {
-            "kernel_name": "PvcGemmBF16BF16FP32_RCR_16",
+            "kernel_name": "BmgGemmBF16BF16FP32_RCR_16",
             "layout": "rcr",
             "dtype_a": "bf16",
             "dtype_b": "bf16",
@@ -83,7 +83,7 @@ SEED_KERNELS = {
             "split_k": 1,
         },
         {
-            "kernel_name": "PvcGemmBF16BF16FP32_RCR_6",
+            "kernel_name": "BmgGemmBF16BF16FP32_RCR_6",
             "layout": "rcr",
             "dtype_a": "bf16",
             "dtype_b": "bf16",
@@ -93,68 +93,6 @@ SEED_KERNELS = {
             "tile_n": 256,
             "tile_k": 32,
             "sg_m": 8,
-            "sg_n": 4,
-            "stages": 2,
-            "split_k": 1,
-        },
-    ],
-    "f16": [
-        {
-            "kernel_name": "PvcGemmFP16FP16FP32_RCR_5",
-            "layout": "rcr",
-            "dtype_a": "f16",
-            "dtype_b": "f16",
-            "dtype_c": "f32",
-            "dtype_acc": "f32",
-            "tile_m": 8,
-            "tile_n": 128,
-            "tile_k": 32,
-            "sg_m": 1,
-            "sg_n": 4,
-            "stages": 2,
-            "split_k": 1,
-        },
-        {
-            "kernel_name": "PvcGemmFP16FP16FP32_RCR_7",
-            "layout": "rcr",
-            "dtype_a": "f16",
-            "dtype_b": "f16",
-            "dtype_c": "f32",
-            "dtype_acc": "f32",
-            "tile_m": 8,
-            "tile_n": 128,
-            "tile_k": 32,
-            "sg_m": 1,
-            "sg_n": 8,
-            "stages": 2,
-            "split_k": 1,
-        },
-        {
-            "kernel_name": "PvcGemmFP16FP16FP32_RCR_9",
-            "layout": "rcr",
-            "dtype_a": "f16",
-            "dtype_b": "f16",
-            "dtype_c": "f32",
-            "dtype_acc": "f32",
-            "tile_m": 8,
-            "tile_n": 64,
-            "tile_k": 32,
-            "sg_m": 1,
-            "sg_n": 4,
-            "stages": 2,
-            "split_k": 1,
-        },
-        {
-            "kernel_name": "PvcGemmFP16FP16FP32_RCR_16",
-            "layout": "rcr",
-            "dtype_a": "f16",
-            "dtype_b": "f16",
-            "dtype_c": "f32",
-            "dtype_acc": "f32",
-            "tile_m": 16,
-            "tile_n": 64,
-            "tile_k": 32,
-            "sg_m": 2,
             "sg_n": 4,
             "stages": 2,
             "split_k": 1,
@@ -790,11 +728,11 @@ def workflow(args):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Intel GEMM profiler MVP runner for legacy registered RCR kernels.")
+    parser = argparse.ArgumentParser(description="Intel GEMM profiler MVP runner for non-legacy registered RCR kernels.")
     parser.add_argument("--workspace", required=True, help="Workspace directory for generated files and reports.")
     parser.add_argument(
         "--benchmark-exe",
-        default="./build/benchmarks/gemm/legacy/cutlass_benchmarks_gemm_sycl_legacy",
+        default="./build/benchmarks/gemm/cutlass_benchmarks_gemm_sycl",
         help="Benchmark executable to run.",
     )
     parser.add_argument("--cwd", default=None, help="Working directory for the benchmark subprocess.")
