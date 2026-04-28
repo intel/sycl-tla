@@ -82,6 +82,7 @@
 #include "helper.h"
 
 #include "cutlass/gemm/kernel/xe_persistent_tile_scheduler_params_streamk.hpp"
+#include <string>
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -93,6 +94,7 @@ struct Options {
   bool error;
   bool splitk;
   bool dp;
+  std::string dtype;
 
   int m, n, k, l, iterations, splits, verify;
   float alpha, beta;
@@ -102,6 +104,7 @@ struct Options {
     error(false),
     splitk(false),
     dp(false),
+    dtype("bf16"),
     m(5120), n(4096), k(4096), l(1), iterations(20), verify(1), splits(1),
     alpha(1.f), beta(0.f)
   { }
@@ -132,6 +135,11 @@ struct Options {
     cmd.get_cmd_line_argument("iterations", iterations, 100);
     cmd.get_cmd_line_argument("splits", splits, 1);
     cmd.get_cmd_line_argument("verify", verify, 1);
+    cmd.get_cmd_line_argument("dtype", dtype, std::string("bf16"));
+
+    if (dtype != "bf16" && dtype != "f16") {
+      error = true;
+    }
   }
 
   /// Prints the usage statement.
@@ -149,6 +157,7 @@ struct Options {
       << "  --splits=<int>              Sets the splitting factor for GEMM\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
+      << "  --dtype=<bf16|f16>          Input dtype preset\n"
       << "  --iterations=<int>          Iterations\n"
       << "  --verify=<int>              Specify whether to verify.\n\n";
 
@@ -328,6 +337,73 @@ struct ExampleRunner {
 
 };
 
+template <class ElementInput>
+int run_gemm(Options const& options, cutlass::KernelHardwareInfo const& hw_info) {
+  using ElementAccumulator = float;
+  using ElementComputeEpilogue = float;
+  using ElementInputA = ElementInput;
+  using ElementInputB = ElementInput;
+  using ElementOutput = float;
+
+  using LayoutA = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::RowMajor;
+  using LayoutC = cutlass::layout::RowMajor;
+  using LayoutD = cutlass::layout::RowMajor;
+
+  using GmemTiledCopyA = void;
+  using GmemTiledCopyB = void;
+
+  using TileShape = Shape<_256, _256, _32>;
+  using TiledMma =
+      typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, ElementInput>>, Layout<TileShape>,
+                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+
+  constexpr int PipelineStages = 2;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages, cutlass::gemm::KernelXeCooperative>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
+
+  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
+          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
+
+  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
+          decltype(tile_shape(TiledMma()))>;
+  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
+          EpilogueDispatchPolicy,
+          TileShape,
+          void,
+          ElementAccumulator,
+          cutlass::gemm::TagToStrideC_t<LayoutC>,
+          ElementOutput,
+          cutlass::gemm::TagToStrideC_t<LayoutD>,
+          FusionCallBacks,
+          void,
+          void>;
+
+  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
+          GEMMDispatchPolicy,
+          TileShape,
+          ElementInputA,
+          cutlass::gemm::TagToStrideA_t<LayoutA>,
+          ElementInputB,
+          cutlass::gemm::TagToStrideB_t<LayoutB>,
+          TiledMma,
+          GmemTiledCopyA, void, void, cute::identity,
+          GmemTiledCopyB, void, void, cute::identity
+  >;
+
+  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
+    Shape<int, int, int, int>,
+    CollectiveMainloop,
+    CollectiveEpilogue,
+    cutlass::gemm::StreamKScheduler
+    >;
+
+  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
+  ExampleRunner<Gemm> runner;
+  CUTLASS_CHECK(runner.run(options, hw_info));
+  return 0;
+}
+
 int main(int argc, const char** argv)
 {
   //
@@ -344,7 +420,7 @@ int main(int argc, const char** argv)
   }
 
   if (options.error) {
-    std::cerr << "Aborting execution." << std::endl;
+    std::cerr << "Aborting execution. Supported --dtype values: bf16, f16." << std::endl;
     return -1;
   }
 
@@ -360,75 +436,8 @@ int main(int argc, const char** argv)
   // to use a GPU other than that with device ID 0.
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
-  // The code section below describes datatype for input, output matrices and computation between
-  // elements in input matrices.
-  using ElementAccumulator = float;     // <- data type of accumulator
-  using ElementComputeEpilogue = float; // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;     // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;     // <- data type of elements in input matrix B
-  using ElementOutput = float;          // <- data type of elements in output matrix D
-
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-  using LayoutC = cutlass::layout::RowMajor;
-  using LayoutD = cutlass::layout::RowMajor;
-
-  using GmemTiledCopyA = void; // XE_2D_U16x32x32_LD_N: tiled copy for matrix A
-  using GmemTiledCopyB = void; // XE_2D_U16x32x32_LD_V: tiled copy for matrix B
-
-  // Workgroup-level tile
-  using TileShape = Shape<_256, _256, _32>;
-
-  using TiledMma =
-      typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, Layout<TileShape>,
-                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
-
-  constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages, cutlass::gemm::KernelXeCooperative>;
-  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
-
-  using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
-          ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
-
-  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
-          decltype(tile_shape(TiledMma()))>;
-  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
-          EpilogueDispatchPolicy,
-          TileShape,
-          void,   // Epilogue tile (void = automatic)
-          ElementAccumulator,
-          cutlass::gemm::TagToStrideC_t<LayoutC>,
-          ElementOutput,
-          cutlass::gemm::TagToStrideC_t<LayoutD>,
-          FusionCallBacks,
-          void,   // The copy atom used to load matrix C  (void = automatic)
-          void>;  // The copy atom used to store matrix D (void = automatic)
-
-// Mainloop
-  using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
-          GEMMDispatchPolicy,
-          TileShape,
-          ElementInputA,
-          cutlass::gemm::TagToStrideA_t<LayoutA>,
-          ElementInputB,
-          cutlass::gemm::TagToStrideB_t<LayoutB>,
-          TiledMma,
-          GmemTiledCopyA, void, void, cute::identity,  // A
-          GmemTiledCopyB, void, void, cute::identity   // B
-  >;
-
-  using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
-  Shape<int, int, int, int>,
-  CollectiveMainloop,
-  CollectiveEpilogue,
-  cutlass::gemm::StreamKScheduler
-  >;
-
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
-
-  ExampleRunner<Gemm> runner;
-
-  CUTLASS_CHECK(runner.run(options, hw_info));
-
-  return 0;
+  if (options.dtype == "f16") {
+    return run_gemm<half_t>(options, hw_info);
+  }
+  return run_gemm<bfloat16_t>(options, hw_info);
 }

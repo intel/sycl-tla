@@ -4,14 +4,19 @@
 #################################################################################################
 
 import argparse
+import copy
 import csv
 import json
 import math
 import os
+import platform
 import re
 import shlex
+import shutil
+import socket
 import statistics
 import subprocess
+import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -97,6 +102,22 @@ SEED_KERNELS = {
             "stages": 2,
             "split_k": 1,
         },
+        {
+            "kernel_name": "03_bmg_gemm_streamk_splitk_bf16",
+            "layout": "rcr",
+            "dtype_a": "bf16",
+            "dtype_b": "bf16",
+            "dtype_c": "f32",
+            "dtype_acc": "f32",
+            "tile_m": 8,
+            "tile_n": 64,
+            "tile_k": 32,
+            "sg_m": 1,
+            "sg_n": 4,
+            "stages": 2,
+            "split_k": 2,
+            "runner": "streamk_example",
+        },
     ],
     "f16": [
         {
@@ -159,6 +180,22 @@ SEED_KERNELS = {
             "stages": 2,
             "split_k": 1,
         },
+        {
+            "kernel_name": "03_bmg_gemm_streamk_splitk_f16",
+            "layout": "rcr",
+            "dtype_a": "f16",
+            "dtype_b": "f16",
+            "dtype_c": "f32",
+            "dtype_acc": "f32",
+            "tile_m": 8,
+            "tile_n": 64,
+            "tile_k": 32,
+            "sg_m": 1,
+            "sg_n": 4,
+            "stages": 2,
+            "split_k": 2,
+            "runner": "streamk_example",
+        },
     ],
 }
 
@@ -180,6 +217,7 @@ CSV_FIELDS = [
     "m",
     "n",
     "k",
+    "split_k",
     "avg_runtime_ms",
     "best_runtime_ms",
     "worst_runtime_ms",
@@ -221,7 +259,7 @@ def default_constraints():
         "limits": {
             "max_slm_kb": 128,
             "subgroup_size": 16,
-            "max_split_k": 1,
+            "max_split_k": 2,
             "max_stages": 3,
         },
         "allowed_values": {
@@ -231,10 +269,63 @@ def default_constraints():
             "sg_m": [1, 2, 4, 8],
             "sg_n": [4, 8],
             "stages": [1, 2, 3],
-            "split_k": [1],
+            "split_k": [1, 2],
         },
         "blocked_rules": [],
     }
+
+
+def resolve_executable(path, cwd=None):
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return candidate if candidate.exists() else None
+    if cwd:
+        joined = Path(cwd) / candidate
+        if joined.exists():
+            return joined.resolve()
+    found = shutil.which(path)
+    return Path(found) if found else None
+
+
+def collect_environment_metadata(shell_init, benchmark_exe, streamk_example_exe, cwd=None):
+    tracked_env = {}
+    for name in (
+        "ONEAPI_DEVICE_SELECTOR",
+        "SYCL_PROGRAM_COMPILE_OPTIONS",
+        "IGC_ExtraOCLOptions",
+        "IGC_VectorAliasBBThreshold",
+        "IGC_VISAOptions",
+    ):
+        value = os.environ.get(name)
+        if value:
+            tracked_env[name] = value
+    benchmark_path = resolve_executable(benchmark_exe, cwd=cwd)
+    streamk_path = resolve_executable(streamk_example_exe, cwd=cwd)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "hostname": socket.gethostname(),
+        "node_id": socket.gethostname(),
+        "platform": platform.platform(),
+        "python_version": sys.version.split()[0],
+        "proxy_bootstrap_method": shell_init or "inherited-environment",
+        "executables": {
+            "benchmark_exe": str(benchmark_path) if benchmark_path else benchmark_exe,
+            "benchmark_available": bool(benchmark_path),
+            "streamk_example_exe": str(streamk_path) if streamk_path else streamk_example_exe,
+            "streamk_example_available": bool(streamk_path),
+        },
+        "effective_env": tracked_env,
+    }
+
+
+def apply_static_probe_constraints(base_constraints, env_caps):
+    constraints = copy.deepcopy(base_constraints)
+    constraints["constraint_source"] = "phase_a_static_probe"
+    if not env_caps["executables"]["streamk_example_available"]:
+        constraints["limits"]["max_split_k"] = 1
+        constraints["allowed_values"]["split_k"] = [1]
+    return constraints
 
 
 def default_compiler_profiles():
@@ -367,12 +458,14 @@ def blocked(seed, constraints):
     return False
 
 
-def generate_candidate_space(shapes_doc, constraints, profiles):
+def generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=("benchmark",)):
     seen = set()
     candidates = []
     dtypes = sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]})
     for dtype in dtypes:
         for seed in SEED_KERNELS.get(dtype, []):
+            if seed.get("runner", "benchmark") not in allowed_runners:
+                continue
             if blocked(seed, constraints):
                 continue
             ident = candidate_id_for(seed)
@@ -397,6 +490,7 @@ def generate_candidate_space(shapes_doc, constraints, profiles):
                     "sg_n": seed["sg_n"],
                     "stages": seed["stages"],
                     "split_k": seed["split_k"],
+                    "runner": seed.get("runner", "benchmark"),
                     "candidate_class": klass,
                     "compiler_profile_id": select_compiler_profile_id(profiles, seed["tile_m"], sg_count),
                     "filters_applied": ["seed_kernel", constraints["constraint_source"]],
@@ -418,6 +512,8 @@ def choose_candidates_for_shape(shape, candidates):
             continue
         if candidate["dtype_a"] != shape["dtype_a"] or candidate["dtype_b"] != shape["dtype_b"]:
             continue
+        if candidate["split_k"] > 1 and shape["n"] < 16384 and shape["k"] < 8192:
+            continue
         if shape["m"] <= 8 and candidate["tile_m"] <= 16:
             matched.append(candidate)
         elif 16 < shape["m"] <= 128 and candidate["tile_m"] <= 64:
@@ -429,6 +525,73 @@ def choose_candidates_for_shape(shape, candidates):
         for candidate in candidates
         if candidate["layout"] == shape["layout"] and candidate["dtype_a"] == shape["dtype_a"]
     ]
+
+
+def build_phase_a_probe_entries(shapes_doc, candidate_space):
+    shape_map = {shape["shape_id"]: shape for shape in shapes_doc["shapes"]}
+    candidates = candidate_space["candidates"]
+    non_splitk = [candidate for candidate in candidates if candidate["split_k"] == 1]
+    splitk = [candidate for candidate in candidates if candidate["split_k"] > 1]
+    selected = []
+    if non_splitk:
+        selected.append(("small", min(non_splitk, key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"])), "rcr_" + non_splitk[0]["dtype_a"] + "_8_4096_4096"))
+        medium = [candidate for candidate in non_splitk if 16 <= candidate["tile_m"] <= 64]
+        if medium:
+            selected.append(("medium", min(medium, key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"])), "rcr_" + medium[0]["dtype_a"] + "_64_4096_4096"))
+        selected.append(("large", max(non_splitk, key=lambda item: (item["tile_m"], item["tile_n"])), "rcr_" + non_splitk[0]["dtype_a"] + "_256_4096_8192"))
+    if splitk:
+        selected.append(("splitk", splitk[0], "rcr_" + splitk[0]["dtype_a"] + "_1_4096_14336"))
+
+    entries = []
+    seen = set()
+    for probe_class, candidate, shape_id in selected:
+        if shape_id not in shape_map:
+            continue
+        key = (candidate["candidate_id"], shape_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        entries.append(
+            {
+                "bm_name": f"{candidate['candidate_id']}__{shape_id}__probe__0",
+                "stage": "probe",
+                "attempt_index": 0,
+                "probe_class": probe_class,
+                "shape": shape_map[shape_id],
+                "candidate": candidate,
+            }
+        )
+    return entries
+
+
+def blocked_rule_for_row(row):
+    return {
+        "rule_id": f"probe.blocked.{row['candidate_id']}",
+        "match": {
+            "tile_m": int(re.search(r"_tm(\d+)_", row["candidate_id"]).group(1)),
+            "tile_n": int(re.search(r"_tn(\d+)_", row["candidate_id"]).group(1)),
+            "tile_k": int(re.search(r"_tk(\d+)_", row["candidate_id"]).group(1)),
+            "sg_m": int(re.search(r"_sg(\d+)x", row["candidate_id"]).group(1)),
+            "sg_n": int(re.search(r"x(\d+)_st", row["candidate_id"]).group(1)),
+            "split_k": int(row["split_k"]),
+        },
+    }
+
+
+def apply_run_probe_constraints(static_constraints, probe_rows):
+    constraints = copy.deepcopy(static_constraints)
+    constraints["constraint_source"] = "phase_a_run_probe"
+    if not any(row["status"] == "pass" and int(row["split_k"]) > 1 for row in probe_rows):
+        constraints["limits"]["max_split_k"] = 1
+        constraints["allowed_values"]["split_k"] = [1]
+    failures = [row for row in probe_rows if row["status"] != "pass"]
+    existing_ids = {rule.get("rule_id") for rule in constraints.get("blocked_rules", [])}
+    for row in failures:
+        rule = blocked_rule_for_row(row)
+        if rule["rule_id"] not in existing_ids:
+            constraints["blocked_rules"].append(rule)
+            existing_ids.add(rule["rule_id"])
+    return constraints
 
 
 def build_screening_entries(shapes_doc, candidate_space):
@@ -503,6 +666,8 @@ def write_config(entries, config_path):
                 "n": shape["n"],
                 "k": shape["k"],
                 "kernel_name": candidate["kernel_name"],
+                "split_k": candidate["split_k"],
+                "runner": candidate.get("runner", "benchmark"),
             }
     return metadata
 
@@ -541,6 +706,50 @@ def parse_metric(line, key):
     return match.group(1) if match else ""
 
 
+def parse_streamk_example_log(log_path, metadata_by_bm_name, run_id):
+    rows = []
+    bm_name = next(iter(metadata_by_bm_name))
+    metadata = metadata_by_bm_name[bm_name]
+    text = Path(log_path).read_text(encoding="utf-8")
+    status = "pass" if "Disposition: Passed" in text else "fail"
+    verify_status = status
+    failure_reason = "" if status == "pass" else text.strip().splitlines()[-1] if text.strip() else "missing output"
+    perf_match = re.search(r"Cutlass GEMM Performance:\s+\[([0-9.]+)\]TFlop/s\s+\(([0-9.]+)\)ms", text)
+    avg_tflops = perf_match.group(1) if perf_match else ""
+    avg_runtime_ms = perf_match.group(2) if perf_match else ""
+    rows.append(
+        {
+            "run_id": run_id,
+            "stage": metadata["stage"],
+            "attempt_index": metadata["attempt_index"],
+            "shape_id": metadata["shape_id"],
+            "candidate_id": metadata["candidate_id"],
+            "compiler_profile_id": metadata["compiler_profile_id"],
+            "status": status,
+            "verify_status": verify_status,
+            "layout": metadata["layout"],
+            "dtype_a": metadata["dtype_a"],
+            "dtype_b": metadata["dtype_b"],
+            "dtype_c": metadata["dtype_c"],
+            "dtype_acc": metadata["dtype_acc"],
+            "m": metadata["m"],
+            "n": metadata["n"],
+            "k": metadata["k"],
+            "split_k": metadata.get("split_k", 1),
+            "avg_runtime_ms": avg_runtime_ms,
+            "best_runtime_ms": avg_runtime_ms,
+            "worst_runtime_ms": avg_runtime_ms,
+            "avg_tflops": avg_tflops,
+            "avg_throughput": "",
+            "max_error": "",
+            "close_call_group": "",
+            "failure_reason": failure_reason,
+            "stdout_log": str(log_path),
+        }
+    )
+    return rows
+
+
 def parse_benchmark_log(log_path, metadata_by_bm_name, run_id):
     rows = []
     with open(log_path, "r", encoding="utf-8") as handle:
@@ -577,6 +786,7 @@ def parse_benchmark_log(log_path, metadata_by_bm_name, run_id):
                 "m": metadata["m"],
                 "n": metadata["n"],
                 "k": metadata["k"],
+                "split_k": metadata.get("split_k", 1),
                 "avg_runtime_ms": parse_metric(stripped, "avg_runtime_ms"),
                 "best_runtime_ms": parse_metric(stripped, "best_runtime_ms"),
                 "worst_runtime_ms": parse_metric(stripped, "worst_runtime_ms"),
@@ -589,6 +799,137 @@ def parse_benchmark_log(log_path, metadata_by_bm_name, run_id):
             }
             rows.append(row)
     return rows
+
+
+def run_entries_with_benchmark(entries, config_path, manifest_path, log_path, exe, cwd=None, shell_init=None):
+    metadata = write_config(entries, config_path)
+    write_json(manifest_path, metadata)
+    command = [exe, f"--config_file={config_path}"]
+    result = run_benchmark(command, log_path, cwd=cwd, shell_init=shell_init)
+    rows = parse_benchmark_log(log_path, metadata, run_id=entries[0]["stage"]) if entries else []
+    if result.returncode != 0 and not rows:
+        raise RuntimeError(f"Benchmark subprocess failed with return code {result.returncode}. See {log_path}")
+    return rows, command
+
+
+def run_entries_with_streamk_example(entries, logs_dir, exe, cwd=None, shell_init=None):
+    rows = []
+    commands = []
+    for entry in entries:
+        candidate = entry["candidate"]
+        shape = entry["shape"]
+        bm_name = entry["bm_name"]
+        metadata = {
+            bm_name: {
+                "shape_id": shape["shape_id"],
+                "candidate_id": candidate["candidate_id"],
+                "compiler_profile_id": candidate["compiler_profile_id"],
+                "stage": entry["stage"],
+                "attempt_index": entry["attempt_index"],
+                "layout": shape["layout"],
+                "dtype_a": shape["dtype_a"],
+                "dtype_b": shape["dtype_b"],
+                "dtype_c": shape["dtype_c"],
+                "dtype_acc": shape["dtype_acc"],
+                "m": shape["m"],
+                "n": shape["n"],
+                "k": shape["k"],
+                "kernel_name": candidate["kernel_name"],
+                "split_k": candidate["split_k"],
+                "runner": candidate.get("runner", "streamk_example"),
+            }
+        }
+        log_path = logs_dir / f"{bm_name}.log"
+        command = [
+            exe,
+            "--splitk",
+            f"--dtype={candidate['dtype_a']}",
+            f"--splits={candidate['split_k']}",
+            f"--m={shape['m']}",
+            f"--n={shape['n']}",
+            f"--k={shape['k']}",
+            "--iterations=20",
+            "--verify=1",
+        ]
+        result = run_benchmark(command, log_path, cwd=cwd, shell_init=shell_init)
+        parsed = parse_streamk_example_log(log_path, metadata, run_id=entry["stage"])
+        if result.returncode != 0 and not parsed:
+            raise RuntimeError(f"StreamK example subprocess failed with return code {result.returncode}. See {log_path}")
+        rows.extend(parsed)
+        commands.append(shell_join(command))
+    return rows, commands
+
+
+def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
+    env_caps = collect_environment_metadata(
+        shell_init=args.shell_init,
+        benchmark_exe=args.benchmark_exe,
+        streamk_example_exe=args.streamk_example_exe,
+        cwd=args.cwd,
+    )
+    static_constraints = apply_static_probe_constraints(base_constraints, env_caps)
+    static_candidate_space = generate_candidate_space(
+        shapes_doc,
+        static_constraints,
+        profiles,
+        allowed_runners=("benchmark", "streamk_example"),
+    )
+    probe_rows = []
+    probe_logs = []
+    probe_commands = []
+
+    probe_entries = build_phase_a_probe_entries(shapes_doc, static_candidate_space)
+    effective_probe_mode = args.probe_mode
+    if effective_probe_mode == "auto":
+        effective_probe_mode = "static" if args.skip_run else "run"
+
+    if effective_probe_mode == "run" and not args.skip_run and probe_entries:
+        probe_benchmark_entries = [entry for entry in probe_entries if entry["candidate"].get("runner", "benchmark") == "benchmark"]
+        probe_streamk_entries = [entry for entry in probe_entries if entry["candidate"].get("runner") == "streamk_example"]
+        if probe_benchmark_entries:
+            probe_log = logs_dir / "probe.log"
+            probe_config = configs_dir / "probe.in"
+            probe_manifest = manifests_dir / "probe_manifest.json"
+            rows, command = run_entries_with_benchmark(
+                probe_benchmark_entries,
+                probe_config,
+                probe_manifest,
+                probe_log,
+                args.benchmark_exe,
+                cwd=args.cwd,
+                shell_init=args.shell_init,
+            )
+            probe_rows.extend(rows)
+            probe_logs.append(str(probe_log))
+            probe_commands.append(shell_join(command))
+        if probe_streamk_entries:
+            rows, commands = run_entries_with_streamk_example(
+                probe_streamk_entries,
+                logs_dir,
+                args.streamk_example_exe,
+                cwd=args.cwd,
+                shell_init=args.shell_init,
+            )
+            probe_rows.extend(rows)
+            probe_logs.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in probe_streamk_entries)
+            probe_commands.extend(commands)
+
+    constraints = apply_run_probe_constraints(static_constraints, probe_rows) if probe_rows else static_constraints
+    env_caps["probe_mode"] = effective_probe_mode
+    env_caps["constraint_source"] = constraints["constraint_source"]
+    env_caps["probe_results"] = [
+        {
+            "candidate_id": row["candidate_id"],
+            "shape_id": row["shape_id"],
+            "status": row["status"],
+            "avg_tflops": row["avg_tflops"],
+            "split_k": row["split_k"],
+        }
+        for row in probe_rows
+    ]
+    verified_hw_caps_path = reports_dir / "verified_hw_caps.json"
+    write_json(verified_hw_caps_path, env_caps)
+    return constraints, env_caps, verified_hw_caps_path, probe_rows, probe_logs, probe_commands
 
 
 def write_results_csv(rows, path):
@@ -700,6 +1041,32 @@ def build_run_summary(rows, dispatch_table, build_command, log_paths):
     }
 
 
+def build_phase_a_summary(verified_hw_caps, constraints, probe_rows):
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "probe_mode": verified_hw_caps.get("probe_mode", "off"),
+        "constraint_source": constraints["constraint_source"],
+        "probe_results": len(probe_rows),
+        "successful_probe_results": sum(1 for row in probe_rows if row["status"] == "pass"),
+        "allowed_values": constraints["allowed_values"],
+        "limits": constraints["limits"],
+        "blocked_rules": constraints.get("blocked_rules", []),
+    }
+
+
+def build_phase_b_summary(candidate_space, dispatch_table, summary):
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "candidate_count": len(candidate_space["candidates"]),
+        "dispatch_entries": len(dispatch_table["entries"]),
+        "rows": summary["rows"],
+        "passed": summary["passed"],
+        "failed": summary["failed"],
+    }
+
+
 def workflow(args):
     workspace = ensure_dir(Path(args.workspace).resolve())
     inputs_dir = ensure_dir(workspace / "inputs")
@@ -709,9 +1076,37 @@ def workflow(args):
     logs_dir = ensure_dir(workspace / "logs")
     reports_dir = ensure_dir(workspace / "reports")
 
-    constraints = read_json(args.constraints_json) if args.constraints_json else default_constraints()
     profiles = read_json(args.compiler_profiles_json) if args.compiler_profiles_json else default_compiler_profiles()
     shapes_doc = read_json(args.shapes_json) if args.shapes_json else default_shapes(args.dtype)
+    base_constraints = read_json(args.constraints_json) if args.constraints_json else default_constraints()
+
+    probe_rows = []
+    probe_logs = []
+    benchmark_commands = []
+    if args.constraints_json or args.probe_mode == "off":
+        constraints = copy.deepcopy(base_constraints)
+        env_caps = collect_environment_metadata(
+            shell_init=args.shell_init,
+            benchmark_exe=args.benchmark_exe,
+            streamk_example_exe=args.streamk_example_exe,
+            cwd=args.cwd,
+        )
+        env_caps["probe_mode"] = "off" if args.probe_mode == "off" else "external_constraints"
+        env_caps["constraint_source"] = constraints["constraint_source"]
+        env_caps["probe_results"] = []
+        verified_hw_caps_path = reports_dir / "verified_hw_caps.json"
+        write_json(verified_hw_caps_path, env_caps)
+    else:
+        constraints, env_caps, verified_hw_caps_path, probe_rows, probe_logs, probe_commands = run_phase_a_probe(
+            args,
+            shapes_doc,
+            base_constraints,
+            profiles,
+            reports_dir,
+            configs_dir,
+            manifests_dir,
+            logs_dir,
+        )
 
     constraints_path = inputs_dir / "safe_search_constraints.json"
     profiles_path = inputs_dir / "compiler_profiles.json"
@@ -720,26 +1115,48 @@ def workflow(args):
     write_json(profiles_path, profiles)
     write_json(shapes_path, shapes_doc)
 
-    candidate_space = generate_candidate_space(shapes_doc, constraints, profiles)
+    candidate_space = generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=("benchmark",))
     candidate_space_path = reports_dir / "gemm_candidate_space.json"
     write_json(candidate_space_path, candidate_space)
+    safe_candidates_path = reports_dir / "bmg_safe_candidates.json"
+    write_json(safe_candidates_path, candidate_space)
 
     screening_entries = build_screening_entries(shapes_doc, candidate_space)
     screening_config = configs_dir / "screening.in"
     screening_manifest = manifests_dir / "screening_manifest.json"
-    screening_metadata = write_config(screening_entries, screening_config)
-    write_json(screening_manifest, screening_metadata)
 
-    all_rows = []
-    log_paths = []
-    benchmark_command = [args.benchmark_exe, f"--config_file={screening_config}"]
+    all_rows = list(probe_rows)
+    log_paths = list(probe_logs)
+    benchmark_commands.extend(probe_commands)
     if not args.skip_run:
-        screening_log = logs_dir / "screening.log"
-        result = run_benchmark(benchmark_command, screening_log, cwd=args.cwd, shell_init=args.shell_init)
-        log_paths.append(str(screening_log))
-        screening_rows = parse_benchmark_log(screening_log, screening_metadata, run_id="screening")
-        if result.returncode != 0 and not screening_rows:
-            raise RuntimeError(f"Benchmark subprocess failed with return code {result.returncode}. See {screening_log}")
+        screening_benchmark_entries = [entry for entry in screening_entries if entry["candidate"].get("runner", "benchmark") == "benchmark"]
+        screening_streamk_entries = [entry for entry in screening_entries if entry["candidate"].get("runner") == "streamk_example"]
+        screening_rows = []
+        if screening_benchmark_entries:
+            screening_log = logs_dir / "screening.log"
+            rows, command = run_entries_with_benchmark(
+                screening_benchmark_entries,
+                screening_config,
+                screening_manifest,
+                screening_log,
+                args.benchmark_exe,
+                cwd=args.cwd,
+                shell_init=args.shell_init,
+            )
+            screening_rows.extend(rows)
+            log_paths.append(str(screening_log))
+            benchmark_commands.append(shell_join(command))
+        if screening_streamk_entries:
+            rows, commands = run_entries_with_streamk_example(
+                screening_streamk_entries,
+                logs_dir,
+                args.streamk_example_exe,
+                cwd=args.cwd,
+                shell_init=args.shell_init,
+            )
+            screening_rows.extend(rows)
+            log_paths.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in screening_streamk_entries)
+            benchmark_commands.extend(commands)
         all_rows.extend(screening_rows)
 
         if args.confirm_runs > 0:
@@ -753,15 +1170,34 @@ def workflow(args):
             if confirm_entries:
                 confirm_config = configs_dir / "confirm.in"
                 confirm_manifest = manifests_dir / "confirm_manifest.json"
-                confirm_metadata = write_config(confirm_entries, confirm_config)
-                write_json(confirm_manifest, confirm_metadata)
-                confirm_log = logs_dir / "confirm.log"
-                confirm_command = [args.benchmark_exe, f"--config_file={confirm_config}"]
-                result = run_benchmark(confirm_command, confirm_log, cwd=args.cwd, shell_init=args.shell_init)
-                log_paths.append(str(confirm_log))
-                confirm_rows = parse_benchmark_log(confirm_log, confirm_metadata, run_id="confirm")
-                if result.returncode != 0 and not confirm_rows:
-                    raise RuntimeError(f"Benchmark subprocess failed with return code {result.returncode}. See {confirm_log}")
+                confirm_benchmark_entries = [entry for entry in confirm_entries if entry["candidate"].get("runner", "benchmark") == "benchmark"]
+                confirm_streamk_entries = [entry for entry in confirm_entries if entry["candidate"].get("runner") == "streamk_example"]
+                confirm_rows = []
+                if confirm_benchmark_entries:
+                    confirm_log = logs_dir / "confirm.log"
+                    rows, command = run_entries_with_benchmark(
+                        confirm_benchmark_entries,
+                        confirm_config,
+                        confirm_manifest,
+                        confirm_log,
+                        args.benchmark_exe,
+                        cwd=args.cwd,
+                        shell_init=args.shell_init,
+                    )
+                    confirm_rows.extend(rows)
+                    log_paths.append(str(confirm_log))
+                    benchmark_commands.append(shell_join(command))
+                if confirm_streamk_entries:
+                    rows, commands = run_entries_with_streamk_example(
+                        confirm_streamk_entries,
+                        logs_dir,
+                        args.streamk_example_exe,
+                        cwd=args.cwd,
+                        shell_init=args.shell_init,
+                    )
+                    confirm_rows.extend(rows)
+                    log_paths.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in confirm_streamk_entries)
+                    benchmark_commands.extend(commands)
                 all_rows.extend(confirm_rows)
 
     results_csv = reports_dir / "gemm_profile_results.csv"
@@ -776,15 +1212,26 @@ def workflow(args):
     )
     dispatch_path = reports_dir / "gemm_dispatch_table.json"
     write_json(dispatch_path, dispatch_table)
+    optimal_dispatch_path = reports_dir / "optimal_dispatch_table.json"
+    write_json(optimal_dispatch_path, dispatch_table)
 
-    summary = build_run_summary(all_rows, dispatch_table, benchmark_command, log_paths)
+    summary = build_run_summary(all_rows, dispatch_table, benchmark_commands, log_paths)
     summary_path = reports_dir / "run_summary.json"
     write_json(summary_path, summary)
+    phase_a_summary_path = reports_dir / "phase_a_summary.json"
+    write_json(phase_a_summary_path, build_phase_a_summary(env_caps, constraints, probe_rows))
+    phase_b_summary_path = reports_dir / "phase_b_summary.json"
+    write_json(phase_b_summary_path, build_phase_b_summary(candidate_space, dispatch_table, summary))
     return {
         "workspace": str(workspace),
         "candidate_space": str(candidate_space_path),
+        "safe_candidates": str(safe_candidates_path),
+        "verified_hw_caps": str(verified_hw_caps_path),
         "results_csv": str(results_csv),
         "dispatch_table": str(dispatch_path),
+        "optimal_dispatch_table": str(optimal_dispatch_path),
+        "phase_a_summary": str(phase_a_summary_path),
+        "phase_b_summary": str(phase_b_summary_path),
         "summary": str(summary_path),
     }
 
@@ -797,6 +1244,11 @@ def build_parser():
         default="./build/benchmarks/gemm/cutlass_benchmarks_gemm_sycl",
         help="Benchmark executable to run.",
     )
+    parser.add_argument(
+        "--streamk-example-exe",
+        default="./build/examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk",
+        help="StreamK example executable used for split-k candidates.",
+    )
     parser.add_argument("--cwd", default=None, help="Working directory for the benchmark subprocess.")
     parser.add_argument(
         "--shell-init",
@@ -804,6 +1256,12 @@ def build_parser():
         help="Optional shell snippet executed before the benchmark command, e.g. 'source /home/intel/.bashrc && source /opt/intel/oneapi/setvars.sh'.",
     )
     parser.add_argument("--dtype", choices=sorted(SEED_KERNELS.keys()), default="bf16", help="Default dtype preset.")
+    parser.add_argument(
+        "--probe-mode",
+        choices=["auto", "off", "static", "run"],
+        default="auto",
+        help="Phase A constraint probe mode. 'auto' runs representative probes unless --skip-run is set.",
+    )
     parser.add_argument("--shapes-json", default="", help="Optional path to gemm_target_shapes.json.")
     parser.add_argument("--constraints-json", default="", help="Optional path to safe_search_constraints.json.")
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")

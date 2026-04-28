@@ -35,6 +35,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
         candidate_ids = {candidate["candidate_id"] for candidate in candidate_space["candidates"]}
         self.assertIn("rcr_bf16bf16f32_tm8_tn128_tk32_sg1x4_st2_sk1", candidate_ids)
         self.assertIn("rcr_bf16bf16f32_tm256_tn256_tk32_sg8x4_st2_sk1", candidate_ids)
+        self.assertFalse(any(candidate["split_k"] > 1 for candidate in candidate_space["candidates"]))
+
+        probe_candidate_space = profiler.generate_candidate_space(
+            shapes, constraints, profiles, allowed_runners=("benchmark", "streamk_example")
+        )
+        splitk = next(candidate for candidate in probe_candidate_space["candidates"] if candidate["split_k"] == 2)
+        self.assertEqual(splitk["runner"], "streamk_example")
 
     def test_parse_benchmark_log_maps_generated_bm_name(self):
         metadata = {
@@ -212,6 +219,62 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(entry["candidate_id"], "cand_fast")
         self.assertTrue(entry["close_call"])
         self.assertAlmostEqual(entry["evidence"]["confirm_median_tflops"], 1.05)
+
+    def test_splitk_candidates_are_gated_to_large_shapes(self):
+        shapes = profiler.default_shapes("bf16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(
+            shapes, constraints, profiles, allowed_runners=("benchmark", "streamk_example")
+        )
+
+        small_shape = next(shape for shape in shapes["shapes"] if shape["shape_id"] == "rcr_bf16_8_4096_4096")
+        large_shape = next(shape for shape in shapes["shapes"] if shape["shape_id"] == "rcr_bf16_1_4096_14336")
+
+        small_candidates = profiler.choose_candidates_for_shape(small_shape, candidate_space["candidates"])
+        large_candidates = profiler.choose_candidates_for_shape(large_shape, candidate_space["candidates"])
+
+        self.assertFalse(any(candidate["split_k"] > 1 for candidate in small_candidates))
+        self.assertTrue(any(candidate["split_k"] > 1 for candidate in large_candidates))
+
+    def test_f16_splitk_seed_uses_streamk_runner(self):
+        shapes = profiler.default_shapes("f16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(
+            shapes, constraints, profiles, allowed_runners=("benchmark", "streamk_example")
+        )
+
+        splitk = next(candidate for candidate in candidate_space["candidates"] if candidate["split_k"] == 2)
+        self.assertEqual(splitk["dtype_a"], "f16")
+        self.assertEqual(splitk["runner"], "streamk_example")
+
+    def test_static_probe_disables_splitk_without_streamk_binary(self):
+        constraints = profiler.default_constraints()
+        env_caps = {
+            "executables": {
+                "benchmark_available": True,
+                "streamk_example_available": False,
+            }
+        }
+        probed = profiler.apply_static_probe_constraints(constraints, env_caps)
+        self.assertEqual(probed["limits"]["max_split_k"], 1)
+        self.assertEqual(probed["allowed_values"]["split_k"], [1])
+
+    def test_run_probe_adds_blocked_rule_for_failed_candidate(self):
+        constraints = profiler.default_constraints()
+        rows = [
+            {
+                "candidate_id": "rcr_bf16bf16f32_tm8_tn64_tk32_sg1x4_st2_sk2",
+                "status": "fail",
+                "split_k": "2",
+            }
+        ]
+        probed = profiler.apply_run_probe_constraints(constraints, rows)
+        self.assertEqual(probed["limits"]["max_split_k"], 1)
+        self.assertEqual(probed["allowed_values"]["split_k"], [1])
+        self.assertEqual(len(probed["blocked_rules"]), 1)
+        self.assertEqual(probed["blocked_rules"][0]["match"]["tile_m"], 8)
 
 
 if __name__ == "__main__":
