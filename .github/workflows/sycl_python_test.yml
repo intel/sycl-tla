@@ -40,8 +40,7 @@ jobs:
         id: install_dpcpp
         uses: ./.github/actions/install-dpcpp
         with:
-          DPCPP_RELEASE: NIGHTLY
-          DPCPP_VERSION: v6.3.0
+          DPCPP_RELEASE: TORCH_SUPPORTED
           DPCPP_PATH: ~/dpcpp
 
       - name: Setup virtual environment

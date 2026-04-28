@@ -107,3 +107,27 @@ runs:
         export CPLUS_INCLUDE_PATH=$CMPLR_ROOT/include:$CPLUS_INCLUDE_PATH
         export LD_LIBRARY_PATH=$CMPLR_ROOT/lib:$LD_LIBRARY_PATH
         EOF
+
+    - name: Install DPCPP
+      if: inputs.DPCPP_RELEASE == 'TORCH_SUPPORTED'
+      shell: bash
+      run: |
+        shopt -s expand_aliases
+        which sudo || alias sudo=""
+        wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
+          gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+        echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
+          sudo tee /etc/apt/sources.list.d/oneAPI.list
+        sudo apt update
+        sudo apt install -y intel-oneapi-runtime-libs=2025.3.0-177 intel-oneapi-compiler-dpcpp-cpp=2025.3.3-30
+        . /opt/intel/oneapi/setvars.sh
+        cat <<EOF | tee setvars.sh
+        . /opt/intel/oneapi/setvars.sh
+        export CC=icx
+        export CXX=icpx
+        export C_INCLUDE_PATH=$CMPLR_ROOT/include:$C_INCLUDE_PATH
+        export CPLUS_INCLUDE_PATH=$CMPLR_ROOT/include:$CPLUS_INCLUDE_PATH
+        export LD_LIBRARY_PATH=$CMPLR_ROOT/lib:$LD_LIBRARY_PATH
+        EOF
+
+
