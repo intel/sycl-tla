@@ -15,11 +15,15 @@ on:
         description: "Coverity analysis tool version"
         required: false
         default: "2025.9.0"
+      custom_branch:
+        description: "Branch or tag for custom triggers"
+        required: false
+        type: string
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.custom_branch || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -31,6 +35,14 @@ env:
 
 jobs:
   coverity-scan:
+    strategy:
+      matrix:
+        include:
+          - compiler: RELEASE
+            gpu: BMG
+            intel_graphics: ROLLING
+            sycl_target: intel_gpu_bmg_g21
+            runner: bmg
     name: Coverity scan on ${{ inputs.runner }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 240
@@ -48,69 +60,51 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+        with:
+          ref: ${{ inputs.custom_branch || github.ref }}
 
       - name: Install Intel graphics drivers
         uses: ./.github/actions/install-intel-graphics
         with:
-          GPU: BMG
-          IGC: ROLLING
-
+          GPU: ${{ matrix.gpu }}
+          IGC: ${{ matrix.intel_graphics }}
       - name: Install DPC++
         uses: ./.github/actions/install-dpcpp
         with:
-          DPCPP_RELEASE: RELEASE
+          DPCPP_RELEASE: ${{ matrix.compiler }}
+          #DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
           DPCPP_PATH: ~/dpcpp
-          GPU: BMG
-          IGC: ROLLING
-
-      - name: Check and install OneAPI
+          GPU: ${{ matrix.gpu }}
+          IGC: ${{ matrix.intel_graphics }}
+      - name: Setup virtual environment
         shell: bash
         run: |
-          set -euxo pipefail
-
-          ensure_icpx_on_path() {
-            # oneAPI packages install under /opt/intel/oneapi but do not always update PATH for non-login shells.
-            if command -v icpx &> /dev/null; then
-              return 0
-            fi
-
-            if [[ -f /opt/intel/oneapi/setvars.sh ]]; then
-              # setvars may return non-zero depending on shell state; ignore and validate via command -v.
-              . /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 || true
-            fi
-
-            # Fallback when setvars is unavailable or does not export compiler paths in this shell.
-            for dir in /opt/intel/oneapi/compiler/*/bin /opt/intel/oneapi/compiler/*/bin-llvm; do
-              [[ -d "${dir}" ]] && export PATH="${dir}:${PATH}"
-            done
-
-            command -v icpx &> /dev/null
-          }
-
-          # OPTIMIZATION: Conditional check to skip redundant installation
-          # Subsequent runs reuse existing installation (~5-10 min saved)
-          if ensure_icpx_on_path; then
-            echo "[INFO] Intel oneAPI DPC++ compiler (icpx) already installed"
-            icpx --version | head -n 2
+          # Install cmake and ninja if not already available
+          if ! command -v cmake &> /dev/null || ! command -v ninja &> /dev/null; then
+            echo "Installing cmake and/or ninja..."
+            sudo apt update
+            sudo apt install -y cmake ninja-build
           else
-            echo "[INFO] Intel oneAPI DPC++ compiler not found. Installing..."
-            wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
-            echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list > /dev/null
-            sudo apt-get update -y
-            sudo apt-get install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp
-            if ! ensure_icpx_on_path; then
-              echo "[ERROR] oneAPI installation completed but icpx is still not in PATH"
-              ls -la /opt/intel/oneapi/compiler || true
-              exit 1
-            fi
-            echo "[INFO] Intel oneAPI DPC++ compiler installed successfully"
-            icpx --version | head -n 2
+            echo "cmake and ninja already available"
           fi
+          . setvars.sh
+          export CC=icx
+          export CXX=icpx
+          export CUTLASS_SYCL_PROFILING_ENABLED=OFF
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          export CMAKE_BUILD_TYPE=Release
+          export IGC_VISAOptions="-perfmodel"
+          export IGC_VectorAliasBBThreshold=100000000000
+          export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
+          # Persist environment variables to following steps
+          env >> $GITHUB_ENV
+          which $CXX
+          $CXX --version
+          sycl-ls
 
       - name: Prepare build tools and environment
         shell: bash
         run: |
-          set -euxo pipefail
           if ! command -v cmake &> /dev/null || ! command -v ninja &> /dev/null; then
             sudo apt-get update -y
             sudo apt-get install -y cmake ninja-build curl
@@ -120,28 +114,12 @@ jobs:
             sudo apt-get update -y && sudo apt-get install -y curl
           fi
 
-          . /opt/intel/oneapi/setvars.sh || . setvars.sh || true
-          export CC=icx
-          export CXX=icpx
-          export CUTLASS_SYCL_PROFILING_ENABLED=ON
-          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-          export CMAKE_BUILD_TYPE=Release
-          export IGC_VISAOptions="-perfmodel"
-          export IGC_VectorAliasBBThreshold=100000000000
-          export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
-          env >> "$GITHUB_ENV"
-
-          which "$CXX"
-          "$CXX" --version
-          sycl-ls
-
       - name: Download Coverity license file from Artifactory
         shell: bash
         env:
           ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
           ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
         run: |
-          set -euxo pipefail
           # OPTIMIZATION: Skip download if Coverity already installed (~1 sec saved)
           # Reuses license from previous run when available
           if test -x "${COVERITY_INSTALL_DIR}/bin/cov-build"; then
@@ -150,11 +128,8 @@ jobs:
           fi
           LICENSE_URL="${ARTIFACTORY_BASE_URL}/license.dat"
           echo "[INFO] Downloading license.dat from ${LICENSE_URL}"
-          curl -fSL \
-            --user "${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}" \
-            --retry 3 --retry-delay 5 \
-            -o license.dat \
-            "${LICENSE_URL}"
+          curl -u ${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }} \
+               "${LICENSE_URL}" --retry 3 --retry-delay 5 -O
           test -s license.dat || { echo "[ERROR] license.dat is empty or missing after download"; exit 1; }
           echo "[INFO] license.dat downloaded successfully ($(wc -c < license.dat) bytes)"
 
@@ -175,18 +150,15 @@ jobs:
           INSTALLER="cov-analysis-linux64-${VERSION}.sh"
           INSTALLER_URL="${ARTIFACTORY_BASE_URL}/${VERSION}/${INSTALLER}"
           echo "[INFO] Downloading ${INSTALLER} from ${INSTALLER_URL}"
-          curl -fSL \
-            --user "${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}" \
-            --retry 3 --retry-delay 5 \
-            -o "${INSTALLER}" \
-            "${INSTALLER_URL}"
+          curl -u "${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}" \
+            "${INSTALLER_URL}" \
+            --retry 3 --retry-delay 5 -O
           test -s "${INSTALLER}" || { echo "[ERROR] Installer is empty or missing after download"; exit 1; }
           echo "[INFO] ${INSTALLER} downloaded successfully ($(wc -c < "${INSTALLER}") bytes)"
 
       - name: Check and install Coverity analysis tool
         shell: bash
         run: |
-          set -euxo pipefail
           VERSION="${{ inputs.coverity_version }}"
           INSTALLER="cov-analysis-linux64-${VERSION}.sh"
 
@@ -240,7 +212,6 @@ jobs:
       - name: Clean and configure project
         shell: bash
         run: |
-          set -euxo pipefail
           rm -rf build
           mkdir build
           cd build
@@ -256,7 +227,6 @@ jobs:
       - name: Capture build with Coverity
         shell: bash
         run: |
-          set -euxo pipefail
           cd build
 
           # Start fast, then reduce parallelism if resource pressure causes failures.
@@ -280,7 +250,6 @@ jobs:
       - name: Analyze captured build
         shell: bash
         run: |
-          set -euxo pipefail
           cd build
 
           cov-analyze \
@@ -295,7 +264,6 @@ jobs:
       - name: Format Coverity HTML report
         shell: bash
         run: |
-          set -euxo pipefail
           cd build
 
           cov-format-errors \
