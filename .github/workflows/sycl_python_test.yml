@@ -26,9 +26,9 @@ jobs:
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
         
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.13'
 
       - name: Install Intel graphics drivers
         uses: ./.github/actions/install-intel-graphics
@@ -40,15 +40,15 @@ jobs:
         id: install_dpcpp
         uses: ./.github/actions/install-dpcpp
         with:
-          DPCPP_RELEASE: RELEASE
-          #DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
+          DPCPP_RELEASE: TORCH_SUPPORTED
           DPCPP_PATH: ~/dpcpp
 
       - name: Setup virtual environment
         shell: bash
         run: |
-          python3 -m venv ~/.venv
-          source ~/.venv/bin/activate
+          python3 -m pip install --upgrade pip virtualenv
+          python3 -m virtualenv ~/.venv
+          source ~/.venv/bin/activate          
           . setvars.sh
           # Persist environment variables to following steps
           env >> $GITHUB_ENV
@@ -84,7 +84,6 @@ jobs:
         shell: bash
         run: |
           source ~/.venv/bin/activate
-          pip install -e .
           export CUTLASS_USE_SYCL=1
           export SYCL_UR_TRACE=2
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
@@ -94,15 +93,8 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "Cleaning up DPC++ installation..."
-          echo "Removing OneAPI packages..."
-          sudo apt remove -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp || true
-          sudo rm -f /etc/apt/sources.list.d/oneAPI.list
-          sudo rm -f /usr/share/keyrings/oneapi-archive-keyring.gpg
           # Clean up environment files
           rm -f setvars.sh
-          # Clean up build artifacts
-          rm -rf build/ || true
           echo "DPC++ cleanup completed"
 
       - name: Cleanup DPCTL
