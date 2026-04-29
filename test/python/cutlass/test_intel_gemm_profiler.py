@@ -573,6 +573,53 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(by_id["bmg.medium_tile.default"]["probe_status"], "fail")
         self.assertFalse(by_id["bmg.medium_tile.default"]["probe_selected"])
 
+    def test_build_compiler_flags_probe_summary_groups_by_candidate_class(self):
+        profiles = profiler.default_compiler_profiles()
+        rows = [
+            {
+                "compiler_profile_id": "bmg.small_tile.default",
+                "candidate_id": "cand_small_a",
+                "shape_id": "shape_small_a",
+                "status": "pass",
+                "avg_tflops": "1.0",
+                "avg_runtime_ms": "0.10",
+                "stdout_log": "small_a.log",
+            },
+            {
+                "compiler_profile_id": "bmg.small_tile.default",
+                "candidate_id": "cand_small_b",
+                "shape_id": "shape_small_b",
+                "status": "pass",
+                "avg_tflops": "1.4",
+                "avg_runtime_ms": "0.08",
+                "stdout_log": "small_b.log",
+            },
+            {
+                "compiler_profile_id": "bmg.large_tile.default",
+                "candidate_id": "cand_large",
+                "shape_id": "shape_large",
+                "status": "fail",
+                "avg_tflops": "",
+                "avg_runtime_ms": "",
+                "stdout_log": "large.log",
+            },
+        ]
+
+        summary = profiler.build_compiler_flags_probe_summary(rows, profiles)
+
+        self.assertEqual(summary["selected_profile_ids"]["small_tile"], "bmg.small_tile.default")
+        results_by_id = {item["compiler_profile_id"]: item for item in summary["results"]}
+        self.assertEqual(results_by_id["bmg.small_tile.default"]["candidate_class"], "small_tile")
+        self.assertEqual(results_by_id["bmg.small_tile.default"]["samples"], 2)
+        self.assertEqual(results_by_id["bmg.small_tile.default"]["avg_tflops"], "1.2")
+        self.assertEqual(results_by_id["bmg.large_tile.default"]["candidate_class"], "large_tile")
+
+    def test_runner_environment_metadata_uses_shared_schema_version(self):
+        metadata = profiler.collect_environment_metadata("", "missing-benchmark", "missing-streamk")
+
+        self.assertEqual(metadata["schema_version"], profiler.SCHEMA_VERSION)
+        self.assertRegex(metadata["python_version"], r"^\d+\.\d+\.\d+")
+
     def test_run_benchmark_returns_timeout(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "timeout.log"

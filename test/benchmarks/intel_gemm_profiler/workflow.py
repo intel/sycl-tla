@@ -6,6 +6,7 @@
 import argparse
 import copy
 import json
+import statistics
 import sys
 from pathlib import Path
 
@@ -64,27 +65,61 @@ else:
     from .schemas import SEARCH_RUNTIME_SCHEMA
 
 
-def build_compiler_flags_probe_summary(rows):
+def build_compiler_flags_probe_summary(rows, profiles=None):
+    profile_class_map = {
+        profile["compiler_profile_id"]: profile.get("candidate_class", "")
+        for profile in (profiles or {}).get("profiles", [])
+    }
     by_profile = {}
     for row in rows:
-        by_profile[row["compiler_profile_id"]] = {
-            "compiler_profile_id": row["compiler_profile_id"],
-            "status": row["status"],
-            "avg_tflops": row["avg_tflops"],
-            "avg_runtime_ms": row["avg_runtime_ms"],
-            "candidate_id": row["candidate_id"],
-            "shape_id": row["shape_id"],
-            "log": row["stdout_log"],
-        }
+        profile_id = row["compiler_profile_id"]
+        by_profile.setdefault(profile_id, []).append(
+            {
+                "compiler_profile_id": profile_id,
+                "candidate_class": row.get("candidate_class", profile_class_map.get(profile_id, "")),
+                "status": row["status"],
+                "avg_tflops": row["avg_tflops"],
+                "avg_runtime_ms": row["avg_runtime_ms"],
+                "candidate_id": row["candidate_id"],
+                "shape_id": row["shape_id"],
+                "log": row["stdout_log"],
+            }
+        )
+    summarized = []
+    for profile_id, items in by_profile.items():
+        passed = [item for item in items if item["status"] == "pass"]
+        best_pass = max(passed, key=lambda item: float(item["avg_tflops"] or 0.0), default=None)
+        status = "pass" if passed else items[0]["status"]
+        avg_tflops = ""
+        avg_runtime_ms = ""
+        if passed:
+            avg_tflops = str(statistics.median(float(item["avg_tflops"]) for item in passed if item["avg_tflops"] != ""))
+            avg_runtime_ms = str(
+                statistics.median(float(item["avg_runtime_ms"]) for item in passed if item["avg_runtime_ms"] != "")
+            )
+        reference = best_pass or items[0]
+        summarized.append(
+            {
+                "compiler_profile_id": profile_id,
+                "candidate_class": reference["candidate_class"],
+                "status": status,
+                "avg_tflops": avg_tflops,
+                "avg_runtime_ms": avg_runtime_ms,
+                "candidate_id": reference["candidate_id"],
+                "shape_id": reference["shape_id"],
+                "log": reference["log"],
+                "samples": len(items),
+            }
+        )
     grouped = {}
-    for item in by_profile.values():
-        grouped.setdefault(item["compiler_profile_id"].split(".")[1], []).append(item)
+    for item in summarized:
+        grouped.setdefault(item["candidate_class"], []).append(item)
     selected = {}
     for candidate_class, items in grouped.items():
         passed = [item for item in items if item["status"] == "pass"]
         if passed:
             selected[candidate_class] = max(passed, key=lambda item: float(item["avg_tflops"] or 0.0))["compiler_profile_id"]
-    return {"results": list(by_profile.values()), "selected_profile_ids": selected}
+    return {"results": summarized, "selected_profile_ids": selected}
 
 
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
@@ -137,7 +172,7 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
             compiler_probe_rows.extend(rows)
             probe_logs.append(str(compiler_log))
             probe_commands.append(shell_join(command))
-        compiler_flags_probe = build_compiler_flags_probe_summary(compiler_probe_rows)
+        compiler_flags_probe = build_compiler_flags_probe_summary(compiler_probe_rows, profiles)
     anomaly_report = detect_probe_anomalies(probe_rows, shapes_doc, static_candidate_space, hw_spec) if probe_rows else {"hw_spec": hw_spec["device_id"], "peak_tflops": hw_spec.get("peak_xmx_tflops", 0.0), "anomalies": [], "auto_block_rules": []}
     constraints = apply_run_probe_constraints(static_constraints, probe_rows, anomaly_report=anomaly_report) if probe_rows else static_constraints
     env_caps["probe_mode"] = effective_probe_mode

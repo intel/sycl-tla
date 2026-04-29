@@ -66,6 +66,7 @@ from .selector import (
     write_results_csv,
 )
 from .workflow import build_parser, main, run_phase_a_probe, workflow
+from .workflow import build_compiler_flags_probe_summary
 
 __all__ = [
     "BENCHMARK_ERROR_RE",
@@ -82,6 +83,7 @@ __all__ = [
     "blocked_rule_for_row",
     "build_candidate_build_manifest",
     "build_compiler_profile_probe_entries",
+    "build_compiler_flags_probe_summary",
     "compute_efficiency_bounds",
     "detect_probe_anomalies",
     "build_dispatch_table",

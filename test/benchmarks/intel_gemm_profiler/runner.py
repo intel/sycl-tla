@@ -8,9 +8,10 @@ import platform
 import re
 import socket
 import subprocess
+import sys
 from pathlib import Path
 
-from .schemas import BENCHMARK_ERROR_RE
+from .schemas import BENCHMARK_ERROR_RE, SCHEMA_VERSION
 from .utils import now_iso, resolve_executable, shell_join, write_json
 from .candidates import write_config
 
@@ -24,12 +25,12 @@ def collect_environment_metadata(shell_init, benchmark_exe, streamk_example_exe,
     benchmark_path = resolve_executable(benchmark_exe, cwd=cwd)
     streamk_path = resolve_executable(streamk_example_exe, cwd=cwd)
     return {
-        "schema_version": "1.0",
+        "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
         "hostname": socket.gethostname(),
         "node_id": socket.gethostname(),
         "platform": platform.platform(),
-        "python_version": os.sys.version.split()[0],
+        "python_version": sys.version.split()[0],
         "proxy_bootstrap_method": shell_init or "inherited-environment",
         "executables": {
             "benchmark_exe": str(benchmark_path) if benchmark_path else benchmark_exe,
