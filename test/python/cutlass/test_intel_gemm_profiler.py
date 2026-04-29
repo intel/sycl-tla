@@ -62,6 +62,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(splitk["runtime_defaults"]["k_unroll"], 1)
         self.assertIn("barrier_interval", splitk["allowed_runtime_sweeps"])
 
+    def test_kernel_catalog_prefers_repo_json(self):
+        catalog = profiler.load_persisted_kernel_catalog()
+
+        self.assertEqual(catalog["catalog_version"], "level0-seed-catalog")
+        kernel_ids = {entry["kernel_id"] for entry in catalog["kernels"]}
+        self.assertIn("BmgGemmFP16FP16FP32_RCR_6", kernel_ids)
+
     def test_build_candidate_build_manifest_splits_compile_and_runtime_fields(self):
         shapes = profiler.default_shapes("bf16")
         constraints = profiler.default_constraints()
@@ -301,6 +308,19 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual((shape["m"], shape["n"], shape["k"]), (1, 64, 32))
         self.assertEqual(shape["runtime_defaults"]["barrier_interval"], 0)
 
+    def test_build_dpas_probe_entry_uses_small_benchmark_candidate(self):
+        shapes = profiler.default_shapes("bf16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
+
+        entry = profiler.build_dpas_probe_entry(shapes, candidate_space)
+
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["stage"], "dpas_probe")
+        self.assertEqual(entry["candidate"]["candidate_id"], "rcr_bf16bf16f32_tm8_tn64_tk32_sg1x4_st2_sk1")
+        self.assertEqual(entry["shape"]["shape_id"], "rcr_bf16_8_4096_4096")
+
     def test_dry_run_workflow_uses_minimal_shape_set_and_no_confirmation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             args = profiler.build_parser().parse_args(
@@ -322,6 +342,15 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(phase_a_summary["probe_mode"], "dry_run_off")
             phase_b_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_b_summary.json")
             self.assertEqual(phase_b_summary["candidate_count"], 5)
+
+    def test_phase_a_summary_includes_dpas_probe(self):
+        summary = profiler.build_phase_a_summary(
+            {"probe_mode": "run", "dpas_baseline_probe": {"status": "pass", "avg_tflops": "1.23"}},
+            profiler.default_constraints(),
+            [],
+        )
+
+        self.assertEqual(summary["dpas_baseline_probe"]["status"], "pass")
 
     def test_static_probe_disables_splitk_without_streamk_binary(self):
         constraints = profiler.default_constraints()

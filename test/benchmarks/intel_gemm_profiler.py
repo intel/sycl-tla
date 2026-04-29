@@ -23,6 +23,7 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = "1.0"
+DEFAULT_KERNEL_CATALOG_PATH = Path(__file__).with_name("intel_gemm_kernel_catalog_level0.json")
 
 
 SEARCH_RUNTIME_SCHEMA = {
@@ -573,18 +574,13 @@ def kernel_catalog_entry(dtype, seed):
     return entry
 
 
-def build_kernel_catalog(dtypes=None, allowed_runners=("benchmark",)):
-    selected_dtypes = dtypes if dtypes is not None else sorted(SEED_KERNELS.keys())
+def generated_level0_kernel_catalog():
     catalog = []
-    for dtype in selected_dtypes:
+    for dtype in sorted(SEED_KERNELS.keys()):
         for seed in SEED_KERNELS.get(dtype, []):
-            entry = kernel_catalog_entry(dtype, seed)
-            if entry["runner"] not in allowed_runners:
-                continue
-            catalog.append(entry)
+            catalog.append(kernel_catalog_entry(dtype, seed))
     return {
         "schema_version": SCHEMA_VERSION,
-        "generated_at": now_iso(),
         "catalog_version": "level0-seed-catalog",
         "instantiation_levels": {
             "0": "existing validated benchmark-backed kernels",
@@ -592,6 +588,32 @@ def build_kernel_catalog(dtypes=None, allowed_runners=("benchmark",)):
             "2": "full autotuning catalog including copy/epilogue variants",
         },
         "search_runtime_schema": SEARCH_RUNTIME_SCHEMA,
+        "kernels": catalog,
+    }
+
+
+def load_persisted_kernel_catalog(path=DEFAULT_KERNEL_CATALOG_PATH):
+    if path.exists():
+        return read_json(path)
+    return generated_level0_kernel_catalog()
+
+
+def build_kernel_catalog(dtypes=None, allowed_runners=("benchmark",), catalog_path=DEFAULT_KERNEL_CATALOG_PATH):
+    source_catalog = load_persisted_kernel_catalog(catalog_path)
+    selected_dtypes = set(dtypes) if dtypes is not None else None
+    catalog = []
+    for entry in source_catalog["kernels"]:
+        if selected_dtypes is not None and entry["dtype_a"] not in selected_dtypes:
+            continue
+        if entry["runner"] not in allowed_runners:
+            continue
+        catalog.append(copy.deepcopy(entry))
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "catalog_version": source_catalog["catalog_version"],
+        "instantiation_levels": source_catalog["instantiation_levels"],
+        "search_runtime_schema": source_catalog.get("search_runtime_schema", SEARCH_RUNTIME_SCHEMA),
         "kernels": catalog,
     }
 
@@ -767,6 +789,36 @@ def build_phase_a_probe_entries(shapes_doc, candidate_space):
             }
         )
     return entries
+
+
+def build_dpas_probe_entry(shapes_doc, candidate_space):
+    benchmark_candidates = [
+        candidate
+        for candidate in candidate_space["candidates"]
+        if candidate.get("runner", "benchmark") == "benchmark" and candidate["split_k"] == 1
+    ]
+    if not benchmark_candidates:
+        return None
+    baseline_candidate = min(
+        benchmark_candidates,
+        key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"], item["tile_n"], item["tile_k"]),
+    )
+    dtype_shapes = [
+        shape
+        for shape in shapes_doc["shapes"]
+        if shape["dtype_a"] == baseline_candidate["dtype_a"] and shape["layout"] == baseline_candidate["layout"]
+    ]
+    if not dtype_shapes:
+        return None
+    baseline_shape = min(dtype_shapes, key=lambda item: (item["k"], item["m"], item["n"]))
+    return {
+        "bm_name": f"{baseline_candidate['candidate_id']}__{baseline_shape['shape_id']}__dpas_probe__0",
+        "stage": "dpas_probe",
+        "attempt_index": 0,
+        "probe_class": "dpas_baseline",
+        "shape": baseline_shape,
+        "candidate": baseline_candidate,
+    }
 
 
 def blocked_rule_for_row(row):
@@ -1119,9 +1171,46 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
             probe_logs.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in probe_streamk_entries)
             probe_commands.extend(commands)
 
+    dpas_probe = {"status": "skipped", "reason": "probe mode disabled or benchmark unavailable"}
+    if (
+        effective_probe_mode == "run"
+        and not args.skip_run
+        and env_caps["executables"]["benchmark_available"]
+    ):
+        dpas_entry = build_dpas_probe_entry(shapes_doc, static_candidate_space)
+        if dpas_entry:
+            dpas_log = logs_dir / "dpas_probe.log"
+            dpas_config = configs_dir / "dpas_probe.in"
+            dpas_manifest = manifests_dir / "dpas_probe_manifest.json"
+            rows, command = run_entries_with_benchmark(
+                [dpas_entry],
+                dpas_config,
+                dpas_manifest,
+                dpas_log,
+                args.benchmark_exe,
+                cwd=args.cwd,
+                shell_init=args.shell_init,
+            )
+            if rows:
+                probe_rows.extend(rows)
+                probe_logs.append(str(dpas_log))
+                probe_commands.append(shell_join(command))
+                row = rows[0]
+                dpas_probe = {
+                    "status": row["status"],
+                    "candidate_id": row["candidate_id"],
+                    "shape_id": row["shape_id"],
+                    "avg_tflops": row["avg_tflops"],
+                    "avg_runtime_ms": row["avg_runtime_ms"],
+                    "log": str(dpas_log),
+                }
+            else:
+                dpas_probe = {"status": "fail", "reason": "missing benchmark row", "log": str(dpas_log)}
+
     constraints = apply_run_probe_constraints(static_constraints, probe_rows) if probe_rows else static_constraints
     env_caps["probe_mode"] = effective_probe_mode
     env_caps["constraint_source"] = constraints["constraint_source"]
+    env_caps["dpas_baseline_probe"] = dpas_probe
     env_caps["probe_results"] = [
         {
             "candidate_id": row["candidate_id"],
@@ -1252,6 +1341,7 @@ def build_phase_a_summary(verified_hw_caps, constraints, probe_rows):
         "generated_at": now_iso(),
         "probe_mode": verified_hw_caps.get("probe_mode", "off"),
         "constraint_source": constraints["constraint_source"],
+        "dpas_baseline_probe": verified_hw_caps.get("dpas_baseline_probe", {}),
         "probe_results": len(probe_rows),
         "successful_probe_results": sum(1 for row in probe_rows if row["status"] == "pass"),
         "allowed_values": constraints["allowed_values"],
