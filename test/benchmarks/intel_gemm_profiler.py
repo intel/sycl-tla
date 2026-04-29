@@ -295,6 +295,9 @@ CSV_FIELDS = [
 ]
 
 
+BENCHMARK_ERROR_RE = re.compile(r"(^ERROR\b|\bERROR OCCURRED\b|Disposition Failed)")
+
+
 def now_iso():
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -623,7 +626,7 @@ def blocked(seed, constraints):
         return True
     allowed = constraints["allowed_values"]
     for key in ("tile_m", "tile_n", "tile_k", "sg_m", "sg_n", "stages", "split_k", "grf_mode"):
-        if seed[key] not in allowed[key]:
+        if seed.get(key) not in allowed.get(key, []):
             return True
     for rule in constraints.get("blocked_rules", []):
         match = rule.get("match", {})
@@ -743,9 +746,9 @@ def choose_candidates_for_shape(shape, candidates):
             continue
         if shape["m"] <= 8 and candidate["tile_m"] <= 16:
             matched.append(candidate)
-        elif 16 < shape["m"] <= 128 and candidate["tile_m"] <= 64:
+        elif 8 < shape["m"] < 128 and candidate["tile_m"] <= 64:
             matched.append(candidate)
-        elif shape["m"] > 128 and candidate["tile_m"] >= 16:
+        elif shape["m"] >= 128 and candidate["tile_m"] >= 16:
             matched.append(candidate)
     return matched or [
         candidate
@@ -754,37 +757,97 @@ def choose_candidates_for_shape(shape, candidates):
     ]
 
 
+def select_probe_shape(shapes_doc, dtype, layout, target_m, target_n, target_k, predicate=None):
+    pool = [shape for shape in shapes_doc["shapes"] if shape["dtype_a"] == dtype and shape["layout"] == layout]
+    if predicate:
+        filtered = [shape for shape in pool if predicate(shape)]
+        if filtered:
+            pool = filtered
+    if not pool:
+        return None
+    return min(
+        pool,
+        key=lambda shape: (
+            abs(shape["m"] - target_m),
+            abs(shape["n"] - target_n),
+            abs(shape["k"] - target_k),
+            shape["m"],
+            shape["n"],
+            shape["k"],
+        ),
+    )
+
+
 def build_phase_a_probe_entries(shapes_doc, candidate_space):
-    shape_map = {shape["shape_id"]: shape for shape in shapes_doc["shapes"]}
     candidates = candidate_space["candidates"]
     non_splitk = [candidate for candidate in candidates if candidate["split_k"] == 1]
     splitk = [candidate for candidate in candidates if candidate["split_k"] > 1]
     selected = []
     if non_splitk:
-        selected.append(("small", min(non_splitk, key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"])), "rcr_" + non_splitk[0]["dtype_a"] + "_8_4096_4096"))
+        small_candidate = min(non_splitk, key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"]))
+        small_shape = select_probe_shape(
+            shapes_doc,
+            small_candidate["dtype_a"],
+            small_candidate["layout"],
+            8,
+            4096,
+            4096,
+            predicate=lambda shape: shape["m"] <= 8,
+        )
+        selected.append(("small", small_candidate, small_shape))
         medium = [candidate for candidate in non_splitk if 16 <= candidate["tile_m"] <= 64]
         if medium:
-            selected.append(("medium", min(medium, key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"])), "rcr_" + medium[0]["dtype_a"] + "_64_4096_4096"))
-        selected.append(("large", max(non_splitk, key=lambda item: (item["tile_m"], item["tile_n"])), "rcr_" + non_splitk[0]["dtype_a"] + "_256_4096_8192"))
+            medium_candidate = min(medium, key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"]))
+            medium_shape = select_probe_shape(
+                shapes_doc,
+                medium_candidate["dtype_a"],
+                medium_candidate["layout"],
+                64,
+                4096,
+                4096,
+                predicate=lambda shape: 8 < shape["m"] < 128,
+            )
+            selected.append(("medium", medium_candidate, medium_shape))
+        large_candidate = max(non_splitk, key=lambda item: (item["tile_m"], item["tile_n"]))
+        large_shape = select_probe_shape(
+            shapes_doc,
+            large_candidate["dtype_a"],
+            large_candidate["layout"],
+            256,
+            4096,
+            8192,
+            predicate=lambda shape: shape["m"] >= 128,
+        )
+        selected.append(("large", large_candidate, large_shape))
     if splitk:
-        selected.append(("splitk", splitk[0], "rcr_" + splitk[0]["dtype_a"] + "_1_4096_14336"))
+        splitk_candidate = splitk[0]
+        splitk_shape = select_probe_shape(
+            shapes_doc,
+            splitk_candidate["dtype_a"],
+            splitk_candidate["layout"],
+            1,
+            4096,
+            14336,
+            predicate=lambda shape: shape["n"] >= 16384 or shape["k"] >= 8192,
+        )
+        selected.append(("splitk", splitk_candidate, splitk_shape))
 
     entries = []
     seen = set()
-    for probe_class, candidate, shape_id in selected:
-        if shape_id not in shape_map:
+    for probe_class, candidate, shape in selected:
+        if shape is None:
             continue
-        key = (candidate["candidate_id"], shape_id)
+        key = (candidate["candidate_id"], shape["shape_id"])
         if key in seen:
             continue
         seen.add(key)
         entries.append(
             {
-                "bm_name": f"{candidate['candidate_id']}__{shape_id}__probe__0",
+                "bm_name": f"{candidate['candidate_id']}__{shape['shape_id']}__probe__0",
                 "stage": "probe",
                 "attempt_index": 0,
                 "probe_class": probe_class,
-                "shape": shape_map[shape_id],
+                "shape": shape,
                 "candidate": candidate,
             }
         )
@@ -933,29 +996,45 @@ def shell_join(command):
     return " ".join(shlex.quote(part) for part in command)
 
 
-def run_benchmark(command, log_path, cwd=None, shell_init=None):
+def run_benchmark(command, log_path, cwd=None, shell_init=None, timeout=None):
+    timed_out = False
+    timeout_reason = ""
     if shell_init:
         payload = f"{shell_init} && {shell_join(command)}"
-        process = subprocess.run(
-            ["bash", "-lc", payload],
-            cwd=cwd,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        try:
+            process = subprocess.run(
+                ["bash", "-lc", payload],
+                cwd=cwd,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            timeout_reason = f"timeout after {timeout}s"
+            process = subprocess.CompletedProcess(exc.cmd, 124, exc.stdout or "", exc.stderr or "")
     else:
-        process = subprocess.run(
-            command,
-            cwd=cwd,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        try:
+            process = subprocess.run(
+                command,
+                cwd=cwd,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            timeout_reason = f"timeout after {timeout}s"
+            process = subprocess.CompletedProcess(exc.cmd, 124, exc.stdout or "", exc.stderr or "")
     with open(log_path, "w", encoding="utf-8") as handle:
-        handle.write(process.stdout)
-    return process
+        handle.write(process.stdout or "")
+        if timed_out:
+            handle.write(f"\nTIMEOUT: {timeout_reason}\n")
+    return process, timed_out, timeout_reason
 
 
 def parse_metric(line, key):
@@ -1011,9 +1090,9 @@ def parse_benchmark_log(log_path, metadata_by_bm_name, run_id):
     rows = []
     with open(log_path, "r", encoding="utf-8") as handle:
         for line in handle:
-            if "manual_time" not in line and "ERROR" not in line:
-                continue
             stripped = line.strip()
+            if "manual_time" not in line and not BENCHMARK_ERROR_RE.search(stripped):
+                continue
             parts = stripped.split()
             if not parts:
                 continue
@@ -1025,7 +1104,7 @@ def parse_benchmark_log(log_path, metadata_by_bm_name, run_id):
             metadata = metadata_by_bm_name.get(bm_name)
             if not metadata:
                 continue
-            failure = any(marker in stripped for marker in ("ERROR OCCURRED", "ERROR", "Disposition Failed"))
+            failure = bool(BENCHMARK_ERROR_RE.search(stripped))
             row = {
                 "run_id": run_id,
                 "stage": metadata["stage"],
@@ -1058,18 +1137,58 @@ def parse_benchmark_log(log_path, metadata_by_bm_name, run_id):
     return rows
 
 
-def run_entries_with_benchmark(entries, config_path, manifest_path, log_path, exe, cwd=None, shell_init=None):
+def timeout_rows(entries, log_path, reason):
+    rows = []
+    for entry in entries:
+        candidate = entry["candidate"]
+        shape = entry["shape"]
+        rows.append(
+            {
+                "run_id": entry["stage"],
+                "stage": entry["stage"],
+                "attempt_index": entry["attempt_index"],
+                "shape_id": shape["shape_id"],
+                "candidate_id": candidate["candidate_id"],
+                "compiler_profile_id": candidate["compiler_profile_id"],
+                "status": "timeout",
+                "verify_status": "fail",
+                "layout": shape["layout"],
+                "dtype_a": shape["dtype_a"],
+                "dtype_b": shape["dtype_b"],
+                "dtype_c": shape["dtype_c"],
+                "dtype_acc": shape["dtype_acc"],
+                "m": shape["m"],
+                "n": shape["n"],
+                "k": shape["k"],
+                "split_k": candidate.get("split_k", 1),
+                "avg_runtime_ms": "",
+                "best_runtime_ms": "",
+                "worst_runtime_ms": "",
+                "avg_tflops": "",
+                "avg_throughput": "",
+                "max_error": "",
+                "close_call_group": "",
+                "failure_reason": reason,
+                "stdout_log": str(log_path),
+            }
+        )
+    return rows
+
+
+def run_entries_with_benchmark(entries, config_path, manifest_path, log_path, exe, cwd=None, shell_init=None, timeout=None):
     metadata = write_config(entries, config_path)
     write_json(manifest_path, metadata)
     command = [exe, f"--config_file={config_path}"]
-    result = run_benchmark(command, log_path, cwd=cwd, shell_init=shell_init)
+    result, timed_out, timeout_reason = run_benchmark(command, log_path, cwd=cwd, shell_init=shell_init, timeout=timeout)
     rows = parse_benchmark_log(log_path, metadata, run_id=entries[0]["stage"]) if entries else []
+    if timed_out and not rows:
+        rows = timeout_rows(entries, log_path, timeout_reason)
     if result.returncode != 0 and not rows:
         raise RuntimeError(f"Benchmark subprocess failed with return code {result.returncode}. See {log_path}")
     return rows, command
 
 
-def run_entries_with_streamk_example(entries, logs_dir, exe, cwd=None, shell_init=None):
+def run_entries_with_streamk_example(entries, logs_dir, exe, cwd=None, shell_init=None, timeout=None):
     rows = []
     commands = []
     for entry in entries:
@@ -1108,8 +1227,8 @@ def run_entries_with_streamk_example(entries, logs_dir, exe, cwd=None, shell_ini
             "--iterations=20",
             "--verify=1",
         ]
-        result = run_benchmark(command, log_path, cwd=cwd, shell_init=shell_init)
-        parsed = parse_streamk_example_log(log_path, metadata, run_id=entry["stage"])
+        result, timed_out, timeout_reason = run_benchmark(command, log_path, cwd=cwd, shell_init=shell_init, timeout=timeout)
+        parsed = timeout_rows([entry], log_path, timeout_reason) if timed_out else parse_streamk_example_log(log_path, metadata, run_id=entry["stage"])
         if result.returncode != 0 and not parsed:
             raise RuntimeError(f"StreamK example subprocess failed with return code {result.returncode}. See {log_path}")
         rows.extend(parsed)
@@ -1155,6 +1274,7 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
                 args.benchmark_exe,
                 cwd=args.cwd,
                 shell_init=args.shell_init,
+                timeout=args.timeout,
             )
             probe_rows.extend(rows)
             probe_logs.append(str(probe_log))
@@ -1166,6 +1286,7 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
                 args.streamk_example_exe,
                 cwd=args.cwd,
                 shell_init=args.shell_init,
+                timeout=args.timeout,
             )
             probe_rows.extend(rows)
             probe_logs.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in probe_streamk_entries)
@@ -1190,6 +1311,7 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
                 args.benchmark_exe,
                 cwd=args.cwd,
                 shell_init=args.shell_init,
+                timeout=args.timeout,
             )
             if rows:
                 probe_rows.extend(rows)
@@ -1322,7 +1444,7 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
 
 def build_run_summary(rows, dispatch_table, build_command, log_paths):
     passed = sum(1 for row in rows if row["status"] == "pass")
-    failed = sum(1 for row in rows if row["status"] == "fail")
+    failed = sum(1 for row in rows if row["status"] != "pass")
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
@@ -1457,6 +1579,7 @@ def workflow(args):
                 args.benchmark_exe,
                 cwd=args.cwd,
                 shell_init=args.shell_init,
+                timeout=args.timeout,
             )
             screening_rows.extend(rows)
             log_paths.append(str(screening_log))
@@ -1468,6 +1591,7 @@ def workflow(args):
                 args.streamk_example_exe,
                 cwd=args.cwd,
                 shell_init=args.shell_init,
+                timeout=args.timeout,
             )
             screening_rows.extend(rows)
             log_paths.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in screening_streamk_entries)
@@ -1498,6 +1622,7 @@ def workflow(args):
                         args.benchmark_exe,
                         cwd=args.cwd,
                         shell_init=args.shell_init,
+                        timeout=args.timeout,
                     )
                     confirm_rows.extend(rows)
                     log_paths.append(str(confirm_log))
@@ -1509,6 +1634,7 @@ def workflow(args):
                         args.streamk_example_exe,
                         cwd=args.cwd,
                         shell_init=args.shell_init,
+                        timeout=args.timeout,
                     )
                     confirm_rows.extend(rows)
                     log_paths.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in confirm_streamk_entries)
@@ -1590,6 +1716,7 @@ def build_parser():
         action="store_true",
         help="Run a minimal benchmark-backed screening smoke with a tiny shape set and no confirmation.",
     )
+    parser.add_argument("--timeout", type=int, default=600, help="Per-subprocess timeout in seconds for benchmark and example runs.")
     parser.add_argument("--top-k", type=int, default=3, help="Top-k candidates kept for confirmation.")
     parser.add_argument("--confirm-runs", type=int, default=3, help="Number of confirmation attempts for top-k candidates.")
     parser.add_argument(

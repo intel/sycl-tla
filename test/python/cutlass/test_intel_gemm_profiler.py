@@ -69,6 +69,15 @@ class TestIntelGemmProfiler(unittest.TestCase):
         kernel_ids = {entry["kernel_id"] for entry in catalog["kernels"]}
         self.assertIn("BmgGemmFP16FP16FP32_RCR_6", kernel_ids)
 
+    def test_generated_seed_catalog_matches_persisted_catalog(self):
+        generated = profiler.generated_level0_kernel_catalog()
+        persisted = profiler.load_persisted_kernel_catalog()
+
+        normalize = lambda catalog: sorted(catalog["kernels"], key=lambda entry: entry["kernel_id"])
+        self.assertEqual(generated["catalog_version"], persisted["catalog_version"])
+        self.assertEqual(generated["search_runtime_schema"], persisted["search_runtime_schema"])
+        self.assertEqual(normalize(generated), normalize(persisted))
+
     def test_build_candidate_build_manifest_splits_compile_and_runtime_fields(self):
         shapes = profiler.default_shapes("bf16")
         constraints = profiler.default_constraints()
@@ -121,6 +130,63 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(row["verify_status"], "pass")
         self.assertEqual(row["shape_id"], "rcr_bf16_1_4096_14336")
         self.assertEqual(row["avg_tflops"], "1.13")
+
+    def test_parse_benchmark_log_does_not_treat_max_error_metric_as_failure(self):
+        metadata = {
+            "bm_case": {
+                "shape_id": "shape_a",
+                "candidate_id": "cand_a",
+                "compiler_profile_id": "bmg.small_tile.default",
+                "stage": "screening",
+                "attempt_index": 0,
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 1,
+                "n": 64,
+                "k": 32,
+            }
+        }
+        line = (
+            "Kernel/bm_case/1x64x32x1/manual_time avg_runtime_ms=0.1 best_runtime_ms=0.09 "
+            "worst_runtime_ms=0.11 avg_tflops=1.2 avg_throughput=3.4 max_error=0.0001\n"
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "parser.log"
+            log_path.write_text(line, encoding="utf-8")
+            rows = profiler.parse_benchmark_log(log_path, metadata, run_id="screening")
+
+        self.assertEqual(rows[0]["status"], "pass")
+        self.assertEqual(rows[0]["failure_reason"], "")
+
+    def test_parse_benchmark_log_detects_real_error_line(self):
+        metadata = {
+            "bm_case": {
+                "shape_id": "shape_a",
+                "candidate_id": "cand_a",
+                "compiler_profile_id": "bmg.small_tile.default",
+                "stage": "screening",
+                "attempt_index": 0,
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 1,
+                "n": 64,
+                "k": 32,
+            }
+        }
+        line = "Kernel/bm_case/1x64x32x1 ERROR OCCURRED can_implement failed\n"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "parser_error.log"
+            log_path.write_text(line, encoding="utf-8")
+            rows = profiler.parse_benchmark_log(log_path, metadata, run_id="screening")
+
+        self.assertEqual(rows[0]["status"], "fail")
+        self.assertIn("ERROR OCCURRED", rows[0]["failure_reason"])
 
     def test_dispatch_table_uses_confirmation_median(self):
         shapes = {
@@ -278,6 +344,47 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertFalse(any(candidate["split_k"] > 1 for candidate in small_candidates))
         self.assertTrue(any(candidate["split_k"] > 1 for candidate in large_candidates))
 
+    def test_choose_candidates_handles_m16_and_m128_boundaries(self):
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "boundary",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "shape_m16",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 16,
+                    "n": 4096,
+                    "k": 4096,
+                },
+                {
+                    "shape_id": "shape_m128",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 128,
+                    "n": 4096,
+                    "k": 8192,
+                },
+            ],
+        }
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles)
+
+        m16_candidates = profiler.choose_candidates_for_shape(shapes["shapes"][0], candidate_space["candidates"])
+        m128_candidates = profiler.choose_candidates_for_shape(shapes["shapes"][1], candidate_space["candidates"])
+
+        self.assertTrue(all(candidate["tile_m"] <= 64 for candidate in m16_candidates))
+        self.assertTrue(any(candidate["tile_m"] == 256 for candidate in m128_candidates))
+
     def test_f16_splitk_seed_uses_streamk_runner(self):
         shapes = profiler.default_shapes("f16")
         constraints = profiler.default_constraints()
@@ -321,6 +428,59 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(entry["candidate"]["candidate_id"], "rcr_bf16bf16f32_tm8_tn64_tk32_sg1x4_st2_sk1")
         self.assertEqual(entry["shape"]["shape_id"], "rcr_bf16_8_4096_4096")
 
+    def test_build_phase_a_probe_entries_use_dynamic_shapes(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "custom",
+            "source": "custom",
+            "shapes": [
+                {
+                    "shape_id": "custom_small",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 4,
+                    "n": 2048,
+                    "k": 2048,
+                },
+                {
+                    "shape_id": "custom_mid",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 48,
+                    "n": 4096,
+                    "k": 4096,
+                },
+                {
+                    "shape_id": "custom_big",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 192,
+                    "n": 4096,
+                    "k": 8192,
+                },
+            ],
+        }
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
+
+        entries = profiler.build_phase_a_probe_entries(shapes, candidate_space)
+        shape_ids = {entry["shape"]["shape_id"] for entry in entries}
+
+        self.assertIn("custom_small", shape_ids)
+        self.assertIn("custom_mid", shape_ids)
+        self.assertIn("custom_big", shape_ids)
+
     def test_dry_run_workflow_uses_minimal_shape_set_and_no_confirmation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             args = profiler.build_parser().parse_args(
@@ -351,6 +511,19 @@ class TestIntelGemmProfiler(unittest.TestCase):
         )
 
         self.assertEqual(summary["dpas_baseline_probe"]["status"], "pass")
+
+    def test_run_benchmark_returns_timeout(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "timeout.log"
+            process, timed_out, reason = profiler.run_benchmark(
+                ["python3", "-c", "import time; time.sleep(2)"],
+                log_path,
+                timeout=1,
+            )
+
+        self.assertTrue(timed_out)
+        self.assertEqual(process.returncode, 124)
+        self.assertIn("timeout after 1s", reason)
 
     def test_static_probe_disables_splitk_without_streamk_binary(self):
         constraints = profiler.default_constraints()
