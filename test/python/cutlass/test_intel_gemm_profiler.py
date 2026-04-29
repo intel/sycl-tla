@@ -621,6 +621,27 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(results_by_id["bmg.small_tile.default"]["avg_tflops"], "1.2")
         self.assertEqual(results_by_id["bmg.large_tile.default"]["candidate_class"], "large_tile")
 
+    def test_build_compiler_flags_probe_summary_handles_empty_pass_metrics(self):
+        profiles = profiler.default_compiler_profiles()
+        rows = [
+            {
+                "compiler_profile_id": "bmg.small_tile.default",
+                "candidate_id": "cand_small",
+                "shape_id": "shape_small",
+                "status": "pass",
+                "avg_tflops": "",
+                "avg_runtime_ms": "",
+                "stdout_log": "small.log",
+            }
+        ]
+
+        summary = profiler.build_compiler_flags_probe_summary(rows, profiles)
+
+        result = summary["results"][0]
+        self.assertEqual(result["avg_tflops"], "")
+        self.assertEqual(result["avg_runtime_ms"], "")
+        self.assertEqual(summary["selected_profile_ids"]["small_tile"], "bmg.small_tile.default")
+
     def test_runner_environment_metadata_uses_shared_schema_version(self):
         metadata = profiler.collect_environment_metadata("", "missing-benchmark", "missing-streamk")
 

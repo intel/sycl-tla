@@ -93,10 +93,10 @@ def build_compiler_flags_probe_summary(rows, profiles=None):
         avg_tflops = ""
         avg_runtime_ms = ""
         if passed:
-            avg_tflops = str(statistics.median(float(item["avg_tflops"]) for item in passed if item["avg_tflops"] != ""))
-            avg_runtime_ms = str(
-                statistics.median(float(item["avg_runtime_ms"]) for item in passed if item["avg_runtime_ms"] != "")
-            )
+            tflops_values = [float(item["avg_tflops"]) for item in passed if item["avg_tflops"] != ""]
+            runtime_values = [float(item["avg_runtime_ms"]) for item in passed if item["avg_runtime_ms"] != ""]
+            avg_tflops = str(statistics.median(tflops_values)) if tflops_values else ""
+            avg_runtime_ms = str(statistics.median(runtime_values)) if runtime_values else ""
         reference = best_pass or items[0]
         summarized.append(
             {
