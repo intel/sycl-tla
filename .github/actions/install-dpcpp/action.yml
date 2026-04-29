@@ -112,14 +112,8 @@ runs:
       if: inputs.DPCPP_RELEASE == 'TORCH_SUPPORTED'
       shell: bash
       run: |
-        shopt -s expand_aliases
-        which sudo || alias sudo=""
-        wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
-          gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
-        echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
-          sudo tee /etc/apt/sources.list.d/oneAPI.list
-        sudo apt update
-        sudo apt install -y intel-oneapi-runtime-libs=2025.3.0-177 intel-oneapi-compiler-dpcpp-cpp=2025.3.3-30 --allow-downgrades
+        sudo wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
+        bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --silent --eula accept --components intel.oneapi.lin.dpcpp-cpp-compiler
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh
