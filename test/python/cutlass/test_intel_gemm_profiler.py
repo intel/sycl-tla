@@ -23,7 +23,7 @@ profiler = load_module()
 
 
 class TestIntelGemmProfiler(unittest.TestCase):
-    def test_generate_candidate_space_uses_seed_kernels(self):
+    def test_generate_candidate_space_uses_catalog_level0(self):
         shapes = profiler.default_shapes("bf16")
         constraints = profiler.default_constraints()
         profiles = profiler.default_compiler_profiles()
@@ -31,17 +31,51 @@ class TestIntelGemmProfiler(unittest.TestCase):
         candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles)
 
         self.assertEqual(candidate_space["device_arch"], "bmg")
+        self.assertEqual(candidate_space["kernel_catalog"]["catalog_version"], "level0-seed-catalog")
+        self.assertEqual(
+            candidate_space["search_runtime_schema"]["compile_time_dimensions"][0],
+            "dtype_a",
+        )
         self.assertEqual(len(candidate_space["candidates"]), 5)
         candidate_ids = {candidate["candidate_id"] for candidate in candidate_space["candidates"]}
         self.assertIn("rcr_bf16bf16f32_tm8_tn128_tk32_sg1x4_st2_sk1", candidate_ids)
         self.assertIn("rcr_bf16bf16f32_tm256_tn256_tk32_sg8x4_st2_sk1", candidate_ids)
         self.assertFalse(any(candidate["split_k"] > 1 for candidate in candidate_space["candidates"]))
+        self.assertTrue(all(candidate["filters_applied"][0] == "kernel_catalog" for candidate in candidate_space["candidates"]))
+        self.assertTrue(all(candidate["grf_mode"] == 256 for candidate in candidate_space["candidates"]))
 
         probe_candidate_space = profiler.generate_candidate_space(
             shapes, constraints, profiles, allowed_runners=("benchmark", "streamk_example")
         )
         splitk = next(candidate for candidate in probe_candidate_space["candidates"] if candidate["split_k"] == 2)
         self.assertEqual(splitk["runner"], "streamk_example")
+        self.assertEqual(splitk["benchmark_target"], "03_bmg_gemm_streamk")
+
+    def test_build_kernel_catalog_includes_runtime_metadata(self):
+        catalog = profiler.build_kernel_catalog(dtypes=["bf16"], allowed_runners=("benchmark", "streamk_example"))
+
+        self.assertEqual(catalog["catalog_version"], "level0-seed-catalog")
+        self.assertEqual(catalog["search_runtime_schema"]["runtime_dimensions"][0], "shape_id")
+        self.assertEqual(len(catalog["kernels"]), 6)
+        splitk = next(entry for entry in catalog["kernels"] if entry["split_k"] == 2)
+        self.assertEqual(splitk["instantiation_level"], 0)
+        self.assertEqual(splitk["runtime_defaults"]["k_unroll"], 1)
+        self.assertIn("barrier_interval", splitk["allowed_runtime_sweeps"])
+
+    def test_build_candidate_build_manifest_splits_compile_and_runtime_fields(self):
+        shapes = profiler.default_shapes("bf16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles)
+
+        manifest = profiler.build_candidate_build_manifest(candidate_space)
+
+        self.assertEqual(manifest["search_runtime_schema"]["microbench_guided_defaults"]["grf_mode"], 256)
+        self.assertEqual(len(manifest["variants"]), 5)
+        variant = manifest["variants"][0]
+        self.assertIn("compile_time_variant", variant)
+        self.assertIn("runtime_sweep", variant)
+        self.assertIn("barrier_interval", variant["runtime_sweep"]["allowed_fields"])
 
     def test_parse_benchmark_log_maps_generated_bm_name(self):
         metadata = {

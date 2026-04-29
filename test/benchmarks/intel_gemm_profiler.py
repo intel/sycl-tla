@@ -25,6 +25,55 @@ from pathlib import Path
 SCHEMA_VERSION = "1.0"
 
 
+SEARCH_RUNTIME_SCHEMA = {
+    "schema_version": SCHEMA_VERSION,
+    "search_space_version": "2026-04-29",
+    "compile_time_dimensions": [
+        "dtype_a",
+        "dtype_b",
+        "dtype_c",
+        "dtype_acc",
+        "layout",
+        "tile_m",
+        "tile_n",
+        "tile_k",
+        "sg_m",
+        "sg_n",
+        "stages",
+        "split_k",
+        "grf_mode",
+        "ilp_class",
+        "instantiation_level",
+        "runner",
+        "benchmark_target",
+    ],
+    "runtime_dimensions": [
+        "shape_id",
+        "m",
+        "n",
+        "k",
+        "raster_order",
+        "swizzle_size",
+        "barrier_interval",
+        "k_unroll",
+    ],
+    "pruning_inputs": [
+        "dpas_alignment",
+        "safe_search_constraints",
+        "phase_a_probe_results",
+        "slm_limit_kb",
+        "split_k_support",
+    ],
+    "microbench_guided_defaults": {
+        "grf_mode": 256,
+        "barrier_interval": 8,
+        "k_unroll": 1,
+        "raster_order": "heuristic",
+        "swizzle_size": 1,
+    },
+}
+
+
 SEED_KERNELS = {
     "bf16": [
         {
@@ -270,6 +319,7 @@ def default_constraints():
             "sg_n": [4, 8],
             "stages": [1, 2, 3],
             "split_k": [1, 2],
+            "grf_mode": [256],
         },
         "blocked_rules": [],
     }
@@ -397,6 +447,12 @@ def default_shapes(dtype):
                 "m": item["m"],
                 "n": item["n"],
                 "k": item["k"],
+                "runtime_defaults": {
+                    "raster_order": "heuristic",
+                    "swizzle_size": 1,
+                    "barrier_interval": 8 if item["m"] >= 64 else 0,
+                    "k_unroll": 1,
+                },
                 "tags": item["tags"],
             }
         )
@@ -444,11 +500,63 @@ def candidate_id_for(seed):
     )
 
 
+def ilp_class(seed):
+    ilp = (seed["tile_m"] // max(seed["sg_m"], 1) // 8) * (seed["tile_n"] // max(seed["sg_n"], 1) // 16)
+    if ilp >= 16:
+        return "ilp16"
+    if ilp >= 8:
+        return "ilp8"
+    return "ilp4"
+
+
+def kernel_catalog_entry(dtype, seed):
+    entry = copy.deepcopy(seed)
+    entry.setdefault("runner", "benchmark")
+    entry["kernel_id"] = seed["kernel_name"]
+    entry["instantiation_level"] = 0
+    entry["benchmark_target"] = "cutlass_benchmarks_gemm_sycl" if entry["runner"] == "benchmark" else "03_bmg_gemm_streamk"
+    entry["grf_mode"] = 256
+    entry["ilp_class"] = ilp_class(entry)
+    entry["runtime_defaults"] = {
+        "raster_order": "heuristic",
+        "swizzle_size": 1,
+        "barrier_interval": 8 if entry["sg_m"] * entry["sg_n"] >= 4 else 0,
+        "k_unroll": 1,
+    }
+    entry["allowed_runtime_sweeps"] = ["shape_id", "m", "n", "k", "raster_order", "swizzle_size", "barrier_interval", "k_unroll"]
+    entry["source"] = "seed_catalog_level0"
+    entry["dtype_family"] = dtype
+    return entry
+
+
+def build_kernel_catalog(dtypes=None, allowed_runners=("benchmark",)):
+    selected_dtypes = dtypes if dtypes is not None else sorted(SEED_KERNELS.keys())
+    catalog = []
+    for dtype in selected_dtypes:
+        for seed in SEED_KERNELS.get(dtype, []):
+            entry = kernel_catalog_entry(dtype, seed)
+            if entry["runner"] not in allowed_runners:
+                continue
+            catalog.append(entry)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "catalog_version": "level0-seed-catalog",
+        "instantiation_levels": {
+            "0": "existing validated benchmark-backed kernels",
+            "1": "expanded tile and subgroup layouts",
+            "2": "full autotuning catalog including copy/epilogue variants",
+        },
+        "search_runtime_schema": SEARCH_RUNTIME_SCHEMA,
+        "kernels": catalog,
+    }
+
+
 def blocked(seed, constraints):
     if seed["sg_m"] * seed["sg_n"] > 32:
         return True
     allowed = constraints["allowed_values"]
-    for key in ("tile_m", "tile_n", "tile_k", "sg_m", "sg_n", "stages", "split_k"):
+    for key in ("tile_m", "tile_n", "tile_k", "sg_m", "sg_n", "stages", "split_k", "grf_mode"):
         if seed[key] not in allowed[key]:
             return True
     for rule in constraints.get("blocked_rules", []):
@@ -462,46 +570,99 @@ def generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=
     seen = set()
     candidates = []
     dtypes = sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]})
-    for dtype in dtypes:
-        for seed in SEED_KERNELS.get(dtype, []):
-            if seed.get("runner", "benchmark") not in allowed_runners:
-                continue
-            if blocked(seed, constraints):
-                continue
-            ident = candidate_id_for(seed)
-            if ident in seen:
-                continue
-            seen.add(ident)
-            sg_count = seed["sg_m"] * seed["sg_n"]
-            klass = candidate_class(seed["tile_m"], sg_count)
-            candidates.append(
-                {
-                    "candidate_id": ident,
-                    "kernel_name": seed["kernel_name"],
-                    "layout": seed["layout"],
-                    "dtype_a": seed["dtype_a"],
-                    "dtype_b": seed["dtype_b"],
-                    "dtype_c": seed["dtype_c"],
-                    "dtype_acc": seed["dtype_acc"],
-                    "tile_m": seed["tile_m"],
-                    "tile_n": seed["tile_n"],
-                    "tile_k": seed["tile_k"],
-                    "sg_m": seed["sg_m"],
-                    "sg_n": seed["sg_n"],
-                    "stages": seed["stages"],
-                    "split_k": seed["split_k"],
-                    "runner": seed.get("runner", "benchmark"),
-                    "candidate_class": klass,
-                    "compiler_profile_id": select_compiler_profile_id(profiles, seed["tile_m"], sg_count),
-                    "filters_applied": ["seed_kernel", constraints["constraint_source"]],
-                }
-            )
+    kernel_catalog = build_kernel_catalog(dtypes=dtypes, allowed_runners=allowed_runners)
+    for seed in kernel_catalog["kernels"]:
+        if blocked(seed, constraints):
+            continue
+        ident = candidate_id_for(seed)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        sg_count = seed["sg_m"] * seed["sg_n"]
+        klass = candidate_class(seed["tile_m"], sg_count)
+        candidates.append(
+            {
+                "candidate_id": ident,
+                "kernel_name": seed["kernel_name"],
+                "kernel_id": seed["kernel_id"],
+                "layout": seed["layout"],
+                "dtype_a": seed["dtype_a"],
+                "dtype_b": seed["dtype_b"],
+                "dtype_c": seed["dtype_c"],
+                "dtype_acc": seed["dtype_acc"],
+                "tile_m": seed["tile_m"],
+                "tile_n": seed["tile_n"],
+                "tile_k": seed["tile_k"],
+                "sg_m": seed["sg_m"],
+                "sg_n": seed["sg_n"],
+                "stages": seed["stages"],
+                "split_k": seed["split_k"],
+                "runner": seed.get("runner", "benchmark"),
+                "benchmark_target": seed["benchmark_target"],
+                "grf_mode": seed["grf_mode"],
+                "ilp_class": seed["ilp_class"],
+                "instantiation_level": seed["instantiation_level"],
+                "runtime_defaults": seed["runtime_defaults"],
+                "allowed_runtime_sweeps": seed["allowed_runtime_sweeps"],
+                "candidate_class": klass,
+                "compiler_profile_id": select_compiler_profile_id(profiles, seed["tile_m"], sg_count),
+                "filters_applied": ["kernel_catalog", constraints["constraint_source"]],
+            }
+        )
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
         "device_arch": constraints["device_arch"],
         "constraint_source": constraints["constraint_source"],
+        "search_runtime_schema": SEARCH_RUNTIME_SCHEMA,
+        "kernel_catalog": {
+            "catalog_version": kernel_catalog["catalog_version"],
+            "kernel_count": len(kernel_catalog["kernels"]),
+        },
         "candidates": candidates,
+    }
+
+
+def build_candidate_build_manifest(candidate_space):
+    variants = []
+    for candidate in candidate_space["candidates"]:
+        variants.append(
+            {
+                "candidate_id": candidate["candidate_id"],
+                "kernel_id": candidate["kernel_id"],
+                "benchmark_target": candidate["benchmark_target"],
+                "runner": candidate["runner"],
+                "compile_time_variant": {
+                    "layout": candidate["layout"],
+                    "dtype_a": candidate["dtype_a"],
+                    "dtype_b": candidate["dtype_b"],
+                    "dtype_c": candidate["dtype_c"],
+                    "dtype_acc": candidate["dtype_acc"],
+                    "tile_m": candidate["tile_m"],
+                    "tile_n": candidate["tile_n"],
+                    "tile_k": candidate["tile_k"],
+                    "sg_m": candidate["sg_m"],
+                    "sg_n": candidate["sg_n"],
+                    "stages": candidate["stages"],
+                    "split_k": candidate["split_k"],
+                    "grf_mode": candidate["grf_mode"],
+                    "ilp_class": candidate["ilp_class"],
+                    "instantiation_level": candidate["instantiation_level"],
+                },
+                "runtime_sweep": {
+                    "allowed_fields": candidate["allowed_runtime_sweeps"],
+                    "defaults": candidate["runtime_defaults"],
+                },
+                "compiler_profile_id": candidate["compiler_profile_id"],
+            }
+        )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "device_arch": candidate_space["device_arch"],
+        "constraint_source": candidate_space["constraint_source"],
+        "search_runtime_schema": SEARCH_RUNTIME_SCHEMA,
+        "variants": variants,
     }
 
 
@@ -1060,6 +1221,7 @@ def build_phase_b_summary(candidate_space, dispatch_table, summary):
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
         "candidate_count": len(candidate_space["candidates"]),
+        "catalog_version": candidate_space.get("kernel_catalog", {}).get("catalog_version", ""),
         "dispatch_entries": len(dispatch_table["entries"]),
         "rows": summary["rows"],
         "passed": summary["passed"],
@@ -1115,11 +1277,22 @@ def workflow(args):
     write_json(profiles_path, profiles)
     write_json(shapes_path, shapes_doc)
 
+    search_runtime_schema_path = inputs_dir / "search_runtime_schema.json"
+    write_json(search_runtime_schema_path, SEARCH_RUNTIME_SCHEMA)
+    kernel_catalog = build_kernel_catalog(
+        dtypes=sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]}),
+        allowed_runners=("benchmark", "streamk_example"),
+    )
+    kernel_catalog_path = reports_dir / "kernel_catalog.json"
+    write_json(kernel_catalog_path, kernel_catalog)
+
     candidate_space = generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=("benchmark",))
     candidate_space_path = reports_dir / "gemm_candidate_space.json"
     write_json(candidate_space_path, candidate_space)
     safe_candidates_path = reports_dir / "bmg_safe_candidates.json"
     write_json(safe_candidates_path, candidate_space)
+    build_manifest_path = reports_dir / "candidate_build_manifest.json"
+    write_json(build_manifest_path, build_candidate_build_manifest(candidate_space))
 
     screening_entries = build_screening_entries(shapes_doc, candidate_space)
     screening_config = configs_dir / "screening.in"
@@ -1224,7 +1397,10 @@ def workflow(args):
     write_json(phase_b_summary_path, build_phase_b_summary(candidate_space, dispatch_table, summary))
     return {
         "workspace": str(workspace),
+        "search_runtime_schema": str(search_runtime_schema_path),
+        "kernel_catalog": str(kernel_catalog_path),
         "candidate_space": str(candidate_space_path),
+        "build_manifest": str(build_manifest_path),
         "safe_candidates": str(safe_candidates_path),
         "verified_hw_caps": str(verified_hw_caps_path),
         "results_csv": str(results_csv),
