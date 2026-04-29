@@ -12,6 +12,47 @@ The target remains the Intel/BMG non-legacy GEMM profiler path, not a full CUDA 
 
 ## Implemented today and previously completed
 
+### 0. Latest calibration and validation update
+
+The profiler now includes a calibrated hardware reference model and spec-driven probe anomaly detection.
+
+New repo assets:
+
+- `test/benchmarks/intel_gemm_hw_reference_specs.json`
+- `test/benchmarks/intel_gemm_profiler/hw_specs.py`
+
+Latest validation data:
+
+| Scope | Result |
+|---|---|
+| local `python3 test/python/cutlass/test_intel_gemm_profiler.py` | `29 / 29` passed |
+| local wrapper smoke (`run_phase_a.py`, `run_phase_b.py`, `workflow.py`) | passed |
+| remote B60 `python3 test/python/cutlass/test_intel_gemm_profiler.py` | passed |
+| remote B60 Phase A BF16 run | passed |
+
+Latest B60 Phase A BF16 evidence:
+
+- resolved `hw_reference_spec_id = bmg_g21`
+- corrected `max_slm_kb = 64`
+- DPAS baseline probe: `2.97414 TFLOPS`
+- compiler probe:
+  - small tile: `2.93268 TFLOPS`
+  - medium tile: `18.9148 TFLOPS`
+  - large tile: `7.92284 TFLOPS`
+- anomaly detection auto-blocked:
+  - `rcr_bf16bf16f32_tm256_tn256_tk32_sg8x4_st2_sk1`
+  - reason: `large_tile_slower_than_rcr_bf16bf16f32_tm16_tn64_tk32_sg2x4_st2_sk1`
+- anomaly detection also auto-blocked:
+  - `rcr_bf16bf16f32_tm8_tn64_tk32_sg1x4_st2_sk2`
+  - reason: `severely_below_spec`
+
+Current compiler-flag conclusion from the B60 benchmark binary:
+
+- an explicit A/B run of the same medium-tile config with and without `IGC_VISAOptions=-perfmodel`
+  produced `18.7488 TFLOPS` vs `18.8388 TFLOPS`
+- the delta is only about `0.5%`
+- therefore the current change does **not** promote runtime env flags into a new per-variant compiler-selection system yet
+- the immediate correction is the calibrated spec model and anomaly-driven pruning
 ### 1. GEMM profiler MVP workflow exists
 
 The current runner already implements the main offline tuning skeleton:

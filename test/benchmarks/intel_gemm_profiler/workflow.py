@@ -32,6 +32,7 @@ if __package__ in (None, ""):
         default_compiler_profiles,
         default_constraints,
     )
+    from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from intel_gemm_profiler.runner import collect_environment_metadata, run_entries_with_benchmark, run_entries_with_streamk_example
     from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_run_summary, write_results_csv
     from intel_gemm_profiler.utils import ensure_dir, read_json, shell_init_with_env, shell_join, write_json
@@ -56,6 +57,7 @@ else:
         default_compiler_profiles,
         default_constraints,
     )
+    from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from .runner import collect_environment_metadata, run_entries_with_benchmark, run_entries_with_streamk_example
     from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_run_summary, write_results_csv
     from .utils import ensure_dir, read_json, shell_init_with_env, shell_join, write_json
@@ -88,6 +90,7 @@ def build_compiler_flags_probe_summary(rows):
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
     static_constraints = apply_static_probe_constraints(base_constraints, env_caps)
+    hw_spec = resolve_hw_reference_spec(static_constraints["device_arch"], getattr(args, "hw_spec_id", ""))
     static_candidate_space = generate_candidate_space(shapes_doc, static_constraints, profiles, allowed_runners=("benchmark", "streamk_example"))
     probe_rows = []
     probe_logs = []
@@ -135,11 +138,15 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
             probe_logs.append(str(compiler_log))
             probe_commands.append(shell_join(command))
         compiler_flags_probe = build_compiler_flags_probe_summary(compiler_probe_rows)
-    constraints = apply_run_probe_constraints(static_constraints, probe_rows) if probe_rows else static_constraints
+    anomaly_report = detect_probe_anomalies(probe_rows, shapes_doc, static_candidate_space, hw_spec) if probe_rows else {"hw_spec": hw_spec["device_id"], "peak_tflops": hw_spec.get("peak_xmx_tflops", 0.0), "anomalies": [], "auto_block_rules": []}
+    constraints = apply_run_probe_constraints(static_constraints, probe_rows, anomaly_report=anomaly_report) if probe_rows else static_constraints
     env_caps["probe_mode"] = effective_probe_mode
+    env_caps["hw_reference_spec_id"] = hw_spec["device_id"]
+    env_caps["hw_reference_spec"] = hw_spec
     env_caps["constraint_source"] = constraints["constraint_source"]
     env_caps["dpas_baseline_probe"] = dpas_probe
     env_caps["compiler_flags_probe"] = compiler_flags_probe
+    env_caps["anomaly_report"] = anomaly_report
     env_caps["probe_results"] = [{"candidate_id": row["candidate_id"], "shape_id": row["shape_id"], "status": row["status"], "avg_tflops": row["avg_tflops"], "split_k": row["split_k"]} for row in probe_rows]
     verified_hw_caps_path = reports_dir / "verified_hw_caps.json"
     write_json(verified_hw_caps_path, env_caps)
@@ -168,8 +175,12 @@ def workflow(args):
     if args.constraints_json or probe_mode == "off":
         constraints = copy.deepcopy(base_constraints)
         env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
+        hw_spec = resolve_hw_reference_spec(constraints["device_arch"], getattr(args, "hw_spec_id", ""))
         env_caps["probe_mode"] = "dry_run_off" if dry_run_mode else ("off" if probe_mode == "off" else "external_constraints")
+        env_caps["hw_reference_spec_id"] = hw_spec["device_id"]
+        env_caps["hw_reference_spec"] = hw_spec
         env_caps["constraint_source"] = constraints["constraint_source"]
+        env_caps["anomaly_report"] = {"hw_spec": hw_spec["device_id"], "peak_tflops": hw_spec.get("peak_xmx_tflops", 0.0), "anomalies": [], "auto_block_rules": []}
         env_caps["probe_results"] = []
         verified_hw_caps_path = reports_dir / "verified_hw_caps.json"
         write_json(verified_hw_caps_path, env_caps)
@@ -262,6 +273,7 @@ def build_parser():
     parser.add_argument("--shapes-json", default="", help="Optional path to gemm_target_shapes.json.")
     parser.add_argument("--constraints-json", default="", help="Optional path to safe_search_constraints.json.")
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")
+    parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")
     parser.add_argument("--skip-run", action="store_true", help="Only emit generated artifacts without invoking the benchmark.")
     parser.add_argument("--dry-run", action="store_true", help="Run a minimal benchmark-backed screening smoke with a tiny shape set and no confirmation.")
     parser.add_argument("--timeout", type=int, default=600, help="Per-subprocess timeout in seconds for benchmark and example runs.")

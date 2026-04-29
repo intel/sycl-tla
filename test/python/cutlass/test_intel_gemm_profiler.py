@@ -93,6 +93,20 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertIn("runtime_sweep", variant)
         self.assertIn("barrier_interval", variant["runtime_sweep"]["allowed_fields"])
 
+    def test_default_constraints_use_calibrated_slm_limit(self):
+        constraints = profiler.default_constraints()
+
+        self.assertEqual(constraints["limits"]["max_slm_kb"], 64)
+
+    def test_resolve_hw_reference_spec_uses_calibrated_b60_data(self):
+        spec = profiler.resolve_hw_reference_spec("bmg")
+
+        self.assertEqual(spec["device_id"], "bmg_g21")
+        self.assertEqual(spec["clock_mhz"], 2400)
+        self.assertEqual(spec["peak_bf16_tflops"], 97.66)
+        self.assertEqual(spec["measured_read_bw_gbps"], 538)
+        self.assertEqual(spec["slm_per_xe_core_kb"], 64)
+
     def test_select_compiler_profile_skips_failed_probe_profile(self):
         profiles = profiler.default_compiler_profiles()
         profiles["profiles"][0]["probe_status"] = "fail"
@@ -598,6 +612,87 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(probed["allowed_values"]["split_k"], [1])
         self.assertEqual(len(probed["blocked_rules"]), 1)
         self.assertEqual(probed["blocked_rules"][0]["match"]["tile_m"], 8)
+
+    def test_detect_probe_anomalies_blocks_large_tile_regression(self):
+        shapes = profiler.default_shapes("bf16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
+        hw_spec = profiler.resolve_hw_reference_spec("bmg")
+        small_candidate = min(
+            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "small_tile"),
+            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
+        )
+        large_candidate = max(
+            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "large_tile"),
+            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
+        )
+        probe_rows = [
+            {
+                "candidate_id": small_candidate["candidate_id"],
+                "shape_id": "rcr_bf16_8_4096_4096",
+                "status": "pass",
+                "avg_tflops": "2.997",
+            },
+            {
+                "candidate_id": small_candidate["candidate_id"],
+                "shape_id": "rcr_bf16_64_4096_4096",
+                "status": "pass",
+                "avg_tflops": "18.9",
+            },
+            {
+                "candidate_id": large_candidate["candidate_id"],
+                "shape_id": "rcr_bf16_256_4096_8192",
+                "status": "pass",
+                "avg_tflops": "2.282",
+            },
+        ]
+
+        report = profiler.detect_probe_anomalies(probe_rows, shapes, candidate_space, hw_spec)
+
+        self.assertEqual(report["hw_spec"], "bmg_g21")
+        self.assertEqual(len(report["anomalies"]), 1)
+        anomaly = report["anomalies"][0]
+        self.assertEqual(anomaly["candidate_id"], large_candidate["candidate_id"])
+        self.assertEqual(anomaly["spec_anomaly"], "severely_below_spec")
+        self.assertTrue(anomaly["cross_anomaly"].startswith("large_tile_slower_than_"))
+        self.assertEqual(report["auto_block_rules"][0]["rule_id"], f"probe.auto_block.anomaly.{large_candidate['candidate_id']}")
+
+    def test_apply_run_probe_constraints_appends_anomaly_auto_block(self):
+        constraints = profiler.default_constraints()
+        rows = []
+        anomaly_report = {
+            "auto_block_rules": [
+                {
+                    "rule_id": "probe.auto_block.anomaly.test_candidate",
+                    "match": {"tile_m": 256, "tile_n": 256, "tile_k": 32, "sg_m": 8, "sg_n": 4, "split_k": 1},
+                    "reason": "severely_below_spec",
+                    "evidence_tflops": 2.282,
+                }
+            ]
+        }
+
+        probed = profiler.apply_run_probe_constraints(constraints, rows, anomaly_report=anomaly_report)
+
+        self.assertEqual(probed["limits"]["max_slm_kb"], 64)
+        self.assertEqual(len(probed["blocked_rules"]), 1)
+        self.assertEqual(probed["blocked_rules"][0]["rule_id"], "probe.auto_block.anomaly.test_candidate")
+
+    def test_phase_a_summary_includes_anomaly_report(self):
+        summary = profiler.build_phase_a_summary(
+            {
+                "probe_mode": "run",
+                "hw_reference_spec_id": "bmg_g21",
+                "dpas_baseline_probe": {"status": "pass", "avg_tflops": "1.23"},
+                "compiler_flags_probe": {"results": [{"compiler_profile_id": "bmg.small_tile.default", "status": "pass"}]},
+                "anomaly_report": {"anomalies": [{"candidate_id": "cand_large"}], "auto_block_rules": [{"rule_id": "rule.large"}]},
+            },
+            profiler.default_constraints(),
+            [],
+        )
+
+        self.assertEqual(summary["hw_reference_spec_id"], "bmg_g21")
+        self.assertEqual(summary["anomaly_report"]["anomalies"][0]["candidate_id"], "cand_large")
 
 
 if __name__ == "__main__":

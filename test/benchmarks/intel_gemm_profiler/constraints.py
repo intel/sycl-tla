@@ -16,7 +16,7 @@ def default_constraints():
         "generated_at": now_iso(),
         "constraint_source": "default_bmg",
         "device_arch": "bmg",
-        "limits": {"max_slm_kb": 128, "subgroup_size": 16, "max_split_k": 2, "max_stages": 3},
+        "limits": {"max_slm_kb": 64, "subgroup_size": 16, "max_split_k": 2, "max_stages": 3},
         "allowed_values": {
             "tile_m": [8, 16, 32, 64, 128, 256],
             "tile_n": [64, 128, 256],
@@ -101,9 +101,13 @@ def blocked_rule_for_row(row):
     }
 
 
-def apply_run_probe_constraints(static_constraints, probe_rows):
+def apply_run_probe_constraints(static_constraints, probe_rows, anomaly_report=None):
     constraints = copy.deepcopy(static_constraints)
     constraints["constraint_source"] = "phase_a_run_probe"
+    constraints["limits"]["max_slm_kb"] = min(
+        constraints["limits"].get("max_slm_kb", 64),
+        64,
+    )
     if not any(row["status"] == "pass" and int(row["split_k"]) > 1 for row in probe_rows):
         constraints["limits"]["max_split_k"] = 1
         constraints["allowed_values"]["split_k"] = [1]
@@ -111,6 +115,10 @@ def apply_run_probe_constraints(static_constraints, probe_rows):
     existing_ids = {rule.get("rule_id") for rule in constraints.get("blocked_rules", [])}
     for row in failures:
         rule = blocked_rule_for_row(row)
+        if rule["rule_id"] not in existing_ids:
+            constraints["blocked_rules"].append(rule)
+            existing_ids.add(rule["rule_id"])
+    for rule in (anomaly_report or {}).get("auto_block_rules", []):
         if rule["rule_id"] not in existing_ids:
             constraints["blocked_rules"].append(rule)
             existing_ids.add(rule["rule_id"])

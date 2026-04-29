@@ -23,6 +23,13 @@ from .constraints import (
     default_compiler_profiles,
     default_constraints,
 )
+from .hw_specs import (
+    DEFAULT_HW_REFERENCE_SPECS_PATH,
+    compute_efficiency_bounds,
+    detect_probe_anomalies,
+    load_hw_reference_specs,
+    resolve_hw_reference_spec,
+)
 from .candidates import (
     build_candidate_build_manifest,
     build_compiler_profile_probe_entries,
@@ -64,6 +71,7 @@ __all__ = [
     "BENCHMARK_ERROR_RE",
     "CSV_FIELDS",
     "DEFAULT_KERNEL_CATALOG_PATH",
+    "DEFAULT_HW_REFERENCE_SPECS_PATH",
     "SCHEMA_VERSION",
     "SEARCH_RUNTIME_SCHEMA",
     "SEED_KERNELS",
@@ -74,6 +82,8 @@ __all__ = [
     "blocked_rule_for_row",
     "build_candidate_build_manifest",
     "build_compiler_profile_probe_entries",
+    "compute_efficiency_bounds",
+    "detect_probe_anomalies",
     "build_dispatch_table",
     "build_dpas_probe_entry",
     "build_kernel_catalog",
@@ -98,6 +108,7 @@ __all__ = [
     "ilp_class",
     "kernel_catalog_entry",
     "load_persisted_kernel_catalog",
+    "load_hw_reference_specs",
     "main",
     "median_or_nan",
     "now_iso",
@@ -106,6 +117,7 @@ __all__ = [
     "parse_streamk_example_log",
     "read_json",
     "resolve_executable",
+    "resolve_hw_reference_spec",
     "run_benchmark",
     "run_entries_with_benchmark",
     "run_entries_with_streamk_example",
