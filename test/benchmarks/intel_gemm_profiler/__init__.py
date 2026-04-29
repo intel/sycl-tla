@@ -65,8 +65,7 @@ from .selector import (
     median_or_nan,
     write_results_csv,
 )
-from .workflow import build_parser, main, run_phase_a_probe, workflow
-from .workflow import build_compiler_flags_probe_summary
+from .workflow import build_compiler_flags_probe_summary, build_parser, empty_anomaly_report, main, run_phase_a_probe, workflow
 
 __all__ = [
     "BENCHMARK_ERROR_RE",
@@ -103,6 +102,7 @@ __all__ = [
     "default_constraints",
     "default_shapes",
     "dry_run_shapes",
+    "empty_anomaly_report",
     "ensure_dir",
     "generate_candidate_space",
     "generate_confirmation_entries",

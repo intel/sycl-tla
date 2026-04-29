@@ -106,6 +106,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(spec["peak_bf16_tflops"], 97.66)
         self.assertEqual(spec["measured_read_bw_gbps"], 538)
         self.assertEqual(spec["slm_per_xe_core_kb"], 64)
+        self.assertEqual(spec["calibration_status"], "measured")
+
+    def test_resolve_hw_reference_spec_marks_b70_as_not_measured(self):
+        spec = profiler.resolve_hw_reference_spec(hw_spec_id="bmg_g31")
+
+        self.assertEqual(spec["device_id"], "bmg_g31")
+        self.assertEqual(spec["calibration_status"], "not_measured")
 
     def test_select_compiler_profile_skips_failed_probe_profile(self):
         profiles = profiler.default_compiler_profiles()
@@ -724,6 +731,95 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(probed["limits"]["max_slm_kb"], 64)
         self.assertEqual(len(probed["blocked_rules"]), 1)
         self.assertEqual(probed["blocked_rules"][0]["rule_id"], "probe.auto_block.anomaly.test_candidate")
+
+    def test_compute_efficiency_bounds_handles_memory_bound_decode_shape(self):
+        hw_spec = profiler.resolve_hw_reference_spec("bmg")
+        shape = profiler.default_shapes("bf16")["shapes"][0]
+        candidate = {
+            "tile_m": 8,
+            "tile_n": 64,
+            "tile_k": 32,
+            "sg_m": 1,
+            "sg_n": 4,
+            "stages": 2,
+            "dtype_a": "bf16",
+        }
+
+        min_eff, max_eff = profiler.compute_efficiency_bounds(shape, candidate, hw_spec)
+
+        self.assertLess(min_eff, max_eff)
+        self.assertLess(max_eff, 0.02)
+
+    def test_detect_probe_anomalies_above_expected_is_report_only(self):
+        shapes = profiler.default_shapes("bf16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
+        hw_spec = profiler.resolve_hw_reference_spec("bmg")
+        small_candidate = min(
+            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "small_tile"),
+            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
+        )
+        probe_rows = [
+            {
+                "candidate_id": small_candidate["candidate_id"],
+                "shape_id": "rcr_bf16_8_4096_4096",
+                "status": "pass",
+                "avg_tflops": "20.0",
+            }
+        ]
+
+        report = profiler.detect_probe_anomalies(probe_rows, shapes, candidate_space, hw_spec)
+
+        self.assertEqual(report["hw_spec_calibration_status"], "measured")
+        self.assertEqual(report["anomalies"][0]["spec_anomaly"], "above_expected")
+        self.assertEqual(report["anomalies"][0]["auto_action"], "reported")
+        self.assertEqual(report["auto_block_rules"], [])
+
+    def test_detect_probe_anomalies_uses_fastest_cross_reference(self):
+        shapes = profiler.default_shapes("bf16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
+        hw_spec = profiler.resolve_hw_reference_spec("bmg")
+        small_candidates = sorted(
+            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "small_tile"),
+            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
+        )
+        large_candidate = max(
+            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "large_tile"),
+            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
+        )
+        probe_rows = [
+            {
+                "candidate_id": small_candidates[0]["candidate_id"],
+                "shape_id": "rcr_bf16_8_4096_4096",
+                "status": "pass",
+                "avg_tflops": "10.0",
+            },
+            {
+                "candidate_id": small_candidates[1]["candidate_id"],
+                "shape_id": "rcr_bf16_64_4096_4096",
+                "status": "pass",
+                "avg_tflops": "20.0",
+            },
+            {
+                "candidate_id": large_candidate["candidate_id"],
+                "shape_id": "rcr_bf16_256_4096_8192",
+                "status": "pass",
+                "avg_tflops": "2.0",
+            },
+        ]
+
+        report = profiler.detect_probe_anomalies(probe_rows, shapes, candidate_space, hw_spec)
+
+        large_anomaly = next(
+            item for item in report["anomalies"] if item["candidate_id"] == large_candidate["candidate_id"]
+        )
+        self.assertEqual(
+            large_anomaly["cross_anomaly"],
+            f"large_tile_slower_than_{small_candidates[1]['candidate_id']}",
+        )
 
     def test_phase_a_summary_includes_anomaly_report(self):
         summary = profiler.build_phase_a_summary(

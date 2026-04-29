@@ -79,6 +79,8 @@ def analyze_efficiency(shape, candidate, hw_spec):
 
     xe_cores_per_wg = math.ceil(sg_count / concurrent_sgs_per_xe_core)
     cross_xe_core_penalty = 1.0 if xe_cores_per_wg <= 1 else 0.85 ** (xe_cores_per_wg - 1)
+    if xe_cores_per_wg > 2:
+        cross_xe_core_penalty *= 0.5
 
     if not slm_ok or grf_pressure > 1.0 or max_concurrent_wg == 0:
         bounds = (0.01, 0.10)
@@ -157,7 +159,7 @@ def detect_probe_anomalies(probe_rows, shapes_doc, candidate_space, hw_spec):
         elif max_eff > 0 and actual_eff > max_eff * 1.5:
             spec_anomaly = "above_expected"
 
-        cross_anomaly = None
+        cross_candidates = []
         for other_row in probe_rows:
             if other_row["candidate_id"] == row["candidate_id"]:
                 continue
@@ -174,8 +176,11 @@ def detect_probe_anomalies(probe_rows, shapes_doc, candidate_space, hw_spec):
                 and candidate["tile_m"] > other_candidate["tile_m"]
                 and actual_tflops < float(other_row["avg_tflops"]) * 0.5
             ):
-                cross_anomaly = f"large_tile_slower_than_{other_row['candidate_id']}"
-                break
+                cross_candidates.append((float(other_row["avg_tflops"]), other_row["candidate_id"]))
+        cross_anomaly = None
+        if cross_candidates:
+            _, reference_candidate_id = max(cross_candidates, key=lambda item: item[0])
+            cross_anomaly = f"large_tile_slower_than_{reference_candidate_id}"
 
         if not spec_anomaly and not cross_anomaly:
             continue
@@ -214,6 +219,7 @@ def detect_probe_anomalies(probe_rows, shapes_doc, candidate_space, hw_spec):
 
     return {
         "hw_spec": hw_spec.get("device_id", ""),
+        "hw_spec_calibration_status": hw_spec.get("calibration_status", "unknown"),
         "peak_tflops": peak_tflops,
         "anomalies": anomalies,
         "auto_block_rules": auto_block_rules,

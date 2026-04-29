@@ -2,6 +2,7 @@
   "bmg_g21": {
     "device_name": "Intel Arc Pro B60",
     "source": "microbenchmark_calibrated",
+    "calibration_status": "measured",
     "xe_cores": 20,
     "eus_per_xe_core": 8,
     "xmx_engines": 160,
@@ -60,6 +61,7 @@
   "bmg_g31": {
     "device_name": "Intel Arc Pro B70",
     "source": "spec_estimate",
+    "calibration_status": "not_measured",
     "xe_cores": 32,
     "eus_per_xe_core": 8,
     "xmx_engines": 256,

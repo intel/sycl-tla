@@ -122,6 +122,16 @@ def build_compiler_flags_probe_summary(rows, profiles=None):
     return {"results": summarized, "selected_profile_ids": selected}
 
 
+def empty_anomaly_report(hw_spec):
+    return {
+        "hw_spec": hw_spec["device_id"],
+        "hw_spec_calibration_status": hw_spec.get("calibration_status", "unknown"),
+        "peak_tflops": hw_spec.get("peak_xmx_tflops", 0.0),
+        "anomalies": [],
+        "auto_block_rules": [],
+    }
+
+
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
     static_constraints = apply_static_probe_constraints(base_constraints, env_caps)
@@ -173,7 +183,7 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
             probe_logs.append(str(compiler_log))
             probe_commands.append(shell_join(command))
         compiler_flags_probe = build_compiler_flags_probe_summary(compiler_probe_rows, profiles)
-    anomaly_report = detect_probe_anomalies(probe_rows, shapes_doc, static_candidate_space, hw_spec) if probe_rows else {"hw_spec": hw_spec["device_id"], "peak_tflops": hw_spec.get("peak_xmx_tflops", 0.0), "anomalies": [], "auto_block_rules": []}
+    anomaly_report = detect_probe_anomalies(probe_rows, shapes_doc, static_candidate_space, hw_spec) if probe_rows else empty_anomaly_report(hw_spec)
     constraints = apply_run_probe_constraints(static_constraints, probe_rows, anomaly_report=anomaly_report) if probe_rows else static_constraints
     env_caps["probe_mode"] = effective_probe_mode
     env_caps["hw_reference_spec_id"] = hw_spec["device_id"]
@@ -215,7 +225,7 @@ def workflow(args):
         env_caps["hw_reference_spec_id"] = hw_spec["device_id"]
         env_caps["hw_reference_spec"] = hw_spec
         env_caps["constraint_source"] = constraints["constraint_source"]
-        env_caps["anomaly_report"] = {"hw_spec": hw_spec["device_id"], "peak_tflops": hw_spec.get("peak_xmx_tflops", 0.0), "anomalies": [], "auto_block_rules": []}
+        env_caps["anomaly_report"] = empty_anomaly_report(hw_spec)
         env_caps["probe_results"] = []
         verified_hw_caps_path = reports_dir / "verified_hw_caps.json"
         write_json(verified_hw_caps_path, env_caps)
