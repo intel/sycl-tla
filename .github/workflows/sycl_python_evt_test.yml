@@ -28,10 +28,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
+      - name: Install Python venv package
+        shell: bash
+        run: |
+           sudo apt-get update
+           sudo apt-get install -y python3.13-venv python3.13-dev
  
       - name: Install Intel graphics drivers
         uses: ./.github/actions/install-intel-graphics
@@ -49,8 +50,7 @@ jobs:
       - name: Setup virtual environment
         shell: bash
         run: |
-          python3 -m pip install --upgrade pip virtualenv
-          python3 -m virtualenv ~/.venv
+          python3 -m venv ~/.venv
           source ~/.venv/bin/activate
           . setvars.sh
           # Persist environment variables to following steps
