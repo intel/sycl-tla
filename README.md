@@ -191,25 +191,25 @@ For Intel Arc GPU Battlemage (G31), use `intel_gpu_bmg_g31`.
 ```bash
 $ mkdir build && cd build
 
-$ CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_pvc"     # compiles for Intel Data Center GPU Max Series
+$ CC=icx CXX=icpx cmake .. -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_pvc"     # compiles for Intel Data Center GPU Max Series
 ```
 
 Or for Intel Arc GPU B580 Graphics:
 
 ```bash
-$  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics
+$  CC=icx CXX=icpx cmake .. -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics
 ```
 
 Or for Intel Arc GPU Battlemage (G31):
 
 ```bash
-$  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g31" # compiles for Intel Arc GPU Battlemage (G31)
+$  CC=icx CXX=icpx cmake .. -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g31" # compiles for Intel Arc GPU Battlemage (G31)
 ```
 
 To compile with G++ as host compiler, add the flag `-DDPCPP_HOST_COMPILER=g++-13` to the cmake command. Please note that the build system must be able to find `g++-13` in your PATH.
 
 ```bash
-$  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_HOST_COMPILER=g++-13 -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics with G++ as host compiler
+$  CC=icx CXX=icpx cmake .. -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_HOST_COMPILER=g++-13 -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics with G++ as host compiler
 ```
 
 From the `build/` directory, compile and run the SYCL*TLA unit tests by building the target `test_unit` with make.
@@ -218,7 +218,7 @@ The unit tests are organized as several binaries mirroring the top-level namespa
 and they may be executed in parallel via make's `-j` command line argument.
 
 ```bash
-$ make test_unit -j
+$ make test_unit -j$(nproc)
 ...
 ...
 ...
