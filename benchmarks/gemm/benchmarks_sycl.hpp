@@ -125,6 +125,10 @@ using BmgF16Tile_9 = TiledMMAHelper<MMAAtomF16, Layout<BmgGemm_BF16FP32_TileShap
 using BmgGemmFP16FP16FP32_RCR_16 = Gemm_Bench_F16FP32_RCR<BmgGemm_BF16FP32_TileShape_16_64_32, BmgF16Tile_9, void, void>;
 CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmFP16FP16FP32_RCR_16);
 
+using BmgF16Tile_1 = TiledMMA<MMAAtomF16, Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>, Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
+using BmgGemmFP16FP16FP32_RCR_6 = Gemm_Bench_F16FP32_RCR<Shape<_256, _256, _32>, BmgF16Tile_1, void, void>;
+CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmFP16FP16FP32_RCR_6);
+
 static void register_gemm_benchmarks() {
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_5);
@@ -133,6 +137,7 @@ static void register_gemm_benchmarks() {
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_9);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_16);
   CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_5);
+  CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_6);
   CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_7);
   CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_9);
   CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_16);

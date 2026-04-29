@@ -230,6 +230,21 @@ SEED_KERNELS = {
             "split_k": 1,
         },
         {
+            "kernel_name": "BmgGemmFP16FP16FP32_RCR_6",
+            "layout": "rcr",
+            "dtype_a": "f16",
+            "dtype_b": "f16",
+            "dtype_c": "f32",
+            "dtype_acc": "f32",
+            "tile_m": 256,
+            "tile_n": 256,
+            "tile_k": 32,
+            "sg_m": 8,
+            "sg_n": 4,
+            "stages": 2,
+            "split_k": 1,
+        },
+        {
             "kernel_name": "03_bmg_gemm_streamk_splitk_f16",
             "layout": "rcr",
             "dtype_a": "f16",
@@ -462,6 +477,35 @@ def default_shapes(dtype):
         "shape_set_id": f"default_{dtype}_decode_prefill",
         "source": "predefined",
         "shapes": shapes,
+    }
+
+
+def dry_run_shapes(dtype):
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "shape_set_id": f"dry_run_{dtype}",
+        "source": "dry_run",
+        "shapes": [
+            {
+                "shape_id": f"dry_run_rcr_{dtype}_1_64_32",
+                "layout": "rcr",
+                "dtype_a": dtype,
+                "dtype_b": dtype,
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 1,
+                "n": 64,
+                "k": 32,
+                "runtime_defaults": {
+                    "raster_order": "heuristic",
+                    "swizzle_size": 1,
+                    "barrier_interval": 0,
+                    "k_unroll": 1,
+                },
+                "tags": ["dry_run"],
+            }
+        ],
     }
 
 
@@ -1239,13 +1283,21 @@ def workflow(args):
     reports_dir = ensure_dir(workspace / "reports")
 
     profiles = read_json(args.compiler_profiles_json) if args.compiler_profiles_json else default_compiler_profiles()
-    shapes_doc = read_json(args.shapes_json) if args.shapes_json else default_shapes(args.dtype)
+    dry_run_mode = getattr(args, "dry_run", False)
+    if args.shapes_json:
+        shapes_doc = read_json(args.shapes_json)
+    else:
+        shapes_doc = dry_run_shapes(args.dtype) if dry_run_mode else default_shapes(args.dtype)
     base_constraints = read_json(args.constraints_json) if args.constraints_json else default_constraints()
+    top_k = min(args.top_k, 1) if dry_run_mode else args.top_k
+    confirm_runs = 0 if dry_run_mode else args.confirm_runs
+    probe_mode = "off" if dry_run_mode else args.probe_mode
 
     probe_rows = []
     probe_logs = []
+    probe_commands = []
     benchmark_commands = []
-    if args.constraints_json or args.probe_mode == "off":
+    if args.constraints_json or probe_mode == "off":
         constraints = copy.deepcopy(base_constraints)
         env_caps = collect_environment_metadata(
             shell_init=args.shell_init,
@@ -1253,7 +1305,7 @@ def workflow(args):
             streamk_example_exe=args.streamk_example_exe,
             cwd=args.cwd,
         )
-        env_caps["probe_mode"] = "off" if args.probe_mode == "off" else "external_constraints"
+        env_caps["probe_mode"] = "dry_run_off" if dry_run_mode else ("off" if probe_mode == "off" else "external_constraints")
         env_caps["constraint_source"] = constraints["constraint_source"]
         env_caps["probe_results"] = []
         verified_hw_caps_path = reports_dir / "verified_hw_caps.json"
@@ -1332,13 +1384,13 @@ def workflow(args):
             benchmark_commands.extend(commands)
         all_rows.extend(screening_rows)
 
-        if args.confirm_runs > 0:
+        if confirm_runs > 0:
             confirm_entries = generate_confirmation_entries(
                 screening_rows,
                 candidate_space,
                 shapes_doc,
-                top_k=args.top_k,
-                confirm_runs=args.confirm_runs,
+                top_k=top_k,
+                confirm_runs=confirm_runs,
             )
             if confirm_entries:
                 confirm_config = configs_dir / "confirm.in"
@@ -1379,8 +1431,8 @@ def workflow(args):
     dispatch_table = build_dispatch_table(
         all_rows,
         shapes_doc,
-        top_k=args.top_k,
-        confirm_runs=args.confirm_runs,
+        top_k=top_k,
+        confirm_runs=confirm_runs,
         close_call_threshold=args.close_call_threshold,
     )
     dispatch_path = reports_dir / "gemm_dispatch_table.json"
@@ -1409,6 +1461,7 @@ def workflow(args):
         "phase_a_summary": str(phase_a_summary_path),
         "phase_b_summary": str(phase_b_summary_path),
         "summary": str(summary_path),
+        "dry_run": dry_run_mode,
     }
 
 
@@ -1442,6 +1495,11 @@ def build_parser():
     parser.add_argument("--constraints-json", default="", help="Optional path to safe_search_constraints.json.")
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")
     parser.add_argument("--skip-run", action="store_true", help="Only emit generated artifacts without invoking the benchmark.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run a minimal benchmark-backed screening smoke with a tiny shape set and no confirmation.",
+    )
     parser.add_argument("--top-k", type=int, default=3, help="Top-k candidates kept for confirmation.")
     parser.add_argument("--confirm-runs", type=int, default=3, help="Number of confirmation attempts for top-k candidates.")
     parser.add_argument(

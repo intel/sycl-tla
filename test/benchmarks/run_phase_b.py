@@ -35,6 +35,7 @@ def main():
     parser.add_argument("--confirm-runs", type=int, default=3)
     parser.add_argument("--close-call-threshold", type=float, default=3.0)
     parser.add_argument("--skip-run", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     workflow_args = profiler.build_parser().parse_args(
@@ -61,6 +62,7 @@ def main():
         + (["--constraints-json", args.constraints_json] if args.constraints_json else [])
         + (["--compiler-profiles-json", args.compiler_profiles_json] if args.compiler_profiles_json else [])
         + (["--shapes-json", args.shapes_json] if args.shapes_json else [])
+        + (["--dry-run"] if args.dry_run else [])
         + (["--skip-run"] if args.skip_run else [])
     )
     outputs = profiler.workflow(workflow_args)

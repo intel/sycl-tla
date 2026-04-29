@@ -283,6 +283,46 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(splitk["dtype_a"], "f16")
         self.assertEqual(splitk["runner"], "streamk_example")
 
+    def test_f16_candidate_space_includes_large_tile(self):
+        shapes = profiler.default_shapes("f16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles)
+
+        candidate_ids = {candidate["candidate_id"] for candidate in candidate_space["candidates"]}
+        self.assertIn("rcr_f16f16f32_tm256_tn256_tk32_sg8x4_st2_sk1", candidate_ids)
+
+    def test_dry_run_shapes_use_tiny_shape_set(self):
+        shapes = profiler.dry_run_shapes("bf16")
+
+        self.assertEqual(shapes["source"], "dry_run")
+        self.assertEqual(len(shapes["shapes"]), 1)
+        shape = shapes["shapes"][0]
+        self.assertEqual((shape["m"], shape["n"], shape["k"]), (1, 64, 32))
+        self.assertEqual(shape["runtime_defaults"]["barrier_interval"], 0)
+
+    def test_dry_run_workflow_uses_minimal_shape_set_and_no_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    tmpdir,
+                    "--dtype",
+                    "f16",
+                    "--dry-run",
+                    "--skip-run",
+                ]
+            )
+            outputs = profiler.workflow(args)
+
+            self.assertTrue(outputs["dry_run"])
+            shapes_doc = profiler.read_json(Path(tmpdir) / "inputs" / "gemm_target_shapes.json")
+            self.assertEqual(shapes_doc["source"], "dry_run")
+            phase_a_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_a_summary.json")
+            self.assertEqual(phase_a_summary["probe_mode"], "dry_run_off")
+            phase_b_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_b_summary.json")
+            self.assertEqual(phase_b_summary["candidate_count"], 5)
+
     def test_static_probe_disables_splitk_without_streamk_binary(self):
         constraints = profiler.default_constraints()
         env_caps = {
