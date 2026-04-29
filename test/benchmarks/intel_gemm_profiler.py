@@ -523,7 +523,10 @@ def candidate_class(tile_m, sg_count):
 
 def select_compiler_profile_id(profiles, tile_m, sg_count):
     chosen = None
+    available_profiles = [profile for profile in profiles["profiles"] if profile.get("probe_status") not in {"fail", "timeout"}]
     for profile in profiles["profiles"]:
+        if profile.get("probe_status") in {"fail", "timeout"}:
+            continue
         selector = profile.get("selector", {})
         if "tile_m_min" in selector and tile_m < selector["tile_m_min"]:
             continue
@@ -537,7 +540,8 @@ def select_compiler_profile_id(profiles, tile_m, sg_count):
         break
     if chosen:
         return chosen
-    return profiles["profiles"][0]["compiler_profile_id"]
+    fallback_profiles = available_profiles or profiles["profiles"]
+    return fallback_profiles[0]["compiler_profile_id"]
 
 
 def candidate_id_for(seed):
@@ -884,6 +888,77 @@ def build_dpas_probe_entry(shapes_doc, candidate_space):
     }
 
 
+def build_compiler_profile_probe_entries(shapes_doc, candidate_space, profiles):
+    probe_entries = build_phase_a_probe_entries(shapes_doc, candidate_space)
+    probe_entry_by_class = {
+        "small_tile": next((entry for entry in probe_entries if entry["probe_class"] == "small" and entry["candidate"].get("runner", "benchmark") == "benchmark"), None),
+        "medium_tile": next((entry for entry in probe_entries if entry["probe_class"] == "medium" and entry["candidate"].get("runner", "benchmark") == "benchmark"), None),
+        "large_tile": next((entry for entry in probe_entries if entry["probe_class"] == "large" and entry["candidate"].get("runner", "benchmark") == "benchmark"), None),
+    }
+    compiler_probe_entries = []
+    for profile in profiles["profiles"]:
+        base_entry = probe_entry_by_class.get(profile.get("candidate_class"))
+        if base_entry is None:
+            continue
+        entry = copy.deepcopy(base_entry)
+        entry["stage"] = "compiler_profile_probe"
+        entry["probe_class"] = profile["candidate_class"]
+        entry["compiler_profile_probe_id"] = profile["compiler_profile_id"]
+        entry["compiler_profile_id"] = profile["compiler_profile_id"]
+        entry["bm_name"] = (
+            f"{entry['candidate']['candidate_id']}__{entry['shape']['shape_id']}__"
+            f"compiler_probe__{profile['compiler_profile_id'].replace('.', '_')}"
+        )
+        compiler_probe_entries.append(entry)
+    return compiler_probe_entries
+
+
+def shell_init_with_env(shell_init, env_map):
+    exports = [f"export {name}={shlex.quote(str(value))}" for name, value in env_map.items()]
+    if shell_init and exports:
+        return f"{shell_init} && " + " && ".join(exports)
+    if exports:
+        return " && ".join(exports)
+    return shell_init
+
+
+def build_compiler_flags_probe_summary(rows):
+    by_profile = {}
+    for row in rows:
+        by_profile[row["compiler_profile_id"]] = {
+            "compiler_profile_id": row["compiler_profile_id"],
+            "status": row["status"],
+            "avg_tflops": row["avg_tflops"],
+            "avg_runtime_ms": row["avg_runtime_ms"],
+            "candidate_id": row["candidate_id"],
+            "shape_id": row["shape_id"],
+            "log": row["stdout_log"],
+        }
+    grouped = defaultdict(list)
+    for item in by_profile.values():
+        grouped[item["compiler_profile_id"].split(".")[1]].append(item)
+    selected = {}
+    for candidate_class, items in grouped.items():
+        passed = [item for item in items if item["status"] == "pass"]
+        if passed:
+            selected[candidate_class] = max(passed, key=lambda item: float(item["avg_tflops"] or 0.0))["compiler_profile_id"]
+    return {"results": list(by_profile.values()), "selected_profile_ids": selected}
+
+
+def apply_probe_results_to_profiles(profiles, compiler_probe_summary):
+    updated = copy.deepcopy(profiles)
+    result_by_id = {item["compiler_profile_id"]: item for item in compiler_probe_summary.get("results", [])}
+    selected_profile_ids = set(compiler_probe_summary.get("selected_profile_ids", {}).values())
+    for profile in updated["profiles"]:
+        result = result_by_id.get(profile["compiler_profile_id"])
+        if result:
+            profile["probe_status"] = result["status"]
+            profile["probe_avg_tflops"] = result["avg_tflops"]
+            profile["probe_avg_runtime_ms"] = result["avg_runtime_ms"]
+        profile["probe_selected"] = profile["compiler_profile_id"] in selected_profile_ids
+    return updated
+
+
 def blocked_rule_for_row(row):
     return {
         "rule_id": f"probe.blocked.{row['candidate_id']}",
@@ -974,7 +1049,7 @@ def write_config(entries, config_path):
             metadata[entry["bm_name"]] = {
                 "shape_id": shape["shape_id"],
                 "candidate_id": candidate["candidate_id"],
-                "compiler_profile_id": candidate["compiler_profile_id"],
+                "compiler_profile_id": entry.get("compiler_profile_id", candidate["compiler_profile_id"]),
                 "stage": entry["stage"],
                 "attempt_index": entry["attempt_index"],
                 "layout": shape["layout"],
@@ -1293,6 +1368,7 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
             probe_commands.extend(commands)
 
     dpas_probe = {"status": "skipped", "reason": "probe mode disabled or benchmark unavailable"}
+    compiler_flags_probe = {"results": [], "selected_profile_ids": {}}
     if (
         effective_probe_mode == "run"
         and not args.skip_run
@@ -1329,10 +1405,37 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
             else:
                 dpas_probe = {"status": "fail", "reason": "missing benchmark row", "log": str(dpas_log)}
 
+        compiler_probe_entries = build_compiler_profile_probe_entries(shapes_doc, static_candidate_space, profiles)
+        compiler_probe_rows = []
+        for entry in compiler_probe_entries:
+            profile = next(
+                profile
+                for profile in profiles["profiles"]
+                if profile["compiler_profile_id"] == entry["compiler_profile_probe_id"]
+            )
+            compiler_log = logs_dir / f"{entry['compiler_profile_probe_id'].replace('.', '_')}.log"
+            compiler_config = configs_dir / f"{entry['compiler_profile_probe_id'].replace('.', '_')}.in"
+            compiler_manifest = manifests_dir / f"{entry['compiler_profile_probe_id'].replace('.', '_')}_manifest.json"
+            rows, command = run_entries_with_benchmark(
+                [entry],
+                compiler_config,
+                compiler_manifest,
+                compiler_log,
+                args.benchmark_exe,
+                cwd=args.cwd,
+                shell_init=shell_init_with_env(args.shell_init, profile.get("env", {})),
+                timeout=args.timeout,
+            )
+            compiler_probe_rows.extend(rows)
+            probe_logs.append(str(compiler_log))
+            probe_commands.append(shell_join(command))
+        compiler_flags_probe = build_compiler_flags_probe_summary(compiler_probe_rows)
+
     constraints = apply_run_probe_constraints(static_constraints, probe_rows) if probe_rows else static_constraints
     env_caps["probe_mode"] = effective_probe_mode
     env_caps["constraint_source"] = constraints["constraint_source"]
     env_caps["dpas_baseline_probe"] = dpas_probe
+    env_caps["compiler_flags_probe"] = compiler_flags_probe
     env_caps["probe_results"] = [
         {
             "candidate_id": row["candidate_id"],
@@ -1464,6 +1567,7 @@ def build_phase_a_summary(verified_hw_caps, constraints, probe_rows):
         "probe_mode": verified_hw_caps.get("probe_mode", "off"),
         "constraint_source": constraints["constraint_source"],
         "dpas_baseline_probe": verified_hw_caps.get("dpas_baseline_probe", {}),
+        "compiler_flags_probe": verified_hw_caps.get("compiler_flags_probe", {}),
         "probe_results": len(probe_rows),
         "successful_probe_results": sum(1 for row in probe_rows if row["status"] == "pass"),
         "allowed_values": constraints["allowed_values"],
@@ -1533,6 +1637,7 @@ def workflow(args):
             manifests_dir,
             logs_dir,
         )
+        profiles = apply_probe_results_to_profiles(profiles, env_caps.get("compiler_flags_probe", {}))
 
     constraints_path = inputs_dir / "safe_search_constraints.json"
     profiles_path = inputs_dir / "compiler_profiles.json"

@@ -93,6 +93,14 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertIn("runtime_sweep", variant)
         self.assertIn("barrier_interval", variant["runtime_sweep"]["allowed_fields"])
 
+    def test_select_compiler_profile_skips_failed_probe_profile(self):
+        profiles = profiler.default_compiler_profiles()
+        profiles["profiles"][0]["probe_status"] = "fail"
+
+        selected = profiler.select_compiler_profile_id(profiles, tile_m=8, sg_count=4)
+
+        self.assertNotEqual(selected, "bmg.small_tile.default")
+
     def test_parse_benchmark_log_maps_generated_bm_name(self):
         metadata = {
             "rcr_bf16bf16f32_tm8_tn128_tk32_sg1x4_st2_sk1__rcr_bf16_1_4096_14336__screening__0": {
@@ -481,6 +489,21 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertIn("custom_mid", shape_ids)
         self.assertIn("custom_big", shape_ids)
 
+    def test_build_compiler_profile_probe_entries_matches_candidate_classes(self):
+        shapes = profiler.default_shapes("bf16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
+
+        entries = profiler.build_compiler_profile_probe_entries(shapes, candidate_space, profiles)
+
+        self.assertEqual(len(entries), 3)
+        probe_ids = {entry["compiler_profile_probe_id"] for entry in entries}
+        self.assertIn("bmg.small_tile.default", probe_ids)
+        self.assertIn("bmg.medium_tile.default", probe_ids)
+        self.assertIn("bmg.large_tile.default", probe_ids)
+        self.assertEqual(entries[0]["compiler_profile_id"], entries[0]["compiler_profile_probe_id"])
+
     def test_dry_run_workflow_uses_minimal_shape_set_and_no_confirmation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             args = profiler.build_parser().parse_args(
@@ -505,12 +528,36 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
     def test_phase_a_summary_includes_dpas_probe(self):
         summary = profiler.build_phase_a_summary(
-            {"probe_mode": "run", "dpas_baseline_probe": {"status": "pass", "avg_tflops": "1.23"}},
+            {
+                "probe_mode": "run",
+                "dpas_baseline_probe": {"status": "pass", "avg_tflops": "1.23"},
+                "compiler_flags_probe": {"results": [{"compiler_profile_id": "bmg.small_tile.default", "status": "pass"}]},
+            },
             profiler.default_constraints(),
             [],
         )
 
         self.assertEqual(summary["dpas_baseline_probe"]["status"], "pass")
+        self.assertEqual(summary["compiler_flags_probe"]["results"][0]["compiler_profile_id"], "bmg.small_tile.default")
+
+    def test_apply_probe_results_to_profiles_marks_selected_profiles(self):
+        profiles = profiler.default_compiler_profiles()
+        summary = {
+            "results": [
+                {"compiler_profile_id": "bmg.small_tile.default", "status": "pass", "avg_tflops": "1.0", "avg_runtime_ms": "0.1"},
+                {"compiler_profile_id": "bmg.medium_tile.default", "status": "fail", "avg_tflops": "", "avg_runtime_ms": ""},
+                {"compiler_profile_id": "bmg.large_tile.default", "status": "pass", "avg_tflops": "2.0", "avg_runtime_ms": "0.2"},
+            ],
+            "selected_profile_ids": {"small_tile": "bmg.small_tile.default", "large_tile": "bmg.large_tile.default"},
+        }
+
+        updated = profiler.apply_probe_results_to_profiles(profiles, summary)
+
+        by_id = {profile["compiler_profile_id"]: profile for profile in updated["profiles"]}
+        self.assertEqual(by_id["bmg.small_tile.default"]["probe_status"], "pass")
+        self.assertTrue(by_id["bmg.small_tile.default"]["probe_selected"])
+        self.assertEqual(by_id["bmg.medium_tile.default"]["probe_status"], "fail")
+        self.assertFalse(by_id["bmg.medium_tile.default"]["probe_selected"])
 
     def test_run_benchmark_returns_timeout(self):
         with tempfile.TemporaryDirectory() as tmpdir:
