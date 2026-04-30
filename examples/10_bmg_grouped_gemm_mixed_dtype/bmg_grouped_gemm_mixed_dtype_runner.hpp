@@ -249,6 +249,27 @@ struct ExampleRunner {
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
   using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
 
+  // DeviceAllocation packs sub-byte types at sizeof_bits/8 bytes per element,
+  // but T* pointer arithmetic advances sizeof(T)=1 byte per element.
+  // This helper computes the correct pointer for packed storage.
+  template <typename T>
+  static T* packed_ptr(T* base, int64_t offset) {
+    if constexpr (cute::sizeof_bits_v<T> < 8) {
+      return reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(base) + offset * cute::sizeof_bits_v<T> / 8);
+    } else {
+      return base + offset;
+    }
+  }
+
+  template <typename T>
+  static const T* packed_ptr(const T* base, int64_t offset) {
+    if constexpr (cute::sizeof_bits_v<T> < 8) {
+      return reinterpret_cast<const T*>(reinterpret_cast<const uint8_t*>(base) + offset * cute::sizeof_bits_v<T> / 8);
+    } else {
+      return base + offset;
+    }
+  }
+
   //
   // Data members
   //
@@ -508,6 +529,22 @@ struct ExampleRunner {
       int64_t elements_C = M * N;
       int64_t elements_D = M * N;
 
+      // For sub-byte types (e.g. int4), each group's element count must be byte-aligned,
+      // i.e. a multiple of (8 / sizeof_bits). Otherwise packed_ptr's integer division
+      // will silently truncate the bit offset and the next group's pointer will be wrong.
+      constexpr int bits_A = cute::sizeof_bits_v<ElementA>;
+      if constexpr (bits_A < 8) {
+        constexpr int elems_per_byte_A = 8 / bits_A;
+        CUTLASS_ASSERT((elements_A % elems_per_byte_A == 0) &&
+          "ElementA is sub-byte: M*K per group must be a multiple of (8/sizeof_bits<ElementA>) for byte-aligned packed storage.");
+      }
+      constexpr int bits_B = cute::sizeof_bits_v<ElementB>;
+      if constexpr (bits_B < 8) {
+        constexpr int elems_per_byte_B = 8 / bits_B;
+        CUTLASS_ASSERT((elements_B % elems_per_byte_B == 0) &&
+          "ElementB is sub-byte: K*N per group must be a multiple of (8/sizeof_bits<ElementB>) for byte-aligned packed storage.");
+      }
+
       total_elements_A += elements_A;
       total_elements_B += elements_B;
       total_elements_C += elements_C;
@@ -516,8 +553,8 @@ struct ExampleRunner {
       const int scale_k = options.g == 0 ? 1 : cute::ceil_div(K, options.g);
       const int dq_mn_size = options.g == 0 ? 1 : AIsNarrower ? M : N;
       total_elements_S += (dq_mn_size * scale_k);
-      total_elements_Z += (dq_mn_size * scale_k);
       auto zero_elements_packed_along_k = get<0>(StrideZero{});
+      total_elements_Z += (dq_mn_size * std::max(static_cast<int>(zero_elements_packed_along_k), scale_k));
 
       stride_A_host.push_back(cutlass::make_cute_packed_stride(StrideA{}, {M, K, 1}));
       stride_B_host.push_back(cutlass::make_cute_packed_stride(StrideB{}, {N, K, 1}));
@@ -697,12 +734,12 @@ struct ExampleRunner {
 
     // Compute offsets, alpha & beta over group on host
     for (int32_t i = 0; i < options.groups; ++i) {
-      ptr_A_host.at(i) = block_A.get() + offset_A.at(i);
-      ptr_B_host.at(i) = block_B.get() + offset_B.at(i);
-      ptr_A_dq_host.at(i) = block_A_dq.get() + offset_A.at(i);
-      ptr_B_dq_host.at(i) = block_B_dq.get() + offset_B.at(i);
-      ptr_S_host.at(i) = block_S.get() + offset_S.at(i);
-      ptr_Z_host.at(i) = block_Z.get() + offset_Z.at(i);
+      ptr_A_host.at(i) = packed_ptr(block_A.get(), offset_A.at(i));
+      ptr_B_host.at(i) = packed_ptr(block_B.get(), offset_B.at(i));
+      ptr_A_dq_host.at(i) = packed_ptr(block_A_dq.get(), offset_A.at(i));
+      ptr_B_dq_host.at(i) = packed_ptr(block_B_dq.get(), offset_B.at(i));
+      ptr_S_host.at(i) = packed_ptr(block_S.get(), offset_S.at(i));
+      ptr_Z_host.at(i) = packed_ptr(block_Z.get(), offset_Z.at(i));
       ptr_C_host.at(i) = block_C.get() + offset_C.at(i);
       ptr_D_host.at(i) = block_D.get() + offset_D.at(i);
       // Fill host vector of alpha & beta with random values if using per-group values
@@ -809,17 +846,17 @@ struct ExampleRunner {
       // filled by initialize_mixed_dtype_block above
       if (options.g != 0) {
         if constexpr (AIsNarrower) {
-          dequantize(block_A_dq.get() + offset_A.at(i), block_A.get() + offset_A.at(i), layout_A,
-                     block_S.get() + offset_S.at(i), block_Z.get() + offset_Z.at(i), layout_scale, layout_zero,
+          dequantize(packed_ptr(block_A_dq.get(), offset_A.at(i)), packed_ptr(block_A.get(), offset_A.at(i)), layout_A,
+                     packed_ptr(block_S.get(), offset_S.at(i)), packed_ptr(block_Z.get(), offset_Z.at(i)), layout_scale, layout_zero,
                      options.g);
         } else {
             if constexpr (cute::sizeof_bits_v<ElementB> < 8) {
-                dequantize_B_int4(block_B_dq.get() + offset_B.at(i), block_B.get() + offset_B.at(i), layout_B,
-                            block_S.get() + offset_S.at(i), block_Z.get() + offset_Z.at(i), layout_scale, layout_zero,
+                dequantize_B_int4(packed_ptr(block_B_dq.get(), offset_B.at(i)), packed_ptr(block_B.get(), offset_B.at(i)), layout_B,
+                            packed_ptr(block_S.get(), offset_S.at(i)), packed_ptr(block_Z.get(), offset_Z.at(i)), layout_scale, layout_zero,
                             options.g);
             } else {
-                dequantize(block_B_dq.get() + offset_B.at(i), block_B.get() + offset_B.at(i), layout_B,
-                            block_S.get() + offset_S.at(i), block_Z.get() + offset_Z.at(i), layout_scale, layout_zero,
+                dequantize(packed_ptr(block_B_dq.get(), offset_B.at(i)), packed_ptr(block_B.get(), offset_B.at(i)), layout_B,
+                            packed_ptr(block_S.get(), offset_S.at(i)), packed_ptr(block_Z.get(), offset_Z.at(i)), layout_scale, layout_zero,
                             options.g);
             }
         }
@@ -827,19 +864,19 @@ struct ExampleRunner {
         if constexpr (AIsNarrower) {
           const size_t size_a = i == options.groups - 1 ? block_A.size() - offset_A[i] : offset_A[i + 1] - offset_A[i];
           quantize_tensorwise<ElementQuant, ElementMMA>(
-              block_A.get() + offset_A.at(i),
-              block_A_dq.get() + offset_A.at(i),
-              block_S.get() + offset_S.at(i),
-              block_Z.get() + offset_Z.at(i),
+              packed_ptr(block_A.get(), offset_A.at(i)),
+              packed_ptr(block_A_dq.get(), offset_A.at(i)),
+              packed_ptr(block_S.get(), offset_S.at(i)),
+              packed_ptr(block_Z.get(), offset_Z.at(i)),
               size_a, 1
           );
         } else {
           const size_t size_b = i == options.groups - 1 ? block_B.size() - offset_B[i] : offset_B[i + 1] - offset_B[i];
           quantize_tensorwise<ElementQuant, ElementMMA>(
-              block_B.get() + offset_B.at(i),
-              block_B_dq.get() + offset_B.at(i),
-              block_S.get() + offset_S.at(i),
-              block_Z.get() + offset_Z.at(i),
+              packed_ptr(block_B.get(), offset_B.at(i)),
+              packed_ptr(block_B_dq.get(), offset_B.at(i)),
+              packed_ptr(block_S.get(), offset_S.at(i)),
+              packed_ptr(block_Z.get(), offset_Z.at(i)),
               size_b, 1
           );
         }
