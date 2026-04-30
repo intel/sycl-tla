@@ -10901,11 +10901,29 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
     ]
 
     default_tiles_wg_sg = [
-        ([256, 256, 32], [8, 4, 1]),
-        ([128, 256, 32], [4, 8, 1]),
-        ([256, 128, 32], [8, 4, 1]),
-        ([128, 128, 32], [4, 4, 1]),
-        ([64, 128, 32], [2, 4, 1]),
+        # Only tiles that were selected as best kernel in benchmarks
+        # === K=64 ===
+        ([256, 128, 64],[8,4,1]),
+        ([128, 256, 64],[4,8,1]),
+        ([128, 128, 64],[4,4,1]),
+        ([256, 64, 64],[8,2,1]),
+        ([64, 256, 64],[2,8,1]),
+        ([32, 32, 64],[4,2,1]),
+        ([16, 64, 64],[2,4,1]),
+        ([64, 16, 64],[8,1,1]),
+
+        # === K=32 ===
+        ([512, 128, 32],[16,2,1]),
+        ([256, 256, 32],[8,4,1]),
+        ([256, 128, 32],[8,4,1]),
+        ([256, 64, 32],[8,2,1]),
+        ([128, 256, 32],[4,8,1]),
+        ([128, 64, 32],[4,2,1]),
+        ([32, 32, 32],[4,2,1]),
+        ([16, 64, 32],[2,4,1]),
+
+        # === K=16 ===
+        ([256, 256, 16],[8,4,1]),
     ]
 
     max_cc = min_cc
@@ -10922,9 +10940,9 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
     for tile in custom_tile_shapes:
       default_tiles_wg_sg.append((tile["wg"],tile["sg"]))
 
+    tile_descriptions=[]
     for math_inst in math_instructions:
-        tile_descriptions = []
-        for wg_tile, sg_tile in default_tiles_wg_sg:
+        for wg_tile,sg_tile in default_tiles_wg_sg:
           tile_descriptions.append(TileDescription(wg_tile,
                   0, sg_tile, math_inst, min_cc, max_cc, [1, 1, 1]))
 
