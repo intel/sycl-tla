@@ -72,21 +72,19 @@ struct SYCLTimer {
 #endif
   }
 
-  float milliseconds() {
+  float milliseconds() const {
 #if defined(CUTLASS_SYCL_PROFILING_ENABLED)
     syclEventSynchronize(start_, stop_);
     float time;
     syclEventElapsedTime(&time, start_, stop_);
     return time;
 #else
-    compat::get_default_queue().wait();
-    auto stop = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float, std::milli> time = stop - start_;
+    std::chrono::duration<float, std::milli> time = stop_ - start_;
     return time.count();
 #endif
   }
 
-  float seconds() {
+  float seconds() const {
     return milliseconds() * float(1e-3);
   }
 

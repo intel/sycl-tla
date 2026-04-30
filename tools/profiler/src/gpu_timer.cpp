@@ -37,6 +37,10 @@
 
 #include "cutlass/profiler/gpu_timer.h"
 
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <cute/util/compat.hpp>
+#endif
+
 
 namespace cutlass {
 namespace profiler {
@@ -44,6 +48,7 @@ namespace profiler {
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 GpuTimer::GpuTimer() {
+#if !defined(CUTLASS_ENABLE_SYCL)
   cudaError_t result;
 
   for (auto & event : events) {
@@ -52,40 +57,65 @@ GpuTimer::GpuTimer() {
       throw std::runtime_error("Failed to create CUDA event");
     }
   }
+#endif
 }
 
 GpuTimer::GpuTimer(GpuTimer&& gpu_timer) noexcept {
+#if defined(CUTLASS_ENABLE_SYCL)
+  (void)gpu_timer;
+#else
   memcpy(events, gpu_timer.events, sizeof(events));
   memset(gpu_timer.events, 0, sizeof(gpu_timer.events));
+#endif
 }
 
 GpuTimer::~GpuTimer() {
+#if !defined(CUTLASS_ENABLE_SYCL)
   for (const auto & event : events) {
     if (event != nullptr) {
       cudaEventDestroy(event);
     }
   }
+#endif
 }
 
 /// Records a start event in the stream, the flag is for cudaEventRecordWithFlags
 void GpuTimer::start(cudaStream_t stream, const unsigned int flag) {
+#if defined(CUTLASS_ENABLE_SYCL)
+  (void)stream;
+  (void)flag;
+  sycl_timer.start();
+#else
   cudaError_t result = cudaEventRecordWithFlags(events[0], stream, flag);
   if (result != cudaSuccess) {
     throw std::runtime_error("Failed to record start event.");
   }
+#endif
 }
 
 /// Records a stop event in the stream, the flag is for cudaEventRecordWithFlags
 void GpuTimer::stop(cudaStream_t stream, const unsigned int flag) {
-cudaError_t result = cudaEventRecordWithFlags(events[1], stream, flag);
+#if defined(CUTLASS_ENABLE_SYCL)
+  (void)stream;
+  (void)flag;
+  sycl_timer.stop();
+#else
+  cudaError_t result = cudaEventRecordWithFlags(events[1], stream, flag);
   if (result != cudaSuccess) {
     throw std::runtime_error("Failed to record stop event.");
   }
+#endif
 }
 
 /// Records a stop event in the stream and synchronizes on the stream, the flag is for cudaEventRecordWithFlags
 void GpuTimer::stop_and_wait(cudaStream_t stream, const unsigned int flag) {
 
+#if defined(CUTLASS_ENABLE_SYCL)
+  (void)stream;
+  (void)flag;
+  sycl_timer.stop();
+  compat::get_default_queue().wait();
+#else
   stop(stream, flag);
 
   cudaError_t result;
@@ -101,11 +131,15 @@ void GpuTimer::stop_and_wait(cudaStream_t stream, const unsigned int flag) {
       throw std::runtime_error("Failed to synchronize with CUDA device.");
     }
   }
+#endif
 }
 
 /// Returns the duration in milliseconds
 double GpuTimer::duration(int iterations) const {
 
+#if defined(CUTLASS_ENABLE_SYCL)
+  return double(sycl_timer.milliseconds()) / double(iterations);
+#else
   float avg_ms;
 
   cudaError_t result = cudaEventElapsedTime(&avg_ms, events[0], events[1]);
@@ -114,6 +148,7 @@ double GpuTimer::duration(int iterations) const {
   }
 
   return double(avg_ms) / double(iterations);
+#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
