@@ -138,7 +138,24 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(experiment["IGC_TotalGRFNum"], "128")
         self.assertNotIn("SYCL_PROGRAM_COMPILE_OPTIONS", experiment)
         self.assertEqual(metadata["status"], "needs_validation")
-        self.assertIn("Do not use in production", metadata["notes"])
+        self.assertIn("Advisory only", metadata["notes"])
+        self.assertIn("do not pass -cl-intel-256-GRF-per-thread", metadata["notes"])
+        self.assertIn("do not use in production", metadata["notes"])
+
+    def test_load_persisted_build_config_fallback_matches_experimental_variants(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fallback_path = Path(tmpdir) / "missing_build_config.json"
+            build_config = profiler.load_persisted_build_config(fallback_path)
+
+        self.assertIn("perf_default", build_config["compile_env_variants"])
+        self.assertIn("perf_perfmodel", build_config["compile_env_variants"])
+        self.assertIn("perf_128grf_experiment", build_config["compile_env_variants"])
+        self.assertIn("perf_enableBCR", build_config["compile_env_variants"])
+        self.assertIn("debug_with_lines", build_config["compile_env_variants"])
+        self.assertEqual(
+            build_config["compile_env_variant_metadata"]["perf_128grf_experiment"]["status"],
+            "needs_validation",
+        )
 
     def test_selected_runtime_env_ignores_compile_time_flags(self):
         profiles = profiler.default_compiler_profiles()

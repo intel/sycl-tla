@@ -42,11 +42,53 @@ def _default_build_config():
                 "IGC_VectorAliasBBThreshold": "100000000000",
                 "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
             },
+            "perf_perfmodel": {
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "100000000000",
+                "IGC_VISAOptions": "-perfmodel",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+            },
+            "perf_128grf_experiment": {
+                "IGC_VectorAliasBBThreshold": "100000000000",
+                "IGC_TotalGRFNum": "128",
+            },
+            "perf_enableBCR": {
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "100000000000",
+                "IGC_VISAOptions": "-enableBCR",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+            },
+            "debug_with_lines": {
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "100000000000",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
+            },
         },
         "compile_env_variant_metadata": {
             "perf_default": {
                 "status": "validated",
                 "notes": "Current best-known validated BMG baseline. Use 256-GRF with large-register-file.",
+            },
+            "perf_perfmodel": {
+                "status": "experimental",
+                "notes": "Optional perfmodel sweep. Not selected by default and not enforced by the workflow.",
+            },
+            "perf_128grf_experiment": {
+                "status": "needs_validation",
+                "notes": (
+                    "Experimental 128-GRF trial. Leaves both 256-GRF hints unset on purpose: "
+                    "do not pass -cl-intel-256-GRF-per-thread and do not pass "
+                    "-ze-opt-large-register-file. Advisory only; do not use in production until "
+                    "B60 A/B validation confirms benefit over perf_default."
+                ),
+            },
+            "perf_enableBCR": {
+                "status": "experimental",
+                "notes": "Optional enableBCR sweep. Not selected by default and not enforced by the workflow.",
+            },
+            "debug_with_lines": {
+                "status": "debug_only",
+                "notes": "Adds line tables for debug or profiling workflows.",
             },
         },
         "selected_compile_variant": "perf_default",

@@ -53,15 +53,15 @@
     },
     "perf_perfmodel": {
       "status": "experimental",
-      "notes": "Optional perfmodel sweep. Not selected by default."
+      "notes": "Optional perfmodel sweep. Not selected by default and not enforced by the workflow."
     },
     "perf_128grf_experiment": {
       "status": "needs_validation",
-      "notes": "Experimental 128-GRF trial. Do not use in production until B60 A/B validation confirms benefit over perf_default."
+      "notes": "Experimental 128-GRF trial. Leaves both 256-GRF hints unset on purpose: do not pass -cl-intel-256-GRF-per-thread and do not pass -ze-opt-large-register-file. Advisory only; do not use in production until B60 A/B validation confirms benefit over perf_default."
     },
     "perf_enableBCR": {
       "status": "experimental",
-      "notes": "Optional enableBCR sweep. Not selected by default."
+      "notes": "Optional enableBCR sweep. Not selected by default and not enforced by the workflow."
     },
     "debug_with_lines": {
       "status": "debug_only",
