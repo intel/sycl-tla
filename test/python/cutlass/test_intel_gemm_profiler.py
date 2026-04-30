@@ -143,6 +143,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertIn("do not use in production", metadata["notes"])
 
     def test_load_persisted_build_config_fallback_matches_experimental_variants(self):
+        persisted = profiler.load_persisted_build_config(profiler.DEFAULT_BUILD_CONFIG_PATH)
         with tempfile.TemporaryDirectory() as tmpdir:
             fallback_path = Path(tmpdir) / "missing_build_config.json"
             build_config = profiler.load_persisted_build_config(fallback_path)
@@ -173,6 +174,11 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(
             build_config["compile_env_variant_metadata"]["perf_128grf_experiment"]["status"],
             "needs_validation",
+        )
+        self.assertEqual(build_config["compile_env_variants"], persisted["compile_env_variants"])
+        self.assertEqual(
+            build_config["compile_env_variant_metadata"],
+            persisted["compile_env_variant_metadata"],
         )
 
     def test_selected_runtime_env_ignores_compile_time_flags(self):
