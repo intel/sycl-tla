@@ -83,8 +83,7 @@
     "peak_memory_bw_gbps": 576,
     "slm_per_xe_core_kb": 64,
     "grf_registers_per_thread": 256,
-    "grf_bytes_per_thread": 8192
-    ,
+    "grf_bytes_per_thread": 8192,
     "grf_bytes_per_thread_256grf": 8192,
     "grf_bytes_per_thread_128grf": 4096
   }

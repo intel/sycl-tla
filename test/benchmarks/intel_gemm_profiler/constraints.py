@@ -42,26 +42,11 @@ def _default_build_config():
                 "IGC_VectorAliasBBThreshold": "100000000000",
                 "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
             },
-            "perf_perfmodel": {
-                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
-                "IGC_VectorAliasBBThreshold": "100000000000",
-                "IGC_VISAOptions": "-perfmodel",
-                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
-            },
-            "perf_128grf": {
-                "IGC_VectorAliasBBThreshold": "100000000000",
-                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
-            },
-            "perf_enableBCR": {
-                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
-                "IGC_VectorAliasBBThreshold": "100000000000",
-                "IGC_VISAOptions": "-enableBCR",
-                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
-            },
-            "debug_with_lines": {
-                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
-                "IGC_VectorAliasBBThreshold": "100000000000",
-                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
+        },
+        "compile_env_variant_metadata": {
+            "perf_default": {
+                "status": "validated",
+                "notes": "Current best-known validated BMG baseline. Use 256-GRF with large-register-file.",
             },
         },
         "selected_compile_variant": "perf_default",

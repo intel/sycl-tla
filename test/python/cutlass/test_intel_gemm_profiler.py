@@ -102,6 +102,10 @@ class TestIntelGemmProfiler(unittest.TestCase):
         profiles = profiler.default_compiler_profiles()
 
         self.assertEqual(
+            profiles["build_config"]["selected_compile_variant"],
+            "perf_default",
+        )
+        self.assertEqual(
             profiles["build_config"]["cmake_vars"]["CUTLASS_SYCL_PROFILING_ENABLED"],
             "OFF",
         )
@@ -119,6 +123,21 @@ class TestIntelGemmProfiler(unittest.TestCase):
             "level_zero:gpu",
         )
         self.assertEqual(profiles["profiles"][0]["runtime_env_override"], {})
+        self.assertEqual(
+            profiles["build_config"]["compile_env_variant_metadata"]["perf_default"]["status"],
+            "validated",
+        )
+
+    def test_build_config_marks_128grf_as_experimental(self):
+        profiles = profiler.default_compiler_profiles()
+
+        experiment = profiles["build_config"]["compile_env_variants"]["perf_128grf_experiment"]
+        metadata = profiles["build_config"]["compile_env_variant_metadata"]["perf_128grf_experiment"]
+
+        self.assertEqual(experiment["IGC_TotalGRFNum"], "128")
+        self.assertNotIn("SYCL_PROGRAM_COMPILE_OPTIONS", experiment)
+        self.assertEqual(metadata["status"], "needs_validation")
+        self.assertIn("Do not use in production", metadata["notes"])
 
     def test_selected_runtime_env_ignores_compile_time_flags(self):
         profiles = profiler.default_compiler_profiles()

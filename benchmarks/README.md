@@ -58,7 +58,7 @@ The checked-in default is the current **best-known validated BMG performance bas
 - compile env keeps the validated 256-GRF + large-register-file settings
 - runtime env only injects the active execution settings such as `ONEAPI_DEVICE_SELECTOR=level_zero:gpu`
 
-This means the out-of-box config is already tuned for the current BMG search flow, while keeping experimental variants available.
+This means the out-of-box config is already tuned for the current BMG search flow. Experimental build variants remain available, but they are not treated as validated replacements for the default baseline.
 
 ### Custom configuration for experiments
 
@@ -74,6 +74,8 @@ Custom testing is still supported in two ways:
 2. **Build-time experiments**: change `build_config.selected_compile_variant` or `build_config.compile_env_variants`, rebuild the benchmark/example binaries with that config, then point the workflow to the rebuilt executables with `--benchmark-exe` and `--streamk-example-exe`.
 
 At the moment, the workflow consumes `runtime_config` directly during execution; `build_config` is the recorded source of truth for how the benchmark binaries should be built for each experiment.
+
+For example, `perf_128grf_experiment` is intentionally marked as a **needs-validation** experiment. The validated production baseline remains `perf_default` until B60 A/B measurements prove otherwise.
 
 ## Compiling Flash Attention v2 benchmarks with Intel Xe backend
 ```
