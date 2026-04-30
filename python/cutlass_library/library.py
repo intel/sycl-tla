@@ -1373,7 +1373,7 @@ class MathInstruction:
 #
 class TileDescription:
 
-  def __init__(self, threadblock_shape, stages, warp_count, math_instruction, min_compute, max_compute, cluster_shape = [1,1,1], explicit_vector_sizes = None):
+  def __init__(self, threadblock_shape, stages, warp_count, math_instruction, min_compute, max_compute, cluster_shape = [1,1,1], explicit_vector_sizes = None, name_suffix = ""):
     self.threadblock_shape = threadblock_shape
     self.tile_shape = threadblock_shape
     self.stages = stages
@@ -1383,6 +1383,7 @@ class TileDescription:
     self.maximum_compute_capability = max_compute
     self.cluster_shape = cluster_shape
     self.explicit_vector_sizes = explicit_vector_sizes
+    self.name_suffix = name_suffix
 
   def procedural_name(self):
     if self.minimum_compute_capability >= 90:

@@ -132,7 +132,15 @@ For improving performance on Intel PVC/BMG you could try the following:
 
 Please refer to [Building with Sycl Support](../media/docs/cpp/build/building_with_sycl_support.md#building-with-sycl-for-intel-gpu-support) for the complete environment setup.
 
-* `SYCL_TLA_ADDITIONAL_TILE_SHAPES` : Path to JSON file containing workgroup and subgroup tile sizes meant for Intel Xe architecture. Expected format s a list of dictionaries like [{"wg": [256, 256, 32], "sg": [8,4,1]}, ...]. Here `wg` refers to the workgroup tile shape and `sg` refers to the subgroup tile layout. This is enabled only for BF16/FP16 kernels.
+* `SYCL_TLA_ADDITIONAL_TILE_SHAPES` : Path to JSON file containing workgroup and subgroup tile sizes meant for Intel Xe architecture. Expected format s a list of dictionaries like [{"wg": [256, 256, 32], "sg": [8,4,1]}, ...]. Here `wg` refers to the workgroup tile shape and `sg` refers to the subgroup tile layout. This is enabled only for BF16/FP16 kernels. Entries may also provide `"stages": [2]` to request explicit Intel Xe stage counts for that tile.
+
+* `SYCL_TLA_XE_GENERATOR_CONFIG` : Path to a JSON file describing a larger Intel Xe generation space. Supported keys are:
+  * `include_default_tiles` : whether to keep the built-in BF16/FP16 tile list
+  * `tile_shapes` : additional BF16/FP16 tile specs of the form `{"wg": [...], "sg": [...], "stages": [0, 2]}`
+  * `tile_schedulers` : Intel Xe scheduler variants to emit, currently `persistent` and `streamk`
+  * `dtype_families` : Intel Xe dtype families to emit, currently `16b`, `fp8`, `int8`
+
+> Note: Intel Xe regular library generation still excludes the `mixed` dtype family. That path requires grouped GEMM infrastructure and is intentionally rejected instead of being silently emitted.
 
 Sample JSON file that may be used for adding tile shapes.
 

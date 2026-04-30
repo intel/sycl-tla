@@ -1,0 +1,17 @@
+{
+  "include_default_tiles": false,
+  "tile_shapes": [
+    {
+      "wg": [256, 256, 32],
+      "sg": [8, 4, 1],
+      "stages": [2]
+    },
+    {
+      "wg": [256, 256, 32],
+      "sg": [4, 8, 1],
+      "stages": [2]
+    }
+  ],
+  "tile_schedulers": ["persistent", "streamk"],
+  "dtype_families": ["16b"]
+}

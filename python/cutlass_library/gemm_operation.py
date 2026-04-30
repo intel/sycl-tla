@@ -421,7 +421,7 @@ class GemmOperation:
             s = self.layout_name_3x(),
             al = str(max(self.A.alignment, self.B.alignment)),
             t = TileSchedulerSuffixes[self.tile_scheduler],
-            k = self.kernel_schedule_name_3x(),
+            k = self.kernel_schedule_name_3x() + self.tile_description.name_suffix,
             e = self.epilogue_schedule_name_3x())
       else:
         # Legacy naming for non-3x Intel Xe operations

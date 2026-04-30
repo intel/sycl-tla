@@ -43,7 +43,7 @@ import cutlass_library.manifest as cutlass_manifest
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 class GenerateXe(unittest.TestCase):
-    def _run_generate_xe(self, arch_name, arch_const, reference_file):
+    def _run_generate_xe(self, arch_name, arch_const, reference_file, instantiation_level=""):
         args = {
             "operations": "all",
             "build_dir": "",
@@ -59,7 +59,7 @@ class GenerateXe(unittest.TestCase):
             "heuristics_configs_per_problem": 10,
             "heuristics_restrict_kernels": False,
             "disable_full_archs_compilation": False,
-            "instantiation_level": "",
+            "instantiation_level": instantiation_level,
             "disable_cutlass_package_imports": False
         }
         manifest = cutlass_manifest.Manifest(Namespace(**args))
@@ -97,6 +97,94 @@ class GenerateXe(unittest.TestCase):
     @mock.patch.dict(os.environ, {"SYCL_TLA_ADDITIONAL_TILE_SHAPES": os.path.join(DIR_PATH, "data/custom_tile_shape.json")})
     def test_generate_xe20_with_custom_shapes(self):
         self._run_generate_xe("bmg", INTEL_XE20, "data/custom_generated_xe20_ops.json")
+
+    @mock.patch.dict(
+        os.environ,
+        {"SYCL_TLA_XE_GENERATOR_CONFIG": os.path.join(DIR_PATH, "data/intel_xe_generator_config.json")},
+    )
+    def test_generate_xe20_with_generator_config_enables_stage_scheduler_and_sg_variants(self):
+        args = {
+            "operations": "all",
+            "build_dir": "",
+            "curr_build_dir": ".",
+            "generator_target": "library",
+            "architectures": "bmg",
+            "kernels": "",
+            "ignore_kernels": "",
+            "exclude_kernels": "",
+            "filter_by_cc": "True",
+            "cuda_version": "11.0.0",
+            "kernel_filter_file": None,
+            "heuristics_configs_per_problem": 10,
+            "heuristics_restrict_kernels": False,
+            "disable_full_archs_compilation": False,
+            "instantiation_level": "",
+            "disable_cutlass_package_imports": False
+        }
+        manifest = cutlass_manifest.Manifest(Namespace(**args))
+        cutlass_generator.GenerateIntelXe(manifest, cuda_version="_", arch=INTEL_XE20)
+        xe_ops = pytree.tree_flatten(manifest.operations)[0]
+        names = [op._procedural_name for op in xe_ops]
+
+        self.assertTrue(any("_stream_k" in name for name in names))
+        self.assertTrue(any("_2_ttt" in name for name in names))
+        self.assertTrue(any("_sg8x4x1" in name for name in names))
+        self.assertTrue(any("_sg4x8x1" in name for name in names))
+
+    def test_generate_xe20_instantiation_level_2_enables_fp8_and_int8_families(self):
+        args = {
+            "operations": "all",
+            "build_dir": "",
+            "curr_build_dir": ".",
+            "generator_target": "library",
+            "architectures": "bmg",
+            "kernels": "",
+            "ignore_kernels": "",
+            "exclude_kernels": "",
+            "filter_by_cc": "True",
+            "cuda_version": "11.0.0",
+            "kernel_filter_file": None,
+            "heuristics_configs_per_problem": 10,
+            "heuristics_restrict_kernels": False,
+            "disable_full_archs_compilation": False,
+            "instantiation_level": "2",
+            "disable_cutlass_package_imports": False
+        }
+        manifest = cutlass_manifest.Manifest(Namespace(**args))
+        cutlass_generator.GenerateIntelXe(manifest, cuda_version="_", arch=INTEL_XE20)
+        xe_ops = pytree.tree_flatten(manifest.operations)[0]
+        names = [op._procedural_name for op in xe_ops]
+
+        self.assertTrue(any("_e4m3_" in name or "_e5m2_" in name for name in names))
+        self.assertTrue(any("_s8_" in name for name in names))
+        self.assertTrue(any("_stream_k" in name for name in names))
+
+    @mock.patch.dict(
+        os.environ,
+        {"SYCL_TLA_XE_GENERATOR_CONFIG": os.path.join(DIR_PATH, "data/unsupported_mixed_generator_config.json")},
+    )
+    def test_generate_xe20_rejects_unsupported_mixed_dtype_family(self):
+        args = {
+            "operations": "all",
+            "build_dir": "",
+            "curr_build_dir": ".",
+            "generator_target": "library",
+            "architectures": "bmg",
+            "kernels": "",
+            "ignore_kernels": "",
+            "exclude_kernels": "",
+            "filter_by_cc": "True",
+            "cuda_version": "11.0.0",
+            "kernel_filter_file": None,
+            "heuristics_configs_per_problem": 10,
+            "heuristics_restrict_kernels": False,
+            "disable_full_archs_compilation": False,
+            "instantiation_level": "",
+            "disable_cutlass_package_imports": False
+        }
+        manifest = cutlass_manifest.Manifest(Namespace(**args))
+        with self.assertRaisesRegex(ValueError, "mixed dtype"):
+            cutlass_generator.GenerateIntelXe(manifest, cuda_version="_", arch=INTEL_XE20)
 
 if __name__ == "__main__":
     unittest.main()

@@ -10865,7 +10865,210 @@ def GeneratePVC(manifest, cuda_version):
     GenerateIntelXe(manifest, cuda_version, arch=INTEL_XE12)
 
 ###################################################################################################
-def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
+def _intel_xe_default_16b_tile_specs():
+    return [
+        # === K=64 ===
+        {"wg": [256, 128, 64], "sg": [8, 4, 1]},
+        {"wg": [128, 256, 64], "sg": [4, 8, 1]},
+        {"wg": [128, 128, 64], "sg": [4, 4, 1]},
+        {"wg": [256, 64, 64], "sg": [8, 2, 1]},
+        {"wg": [64, 256, 64], "sg": [2, 8, 1]},
+        {"wg": [32, 32, 64], "sg": [4, 2, 1]},
+        {"wg": [16, 64, 64], "sg": [2, 4, 1]},
+        {"wg": [64, 16, 64], "sg": [8, 1, 1]},
+
+        # === K=32 ===
+        {"wg": [512, 128, 32], "sg": [16, 2, 1]},
+        {"wg": [256, 256, 32], "sg": [8, 4, 1]},
+        {"wg": [256, 128, 32], "sg": [8, 4, 1]},
+        {"wg": [256, 64, 32], "sg": [8, 2, 1]},
+        {"wg": [128, 256, 32], "sg": [4, 8, 1]},
+        {"wg": [128, 64, 32], "sg": [4, 2, 1]},
+        {"wg": [32, 32, 32], "sg": [4, 2, 1]},
+        {"wg": [16, 64, 32], "sg": [2, 4, 1]},
+        {"wg": [64, 128, 32], "sg": [2, 4, 1]},
+        {"wg": [128, 128, 32], "sg": [4, 4, 1]},
+
+        # === K=16 ===
+        {"wg": [256, 256, 16], "sg": [8, 4, 1]},
+    ]
+
+
+def _intel_xe_default_fp8_tile_specs():
+    return [
+        {"wg": [256, 256, 64], "sg": [8, 4, 1]},
+        {"wg": [128, 256, 64], "sg": [4, 8, 1]},
+        {"wg": [256, 128, 64], "sg": [8, 4, 1]},
+        {"wg": [128, 128, 64], "sg": [4, 4, 1]},
+    ]
+
+
+def _intel_xe_default_int8_tile_specs():
+    return [
+        {"wg": [256, 256, 64], "sg": [8, 4, 1]},
+        {"wg": [128, 256, 64], "sg": [4, 8, 1]},
+        {"wg": [256, 128, 64], "sg": [8, 4, 1]},
+        {"wg": [128, 128, 64], "sg": [4, 4, 1]},
+    ]
+
+
+def _normalize_intel_xe_tile_spec(tile_spec):
+    wg = tile_spec["wg"]
+    sg = tile_spec["sg"]
+    if len(wg) != 3 or len(sg) != 3:
+        raise ValueError(f"Intel Xe tile specs must provide 3D wg/sg shapes, got wg={wg}, sg={sg}")
+
+    normalized = {
+        "wg": [int(v) for v in wg],
+        "sg": [int(v) for v in sg],
+    }
+
+    if "stages" in tile_spec:
+        stages = tile_spec["stages"]
+        if isinstance(stages, int):
+            stages = [stages]
+        normalized["stages"] = [int(v) for v in stages]
+
+    return normalized
+
+
+def _load_legacy_intel_xe_additional_tile_specs():
+    custom_tile_shapes = []
+    if os.getenv("SYCL_TLA_ADDITIONAL_TILE_SHAPES"):
+        custom_json = os.getenv("SYCL_TLA_ADDITIONAL_TILE_SHAPES")
+        with open(custom_json, "r") as f:
+            try:
+                custom_tile_shapes = json.load(f)
+            except json.JSONDecodeError:
+                raise ValueError(f"Error decoding JSON : {custom_json}")
+
+    return [_normalize_intel_xe_tile_spec(tile) for tile in custom_tile_shapes]
+
+
+def _parse_intel_xe_tile_schedulers(tile_schedulers):
+    scheduler_map = {
+        "persistent": TileSchedulerType.Persistent,
+        "streamk": TileSchedulerType.StreamK,
+        "stream_k": TileSchedulerType.StreamK,
+    }
+
+    parsed = []
+    for scheduler in tile_schedulers:
+        key = scheduler.lower()
+        if key == "default":
+            raise ValueError(
+                "Intel Xe generator config should use 'persistent' instead of 'default'. "
+                "Default and Persistent share the same naming suffix and would collide."
+            )
+        if key not in scheduler_map:
+            raise ValueError(f"Unsupported Intel Xe tile scheduler: {scheduler}")
+        parsed.append(scheduler_map[key])
+    return parsed
+
+
+def _load_intel_xe_generator_options(manifest):
+    instantiation_level = getattr(manifest, "instantiation_level", 0) or 0
+
+    options = {
+        "include_default_tiles": True,
+        "tile_specs_16b": _intel_xe_default_16b_tile_specs(),
+        "stage_counts_16b": [0],
+        "tile_schedulers_16b": [TileSchedulerType.Persistent],
+        "dtype_families": ["16b"],
+    }
+
+    # Intel exceptions:
+    # - stage 1/3 are not enabled by default until validated on BMG/PVC
+    # - StreamK is only enabled in expanded generation modes
+    # - mixed dtype regular library generation remains disabled because it still
+    #   requires grouped GEMM infrastructure on Intel Xe
+    if instantiation_level >= 1:
+        options["stage_counts_16b"] = [0, 2]
+        options["tile_schedulers_16b"] = [TileSchedulerType.Persistent, TileSchedulerType.StreamK]
+
+    if instantiation_level >= 2:
+        options["dtype_families"] = ["16b", "fp8", "int8"]
+
+    config_path = os.getenv("SYCL_TLA_XE_GENERATOR_CONFIG")
+    if config_path:
+        with open(config_path, "r") as f:
+            try:
+                config = json.load(f)
+            except json.JSONDecodeError:
+                raise ValueError(f"Error decoding JSON : {config_path}")
+
+        if "include_default_tiles" in config:
+            options["include_default_tiles"] = bool(config["include_default_tiles"])
+
+        if "stage_counts" in config:
+            options["stage_counts_16b"] = [int(v) for v in config["stage_counts"]]
+
+        if "tile_schedulers" in config:
+            options["tile_schedulers_16b"] = _parse_intel_xe_tile_schedulers(config["tile_schedulers"])
+
+        if "dtype_families" in config:
+            dtype_families = [str(v).lower() for v in config["dtype_families"]]
+            if "mixed" in dtype_families:
+                raise ValueError(
+                    "Intel Xe mixed dtype regular library generation is not yet supported. "
+                    "Use grouped GEMM infrastructure instead of enabling 'mixed' here."
+                )
+            valid_dtype_families = {"16b", "fp8", "int8"}
+            unknown = sorted(set(dtype_families) - valid_dtype_families)
+            if unknown:
+                raise ValueError(f"Unsupported Intel Xe dtype families: {unknown}")
+            options["dtype_families"] = dtype_families
+
+        extra_tile_specs = [_normalize_intel_xe_tile_spec(tile) for tile in config.get("tile_shapes", [])]
+        if options["include_default_tiles"]:
+            options["tile_specs_16b"].extend(extra_tile_specs)
+        else:
+            options["tile_specs_16b"] = extra_tile_specs
+
+    options["tile_specs_16b"].extend(_load_legacy_intel_xe_additional_tile_specs())
+    return options
+
+
+def _build_intel_xe_tile_descriptions(tile_specs, stage_counts, math_inst, min_cc, max_cc):
+    normalized_specs = [_normalize_intel_xe_tile_spec(tile_spec) for tile_spec in tile_specs]
+
+    sg_variants_by_wg = {}
+    for tile_spec in normalized_specs:
+        key = tuple(tile_spec["wg"])
+        sg_variants_by_wg.setdefault(key, set()).add(tuple(tile_spec["sg"]))
+
+    tile_descriptions = []
+    seen = set()
+    for tile_spec in normalized_specs:
+        wg_tile = tile_spec["wg"]
+        sg_tile = tile_spec["sg"]
+        tile_stages = tile_spec.get("stages", stage_counts)
+        name_suffix = ""
+        if len(sg_variants_by_wg[tuple(wg_tile)]) > 1:
+            name_suffix = "_sg{}x{}x{}".format(*sg_tile)
+
+        for stage in tile_stages:
+            key = (tuple(wg_tile), tuple(sg_tile), int(stage))
+            if key in seen:
+                continue
+            seen.add(key)
+            tile_descriptions.append(
+                TileDescription(
+                    wg_tile,
+                    int(stage),
+                    sg_tile,
+                    math_inst,
+                    min_cc,
+                    max_cc,
+                    [1, 1, 1],
+                    name_suffix=name_suffix,
+                )
+            )
+
+    return tile_descriptions
+
+
+def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20, tile_specs=None, stage_counts=None, tile_schedulers=None):
     """Generate FP16/BF16 GEMM kernels for Intel Xe architecture using DPAS.
     
     :param min_cc: Architecture number (12 for PVC, 20 for BMG)
@@ -10900,52 +11103,17 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
             MathOperation.multiply_add)
     ]
 
-    default_tiles_wg_sg = [
-        # === K=64 ===
-        ([256, 128, 64],[8,4,1]),
-        ([128, 256, 64],[4,8,1]),
-        ([128, 128, 64],[4,4,1]),
-        ([256, 64, 64],[8,2,1]),
-        ([64, 256, 64],[2,8,1]),
-        ([32, 32, 64],[4,2,1]),
-        ([16, 64, 64],[2,4,1]),
-        ([64, 16, 64],[8,1,1]),
-
-        # === K=32 ===
-        ([512, 128, 32],[16,2,1]),
-        ([256, 256, 32],[8,4,1]),
-        ([256, 128, 32],[8,4,1]),
-        ([256, 64, 32],[8,2,1]),
-        ([128, 256, 32],[4,8,1]),
-        ([128, 64, 32],[4,2,1]),
-        ([32, 32, 32],[4,2,1]),
-        ([16, 64, 32],[2,4,1]),
-        ([64, 128, 32], [2,4,1]),
-        ([128, 128, 32], [4,4,1]),
-
-        # === K=16 ===
-        ([256, 256, 16],[8,4,1]),
-    ]
+    if tile_specs is None:
+        tile_specs = _intel_xe_default_16b_tile_specs()
+    if stage_counts is None:
+        stage_counts = [0]
+    if tile_schedulers is None:
+        tile_schedulers = [TileSchedulerType.Persistent]
 
     max_cc = min_cc
 
-    # Expecting JSON of format i.e list of dictionaries [{"wg": [256, 256, 32], "sg": [8,4,1]}, ...]
-    custom_tile_shapes = []
-    if os.getenv("SYCL_TLA_ADDITIONAL_TILE_SHAPES"):
-      custom_json = os.getenv("SYCL_TLA_ADDITIONAL_TILE_SHAPES")
-      with open(custom_json, "r") as f:
-          try:
-            custom_tile_shapes = json.load(f)
-          except json.JSONDecodeError:
-            raise ValueError(f"Error decoding JSON : {custom_json}")
-    for tile in custom_tile_shapes:
-      default_tiles_wg_sg.append((tile["wg"],tile["sg"]))
-
     for math_inst in math_instructions:
-        tile_descriptions=[]
-        for wg_tile,sg_tile in default_tiles_wg_sg:
-          tile_descriptions.append(TileDescription(wg_tile,
-                  0, sg_tile, math_inst, min_cc, max_cc, [1, 1, 1]))
+        tile_descriptions = _build_intel_xe_tile_descriptions(tile_specs, stage_counts, math_inst, min_cc, max_cc)
 
         # Generate kernels for different output (D) types
         # Default: accumulator type (FP32 for mixed precision, same as input for native precision)
@@ -10968,8 +11136,8 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
                 
                 schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
-                CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
-   
+                CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=tile_schedulers)
+    
 def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate FP8 (E4M3/E5M2) GEMM kernels for Intel Xe architecture using DPAS.
     
@@ -11018,16 +11186,13 @@ def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     max_cc = min_cc
 
     for math_inst in math_instructions:
-        tile_descriptions = [
-            TileDescription([256, 256, 64],
-                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([128, 256, 64],
-                0, [4, 8, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([256, 128, 64],
-                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([128, 128, 64],
-                0, [4, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-        ]
+        tile_descriptions = _build_intel_xe_tile_descriptions(
+            _intel_xe_default_fp8_tile_specs(),
+            [0],
+            math_inst,
+            min_cc,
+            max_cc,
+        )
 
         # Generate kernels for different output (D) types
         # Valid D types for FP8: fp32 (accumulator), bf16, fp16, e4m3, e5m2
@@ -11073,16 +11238,13 @@ def GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     max_cc = min_cc
 
     for math_inst in math_instructions:
-        tile_descriptions = [
-            TileDescription([256, 256, 64],
-                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([128, 256, 64],
-                0, [4, 8, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([256, 128, 64],
-                0, [8, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-            TileDescription([128, 128, 64],
-                0, [4, 4, 1], math_inst, min_cc, max_cc, [1, 1, 1]),
-        ]
+        tile_descriptions = _build_intel_xe_tile_descriptions(
+            _intel_xe_default_int8_tile_specs(),
+            [0],
+            math_inst,
+            min_cc,
+            max_cc,
+        )
 
         # Generate kernels for different output (D) types
         # Default: accumulator type (INT32)
@@ -11184,15 +11346,25 @@ def GenerateIntelXe(manifest, cuda_version, arch):
     if arch not in [INTEL_XE12, INTEL_XE20]:
         raise ValueError(f"Unsupported Intel Xe architecture: {arch}. Supported: {INTEL_XE12} (PVC), {INTEL_XE20} (BMG)")
     
-    # All Intel Xe architectures use the same generation functions
-    # Only the min_cc (architecture number) differs
-    GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=arch)
-    #DISABLED: FP8 GEMMs are not yet ready. Will be enabled once the tests are ready
-    #GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
-    #GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
-    # DISABLED: Mixed precision (FP16 x INT4) requires grouped GEMM infrastructure
-    # Regular library generation uses MainloopIntelXeXMX16 which requires ElementA == ElementB
-    # GenerateXe_TensorOp_mixed_dtype_DPAS_gemm(manifest, cuda_version, min_cc=arch)
+    # All Intel Xe architectures use the same generation functions.
+    # Default generation stays conservative to preserve current B60/PVC behavior.
+    intel_xe_options = _load_intel_xe_generator_options(manifest)
+
+    if "16b" in intel_xe_options["dtype_families"]:
+        GenerateXe_TensorOp_16b_DPAS_gemm(
+            manifest,
+            cuda_version,
+            min_cc=arch,
+            tile_specs=intel_xe_options["tile_specs_16b"],
+            stage_counts=intel_xe_options["stage_counts_16b"],
+            tile_schedulers=intel_xe_options["tile_schedulers_16b"],
+        )
+
+    if "fp8" in intel_xe_options["dtype_families"]:
+        GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
+
+    if "int8" in intel_xe_options["dtype_families"]:
+        GenerateXe_TensorOp_int8_DPAS_gemm(manifest, cuda_version, min_cc=arch)
 
 ###################################################################################################
 
