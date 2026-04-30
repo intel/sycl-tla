@@ -10940,8 +10940,8 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
     for tile in custom_tile_shapes:
       default_tiles_wg_sg.append((tile["wg"],tile["sg"]))
 
-    tile_descriptions=[]
     for math_inst in math_instructions:
+        tile_descriptions=[]
         for wg_tile,sg_tile in default_tiles_wg_sg:
           tile_descriptions.append(TileDescription(wg_tile,
                   0, sg_tile, math_inst, min_cc, max_cc, [1, 1, 1]))
