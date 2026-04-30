@@ -55,13 +55,8 @@ def kernel_catalog_entry(dtype, seed):
     entry["benchmark_target"] = "cutlass_benchmarks_gemm_sycl" if entry["runner"] == "benchmark" else "03_bmg_gemm_streamk"
     entry["grf_mode"] = 256
     entry["ilp_class"] = ilp_class(entry)
-    entry["runtime_defaults"] = {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8 if entry["sg_m"] * entry["sg_n"] >= 4 else 0,
-        "k_unroll": 1,
-    }
-    entry["allowed_runtime_sweeps"] = ["shape_id", "m", "n", "k", "raster_order", "swizzle_size", "barrier_interval", "k_unroll"]
+    entry["runtime_defaults"] = {}
+    entry["allowed_runtime_sweeps"] = ["shape_id", "m", "n", "k"]
     entry["source"] = "seed_catalog_level0"
     entry["dtype_family"] = dtype
     return entry

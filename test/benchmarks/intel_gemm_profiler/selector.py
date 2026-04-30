@@ -64,7 +64,11 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
             peak_tflops = round(analysis["peak_tflops"], 6)
             if analysis["peak_tflops"] > 0:
                 selected_efficiency = round(winner["median_tflops"] / analysis["peak_tflops"], 6)
-                if selected_efficiency < low_efficiency_threshold:
+                if (
+                    analysis["is_compute_bound"]
+                    and selected_efficiency < low_efficiency_threshold
+                    and selected_efficiency < analysis["min_expected_efficiency"]
+                ):
                     efficiency_warning = (
                         f"winner_efficiency_below_{int(low_efficiency_threshold * 100)}pct_peak"
                     )

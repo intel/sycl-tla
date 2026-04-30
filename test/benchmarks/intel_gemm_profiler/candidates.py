@@ -31,7 +31,7 @@ def default_shapes(dtype):
                 "m": item["m"],
                 "n": item["n"],
                 "k": item["k"],
-                "runtime_defaults": {"raster_order": "heuristic", "swizzle_size": 1, "barrier_interval": 8 if item["m"] >= 64 else 0, "k_unroll": 1},
+                "runtime_defaults": {},
                 "tags": item["tags"],
             }
         )
@@ -55,7 +55,7 @@ def dry_run_shapes(dtype):
                 "m": 1,
                 "n": 64,
                 "k": 32,
-                "runtime_defaults": {"raster_order": "heuristic", "swizzle_size": 1, "barrier_interval": 0, "k_unroll": 1},
+                "runtime_defaults": {},
                 "tags": ["dry_run"],
             }
         ],
@@ -102,6 +102,13 @@ def generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=
     candidates = []
     dtypes = sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]})
     kernel_catalog = build_kernel_catalog(dtypes=dtypes, allowed_runners=allowed_runners)
+    available_layouts = {entry["layout"] for entry in kernel_catalog["kernels"]}
+    unsupported_layouts = sorted({shape["layout"] for shape in shapes_doc["shapes"] if shape["layout"] not in available_layouts})
+    if unsupported_layouts:
+        raise ValueError(
+            f"Unsupported layouts in shapes: {', '.join(unsupported_layouts)}. "
+            f"Available layouts: {', '.join(sorted(available_layouts))}."
+        )
     for seed in kernel_catalog["kernels"]:
         if blocked(seed, constraints):
             continue

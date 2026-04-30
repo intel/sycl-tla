@@ -32,11 +32,7 @@
       "shape_id",
       "m",
       "n",
-      "k",
-      "raster_order",
-      "swizzle_size",
-      "barrier_interval",
-      "k_unroll"
+      "k"
     ],
     "pruning_inputs": [
       "dpas_alignment",
@@ -46,11 +42,7 @@
       "split_k_support"
     ],
     "microbench_guided_defaults": {
-      "grf_mode": 256,
-      "barrier_interval": 8,
-      "k_unroll": 1,
-      "raster_order": "heuristic",
-      "swizzle_size": 1
+      "grf_mode": 256
     }
   },
   "kernels": [
@@ -74,21 +66,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "bf16"
@@ -113,21 +96,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "bf16"
@@ -152,21 +126,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "bf16"
@@ -191,21 +156,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "bf16"
@@ -230,21 +186,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "bf16"
@@ -269,21 +216,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp8",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "bf16"
@@ -308,21 +246,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp16",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "bf16"
@@ -347,21 +276,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp16",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "bf16"
@@ -386,21 +306,12 @@
       "benchmark_target": "03_bmg_gemm_streamk",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "bf16"
@@ -425,21 +336,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "f16"
@@ -464,21 +366,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "f16"
@@ -503,21 +396,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "f16"
@@ -542,21 +426,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "f16"
@@ -581,21 +456,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "f16"
@@ -620,21 +486,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp8",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "f16"
@@ -659,21 +516,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp16",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "f16"
@@ -698,21 +546,12 @@
       "benchmark_target": "cutlass_benchmarks_gemm_sycl",
       "grf_mode": 256,
       "ilp_class": "ilp16",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "f16"
@@ -737,21 +576,12 @@
       "benchmark_target": "03_bmg_gemm_streamk",
       "grf_mode": 256,
       "ilp_class": "ilp4",
-      "runtime_defaults": {
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
-        "barrier_interval": 8,
-        "k_unroll": 1
-      },
+      "runtime_defaults": {},
       "allowed_runtime_sweeps": [
         "shape_id",
         "m",
         "n",
-        "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll"
+        "k"
       ],
       "source": "seed_catalog_level0",
       "dtype_family": "f16"

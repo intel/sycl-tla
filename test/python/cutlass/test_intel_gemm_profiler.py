@@ -60,8 +60,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(len(catalog["kernels"]), 9)
         splitk = next(entry for entry in catalog["kernels"] if entry["split_k"] == 2)
         self.assertEqual(splitk["instantiation_level"], 0)
-        self.assertEqual(splitk["runtime_defaults"]["k_unroll"], 1)
-        self.assertIn("barrier_interval", splitk["allowed_runtime_sweeps"])
+        self.assertEqual(splitk["runtime_defaults"], {})
+        self.assertEqual(splitk["allowed_runtime_sweeps"], ["shape_id", "m", "n", "k"])
 
     def test_kernel_catalog_prefers_repo_json(self):
         catalog = profiler.load_persisted_kernel_catalog()
@@ -92,7 +92,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         variant = manifest["variants"][0]
         self.assertIn("compile_time_variant", variant)
         self.assertIn("runtime_sweep", variant)
-        self.assertIn("barrier_interval", variant["runtime_sweep"]["allowed_fields"])
+        self.assertEqual(variant["runtime_sweep"]["allowed_fields"], ["shape_id", "m", "n", "k"])
 
     def test_default_constraints_use_calibrated_slm_limit(self):
         constraints = profiler.default_constraints()
@@ -497,7 +497,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(len(shapes["shapes"]), 1)
         shape = shapes["shapes"][0]
         self.assertEqual((shape["m"], shape["n"], shape["k"]), (1, 64, 32))
-        self.assertEqual(shape["runtime_defaults"]["barrier_interval"], 0)
+        self.assertEqual(shape["runtime_defaults"], {})
 
     def test_build_dpas_probe_entry_uses_small_benchmark_candidate(self):
         shapes = profiler.default_shapes("bf16")
@@ -646,7 +646,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
                 "avg_runtime_ms": "0.57",
                 "best_runtime_ms": "0.56",
                 "worst_runtime_ms": "0.58",
-                "avg_tflops": "29.79",
+                "avg_tflops": "10.0",
                 "avg_throughput": "0",
                 "max_error": "",
                 "close_call_group": "",
@@ -692,6 +692,97 @@ class TestIntelGemmProfiler(unittest.TestCase):
             phase_b_summary["low_efficiency_warnings"][0]["warning"],
             "winner_efficiency_below_40pct_peak",
         )
+
+    def test_dispatch_table_skips_low_efficiency_warning_for_memory_bound_winner(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "memory-bound",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "decode_shape",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 1,
+                    "n": 4096,
+                    "k": 14336,
+                }
+            ],
+        }
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles)
+        rows = [
+            {
+                "run_id": "confirm",
+                "stage": "confirm",
+                "attempt_index": 0,
+                "shape_id": "decode_shape",
+                "candidate_id": "rcr_bf16bf16f32_tm8_tn128_tk32_sg1x8_st2_sk1",
+                "compiler_profile_id": "bmg.small_tile.default",
+                "status": "pass",
+                "verify_status": "pass",
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 1,
+                "n": 4096,
+                "k": 14336,
+                "avg_runtime_ms": "0.235",
+                "best_runtime_ms": "0.230",
+                "worst_runtime_ms": "0.240",
+                "avg_tflops": "0.5",
+                "avg_throughput": "0",
+                "max_error": "",
+                "close_call_group": "",
+                "failure_reason": "",
+                "stdout_log": "decode.log",
+            }
+        ]
+
+        dispatch = profiler.build_dispatch_table(
+            rows,
+            shapes,
+            top_k=1,
+            confirm_runs=1,
+            close_call_threshold=3.0,
+            candidate_space=candidate_space,
+            hw_spec=profiler.resolve_hw_reference_spec("bmg"),
+        )
+
+        entry = dispatch["entries"][0]
+        self.assertLess(entry["selected_efficiency"], 0.4)
+        self.assertEqual(entry["efficiency_warning"], "")
+
+    def test_generate_candidate_space_rejects_unsupported_layout(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "unsupported-layout",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "shape_rrr",
+                    "layout": "rrr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 64,
+                    "n": 256,
+                    "k": 256,
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(ValueError, "Unsupported layouts in shapes: rrr"):
+            profiler.generate_candidate_space(shapes, profiler.default_constraints(), profiler.default_compiler_profiles())
 
     def test_phase_a_summary_includes_dpas_probe(self):
         summary = profiler.build_phase_a_summary(

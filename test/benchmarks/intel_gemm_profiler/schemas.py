@@ -35,10 +35,6 @@ SEARCH_RUNTIME_SCHEMA = {
         "m",
         "n",
         "k",
-        "raster_order",
-        "swizzle_size",
-        "barrier_interval",
-        "k_unroll",
     ],
     "pruning_inputs": [
         "dpas_alignment",
@@ -49,10 +45,6 @@ SEARCH_RUNTIME_SCHEMA = {
     ],
     "microbench_guided_defaults": {
         "grf_mode": 256,
-        "barrier_interval": 8,
-        "k_unroll": 1,
-        "raster_order": "heuristic",
-        "swizzle_size": 1,
     },
 }
 
