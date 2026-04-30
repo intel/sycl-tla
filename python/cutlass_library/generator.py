@@ -10901,7 +10901,6 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
     ]
 
     default_tiles_wg_sg = [
-        # Only tiles that were selected as best kernel in benchmarks
         # === K=64 ===
         ([256, 128, 64],[8,4,1]),
         ([128, 256, 64],[4,8,1]),
@@ -10921,6 +10920,8 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
         ([128, 64, 32],[4,2,1]),
         ([32, 32, 32],[4,2,1]),
         ([16, 64, 32],[2,4,1]),
+        ([64, 128, 32], [2,4,1]),
+        ([128, 128, 32], [4,4,1]),
 
         # === K=16 ===
         ([256, 256, 16],[8,4,1]),
