@@ -147,11 +147,29 @@ class TestIntelGemmProfiler(unittest.TestCase):
             fallback_path = Path(tmpdir) / "missing_build_config.json"
             build_config = profiler.load_persisted_build_config(fallback_path)
 
-        self.assertIn("perf_default", build_config["compile_env_variants"])
-        self.assertIn("perf_perfmodel", build_config["compile_env_variants"])
-        self.assertIn("perf_128grf_experiment", build_config["compile_env_variants"])
-        self.assertIn("perf_enableBCR", build_config["compile_env_variants"])
-        self.assertIn("debug_with_lines", build_config["compile_env_variants"])
+        variants = build_config["compile_env_variants"]
+
+        self.assertIn("perf_default", variants)
+        self.assertIn("perf_perfmodel", variants)
+        self.assertIn("perf_128grf_experiment", variants)
+        self.assertIn("perf_enableBCR", variants)
+        self.assertIn("debug_with_lines", variants)
+        self.assertEqual(
+            variants["perf_perfmodel"]["IGC_VISAOptions"],
+            "-perfmodel",
+        )
+        self.assertEqual(
+            variants["perf_enableBCR"]["IGC_VISAOptions"],
+            "-enableBCR",
+        )
+        self.assertEqual(
+            variants["debug_with_lines"]["SYCL_PROGRAM_COMPILE_OPTIONS"],
+            "-ze-opt-large-register-file -gline-tables-only",
+        )
+        self.assertEqual(
+            variants["perf_default"]["SYCL_PROGRAM_COMPILE_OPTIONS"],
+            "-ze-opt-large-register-file",
+        )
         self.assertEqual(
             build_config["compile_env_variant_metadata"]["perf_128grf_experiment"]["status"],
             "needs_validation",
