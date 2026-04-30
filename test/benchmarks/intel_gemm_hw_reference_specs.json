@@ -7,6 +7,7 @@
     "eus_per_xe_core": 8,
     "xmx_engines": 160,
     "concurrent_sgs_per_xe_core_256grf": 8,
+    "concurrent_sgs_per_xe_core_128grf": 16,
     "hw_threads_per_eu": 8,
     "subgroup_size": 16,
     "clock_mhz": 2400,
@@ -40,6 +41,8 @@
     "slm_sycl_overhead_cycles": 34,
     "grf_registers_per_thread": 256,
     "grf_bytes_per_thread": 8192,
+    "grf_bytes_per_thread_256grf": 8192,
+    "grf_bytes_per_thread_128grf": 4096,
     "accumulator_grf_per_tile": 16,
     "dispatch_fixed_overhead_ns": 3744,
     "dispatch_per_wg_overhead_ns": 40.1,
@@ -66,6 +69,7 @@
     "eus_per_xe_core": 8,
     "xmx_engines": 256,
     "concurrent_sgs_per_xe_core_256grf": 8,
+    "concurrent_sgs_per_xe_core_128grf": 16,
     "hw_threads_per_eu": 8,
     "subgroup_size": 16,
     "clock_mhz": 2400,
@@ -80,5 +84,8 @@
     "slm_per_xe_core_kb": 64,
     "grf_registers_per_thread": 256,
     "grf_bytes_per_thread": 8192
+    ,
+    "grf_bytes_per_thread_256grf": 8192,
+    "grf_bytes_per_thread_128grf": 4096
   }
 }

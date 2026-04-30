@@ -15,6 +15,8 @@ from .catalog import (
     load_persisted_kernel_catalog,
 )
 from .constraints import (
+    DEFAULT_BUILD_CONFIG_PATH,
+    DEFAULT_RUNTIME_CONFIG_PATH,
     apply_probe_results_to_profiles,
     apply_run_probe_constraints,
     apply_static_probe_constraints,
@@ -22,6 +24,9 @@ from .constraints import (
     blocked_rule_for_row,
     default_compiler_profiles,
     default_constraints,
+    load_persisted_build_config,
+    load_persisted_runtime_config,
+    selected_runtime_env,
 )
 from .hw_specs import (
     DEFAULT_HW_REFERENCE_SPECS_PATH,
@@ -71,6 +76,8 @@ __all__ = [
     "BENCHMARK_ERROR_RE",
     "CSV_FIELDS",
     "DEFAULT_KERNEL_CATALOG_PATH",
+    "DEFAULT_BUILD_CONFIG_PATH",
+    "DEFAULT_RUNTIME_CONFIG_PATH",
     "DEFAULT_HW_REFERENCE_SPECS_PATH",
     "SCHEMA_VERSION",
     "SEARCH_RUNTIME_SCHEMA",
@@ -111,6 +118,8 @@ __all__ = [
     "kernel_catalog_entry",
     "load_persisted_kernel_catalog",
     "load_hw_reference_specs",
+    "load_persisted_build_config",
+    "load_persisted_runtime_config",
     "main",
     "median_or_nan",
     "now_iso",
@@ -120,6 +129,7 @@ __all__ = [
     "read_json",
     "resolve_executable",
     "resolve_hw_reference_spec",
+    "selected_runtime_env",
     "run_benchmark",
     "run_entries_with_benchmark",
     "run_entries_with_streamk_example",

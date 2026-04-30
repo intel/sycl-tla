@@ -32,6 +32,7 @@ if __package__ in (None, ""):
         apply_static_probe_constraints,
         default_compiler_profiles,
         default_constraints,
+        selected_runtime_env,
     )
     from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from intel_gemm_profiler.runner import collect_environment_metadata, run_entries_with_benchmark, run_entries_with_streamk_example
@@ -57,6 +58,7 @@ else:
         apply_static_probe_constraints,
         default_compiler_profiles,
         default_constraints,
+        selected_runtime_env,
     )
     from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from .runner import collect_environment_metadata, run_entries_with_benchmark, run_entries_with_streamk_example
@@ -133,6 +135,7 @@ def empty_anomaly_report(hw_spec):
 
 
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
+    base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
     static_constraints = apply_static_probe_constraints(base_constraints, env_caps)
     hw_spec = resolve_hw_reference_spec(static_constraints["device_arch"], getattr(args, "hw_spec_id", ""))
@@ -149,12 +152,12 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
         probe_streamk_entries = [entry for entry in probe_entries if entry["candidate"].get("runner") == "streamk_example"]
         if probe_benchmark_entries:
             probe_log = logs_dir / "probe.log"
-            rows, command = run_entries_with_benchmark(probe_benchmark_entries, configs_dir / "probe.in", manifests_dir / "probe_manifest.json", probe_log, args.benchmark_exe, cwd=args.cwd, shell_init=args.shell_init, timeout=args.timeout)
+            rows, command = run_entries_with_benchmark(probe_benchmark_entries, configs_dir / "probe.in", manifests_dir / "probe_manifest.json", probe_log, args.benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
             probe_rows.extend(rows)
             probe_logs.append(str(probe_log))
             probe_commands.append(shell_join(command))
         if probe_streamk_entries:
-            rows, commands = run_entries_with_streamk_example(probe_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=args.shell_init, timeout=args.timeout)
+            rows, commands = run_entries_with_streamk_example(probe_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
             probe_rows.extend(rows)
             probe_logs.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in probe_streamk_entries)
             probe_commands.extend(commands)
@@ -164,7 +167,7 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
         dpas_entry = build_dpas_probe_entry(shapes_doc, static_candidate_space)
         if dpas_entry:
             dpas_log = logs_dir / "dpas_probe.log"
-            rows, command = run_entries_with_benchmark([dpas_entry], configs_dir / "dpas_probe.in", manifests_dir / "dpas_probe_manifest.json", dpas_log, args.benchmark_exe, cwd=args.cwd, shell_init=args.shell_init, timeout=args.timeout)
+            rows, command = run_entries_with_benchmark([dpas_entry], configs_dir / "dpas_probe.in", manifests_dir / "dpas_probe_manifest.json", dpas_log, args.benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
             if rows:
                 probe_rows.extend(rows)
                 probe_logs.append(str(dpas_log))
@@ -178,7 +181,8 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
         for entry in compiler_probe_entries:
             profile = next(profile for profile in profiles["profiles"] if profile["compiler_profile_id"] == entry["compiler_profile_probe_id"])
             compiler_log = logs_dir / f"{entry['compiler_profile_probe_id'].replace('.', '_')}.log"
-            rows, command = run_entries_with_benchmark([entry], configs_dir / f"{entry['compiler_profile_probe_id'].replace('.', '_')}.in", manifests_dir / f"{entry['compiler_profile_probe_id'].replace('.', '_')}_manifest.json", compiler_log, args.benchmark_exe, cwd=args.cwd, shell_init=shell_init_with_env(args.shell_init, profile.get("env", {})), timeout=args.timeout)
+            runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles, profile))
+            rows, command = run_entries_with_benchmark([entry], configs_dir / f"{entry['compiler_profile_probe_id'].replace('.', '_')}.in", manifests_dir / f"{entry['compiler_profile_probe_id'].replace('.', '_')}_manifest.json", compiler_log, args.benchmark_exe, cwd=args.cwd, shell_init=runtime_shell_init, timeout=args.timeout)
             compiler_probe_rows.extend(rows)
             probe_logs.append(str(compiler_log))
             probe_commands.append(shell_join(command))
@@ -217,6 +221,7 @@ def workflow(args):
     probe_logs = []
     probe_commands = []
     benchmark_commands = []
+    base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
     if args.constraints_json or probe_mode == "off":
         constraints = copy.deepcopy(base_constraints)
         env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
@@ -252,12 +257,12 @@ def workflow(args):
         screening_rows = []
         if screening_benchmark_entries:
             screening_log = logs_dir / "screening.log"
-            rows, command = run_entries_with_benchmark(screening_benchmark_entries, configs_dir / "screening.in", manifests_dir / "screening_manifest.json", screening_log, args.benchmark_exe, cwd=args.cwd, shell_init=args.shell_init, timeout=args.timeout)
+            rows, command = run_entries_with_benchmark(screening_benchmark_entries, configs_dir / "screening.in", manifests_dir / "screening_manifest.json", screening_log, args.benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
             screening_rows.extend(rows)
             log_paths.append(str(screening_log))
             benchmark_commands.append(shell_join(command))
         if screening_streamk_entries:
-            rows, commands = run_entries_with_streamk_example(screening_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=args.shell_init, timeout=args.timeout)
+            rows, commands = run_entries_with_streamk_example(screening_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
             screening_rows.extend(rows)
             log_paths.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in screening_streamk_entries)
             benchmark_commands.extend(commands)
@@ -270,12 +275,12 @@ def workflow(args):
                 confirm_rows = []
                 if confirm_benchmark_entries:
                     confirm_log = logs_dir / "confirm.log"
-                    rows, command = run_entries_with_benchmark(confirm_benchmark_entries, configs_dir / "confirm.in", manifests_dir / "confirm_manifest.json", confirm_log, args.benchmark_exe, cwd=args.cwd, shell_init=args.shell_init, timeout=args.timeout)
+                    rows, command = run_entries_with_benchmark(confirm_benchmark_entries, configs_dir / "confirm.in", manifests_dir / "confirm_manifest.json", confirm_log, args.benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
                     confirm_rows.extend(rows)
                     log_paths.append(str(confirm_log))
                     benchmark_commands.append(shell_join(command))
                 if confirm_streamk_entries:
-                    rows, commands = run_entries_with_streamk_example(confirm_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=args.shell_init, timeout=args.timeout)
+                    rows, commands = run_entries_with_streamk_example(confirm_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
                     confirm_rows.extend(rows)
                     log_paths.extend(str(logs_dir / f"{entry['bm_name']}.log") for entry in confirm_streamk_entries)
                     benchmark_commands.extend(commands)

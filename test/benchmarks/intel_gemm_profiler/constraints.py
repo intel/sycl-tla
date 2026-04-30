@@ -5,9 +5,110 @@
 
 import copy
 import re
+from pathlib import Path
 
 from .schemas import SCHEMA_VERSION
-from .utils import now_iso
+from .utils import now_iso, read_json
+
+
+DEFAULT_BUILD_CONFIG_PATH = Path(__file__).resolve().parent.parent / "build_config_bmg_perf.json"
+DEFAULT_RUNTIME_CONFIG_PATH = Path(__file__).resolve().parent.parent / "runtime_config_bmg_perf.json"
+
+
+def _default_build_config():
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "device_arch": "bmg",
+        "purpose": "optimal_performance_profiling",
+        "cmake_vars": {
+            "CUTLASS_ENABLE_SYCL": "ON",
+            "DPCPP_SYCL_TARGET": "bmg",
+            "CMAKE_BUILD_TYPE": "Release",
+            "CUTLASS_SYCL_PROFILING_ENABLED": "OFF",
+            "CUTLASS_ENABLE_BENCHMARKS": "ON",
+            "CUTLASS_ENABLE_EXAMPLES": "OFF",
+            "CUTLASS_ENABLE_TESTS": "OFF",
+        },
+        "compile_env": {
+            "CC": "icx",
+            "CXX": "icpx",
+            "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+            "IGC_VectorAliasBBThreshold": "100000000000",
+            "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+        },
+        "compile_env_variants": {
+            "perf_default": {
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "100000000000",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+            },
+            "perf_perfmodel": {
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "100000000000",
+                "IGC_VISAOptions": "-perfmodel",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+            },
+            "perf_128grf": {
+                "IGC_VectorAliasBBThreshold": "100000000000",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+            },
+            "perf_enableBCR": {
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "100000000000",
+                "IGC_VISAOptions": "-enableBCR",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+            },
+            "debug_with_lines": {
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "100000000000",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
+            },
+        },
+        "selected_compile_variant": "perf_default",
+    }
+
+
+def _default_runtime_config():
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "device_arch": "bmg",
+        "runtime_env": {
+            "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+        },
+        "runtime_env_variants": {
+            "default": {
+                "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+            },
+            "ze_affinity_0": {
+                "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "ZE_AFFINITY_MASK": "0",
+            },
+            "ze_affinity_1": {
+                "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "ZE_AFFINITY_MASK": "1",
+            },
+        },
+        "selected_runtime_variant": "default",
+    }
+
+
+def load_persisted_build_config(path=DEFAULT_BUILD_CONFIG_PATH):
+    return read_json(path) if path.exists() else _default_build_config()
+
+
+def load_persisted_runtime_config(path=DEFAULT_RUNTIME_CONFIG_PATH):
+    return read_json(path) if path.exists() else _default_runtime_config()
+
+
+def selected_runtime_env(profiles, profile=None):
+    runtime_config = profiles.get("runtime_config", {})
+    runtime_env = dict(runtime_config.get("runtime_env", {}))
+    selected_variant = runtime_config.get("selected_runtime_variant")
+    variant_overrides = runtime_config.get("runtime_env_variants", {}).get(selected_variant, {})
+    runtime_env.update(variant_overrides)
+    if profile:
+        runtime_env.update(profile.get("runtime_env_override", {}))
+    return runtime_env
 
 
 def default_constraints():
@@ -35,30 +136,29 @@ def default_compiler_profiles():
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
+        "build_config": load_persisted_build_config(),
+        "runtime_config": load_persisted_runtime_config(),
         "profiles": [
             {
                 "compiler_profile_id": "bmg.small_tile.default",
                 "candidate_class": "small_tile",
                 "description": "Default BMG profile for small tiles.",
                 "selector": {"tile_m_max": 16, "sg_count_max": 8},
-                "env": {"ONEAPI_DEVICE_SELECTOR": "level_zero:gpu", "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread", "IGC_VectorAliasBBThreshold": "100000000000", "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only"},
-                "cmake_flags": ["-DCMAKE_BUILD_TYPE=Release"],
+                "runtime_env_override": {},
             },
             {
                 "compiler_profile_id": "bmg.medium_tile.default",
                 "candidate_class": "medium_tile",
                 "description": "Default BMG profile for medium tiles.",
                 "selector": {"tile_m_min": 32, "tile_m_max": 64, "sg_count_max": 16},
-                "env": {"ONEAPI_DEVICE_SELECTOR": "level_zero:gpu", "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread", "IGC_VectorAliasBBThreshold": "100000000000", "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only"},
-                "cmake_flags": ["-DCMAKE_BUILD_TYPE=Release"],
+                "runtime_env_override": {},
             },
             {
                 "compiler_profile_id": "bmg.large_tile.default",
                 "candidate_class": "large_tile",
                 "description": "Default BMG profile for large tiles.",
                 "selector": {"tile_m_min": 128, "sg_count_min": 16},
-                "env": {"ONEAPI_DEVICE_SELECTOR": "level_zero:gpu", "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread", "IGC_VectorAliasBBThreshold": "100000000000", "IGC_VISAOptions": "-perfmodel", "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only"},
-                "cmake_flags": ["-DCMAKE_BUILD_TYPE=Release"],
+                "runtime_env_override": {},
             },
         ],
     }

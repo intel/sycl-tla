@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "device_arch": "bmg",
+  "purpose": "optimal_performance_profiling",
+  "cmake_vars": {
+    "CUTLASS_ENABLE_SYCL": "ON",
+    "DPCPP_SYCL_TARGET": "bmg",
+    "CMAKE_BUILD_TYPE": "Release",
+    "CUTLASS_SYCL_PROFILING_ENABLED": "OFF",
+    "CUTLASS_ENABLE_BENCHMARKS": "ON",
+    "CUTLASS_ENABLE_EXAMPLES": "OFF",
+    "CUTLASS_ENABLE_TESTS": "OFF"
+  },
+  "compile_env": {
+    "CC": "icx",
+    "CXX": "icpx",
+    "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+    "IGC_VectorAliasBBThreshold": "100000000000",
+    "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file"
+  },
+  "compile_env_variants": {
+    "perf_default": {
+      "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+      "IGC_VectorAliasBBThreshold": "100000000000",
+      "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file"
+    },
+    "perf_perfmodel": {
+      "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+      "IGC_VectorAliasBBThreshold": "100000000000",
+      "IGC_VISAOptions": "-perfmodel",
+      "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file"
+    },
+    "perf_128grf": {
+      "IGC_VectorAliasBBThreshold": "100000000000",
+      "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file"
+    },
+    "perf_enableBCR": {
+      "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+      "IGC_VectorAliasBBThreshold": "100000000000",
+      "IGC_VISAOptions": "-enableBCR",
+      "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file"
+    },
+    "debug_with_lines": {
+      "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+      "IGC_VectorAliasBBThreshold": "100000000000",
+      "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only"
+    }
+  },
+  "selected_compile_variant": "perf_default"
+}

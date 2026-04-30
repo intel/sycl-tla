@@ -98,6 +98,38 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertEqual(constraints["limits"]["max_slm_kb"], 64)
 
+    def test_default_compiler_profiles_split_build_and_runtime_config(self):
+        profiles = profiler.default_compiler_profiles()
+
+        self.assertEqual(
+            profiles["build_config"]["cmake_vars"]["CUTLASS_SYCL_PROFILING_ENABLED"],
+            "OFF",
+        )
+        self.assertEqual(
+            profiles["build_config"]["cmake_vars"]["CUTLASS_ENABLE_EXAMPLES"],
+            "OFF",
+        )
+        self.assertEqual(
+            profiles["build_config"]["cmake_vars"]["CUTLASS_ENABLE_TESTS"],
+            "OFF",
+        )
+        self.assertNotIn("IGC_VISAOptions", profiles["build_config"]["compile_env"])
+        self.assertEqual(
+            profiles["runtime_config"]["runtime_env"]["ONEAPI_DEVICE_SELECTOR"],
+            "level_zero:gpu",
+        )
+        self.assertEqual(profiles["profiles"][0]["runtime_env_override"], {})
+
+    def test_selected_runtime_env_ignores_compile_time_flags(self):
+        profiles = profiler.default_compiler_profiles()
+
+        runtime_env = profiler.selected_runtime_env(profiles, profiles["profiles"][0])
+
+        self.assertEqual(runtime_env["ONEAPI_DEVICE_SELECTOR"], "level_zero:gpu")
+        self.assertNotIn("IGC_ExtraOCLOptions", runtime_env)
+        self.assertNotIn("IGC_VISAOptions", runtime_env)
+        self.assertNotIn("SYCL_PROGRAM_COMPILE_OPTIONS", runtime_env)
+
     def test_resolve_hw_reference_spec_uses_calibrated_b60_data(self):
         spec = profiler.resolve_hw_reference_spec("bmg")
 
@@ -107,6 +139,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(spec["measured_read_bw_gbps"], 538)
         self.assertEqual(spec["slm_per_xe_core_kb"], 64)
         self.assertEqual(spec["calibration_status"], "measured")
+        self.assertEqual(spec["concurrent_sgs_per_xe_core_128grf"], 16)
+        self.assertEqual(spec["grf_bytes_per_thread_128grf"], 4096)
 
     def test_resolve_hw_reference_spec_marks_b70_as_not_measured(self):
         spec = profiler.resolve_hw_reference_spec(hw_spec_id="bmg_g31")

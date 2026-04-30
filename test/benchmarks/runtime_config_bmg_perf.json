@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "device_arch": "bmg",
+  "runtime_env": {
+    "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu"
+  },
+  "runtime_env_variants": {
+    "default": {
+      "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu"
+    },
+    "ze_affinity_0": {
+      "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+      "ZE_AFFINITY_MASK": "0"
+    },
+    "ze_affinity_1": {
+      "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+      "ZE_AFFINITY_MASK": "1"
+    }
+  },
+  "selected_runtime_variant": "default"
+}
