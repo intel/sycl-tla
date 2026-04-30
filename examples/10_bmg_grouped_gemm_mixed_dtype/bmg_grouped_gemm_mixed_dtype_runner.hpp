@@ -336,21 +336,36 @@ struct ExampleRunner {
 
   template <typename SrcT, typename DstT>
   void quantize_tensorwise(const SrcT* d_src, DstT* d_dst, const ElementScale* scale, const ElementZero* zero, size_t size, size_t L) {
-      SrcT* h_src = new SrcT[size * L];
+      // For sub-byte types (e.g. int4), device data is packed: sizeof_bits/8 bytes per element.
+      // Use a raw byte buffer with the correct packed size to avoid over-reading device memory.
+      constexpr int src_bits = cute::sizeof_bits_v<SrcT>;
+      size_t src_bytes = size * L * src_bits / 8;
+      uint8_t* h_src_raw = new uint8_t[src_bytes];
       ElementScale* scale_h = new ElementScale[L];
       ElementZero* zero_h = new ElementZero[L];
-      compat::memcpy(h_src, d_src, size * L * sizeof(SrcT));
+      compat::memcpy(h_src_raw, d_src, src_bytes);
       compat::memcpy(scale_h, scale, L * sizeof(ElementScale));
       compat::memcpy(zero_h, zero, L * sizeof(ElementZero));
       
       DstT* h_dst = new DstT[size * L];
       for(size_t j = 0; j < L; ++j) {
         for (size_t i = 0; i < size; ++i) {
-            h_dst[i + j * size] = (static_cast<DstT>(h_src[i + j * size]) - zero_h[j]) * scale_h[j];
+            SrcT elem;
+            if constexpr (src_bits < 8) {
+              // Use subbyte_iterator to unpack packed nibble data correctly.
+              elem = cute::subbyte_iterator<const SrcT>(h_src_raw)[i + j * size].get();
+            } else {
+              elem = reinterpret_cast<const SrcT*>(h_src_raw)[i + j * size];
+            }
+            h_dst[i + j * size] = (static_cast<DstT>(elem) - zero_h[j]) * scale_h[j];
         }
       }
 
       compat::memcpy(d_dst, h_dst, size * sizeof(DstT));
+      delete[] h_src_raw;
+      delete[] scale_h;
+      delete[] zero_h;
+      delete[] h_dst;
   }
 
   /// Populates a Gemm::Arguments structure from the given commandline options
