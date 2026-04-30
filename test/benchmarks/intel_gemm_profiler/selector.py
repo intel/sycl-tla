@@ -9,6 +9,7 @@ import statistics
 from collections import defaultdict
 from datetime import datetime
 
+from .hw_specs import analyze_efficiency
 from .schemas import CSV_FIELDS, SCHEMA_VERSION
 from .utils import now_iso
 
@@ -27,12 +28,13 @@ def median_or_nan(values):
     return statistics.median(numeric)
 
 
-def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_threshold):
+def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_threshold, candidate_space=None, hw_spec=None, low_efficiency_threshold=0.4):
     grouped = defaultdict(list)
     for row in rows:
         if row["status"] == "pass" and row["verify_status"] == "pass":
             grouped[row["shape_id"]].append(row)
     shapes = {shape["shape_id"]: shape for shape in shapes_doc["shapes"]}
+    candidates = {candidate["candidate_id"]: candidate for candidate in candidate_space.get("candidates", [])} if candidate_space and hw_spec else {}
     entries = []
     for shape_id, shape_rows in grouped.items():
         confirm_rows = [row for row in shape_rows if row["stage"] == "confirm"]
@@ -54,6 +56,18 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
             gap = ((winner["median_tflops"] - runner_up["median_tflops"]) / runner_up["median_tflops"]) * 100.0
             close_call = gap < close_call_threshold
         shape = shapes[shape_id]
+        selected_efficiency = ""
+        peak_tflops = ""
+        efficiency_warning = ""
+        if hw_spec and winner["candidate_id"] in candidates:
+            analysis = analyze_efficiency(shape, candidates[winner["candidate_id"]], hw_spec)
+            peak_tflops = round(analysis["peak_tflops"], 6)
+            if analysis["peak_tflops"] > 0:
+                selected_efficiency = round(winner["median_tflops"] / analysis["peak_tflops"], 6)
+                if selected_efficiency < low_efficiency_threshold:
+                    efficiency_warning = (
+                        f"winner_efficiency_below_{int(low_efficiency_threshold * 100)}pct_peak"
+                    )
         entries.append(
             {
                 "shape_key": {"layout": shape["layout"], "dtype_a": shape["dtype_a"], "dtype_b": shape["dtype_b"], "dtype_c": shape["dtype_c"], "dtype_acc": shape["dtype_acc"], "m": shape["m"], "n": shape["n"], "k": shape["k"]},
@@ -62,6 +76,9 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
                 "compiler_profile_id": winner["compiler_profile_id"],
                 "status": "pass",
                 "selected_metric": round(winner["median_tflops"], 6),
+                "selected_efficiency": selected_efficiency,
+                "peak_tflops": peak_tflops,
+                "efficiency_warning": efficiency_warning,
                 "runner_up_candidate_id": runner_up["candidate_id"] if runner_up else "",
                 "runner_up_gap_percent": round(gap, 6) if gap is not None else "",
                 "close_call": close_call,
@@ -102,6 +119,17 @@ def build_phase_a_summary(verified_hw_caps, constraints, probe_rows):
 
 
 def build_phase_b_summary(candidate_space, dispatch_table, summary):
+    low_efficiency_warnings = [
+        {
+            "shape_id": entry["shape_id"],
+            "candidate_id": entry["candidate_id"],
+            "selected_efficiency": entry["selected_efficiency"],
+            "peak_tflops": entry["peak_tflops"],
+            "warning": entry["efficiency_warning"],
+        }
+        for entry in dispatch_table["entries"]
+        if entry.get("efficiency_warning")
+    ]
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
@@ -111,4 +139,5 @@ def build_phase_b_summary(candidate_space, dispatch_table, summary):
         "rows": summary["rows"],
         "passed": summary["passed"],
         "failed": summary["failed"],
+        "low_efficiency_warnings": low_efficiency_warnings,
     }

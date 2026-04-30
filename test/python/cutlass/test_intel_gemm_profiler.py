@@ -36,10 +36,11 @@ class TestIntelGemmProfiler(unittest.TestCase):
             candidate_space["search_runtime_schema"]["compile_time_dimensions"][0],
             "dtype_a",
         )
-        self.assertEqual(len(candidate_space["candidates"]), 5)
+        self.assertEqual(len(candidate_space["candidates"]), 8)
         candidate_ids = {candidate["candidate_id"] for candidate in candidate_space["candidates"]}
         self.assertIn("rcr_bf16bf16f32_tm8_tn128_tk32_sg1x4_st2_sk1", candidate_ids)
         self.assertIn("rcr_bf16bf16f32_tm256_tn256_tk32_sg8x4_st2_sk1", candidate_ids)
+        self.assertIn("rcr_bf16bf16f32_tm128_tn256_tk32_sg4x4_st2_sk1", candidate_ids)
         self.assertFalse(any(candidate["split_k"] > 1 for candidate in candidate_space["candidates"]))
         self.assertTrue(all(candidate["filters_applied"][0] == "kernel_catalog" for candidate in candidate_space["candidates"]))
         self.assertTrue(all(candidate["grf_mode"] == 256 for candidate in candidate_space["candidates"]))
@@ -56,7 +57,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertEqual(catalog["catalog_version"], "level0-seed-catalog")
         self.assertEqual(catalog["search_runtime_schema"]["runtime_dimensions"][0], "shape_id")
-        self.assertEqual(len(catalog["kernels"]), 6)
+        self.assertEqual(len(catalog["kernels"]), 9)
         splitk = next(entry for entry in catalog["kernels"] if entry["split_k"] == 2)
         self.assertEqual(splitk["instantiation_level"], 0)
         self.assertEqual(splitk["runtime_defaults"]["k_unroll"], 1)
@@ -87,7 +88,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         manifest = profiler.build_candidate_build_manifest(candidate_space)
 
         self.assertEqual(manifest["search_runtime_schema"]["microbench_guided_defaults"]["grf_mode"], 256)
-        self.assertEqual(len(manifest["variants"]), 5)
+        self.assertEqual(len(manifest["variants"]), 8)
         variant = manifest["variants"][0]
         self.assertIn("compile_time_variant", variant)
         self.assertIn("runtime_sweep", variant)
@@ -464,7 +465,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         m16_candidates = profiler.choose_candidates_for_shape(shapes["shapes"][0], candidate_space["candidates"])
         m128_candidates = profiler.choose_candidates_for_shape(shapes["shapes"][1], candidate_space["candidates"])
 
-        self.assertTrue(all(candidate["tile_m"] <= 64 for candidate in m16_candidates))
+        self.assertTrue(any(candidate["tile_m"] == 128 for candidate in m16_candidates))
         self.assertTrue(any(candidate["tile_m"] == 256 for candidate in m128_candidates))
 
     def test_f16_splitk_seed_uses_streamk_runner(self):
@@ -487,6 +488,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         candidate_ids = {candidate["candidate_id"] for candidate in candidate_space["candidates"]}
         self.assertIn("rcr_f16f16f32_tm256_tn256_tk32_sg8x4_st2_sk1", candidate_ids)
+        self.assertIn("rcr_f16f16f32_tm128_tn256_tk32_sg4x4_st2_sk1", candidate_ids)
 
     def test_dry_run_shapes_use_tiny_shape_set(self):
         shapes = profiler.dry_run_shapes("bf16")
@@ -598,7 +600,98 @@ class TestIntelGemmProfiler(unittest.TestCase):
             phase_a_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_a_summary.json")
             self.assertEqual(phase_a_summary["probe_mode"], "dry_run_off")
             phase_b_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_b_summary.json")
-            self.assertEqual(phase_b_summary["candidate_count"], 5)
+            self.assertEqual(phase_b_summary["candidate_count"], 8)
+
+    def test_dispatch_table_reports_low_efficiency_winner(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "efficiency",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "shape_peak_gap",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 256,
+                    "n": 4096,
+                    "k": 8192,
+                }
+            ],
+        }
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles)
+        rows = [
+            {
+                "run_id": "confirm",
+                "stage": "confirm",
+                "attempt_index": 0,
+                "shape_id": "shape_peak_gap",
+                "candidate_id": "rcr_bf16bf16f32_tm16_tn64_tk32_sg2x4_st2_sk1",
+                "compiler_profile_id": "bmg.small_tile.default",
+                "status": "pass",
+                "verify_status": "pass",
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 256,
+                "n": 4096,
+                "k": 8192,
+                "avg_runtime_ms": "0.57",
+                "best_runtime_ms": "0.56",
+                "worst_runtime_ms": "0.58",
+                "avg_tflops": "29.79",
+                "avg_throughput": "0",
+                "max_error": "",
+                "close_call_group": "",
+                "failure_reason": "",
+                "stdout_log": "winner.log",
+            }
+        ]
+
+        dispatch = profiler.build_dispatch_table(
+            rows,
+            shapes,
+            top_k=3,
+            confirm_runs=1,
+            close_call_threshold=3.0,
+            candidate_space=candidate_space,
+            hw_spec=profiler.resolve_hw_reference_spec("bmg"),
+        )
+
+        entry = dispatch["entries"][0]
+        self.assertEqual(entry["candidate_id"], "rcr_bf16bf16f32_tm16_tn64_tk32_sg2x4_st2_sk1")
+        self.assertEqual(entry["efficiency_warning"], "winner_efficiency_below_40pct_peak")
+        self.assertLess(entry["selected_efficiency"], 0.4)
+
+    def test_phase_b_summary_surfaces_low_efficiency_warnings(self):
+        candidate_space = {"candidates": [{}], "kernel_catalog": {"catalog_version": "test-catalog"}}
+        dispatch_table = {
+            "entries": [
+                {
+                    "shape_id": "shape_peak_gap",
+                    "candidate_id": "cand_a",
+                    "selected_efficiency": 0.31,
+                    "peak_tflops": 97.66,
+                    "efficiency_warning": "winner_efficiency_below_40pct_peak",
+                }
+            ]
+        }
+        summary = {"rows": 10, "passed": 10, "failed": 0}
+
+        phase_b_summary = profiler.build_phase_b_summary(candidate_space, dispatch_table, summary)
+
+        self.assertEqual(len(phase_b_summary["low_efficiency_warnings"]), 1)
+        self.assertEqual(
+            phase_b_summary["low_efficiency_warnings"][0]["warning"],
+            "winner_efficiency_below_40pct_peak",
+        )
 
     def test_phase_a_summary_includes_dpas_probe(self):
         summary = profiler.build_phase_a_summary(

@@ -192,12 +192,7 @@ def choose_candidates_for_shape(shape, candidates):
             continue
         if candidate["split_k"] > 1 and shape["n"] < 16384 and shape["k"] < 8192:
             continue
-        if shape["m"] <= 8 and candidate["tile_m"] <= 16:
-            matched.append(candidate)
-        elif 8 < shape["m"] < 128 and candidate["tile_m"] <= 64:
-            matched.append(candidate)
-        elif shape["m"] >= 128 and candidate["tile_m"] >= 16:
-            matched.append(candidate)
+        matched.append(candidate)
     return matched or [candidate for candidate in candidates if candidate["layout"] == shape["layout"] and candidate["dtype_a"] == shape["dtype_a"]]
 
 

@@ -108,7 +108,7 @@ def default_constraints():
             "tile_n": [64, 128, 256],
             "tile_k": [32, 64],
             "sg_m": [1, 2, 4, 8],
-            "sg_n": [4, 8],
+            "sg_n": [2, 4, 8],
             "stages": [1, 2, 3],
             "split_k": [1, 2],
             "grf_mode": [256],

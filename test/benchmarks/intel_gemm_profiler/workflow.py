@@ -286,7 +286,15 @@ def workflow(args):
                     benchmark_commands.extend(commands)
                 all_rows.extend(confirm_rows)
     write_results_csv(all_rows, reports_dir / "gemm_profile_results.csv")
-    dispatch_table = build_dispatch_table(all_rows, shapes_doc, top_k=top_k, confirm_runs=confirm_runs, close_call_threshold=args.close_call_threshold)
+    dispatch_table = build_dispatch_table(
+        all_rows,
+        shapes_doc,
+        top_k=top_k,
+        confirm_runs=confirm_runs,
+        close_call_threshold=args.close_call_threshold,
+        candidate_space=candidate_space,
+        hw_spec=env_caps.get("hw_reference_spec"),
+    )
     write_json(reports_dir / "gemm_dispatch_table.json", dispatch_table)
     write_json(reports_dir / "optimal_dispatch_table.json", dispatch_table)
     summary = build_run_summary(all_rows, dispatch_table, benchmark_commands, log_paths)
