@@ -90,6 +90,23 @@
 - benchmark-backed BF16 Phase B 已可跑通
 - performance mode 下，B60 大 shape 已观察到显著优于早期小 tile winner 的结果
 
+## 执行优先级调整
+
+基于最新目标，下一阶段不再优先做“完整 profiler 全量迁移”，而是先走一条 **最快形成闭环** 的路径：
+
+1. **先让现有约 24 个已注册 kernel 跑通搜索链路**
+   - 使用现有 manifest / 注册 / benchmark-backed 执行路径
+   - 优先验证 profiler 能对单个 problem case 在现有 kernel 集合内选出 best kernel
+2. **再围绕单个测试 case 扩大搜索范围**
+   - 从一个明确的 `dtype + layout + m/n/k` 用例开始
+   - 先得到 best candidate、TFLOPS 和 dispatch 结果
+   - 再逐步扩展 catalog / instantiation level / tile 组合
+
+这个调整的含义是：
+
+- **短期目标**：不是先把所有 CUTLASS profiler 组件都 SYCL 化，而是先让 Intel 路径具备“给一个 case，遍历当前 kernel 集合并找到最优解”的能力
+- **中期目标**：在这个闭环已经成立后，再继续扩到更丰富的 kernel 变体和更系统化的搜索空间
+
 ## 当前仍需继续的工作
 
 ### 1. B60 性能稳定性与复测
@@ -117,6 +134,7 @@
 本轮工作已经把现有 profiler 修到可用和可扩展，但还没有完全达到最初规划中的完整搜索系统形态。  
 仍需继续推进：
 
+- 让现有约 24 个 kernel 的单 case 搜索闭环优先稳定下来
 - Phase A / Phase B artifact 命名对齐
 - `safe_candidates` / `optimal_dispatch_table` 产物进一步明确化
 - 更系统化的 catalog / instantiation level / build manifest 演进
@@ -133,9 +151,10 @@
 
 如果下一阶段目标是 **继续逼近 B60 峰值 TFLOPS**，建议优先顺序如下：
 
-1. 先做 **B60 稳定复测**，确认当前 `tm64_tn128_tk32_sg4x4` 的可重复性  
-2. 再做 **128-GRF experiment A/B**，决定是否保留为长期实验分支  
-3. 之后再进入 **更大 catalog / 更高 instantiation level** 的扩展
+1. 先完成 **现有约 24 个 kernel 的单 case 搜索闭环**  
+2. 再做 **B60 稳定复测**，确认当前 `tm64_tn128_tk32_sg4x4` 的可重复性  
+3. 再做 **128-GRF experiment A/B**，决定是否保留为长期实验分支  
+4. 之后再进入 **更大 catalog / 更高 instantiation level** 的扩展
 
 如果下一阶段目标是 **工程化收口**，建议优先顺序如下：
 
