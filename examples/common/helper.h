@@ -70,7 +70,7 @@
  */
 struct GpuTimer {
 #if defined(CUTLASS_ENABLE_SYCL)
-    using cudaStream_t = int;
+    using cudaStream_t = sycl::queue*;
     SYCLTimer syclTimer;
 #else
     cudaEvent_t _start;
@@ -79,7 +79,7 @@ struct GpuTimer {
     cudaStream_t _stream_id;
 
     /// Constructor
-    GpuTimer() : _stream_id(0)
+    GpuTimer() : _stream_id(nullptr)
     {
 #if !defined(CUTLASS_ENABLE_SYCL)
         CUDA_CHECK(cudaEventCreate(&_start));
@@ -101,7 +101,7 @@ struct GpuTimer {
     {
         _stream_id = stream_id;
 #if defined(CUTLASS_ENABLE_SYCL)
-        syclTimer.start();
+        syclTimer.start(_stream_id);
 #else
         CUDA_CHECK(cudaEventRecord(_start, _stream_id));
 #endif
@@ -111,7 +111,7 @@ struct GpuTimer {
     void stop()
     {
 #if defined(CUTLASS_ENABLE_SYCL)
-        syclTimer.stop();
+        syclTimer.stop(_stream_id);
 #else
         CUDA_CHECK(cudaEventRecord(_stop, _stream_id));
 #endif

@@ -37,9 +37,6 @@
 #include "cutlass/cutlass.h"
 
 #if defined(CUTLASS_ENABLE_SYCL)
-#if !defined(CUTLASS_SYCL_PROFILING_ENABLED)
-#error "cutlass::profiler::GpuTimer requires CUTLASS_SYCL_PROFILING_ENABLED for high-precision SYCL event timing."
-#endif
 #include "cutlass/util/sycl_timer.hpp"
 #else
 #include <cuda_runtime.h>
@@ -53,7 +50,7 @@ namespace profiler {
 struct GpuTimer {
 
 #if defined(CUTLASS_ENABLE_SYCL)
-  using cudaStream_t = int;
+  using cudaStream_t = sycl::queue*;
   static constexpr unsigned int kDefaultEventRecordFlag = 0;
   SYCLTimer sycl_timer;
 #else
@@ -74,13 +71,13 @@ struct GpuTimer {
   ~GpuTimer();
 
   /// Records a start event in the stream, the flag is for cudaEventRecordWithFlags
-  void start(cudaStream_t stream = 0, unsigned int flag = kDefaultEventRecordFlag);
+  void start(cudaStream_t stream = nullptr, unsigned int flag = kDefaultEventRecordFlag);
 
   /// Records a stop event in the stream, the flag is for cudaEventRecordWithFlags
-  void stop(cudaStream_t stream = 0, unsigned int flag = kDefaultEventRecordFlag);
+  void stop(cudaStream_t stream = nullptr, unsigned int flag = kDefaultEventRecordFlag);
 
   /// Records a stop event in the stream and synchronizes on the stream, the flag is for cudaEventRecordWithFlags
-  void stop_and_wait(cudaStream_t stream = 0, unsigned int flag = kDefaultEventRecordFlag);
+  void stop_and_wait(cudaStream_t stream = nullptr, unsigned int flag = kDefaultEventRecordFlag);
 
   /// Returns the duration in milliseconds
   double duration(int iterations = 1) const;

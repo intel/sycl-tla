@@ -47,6 +47,21 @@ namespace profiler {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTLASS_ENABLE_SYCL)
+namespace {
+
+void wait_for(GpuTimer::cudaStream_t stream) {
+  if (stream) {
+    stream->wait();
+  }
+  else {
+    compat::get_default_queue().wait();
+  }
+}
+
+} // namespace
+#endif
+
 GpuTimer::GpuTimer() {
 #if !defined(CUTLASS_ENABLE_SYCL)
   cudaError_t result;
@@ -82,9 +97,8 @@ GpuTimer::~GpuTimer() {
 /// Records a start event in the stream, the flag is for cudaEventRecordWithFlags
 void GpuTimer::start(cudaStream_t stream, const unsigned int flag) {
 #if defined(CUTLASS_ENABLE_SYCL)
-  (void)stream;
   (void)flag;
-  sycl_timer.start();
+  sycl_timer.start(stream);
 #else
   cudaError_t result = cudaEventRecordWithFlags(events[0], stream, flag);
   if (result != cudaSuccess) {
@@ -96,9 +110,8 @@ void GpuTimer::start(cudaStream_t stream, const unsigned int flag) {
 /// Records a stop event in the stream, the flag is for cudaEventRecordWithFlags
 void GpuTimer::stop(cudaStream_t stream, const unsigned int flag) {
 #if defined(CUTLASS_ENABLE_SYCL)
-  (void)stream;
   (void)flag;
-  sycl_timer.stop();
+  sycl_timer.stop(stream);
 #else
   cudaError_t result = cudaEventRecordWithFlags(events[1], stream, flag);
   if (result != cudaSuccess) {
@@ -111,10 +124,9 @@ void GpuTimer::stop(cudaStream_t stream, const unsigned int flag) {
 void GpuTimer::stop_and_wait(cudaStream_t stream, const unsigned int flag) {
 
 #if defined(CUTLASS_ENABLE_SYCL)
-  (void)stream;
   (void)flag;
-  sycl_timer.stop();
-  compat::get_default_queue().wait();
+  sycl_timer.stop(stream);
+  wait_for(stream);
 #else
   stop(stream, flag);
 

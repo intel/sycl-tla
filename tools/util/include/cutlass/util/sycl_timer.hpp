@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <sycl/sycl.hpp>
 #include <cute/util/compat.hpp>
 
@@ -54,21 +55,33 @@ struct SYCLTimer {
 #endif
   }
 
-  void start() {
+  void start(sycl::queue* stream = nullptr) {
 #if defined(CUTLASS_SYCL_PROFILING_ENABLED)
+    (void)stream;
     syclEventRecord(start_);
 #else
-    compat::get_default_queue().wait();
-    start_ = std::chrono::high_resolution_clock::now();
+    if (stream) {
+      stream->wait();
+    }
+    else {
+      compat::get_default_queue().wait();
+    }
+    start_ = clock::now();
 #endif
   }
 
-    void stop() {
+  void stop(sycl::queue* stream = nullptr) {
 #if defined(CUTLASS_SYCL_PROFILING_ENABLED)
+    (void)stream;
     syclEventRecord(stop_);
 #else
-    compat::get_default_queue().wait();
-    stop_ = std::chrono::high_resolution_clock::now();
+    if (stream) {
+      stream->wait();
+    }
+    else {
+      compat::get_default_queue().wait();
+    }
+    stop_ = clock::now();
 #endif
   }
 
@@ -92,11 +105,11 @@ struct SYCLTimer {
 #if defined(CUTLASS_SYCL_PROFILING_ENABLED)
     SyclEvent start_, stop_;
 #else
-    typedef std::chrono::nanoseconds				                  duration;
-    typedef std::chrono::high_resolution_clock		                  high_resolution_clock;
-    typedef std::chrono::time_point<high_resolution_clock, duration>  time_point;
+    using duration = std::chrono::nanoseconds;
+    using clock = std::chrono::steady_clock;
+    using time_point = std::chrono::time_point<clock, duration>;
 
-    time_point start_ = std::chrono::high_resolution_clock::now();
-    time_point stop_ = std::chrono::high_resolution_clock::now();
+    time_point start_ = clock::now();
+    time_point stop_ = clock::now();
 #endif
 };
