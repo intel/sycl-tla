@@ -24,6 +24,7 @@ SEARCH_RUNTIME_SCHEMA = {
         "sg_n",
         "stages",
         "split_k",
+        "streamk_mode",
         "grf_mode",
         "ilp_class",
         "instantiation_level",

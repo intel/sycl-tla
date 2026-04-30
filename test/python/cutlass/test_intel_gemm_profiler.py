@@ -48,7 +48,20 @@ class TestIntelGemmProfiler(unittest.TestCase):
         probe_candidate_space = profiler.generate_candidate_space(
             shapes, constraints, profiles, allowed_runners=("benchmark", "streamk_example")
         )
+        self.assertEqual(len(probe_candidate_space["candidates"]), 11)
+        streamk = next(
+            candidate
+            for candidate in probe_candidate_space["candidates"]
+            if candidate["streamk_mode"] == "streamk"
+        )
+        data_parallel = next(
+            candidate
+            for candidate in probe_candidate_space["candidates"]
+            if candidate["streamk_mode"] == "data_parallel"
+        )
         splitk = next(candidate for candidate in probe_candidate_space["candidates"] if candidate["split_k"] == 2)
+        self.assertEqual(streamk["runner"], "streamk_example")
+        self.assertEqual(data_parallel["runner"], "streamk_example")
         self.assertEqual(splitk["runner"], "streamk_example")
         self.assertEqual(splitk["benchmark_target"], "03_bmg_gemm_streamk")
 
@@ -57,11 +70,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertEqual(catalog["catalog_version"], "level0-seed-catalog")
         self.assertEqual(catalog["search_runtime_schema"]["runtime_dimensions"][0], "shape_id")
-        self.assertEqual(len(catalog["kernels"]), 9)
+        self.assertEqual(len(catalog["kernels"]), 11)
         splitk = next(entry for entry in catalog["kernels"] if entry["split_k"] == 2)
+        data_parallel = next(entry for entry in catalog["kernels"] if entry["streamk_mode"] == "data_parallel")
         self.assertEqual(splitk["instantiation_level"], 0)
         self.assertEqual(splitk["runtime_defaults"], {})
         self.assertEqual(splitk["allowed_runtime_sweeps"], ["shape_id", "m", "n", "k"])
+        self.assertEqual(data_parallel["benchmark_target"], "03_bmg_gemm_streamk")
 
     def test_kernel_catalog_prefers_repo_json(self):
         catalog = profiler.load_persisted_kernel_catalog()
@@ -509,7 +524,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertTrue(any(candidate["tile_m"] == 128 for candidate in m16_candidates))
         self.assertTrue(any(candidate["tile_m"] == 256 for candidate in m128_candidates))
 
-    def test_f16_splitk_seed_uses_streamk_runner(self):
+    def test_f16_streamk_modes_use_streamk_runner(self):
         shapes = profiler.default_shapes("f16")
         constraints = profiler.default_constraints()
         profiles = profiler.default_compiler_profiles()
@@ -517,7 +532,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
             shapes, constraints, profiles, allowed_runners=("benchmark", "streamk_example")
         )
 
+        streamk = next(candidate for candidate in candidate_space["candidates"] if candidate["streamk_mode"] == "streamk")
+        data_parallel = next(candidate for candidate in candidate_space["candidates"] if candidate["streamk_mode"] == "data_parallel")
         splitk = next(candidate for candidate in candidate_space["candidates"] if candidate["split_k"] == 2)
+        self.assertEqual(streamk["dtype_a"], "f16")
+        self.assertEqual(streamk["runner"], "streamk_example")
+        self.assertEqual(data_parallel["dtype_a"], "f16")
+        self.assertEqual(data_parallel["runner"], "streamk_example")
         self.assertEqual(splitk["dtype_a"], "f16")
         self.assertEqual(splitk["runner"], "streamk_example")
 
@@ -938,6 +959,62 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertTrue(timed_out)
         self.assertEqual(process.returncode, 124)
         self.assertIn("timeout after 1s", reason)
+
+    def test_run_entries_with_streamk_example_supports_streamk_and_dp_modes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logs_dir = Path(tmpdir) / "logs"
+            logs_dir.mkdir()
+            fake_exe = Path(tmpdir) / "fake_streamk.py"
+            fake_exe.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "print('ARGS:' + ' '.join(sys.argv[1:]))\n"
+                "print('Cutlass GEMM Performance: [1.23]TFlop/s (0.45)ms')\n"
+                "print('Disposition: Passed')\n",
+                encoding='utf-8',
+            )
+            fake_exe.chmod(0o755)
+            shape = {
+                "shape_id": "shape_a",
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 64,
+                "n": 4096,
+                "k": 4096,
+            }
+            streamk_candidate = {
+                "candidate_id": "cand_streamk",
+                "compiler_profile_id": "bmg.medium_tile.default",
+                "dtype_a": "bf16",
+                "kernel_name": "03_bmg_gemm_streamk_streamk_bf16",
+                "split_k": 1,
+                "streamk_mode": "streamk",
+            }
+            data_parallel_candidate = {
+                "candidate_id": "cand_dp",
+                "compiler_profile_id": "bmg.medium_tile.default",
+                "dtype_a": "bf16",
+                "kernel_name": "03_bmg_gemm_streamk_dp_bf16",
+                "split_k": 1,
+                "streamk_mode": "data_parallel",
+            }
+            entries = [
+                {"bm_name": "cand_streamk__shape_a__screening__0", "stage": "screening", "attempt_index": 0, "shape": shape, "candidate": streamk_candidate},
+                {"bm_name": "cand_dp__shape_a__screening__0", "stage": "screening", "attempt_index": 0, "shape": shape, "candidate": data_parallel_candidate},
+            ]
+
+            rows, commands = profiler.run_entries_with_streamk_example(entries, logs_dir, str(fake_exe))
+
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row["status"] == "pass" for row in rows))
+        self.assertIn("--dtype=bf16", commands[0])
+        self.assertNotIn("--splitk", commands[0])
+        self.assertNotIn("--dp", commands[0])
+        self.assertIn("--dp", commands[1])
+        self.assertNotIn("--splitk", commands[1])
 
     def test_static_probe_disables_splitk_without_streamk_binary(self):
         constraints = profiler.default_constraints()

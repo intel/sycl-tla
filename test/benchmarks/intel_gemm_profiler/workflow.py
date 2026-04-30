@@ -139,7 +139,8 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
     static_constraints = apply_static_probe_constraints(base_constraints, env_caps)
     hw_spec = resolve_hw_reference_spec(static_constraints["device_arch"], getattr(args, "hw_spec_id", ""))
-    static_candidate_space = generate_candidate_space(shapes_doc, static_constraints, profiles, allowed_runners=("benchmark", "streamk_example"))
+    allowed_runners = ("benchmark", "streamk_example") if env_caps["executables"].get("streamk_example_available") else ("benchmark",)
+    static_candidate_space = generate_candidate_space(shapes_doc, static_constraints, profiles, allowed_runners=allowed_runners)
     probe_rows = []
     probe_logs = []
     probe_commands = []
@@ -237,13 +238,14 @@ def workflow(args):
     else:
         constraints, env_caps, verified_hw_caps_path, probe_rows, probe_logs, probe_commands = run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir)
         profiles = apply_probe_results_to_profiles(profiles, env_caps.get("compiler_flags_probe", {}))
+    allowed_runners = ("benchmark", "streamk_example") if env_caps["executables"].get("streamk_example_available") else ("benchmark",)
     write_json(inputs_dir / "safe_search_constraints.json", constraints)
     write_json(inputs_dir / "compiler_profiles.json", profiles)
     write_json(inputs_dir / "gemm_target_shapes.json", shapes_doc)
     write_json(inputs_dir / "search_runtime_schema.json", SEARCH_RUNTIME_SCHEMA)
-    kernel_catalog = build_kernel_catalog(dtypes=sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]}), allowed_runners=("benchmark", "streamk_example"))
+    kernel_catalog = build_kernel_catalog(dtypes=sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]}), allowed_runners=allowed_runners)
     write_json(reports_dir / "kernel_catalog.json", kernel_catalog)
-    candidate_space = generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=("benchmark",))
+    candidate_space = generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=allowed_runners)
     write_json(reports_dir / "gemm_candidate_space.json", candidate_space)
     write_json(reports_dir / "bmg_safe_candidates.json", candidate_space)
     write_json(reports_dir / "candidate_build_manifest.json", build_candidate_build_manifest(candidate_space))

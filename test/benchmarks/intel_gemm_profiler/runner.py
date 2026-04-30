@@ -232,11 +232,17 @@ def run_entries_with_streamk_example(entries, logs_dir, exe, cwd=None, shell_ini
                 "k": shape["k"],
                 "kernel_name": candidate["kernel_name"],
                 "split_k": candidate["split_k"],
+                "streamk_mode": candidate.get("streamk_mode", ""),
                 "runner": candidate.get("runner", "streamk_example"),
             }
         }
         log_path = logs_dir / f"{bm_name}.log"
-        command = [exe, "--splitk", f"--dtype={candidate['dtype_a']}", f"--splits={candidate['split_k']}", f"--m={shape['m']}", f"--n={shape['n']}", f"--k={shape['k']}", "--iterations=20", "--verify=1"]
+        command = [exe, f"--dtype={candidate['dtype_a']}", f"--m={shape['m']}", f"--n={shape['n']}", f"--k={shape['k']}", "--iterations=20", "--verify=1"]
+        streamk_mode = candidate.get("streamk_mode", "")
+        if streamk_mode == "splitk":
+            command.extend(["--splitk", f"--splits={candidate['split_k']}"])
+        elif streamk_mode == "data_parallel":
+            command.append("--dp")
         result, timed_out, timeout_reason = run_benchmark(command, log_path, cwd=cwd, shell_init=shell_init, timeout=timeout)
         parsed = timeout_rows([entry], log_path, timeout_reason) if timed_out else parse_streamk_example_log(log_path, metadata, run_id=entry["stage"])
         if result.returncode != 0 and not parsed:

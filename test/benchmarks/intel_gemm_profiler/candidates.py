@@ -94,7 +94,11 @@ def select_compiler_profile_id(profiles, tile_m, sg_count):
 
 
 def candidate_id_for(seed):
-    return f"{seed['layout']}_{seed['dtype_a']}{seed['dtype_b']}{seed['dtype_c']}_tm{seed['tile_m']}_tn{seed['tile_n']}_tk{seed['tile_k']}_sg{seed['sg_m']}x{seed['sg_n']}_st{seed['stages']}_sk{seed['split_k']}"
+    candidate_id = f"{seed['layout']}_{seed['dtype_a']}{seed['dtype_b']}{seed['dtype_c']}_tm{seed['tile_m']}_tn{seed['tile_n']}_tk{seed['tile_k']}_sg{seed['sg_m']}x{seed['sg_n']}_st{seed['stages']}_sk{seed['split_k']}"
+    streamk_mode = seed.get("streamk_mode", "")
+    if streamk_mode:
+        candidate_id = f"{candidate_id}_{streamk_mode}"
+    return candidate_id
 
 
 def generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=("benchmark",)):
@@ -134,6 +138,7 @@ def generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=
                 "sg_n": seed["sg_n"],
                 "stages": seed["stages"],
                 "split_k": seed["split_k"],
+                "streamk_mode": seed.get("streamk_mode", ""),
                 "runner": seed.get("runner", "benchmark"),
                 "benchmark_target": seed["benchmark_target"],
                 "grf_mode": seed["grf_mode"],
@@ -179,6 +184,7 @@ def build_candidate_build_manifest(candidate_space):
                     "sg_n": candidate["sg_n"],
                     "stages": candidate["stages"],
                     "split_k": candidate["split_k"],
+                    "streamk_mode": candidate.get("streamk_mode", ""),
                     "grf_mode": candidate["grf_mode"],
                     "ilp_class": candidate["ilp_class"],
                     "instantiation_level": candidate["instantiation_level"],
@@ -326,6 +332,7 @@ def write_config(entries, config_path):
                 "k": shape["k"],
                 "kernel_name": candidate["kernel_name"],
                 "split_k": candidate["split_k"],
+                "streamk_mode": candidate.get("streamk_mode", ""),
                 "runner": candidate.get("runner", "benchmark"),
             }
     return metadata
