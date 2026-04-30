@@ -107,3 +107,26 @@ runs:
         export CPLUS_INCLUDE_PATH=$CMPLR_ROOT/include:$CPLUS_INCLUDE_PATH
         export LD_LIBRARY_PATH=$CMPLR_ROOT/lib:$LD_LIBRARY_PATH
         EOF
+
+    - name: Install DPCPP
+      if: inputs.DPCPP_RELEASE == 'TORCH_SUPPORTED'
+      shell: bash
+      run: |
+        if [ -d /home/ghrunner/intel/oneapi/compiler ]; then
+          echo "DPC++ compiler already installed at /home/ghrunner/intel/oneapi/compiler"
+        else
+          echo "Installing DPC++ compiler..."
+          sudo wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
+          bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --silent --eula accept --components intel.oneapi.lin.dpcpp-cpp-compiler
+        fi
+        . /home/ghrunner/intel/oneapi/setvars.sh
+        cat > setvars.sh <<EOF
+        . /home/ghrunner/intel/oneapi/setvars.sh
+        export CC=icx
+        export CXX=icpx
+        export C_INCLUDE_PATH=$CMPLR_ROOT/include:$C_INCLUDE_PATH
+        export CPLUS_INCLUDE_PATH=$CMPLR_ROOT/include:$CPLUS_INCLUDE_PATH
+        export LD_LIBRARY_PATH=$CMPLR_ROOT/lib:$LD_LIBRARY_PATH
+        EOF
+
+
