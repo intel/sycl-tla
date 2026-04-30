@@ -48,6 +48,37 @@
   },
   "kernels": [
     {
+      "kernel_name": "BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32",
+      "layout": "rrr",
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_c": "f32",
+      "dtype_acc": "f32",
+      "tile_m": 512,
+      "tile_n": 256,
+      "tile_k": 32,
+      "sg_m": 8,
+      "sg_n": 4,
+      "stages": 2,
+      "split_k": 1,
+      "runner": "benchmark",
+      "kernel_id": "BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32",
+      "instantiation_level": 0,
+      "benchmark_target": "cutlass_benchmarks_gemm_sycl",
+      "grf_mode": 256,
+      "ilp_class": "ilp16",
+      "streamk_mode": "",
+      "runtime_defaults": {},
+      "allowed_runtime_sweeps": [
+        "shape_id",
+        "m",
+        "n",
+        "k"
+      ],
+      "source": "seed_catalog_level0",
+      "dtype_family": "bf16"
+    },
+    {
       "kernel_name": "BmgGemmBF16BF16FP32_RCR_5",
       "layout": "rcr",
       "dtype_a": "bf16",

@@ -36,7 +36,7 @@ if __package__ in (None, ""):
     )
     from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from intel_gemm_profiler.runner import collect_environment_metadata, run_entries_with_benchmark, run_entries_with_streamk_example
-    from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_run_summary, write_results_csv
+    from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from intel_gemm_profiler.utils import ensure_dir, read_json, shell_init_with_env, shell_join, write_json
     from intel_gemm_profiler.schemas import SEARCH_RUNTIME_SCHEMA
 else:
@@ -62,7 +62,7 @@ else:
     )
     from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from .runner import collect_environment_metadata, run_entries_with_benchmark, run_entries_with_streamk_example
-    from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_run_summary, write_results_csv
+    from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from .utils import ensure_dir, read_json, shell_init_with_env, shell_join, write_json
     from .schemas import SEARCH_RUNTIME_SCHEMA
 
@@ -299,6 +299,11 @@ def workflow(args):
     )
     write_json(reports_dir / "gemm_dispatch_table.json", dispatch_table)
     write_json(reports_dir / "optimal_dispatch_table.json", dispatch_table)
+    if args.reference_json:
+        write_json(
+            reports_dir / "reference_comparison.json",
+            build_reference_comparison(dispatch_table, read_json(args.reference_json)),
+        )
     summary = build_run_summary(all_rows, dispatch_table, benchmark_commands, log_paths)
     write_json(reports_dir / "run_summary.json", summary)
     write_json(reports_dir / "phase_a_summary.json", build_phase_a_summary(env_caps, constraints, probe_rows))
@@ -314,6 +319,7 @@ def workflow(args):
         "results_csv": str(reports_dir / "gemm_profile_results.csv"),
         "dispatch_table": str(reports_dir / "gemm_dispatch_table.json"),
         "optimal_dispatch_table": str(reports_dir / "optimal_dispatch_table.json"),
+        "reference_comparison": str(reports_dir / "reference_comparison.json") if args.reference_json else "",
         "phase_a_summary": str(reports_dir / "phase_a_summary.json"),
         "phase_b_summary": str(reports_dir / "phase_b_summary.json"),
         "summary": str(reports_dir / "run_summary.json"),
@@ -331,6 +337,7 @@ def build_parser():
     parser.add_argument("--dtype", choices=sorted(SEED_KERNELS.keys()), default="bf16", help="Default dtype preset.")
     parser.add_argument("--probe-mode", choices=["auto", "off", "static", "run"], default="auto", help="Phase A constraint probe mode. 'auto' runs representative probes unless --skip-run is set.")
     parser.add_argument("--shapes-json", default="", help="Optional path to gemm_target_shapes.json.")
+    parser.add_argument("--reference-json", default="", help="Optional path to reference/oracle JSON for dataset comparison.")
     parser.add_argument("--constraints-json", default="", help="Optional path to safe_search_constraints.json.")
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")

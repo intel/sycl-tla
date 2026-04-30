@@ -146,7 +146,7 @@ def default_constraints():
         "device_arch": "bmg",
         "limits": {"max_slm_kb": 64, "subgroup_size": 16, "max_split_k": 2, "max_stages": 3},
         "allowed_values": {
-            "tile_m": [8, 16, 32, 64, 128, 256],
+            "tile_m": [8, 16, 32, 64, 128, 256, 512],
             "tile_n": [64, 128, 256],
             "tile_k": [32, 64],
             "sg_m": [1, 2, 4, 8],

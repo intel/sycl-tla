@@ -105,6 +105,7 @@ def generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=
     seen = set()
     candidates = []
     dtypes = sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]})
+    requested_layouts = {shape["layout"] for shape in shapes_doc["shapes"]}
     kernel_catalog = build_kernel_catalog(dtypes=dtypes, allowed_runners=allowed_runners)
     available_layouts = {entry["layout"] for entry in kernel_catalog["kernels"]}
     unsupported_layouts = sorted({shape["layout"] for shape in shapes_doc["shapes"] if shape["layout"] not in available_layouts})
@@ -114,6 +115,8 @@ def generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=
             f"Available layouts: {', '.join(sorted(available_layouts))}."
         )
     for seed in kernel_catalog["kernels"]:
+        if seed["layout"] not in requested_layouts:
+            continue
         if blocked(seed, constraints):
             continue
         ident = candidate_id_for(seed)

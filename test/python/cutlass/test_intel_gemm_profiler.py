@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from openpyxl import Workbook
+
 
 def load_module():
     repo_root = Path(__file__).resolve().parents[3]
@@ -70,7 +72,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertEqual(catalog["catalog_version"], "level0-seed-catalog")
         self.assertEqual(catalog["search_runtime_schema"]["runtime_dimensions"][0], "shape_id")
-        self.assertEqual(len(catalog["kernels"]), 11)
+        self.assertEqual(len(catalog["kernels"]), 12)
         splitk = next(entry for entry in catalog["kernels"] if entry["split_k"] == 2)
         data_parallel = next(entry for entry in catalog["kernels"] if entry["streamk_mode"] == "data_parallel")
         self.assertEqual(splitk["instantiation_level"], 0)
@@ -830,8 +832,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
             "source": "test",
             "shapes": [
                 {
-                    "shape_id": "shape_rrr",
-                    "layout": "rrr",
+                    "shape_id": "shape_ccc",
+                    "layout": "ccc",
                     "dtype_a": "bf16",
                     "dtype_b": "bf16",
                     "dtype_c": "f32",
@@ -843,8 +845,42 @@ class TestIntelGemmProfiler(unittest.TestCase):
             ],
         }
 
-        with self.assertRaisesRegex(ValueError, "Unsupported layouts in shapes: rrr"):
+        with self.assertRaisesRegex(ValueError, "Unsupported layouts in shapes: ccc"):
             profiler.generate_candidate_space(shapes, profiler.default_constraints(), profiler.default_compiler_profiles())
+
+    def test_generate_candidate_space_supports_registered_rrr_layout(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "rrr-layout",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rrr_bf16_512_256_32",
+                    "layout": "rrr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 512,
+                    "n": 256,
+                    "k": 32,
+                }
+            ],
+        }
+
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+        )
+
+        self.assertEqual(len(candidate_space["candidates"]), 1)
+        self.assertEqual(
+            candidate_space["candidates"][0]["kernel_name"],
+            "BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32",
+        )
 
     def test_phase_a_summary_includes_dpas_probe(self):
         summary = profiler.build_phase_a_summary(
@@ -1196,6 +1232,105 @@ class TestIntelGemmProfiler(unittest.TestCase):
             large_anomaly["cross_anomaly"],
             f"large_tile_slower_than_{small_candidates[1]['candidate_id']}",
         )
+
+    def test_build_ali_gemm_docs_extracts_supported_shapes_and_reference(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workbook_path = Path(tmpdir) / "ali.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "v1.6"
+            sheet.append(["", "", "", "", "", "bf16", "", "", "", "", "", "", "", "", "", "f16", "", "", "", "int8", "", "", ""])
+            sheet.append([
+                "",
+                "M",
+                "N",
+                "K",
+                "Type",
+                "oneMKL(BLAS)",
+                "oneDNN(matmul)",
+                "PyTorch->oneDNN",
+                "Sycl_TLA(00_base)",
+                "Sycl_TLA(00_padded)",
+                "Sycl_TLA(00_sycl_q)",
+                "Sycl_TLA(03_streamk)",
+                "Sycl_TLA(03_dp)",
+                "",
+                "",
+                "oneMKL(BLAS)",
+                "oneDNN(matmul)",
+                "PyTorch->oneDNN",
+                "SYCL-TLA(XeTLA)",
+                "oneMKL(BLAS)",
+                "oneDNN(matmul)",
+                "PyTorch->oneDNN",
+                "SYCL-TLA(XeTLA)",
+            ])
+            sheet.append([
+                "",
+                8192,
+                4096,
+                4096,
+                "Compute Bounded",
+                None,
+                158.0,
+                155.0,
+                155.8,
+                155.9,
+                155.8,
+                156.7,
+                160.2,
+                None,
+                None,
+                None,
+                119.6,
+                157.2,
+                153.3,
+                150.1,
+                315.0,
+                312.8,
+                None,
+                300.0,
+            ])
+            workbook.save(workbook_path)
+
+            shapes_doc, reference_doc = profiler.build_ali_gemm_docs(workbook_path)
+
+        self.assertEqual(len(shapes_doc["shapes"]), 2)
+        shape_ids = {shape["shape_id"] for shape in shapes_doc["shapes"]}
+        self.assertIn("rcr_bf16_8192_4096_4096", shape_ids)
+        self.assertIn("rcr_f16_8192_4096_4096", shape_ids)
+        bf16_entry = next(entry for entry in reference_doc["entries"] if entry["dtype_a"] == "bf16")
+        self.assertEqual(bf16_entry["reference_provider"], "Sycl_TLA(03_dp)")
+        self.assertEqual(bf16_entry["reference_tflops"], 160.2)
+        self.assertTrue(any(item["dtype"] == "int8" for item in reference_doc["skipped_entries"]))
+
+    def test_build_reference_comparison_matches_dispatch_against_reference(self):
+        dispatch_table = {
+            "entries": [
+                {
+                    "shape_id": "rcr_bf16_8192_4096_4096",
+                    "candidate_id": "cand_a",
+                    "selected_metric": 150.0,
+                }
+            ]
+        }
+        reference_doc = {
+            "dataset_id": "ali",
+            "entries": [
+                {
+                    "shape_id": "rcr_bf16_8192_4096_4096",
+                    "reference_provider": "Sycl_TLA(03_dp)",
+                    "reference_tflops": 160.0,
+                    "supported": True,
+                }
+            ],
+        }
+
+        comparison = profiler.build_reference_comparison(dispatch_table, reference_doc)
+
+        self.assertEqual(comparison["summary"]["matched"], 1)
+        self.assertEqual(comparison["entries"][0]["selected_candidate_id"], "cand_a")
+        self.assertEqual(comparison["entries"][0]["selected_vs_reference_ratio"], 0.9375)
 
     def test_phase_a_summary_includes_anomaly_report(self):
         summary = profiler.build_phase_a_summary(

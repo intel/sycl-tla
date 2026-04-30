@@ -145,3 +145,53 @@ def build_phase_b_summary(candidate_space, dispatch_table, summary):
         "failed": summary["failed"],
         "low_efficiency_warnings": low_efficiency_warnings,
     }
+
+
+def build_reference_comparison(dispatch_table, reference_doc):
+    reference_by_shape = {entry["shape_id"]: entry for entry in reference_doc.get("entries", []) if entry.get("supported", True)}
+    dispatch_by_shape = {entry["shape_id"]: entry for entry in dispatch_table.get("entries", [])}
+    entries = []
+    matched = 0
+    missing_dispatch = 0
+    for shape_id, reference in reference_by_shape.items():
+        dispatch_entry = dispatch_by_shape.get(shape_id)
+        if dispatch_entry is None:
+            missing_dispatch += 1
+            entries.append(
+                {
+                    "shape_id": shape_id,
+                    "reference_provider": reference["reference_provider"],
+                    "reference_tflops": reference["reference_tflops"],
+                    "selected_candidate_id": "",
+                    "selected_tflops": "",
+                    "selected_vs_reference_ratio": "",
+                    "status": "missing_dispatch",
+                }
+            )
+            continue
+        matched += 1
+        selected_tflops = dispatch_entry["selected_metric"]
+        reference_tflops = reference["reference_tflops"]
+        ratio = round(selected_tflops / reference_tflops, 6) if reference_tflops else ""
+        entries.append(
+            {
+                "shape_id": shape_id,
+                "reference_provider": reference["reference_provider"],
+                "reference_tflops": reference_tflops,
+                "selected_candidate_id": dispatch_entry["candidate_id"],
+                "selected_tflops": selected_tflops,
+                "selected_vs_reference_ratio": ratio,
+                "status": "matched",
+            }
+        )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "dataset_id": reference_doc.get("dataset_id", ""),
+        "summary": {
+            "reference_entries": len(reference_by_shape),
+            "matched": matched,
+            "missing_dispatch": missing_dispatch,
+        },
+        "entries": entries,
+    }

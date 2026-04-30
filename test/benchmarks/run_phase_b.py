@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--constraints-json", default="")
     parser.add_argument("--compiler-profiles-json", default="")
     parser.add_argument("--shapes-json", default="")
+    parser.add_argument("--reference-json", default="")
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--confirm-runs", type=int, default=3)
     parser.add_argument("--close-call-threshold", type=float, default=3.0)
@@ -63,6 +64,7 @@ def main():
         + (["--constraints-json", args.constraints_json] if args.constraints_json else [])
         + (["--compiler-profiles-json", args.compiler_profiles_json] if args.compiler_profiles_json else [])
         + (["--shapes-json", args.shapes_json] if args.shapes_json else [])
+        + (["--reference-json", args.reference_json] if args.reference_json else [])
         + ["--timeout", str(args.timeout)]
         + (["--dry-run"] if args.dry_run else [])
         + (["--skip-run"] if args.skip_run else [])

@@ -66,10 +66,12 @@ from .selector import (
     build_dispatch_table,
     build_phase_a_summary,
     build_phase_b_summary,
+    build_reference_comparison,
     build_run_summary,
     median_or_nan,
     write_results_csv,
 )
+from .ali_dataset import build_ali_gemm_docs
 from .workflow import build_compiler_flags_probe_summary, build_parser, empty_anomaly_report, main, run_phase_a_probe, workflow
 
 __all__ = [
@@ -99,7 +101,9 @@ __all__ = [
     "build_phase_a_probe_entries",
     "build_phase_a_summary",
     "build_phase_b_summary",
+    "build_reference_comparison",
     "build_run_summary",
+    "build_ali_gemm_docs",
     "build_screening_entries",
     "candidate_class",
     "candidate_id_for",
