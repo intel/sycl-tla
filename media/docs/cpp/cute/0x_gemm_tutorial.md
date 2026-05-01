@@ -1,7 +1,12 @@
 # CuTe dense matrix-matrix multiply tutorial
 
+> **Note on terminology.** This page uses CUDA terminology (CTA, threadblock, `.cu`
+> files) inherited from upstream CUTLASS. See [10_intel_overview.md](./10_intel_overview.md)
+> for the CUDA → SYCL mapping used in SYCL*TLA. For an Intel Xe GPU walkthrough, see
+> [11_intel_gemm_companion.md](./11_intel_gemm_companion.md).
+
 In this section, we review
-[these examples](https://github.com/NVIDIA/cutlass/tree/main/examples/cute/tutorial/),
+[these examples](https://github.com/intel/sycl-tla/tree/main/examples/cute/tutorial/),
 which demonstrate a few self-contained, single-file dense matrix-matrix multiply implementations using only CuTe.
 
 ## `sgemm_1.cu`
@@ -529,7 +534,7 @@ gett(int m0, int m1, int n, int k,
 ```
 Note that the only changes are the definition of shape `M`, the definition of strides `dA` and `dC`, and the definition of the CTA Tiler `bM`. The above uses a multimodel problem shape `M = (m0,m1)` and a multimodal CTA Tiler `bM = <_64,_2>` to change which portion of the global memory tensors `A` and `C` each CTA will be responsible for computing.
 
-Similar examples can be found for CUTLASS 3.x kernels that are based on CuTe, such as [this Hopper GETT example](https://github.com/NVIDIA/cutlass/tree/main/examples/51_hopper_gett).
+Similar examples can be found for CUTLASS 3.x kernels that are based on CuTe, such as [this Hopper GETT example](https://github.com/NVIDIA/cutlass/tree/main/examples/51_hopper_gett) in upstream CUTLASS.
 
 ## Copyright
 

@@ -24,9 +24,9 @@ examples/
 │   └── tutorial/                    
 ├── generics/                        # Device-agnostic SYCL examples
 │   └── device_agnostic/
-└── nv_sycl/                         # NVIDIA SYCL examples
-    ├── 00_ampere_tf32_tensorop_gemm/
-    └── 01_gemm_softmax/
+└── nv_sycl/                         # Legacy validation examples (NVIDIA)
+    ├── 14_ampere_tf32_tensorop_gemm/
+    └── 35_gemm_softmax/
 ```
 
 ## SYCL*TLA Examples for Intel GPUs
@@ -89,15 +89,19 @@ These examples work across different SYCL implementations and devices:
 
     Generic GEMM kernel implementation that can be executed on any SYCL-compatible device
 
-## NVIDIA SYCL Examples
+## Legacy Validation Examples (NVIDIA)
 
-SYCL implementations of traditional NVIDIA CUDA examples:
+> These examples are provided for cross-platform SYCL validation only. For Intel GPU
+> development, start with the Intel examples above.
 
-* [nv_sycl/00_ampere_tf32_tensorop_gemm](nv_sycl/00_ampere_tf32_tensorop_gemm/)
+SYCL implementations of traditional NVIDIA CUDA examples, retained for cross-platform
+build/test coverage when `SYCL_NVIDIA_TARGET=ON`:
+
+* [nv_sycl/14_ampere_tf32_tensorop_gemm](nv_sycl/14_ampere_tf32_tensorop_gemm/)
 
     SYCL implementation demonstrating FP32 GEMM with implicit TF32 conversion for NVIDIA Ampere architecture
 
-* [nv_sycl/01_gemm_softmax](nv_sycl/01_gemm_softmax/)
+* [nv_sycl/35_gemm_softmax](nv_sycl/35_gemm_softmax/)
 
     SYCL implementation demonstrating GEMM fused with Softmax in mixed precision using NVIDIA Tensor Cores
 
@@ -105,13 +109,13 @@ SYCL implementations of traditional NVIDIA CUDA examples:
 
 # CuTe - Programming Examples
 
-Examples that do not rely on CUTLASS and directly showcase the features of CuTe are located in [cutlass/examples/cute](./cute/).
+Examples that do not rely on CUTLASS and directly showcase the features of CuTe are located in [examples/cute](./cute/).
 
-Additionally, CuTe's core layout and layout algebra have their own test cases within [cutlass/test/unit/cute/core/](../test/unit/cute/core/) that users might find useful as examples of CuTe.
+Additionally, CuTe's core layout and layout algebra have their own test cases within [test/unit/cute/core/](../test/unit/cute/core/) that users might find useful as examples of CuTe.
 
 # Python Interface Examples
 
-Examples leveraging CUTLASS's [Python interface](../python/README.md) are located in [cutlass/examples/python](python/).
+Examples leveraging CUTLASS's [Python interface](../python/README.md) are located in [examples/python](python/).
 
 # Copyright
 
