@@ -44,6 +44,7 @@ int main(int argc, char const *arg[]) {
 
   cutlass::CommandLine cmdline(argc, arg);
   cutlass::profiler::Options options(cmdline);
+  cmdline.disable_unused_check();
 
   cutlass::profiler::CutlassProfiler profiler(options);
 

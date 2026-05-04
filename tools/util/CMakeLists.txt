@@ -28,7 +28,7 @@
 cmake_policy(SET CMP0112 NEW)
 
 # Include oneMKL support for SYCL builds
-if (CUTLASS_ENABLE_SYCL)
+if (CUTLASS_ENABLE_SYCL AND CUTLASS_SYCL_USE_ONEMKL)
   include(${CUTLASS_DIR}/cmake/onemkl.cmake)
 endif()
 
@@ -50,7 +50,7 @@ target_link_libraries(
   )
 
 # Add oneMKL for SYCL builds (sycl_tensor_fill.h needs oneapi/mkl/rng/device.hpp)
-if (CUTLASS_ENABLE_SYCL)
+if (CUTLASS_ENABLE_SYCL AND CUTLASS_SYCL_USE_ONEMKL)
   if (CUTLASS_USING_SYSTEM_ONEMKL)
     target_link_libraries(cutlass_tools_util_includes INTERFACE MKL::MKL)
   else()
@@ -68,4 +68,3 @@ install(
   TARGETS cutlass_tools_util_includes
   EXPORT NvidiaCutlass
   )
-

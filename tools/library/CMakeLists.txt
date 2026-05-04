@@ -129,7 +129,7 @@ function(cutlass_add_cutlass_library)
   # ensure the generated object target depends on that project. Otherwise
   # compilation of object files can run before the onemkl headers are available
   # and cause "oneapi/mkl/rng/device.hpp file not found" errors.
-  if (CUTLASS_ENABLE_SYCL)
+  if (CUTLASS_ENABLE_SYCL AND CUTLASS_SYCL_USE_ONEMKL)
     if (NOT CUTLASS_USING_SYSTEM_ONEMKL)
       if (TARGET onemkl_project)
         add_dependencies(${__NAME}_objs onemkl_project)
@@ -189,7 +189,9 @@ function(cutlass_add_cutlass_library)
       endif()
       
       # Add oneMKL for SYCL builds (needed for sycl_tensor_fill.h runtime)
-      add_onemkl_to_target(TARGET ${__NAME})
+      if (CUTLASS_SYCL_USE_ONEMKL)
+        add_onemkl_to_target(TARGET ${__NAME})
+      endif()
     else()
       # For CUDA builds, link with cuda_driver
       target_link_libraries(${__NAME} PRIVATE cuda_driver)
@@ -337,6 +339,7 @@ else()
     src/operation_table.cu
     src/singleton.cu
     src/util.cu
+    src/reference/gemm_fp32out.cu
   )
   
   # For backward compatibility with the old name
@@ -434,4 +437,3 @@ install(
   FILES ${CUTLASS_LIBRARY_GENERATED_KERNEL_LIST_FILE}
   DESTINATION ${CMAKE_INSTALL_INFODIR}/cutlass/
   )
-

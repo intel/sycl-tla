@@ -47,7 +47,9 @@
 // sleep not supported
 #endif
 
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include <cuda/atomic>
+#endif
 
 #include "cutlass/profiler/options.h"
 #include "cutlass/profiler/operation_profiler.h"
@@ -709,6 +711,7 @@ void OperationProfiler::save_workspace(
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace {
+#if !defined(CUTLASS_ENABLE_SYCL)
 extern "C" {
 __global__ void delay(cuda::atomic<bool> const *release) {
   while (release->load(cuda::memory_order_acquire) != true) {
@@ -718,6 +721,7 @@ __global__ void delay(cuda::atomic<bool> const *release) {
   }
 }
 }
+#endif
 
 Status predict_iters(
   int &iterations,
@@ -765,6 +769,10 @@ Status OperationProfiler::profile_kernel_w_cuda_graphs_(
   Options const& options,
   std::function<Status(int, cudaStream_t, int)> const& func,
   std::vector<cudaStream_t> const& streams) {
+
+#if defined(CUTLASS_ENABLE_SYCL)
+  return Status::kErrorNotSupported;
+#else
 
   auto dev_count = streams.size();
 
@@ -868,6 +876,7 @@ Status OperationProfiler::profile_kernel_w_cuda_graphs_(
   }
 
   return Status::kSuccess;
+#endif
 }
 
 Status OperationProfiler::profile_kernel_(
@@ -877,7 +886,17 @@ Status OperationProfiler::profile_kernel_(
   const std::vector<cudaStream_t> &streams) {
 
   if (options.profiling.use_cuda_graphs) {
+#if defined(CUTLASS_ENABLE_SYCL)
+    if (streams.size() != 1) {
+      return Status::kErrorNotSupported;
+    }
+    auto single_device_func = [&](cudaStream_t stream, int iteration) {
+      return func(0, stream, iteration);
+    };
+    return profile_kernel_no_cuda_graphs_(result, options, single_device_func, streams[0]);
+#else
     return profile_kernel_w_cuda_graphs_(result, options, func, streams);
+#endif
   }
   else if (streams.size() == 1) {
     auto single_device_func = [&](cudaStream_t stream, int iteration) {
@@ -896,10 +915,14 @@ Status OperationProfiler::profile_kernel_(
   cudaStream_t stream) {
 
   if (options.profiling.use_cuda_graphs) {
+#if defined(CUTLASS_ENABLE_SYCL)
+    return profile_kernel_no_cuda_graphs_(result, options, func, stream);
+#else
     auto graph_func = [&](int dev_id, cudaStream_t stream, int iteration) {
       return func(stream, iteration);
     };
     return profile_kernel_w_cuda_graphs_(result, options, graph_func, {stream});
+#endif
   } else {
     return profile_kernel_no_cuda_graphs_(result, options, func, stream);
   }

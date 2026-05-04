@@ -35,15 +35,112 @@
 #include <iostream>
 #include <stdexcept>
 #include <cstdint>
+#include <cctype>
+#include <cstdio>
+#include <cstring>
+#include <string>
 
 #include "cutlass/library/handle.h"
 #include "cutlass/library/singleton.h"
 #include "cutlass/library/util.h"
 
+#if defined(CUTLASS_ENABLE_SYCL)
+#include <cute/util/compat/device.hpp>
+#include <cute/util/compat/memory.hpp>
+#include <sycl/usm.hpp>
+#endif
+
 namespace cutlass {
 namespace library {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTLASS_ENABLE_SYCL)
+namespace {
+
+inline int infer_compute_capability(char const* device_name) {
+  std::string lower(device_name ? device_name : "");
+  for (char& ch : lower) {
+    ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  if (lower.find("pvc") != std::string::npos || lower.find("ponte") != std::string::npos) {
+    return 12;
+  }
+  if (lower.find("bmg") != std::string::npos || lower.find("battlemage") != std::string::npos ||
+      lower.find("xe2") != std::string::npos || lower.find("intel") != std::string::npos) {
+    return 20;
+  }
+  return 0;
+}
+
+inline cudaError_t cudaGetDevice(int* device) {
+  if (!device) {
+    return cudaErrorUnknown;
+  }
+  *device = int(compat::get_current_device_id());
+  return cudaSuccess;
+}
+
+inline cudaError_t cudaSetDevice(int device) {
+  compat::select_device(unsigned(device));
+  return cudaSuccess;
+}
+
+inline cudaError_t cudaGetDeviceProperties(cudaDeviceProp* prop, int device) {
+  if (!prop) {
+    return cudaErrorUnknown;
+  }
+  auto& dev = compat::get_device(unsigned(device));
+  auto info = dev.get_device_info();
+  std::memset(prop, 0, sizeof(cudaDeviceProp));
+  std::strncpy(prop->name, info.get_name(), sizeof(prop->name) - 1);
+  int cc = infer_compute_capability(prop->name);
+  prop->major = cc / 10;
+  prop->minor = cc % 10;
+  prop->multiProcessorCount = info.get_max_compute_units();
+  prop->l2CacheSize = int(info.get_global_mem_cache_size());
+  prop->totalGlobalMem = info.get_global_mem_size();
+  prop->multiGpuBoardGroupID = int(info.get_device_id());
+  return cudaSuccess;
+}
+
+inline sycl::queue& current_queue() {
+  return *compat::get_current_device().default_queue();
+}
+
+inline cudaError_t cudaMalloc(void** ptr, size_t size) {
+  if (!ptr) {
+    return cudaErrorUnknown;
+  }
+  try {
+    *ptr = sycl::malloc_device(size, current_queue());
+  } catch (std::exception const&) {
+    *ptr = nullptr;
+    return cudaErrorUnknown;
+  }
+  return *ptr ? cudaSuccess : cudaErrorUnknown;
+}
+
+inline cudaError_t cudaFree(void* ptr) {
+  try {
+    compat::free(ptr, current_queue());
+  } catch (std::exception const&) {
+    return cudaErrorUnknown;
+  }
+  return cudaSuccess;
+}
+
+inline cudaError_t cudaMemset(void* ptr, int value, size_t size) {
+  try {
+    compat::memset(ptr, value, size, current_queue());
+  } catch (std::exception const&) {
+    return cudaErrorUnknown;
+  }
+  return cudaSuccess;
+}
+
+}  // namespace
+#endif
 
 /// Constructor
 Handle::Handle(

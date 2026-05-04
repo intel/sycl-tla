@@ -30,6 +30,10 @@ def main():
     parser.add_argument("--shell-init", default="")
     parser.add_argument("--constraints-json", default="")
     parser.add_argument("--compiler-profiles-json", default="")
+    parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator"], default="persisted")
+    parser.add_argument("--kernel-catalog-path", default="")
+    parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg")
+    parser.add_argument("--generator-instantiation-level", type=int, default=0)
     parser.add_argument("--shapes-json", default="")
     parser.add_argument("--reference-json", default="")
     parser.add_argument("--top-k", type=int, default=3)
@@ -63,6 +67,9 @@ def main():
         + (["--shell-init", args.shell_init] if args.shell_init else [])
         + (["--constraints-json", args.constraints_json] if args.constraints_json else [])
         + (["--compiler-profiles-json", args.compiler_profiles_json] if args.compiler_profiles_json else [])
+        + ["--kernel-catalog-source", args.kernel_catalog_source]
+        + (["--kernel-catalog-path", args.kernel_catalog_path] if args.kernel_catalog_path else [])
+        + ["--generator-arch", args.generator_arch, "--generator-instantiation-level", str(args.generator_instantiation_level)]
         + (["--shapes-json", args.shapes_json] if args.shapes_json else [])
         + (["--reference-json", args.reference_json] if args.reference_json else [])
         + ["--timeout", str(args.timeout)]

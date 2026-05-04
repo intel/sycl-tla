@@ -39,10 +39,14 @@
 #include <vector>
 
 #include "cutlass/core_io.h"
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include <cuda_runtime_api.h>
 #include <cuda/atomic>
+#endif
 
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/profiler/cublas_helpers.h"
+#endif
 #include "cutlass/profiler/gemm_operation_profiler.h"
 #include "cutlass/profiler/gpu_timer.h"
 #include "cutlass/library/singleton.h"
@@ -81,7 +85,14 @@ GemmOperationProfiler::GemmOperationProfiler(Options const &options):
       {ArgumentTypeID::kEnumerated, {"enable_sm90_mixed_dtype_shuffle_test", "enable-sm90-mixed-dtype-shuffle-test"}, "Enable SM90 mixed input data type kernel shuffle layout test (true, false)"},
       {ArgumentTypeID::kInteger, {"swizzle_size", "swizzle-size"}, "Size to swizzle"},
     },
-    { library::Provider::kCUBLAS}
+    {
+#if defined(CUTLASS_ENABLE_SYCL)
+      library::Provider::kReferenceDevice,
+      library::Provider::kReferenceHost
+#else
+      library::Provider::kCUBLAS
+#endif
+    }
   ) {
 
   description_ = "      General matrix-matrix product. D = alpha * A*B + beta * C";

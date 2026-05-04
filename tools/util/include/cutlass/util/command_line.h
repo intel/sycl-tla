@@ -64,6 +64,7 @@ struct CommandLine {
   std::vector<std::string> args;
   mutable std::vector<bool> keys_used;
   mutable std::vector<bool> args_used;
+  bool enforce_unused_check = true;
 
   /**
    * Constructor
@@ -99,7 +100,50 @@ struct CommandLine {
     }
   }
 
+  CommandLine(CommandLine const& other):
+    keys(other.keys),
+    values(other.values),
+    args(other.args),
+    keys_used(other.keys_used),
+    args_used(other.args_used),
+    enforce_unused_check(false) {}
+
+  CommandLine& operator=(CommandLine const& other) {
+    if (this != &other) {
+      keys = other.keys;
+      values = other.values;
+      args = other.args;
+      keys_used = other.keys_used;
+      args_used = other.args_used;
+      enforce_unused_check = false;
+    }
+    return *this;
+  }
+
+  CommandLine(CommandLine&& other) noexcept:
+    keys(std::move(other.keys)),
+    values(std::move(other.values)),
+    args(std::move(other.args)),
+    keys_used(std::move(other.keys_used)),
+    args_used(std::move(other.args_used)),
+    enforce_unused_check(false) {}
+
+  CommandLine& operator=(CommandLine&& other) noexcept {
+    if (this != &other) {
+      keys = std::move(other.keys);
+      values = std::move(other.values);
+      args = std::move(other.args);
+      keys_used = std::move(other.keys_used);
+      args_used = std::move(other.args_used);
+      enforce_unused_check = false;
+    }
+    return *this;
+  }
+
   ~CommandLine() noexcept(false){
+    if (!enforce_unused_check) {
+      return;
+    }
     bool err = false;
     for (int i = 0; i < keys_used.size(); ++i){
       if(!keys_used[i]){
@@ -119,6 +163,10 @@ struct CommandLine {
     }
   }
 
+  void disable_unused_check() {
+    enforce_unused_check = false;
+  }
+
   /**
    * Constructor to represent a command line from a map of [argument] -> [value]
    */
@@ -127,6 +175,7 @@ struct CommandLine {
       keys.push_back(key);
       values.push_back(value);
     }
+    enforce_unused_check = false;
   }
 
   /**

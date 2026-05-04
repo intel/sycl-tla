@@ -101,12 +101,28 @@ def candidate_id_for(seed):
     return candidate_id
 
 
-def generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=("benchmark",)):
+def generate_candidate_space(
+    shapes_doc,
+    constraints,
+    profiles,
+    allowed_runners=("benchmark",),
+    catalog_source="persisted",
+    catalog_path=None,
+    generator_arch="bmg",
+    generator_instantiation_level=0,
+):
     seen = set()
     candidates = []
     dtypes = sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]})
     requested_layouts = {shape["layout"] for shape in shapes_doc["shapes"]}
-    kernel_catalog = build_kernel_catalog(dtypes=dtypes, allowed_runners=allowed_runners)
+    kernel_catalog = build_kernel_catalog(
+        dtypes=dtypes,
+        allowed_runners=allowed_runners,
+        catalog_path=catalog_path,
+        catalog_source=catalog_source,
+        generator_arch=generator_arch,
+        generator_instantiation_level=generator_instantiation_level,
+    )
     available_layouts = {entry["layout"] for entry in kernel_catalog["kernels"]}
     unsupported_layouts = sorted({shape["layout"] for shape in shapes_doc["shapes"] if shape["layout"] not in available_layouts})
     if unsupported_layouts:
@@ -160,7 +176,13 @@ def generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=
         "device_arch": constraints["device_arch"],
         "constraint_source": constraints["constraint_source"],
         "search_runtime_schema": SEARCH_RUNTIME_SCHEMA,
-        "kernel_catalog": {"catalog_version": kernel_catalog["catalog_version"], "kernel_count": len(kernel_catalog["kernels"])},
+        "kernel_catalog": {
+            "catalog_version": kernel_catalog["catalog_version"],
+            "catalog_source": kernel_catalog.get("catalog_source", "persisted"),
+            "generator_arch": kernel_catalog.get("generator_arch", ""),
+            "generator_instantiation_level": kernel_catalog.get("generator_instantiation_level", 0),
+            "kernel_count": len(kernel_catalog["kernels"]),
+        },
         "candidates": candidates,
     }
 

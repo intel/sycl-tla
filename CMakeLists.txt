@@ -224,6 +224,7 @@ include(customConfigs.cmake)
 
 
 set(CUTLASS_ENABLE_HEADERS_ONLY OFF CACHE BOOL "Enable only the header library")
+set(CUTLASS_SYCL_USE_ONEMKL ON CACHE BOOL "Enable oneMKL-dependent SYCL utilities and targets")
 
 if(CUTLASS_ENABLE_HEADERS_ONLY)
   set(CUTLASS_ENABLE_EXAMPLES_INIT OFF)
@@ -241,7 +242,9 @@ else()
   endif()
 
   # Not include MKL when headers only
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/onemkl.cmake)
+  if (CUTLASS_ENABLE_SYCL AND CUTLASS_SYCL_USE_ONEMKL)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/onemkl.cmake)
+  endif()
 endif()
 
 set(CUTLASS_TEST_UNIT_ENABLE_WARNINGS OFF CACHE BOOL "Enable warnings on waived unit tests.")
@@ -1334,4 +1337,3 @@ install(
 ################################################################################
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/NvidiaCutlassPackageConfig.cmake)
-

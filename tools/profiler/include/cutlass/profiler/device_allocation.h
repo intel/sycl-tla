@@ -41,6 +41,7 @@
 #include "cutlass/library/library.h"
 #include "cutlass/util/distribution.h"
 
+#include "cuda_helpers.h"
 #include "enumerated_types.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////

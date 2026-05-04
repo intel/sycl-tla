@@ -90,7 +90,9 @@ function(cutlass_benchmark_add_executable NAME)
   )
 
   if (CUTLASS_ENABLE_SYCL)
-    add_onemkl_to_target(TARGET ${NAME})
+    if (CUTLASS_SYCL_USE_ONEMKL)
+      add_onemkl_to_target(TARGET ${NAME})
+    endif()
     add_sycl_to_target(TARGET ${NAME})
   endif()
 

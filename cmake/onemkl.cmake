@@ -32,6 +32,11 @@ include(ExternalProject)
 
 option(CUTLASS_SYCL_DISCONNECT_ONEMKL_UPDATE "Stop oneMKL from updating when the git tag is not changed" YES)
 
+if (NOT CUTLASS_SYCL_USE_ONEMKL)
+  set(CUTLASS_USING_SYSTEM_ONEMKL FALSE)
+  return()
+endif()
+
 set(ONEMKL_INSTALL_DIR ${CMAKE_BINARY_DIR}/deps/oneMKL)
 
 # Try to find oneMKL using find_package

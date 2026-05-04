@@ -48,10 +48,10 @@ namespace library {
 // For CUDA builds, reference operations are defined in initialize_reference_operations.cu
 void initialize_reference_operations(Manifest &manifest);
 #else
-// For SYCL builds, provide a stub implementation since reference ops are not yet supported
+// For SYCL builds, register the minimal GEMM reference set needed by stage-1 profiler verification.
+void initialize_gemm_reference_operations_fp32out(Manifest &manifest);
 inline void initialize_reference_operations(Manifest &manifest) {
-  // Reference operations not yet implemented for SYCL
-  // This is a stub to allow the library to compile
+  initialize_gemm_reference_operations_fp32out(manifest);
 }
 #endif
 

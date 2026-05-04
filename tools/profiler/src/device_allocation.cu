@@ -33,6 +33,8 @@
 */
 
 #include <cstring>
+#include <cstdio>
+#include <vector>
 
 #include "cutlass/numeric_types.h"
 #include "cutlass/layout/matrix.h"
@@ -49,9 +51,74 @@
 #include "cutlass/profiler/device_allocation.h"
 
 namespace cutlass {
+
+#if defined(CUTLASS_ENABLE_SYCL)
+namespace reference {
+namespace device {
+
+template <typename Element>
+void BlockFillRandom(Element* ptr, size_t capacity, uint64_t seed, Distribution dist) {
+  std::vector<Element> host(capacity);
+  cutlass::reference::host::BlockFillRandom(host.data(), capacity, seed, dist);
+  compat::memcpy(ptr, host.data(), capacity * sizeof(Element));
+  compat::wait();
+}
+
+template <typename Element, typename Index>
+void BlockFillSequential(Element* ptr, size_t capacity, Index start, Index delta) {
+  std::vector<Element> host(capacity);
+  cutlass::reference::host::BlockFillSequential(host.data(), capacity, start, delta);
+  compat::memcpy(ptr, host.data(), capacity * sizeof(Element));
+  compat::wait();
+}
+
+template <typename Element>
+void BlockFillRandomSparseMeta(Element* ptr, size_t capacity, uint64_t seed, int meta_size_in_bits) {
+  std::vector<Element> host(capacity);
+  cutlass::reference::host::BlockFillRandomSparseMeta(
+    host.data(), capacity, seed, meta_size_in_bits);
+  compat::memcpy(ptr, host.data(), capacity * sizeof(Element));
+  compat::wait();
+}
+
+template <typename Element, typename Layout>
+void TensorFill(TensorView<Element, Layout> view, Element val = Element()) {
+  auto host = cutlass::HostTensor<Element, Layout>(view.extent());
+  cutlass::reference::host::TensorFill(host.host_view(), val);
+  compat::memcpy(view.data(), host.host_data(), host.capacity() * sizeof(Element));
+  compat::wait();
+}
+
+}  // namespace device
+}  // namespace reference
+#endif
+
 namespace profiler {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+struct ScopedDevice {
+  int previous_device{0};
+  bool restore{false};
+
+  explicit ScopedDevice(int target_device) {
+    cudaGetDevice(&previous_device);
+    restore = previous_device != target_device;
+    if (restore) {
+      cudaSetDevice(target_device);
+    }
+  }
+
+  ~ScopedDevice() {
+    if (restore) {
+      cudaSetDevice(previous_device);
+    }
+  }
+};
+
+}  // namespace
 
 size_t DeviceAllocation::bytes(library::NumericTypeID type, size_t capacity) {
   return size_t(cutlass::library::sizeof_bits(type)) * capacity / 8;
@@ -486,13 +553,20 @@ size_t DeviceAllocation::bytes() const {
 /// Copies from an equivalent-sized tensor in device memory
 void DeviceAllocation::copy_from_device(void const *ptr) {
   if (!bytes()) {
-#ifndef NDEBUG
-    std::cout << "Skipping copy of size 0 allocation\n";
-#endif
     return;
   }
 
+  int current_device;
+  cudaGetDevice(&current_device);
+  if (current_device != device_) {
+    cudaSetDevice(device_);
+  }
+
   cudaError_t result = cudaMemcpy(data(), ptr, bytes(), cudaMemcpyDeviceToDevice);
+
+  if (current_device != device_) {
+    cudaSetDevice(current_device);
+  }
   if (result != cudaSuccess) {
     throw std::runtime_error("Failed device-to-device copy");
   }
@@ -501,13 +575,20 @@ void DeviceAllocation::copy_from_device(void const *ptr) {
 /// Copies from an equivalent-sized tensor in device memory
 void DeviceAllocation::copy_from_host(void const *ptr) {
   if (!bytes()) {
-#ifndef NDEBUG
-    std::cout << "Skipping copy of size 0 allocation\n";
-#endif
     return;
   }
 
+  int current_device;
+  cudaGetDevice(&current_device);
+  if (current_device != device_) {
+    cudaSetDevice(device_);
+  }
+
   cudaError_t result = cudaMemcpy(data(), ptr, bytes(), cudaMemcpyHostToDevice);
+
+  if (current_device != device_) {
+    cudaSetDevice(current_device);
+  }
   if (result != cudaSuccess) {
     throw std::runtime_error("Failed host-to-device copy");
   }
@@ -516,13 +597,20 @@ void DeviceAllocation::copy_from_host(void const *ptr) {
 /// Copies from an equivalent-sized tensor in device memory
 void DeviceAllocation::copy_to_host(void *ptr) {
   if (!bytes()) {
-#ifndef NDEBUG
-    std::cout << "Skipping copy of size 0 allocation\n";
-#endif
     return;
   }
 
+  int current_device;
+  cudaGetDevice(&current_device);
+  if (current_device != device_) {
+    cudaSetDevice(device_);
+  }
+
   cudaError_t result = cudaMemcpy(ptr, data(), bytes(), cudaMemcpyDeviceToHost);
+
+  if (current_device != device_) {
+    cudaSetDevice(current_device);
+  }
   if (result != cudaSuccess) {
     throw std::runtime_error("Failed device-to-host copy");
   }
@@ -530,15 +618,14 @@ void DeviceAllocation::copy_to_host(void *ptr) {
 
 void DeviceAllocation::initialize_random_device(int seed, Distribution dist) {
   if (!bytes()) {
-#ifndef NDEBUG
-    std::cout << "Skipping initialization of size 0 allocation\n";
-#endif
     return;
   }
 
   if (!data()) {
     throw std::runtime_error("Attempting to initialize invalid allocation.");
   }
+
+  ScopedDevice device_guard(device_);
 
   // Instantiate calls to CURAND here. This file takes a long time to compile for
   // this reason.
@@ -782,9 +869,6 @@ void DeviceAllocation::initialize_random_device(int seed, Distribution dist) {
 
 void DeviceAllocation::initialize_random_host(int seed, Distribution dist) {
   if (!bytes()) {
-#ifndef NDEBUG
-    std::cout << "Skipping initialization of size 0 allocation\n";
-#endif
     return;
   }
 
@@ -1045,15 +1129,14 @@ void DeviceAllocation::initialize_random_host(int seed, Distribution dist) {
 
 void DeviceAllocation::initialize_sequential_device(Distribution dist) {
   if (!bytes()) {
-#ifndef NDEBUG
-    std::cout << "Skipping initialization of size 0 allocation\n";
-#endif
     return;
   }
 
   if (!data()) {
     throw std::runtime_error("Attempting to initialize invalid allocation.");
   }
+
+  ScopedDevice device_guard(device_);
 
   switch (type_) {
   case library::NumericTypeID::kFE4M3:
@@ -1315,9 +1398,6 @@ void DeviceAllocation::initialize_sequential_device(Distribution dist) {
 
 void DeviceAllocation::initialize_sequential_host(Distribution dist) {
   if (!bytes()) {
-#ifndef NDEBUG
-    std::cout << "Skipping initialization of size 0 allocation\n";
-#endif
     return;
   }
 
@@ -1588,15 +1668,14 @@ void DeviceAllocation::initialize_sequential_host(Distribution dist) {
 
 void DeviceAllocation::initialize_random_sparsemeta_device(int seed, int MetaSizeInBits) {
   if (!bytes()) {
-#ifndef NDEBUG
-    std::cout << "Skipping initialization of size 0 allocation\n";
-#endif
     return;
   }
 
   if (!data()) {
     throw std::runtime_error("Attempting to initialize invalid allocation.");
   }
+
+  ScopedDevice device_guard(device_);
 
   // Instantiate calls to CURAND here. This file takes a long time to compile for
   // this reason.
@@ -1625,9 +1704,6 @@ void DeviceAllocation::initialize_random_sparsemeta_device(int seed, int MetaSiz
 
 void DeviceAllocation::initialize_random_sparsemeta_host(int seed, int MetaSizeInBits) {
   if (!bytes()) {
-#ifndef NDEBUG
-    std::cout << "Skipping initialization of size 0 allocation\n";
-#endif
     return;
   }
 
@@ -2433,6 +2509,7 @@ static void tensor_fill(DeviceAllocation &allocation, Element val = Element()) {
 
 /// Fills a tensor uniformly with a value (most frequently used to clear the tensor)
 void DeviceAllocation::fill_device(double val = 0.0) {
+  ScopedDevice device_guard(device_);
 
   switch (this->type()) {
   case library::NumericTypeID::kFE4M3:
@@ -2769,6 +2846,14 @@ cudaError_t DeviceAllocation::malloc(void** ptr, size_t size) {
   int current_device;
   cudaGetDevice(&current_device);
 
+  if (ptr) {
+    *ptr = nullptr;
+  }
+
+  if (!size) {
+    return cudaSuccess;
+  }
+
   if (current_device != device_) {
     cudaSetDevice(device_);
   }
@@ -2776,6 +2861,12 @@ cudaError_t DeviceAllocation::malloc(void** ptr, size_t size) {
   // This performs the cudaMalloc
   result = cudaMalloc(ptr, size);
   if (result != cudaSuccess) {
+    std::fprintf(
+      stderr,
+      "DeviceAllocation::malloc failed size=%zu current_device=%d target_device=%d\n",
+      size,
+      current_device,
+      device_);
     return result;
   }
 

@@ -96,6 +96,44 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(generated["search_runtime_schema"], persisted["search_runtime_schema"])
         self.assertEqual(normalize(generated), normalize(persisted))
 
+    def test_build_kernel_catalog_can_bridge_generator_space(self):
+        catalog = profiler.build_kernel_catalog(
+            dtypes=["bf16"],
+            allowed_runners=("benchmark",),
+            catalog_source="generator",
+            generator_arch="bmg",
+            generator_instantiation_level=1,
+        )
+
+        self.assertEqual(catalog["catalog_source"], "generator")
+        self.assertEqual(catalog["generator_arch"], "bmg")
+        self.assertEqual(catalog["generator_instantiation_level"], 1)
+        self.assertEqual(catalog["catalog_version"], "generator-bmg-level1")
+        self.assertGreater(len(catalog["kernels"]), 8)
+        self.assertTrue(any(entry["streamk_mode"] == "streamk" for entry in catalog["kernels"]))
+        self.assertTrue(any(entry["stages"] == 0 for entry in catalog["kernels"]))
+        self.assertTrue(all(entry["benchmark_target"] == "cutlass_benchmarks_gemm_sycl" for entry in catalog["kernels"]))
+
+    def test_generate_candidate_space_can_use_generator_catalog(self):
+        shapes = profiler.default_shapes("bf16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            constraints,
+            profiles,
+            allowed_runners=("benchmark",),
+            catalog_source="generator",
+            generator_arch="bmg",
+            generator_instantiation_level=1,
+        )
+
+        self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "generator")
+        self.assertEqual(candidate_space["kernel_catalog"]["generator_instantiation_level"], 1)
+        self.assertGreater(candidate_space["kernel_catalog"]["kernel_count"], 8)
+        self.assertTrue(any(candidate["streamk_mode"] == "streamk" for candidate in candidate_space["candidates"]))
+
     def test_build_candidate_build_manifest_splits_compile_and_runtime_fields(self):
         shapes = profiler.default_shapes("bf16")
         constraints = profiler.default_constraints()
@@ -665,6 +703,36 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(phase_a_summary["probe_mode"], "dry_run_off")
             phase_b_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_b_summary.json")
             self.assertEqual(phase_b_summary["candidate_count"], 8)
+
+    def test_skip_run_workflow_can_emit_generator_backed_catalog(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    tmpdir,
+                    "--dtype",
+                    "bf16",
+                    "--skip-run",
+                    "--kernel-catalog-source",
+                    "generator",
+                    "--generator-arch",
+                    "bmg",
+                    "--generator-instantiation-level",
+                    "1",
+                ]
+            )
+            outputs = profiler.workflow(args)
+
+            kernel_catalog = profiler.read_json(Path(outputs["kernel_catalog"]))
+            candidate_space = profiler.read_json(Path(outputs["candidate_space"]))
+            build_manifest = profiler.read_json(Path(outputs["build_manifest"]))
+
+            self.assertEqual(kernel_catalog["catalog_source"], "generator")
+            self.assertEqual(kernel_catalog["generator_instantiation_level"], 1)
+            self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "generator")
+            self.assertTrue(any(entry["stages"] == 0 for entry in kernel_catalog["kernels"]))
+            self.assertGreater(len(build_manifest["variants"]), 8)
+            self.assertTrue(any("_stream_k" in variant["kernel_id"] for variant in build_manifest["variants"]))
 
     def test_dispatch_table_reports_low_efficiency_winner(self):
         shapes = {

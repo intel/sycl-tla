@@ -44,6 +44,18 @@ namespace library {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(CUTLASS_ENABLE_SYCL)
+struct cudaDeviceProp {
+  char name[256];
+  int major;
+  int minor;
+  int multiProcessorCount;
+  int l2CacheSize;
+  size_t totalGlobalMem;
+  int multiGpuBoardGroupID;
+};
+#endif
+
 /// Handle object
 class Handle {
 private:
@@ -362,4 +374,3 @@ Operation const* find_gemm_operation_for_parallel_reduction(Operation const *ope
 } // namespace cutlass
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-

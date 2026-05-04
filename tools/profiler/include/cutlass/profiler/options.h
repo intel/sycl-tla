@@ -38,12 +38,11 @@
 #include <vector>
 #include <map>
 
-#include <cuda_runtime.h>
-
 #include "cutlass/util/command_line.h"
 #include "cutlass/util/distribution.h"
 #include "cutlass/library/library.h"
 
+#include "cuda_helpers.h"
 #include "enumerated_types.h"
 
 namespace cutlass {

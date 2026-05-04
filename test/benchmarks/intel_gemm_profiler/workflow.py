@@ -243,9 +243,25 @@ def workflow(args):
     write_json(inputs_dir / "compiler_profiles.json", profiles)
     write_json(inputs_dir / "gemm_target_shapes.json", shapes_doc)
     write_json(inputs_dir / "search_runtime_schema.json", SEARCH_RUNTIME_SCHEMA)
-    kernel_catalog = build_kernel_catalog(dtypes=sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]}), allowed_runners=allowed_runners)
+    kernel_catalog = build_kernel_catalog(
+        dtypes=sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]}),
+        allowed_runners=allowed_runners,
+        catalog_path=Path(args.kernel_catalog_path) if args.kernel_catalog_path else None,
+        catalog_source=args.kernel_catalog_source,
+        generator_arch=args.generator_arch,
+        generator_instantiation_level=args.generator_instantiation_level,
+    )
     write_json(reports_dir / "kernel_catalog.json", kernel_catalog)
-    candidate_space = generate_candidate_space(shapes_doc, constraints, profiles, allowed_runners=allowed_runners)
+    candidate_space = generate_candidate_space(
+        shapes_doc,
+        constraints,
+        profiles,
+        allowed_runners=allowed_runners,
+        catalog_path=Path(args.kernel_catalog_path) if args.kernel_catalog_path else None,
+        catalog_source=args.kernel_catalog_source,
+        generator_arch=args.generator_arch,
+        generator_instantiation_level=args.generator_instantiation_level,
+    )
     write_json(reports_dir / "gemm_candidate_space.json", candidate_space)
     write_json(reports_dir / "bmg_safe_candidates.json", candidate_space)
     write_json(reports_dir / "candidate_build_manifest.json", build_candidate_build_manifest(candidate_space))
@@ -340,6 +356,10 @@ def build_parser():
     parser.add_argument("--reference-json", default="", help="Optional path to reference/oracle JSON for dataset comparison.")
     parser.add_argument("--constraints-json", default="", help="Optional path to safe_search_constraints.json.")
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")
+    parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator"], default="persisted", help="Catalog source for Phase B candidates. 'generator' bridges Intel Xe library generation into the benchmark/search catalog but requires a benchmark binary built from the same generated kernels.")
+    parser.add_argument("--kernel-catalog-path", default="", help="Optional path to a persisted kernel catalog JSON. Used when --kernel-catalog-source=persisted.")
+    parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
+    parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")
     parser.add_argument("--skip-run", action="store_true", help="Only emit generated artifacts without invoking the benchmark.")
     parser.add_argument("--dry-run", action="store_true", help="Run a minimal benchmark-backed screening smoke with a tiny shape set and no confirmation.")

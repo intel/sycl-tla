@@ -41,22 +41,27 @@ set(CUTLASS_TOOLS_PROFILER_SOURCES
   src/gpu_timer.cpp
   src/device_allocation.cu
   src/device_context.cu
-  src/cublas_helpers.cu             
-  src/cudnn_helpers.cpp                   
   src/problem_space.cpp
   src/operation_profiler.cu
   src/gemm_operation_profiler.cu
-  src/grouped_gemm_operation_profiler.cu
-  src/block_scaled_gemm_operation_profiler.cu
-  src/blockwise_gemm_operation_profiler.cu
-  src/rank_k_operation_profiler.cu
-  src/rank_2k_operation_profiler.cu
-  src/trmm_operation_profiler.cu
-  src/symm_operation_profiler.cu
-  src/conv2d_operation_profiler.cu          
-  src/conv3d_operation_profiler.cu          
-  src/sparse_gemm_operation_profiler.cu
 )
+
+if (NOT CUTLASS_ENABLE_SYCL)
+  list(APPEND CUTLASS_TOOLS_PROFILER_SOURCES
+    src/cublas_helpers.cu
+    src/cudnn_helpers.cpp
+    src/grouped_gemm_operation_profiler.cu
+    src/block_scaled_gemm_operation_profiler.cu
+    src/blockwise_gemm_operation_profiler.cu
+    src/rank_k_operation_profiler.cu
+    src/rank_2k_operation_profiler.cu
+    src/trmm_operation_profiler.cu
+    src/symm_operation_profiler.cu
+    src/conv2d_operation_profiler.cu
+    src/conv3d_operation_profiler.cu
+    src/sparse_gemm_operation_profiler.cu
+  )
+endif()
 
 #
 # Build target
@@ -86,13 +91,26 @@ target_include_directories(
 target_link_libraries(
   cutlass_profiler
   PRIVATE 
-  cutlass_lib
+  $<$<BOOL:${CUTLASS_ENABLE_SYCL}>:cutlass_lib_static>
+  $<$<NOT:$<BOOL:${CUTLASS_ENABLE_SYCL}>>:cutlass_lib>
   cutlass_tools_util_includes
+)
+
+if (CUTLASS_ENABLE_SYCL)
+  add_sycl_to_target(TARGET cutlass_profiler)
+  add_sycl_include_directories_to_target(cutlass_profiler)
+endif()
+
+if (NOT CUTLASS_ENABLE_SYCL)
+  target_link_libraries(
+    cutlass_profiler
+    PRIVATE
   $<$<BOOL:${CUTLASS_ENABLE_CUBLAS}>:nvidia::cublas>
   $<$<BOOL:${CUTLASS_ENABLE_CUDNN}>:nvidia::cudnn>
   cudart
   cuda_driver
   )
+endif()
 
 install(
   TARGETS cutlass_profiler
@@ -100,41 +118,42 @@ install(
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
   )
 
-if (CUDA_VERSION VERSION_GREATER_EQUAL 12.3 AND CUDA_VERSION VERSION_LESS 12.4 AND (90a IN_LIST CUTLASS_NVCC_ARCHS_ENABLED OR (90 IN_LIST CUTLASS_NVCC_ARCHS_ENABLED)))
-  set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GEMM   --operation=Gemm       --providers=cutlass --verification-providers=cublas,host      --junit-output=test_cutlass_profiler_gemm    --print-kernel-before-running=true)
-else()
-    set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GEMM   --operation=Gemm       --providers=cutlass --verification-providers=cublas,device      --junit-output=test_cutlass_profiler_gemm    --print-kernel-before-running=true)
-    if (90a IN_LIST CUTLASS_NVCC_ARCHS_ENABLED OR (90 IN_LIST CUTLASS_NVCC_ARCHS_ENABLED))
-      set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GEMM   --operation=BlockScaledGemm --providers=cutlass --verification-providers=cublas,device      --junit-output=test_cutlass_profiler_gemm    --print-kernel-before-running=true)
-    else()
-      set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GEMM   --operation=BlockScaledGemm --mode=trace      --junit-output=test_cutlass_profiler_gemm    --print-kernel-before-running=true)
-    endif()
+if (NOT CUTLASS_ENABLE_SYCL)
+  if (CUDA_VERSION VERSION_GREATER_EQUAL 12.3 AND CUDA_VERSION VERSION_LESS 12.4 AND (90a IN_LIST CUTLASS_NVCC_ARCHS_ENABLED OR (90 IN_LIST CUTLASS_NVCC_ARCHS_ENABLED)))
+    set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GEMM   --operation=Gemm       --providers=cutlass --verification-providers=cublas,host      --junit-output=test_cutlass_profiler_gemm    --print-kernel-before-running=true)
+  else()
+      set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GEMM   --operation=Gemm       --providers=cutlass --verification-providers=cublas,device      --junit-output=test_cutlass_profiler_gemm    --print-kernel-before-running=true)
+      if (90a IN_LIST CUTLASS_NVCC_ARCHS_ENABLED OR (90 IN_LIST CUTLASS_NVCC_ARCHS_ENABLED))
+        set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GEMM   --operation=BlockScaledGemm --providers=cutlass --verification-providers=cublas,device      --junit-output=test_cutlass_profiler_gemm    --print-kernel-before-running=true)
+      else()
+        set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GEMM   --operation=BlockScaledGemm --mode=trace      --junit-output=test_cutlass_profiler_gemm    --print-kernel-before-running=true)
+      endif()
+  endif()
+
+  set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_CONV2D --operation=Conv2d     --providers=cutlass --verification-providers=cudnn,device       --junit-output=test_cutlass_profiler_conv2d  --print-kernel-before-running=true)
+  set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_CONV3D --operation=Conv3d     --providers=cutlass --verification-providers=cudnn,device,host  --junit-output=test_cutlass_profiler_conv3d  --print-kernel-before-running=true)
+  set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_SPGEMM --operation=SparseGemm --providers=cutlass --verification-providers=cublas,device,host --junit-output=test_cutlass_profiler_spgemm  --print-kernel-before-running=true)
+  set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_RANK_K   --operation=RankK       --providers=cutlass --verification-providers=cublas        --junit-output=test_cutlass_profiler_rank_k    --print-kernel-before-running=true)
+  set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_RANK_2K   --operation=Rank2K       --providers=cutlass --verification-providers=cublas        --junit-output=test_cutlass_profiler_rank_2k --print-kernel-before-running=true)
+  set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_TRMM   --operation=Trmm       --providers=cutlass --verification-providers=device,host        --junit-output=test_cutlass_profiler_trmm    --print-kernel-before-running=true)
+  set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_SYMM   --operation=Symm       --providers=cutlass --verification-providers=cublas,host        --junit-output=test_cutlass_profiler_symm    --print-kernel-before-running=true)
+  set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GROUPED_GEMM --operation=GroupedGemm --providers=cutlass --verification-providers=device --junit-output=test_cutlass_profiler_grouped_gemm --print-kernel-before-running=true)
+
+  cutlass_add_executable_tests(
+    test_profiler cutlass_profiler
+    DEPENDEES test_all
+    TEST_COMMAND_OPTIONS
+      GEMM
+      CONV2D
+      CONV3D
+      SPGEMM
+      RANK_K
+      RANK_2K
+      TRMM
+      SYMM
+      GROUPED_GEMM
+    TEST_COMMAND_OPTIONS_PREFIX
+      CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_
+    DISABLE_EXECUTABLE_INSTALL_RULE
+    )
 endif()
-
-set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_CONV2D --operation=Conv2d     --providers=cutlass --verification-providers=cudnn,device       --junit-output=test_cutlass_profiler_conv2d  --print-kernel-before-running=true)
-set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_CONV3D --operation=Conv3d     --providers=cutlass --verification-providers=cudnn,device,host  --junit-output=test_cutlass_profiler_conv3d  --print-kernel-before-running=true)
-set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_SPGEMM --operation=SparseGemm --providers=cutlass --verification-providers=cublas,device,host --junit-output=test_cutlass_profiler_spgemm  --print-kernel-before-running=true)
-set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_RANK_K   --operation=RankK       --providers=cutlass --verification-providers=cublas        --junit-output=test_cutlass_profiler_rank_k    --print-kernel-before-running=true)
-set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_RANK_2K   --operation=Rank2K       --providers=cutlass --verification-providers=cublas        --junit-output=test_cutlass_profiler_rank_2k --print-kernel-before-running=true)
-set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_TRMM   --operation=Trmm       --providers=cutlass --verification-providers=device,host        --junit-output=test_cutlass_profiler_trmm    --print-kernel-before-running=true)
-set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_SYMM   --operation=Symm       --providers=cutlass --verification-providers=cublas,host        --junit-output=test_cutlass_profiler_symm    --print-kernel-before-running=true)
-set(CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_GROUPED_GEMM --operation=GroupedGemm --providers=cutlass --verification-providers=device --junit-output=test_cutlass_profiler_grouped_gemm --print-kernel-before-running=true)
-
-cutlass_add_executable_tests(
-  test_profiler cutlass_profiler
-  DEPENDEES test_all
-  TEST_COMMAND_OPTIONS
-    GEMM
-    CONV2D
-    CONV3D
-    SPGEMM
-    RANK_K
-    RANK_2K
-    TRMM
-    SYMM
-    GROUPED_GEMM
-  TEST_COMMAND_OPTIONS_PREFIX
-    CUTLASS_PROFILER_TEST_COMMAND_OPTIONS_
-  DISABLE_EXECUTABLE_INSTALL_RULE
-  )
-

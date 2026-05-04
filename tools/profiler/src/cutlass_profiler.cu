@@ -36,18 +36,20 @@
 #include <stdexcept>
 
 // Profiler includes
+#include "cutlass/profiler/cutlass_profiler.h"
+#include "cutlass/profiler/gemm_operation_profiler.h"
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/profiler/block_scaled_gemm_operation_profiler.h"
 #include "cutlass/profiler/blockwise_gemm_operation_profiler.h"
 #include "cutlass/profiler/conv2d_operation_profiler.h"
 #include "cutlass/profiler/conv3d_operation_profiler.h"
-#include "cutlass/profiler/cutlass_profiler.h"
-#include "cutlass/profiler/gemm_operation_profiler.h"
 #include "cutlass/profiler/grouped_gemm_operation_profiler.h"
 #include "cutlass/profiler/rank_2k_operation_profiler.h"
 #include "cutlass/profiler/rank_k_operation_profiler.h"
 #include "cutlass/profiler/sparse_gemm_operation_profiler.h"
 #include "cutlass/profiler/symm_operation_profiler.h"
 #include "cutlass/profiler/trmm_operation_profiler.h"
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -63,6 +65,7 @@ CutlassProfiler::CutlassProfiler(
 
   operation_profilers_.emplace_back(new GemmOperationProfiler(options));
 
+#if !defined(CUTLASS_ENABLE_SYCL)
   operation_profilers_.emplace_back(new BlockScaledGemmOperationProfiler(options));   
 
   operation_profilers_.emplace_back(new BlockwiseGemmOperationProfiler(options));   
@@ -82,6 +85,7 @@ CutlassProfiler::CutlassProfiler(
   operation_profilers_.emplace_back(new SymmOperationProfiler(options));
 
   operation_profilers_.emplace_back(new GroupedGemmOperationProfiler(options));
+#endif
 }
 
 CutlassProfiler::~CutlassProfiler() {
@@ -200,15 +204,18 @@ void CutlassProfiler::print_usage_(std::ostream &out) {
   }
 
   out << "\n\nFor details about a particular function, specify the function name with --help.\n\nExample:\n\n"
-    << "  $ cutlass_profiler --operation=Gemm --help\n\n"
+    << "  $ cutlass_profiler --operation=Gemm --help\n\n";
+
+#if !defined(CUTLASS_ENABLE_SYCL)
+  out
     << "  $ cutlass_profiler --operation=RankK --help\n\n"
     << "  $ cutlass_profiler --operation=Trmm --help\n\n"
     << "  $ cutlass_profiler --operation=Symm --help\n\n"
     << "  $ cutlass_profiler --operation=Conv3d --help\n\n"
     << "  $ cutlass_profiler --operation=Conv2d --help\n\n"
     << "  $ cutlass_profiler --operation=SparseGemm --help\n\n"
-    << "  $ cutlass_profiler --operation=GroupedGemm --help\n\n"
-  ;
+    << "  $ cutlass_profiler --operation=GroupedGemm --help\n\n";
+#endif
 }
 
 /// Prints usage

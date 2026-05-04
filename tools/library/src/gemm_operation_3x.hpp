@@ -45,15 +45,39 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/initialize_block.hpp"
 #include "cutlass/util/device_memory.h"
+#if defined(CUTLASS_ENABLE_SYCL)
+#include "cutlass/util/reference/host/tensor_fill.h"
+#else
 #include "cutlass/util/reference/device/tensor_fill.h"
+#endif
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "cutlass/util/mixed_dtype_utils.hpp"
 #include "cute/tensor.hpp"
 #include <unordered_map>
+#include <vector>
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::library {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <typename Element>
+void fill_random_uniform_compat(
+  Element* ptr,
+  size_t capacity,
+  uint64_t seed,
+  Element max,
+  Element min) {
+#if defined(CUTLASS_ENABLE_SYCL)
+  std::vector<Element> host(capacity);
+  cutlass::reference::host::BlockFillRandomUniform(host.data(), capacity, seed, max, min);
+  compat::memcpy(ptr, host.data(), capacity * sizeof(Element));
+  compat::wait();
+#else
+  cutlass::reference::device::BlockFillRandomUniform(ptr, capacity, seed, max, min);
+#endif
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -511,13 +535,13 @@ protected:
           scale_min = min_dequant_val / elt_max_f;
         }
         uint64_t seed = 2023;
-        cutlass::reference::device::BlockFillRandomUniform(
+        fill_random_uniform_compat(
           ptr_S, SZ_size, seed, ElementScale(scale_max), ElementScale(scale_min));
 
         // In ScaleOnly mode, set Z as zero for generating dequantized A or B
         const float zero_max = has_zero ?  2.0f : 0.0f;
         const float zero_min = has_zero ? -2.0f : 0.0f;
-        cutlass::reference::device::BlockFillRandomUniform(
+        fill_random_uniform_compat(
           ptr_Z, SZ_size, seed, ElementZero(zero_max), ElementZero(zero_min));
       }  // End of "if (arguments->generate_scale_and_zero)"
 

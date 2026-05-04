@@ -214,6 +214,7 @@ public:
         ElementCompute,
         ElementAccumulator,
         ElementD,
+        LayoutC,
         ConvertOp,
         InnerProductOp
       >(
@@ -248,6 +249,7 @@ public:
         ElementCompute,
         ElementAccumulator,
         ElementD,
+        LayoutC,
         ConvertOp,
         InnerProductOp
       >(
@@ -540,4 +542,3 @@ void make_gemm_complex_canonical_layouts(Manifest &manifest) {
 } // namespace cutlass
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-

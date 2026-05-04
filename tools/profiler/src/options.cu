@@ -31,8 +31,6 @@
 /* \file
    \brief Command line options for performance test program
 */
-#include <cuda.h>
-#include <cuda_runtime_api.h>
 #include <algorithm>
 #include <fstream>
 #include <set>
@@ -89,6 +87,15 @@ Options::Device::Device(cutlass::CommandLine const &cmdline) {
       }
     }
   }
+
+#if defined(CUTLASS_ENABLE_SYCL)
+  if (devices.size() > 1) {
+    throw std::runtime_error(
+      "Intel/SYCL stage-1 cutlass_profiler currently supports a single device. "
+      "Multi-device interference profiling still depends on the CUDA Graph path and remains disabled."
+    );
+  }
+#endif
 
   properties.resize(devices.size());
   // Retrieves properties for all specified devices
@@ -157,13 +164,17 @@ void Options::Device::print_usage(std::ostream &out) const {
 
   out << "Device:\n"
     << "  --devices=<int>,<int>,...                      "
-    << "    CUDA Device IDs\n\n";
+    << "    Device IDs\n\n";
+
+#if defined(CUTLASS_ENABLE_SYCL)
+  out << "      Intel/SYCL stage-1 currently supports a single device.\n\n";
+#endif
 
   int device_count = 0;
   cudaError_t result = cudaGetDeviceCount(&device_count);
 
   if (result != cudaSuccess) {
-    out << "      <could not query for CUDA devices>\n";
+    out << "      <could not query for devices>\n";
   }
   else {
 
@@ -513,8 +524,10 @@ Options::Profiling::Profiling(cutlass::CommandLine const &cmdline) {
   }
   else {
     providers.push_back(library::Provider::kCUTLASS);
+#if !defined(CUTLASS_ENABLE_SYCL)
     providers.push_back(library::Provider::kCUBLAS);
     providers.push_back(library::Provider::kCUDNN);
+#endif
   }
 }
 
@@ -546,6 +559,14 @@ void Options::Profiling::print_usage(std::ostream &out) const {
 
     << "  --sleep-duration=<duration>                  "
     << "    Number of ms to sleep between profiling periods (ms).\n\n"
+
+    << "  --use-cuda-graphs=<bool>                     "
+#if defined(CUTLASS_ENABLE_SYCL)
+    << "    CUDA Graph profiling is unsupported on Intel/SYCL stage-1 and falls back" << end_of_line
+    << "      to the regular timing path.\n\n"
+#else
+    << "    If true, profile with CUDA Graph capture enabled.\n\n"
+#endif
 
     << "  --profiling-enabled=<bool>                   "
     << "    If true, profiling is actually conducted.\n\n"
@@ -628,9 +649,14 @@ Options::Verification::Verification(cutlass::CommandLine const &cmdline) {
     }
   }
   else {
+#if defined(CUTLASS_ENABLE_SYCL)
+    providers.push_back(library::Provider::kReferenceDevice);
+    providers.push_back(library::Provider::kReferenceHost);
+#else
     providers.push_back(library::Provider::kCUBLAS);
     providers.push_back(library::Provider::kReferenceDevice);
     providers.push_back(library::Provider::kCUDNN);
+#endif
   }
 }
 
@@ -657,8 +683,13 @@ void Options::Verification::print_usage(std::ostream &out) const {
 
     << "  --verification-providers=<providers>         "
     << "    List of providers used to verify result. (default: '*')" << end_of_line
+#if defined(CUTLASS_ENABLE_SYCL)
+    << "      Intel/SYCL GEMM verification-providers {device*, host}" << end_of_line
+    << "      cuBLAS/cuDNN verification is disabled on Intel stage-1"
+#else
     << "      Gemm verification-providers {cublas*}" << end_of_line
     << "      Conv2d verification-providers {cudnn*, device*, host}"
+#endif
     << "\n\n";
 }
 
