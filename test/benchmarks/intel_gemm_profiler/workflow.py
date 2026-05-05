@@ -35,6 +35,7 @@ if __package__ in (None, ""):
         selected_runtime_env,
     )
     from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
+    from intel_gemm_profiler.ali_dataset import build_ali_gemm_docs
     from intel_gemm_profiler.runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from intel_gemm_profiler.utils import ensure_dir, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
@@ -61,6 +62,7 @@ else:
         selected_runtime_env,
     )
     from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
+    from .ali_dataset import build_ali_gemm_docs
     from .runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from .utils import ensure_dir, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
@@ -261,6 +263,19 @@ def validate_candidate_auto_build_mode(args, dry_run_mode, probe_mode):
     )
 
 
+def load_target_shapes_and_reference(args, dry_run_mode):
+    if args.ali_workbook:
+        if args.shapes_json:
+            raise ValueError("--ali-workbook and --shapes-json are mutually exclusive.")
+        if args.reference_json:
+            raise ValueError("--ali-workbook and --reference-json are mutually exclusive.")
+        shapes_doc, reference_doc = build_ali_gemm_docs(args.ali_workbook)
+        return shapes_doc, reference_doc
+    shapes_doc = read_json(args.shapes_json) if args.shapes_json else (dry_run_shapes(args.dtype) if dry_run_mode else default_shapes(args.dtype))
+    reference_doc = read_json(args.reference_json) if args.reference_json else None
+    return shapes_doc, reference_doc
+
+
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
     base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
@@ -340,7 +355,7 @@ def workflow(args):
     reports_dir = ensure_dir(workspace / "reports")
     profiles = read_json(args.compiler_profiles_json) if args.compiler_profiles_json else default_compiler_profiles()
     dry_run_mode = getattr(args, "dry_run", False)
-    shapes_doc = read_json(args.shapes_json) if args.shapes_json else (dry_run_shapes(args.dtype) if dry_run_mode else default_shapes(args.dtype))
+    shapes_doc, reference_doc = load_target_shapes_and_reference(args, dry_run_mode)
     base_constraints = read_json(args.constraints_json) if args.constraints_json else default_constraints()
     top_k = min(args.top_k, 1) if dry_run_mode else args.top_k
     confirm_runs = 0 if dry_run_mode else args.confirm_runs
@@ -370,6 +385,9 @@ def workflow(args):
     write_json(inputs_dir / "safe_search_constraints.json", constraints)
     write_json(inputs_dir / "compiler_profiles.json", profiles)
     write_json(inputs_dir / "gemm_target_shapes.json", shapes_doc)
+    reference_doc_path = reports_dir / "ali_reference.json"
+    if reference_doc is not None:
+        write_json(reference_doc_path, reference_doc)
     write_json(inputs_dir / "search_runtime_schema.json", SEARCH_RUNTIME_SCHEMA)
     kernel_catalog = build_kernel_catalog(
         dtypes=sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]}),
@@ -488,10 +506,10 @@ def workflow(args):
     )
     write_json(reports_dir / "gemm_dispatch_table.json", dispatch_table)
     write_json(reports_dir / "optimal_dispatch_table.json", dispatch_table)
-    if args.reference_json:
+    if reference_doc is not None:
         write_json(
             reports_dir / "reference_comparison.json",
-            build_reference_comparison(dispatch_table, read_json(args.reference_json)),
+            build_reference_comparison(dispatch_table, reference_doc),
         )
     summary = build_run_summary(all_rows, dispatch_table, benchmark_commands, log_paths)
     write_json(reports_dir / "run_summary.json", summary)
@@ -513,7 +531,8 @@ def workflow(args):
         "results_csv": str(reports_dir / "gemm_profile_results.csv"),
         "dispatch_table": str(reports_dir / "gemm_dispatch_table.json"),
         "optimal_dispatch_table": str(reports_dir / "optimal_dispatch_table.json"),
-        "reference_comparison": str(reports_dir / "reference_comparison.json") if args.reference_json else "",
+        "reference_doc": str(reference_doc_path) if reference_doc is not None else "",
+        "reference_comparison": str(reports_dir / "reference_comparison.json") if reference_doc is not None else "",
         "phase_a_summary": str(reports_dir / "phase_a_summary.json"),
         "phase_b_summary": str(reports_dir / "phase_b_summary.json"),
         "summary": str(reports_dir / "run_summary.json"),
@@ -532,6 +551,7 @@ def build_parser():
     parser.add_argument("--probe-mode", choices=["auto", "off", "static", "run"], default="auto", help="Phase A constraint probe mode. 'auto' runs representative probes unless --skip-run is set.")
     parser.add_argument("--shapes-json", default="", help="Optional path to gemm_target_shapes.json.")
     parser.add_argument("--reference-json", default="", help="Optional path to reference/oracle JSON for dataset comparison.")
+    parser.add_argument("--ali-workbook", default="", help="Optional Ali GEMM performance workbook. When set, workflow derives gemm_target_shapes.json and reference comparison input from the workbook.")
     parser.add_argument("--constraints-json", default="", help="Optional path to safe_search_constraints.json.")
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")
     parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator"], default="persisted", help="Catalog source for Phase B candidates. 'generator' bridges Intel Xe library generation into the benchmark/search catalog but requires a benchmark binary built from the same generated kernels.")

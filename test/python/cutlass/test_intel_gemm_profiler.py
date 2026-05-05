@@ -1610,6 +1610,85 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(bf16_entry["reference_tflops"], 160.2)
         self.assertTrue(any(item["dtype"] == "int8" for item in reference_doc["skipped_entries"]))
 
+    def test_workflow_can_derive_shapes_and_reference_from_ali_workbook(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workbook_path = Path(tmpdir) / "ali.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "v1.6"
+            sheet.append(["", "", "", "", "", "bf16", "", "", "", "", "", "", "", "", "", "f16", "", "", "", "int8", "", "", ""])
+            sheet.append([
+                "",
+                "M",
+                "N",
+                "K",
+                "Type",
+                "oneMKL(BLAS)",
+                "oneDNN(matmul)",
+                "PyTorch->oneDNN",
+                "Sycl_TLA(00_base)",
+                "Sycl_TLA(00_padded)",
+                "Sycl_TLA(00_sycl_q)",
+                "Sycl_TLA(03_streamk)",
+                "Sycl_TLA(03_dp)",
+                "",
+                "",
+                "oneMKL(BLAS)",
+                "oneDNN(matmul)",
+                "PyTorch->oneDNN",
+                "SYCL-TLA(XeTLA)",
+                "oneMKL(BLAS)",
+                "oneDNN(matmul)",
+                "PyTorch->oneDNN",
+                "SYCL-TLA(XeTLA)",
+            ])
+            sheet.append(["", 64, 4096, 4096, "Prefill", None, None, None, 100.0, 101.0, 99.0, 98.0, 102.0, None, None, None, None, None, None, None, None, None, None])
+            workbook.save(workbook_path)
+
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    tmpdir,
+                    "--ali-workbook",
+                    str(workbook_path),
+                    "--skip-run",
+                    "--probe-mode",
+                    "off",
+                ]
+            )
+            outputs = profiler.workflow(args)
+
+            shapes_doc = profiler.read_json(Path(outputs["workspace"]) / "inputs" / "gemm_target_shapes.json")
+            reference_doc = profiler.read_json(Path(outputs["reference_doc"]))
+            comparison = profiler.read_json(Path(outputs["reference_comparison"]))
+
+        self.assertEqual(shapes_doc["source"], str(workbook_path))
+        self.assertEqual(len(shapes_doc["shapes"]), 1)
+        self.assertEqual(reference_doc["dataset_id"], "ali_gemm_perf_reference")
+        self.assertEqual(comparison["summary"]["reference_entries"], 1)
+        self.assertEqual(comparison["summary"]["missing_dispatch"], 1)
+
+    def test_ali_workbook_conflicts_with_explicit_shapes_or_reference(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workbook_path = Path(tmpdir) / "ali.xlsx"
+            shapes_path = Path(tmpdir) / "shapes.json"
+            workbook = Workbook()
+            workbook.save(workbook_path)
+            shapes_path.write_text("{}", encoding="utf-8")
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    tmpdir,
+                    "--ali-workbook",
+                    str(workbook_path),
+                    "--shapes-json",
+                    str(shapes_path),
+                ]
+            )
+
+            with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+                profiler.workflow(args)
+
     def test_build_reference_comparison_matches_dispatch_against_reference(self):
         dispatch_table = {
             "entries": [
