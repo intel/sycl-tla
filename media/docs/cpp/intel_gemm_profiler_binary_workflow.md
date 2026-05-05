@@ -146,6 +146,8 @@ Responsibility:
 - execute benchmark subprocesses
 - capture stdout/stderr
 - map failures into structured CSV rows
+- optionally split large entry lists into chunked config files and subprocesses
+- preserve partial rows on timeout and emit timeout rows only for entries that did not produce parseable output
 
 ### `ResultParser`
 
@@ -178,6 +180,8 @@ Responsibility:
 - run top-k screening
 - run confirmation rounds
 - produce final exact-shape mapping
+- use confirmation median TFLOPS when confirmation rows are available
+- emit evidence for median runtime, median TFLOPS, variance, confirmation completeness, screening rank, runner-up metrics, and close-call status
 
 ## Workspace layout
 
@@ -194,17 +198,29 @@ Recommended structure:
   generated/
     candidates/
     configs/
+      screening.in
+      screening_part000.in
+      confirm.in
+      confirm_part000.in
     sources/
     manifests/
+      screening_manifest.json
+      screening_manifest_part000.json
   build/
     <batch_id>/
   logs/
     build/
     run/
+    screening.log
+    screening_part000.log
+    confirm.log
+    confirm_part000.log
   reports/
     gemm_candidate_space.json
     gemm_profile_results.csv
     gemm_dispatch_table.json
+    optimal_dispatch_table.json
+    run_summary.json
 ```
 
 This layout keeps generated artifacts isolated from repository-tracked source.

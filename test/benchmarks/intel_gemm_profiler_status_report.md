@@ -2,8 +2,72 @@
 
 ## 当前结论
 
-当前 `main` 分支已经完成本轮 **Intel/B60 GEMM profiler 迁移纠偏、搜索空间扩展、配置回退修复和测试补强** 的主要工作。  
-现阶段代码处于 **可继续做性能迭代，但核心正确性问题已收口** 的状态。
+当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行和确认选择器补强** 的主要工作。
+
+现阶段代码处于 **GEMM MVP 主链路已端到端打通，可继续做性能可信度和非 GEMM family 扩展** 的状态。
+
+最新全量 Ali workbook generated workflow 已在远端 BMG 节点通过：
+
+- 76 个 BF16 GEMM shapes
+- 14 个 generated benchmark candidates
+- 1064 条 benchmark rows
+- 1064 passed
+- 0 failed
+- 0 timeout
+- 76 个 dispatch entries
+- 76 个 Ali reference matches
+- 0 missing dispatch
+
+本地 profiler Python 回归当前为 **65/65 OK**。
+
+## 当前可复现的 GEMM MVP workflow
+
+典型全量 Ali generated benchmark search 命令如下：
+
+```bash
+python3 test/benchmarks/intel_gemm_profiler.py \
+  --workspace /tmp/ali_generated_full_chunked \
+  --ali-workbook /tmp/ali_gemm_perf_v0.1.xlsx \
+  --probe-mode off \
+  --kernel-catalog-source generator \
+  --generator-arch bmg \
+  --generator-instantiation-level 1 \
+  --cmake-source-dir /path/to/sycl-tla \
+  --benchmark-build-dir /path/to/sycl-tla/build-bench-gen-ali-full \
+  --googlebenchmark-dir /path/to/googlebenchmark-src \
+  --cmake-cxx-compiler icpx \
+  --build-candidate-benchmark \
+  --benchmark-entry-chunk-size 14 \
+  --confirm-runs 0 \
+  --shell-init 'source /opt/intel/oneapi/setvars.sh >/dev/null 2>&1' \
+  --timeout 900
+```
+
+关键输出位于 `<workspace>/reports/`：
+
+- `kernel_catalog.json`
+- `gemm_candidate_space.json`
+- `bmg_safe_candidates.json`
+- `candidate_build_manifest.json`
+- `candidate_build_plan.json`
+- `candidate_build_summary.json`
+- `gemm_profile_results.csv`
+- `gemm_dispatch_table.json`
+- `optimal_dispatch_table.json`
+- `run_summary.json`
+- `phase_a_summary.json`
+- `phase_b_summary.json`
+- `reference_comparison.json`
+
+大规模 benchmark 建议使用 `--benchmark-entry-chunk-size`。chunked mode 会生成 `screening_partXXX.in`、`screening_manifest_partXXX.json` 和 `screening_partXXX.log`，避免单个大 config 长时间无输出、超时后难以恢复或诊断。
+
+如果需要更可信的最终调优结果，建议打开确认阶段：
+
+```bash
+--top-k 3 --confirm-runs 3 --close-call-threshold 3.0
+```
+
+确认阶段会对每个 shape 的 top-k candidates 多次运行，并在 dispatch table 的 `evidence` 中记录 median runtime、median TFLOPS、样本数、confirmation 完整性、方差/CV、screening rank、runner-up 信息和 close-call 标记。
 
 ## 已完成内容
 
@@ -82,94 +146,92 @@
 ### 本地
 
 - `test/python/cutlass/test_intel_gemm_profiler.py`
-- 当前回归结果：**44/44 OK**
+- 当前回归结果：**65/65 OK**
 
-### B60 远端
+### BMG 远端
 
-- profiler Python 回归：**44/44 OK**
+- generated candidate benchmark auto-build 通过
+- Ali workbook full generated workflow 通过
 - benchmark-backed BF16 Phase B 已可跑通
-- performance mode 下，B60 大 shape 已观察到显著优于早期小 tile winner 的结果
-
-## 执行优先级调整
-
-基于最新目标，下一阶段不再优先做“完整 profiler 全量迁移”，而是先走一条 **最快形成闭环** 的路径：
-
-1. **先让现有约 24 个已注册 kernel 跑通搜索链路**
-   - 使用现有 manifest / 注册 / benchmark-backed 执行路径
-   - 优先验证 profiler 能对单个 problem case 在现有 kernel 集合内选出 best kernel
-2. **再围绕单个测试 case 扩大搜索范围**
-   - 从一个明确的 `dtype + layout + m/n/k` 用例开始
-   - 先得到 best candidate、TFLOPS 和 dispatch 结果
-   - 再逐步扩展 catalog / instantiation level / tile 组合
-
-这个调整的含义是：
-
-- **短期目标**：不是先把所有 CUTLASS profiler 组件都 SYCL 化，而是先让 Intel 路径具备“给一个 case，遍历当前 kernel 集合并找到最优解”的能力
-- **中期目标**：在这个闭环已经成立后，再继续扩到更丰富的 kernel 变体和更系统化的搜索空间
+- chunked screening 全量 76 chunks 已验证
+- reference comparison matched 76/76
 
 ## 当前仍需继续的工作
 
-### 1. B60 性能稳定性与复测
+### 1. 结果可信度增强
 
-当前代码逻辑已经收敛，但 B60 多次运行仍存在性能波动。  
-下一阶段需要做更受控的 A/B 复测，确认：
+当前全量 Ali validation 使用 screening-only 证明了链路稳定。正式调优建议继续补：
 
-- 相同 build hash 下的重复性
-- performance mode / 机况 / 频率状态影响
-- 最优 kernel 是否稳定落在 `tm64_tn128_tk32_sg4x4` 一类候选上
+- 打开 `--confirm-runs` 的全量/子集复测。
+- 记录 median runtime / median TFLOPS 后的 winner 稳定性。
+- 关注 `close_call=true` 的 shape。
+- 将 variance/CV 作为后续 dispatch table 质量门禁或人工 review 信号。
 
-### 2. 128-GRF experiment 的真实收益验证
+### 2. Phase A probe 深化
 
-`perf_128grf_experiment` 现在只是被正确标注为实验配置，**尚未被证明优于默认 256-GRF baseline**。  
-下一步需要在 B60 上做明确的重新编译 A/B：
+已有 `verified_hw_caps.json`、`safe_search_constraints.json` 和 probe mode，但仍需继续增强：
 
-- baseline：256-GRF + large-register-file
-- 去 hint
-- 显式 128-GRF
+- 更系统的 hardware capability probe。
+- compiler profile probe 与 candidate pruning 的更强绑定。
+- probe 失败后的降级策略和报告规范。
 
-在拿到稳定数据前，应继续保持 `perf_default` 作为默认选择。
+### 3. 搜索空间继续扩大
 
-### 3. 搜索系统与最初规划文档继续对齐
+当前全量 Ali 跑通的是 BF16、RCR、level 1 generated candidates。后续可继续扩展：
 
-本轮工作已经把现有 profiler 修到可用和可扩展，但还没有完全达到最初规划中的完整搜索系统形态。  
-仍需继续推进：
+- 更多 dtype/layout。
+- 更高 generator instantiation level。
+- compile-time variant 和 runtime sweep 的 schema 化边界。
+- candidate build 失败隔离和增量复用。
 
-- 让现有约 24 个 kernel 的单 case 搜索闭环优先稳定下来
-- Phase A / Phase B artifact 命名对齐
-- `safe_candidates` / `optimal_dispatch_table` 产物进一步明确化
-- 更系统化的 catalog / instantiation level / build manifest 演进
+### 4. StreamK 纳入 benchmark-backed search
 
-### 4. 非 RCR layout 的策略决策
+StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前因 Intel Xe scheduler specialization 限制被过滤。后续需要在 kernel/generator 层解决该限制，然后再把 Split-K/StreamK 纳入 benchmark-backed search。
 
-当前 profiler 对 unsupported layout 会显式拒绝，这是比静默失败更安全的行为。  
-后续需要决定：
+### 5. 非 GEMM profiler family 真实 instance 和 correctness
 
-- 继续保持显式拒绝并文档化
-- 或者补齐 catalog / search 支持，把非 RCR layout 纳入系统
+多个 family 已经进入 SYCL build/CLI/dry_run，但仍缺真实 Intel operation instances 和 correctness baseline：
+
+- GroupedGemm
+- BlockScaledGemm
+- BlockwiseGemm
+- RankK / Rank2K
+- TRMM / SYMM
+- Sparse GEMM
+- Conv2d / Conv3d
+
+其中 RankK/Rank2K/TRMM/SYMM 目前在 SYCL reference verification 下显式 `NotSupported`，需要后续补 ReferenceHost/ReferenceDevice 或合适 baseline。
+
+### 6. Runtime dispatch table 集成
+
+当前 `gemm_dispatch_table.json` 和 `optimal_dispatch_table.json` 已能生成，但尚未接入真实推理 runtime。后续需要定义：
+
+- runtime lookup key。
+- fallback 策略。
+- artifact 版本兼容。
+- 发布和加载流程。
 
 ## 当前建议
 
-如果下一阶段目标是 **继续逼近 B60 峰值 TFLOPS**，建议优先顺序如下：
+下一阶段建议按以下顺序推进：
 
-1. 先完成 **现有约 24 个 kernel 的单 case 搜索闭环**  
-2. 再做 **B60 稳定复测**，确认当前 `tm64_tn128_tk32_sg4x4` 的可重复性  
-3. 再做 **128-GRF experiment A/B**，决定是否保留为长期实验分支  
-4. 之后再进入 **更大 catalog / 更高 instantiation level** 的扩展
-
-如果下一阶段目标是 **工程化收口**，建议优先顺序如下：
-
-1. 补 Phase A / Phase B artifact 命名对齐  
-2. 固化 `safe_candidates` 和 `optimal_dispatch_table` 输出  
-3. 再决定 metadata 是否继续保持 advisory-only，还是在 workflow 中增加约束
+1. 使用 `--confirm-runs` 做 Ali 子集或全量确认复测，检查 close-call 和 variance。
+2. 深化 Phase A probe，将 probe 结果真正反馈到 pruning。
+3. 扩展 generated candidate search space。
+4. 选择一个非 GEMM family 做真实 instance 端到端突破，优先 Sparse GEMM 或 Conv2d。
+5. 继续推进 StreamK generated benchmark 支持。
 
 ## 结论
 
 截至当前 `main` 分支，本轮工作已经完成：
 
-- 核心配置架构修正
-- B60 搜索空间补洞
-- 关键 review bug 修复
-- fallback 与 metadata 漂移防护
+- GEMM MVP generated benchmark search 闭环
+- Ali workbook full workflow
+- benchmark auto-build
+- chunked benchmark execution
+- timeout robustness
+- confirmation selector evidence
+- 多个 tools/profiler family 的 SYCL build/CLI 纳入
 - 本地与远端回归闭环
 
-项目现在的状态是：**核心 correctness 问题已完成，后续重点转向性能验证和搜索系统继续扩展。**
+项目现在的状态是：**GEMM MVP 已能作为离线调优基线使用，后续重点转向结果可信度、Phase A probe、搜索空间扩展、非 GEMM family 真实运行能力和 runtime dispatch table 集成。**

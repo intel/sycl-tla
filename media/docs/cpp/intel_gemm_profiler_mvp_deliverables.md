@@ -6,6 +6,33 @@ This document defines what counts as a successful Phase 1 GEMM profiler MVP on I
 
 The MVP is complete when it delivers a usable end-to-end tuning loop, not just isolated scripts or benchmark binaries.
 
+## Current implementation status
+
+The GEMM MVP vertical slice is now operational for the Intel/BMG generated benchmark path.
+
+Validated end-to-end proof:
+
+- Ali workbook input: 76 BF16 GEMM shapes
+- generated catalog source: `--kernel-catalog-source generator`
+- generator instantiation level: `1`
+- generated benchmark candidates: 14
+- benchmark result rows: 1064
+- passed rows: 1064
+- failed rows: 0
+- timeout rows: 0
+- dispatch entries: 76
+- Ali reference matches: 76
+- missing dispatch entries: 0
+
+The current workflow also supports:
+
+- candidate benchmark auto-build through `--build-candidate-benchmark`
+- local Google Benchmark source injection through `--googlebenchmark-dir`
+- chunked benchmark subprocess execution through `--benchmark-entry-chunk-size`
+- top-k confirmation through `--top-k` and `--confirm-runs`
+- median-based final selection evidence in `gemm_dispatch_table.json`
+- close-call labeling through `--close-call-threshold`
+
 ## MVP scope
 
 The MVP includes:
@@ -112,6 +139,26 @@ Minimum proof:
 
 - at least one shape produces a single dispatch-table winner with evidence fields populated
 
+Current implementation:
+
+- screening uses the normalized benchmark rows in `gemm_profile_results.csv`
+- confirmation entries are generated from the per-shape screening top-k candidates
+- final selection uses confirmation median TFLOPS when confirmation rows are present
+- `evidence` records:
+  - selection stage
+  - median runtime
+  - median TFLOPS
+  - runtime standard deviation
+  - TFLOPS standard deviation
+  - TFLOPS coefficient of variation
+  - screening rank
+  - confirmation sample count
+  - expected confirmation sample count
+  - confirmation completeness
+  - runner-up median metrics
+  - ranked top candidates
+- `selection_summary` records dispatch entry count, confirmation coverage, incomplete confirmation count, and close-call count
+
 ## Minimal runtime deliverables
 
 For the first successful MVP run, the minimum artifact set is:
@@ -127,6 +174,11 @@ For the first successful MVP run, the minimum artifact set is:
 | run logs | runtime failure diagnosis |
 | `gemm_profile_results.csv` | normalized measurements |
 | `gemm_dispatch_table.json` | final selection result |
+| `optimal_dispatch_table.json` | alias of the final best-dispatch artifact for downstream consumers |
+| `reference_comparison.json` | optional comparison against Ali/reference performance data |
+| `run_summary.json` | row counts, pass/fail counts, benchmark commands, and log paths |
+| `phase_a_summary.json` | Phase A/probe summary |
+| `phase_b_summary.json` | candidate/search/dispatch summary |
 
 ## Acceptance criteria
 
