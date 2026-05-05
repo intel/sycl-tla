@@ -74,6 +74,7 @@ from .selector import (
 )
 from .ali_dataset import build_ali_gemm_docs
 from .workflow import build_compiler_flags_probe_summary, build_parser, empty_anomaly_report, main, run_phase_a_probe, workflow
+from .workflow import build_candidate_build_plan
 
 __all__ = [
     "BENCHMARK_ERROR_RE",
@@ -91,6 +92,7 @@ __all__ = [
     "blocked",
     "blocked_rule_for_row",
     "build_candidate_build_manifest",
+    "build_candidate_build_plan",
     "build_compiler_profile_probe_entries",
     "build_compiler_flags_probe_summary",
     "compute_efficiency_bounds",

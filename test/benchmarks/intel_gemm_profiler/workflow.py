@@ -167,6 +167,37 @@ def filter_candidate_space_by_compiled_kernels(candidate_space, compiled_kernels
     return filtered
 
 
+def build_candidate_build_plan(build_manifest, source_dir, build_dir, kernel_filter_path):
+    cmake_config = build_manifest["cmake_config"]
+    cmake_vars = dict(cmake_config["cmake_vars"])
+    kernel_filter_var = cmake_config["kernel_filter_cmake_var"]
+    cmake_vars[kernel_filter_var] = str(kernel_filter_path)
+    configure_command = ["cmake", "-S", str(source_dir), "-B", str(build_dir)]
+    configure_command.extend(f"-D{name}={value}" for name, value in sorted(cmake_vars.items()))
+    build_command = [
+        "cmake",
+        "--build",
+        str(build_dir),
+        "--target",
+        cmake_config["build_target"],
+        "--parallel",
+    ]
+    return {
+        "schema_version": build_manifest["schema_version"],
+        "generated_at": build_manifest["generated_at"],
+        "build_target": cmake_config["build_target"],
+        "source_dir": str(source_dir),
+        "build_dir": str(build_dir),
+        "kernel_filter_file": str(kernel_filter_path),
+        "selected_kernel_count": build_manifest["selected_kernel_count"],
+        "cmake_vars": cmake_vars,
+        "configure_command": configure_command,
+        "build_command": build_command,
+        "configure_command_line": shell_join(configure_command),
+        "build_command_line": shell_join(build_command),
+    }
+
+
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
     base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
@@ -306,9 +337,16 @@ def workflow(args):
     selected_kernel_list_path = reports_dir / "selected_kernel_list.txt"
     selected_kernel_filter_path = reports_dir / "selected_kernel_filter.list"
     candidate_build_cmake_config_path = reports_dir / "candidate_build_cmake_config.json"
+    candidate_build_plan_path = reports_dir / "candidate_build_plan.json"
     selected_kernel_list_path.write_text("\n".join(build_manifest["selected_kernel_list"]) + "\n", encoding="utf-8")
     selected_kernel_filter_path.write_text("\n".join(build_manifest["kernel_filter_file"]["lines"]) + "\n", encoding="utf-8")
     write_json(candidate_build_cmake_config_path, build_manifest["cmake_config"])
+    source_dir = Path(args.cmake_source_dir).resolve() if args.cmake_source_dir else (Path(args.cwd).resolve() if args.cwd else Path.cwd().resolve())
+    build_dir = Path(args.benchmark_build_dir).resolve() if args.benchmark_build_dir else workspace / "build" / "candidate_benchmarks"
+    write_json(
+        candidate_build_plan_path,
+        build_candidate_build_plan(build_manifest, source_dir, build_dir, selected_kernel_filter_path),
+    )
     screening_entries = build_screening_entries(shapes_doc, candidate_space)
     all_rows = list(probe_rows)
     log_paths = list(probe_logs)
@@ -377,6 +415,7 @@ def workflow(args):
         "selected_kernel_list": str(selected_kernel_list_path),
         "selected_kernel_filter": str(selected_kernel_filter_path),
         "candidate_build_cmake_config": str(candidate_build_cmake_config_path),
+        "candidate_build_plan": str(candidate_build_plan_path),
         "safe_candidates": str(reports_dir / "bmg_safe_candidates.json"),
         "verified_hw_caps": str(verified_hw_caps_path),
         "results_csv": str(reports_dir / "gemm_profile_results.csv"),
@@ -406,6 +445,8 @@ def build_parser():
     parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator"], default="persisted", help="Catalog source for Phase B candidates. 'generator' bridges Intel Xe library generation into the benchmark/search catalog but requires a benchmark binary built from the same generated kernels.")
     parser.add_argument("--kernel-catalog-path", default="", help="Optional path to a persisted kernel catalog JSON. Used when --kernel-catalog-source=persisted.")
     parser.add_argument("--compiled-kernel-list", default="", help="Optional newline-delimited compiled kernel list or regex filter file. When set, Phase B only runs benchmark candidates present in this list.")
+    parser.add_argument("--cmake-source-dir", default="", help="Optional source directory used in the generated candidate benchmark CMake build plan. Defaults to --cwd or the current directory.")
+    parser.add_argument("--benchmark-build-dir", default="", help="Optional build directory used in the generated candidate benchmark CMake build plan. Defaults to <workspace>/build/candidate_benchmarks.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")

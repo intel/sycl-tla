@@ -821,6 +821,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             candidate_space = profiler.read_json(Path(outputs["candidate_space"]))
             build_manifest = profiler.read_json(Path(outputs["build_manifest"]))
             cmake_config = profiler.read_json(Path(outputs["candidate_build_cmake_config"]))
+            build_plan = profiler.read_json(Path(outputs["candidate_build_plan"]))
             selected_kernel_list = Path(outputs["selected_kernel_list"]).read_text(encoding="utf-8").splitlines()
             selected_kernel_filter = Path(outputs["selected_kernel_filter"]).read_text(encoding="utf-8").splitlines()
 
@@ -841,6 +842,12 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(build_manifest["kernel_filter_file"]["lines"], selected_kernel_filter)
             self.assertEqual(cmake_config["kernel_filter_cmake_var"], "KERNEL_FILTER_FILE")
             self.assertEqual(cmake_config["cmake_vars"]["CUTLASS_LIBRARY_INSTANTIATION_LEVEL"], "1")
+            self.assertEqual(build_plan["build_target"], "cutlass_benchmarks_gemm_sycl")
+            self.assertEqual(build_plan["kernel_filter_file"], outputs["selected_kernel_filter"])
+            self.assertEqual(build_plan["cmake_vars"]["KERNEL_FILTER_FILE"], outputs["selected_kernel_filter"])
+            self.assertIn("-DCUTLASS_LIBRARY_INSTANTIATION_LEVEL=1", build_plan["configure_command"])
+            self.assertIn(f"-DKERNEL_FILTER_FILE={outputs['selected_kernel_filter']}", build_plan["configure_command"])
+            self.assertEqual(build_plan["build_command"][4], "cutlass_benchmarks_gemm_sycl")
 
     def test_workflow_can_limit_generator_candidates_to_compiled_kernel_list(self):
         shapes = profiler.dry_run_shapes("f16")
@@ -880,10 +887,12 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
             filtered_candidate_space = profiler.read_json(Path(outputs["candidate_space"]))
             build_manifest = profiler.read_json(Path(outputs["build_manifest"]))
+            build_plan = profiler.read_json(Path(outputs["candidate_build_plan"]))
 
         self.assertEqual(filtered_candidate_space["compiled_kernel_filter"]["kernel_count"], 1)
         self.assertEqual(filtered_candidate_space["compiled_kernel_filter"]["matched_candidate_count"], 1)
         self.assertEqual(build_manifest["selected_kernel_list"], [selected_kernel])
+        self.assertEqual(build_plan["selected_kernel_count"], 1)
 
     def test_dispatch_table_reports_low_efficiency_winner(self):
         shapes = {
