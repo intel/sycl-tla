@@ -91,7 +91,13 @@ Conv3dOperationProfiler::Conv3dOperationProfiler(Options const &options):
       {ArgumentTypeID::kInteger, {"split_k_slices", "split-k-slices"}, "Number of partitions of K dimension"},
       {ArgumentTypeID::kEnumerated, {"eq_gemm_provider", "eq-gemm-provider"}, "Enable profiling equivalent gemm by the following providers (cutlass)"},
     },
-    { library::Provider::kReferenceDevice, library::Provider::kReferenceHost, library::Provider::kCUDNN }
+    {
+      library::Provider::kReferenceDevice,
+      library::Provider::kReferenceHost
+#if !defined(CUTLASS_ENABLE_SYCL)
+      , library::Provider::kCUDNN
+#endif
+    }
   ) {
 
   description_ = "      Conv3d operation. Output(Tensor5D) = alpha * Input(Tensor5D) * Filter(Tensor5D) + beta * Input(Tensor5D)";

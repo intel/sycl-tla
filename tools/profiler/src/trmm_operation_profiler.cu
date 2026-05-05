@@ -76,7 +76,14 @@ TrmmOperationProfiler::TrmmOperationProfiler(Options const &options):
       {ArgumentTypeID::kInteger, {"split_k_slices", "split-k-slices"}, "Number of partitions of K dimension"},
       {ArgumentTypeID::kInteger, {"batch_count", "batch-count"}, "Number of TRMMs computed in one batch"},
     },
-    { library::Provider::kCUBLAS}
+    {
+#if defined(CUTLASS_ENABLE_SYCL)
+      library::Provider::kReferenceDevice,
+      library::Provider::kReferenceHost
+#else
+      library::Provider::kCUBLAS
+#endif
+    }
   ) {
   description_ = "      Triangular Matrix-Multiplication. D = alpha * A * B or alpha * B * A";
 }
@@ -570,6 +577,15 @@ bool TrmmOperationProfiler::verify_cutlass(
       }
     }
 #endif // #if CUTLASS_ENABLE_CUBLAS
+
+#if defined(CUTLASS_ENABLE_SYCL)
+    if (options.verification.provider_enabled(library::Provider::kReferenceDevice)) {
+      results_.back().verification_map[library::Provider::kReferenceDevice] = Disposition::kNotSupported;
+    }
+    if (options.verification.provider_enabled(library::Provider::kReferenceHost)) {
+      results_.back().verification_map[library::Provider::kReferenceHost] = Disposition::kNotSupported;
+    }
+#endif
 
     // Update disposition to worst case verification outcome among all
     // verification providers which are supported

@@ -192,7 +192,6 @@ void CutlassProfiler::print_usage_(std::ostream &out) {
   out << "\n\nFor details about a particular function, specify the function name with --help.\n\nExample:\n\n"
     << "  $ cutlass_profiler --operation=Gemm --help\n\n";
 
-#if !defined(CUTLASS_ENABLE_SYCL)
   out
     << "  $ cutlass_profiler --operation=RankK --help\n\n"
     << "  $ cutlass_profiler --operation=Trmm --help\n\n"
@@ -201,7 +200,6 @@ void CutlassProfiler::print_usage_(std::ostream &out) {
     << "  $ cutlass_profiler --operation=Conv2d --help\n\n"
     << "  $ cutlass_profiler --operation=SparseGemm --help\n\n"
     << "  $ cutlass_profiler --operation=GroupedGemm --help\n\n";
-#endif
 }
 
 /// Prints usage
