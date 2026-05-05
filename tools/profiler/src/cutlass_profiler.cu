@@ -47,9 +47,7 @@
 #include "cutlass/profiler/symm_operation_profiler.h"
 #include "cutlass/profiler/conv2d_operation_profiler.h"
 #include "cutlass/profiler/conv3d_operation_profiler.h"
-#if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/profiler/sparse_gemm_operation_profiler.h"
-#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -73,11 +71,7 @@ CutlassProfiler::CutlassProfiler(
   operation_profilers_.emplace_back(new SymmOperationProfiler(options));
   operation_profilers_.emplace_back(new Conv2dOperationProfiler(options));
   operation_profilers_.emplace_back(new Conv3dOperationProfiler(options));
-
-#if !defined(CUTLASS_ENABLE_SYCL)
   operation_profilers_.emplace_back(new SparseGemmOperationProfiler(options));
-
-#endif
 }
 
 CutlassProfiler::~CutlassProfiler() {
