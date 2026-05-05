@@ -39,8 +39,8 @@
 #include "cutlass/profiler/cutlass_profiler.h"
 #include "cutlass/profiler/gemm_operation_profiler.h"
 #include "cutlass/profiler/grouped_gemm_operation_profiler.h"
-#if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/profiler/block_scaled_gemm_operation_profiler.h"
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/profiler/blockwise_gemm_operation_profiler.h"
 #include "cutlass/profiler/conv2d_operation_profiler.h"
 #include "cutlass/profiler/conv3d_operation_profiler.h"
@@ -66,10 +66,9 @@ CutlassProfiler::CutlassProfiler(
 
   operation_profilers_.emplace_back(new GemmOperationProfiler(options));
   operation_profilers_.emplace_back(new GroupedGemmOperationProfiler(options));
-
-#if !defined(CUTLASS_ENABLE_SYCL)
   operation_profilers_.emplace_back(new BlockScaledGemmOperationProfiler(options));   
 
+#if !defined(CUTLASS_ENABLE_SYCL)
   operation_profilers_.emplace_back(new BlockwiseGemmOperationProfiler(options));   
 
   operation_profilers_.emplace_back(new SparseGemmOperationProfiler(options));

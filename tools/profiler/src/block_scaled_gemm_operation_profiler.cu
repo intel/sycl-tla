@@ -42,7 +42,10 @@
 
 #include "cutlass/core_io.h"
 
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/profiler/cublas_helpers.h"
+#endif
+#include "cutlass/profiler/cuda_helpers.h"
 #include "cutlass/profiler/block_scaled_gemm_operation_profiler.h"
 #include "cutlass/profiler/gpu_timer.h"
 #include "cutlass/library/singleton.h"
