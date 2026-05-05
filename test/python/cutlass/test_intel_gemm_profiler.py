@@ -826,6 +826,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             build_manifest = profiler.read_json(Path(outputs["build_manifest"]))
             cmake_config = profiler.read_json(Path(outputs["candidate_build_cmake_config"]))
             build_plan = profiler.read_json(Path(outputs["candidate_build_plan"]))
+            build_summary = profiler.read_json(Path(outputs["candidate_build_summary"]))
             selected_kernel_list = Path(outputs["selected_kernel_list"]).read_text(encoding="utf-8").splitlines()
             selected_kernel_filter = Path(outputs["selected_kernel_filter"]).read_text(encoding="utf-8").splitlines()
 
@@ -847,6 +848,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(cmake_config["kernel_filter_cmake_var"], "KERNEL_FILTER_FILE")
             self.assertEqual(cmake_config["cmake_vars"]["CUTLASS_LIBRARY_INSTANTIATION_LEVEL"], "1")
             self.assertEqual(build_plan["build_target"], "cutlass_benchmarks_gemm_sycl")
+            self.assertTrue(build_plan["benchmark_exe"].endswith("/benchmarks/gemm/cutlass_benchmarks_gemm_sycl"))
             self.assertEqual(build_plan["kernel_filter_file"], outputs["selected_kernel_filter"])
             self.assertEqual(build_plan["cmake_vars"]["KERNEL_FILTER_FILE"], outputs["selected_kernel_filter"])
             self.assertEqual(build_plan["googlebenchmark_dir"], str(Path(tmpdir) / "googlebenchmark-src"))
@@ -858,6 +860,26 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertIn("-DCUTLASS_LIBRARY_INSTANTIATION_LEVEL=1", build_plan["configure_command"])
             self.assertIn(f"-DKERNEL_FILTER_FILE={outputs['selected_kernel_filter']}", build_plan["configure_command"])
             self.assertEqual(build_plan["build_command"][4], "cutlass_benchmarks_gemm_sycl")
+            self.assertEqual(build_summary["status"], "not_run")
+
+    def test_execute_candidate_build_plan_runs_configure_and_build_steps(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            build_plan = {
+                "schema_version": profiler.SCHEMA_VERSION,
+                "generated_at": profiler.now_iso(),
+                "build_target": "fake_benchmark",
+                "benchmark_exe": str(tmp / "build" / "benchmarks" / "gemm" / "fake_benchmark"),
+                "configure_command": ["python3", "-c", "print('configure ok')"],
+                "build_command": ["python3", "-c", "print('build ok')"],
+            }
+
+            summary = profiler.execute_candidate_build_plan(build_plan, tmp / "logs")
+
+        self.assertEqual(summary["status"], "pass")
+        self.assertEqual(summary["benchmark_exe"], build_plan["benchmark_exe"])
+        self.assertEqual([step["step"] for step in summary["steps"]], ["configure", "build"])
+        self.assertTrue(all(step["status"] == "pass" for step in summary["steps"]))
 
     def test_workflow_can_limit_generator_candidates_to_compiled_kernel_list(self):
         shapes = profiler.dry_run_shapes("f16")

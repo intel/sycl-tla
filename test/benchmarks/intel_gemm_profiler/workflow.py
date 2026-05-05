@@ -35,7 +35,7 @@ if __package__ in (None, ""):
         selected_runtime_env,
     )
     from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
-    from intel_gemm_profiler.runner import collect_environment_metadata, run_entries_with_benchmark, run_entries_with_streamk_example
+    from intel_gemm_profiler.runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from intel_gemm_profiler.utils import ensure_dir, read_json, shell_init_with_env, shell_join, write_json
     from intel_gemm_profiler.schemas import SEARCH_RUNTIME_SCHEMA
@@ -61,7 +61,7 @@ else:
         selected_runtime_env,
     )
     from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
-    from .runner import collect_environment_metadata, run_entries_with_benchmark, run_entries_with_streamk_example
+    from .runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from .utils import ensure_dir, read_json, shell_init_with_env, shell_join, write_json
     from .schemas import SEARCH_RUNTIME_SCHEMA
@@ -167,6 +167,10 @@ def filter_candidate_space_by_compiled_kernels(candidate_space, compiled_kernels
     return filtered
 
 
+def benchmark_exe_for_build_plan(build_dir, build_target):
+    return str(Path(build_dir) / "benchmarks" / "gemm" / build_target)
+
+
 def build_candidate_build_plan(
     build_manifest,
     source_dir,
@@ -199,6 +203,7 @@ def build_candidate_build_plan(
         "build_target": cmake_config["build_target"],
         "source_dir": str(source_dir),
         "build_dir": str(build_dir),
+        "benchmark_exe": benchmark_exe_for_build_plan(build_dir, cmake_config["build_target"]),
         "kernel_filter_file": str(kernel_filter_path),
         "googlebenchmark_dir": str(googlebenchmark_dir) if googlebenchmark_dir else "",
         "cmake_cxx_compiler": cmake_cxx_compiler,
@@ -208,6 +213,38 @@ def build_candidate_build_plan(
         "build_command": build_command,
         "configure_command_line": shell_join(configure_command),
         "build_command_line": shell_join(build_command),
+    }
+
+
+def execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=None):
+    ensure_dir(Path(log_dir))
+    steps = [
+        ("configure", build_plan["configure_command"], Path(log_dir) / "candidate_build_configure.log"),
+        ("build", build_plan["build_command"], Path(log_dir) / "candidate_build.log"),
+    ]
+    results = []
+    for step, command, log_path in steps:
+        process, timed_out, timeout_reason = run_benchmark(command, log_path, shell_init=shell_init, timeout=timeout)
+        status = "timeout" if timed_out else ("pass" if process.returncode == 0 else "fail")
+        item = {
+            "step": step,
+            "status": status,
+            "returncode": process.returncode,
+            "command": shell_join(command),
+            "log": str(log_path),
+        }
+        if timed_out:
+            item["timeout_reason"] = timeout_reason
+        results.append(item)
+        if status != "pass":
+            raise RuntimeError(f"Candidate benchmark {step} failed with status {status}. See {log_path}.")
+    return {
+        "schema_version": build_plan["schema_version"],
+        "generated_at": build_plan["generated_at"],
+        "status": "pass",
+        "build_target": build_plan["build_target"],
+        "benchmark_exe": build_plan["benchmark_exe"],
+        "steps": results,
     }
 
 
@@ -357,28 +394,47 @@ def workflow(args):
     source_dir = Path(args.cmake_source_dir).resolve() if args.cmake_source_dir else (Path(args.cwd).resolve() if args.cwd else Path.cwd().resolve())
     build_dir = Path(args.benchmark_build_dir).resolve() if args.benchmark_build_dir else workspace / "build" / "candidate_benchmarks"
     googlebenchmark_dir = Path(args.googlebenchmark_dir).resolve() if args.googlebenchmark_dir else None
-    write_json(
-        candidate_build_plan_path,
-        build_candidate_build_plan(
-            build_manifest,
-            source_dir,
-            build_dir,
-            selected_kernel_filter_path,
-            googlebenchmark_dir,
-            args.cmake_cxx_compiler,
-        ),
+    candidate_build_plan = build_candidate_build_plan(
+        build_manifest,
+        source_dir,
+        build_dir,
+        selected_kernel_filter_path,
+        googlebenchmark_dir,
+        args.cmake_cxx_compiler,
     )
+    write_json(candidate_build_plan_path, candidate_build_plan)
+    candidate_build_summary_path = reports_dir / "candidate_build_summary.json"
+    candidate_build_summary = {"status": "not_run", "reason": "build_candidate_benchmark disabled"}
+    effective_benchmark_exe = args.benchmark_exe
+    if args.build_candidate_benchmark:
+        candidate_build_summary = execute_candidate_build_plan(
+            candidate_build_plan,
+            logs_dir,
+            shell_init=args.shell_init,
+            timeout=args.timeout,
+        )
+        write_json(candidate_build_summary_path, candidate_build_summary)
+        effective_benchmark_exe = candidate_build_plan["benchmark_exe"]
+        env_caps["executables"]["benchmark_exe"] = effective_benchmark_exe
+        env_caps["executables"]["benchmark_available"] = True
+        env_caps["candidate_build_summary"] = candidate_build_summary
+        write_json(verified_hw_caps_path, env_caps)
+    else:
+        write_json(candidate_build_summary_path, candidate_build_summary)
     screening_entries = build_screening_entries(shapes_doc, candidate_space)
     all_rows = list(probe_rows)
     log_paths = list(probe_logs)
     benchmark_commands.extend(probe_commands)
+    if candidate_build_summary.get("status") == "pass":
+        log_paths.extend(step["log"] for step in candidate_build_summary["steps"])
+        benchmark_commands.extend(step["command"] for step in candidate_build_summary["steps"])
     if not args.skip_run:
         screening_benchmark_entries = [entry for entry in screening_entries if entry["candidate"].get("runner", "benchmark") == "benchmark"]
         screening_streamk_entries = [entry for entry in screening_entries if entry["candidate"].get("runner") == "streamk_example"]
         screening_rows = []
         if screening_benchmark_entries:
             screening_log = logs_dir / "screening.log"
-            rows, command = run_entries_with_benchmark(screening_benchmark_entries, configs_dir / "screening.in", manifests_dir / "screening_manifest.json", screening_log, args.benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
+            rows, command = run_entries_with_benchmark(screening_benchmark_entries, configs_dir / "screening.in", manifests_dir / "screening_manifest.json", screening_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
             screening_rows.extend(rows)
             log_paths.append(str(screening_log))
             benchmark_commands.append(shell_join(command))
@@ -396,7 +452,7 @@ def workflow(args):
                 confirm_rows = []
                 if confirm_benchmark_entries:
                     confirm_log = logs_dir / "confirm.log"
-                    rows, command = run_entries_with_benchmark(confirm_benchmark_entries, configs_dir / "confirm.in", manifests_dir / "confirm_manifest.json", confirm_log, args.benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
+                    rows, command = run_entries_with_benchmark(confirm_benchmark_entries, configs_dir / "confirm.in", manifests_dir / "confirm_manifest.json", confirm_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
                     confirm_rows.extend(rows)
                     log_paths.append(str(confirm_log))
                     benchmark_commands.append(shell_join(command))
@@ -437,6 +493,7 @@ def workflow(args):
         "selected_kernel_filter": str(selected_kernel_filter_path),
         "candidate_build_cmake_config": str(candidate_build_cmake_config_path),
         "candidate_build_plan": str(candidate_build_plan_path),
+        "candidate_build_summary": str(candidate_build_summary_path),
         "safe_candidates": str(reports_dir / "bmg_safe_candidates.json"),
         "verified_hw_caps": str(verified_hw_caps_path),
         "results_csv": str(reports_dir / "gemm_profile_results.csv"),
@@ -470,6 +527,7 @@ def build_parser():
     parser.add_argument("--benchmark-build-dir", default="", help="Optional build directory used in the generated candidate benchmark CMake build plan. Defaults to <workspace>/build/candidate_benchmarks.")
     parser.add_argument("--googlebenchmark-dir", default="", help="Optional local Google Benchmark source directory injected into the generated CMake build plan as GOOGLEBENCHMARK_DIR to avoid FetchContent downloads.")
     parser.add_argument("--cmake-cxx-compiler", default="", help="Optional CMAKE_CXX_COMPILER value injected into the generated candidate benchmark CMake build plan, e.g. 'icpx' for oneAPI SYCL builds.")
+    parser.add_argument("--build-candidate-benchmark", action="store_true", help="Execute the generated candidate benchmark CMake configure/build plan before Phase B runs, then use the built benchmark executable for screening and confirmation.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")
