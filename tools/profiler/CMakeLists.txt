@@ -49,14 +49,14 @@ set(CUTLASS_TOOLS_PROFILER_SOURCES
   src/blockwise_gemm_operation_profiler.cu
   src/rank_k_operation_profiler.cu
   src/rank_2k_operation_profiler.cu
+  src/trmm_operation_profiler.cu
+  src/symm_operation_profiler.cu
 )
 
 if (NOT CUTLASS_ENABLE_SYCL)
   list(APPEND CUTLASS_TOOLS_PROFILER_SOURCES
     src/cublas_helpers.cu
     src/cudnn_helpers.cpp
-    src/trmm_operation_profiler.cu
-    src/symm_operation_profiler.cu
     src/conv2d_operation_profiler.cu
     src/conv3d_operation_profiler.cu
     src/sparse_gemm_operation_profiler.cu

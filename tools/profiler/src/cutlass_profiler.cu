@@ -43,15 +43,12 @@
 #include "cutlass/profiler/blockwise_gemm_operation_profiler.h"
 #include "cutlass/profiler/rank_k_operation_profiler.h"
 #include "cutlass/profiler/rank_2k_operation_profiler.h"
+#include "cutlass/profiler/trmm_operation_profiler.h"
+#include "cutlass/profiler/symm_operation_profiler.h"
 #if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/profiler/conv2d_operation_profiler.h"
 #include "cutlass/profiler/conv3d_operation_profiler.h"
-#include "cutlass/profiler/grouped_gemm_operation_profiler.h"
-#include "cutlass/profiler/rank_2k_operation_profiler.h"
-#include "cutlass/profiler/rank_k_operation_profiler.h"
 #include "cutlass/profiler/sparse_gemm_operation_profiler.h"
-#include "cutlass/profiler/symm_operation_profiler.h"
-#include "cutlass/profiler/trmm_operation_profiler.h"
 #endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -72,6 +69,8 @@ CutlassProfiler::CutlassProfiler(
   operation_profilers_.emplace_back(new BlockwiseGemmOperationProfiler(options));   
   operation_profilers_.emplace_back(new RankKOperationProfiler(options));
   operation_profilers_.emplace_back(new Rank2KOperationProfiler(options));
+  operation_profilers_.emplace_back(new TrmmOperationProfiler(options));
+  operation_profilers_.emplace_back(new SymmOperationProfiler(options));
 
 #if !defined(CUTLASS_ENABLE_SYCL)
   operation_profilers_.emplace_back(new SparseGemmOperationProfiler(options));
@@ -79,10 +78,6 @@ CutlassProfiler::CutlassProfiler(
   operation_profilers_.emplace_back(new Conv2dOperationProfiler(options));
 
   operation_profilers_.emplace_back(new Conv3dOperationProfiler(options));
-
-  operation_profilers_.emplace_back(new TrmmOperationProfiler(options));
-
-  operation_profilers_.emplace_back(new SymmOperationProfiler(options));
 
 #endif
 }
