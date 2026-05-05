@@ -115,6 +115,10 @@ def generate_candidate_space(
     candidates = []
     dtypes = sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]})
     requested_layouts = {shape["layout"] for shape in shapes_doc["shapes"]}
+    requested_signatures = {
+        (shape["layout"], shape["dtype_a"], shape["dtype_b"], shape["dtype_c"], shape["dtype_acc"])
+        for shape in shapes_doc["shapes"]
+    }
     kernel_catalog = build_kernel_catalog(
         dtypes=dtypes,
         allowed_runners=allowed_runners,
@@ -132,6 +136,9 @@ def generate_candidate_space(
         )
     for seed in kernel_catalog["kernels"]:
         if seed["layout"] not in requested_layouts:
+            continue
+        signature = (seed["layout"], seed["dtype_a"], seed["dtype_b"], seed["dtype_c"], seed["dtype_acc"])
+        if signature not in requested_signatures:
             continue
         if blocked(seed, constraints):
             continue
@@ -188,8 +195,13 @@ def generate_candidate_space(
 
 
 def build_candidate_build_manifest(candidate_space):
+    selected_kernel_list = []
+    seen_kernel_ids = set()
     variants = []
     for candidate in candidate_space["candidates"]:
+        if candidate["runner"] == "benchmark" and candidate["kernel_id"] not in seen_kernel_ids:
+            seen_kernel_ids.add(candidate["kernel_id"])
+            selected_kernel_list.append(candidate["kernel_id"])
         variants.append(
             {
                 "candidate_id": candidate["candidate_id"],
@@ -218,7 +230,38 @@ def build_candidate_build_manifest(candidate_space):
                 "compiler_profile_id": candidate["compiler_profile_id"],
             }
         )
-    return {"schema_version": SCHEMA_VERSION, "generated_at": now_iso(), "device_arch": candidate_space["device_arch"], "constraint_source": candidate_space["constraint_source"], "search_runtime_schema": SEARCH_RUNTIME_SCHEMA, "variants": variants}
+    generator_level = int(candidate_space.get("kernel_catalog", {}).get("generator_instantiation_level", 0))
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "device_arch": candidate_space["device_arch"],
+        "constraint_source": candidate_space["constraint_source"],
+        "search_runtime_schema": SEARCH_RUNTIME_SCHEMA,
+        "kernel_catalog": candidate_space.get("kernel_catalog", {}),
+        "selected_kernel_list": selected_kernel_list,
+        "selected_kernel_count": len(selected_kernel_list),
+        "kernel_filter_file": {
+            "format": "python-regex-lines",
+            "recommended_cmake_var": "KERNEL_FILTER_FILE",
+            "lines": [f"^{kernel_id}$" for kernel_id in selected_kernel_list],
+        },
+        "cmake_config": {
+            "build_target": "cutlass_benchmarks_gemm_sycl",
+            "cmake_vars": {
+                "CUTLASS_ENABLE_SYCL": "ON",
+                "CUTLASS_ENABLE_BENCHMARKS": "ON",
+                "CUTLASS_ENABLE_TESTS": "OFF",
+                "CUTLASS_ENABLE_EXAMPLES": "OFF",
+                "CUTLASS_LIBRARY_OPERATIONS": "gemm",
+                "CUTLASS_LIBRARY_INSTANTIATION_LEVEL": str(generator_level),
+                "SYCL_INTEL_TARGET": candidate_space["device_arch"],
+                "BENCHMARK_ENABLE_TESTING": "OFF",
+                "BENCHMARK_ENABLE_GTEST_TESTS": "OFF",
+            },
+            "kernel_filter_cmake_var": "KERNEL_FILTER_FILE",
+        },
+        "variants": variants,
+    }
 
 
 def choose_candidates_for_shape(shape, candidates):

@@ -108,6 +108,7 @@ def parse_streamk_example_log(log_path, metadata_by_bm_name, run_id):
 
 def parse_benchmark_log(log_path, metadata_by_bm_name, run_id):
     rows = []
+    text = Path(log_path).read_text(encoding="utf-8")
     with open(log_path, "r", encoding="utf-8") as handle:
         for line in handle:
             stripped = line.strip()
@@ -151,6 +152,38 @@ def parse_benchmark_log(log_path, metadata_by_bm_name, run_id):
                     "max_error": "",
                     "close_call_group": "",
                     "failure_reason": stripped if failure else "",
+                    "stdout_log": str(log_path),
+                }
+            )
+    if not rows and "Benchmark not found" in text:
+        for bm_name, metadata in metadata_by_bm_name.items():
+            rows.append(
+                {
+                    "run_id": run_id,
+                    "stage": metadata["stage"],
+                    "attempt_index": metadata["attempt_index"],
+                    "shape_id": metadata["shape_id"],
+                    "candidate_id": metadata["candidate_id"],
+                    "compiler_profile_id": metadata["compiler_profile_id"],
+                    "status": "fail",
+                    "verify_status": "fail",
+                    "layout": metadata["layout"],
+                    "dtype_a": metadata["dtype_a"],
+                    "dtype_b": metadata["dtype_b"],
+                    "dtype_c": metadata["dtype_c"],
+                    "dtype_acc": metadata["dtype_acc"],
+                    "m": metadata["m"],
+                    "n": metadata["n"],
+                    "k": metadata["k"],
+                    "split_k": metadata.get("split_k", 1),
+                    "avg_runtime_ms": "",
+                    "best_runtime_ms": "",
+                    "worst_runtime_ms": "",
+                    "avg_tflops": "",
+                    "avg_throughput": "",
+                    "max_error": "",
+                    "close_call_group": "",
+                    "failure_reason": "benchmark registry entry not found for generated kernel",
                     "stdout_log": str(log_path),
                 }
             )

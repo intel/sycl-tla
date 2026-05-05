@@ -133,6 +133,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(candidate_space["kernel_catalog"]["generator_instantiation_level"], 1)
         self.assertGreater(candidate_space["kernel_catalog"]["kernel_count"], 8)
         self.assertTrue(any(candidate["streamk_mode"] == "streamk" for candidate in candidate_space["candidates"]))
+        self.assertTrue(all(candidate["dtype_c"] == "f32" for candidate in candidate_space["candidates"]))
+        self.assertTrue(all(candidate["dtype_acc"] == "f32" for candidate in candidate_space["candidates"]))
 
     def test_build_candidate_build_manifest_splits_compile_and_runtime_fields(self):
         shapes = profiler.default_shapes("bf16")
@@ -144,6 +146,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertEqual(manifest["search_runtime_schema"]["microbench_guided_defaults"]["grf_mode"], 256)
         self.assertEqual(len(manifest["variants"]), 8)
+        self.assertEqual(manifest["selected_kernel_count"], 8)
+        self.assertEqual(len(manifest["selected_kernel_list"]), 8)
+        self.assertTrue(all(line.startswith("^") and line.endswith("$") for line in manifest["kernel_filter_file"]["lines"]))
+        self.assertEqual(manifest["kernel_filter_file"]["recommended_cmake_var"], "KERNEL_FILTER_FILE")
+        self.assertEqual(manifest["cmake_config"]["cmake_vars"]["CUTLASS_LIBRARY_OPERATIONS"], "gemm")
+        self.assertEqual(manifest["cmake_config"]["cmake_vars"]["BENCHMARK_ENABLE_TESTING"], "OFF")
+        self.assertEqual(manifest["cmake_config"]["cmake_vars"]["BENCHMARK_ENABLE_GTEST_TESTS"], "OFF")
         variant = manifest["variants"][0]
         self.assertIn("compile_time_variant", variant)
         self.assertIn("runtime_sweep", variant)
@@ -366,6 +375,38 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertEqual(rows[0]["status"], "fail")
         self.assertIn("ERROR OCCURRED", rows[0]["failure_reason"])
+
+    def test_parse_benchmark_log_reports_missing_generated_registry_entry(self):
+        metadata = {
+            "bm_case": {
+                "shape_id": "shape_a",
+                "candidate_id": "generated_kernel_candidate",
+                "compiler_profile_id": "bmg.large_tile.default",
+                "stage": "screening",
+                "attempt_index": 0,
+                "layout": "rcr",
+                "dtype_a": "f16",
+                "dtype_b": "f16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 1,
+                "n": 64,
+                "k": 32,
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "missing_registry.log"
+            log_path.write_text(
+                "terminate called after throwing an instance of 'std::runtime_error'\n"
+                "  what():  Benchmark not found\n",
+                encoding="utf-8",
+            )
+            rows = profiler.parse_benchmark_log(log_path, metadata, run_id="screening")
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["status"], "fail")
+        self.assertEqual(rows[0]["candidate_id"], "generated_kernel_candidate")
+        self.assertIn("benchmark registry entry not found", rows[0]["failure_reason"])
 
     def test_dispatch_table_uses_confirmation_median(self):
         shapes = {
@@ -726,6 +767,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
             kernel_catalog = profiler.read_json(Path(outputs["kernel_catalog"]))
             candidate_space = profiler.read_json(Path(outputs["candidate_space"]))
             build_manifest = profiler.read_json(Path(outputs["build_manifest"]))
+            cmake_config = profiler.read_json(Path(outputs["candidate_build_cmake_config"]))
+            selected_kernel_list = Path(outputs["selected_kernel_list"]).read_text(encoding="utf-8").splitlines()
+            selected_kernel_filter = Path(outputs["selected_kernel_filter"]).read_text(encoding="utf-8").splitlines()
 
             self.assertEqual(kernel_catalog["catalog_source"], "generator")
             self.assertEqual(kernel_catalog["generator_instantiation_level"], 1)
@@ -733,6 +777,54 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertTrue(any(entry["stages"] == 0 for entry in kernel_catalog["kernels"]))
             self.assertGreater(len(build_manifest["variants"]), 8)
             self.assertTrue(any("_stream_k" in variant["kernel_id"] for variant in build_manifest["variants"]))
+            self.assertEqual(build_manifest["selected_kernel_count"], len(selected_kernel_list))
+            self.assertEqual(build_manifest["selected_kernel_list"], selected_kernel_list)
+            self.assertEqual(build_manifest["kernel_filter_file"]["lines"], selected_kernel_filter)
+            self.assertEqual(cmake_config["kernel_filter_cmake_var"], "KERNEL_FILTER_FILE")
+            self.assertEqual(cmake_config["cmake_vars"]["CUTLASS_LIBRARY_INSTANTIATION_LEVEL"], "1")
+
+    def test_workflow_can_limit_generator_candidates_to_compiled_kernel_list(self):
+        shapes = profiler.dry_run_shapes("f16")
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="generator",
+            generator_arch="bmg",
+            generator_instantiation_level=1,
+        )
+        selected_kernel = candidate_space["candidates"][0]["kernel_id"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            compiled_kernel_list = Path(tmpdir) / "compiled_kernels.list"
+            compiled_kernel_list.write_text(f"^{selected_kernel}$\n", encoding="utf-8")
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    tmpdir,
+                    "--dtype",
+                    "f16",
+                    "--dry-run",
+                    "--skip-run",
+                    "--kernel-catalog-source",
+                    "generator",
+                    "--generator-arch",
+                    "bmg",
+                    "--generator-instantiation-level",
+                    "1",
+                    "--compiled-kernel-list",
+                    str(compiled_kernel_list),
+                ]
+            )
+            outputs = profiler.workflow(args)
+
+            filtered_candidate_space = profiler.read_json(Path(outputs["candidate_space"]))
+            build_manifest = profiler.read_json(Path(outputs["build_manifest"]))
+
+        self.assertEqual(filtered_candidate_space["compiled_kernel_filter"]["kernel_count"], 1)
+        self.assertEqual(filtered_candidate_space["compiled_kernel_filter"]["matched_candidate_count"], 1)
+        self.assertEqual(build_manifest["selected_kernel_list"], [selected_kernel])
 
     def test_dispatch_table_reports_low_efficiency_winner(self):
         shapes = {

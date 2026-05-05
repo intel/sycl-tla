@@ -134,6 +134,39 @@ def empty_anomaly_report(hw_spec):
     }
 
 
+def load_compiled_kernel_list(path):
+    if not path:
+        return None
+    kernels = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        item = line.strip()
+        if not item or item.startswith("#"):
+            continue
+        if item.startswith("^") and item.endswith("$"):
+            item = item[1:-1]
+        kernels.append(item)
+    return kernels
+
+
+def filter_candidate_space_by_compiled_kernels(candidate_space, compiled_kernels):
+    if compiled_kernels is None:
+        return candidate_space
+    compiled = set(compiled_kernels)
+    filtered = copy.deepcopy(candidate_space)
+    filtered["candidates"] = [
+        candidate for candidate in candidate_space["candidates"]
+        if candidate.get("runner", "benchmark") != "benchmark" or candidate["kernel_id"] in compiled
+    ]
+    filtered["compiled_kernel_filter"] = {
+        "source": "compiled_kernel_list",
+        "kernel_count": len(compiled),
+        "matched_candidate_count": len(filtered["candidates"]),
+    }
+    if candidate_space["candidates"] and not filtered["candidates"]:
+        raise ValueError("Compiled kernel list does not match any generated benchmark candidates.")
+    return filtered
+
+
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
     base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
@@ -262,9 +295,20 @@ def workflow(args):
         generator_arch=args.generator_arch,
         generator_instantiation_level=args.generator_instantiation_level,
     )
+    candidate_space = filter_candidate_space_by_compiled_kernels(
+        candidate_space,
+        load_compiled_kernel_list(args.compiled_kernel_list),
+    )
     write_json(reports_dir / "gemm_candidate_space.json", candidate_space)
     write_json(reports_dir / "bmg_safe_candidates.json", candidate_space)
-    write_json(reports_dir / "candidate_build_manifest.json", build_candidate_build_manifest(candidate_space))
+    build_manifest = build_candidate_build_manifest(candidate_space)
+    write_json(reports_dir / "candidate_build_manifest.json", build_manifest)
+    selected_kernel_list_path = reports_dir / "selected_kernel_list.txt"
+    selected_kernel_filter_path = reports_dir / "selected_kernel_filter.list"
+    candidate_build_cmake_config_path = reports_dir / "candidate_build_cmake_config.json"
+    selected_kernel_list_path.write_text("\n".join(build_manifest["selected_kernel_list"]) + "\n", encoding="utf-8")
+    selected_kernel_filter_path.write_text("\n".join(build_manifest["kernel_filter_file"]["lines"]) + "\n", encoding="utf-8")
+    write_json(candidate_build_cmake_config_path, build_manifest["cmake_config"])
     screening_entries = build_screening_entries(shapes_doc, candidate_space)
     all_rows = list(probe_rows)
     log_paths = list(probe_logs)
@@ -330,6 +374,9 @@ def workflow(args):
         "kernel_catalog": str(reports_dir / "kernel_catalog.json"),
         "candidate_space": str(reports_dir / "gemm_candidate_space.json"),
         "build_manifest": str(reports_dir / "candidate_build_manifest.json"),
+        "selected_kernel_list": str(selected_kernel_list_path),
+        "selected_kernel_filter": str(selected_kernel_filter_path),
+        "candidate_build_cmake_config": str(candidate_build_cmake_config_path),
         "safe_candidates": str(reports_dir / "bmg_safe_candidates.json"),
         "verified_hw_caps": str(verified_hw_caps_path),
         "results_csv": str(reports_dir / "gemm_profile_results.csv"),
@@ -358,6 +405,7 @@ def build_parser():
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")
     parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator"], default="persisted", help="Catalog source for Phase B candidates. 'generator' bridges Intel Xe library generation into the benchmark/search catalog but requires a benchmark binary built from the same generated kernels.")
     parser.add_argument("--kernel-catalog-path", default="", help="Optional path to a persisted kernel catalog JSON. Used when --kernel-catalog-source=persisted.")
+    parser.add_argument("--compiled-kernel-list", default="", help="Optional newline-delimited compiled kernel list or regex filter file. When set, Phase B only runs benchmark candidates present in this list.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")
