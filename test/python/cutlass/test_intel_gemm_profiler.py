@@ -114,6 +114,14 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertTrue(any(entry["stages"] == 0 for entry in catalog["kernels"]))
         self.assertTrue(all(entry["benchmark_target"] == "cutlass_benchmarks_gemm_sycl" for entry in catalog["kernels"]))
 
+    def test_xe_generator_emits_auto_stage_count_for_staged_operations(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        gemm_operation_path = repo_root / "python" / "cutlass_library" / "gemm_operation.py"
+        text = gemm_operation_path.read_text(encoding="utf-8")
+        xe_auto = text.index("if operation.is_xe:")
+        positive_stage = text.index("elif operation.tile_description.stages > 0:")
+        self.assertLess(xe_auto, positive_stage)
+
     def test_generate_candidate_space_can_use_generator_catalog(self):
         shapes = profiler.default_shapes("bf16")
         constraints = profiler.default_constraints()
@@ -132,9 +140,54 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "generator")
         self.assertEqual(candidate_space["kernel_catalog"]["generator_instantiation_level"], 1)
         self.assertGreater(candidate_space["kernel_catalog"]["kernel_count"], 8)
-        self.assertTrue(any(candidate["streamk_mode"] == "streamk" for candidate in candidate_space["candidates"]))
+        self.assertFalse(any(candidate["streamk_mode"] == "streamk" for candidate in candidate_space["candidates"]))
+        self.assertTrue(
+            any(
+                item["reason"] == "intel_xe_generated_streamk_tile_scheduler_unsupported"
+                for item in candidate_space["candidate_exceptions"]
+            )
+        )
         self.assertTrue(all(candidate["dtype_c"] == "f32" for candidate in candidate_space["candidates"]))
         self.assertTrue(all(candidate["dtype_acc"] == "f32" for candidate in candidate_space["candidates"]))
+        self.assertTrue(all(candidate["source"] == "generator_manifest" for candidate in candidate_space["candidates"]))
+
+    def test_write_config_routes_generated_kernels_through_library_runner(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "screening.in"
+            entry = {
+                "bm_name": "generated__shape__screening__0",
+                "stage": "screening",
+                "attempt_index": 0,
+                "shape": {
+                    "shape_id": "shape",
+                    "layout": "rcr",
+                    "dtype_a": "f16",
+                    "dtype_b": "f16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 16,
+                    "n": 32,
+                    "k": 64,
+                },
+                "candidate": {
+                    "candidate_id": "generated",
+                    "compiler_profile_id": "default",
+                    "kernel_name": "cutlass3x_xe20_tensorop_gemm_f16_f16_f32_f32_f16_df16_128x128x32_1x1x1_2_tnt_align8",
+                    "split_k": 1,
+                    "source": "generator_manifest",
+                    "runner": "benchmark",
+                },
+            }
+
+            metadata = profiler.write_config([entry], config_path)
+
+            line = config_path.read_text(encoding="utf-8").strip()
+            self.assertTrue(line.startswith("cutlass_library_gemm "))
+            self.assertIn("--operation_name=cutlass3x_xe20_tensorop_gemm_f16_f16_f32_f32_f16_df16_128x128x32_1x1x1_2_tnt_align8", line)
+            self.assertIn("--layout=rcr", line)
+            self.assertIn("--dtype_a=f16", line)
+            self.assertIn("--dtype_c=f32", line)
+            self.assertEqual(metadata["generated__shape__screening__0"]["kernel_name"], entry["candidate"]["kernel_name"])
 
     def test_build_candidate_build_manifest_splits_compile_and_runtime_fields(self):
         shapes = profiler.default_shapes("bf16")
@@ -776,7 +829,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "generator")
             self.assertTrue(any(entry["stages"] == 0 for entry in kernel_catalog["kernels"]))
             self.assertGreater(len(build_manifest["variants"]), 8)
-            self.assertTrue(any("_stream_k" in variant["kernel_id"] for variant in build_manifest["variants"]))
+            self.assertFalse(any("_stream_k" in variant["kernel_id"] for variant in build_manifest["variants"]))
+            self.assertTrue(
+                any(
+                    item["reason"] == "intel_xe_generated_streamk_tile_scheduler_unsupported"
+                    for item in candidate_space["candidate_exceptions"]
+                )
+            )
             self.assertEqual(build_manifest["selected_kernel_count"], len(selected_kernel_list))
             self.assertEqual(build_manifest["selected_kernel_list"], selected_kernel_list)
             self.assertEqual(build_manifest["kernel_filter_file"]["lines"], selected_kernel_filter)

@@ -129,6 +129,7 @@ def generate_candidate_space(
     )
     available_layouts = {entry["layout"] for entry in kernel_catalog["kernels"]}
     unsupported_layouts = sorted({shape["layout"] for shape in shapes_doc["shapes"] if shape["layout"] not in available_layouts})
+    candidate_exceptions = []
     if unsupported_layouts:
         raise ValueError(
             f"Unsupported layouts in shapes: {', '.join(unsupported_layouts)}. "
@@ -139,6 +140,15 @@ def generate_candidate_space(
             continue
         signature = (seed["layout"], seed["dtype_a"], seed["dtype_b"], seed["dtype_c"], seed["dtype_acc"])
         if signature not in requested_signatures:
+            continue
+        if seed.get("source") == "generator_manifest" and seed.get("streamk_mode") == "streamk":
+            candidate_exceptions.append(
+                {
+                    "kernel_name": seed["kernel_name"],
+                    "reason": "intel_xe_generated_streamk_tile_scheduler_unsupported",
+                    "detail": "Intel Xe generated library kernels currently reject StreamK tile scheduler specialization.",
+                }
+            )
             continue
         if blocked(seed, constraints):
             continue
@@ -172,6 +182,7 @@ def generate_candidate_space(
                 "instantiation_level": seed["instantiation_level"],
                 "runtime_defaults": seed["runtime_defaults"],
                 "allowed_runtime_sweeps": seed["allowed_runtime_sweeps"],
+                "source": seed.get("source", ""),
                 "candidate_class": candidate_class(seed["tile_m"], sg_count),
                 "compiler_profile_id": select_compiler_profile_id(profiles, seed["tile_m"], sg_count),
                 "filters_applied": ["kernel_catalog", constraints["constraint_source"]],
@@ -190,6 +201,7 @@ def generate_candidate_space(
             "generator_instantiation_level": kernel_catalog.get("generator_instantiation_level", 0),
             "kernel_count": len(kernel_catalog["kernels"]),
         },
+        "candidate_exceptions": candidate_exceptions,
         "candidates": candidates,
     }
 
@@ -383,7 +395,19 @@ def write_config(entries, config_path):
         for entry in entries:
             candidate = entry["candidate"]
             shape = entry["shape"]
-            handle.write(f"{candidate['kernel_name']} --bm_name={entry['bm_name']} --m={shape['m']} --n={shape['n']} --k={shape['k']}\n")
+            is_generated_library_kernel = candidate.get("source") == "generator_manifest" or candidate["kernel_name"].startswith("cutlass3x_")
+            benchmark_name = "cutlass_library_gemm" if is_generated_library_kernel else candidate["kernel_name"]
+            library_options = ""
+            if is_generated_library_kernel:
+                library_options = (
+                    f" --operation_name={candidate['kernel_name']}"
+                    f" --layout={shape['layout']}"
+                    f" --dtype_a={shape['dtype_a']}"
+                    f" --dtype_b={shape['dtype_b']}"
+                    f" --dtype_c={shape['dtype_c']}"
+                    f" --dtype_acc={shape['dtype_acc']}"
+                )
+            handle.write(f"{benchmark_name} --bm_name={entry['bm_name']} --m={shape['m']} --n={shape['n']} --k={shape['k']}{library_options}\n")
             metadata[entry["bm_name"]] = {
                 "shape_id": shape["shape_id"],
                 "candidate_id": candidate["candidate_id"],

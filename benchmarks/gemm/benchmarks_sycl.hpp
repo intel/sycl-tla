@@ -157,6 +157,11 @@ using BmgGemmFP16FP16FP32_RCR_6 = Gemm_Bench_F16FP32_RCR<Shape<_256, _256, _32>,
 CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmFP16FP16FP32_RCR_6);
 
 static void register_gemm_benchmarks() {
+#if defined(CUTLASS_BENCHMARK_ENABLE_LIBRARY_GEMM)
+  cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::GEMMOptions>::Register(
+      "cutlass_library_gemm",
+      &cutlass::benchmark::cutlass_library_gemm_func);
+#endif
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_5);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_6);

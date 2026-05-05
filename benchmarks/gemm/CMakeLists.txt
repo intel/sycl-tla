@@ -36,13 +36,26 @@ if(CUTLASS_ENABLE_SYCL)
 
 if(SYCL_INTEL_TARGET)
 
+set(CUTLASS_GEMM_BENCHMARK_LIBRARIES)
+if(KERNEL_FILTER_FILE AND TARGET cutlass_lib_static)
+  list(APPEND CUTLASS_GEMM_BENCHMARK_LIBRARIES cutlass_lib_static)
+  set(CUTLASS_GEMM_BENCHMARK_ENABLE_LIBRARY_GEMM ON)
+else()
+  set(CUTLASS_GEMM_BENCHMARK_ENABLE_LIBRARY_GEMM OFF)
+endif()
+
 cutlass_benchmark_add_executable(
     cutlass_benchmarks_gemm_sycl
     main.cpp
     SUITE cutlass_benchmarks_gemm
+    LIBRARIES ${CUTLASS_GEMM_BENCHMARK_LIBRARIES}
     TEST_COMMAND_OPTIONS
     CONFIG_FILE_INTEL_SMALL
 )
+
+if(CUTLASS_GEMM_BENCHMARK_ENABLE_LIBRARY_GEMM)
+  target_compile_definitions(cutlass_benchmarks_gemm_sycl PRIVATE CUTLASS_BENCHMARK_ENABLE_LIBRARY_GEMM=1)
+endif()
 
 else()
 cutlass_benchmark_add_executable(

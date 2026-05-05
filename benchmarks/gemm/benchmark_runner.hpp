@@ -51,10 +51,18 @@
 #include "cutlass/util/reference/device/tensor_fill.h"
 #include "cutlass/util/reference/device/tensor_silu.h"
 #include "cutlass/util/initialize_block.hpp"
+#if defined(CUTLASS_BENCHMARK_ENABLE_LIBRARY_GEMM)
+#include "cutlass/library/library.h"
+#include "cutlass/library/singleton.h"
+#endif
 
 #include "../common.hpp"
 
+#include <algorithm>
 #include <benchmark/benchmark.h>
+#include <cmath>
+#include <limits>
+#include <vector>
 
 using namespace cute;
 
@@ -119,12 +127,28 @@ struct GEMMOptions {
   int m, n, k, l;
   float alpha, beta;
   std::string bm_name;
+  std::string operation_name;
+  std::string layout;
+  std::string dtype_a;
+  std::string dtype_b;
+  std::string dtype_c;
+  std::string dtype_acc;
+  int verify_library;
+  int library_verify_max_ops;
 
   GEMMOptions():
           error(false),
           m(5120), n(4096), k(4096), l(1),
           alpha(1.f), beta(0.f),
-          bm_name("GEMM")
+          bm_name("GEMM"),
+          operation_name(""),
+          layout("rcr"),
+          dtype_a("f16"),
+          dtype_b("f16"),
+          dtype_c("f32"),
+          dtype_acc("f32"),
+          verify_library(1),
+          library_verify_max_ops(1 << 26)
   { }
 
   // Parses the command line
@@ -138,6 +162,14 @@ struct GEMMOptions {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("bm_name", bm_name, std::string("GEMM"));
+    cmd.get_cmd_line_argument("operation_name", operation_name, std::string(""));
+    cmd.get_cmd_line_argument("layout", layout, std::string("rcr"));
+    cmd.get_cmd_line_argument("dtype_a", dtype_a, std::string("f16"));
+    cmd.get_cmd_line_argument("dtype_b", dtype_b, std::string("f16"));
+    cmd.get_cmd_line_argument("dtype_c", dtype_c, std::string("f32"));
+    cmd.get_cmd_line_argument("dtype_acc", dtype_acc, std::string("f32"));
+    cmd.get_cmd_line_argument("verify_library", verify_library, 1);
+    cmd.get_cmd_line_argument("library_verify_max_ops", library_verify_max_ops, 1 << 26);
   }
 
   std::string benchmark_name() const {
@@ -154,6 +186,250 @@ struct GEMMOptions {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CUTLASS_BENCHMARK_ENABLE_LIBRARY_GEMM)
+struct LibraryGemmBenchmarkRunner {
+  template <typename ElementA, typename ElementB, typename ElementD>
+  static void run_typed(::benchmark::State& state, GEMMOptions const& options, KernelHardwareInfo const& hw_info) {
+    using namespace cutlass;
+    using namespace cutlass::library;
+
+    Operation const* operation = nullptr;
+    for (auto const& candidate : Singleton::get().manifest.operations()) {
+      if (candidate->description().name == options.operation_name) {
+        operation = candidate.get();
+        break;
+      }
+    }
+
+    if (!operation) {
+      state.SkipWithError(("library operation not found: " + options.operation_name).c_str());
+      return;
+    }
+
+    if (operation->description().kind != OperationKind::kGemm) {
+      state.SkipWithError("library operation is not a GEMM operation.");
+      return;
+    }
+
+    auto const& desc = static_cast<GemmDescription const&>(operation->description());
+    if (desc.gemm_kind != GemmKind::kUniversal) {
+      state.SkipWithError("library operation is not a universal GEMM operation.");
+      return;
+    }
+
+    auto leading_dim = [](char layout, int rows, int cols) {
+      return layout == 'r' ? cols : rows;
+    };
+    auto element_offset = [](char layout, int row, int col, int ld) {
+      return layout == 'r' ? row * ld + col : col * ld + row;
+    };
+
+    if (options.layout.size() != 3) {
+      state.SkipWithError("library GEMM requires a 3-character layout such as rcr.");
+      return;
+    }
+
+    char const layout_a = options.layout[0];
+    char const layout_b = options.layout[1];
+    char const layout_c = options.layout[2];
+    int const lda = leading_dim(layout_a, options.m, options.k);
+    int const ldb = leading_dim(layout_b, options.k, options.n);
+    int const ldc = leading_dim(layout_c, options.m, options.n);
+    int const ldd = ldc;
+
+    std::vector<ElementA> host_a(static_cast<size_t>(options.m) * options.k);
+    std::vector<ElementB> host_b(static_cast<size_t>(options.k) * options.n);
+    std::vector<float> host_c(static_cast<size_t>(options.m) * options.n);
+    std::vector<ElementD> host_d(static_cast<size_t>(options.m) * options.n);
+
+    for (int row = 0; row < options.m; ++row) {
+      for (int col = 0; col < options.k; ++col) {
+        float value = static_cast<float>(((row * 13 + col * 7) % 17) - 8) / 8.0f;
+        host_a[element_offset(layout_a, row, col, lda)] = ElementA(value);
+      }
+    }
+    for (int row = 0; row < options.k; ++row) {
+      for (int col = 0; col < options.n; ++col) {
+        float value = static_cast<float>(((row * 11 + col * 5) % 19) - 9) / 9.0f;
+        host_b[element_offset(layout_b, row, col, ldb)] = ElementB(value);
+      }
+    }
+    for (int row = 0; row < options.m; ++row) {
+      for (int col = 0; col < options.n; ++col) {
+        host_c[element_offset(layout_c, row, col, ldc)] = static_cast<float>(((row * 3 + col * 2) % 11) - 5) / 11.0f;
+      }
+    }
+
+    DeviceAllocation<ElementA> device_a(host_a.size());
+    DeviceAllocation<ElementB> device_b(host_b.size());
+    DeviceAllocation<float> device_c(host_c.size());
+    DeviceAllocation<ElementD> device_d(host_d.size());
+    device_a.copy_from_host(host_a.data());
+    device_b.copy_from_host(host_b.data());
+    device_c.copy_from_host(host_c.data());
+
+    GemmUniversalConfiguration configuration{
+      GemmUniversalMode::kGemm,
+      {options.m, options.n, options.k},
+      {1, 1, 1},
+      {1, 1, 1},
+      options.l,
+      lda,
+      ldb,
+      ldc,
+      ldd,
+      1
+    };
+
+    GemmUniversalArguments arguments{
+      {options.m, options.n, options.k},
+      {1, 1, 1},
+      {1, 1, 1},
+      options.l,
+      device_a.get(),
+      device_b.get(),
+      device_c.get(),
+      device_d.get(),
+      &options.alpha,
+      &options.beta,
+      ScalarPointerMode::kHost,
+      lda,
+      ldb,
+      ldc,
+      ldd,
+      static_cast<int64_t>(options.m) * options.k,
+      static_cast<int64_t>(options.k) * options.n,
+      static_cast<int64_t>(options.m) * options.n,
+      static_cast<int64_t>(options.m) * options.n,
+      hw_info.sm_count
+    };
+
+    if (operation->can_implement(&configuration, &arguments) != Status::kSuccess) {
+      state.SkipWithError("library GEMM unable to implement given args.");
+      return;
+    }
+
+    uint64_t const host_workspace_size = operation->get_host_workspace_size(&configuration);
+    std::vector<uint8_t> host_workspace(static_cast<size_t>(host_workspace_size));
+    uint64_t const device_workspace_size = operation->get_device_workspace_size(&configuration, &arguments);
+    device_memory::allocation<uint8_t> device_workspace;
+    device_workspace.reset(static_cast<size_t>(device_workspace_size));
+
+    if (operation->initialize(&configuration, host_workspace.data(), device_workspace.get()) != Status::kSuccess) {
+      state.SkipWithError("library GEMM failed to initialize.");
+      return;
+    }
+    if (operation->run(&arguments, host_workspace.data(), device_workspace.get()) != Status::kSuccess) {
+      state.SkipWithError("library GEMM failed to run.");
+      return;
+    }
+#if defined(CUTLASS_ENABLE_SYCL)
+    compat::wait();
+#else
+    cudaDeviceSynchronize();
+#endif
+
+    int64_t const verify_ops = static_cast<int64_t>(options.m) * options.n * options.k;
+    if (options.verify_library && verify_ops <= options.library_verify_max_ops) {
+      device_d.copy_to_host(host_d.data());
+      double max_error = 0.0;
+      for (int row = 0; row < options.m; ++row) {
+        for (int col = 0; col < options.n; ++col) {
+          float accum = 0.0f;
+          for (int kk = 0; kk < options.k; ++kk) {
+            accum += float(host_a[element_offset(layout_a, row, kk, lda)]) *
+                     float(host_b[element_offset(layout_b, kk, col, ldb)]);
+          }
+          float const ref = options.alpha * accum + options.beta * host_c[element_offset(layout_c, row, col, ldc)];
+          float const got = float(host_d[element_offset(layout_c, row, col, ldd)]);
+          max_error = std::max(max_error, std::abs(double(got) - double(ref)));
+        }
+      }
+      if (max_error > 0.5) {
+        state.SkipWithError("Disposition Failed.");
+        return;
+      }
+    }
+
+    state.counters["m"] = options.m;
+    state.counters["n"] = options.n;
+    state.counters["k"] = options.k;
+    state.counters["l"] = options.l;
+    state.counters["alpha"] = options.alpha;
+    state.counters["beta"] = options.beta;
+    state.SetLabel("library_operation=" + options.operation_name + " layout=" + options.layout);
+
+    double const gflop = 2.0 * options.m * options.n * options.k * options.l * 1e-9;
+    double const mega_bytes_transferred = static_cast<double>(
+      options.m * options.k * sizeof(ElementA) +
+      options.k * options.n * sizeof(ElementB) +
+      options.m * options.n * sizeof(ElementD) +
+      (options.beta != 0 ? options.m * options.n * sizeof(float) : 0)
+    ) * 1e-6 * options.l;
+
+    state.counters["total_runtime_ms"] = 0;
+    state.counters["best_runtime_ms"] = std::numeric_limits<double>::max();
+    state.counters["worst_runtime_ms"] = std::numeric_limits<double>::lowest();
+    for (auto _ : state) {
+      GPU_Clock timer;
+      timer.start();
+      auto status = operation->run(&arguments, host_workspace.data(), device_workspace.get());
+      auto ms_elapsed = timer.milliseconds();
+      if (status != Status::kSuccess) {
+        state.SkipWithError("library GEMM failed during benchmark loop.");
+        return;
+      }
+      state.SetIterationTime(ms_elapsed / 1000.0);
+      state.counters["total_runtime_ms"] += ms_elapsed;
+      state.counters["best_runtime_ms"] = std::min<double>(state.counters["best_runtime_ms"], ms_elapsed);
+      state.counters["worst_runtime_ms"] = std::max<double>(state.counters["worst_runtime_ms"], ms_elapsed);
+    }
+    double const iterations = static_cast<double>(std::max<int64_t>(state.iterations(), 1));
+    state.counters["avg_runtime_ms"] = state.counters["total_runtime_ms"] / iterations;
+    state.counters["avg_tflops"] = gflop / state.counters["avg_runtime_ms"];
+    state.counters["avg_throughput"] = mega_bytes_transferred / state.counters["avg_runtime_ms"];
+    state.counters["best_tflop"] = gflop / state.counters["best_runtime_ms"];
+    state.counters["best_bandwidth"] = mega_bytes_transferred / state.counters["best_runtime_ms"];
+  }
+
+  static void run(::benchmark::State& state, GEMMOptions const& options, KernelHardwareInfo const& hw_info) {
+    if (options.operation_name.empty()) {
+      state.SkipWithError("library GEMM requires --operation_name.");
+      return;
+    }
+    if (options.dtype_c != "f32" || options.dtype_acc != "f32") {
+      state.SkipWithError("library GEMM benchmark currently supports f32 C and accumulator only.");
+      return;
+    }
+    bool const d_is_f16 = options.operation_name.find("_f16_df16_") != std::string::npos;
+    if (options.dtype_a == "f16" && options.dtype_b == "f16" && d_is_f16) {
+      run_typed<cutlass::half_t, cutlass::half_t, cutlass::half_t>(state, options, hw_info);
+    }
+    else if (options.dtype_a == "f16" && options.dtype_b == "f16") {
+      run_typed<cutlass::half_t, cutlass::half_t, float>(state, options, hw_info);
+    }
+    else if (options.dtype_a == "bf16" && options.dtype_b == "bf16" && d_is_f16) {
+      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::half_t>(state, options, hw_info);
+    }
+    else if (options.dtype_a == "bf16" && options.dtype_b == "bf16") {
+      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, float>(state, options, hw_info);
+    }
+    else {
+      state.SkipWithError("library GEMM benchmark currently supports f16/f16 and bf16/bf16 inputs only.");
+    }
+  }
+};
+
+inline void cutlass_library_gemm_func(
+    ::benchmark::State& state,
+    cutlass::benchmark::GEMMOptions const& options,
+    cutlass::KernelHardwareInfo const& hw_info) {
+  LibraryGemmBenchmarkRunner::run(state, options, hw_info);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+#endif
 
 template <class GemmConfiguration>
 struct BenchmarkRunnerGemm {
