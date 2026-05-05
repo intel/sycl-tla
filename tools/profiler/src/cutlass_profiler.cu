@@ -38,6 +38,7 @@
 // Profiler includes
 #include "cutlass/profiler/cutlass_profiler.h"
 #include "cutlass/profiler/gemm_operation_profiler.h"
+#include "cutlass/profiler/grouped_gemm_operation_profiler.h"
 #if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/profiler/block_scaled_gemm_operation_profiler.h"
 #include "cutlass/profiler/blockwise_gemm_operation_profiler.h"
@@ -64,6 +65,7 @@ CutlassProfiler::CutlassProfiler(
   options_(options) {
 
   operation_profilers_.emplace_back(new GemmOperationProfiler(options));
+  operation_profilers_.emplace_back(new GroupedGemmOperationProfiler(options));
 
 #if !defined(CUTLASS_ENABLE_SYCL)
   operation_profilers_.emplace_back(new BlockScaledGemmOperationProfiler(options));   
@@ -84,7 +86,6 @@ CutlassProfiler::CutlassProfiler(
 
   operation_profilers_.emplace_back(new SymmOperationProfiler(options));
 
-  operation_profilers_.emplace_back(new GroupedGemmOperationProfiler(options));
 #endif
 }
 

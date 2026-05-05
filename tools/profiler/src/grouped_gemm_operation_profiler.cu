@@ -42,9 +42,12 @@
 #include <vector>
 #include <regex>
 
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include <cuda_runtime_api.h>
+#endif
 
 #include "cutlass/cutlass.h"
+#include "cutlass/profiler/cuda_helpers.h"
 #include "cutlass/profiler/grouped_gemm_operation_profiler.h"
 #include "cutlass/library/handle.h"
 #include "cutlass/library/library.h"
