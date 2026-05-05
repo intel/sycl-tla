@@ -20,6 +20,19 @@
 
 本地 profiler Python 回归当前为 **65/65 OK**。
 
+补充确认阶段 smoke 也已在远端 BMG 节点通过：
+
+- Ali 子集 2 shapes
+- `--top-k 3 --confirm-runs 2`
+- 40 rows
+- screening + confirm stages 均出现
+- 40 passed
+- 0 failed
+- 2 dispatch entries
+- `selection_summary.entries_with_confirmation = 2`
+- `selection_summary.incomplete_confirmation_entries = 0`
+- dispatch evidence 已记录 median runtime、median TFLOPS、stdev、CV、screening rank、runner-up 和 ranked candidates
+
 ## 当前可复现的 GEMM MVP workflow
 
 典型全量 Ali generated benchmark search 命令如下：
@@ -154,6 +167,7 @@ python3 test/benchmarks/intel_gemm_profiler.py \
 - Ali workbook full generated workflow 通过
 - benchmark-backed BF16 Phase B 已可跑通
 - chunked screening 全量 76 chunks 已验证
+- top-k confirmation smoke 已验证
 - reference comparison matched 76/76
 
 ## 当前仍需继续的工作

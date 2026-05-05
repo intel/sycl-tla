@@ -33,6 +33,17 @@ The current workflow also supports:
 - median-based final selection evidence in `gemm_dispatch_table.json`
 - close-call labeling through `--close-call-threshold`
 
+Confirmation smoke proof:
+
+- Ali subset: 2 BF16 GEMM shapes
+- confirmation policy: `--top-k 3 --confirm-runs 2`
+- benchmark rows: 40
+- passed rows: 40
+- failed rows: 0
+- dispatch entries: 2
+- entries with confirmation evidence: 2
+- incomplete confirmation entries: 0
+
 ## MVP scope
 
 The MVP includes:
