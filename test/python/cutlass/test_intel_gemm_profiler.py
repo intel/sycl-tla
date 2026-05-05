@@ -189,6 +189,17 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertIn("--dtype_c=f32", line)
             self.assertEqual(metadata["generated__shape__screening__0"]["kernel_name"], entry["candidate"]["kernel_name"])
 
+    def test_library_benchmark_runner_recognizes_bf16_d_generated_kernels(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        runner_path = repo_root / "benchmarks" / "gemm" / "benchmark_runner.hpp"
+        text = runner_path.read_text(encoding="utf-8")
+
+        self.assertIn('operation_name.find("_bf16_dbf16_")', text)
+        self.assertIn(
+            "run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t>",
+            text,
+        )
+
     def test_build_candidate_build_manifest_splits_compile_and_runtime_fields(self):
         shapes = profiler.default_shapes("bf16")
         constraints = profiler.default_constraints()

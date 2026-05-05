@@ -403,6 +403,7 @@ struct LibraryGemmBenchmarkRunner {
       return;
     }
     bool const d_is_f16 = options.operation_name.find("_f16_df16_") != std::string::npos;
+    bool const d_is_bf16 = options.operation_name.find("_bf16_dbf16_") != std::string::npos;
     if (options.dtype_a == "f16" && options.dtype_b == "f16" && d_is_f16) {
       run_typed<cutlass::half_t, cutlass::half_t, cutlass::half_t>(state, options, hw_info);
     }
@@ -411,6 +412,9 @@ struct LibraryGemmBenchmarkRunner {
     }
     else if (options.dtype_a == "bf16" && options.dtype_b == "bf16" && d_is_f16) {
       run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::half_t>(state, options, hw_info);
+    }
+    else if (options.dtype_a == "bf16" && options.dtype_b == "bf16" && d_is_bf16) {
+      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t>(state, options, hw_info);
     }
     else if (options.dtype_a == "bf16" && options.dtype_b == "bf16") {
       run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, float>(state, options, hw_info);
