@@ -167,11 +167,22 @@ def filter_candidate_space_by_compiled_kernels(candidate_space, compiled_kernels
     return filtered
 
 
-def build_candidate_build_plan(build_manifest, source_dir, build_dir, kernel_filter_path):
+def build_candidate_build_plan(
+    build_manifest,
+    source_dir,
+    build_dir,
+    kernel_filter_path,
+    googlebenchmark_dir=None,
+    cmake_cxx_compiler="",
+):
     cmake_config = build_manifest["cmake_config"]
     cmake_vars = dict(cmake_config["cmake_vars"])
     kernel_filter_var = cmake_config["kernel_filter_cmake_var"]
     cmake_vars[kernel_filter_var] = str(kernel_filter_path)
+    if googlebenchmark_dir:
+        cmake_vars["GOOGLEBENCHMARK_DIR"] = str(googlebenchmark_dir)
+    if cmake_cxx_compiler:
+        cmake_vars["CMAKE_CXX_COMPILER"] = cmake_cxx_compiler
     configure_command = ["cmake", "-S", str(source_dir), "-B", str(build_dir)]
     configure_command.extend(f"-D{name}={value}" for name, value in sorted(cmake_vars.items()))
     build_command = [
@@ -189,6 +200,8 @@ def build_candidate_build_plan(build_manifest, source_dir, build_dir, kernel_fil
         "source_dir": str(source_dir),
         "build_dir": str(build_dir),
         "kernel_filter_file": str(kernel_filter_path),
+        "googlebenchmark_dir": str(googlebenchmark_dir) if googlebenchmark_dir else "",
+        "cmake_cxx_compiler": cmake_cxx_compiler,
         "selected_kernel_count": build_manifest["selected_kernel_count"],
         "cmake_vars": cmake_vars,
         "configure_command": configure_command,
@@ -343,9 +356,17 @@ def workflow(args):
     write_json(candidate_build_cmake_config_path, build_manifest["cmake_config"])
     source_dir = Path(args.cmake_source_dir).resolve() if args.cmake_source_dir else (Path(args.cwd).resolve() if args.cwd else Path.cwd().resolve())
     build_dir = Path(args.benchmark_build_dir).resolve() if args.benchmark_build_dir else workspace / "build" / "candidate_benchmarks"
+    googlebenchmark_dir = Path(args.googlebenchmark_dir).resolve() if args.googlebenchmark_dir else None
     write_json(
         candidate_build_plan_path,
-        build_candidate_build_plan(build_manifest, source_dir, build_dir, selected_kernel_filter_path),
+        build_candidate_build_plan(
+            build_manifest,
+            source_dir,
+            build_dir,
+            selected_kernel_filter_path,
+            googlebenchmark_dir,
+            args.cmake_cxx_compiler,
+        ),
     )
     screening_entries = build_screening_entries(shapes_doc, candidate_space)
     all_rows = list(probe_rows)
@@ -447,6 +468,8 @@ def build_parser():
     parser.add_argument("--compiled-kernel-list", default="", help="Optional newline-delimited compiled kernel list or regex filter file. When set, Phase B only runs benchmark candidates present in this list.")
     parser.add_argument("--cmake-source-dir", default="", help="Optional source directory used in the generated candidate benchmark CMake build plan. Defaults to --cwd or the current directory.")
     parser.add_argument("--benchmark-build-dir", default="", help="Optional build directory used in the generated candidate benchmark CMake build plan. Defaults to <workspace>/build/candidate_benchmarks.")
+    parser.add_argument("--googlebenchmark-dir", default="", help="Optional local Google Benchmark source directory injected into the generated CMake build plan as GOOGLEBENCHMARK_DIR to avoid FetchContent downloads.")
+    parser.add_argument("--cmake-cxx-compiler", default="", help="Optional CMAKE_CXX_COMPILER value injected into the generated candidate benchmark CMake build plan, e.g. 'icpx' for oneAPI SYCL builds.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")

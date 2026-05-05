@@ -813,6 +813,10 @@ class TestIntelGemmProfiler(unittest.TestCase):
                     "bmg",
                     "--generator-instantiation-level",
                     "1",
+                    "--googlebenchmark-dir",
+                    str(Path(tmpdir) / "googlebenchmark-src"),
+                    "--cmake-cxx-compiler",
+                    "icpx",
                 ]
             )
             outputs = profiler.workflow(args)
@@ -845,6 +849,12 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(build_plan["build_target"], "cutlass_benchmarks_gemm_sycl")
             self.assertEqual(build_plan["kernel_filter_file"], outputs["selected_kernel_filter"])
             self.assertEqual(build_plan["cmake_vars"]["KERNEL_FILTER_FILE"], outputs["selected_kernel_filter"])
+            self.assertEqual(build_plan["googlebenchmark_dir"], str(Path(tmpdir) / "googlebenchmark-src"))
+            self.assertEqual(build_plan["cmake_vars"]["GOOGLEBENCHMARK_DIR"], str(Path(tmpdir) / "googlebenchmark-src"))
+            self.assertIn(f"-DGOOGLEBENCHMARK_DIR={Path(tmpdir) / 'googlebenchmark-src'}", build_plan["configure_command"])
+            self.assertEqual(build_plan["cmake_cxx_compiler"], "icpx")
+            self.assertEqual(build_plan["cmake_vars"]["CMAKE_CXX_COMPILER"], "icpx")
+            self.assertIn("-DCMAKE_CXX_COMPILER=icpx", build_plan["configure_command"])
             self.assertIn("-DCUTLASS_LIBRARY_INSTANTIATION_LEVEL=1", build_plan["configure_command"])
             self.assertIn(f"-DKERNEL_FILTER_FILE={outputs['selected_kernel_filter']}", build_plan["configure_command"])
             self.assertEqual(build_plan["build_command"][4], "cutlass_benchmarks_gemm_sycl")
