@@ -28,6 +28,21 @@ def median_or_nan(values):
     return statistics.median(numeric)
 
 
+def numeric_values(values):
+    return [float(value) for value in values if str(value) != ""]
+
+
+def pstdev_or_nan(values):
+    numeric = numeric_values(values)
+    if len(numeric) < 2:
+        return math.nan
+    return statistics.pstdev(numeric)
+
+
+def round_or_empty(value):
+    return round(value, 6) if not math.isnan(value) else ""
+
+
 def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_threshold, candidate_space=None, hw_spec=None, low_efficiency_threshold=0.4):
     grouped = defaultdict(list)
     for row in rows:
@@ -37,14 +52,41 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
     candidates = {candidate["candidate_id"]: candidate for candidate in candidate_space.get("candidates", [])} if candidate_space and hw_spec else {}
     entries = []
     for shape_id, shape_rows in grouped.items():
+        screening_rows = [row for row in shape_rows if row["stage"] == "screening"]
+        screening_ranked = sorted(
+            screening_rows,
+            key=lambda row: float(row["avg_tflops"] or 0.0),
+            reverse=True,
+        )
+        screening_rank_by_candidate = {
+            row["candidate_id"]: index + 1 for index, row in enumerate(screening_ranked)
+        }
         confirm_rows = [row for row in shape_rows if row["stage"] == "confirm"]
         selection_rows = confirm_rows if confirm_rows else [row for row in shape_rows if row["stage"] == "screening"]
+        selection_stage = "confirm" if confirm_rows else "screening"
         by_candidate = defaultdict(list)
         for row in selection_rows:
             by_candidate[row["candidate_id"]].append(row)
         ranked = []
         for candidate_id, candidate_rows in by_candidate.items():
-            ranked.append({"candidate_id": candidate_id, "compiler_profile_id": candidate_rows[0]["compiler_profile_id"], "median_tflops": median_or_nan(row["avg_tflops"] for row in candidate_rows), "median_runtime_ms": median_or_nan(row["avg_runtime_ms"] for row in candidate_rows), "samples": len(candidate_rows)})
+            median_tflops = median_or_nan(row["avg_tflops"] for row in candidate_rows)
+            median_runtime_ms = median_or_nan(row["avg_runtime_ms"] for row in candidate_rows)
+            tflops_stdev = pstdev_or_nan(row["avg_tflops"] for row in candidate_rows)
+            runtime_stdev = pstdev_or_nan(row["avg_runtime_ms"] for row in candidate_rows)
+            ranked.append(
+                {
+                    "candidate_id": candidate_id,
+                    "compiler_profile_id": candidate_rows[0]["compiler_profile_id"],
+                    "median_tflops": median_tflops,
+                    "median_runtime_ms": median_runtime_ms,
+                    "tflops_stdev": tflops_stdev,
+                    "runtime_stdev": runtime_stdev,
+                    "tflops_cv_percent": (tflops_stdev / median_tflops) * 100.0 if median_tflops > 0 and not math.isnan(tflops_stdev) else math.nan,
+                    "samples": len(candidate_rows),
+                    "expected_samples": confirm_runs if selection_stage == "confirm" else 1,
+                    "screening_rank": screening_rank_by_candidate.get(candidate_id, ""),
+                }
+            )
         ranked.sort(key=lambda item: item["median_tflops"], reverse=True)
         if not ranked:
             continue
@@ -86,14 +128,51 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
                 "runner_up_candidate_id": runner_up["candidate_id"] if runner_up else "",
                 "runner_up_gap_percent": round(gap, 6) if gap is not None else "",
                 "close_call": close_call,
-                "evidence": {"confirm_median_runtime_ms": round(winner["median_runtime_ms"], 6) if not math.isnan(winner["median_runtime_ms"]) else "", "confirm_median_tflops": round(winner["median_tflops"], 6), "screening_rank": 1, "confirm_samples": winner["samples"]},
+                "evidence": {
+                    "selection_stage": selection_stage,
+                    "selection_metric": "median_tflops" if selection_stage == "confirm" else "avg_tflops",
+                    "confirm_median_runtime_ms": round_or_empty(winner["median_runtime_ms"]),
+                    "confirm_median_tflops": round_or_empty(winner["median_tflops"]),
+                    "confirm_runtime_stdev_ms": round_or_empty(winner["runtime_stdev"]),
+                    "confirm_tflops_stdev": round_or_empty(winner["tflops_stdev"]),
+                    "confirm_tflops_cv_percent": round_or_empty(winner["tflops_cv_percent"]),
+                    "screening_rank": winner["screening_rank"],
+                    "confirm_samples": winner["samples"] if selection_stage == "confirm" else 0,
+                    "expected_confirm_samples": confirm_runs if selection_stage == "confirm" else 0,
+                    "confirm_complete": selection_stage != "confirm" or winner["samples"] >= confirm_runs,
+                    "runner_up_median_tflops": round_or_empty(runner_up["median_tflops"]) if runner_up else "",
+                    "runner_up_median_runtime_ms": round_or_empty(runner_up["median_runtime_ms"]) if runner_up else "",
+                    "runner_up_samples": runner_up["samples"] if runner_up else 0,
+                    "runner_up_screening_rank": runner_up["screening_rank"] if runner_up else "",
+                    "ranked_candidates": [
+                        {
+                            "candidate_id": item["candidate_id"],
+                            "median_tflops": round_or_empty(item["median_tflops"]),
+                            "median_runtime_ms": round_or_empty(item["median_runtime_ms"]),
+                            "samples": item["samples"],
+                            "screening_rank": item["screening_rank"],
+                            "confirm_complete": selection_stage != "confirm" or item["samples"] >= confirm_runs,
+                        }
+                        for item in ranked[:top_k]
+                    ],
+                },
             }
         )
+    close_calls = sum(1 for entry in entries if entry["close_call"])
+    entries_with_confirm = [entry for entry in entries if entry["evidence"]["selection_stage"] == "confirm"]
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
         "dispatch_id": f"intel_gemm_profiler_{datetime.now().strftime('%Y%m%d%H%M%S')}",
         "selection_policy": {"screening_top_k": top_k, "confirm_runs": confirm_runs, "metric": "confirm_median_tflops" if confirm_runs else "screening_avg_tflops", "close_call_threshold_percent": close_call_threshold},
+        "selection_summary": {
+            "entries": len(entries),
+            "entries_with_confirmation": len(entries_with_confirm),
+            "incomplete_confirmation_entries": sum(
+                1 for entry in entries_with_confirm if not entry["evidence"]["confirm_complete"]
+            ),
+            "close_calls": close_calls,
+        },
         "entries": entries,
     }
 

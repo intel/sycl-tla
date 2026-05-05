@@ -610,6 +610,96 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(entry["candidate_id"], "cand_fast")
         self.assertTrue(entry["close_call"])
         self.assertAlmostEqual(entry["evidence"]["confirm_median_tflops"], 1.05)
+        self.assertEqual(entry["evidence"]["selection_stage"], "confirm")
+        self.assertEqual(entry["evidence"]["screening_rank"], 1)
+        self.assertEqual(entry["evidence"]["confirm_samples"], 2)
+        self.assertTrue(entry["evidence"]["confirm_complete"])
+        self.assertEqual(dispatch["selection_summary"]["entries_with_confirmation"], 1)
+        self.assertEqual(dispatch["selection_summary"]["close_calls"], 1)
+
+    def test_confirmation_median_can_override_screening_rank(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "test",
+            "source": "predefined",
+            "shapes": [
+                {
+                    "shape_id": "shape_a",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 64,
+                    "n": 4096,
+                    "k": 4096,
+                }
+            ],
+        }
+
+        def row(stage, candidate_id, attempt_index, tflops, runtime):
+            return {
+                "run_id": stage,
+                "stage": stage,
+                "attempt_index": attempt_index,
+                "shape_id": "shape_a",
+                "candidate_id": candidate_id,
+                "compiler_profile_id": "bmg.default",
+                "status": "pass",
+                "verify_status": "pass",
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 64,
+                "n": 4096,
+                "k": 4096,
+                "avg_runtime_ms": str(runtime),
+                "best_runtime_ms": str(runtime),
+                "worst_runtime_ms": str(runtime),
+                "avg_tflops": str(tflops),
+                "avg_throughput": "",
+                "max_error": "",
+                "close_call_group": "",
+                "failure_reason": "",
+                "stdout_log": f"{candidate_id}.log",
+            }
+
+        rows = [
+            row("screening", "screening_winner", 0, 10.0, 0.40),
+            row("screening", "confirmed_winner", 0, 9.0, 0.45),
+            row("confirm", "screening_winner", 0, 7.5, 0.54),
+            row("confirm", "screening_winner", 1, 7.7, 0.52),
+            row("confirm", "screening_winner", 2, 7.6, 0.53),
+            row("confirm", "confirmed_winner", 0, 8.3, 0.49),
+            row("confirm", "confirmed_winner", 1, 8.5, 0.47),
+            row("confirm", "confirmed_winner", 2, 8.4, 0.48),
+        ]
+
+        dispatch = profiler.build_dispatch_table(
+            rows,
+            shapes,
+            top_k=2,
+            confirm_runs=3,
+            close_call_threshold=5.0,
+        )
+
+        entry = dispatch["entries"][0]
+        evidence = entry["evidence"]
+        self.assertEqual(entry["candidate_id"], "confirmed_winner")
+        self.assertEqual(evidence["selection_stage"], "confirm")
+        self.assertEqual(evidence["screening_rank"], 2)
+        self.assertEqual(evidence["confirm_samples"], 3)
+        self.assertEqual(evidence["expected_confirm_samples"], 3)
+        self.assertTrue(evidence["confirm_complete"])
+        self.assertEqual(evidence["runner_up_screening_rank"], 1)
+        self.assertAlmostEqual(evidence["confirm_median_tflops"], 8.4)
+        self.assertAlmostEqual(evidence["runner_up_median_tflops"], 7.6)
+        self.assertGreater(evidence["confirm_tflops_stdev"], 0.0)
+        self.assertEqual(len(evidence["ranked_candidates"]), 2)
+        self.assertEqual(dispatch["selection_summary"]["incomplete_confirmation_entries"], 0)
 
     def test_splitk_candidates_are_gated_to_large_shapes(self):
         shapes = profiler.default_shapes("bf16")
