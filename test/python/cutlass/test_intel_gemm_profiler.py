@@ -881,6 +881,41 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual([step["step"] for step in summary["steps"]], ["configure", "build"])
         self.assertTrue(all(step["status"] == "pass" for step in summary["steps"]))
 
+    def test_build_candidate_benchmark_requires_phase_a_inputs_or_probe_off(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    tmpdir,
+                    "--kernel-catalog-source",
+                    "generator",
+                    "--build-candidate-benchmark",
+                    "--benchmark-exe",
+                    str(Path(tmpdir) / "missing_benchmark"),
+                ]
+            )
+
+            with self.assertRaisesRegex(ValueError, "--probe-mode=off"):
+                profiler.workflow(args)
+
+    def test_build_candidate_benchmark_allows_probe_off_without_prebuilt_benchmark(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    tmpdir,
+                    "--kernel-catalog-source",
+                    "generator",
+                    "--build-candidate-benchmark",
+                    "--probe-mode",
+                    "off",
+                    "--benchmark-exe",
+                    str(Path(tmpdir) / "missing_benchmark"),
+                ]
+            )
+
+            profiler.validate_candidate_auto_build_mode(args, dry_run_mode=False, probe_mode=args.probe_mode)
+
     def test_workflow_can_limit_generator_candidates_to_compiled_kernel_list(self):
         shapes = profiler.dry_run_shapes("f16")
         candidate_space = profiler.generate_candidate_space(

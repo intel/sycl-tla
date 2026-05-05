@@ -37,7 +37,7 @@ if __package__ in (None, ""):
     from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from intel_gemm_profiler.runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
-    from intel_gemm_profiler.utils import ensure_dir, read_json, shell_init_with_env, shell_join, write_json
+    from intel_gemm_profiler.utils import ensure_dir, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
     from intel_gemm_profiler.schemas import SEARCH_RUNTIME_SCHEMA
 else:
     from .catalog import SEED_KERNELS, build_kernel_catalog
@@ -63,7 +63,7 @@ else:
     from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from .runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
-    from .utils import ensure_dir, read_json, shell_init_with_env, shell_join, write_json
+    from .utils import ensure_dir, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
     from .schemas import SEARCH_RUNTIME_SCHEMA
 
 
@@ -248,6 +248,19 @@ def execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=Non
     }
 
 
+def validate_candidate_auto_build_mode(args, dry_run_mode, probe_mode):
+    if not args.build_candidate_benchmark or dry_run_mode or args.skip_run or args.constraints_json:
+        return
+    if probe_mode not in {"auto", "run"}:
+        return
+    if resolve_executable(args.benchmark_exe, cwd=args.cwd):
+        return
+    raise ValueError(
+        "--build-candidate-benchmark builds the generated benchmark after Phase A. "
+        "Use --probe-mode=off or --constraints-json when no prebuilt --benchmark-exe is available for Phase A probes."
+    )
+
+
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
     base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
@@ -332,6 +345,7 @@ def workflow(args):
     top_k = min(args.top_k, 1) if dry_run_mode else args.top_k
     confirm_runs = 0 if dry_run_mode else args.confirm_runs
     probe_mode = "off" if dry_run_mode else args.probe_mode
+    validate_candidate_auto_build_mode(args, dry_run_mode, probe_mode)
     probe_rows = []
     probe_logs = []
     probe_commands = []

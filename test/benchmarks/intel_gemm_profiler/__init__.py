@@ -73,7 +73,7 @@ from .selector import (
     write_results_csv,
 )
 from .ali_dataset import build_ali_gemm_docs
-from .workflow import build_candidate_build_plan, benchmark_exe_for_build_plan, execute_candidate_build_plan
+from .workflow import build_candidate_build_plan, benchmark_exe_for_build_plan, execute_candidate_build_plan, validate_candidate_auto_build_mode
 from .workflow import build_compiler_flags_probe_summary, build_parser, empty_anomaly_report, main, run_phase_a_probe, workflow
 
 __all__ = [
@@ -149,6 +149,7 @@ __all__ = [
     "shell_init_with_env",
     "shell_join",
     "timeout_rows",
+    "validate_candidate_auto_build_mode",
     "workflow",
     "write_config",
     "write_json",
