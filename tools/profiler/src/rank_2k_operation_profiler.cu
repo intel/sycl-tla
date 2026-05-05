@@ -41,7 +41,10 @@
 
 #include "cutlass/core_io.h"
 
+#if !defined(CUTLASS_ENABLE_SYCL)
 #include "cutlass/profiler/cublas_helpers.h"
+#endif
+#include "cutlass/profiler/cuda_helpers.h"
 #include "cutlass/profiler/rank_2k_operation_profiler.h"
 #include "cutlass/profiler/gpu_timer.h"
 
