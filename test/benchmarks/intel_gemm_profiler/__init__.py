@@ -73,7 +73,7 @@ from .selector import (
     write_results_csv,
 )
 from .ali_dataset import build_ali_gemm_docs
-from .workflow import build_candidate_build_plan, benchmark_exe_for_build_plan, execute_candidate_build_plan, load_target_shapes_and_reference, validate_candidate_auto_build_mode
+from .workflow import build_candidate_build_plan, benchmark_exe_for_build_plan, execute_candidate_build_plan, limit_shapes_and_reference, load_target_shapes_and_reference, validate_candidate_auto_build_mode
 from .workflow import build_compiler_flags_probe_summary, build_parser, empty_anomaly_report, main, run_phase_a_probe, workflow
 
 __all__ = [
@@ -127,6 +127,7 @@ __all__ = [
     "ilp_class",
     "kernel_catalog_entry",
     "load_persisted_kernel_catalog",
+    "limit_shapes_and_reference",
     "load_target_shapes_and_reference",
     "load_hw_reference_specs",
     "load_persisted_build_config",

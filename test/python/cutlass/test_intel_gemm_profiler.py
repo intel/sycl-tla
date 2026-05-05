@@ -1668,6 +1668,74 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(comparison["summary"]["reference_entries"], 1)
         self.assertEqual(comparison["summary"]["missing_dispatch"], 1)
 
+    def test_workflow_limits_ali_shapes_and_reference_entries(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workbook_path = Path(tmpdir) / "ali.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "v1.6"
+            sheet.append(["", "", "", "", "", "bf16", "", "", "", "", "", "", "", "", "", "f16", "", "", "", "int8", "", "", ""])
+            sheet.append([
+                "",
+                "M",
+                "N",
+                "K",
+                "Type",
+                "oneMKL(BLAS)",
+                "oneDNN(matmul)",
+                "PyTorch->oneDNN",
+                "Sycl_TLA(00_base)",
+                "Sycl_TLA(00_padded)",
+                "Sycl_TLA(00_sycl_q)",
+                "Sycl_TLA(03_streamk)",
+                "Sycl_TLA(03_dp)",
+                "",
+                "",
+                "oneMKL(BLAS)",
+                "oneDNN(matmul)",
+                "PyTorch->oneDNN",
+                "SYCL-TLA(XeTLA)",
+                "oneMKL(BLAS)",
+                "oneDNN(matmul)",
+                "PyTorch->oneDNN",
+                "SYCL-TLA(XeTLA)",
+            ])
+            sheet.append(["", 64, 4096, 4096, "Prefill", None, None, None, 100.0, None, None, None, 102.0, None, None, None, None, None, None, None, None, None, None])
+            sheet.append(["", 128, 4096, 4096, "Prefill", None, None, None, 110.0, None, None, None, 112.0, None, None, None, None, None, None, 300.0, None, None, None])
+            workbook.save(workbook_path)
+
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    tmpdir,
+                    "--ali-workbook",
+                    str(workbook_path),
+                    "--max-shapes",
+                    "1",
+                    "--skip-run",
+                    "--probe-mode",
+                    "off",
+                ]
+            )
+            outputs = profiler.workflow(args)
+
+            shapes_doc = profiler.read_json(Path(outputs["workspace"]) / "inputs" / "gemm_target_shapes.json")
+            reference_doc = profiler.read_json(Path(outputs["reference_doc"]))
+            comparison = profiler.read_json(Path(outputs["reference_comparison"]))
+
+        self.assertEqual(shapes_doc["shape_limit"], 1)
+        self.assertEqual(shapes_doc["unlimited_shape_count"], 3)
+        self.assertEqual(len(shapes_doc["shapes"]), 1)
+        self.assertEqual(len(reference_doc["entries"]), 1)
+        self.assertEqual(reference_doc["unlimited_reference_entries"], 3)
+        self.assertEqual(comparison["summary"]["reference_entries"], 1)
+
+    def test_negative_max_shapes_is_rejected(self):
+        shapes_doc = profiler.default_shapes("bf16")
+
+        with self.assertRaisesRegex(ValueError, "--max-shapes must be non-negative"):
+            profiler.limit_shapes_and_reference(shapes_doc, max_shapes=-1)
+
     def test_ali_workbook_conflicts_with_explicit_shapes_or_reference(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             workbook_path = Path(tmpdir) / "ali.xlsx"

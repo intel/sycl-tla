@@ -270,10 +270,41 @@ def load_target_shapes_and_reference(args, dry_run_mode):
         if args.reference_json:
             raise ValueError("--ali-workbook and --reference-json are mutually exclusive.")
         shapes_doc, reference_doc = build_ali_gemm_docs(args.ali_workbook)
-        return shapes_doc, reference_doc
+        return limit_shapes_and_reference(shapes_doc, reference_doc, args.max_shapes)
     shapes_doc = read_json(args.shapes_json) if args.shapes_json else (dry_run_shapes(args.dtype) if dry_run_mode else default_shapes(args.dtype))
     reference_doc = read_json(args.reference_json) if args.reference_json else None
-    return shapes_doc, reference_doc
+    return limit_shapes_and_reference(shapes_doc, reference_doc, args.max_shapes)
+
+
+def limit_shapes_and_reference(shapes_doc, reference_doc=None, max_shapes=0):
+    if max_shapes is None or max_shapes == 0:
+        return shapes_doc, reference_doc
+    if max_shapes < 0:
+        raise ValueError("--max-shapes must be non-negative.")
+    limited_shapes_doc = copy.deepcopy(shapes_doc)
+    selected_shapes = limited_shapes_doc.get("shapes", [])[:max_shapes]
+    limited_shapes_doc["shapes"] = selected_shapes
+    limited_shapes_doc["shape_limit"] = max_shapes
+    limited_shapes_doc["unlimited_shape_count"] = len(shapes_doc.get("shapes", []))
+    if reference_doc is None:
+        return limited_shapes_doc, None
+    selected_shape_ids = {shape["shape_id"] for shape in selected_shapes}
+    selected_shape_keys = {
+        (shape.get("dtype_a"), shape.get("m"), shape.get("n"), shape.get("k"))
+        for shape in selected_shapes
+    }
+    limited_reference_doc = copy.deepcopy(reference_doc)
+    limited_reference_doc["entries"] = [
+        entry for entry in limited_reference_doc.get("entries", [])
+        if entry.get("shape_id") in selected_shape_ids
+    ]
+    limited_reference_doc["skipped_entries"] = [
+        entry for entry in limited_reference_doc.get("skipped_entries", [])
+        if (entry.get("dtype"), entry.get("m"), entry.get("n"), entry.get("k")) in selected_shape_keys
+    ]
+    limited_reference_doc["shape_limit"] = max_shapes
+    limited_reference_doc["unlimited_reference_entries"] = len(reference_doc.get("entries", []))
+    return limited_shapes_doc, limited_reference_doc
 
 
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
@@ -552,6 +583,7 @@ def build_parser():
     parser.add_argument("--shapes-json", default="", help="Optional path to gemm_target_shapes.json.")
     parser.add_argument("--reference-json", default="", help="Optional path to reference/oracle JSON for dataset comparison.")
     parser.add_argument("--ali-workbook", default="", help="Optional Ali GEMM performance workbook. When set, workflow derives gemm_target_shapes.json and reference comparison input from the workbook.")
+    parser.add_argument("--max-shapes", type=int, default=0, help="Limit target shapes to the first N entries after loading --shapes-json, --ali-workbook, or the default shape set. 0 disables the limit.")
     parser.add_argument("--constraints-json", default="", help="Optional path to safe_search_constraints.json.")
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")
     parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator"], default="persisted", help="Catalog source for Phase B candidates. 'generator' bridges Intel Xe library generation into the benchmark/search catalog but requires a benchmark binary built from the same generated kernels.")

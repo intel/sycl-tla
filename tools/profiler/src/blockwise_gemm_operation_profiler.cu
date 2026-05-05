@@ -90,7 +90,13 @@ BlockwiseGemmOperationProfiler::BlockwiseGemmOperationProfiler(Options const &op
       {ArgumentTypeID::kInteger, {"swizzle_size", "swizzle-size"}, "Size to swizzle"},
       {ArgumentTypeID::kEnumerated, {"use_pdl", "use_pdl"}, "Use PDL (true, false)"},
     },
-    { library::Provider::kCUBLAS}
+    {
+#if defined(CUTLASS_ENABLE_SYCL)
+      library::Provider::kReferenceHost
+#else
+      library::Provider::kCUBLAS
+#endif
+    }
   ) {
 
   description_ = "      General matrix-matrix product. D = alpha * A*B + beta * C";
