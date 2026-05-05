@@ -45,6 +45,12 @@ def collect_environment_metadata(shell_init, benchmark_exe, streamk_example_exe,
 def run_benchmark(command, log_path, cwd=None, shell_init=None, timeout=None):
     timed_out = False
     timeout_reason = ""
+    def output_text(value):
+        if value is None:
+            return ""
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        return str(value)
     try:
         if shell_init:
             payload = f"{shell_init} && {shell_join(command)}"
@@ -54,9 +60,9 @@ def run_benchmark(command, log_path, cwd=None, shell_init=None, timeout=None):
     except subprocess.TimeoutExpired as exc:
         timed_out = True
         timeout_reason = f"timeout after {timeout}s"
-        process = subprocess.CompletedProcess(exc.cmd, 124, exc.stdout or "", exc.stderr or "")
+        process = subprocess.CompletedProcess(exc.cmd, 124, output_text(exc.stdout), output_text(exc.stderr))
     with open(log_path, "w", encoding="utf-8") as handle:
-        handle.write(process.stdout or "")
+        handle.write(output_text(process.stdout))
         if timed_out:
             handle.write(f"\nTIMEOUT: {timeout_reason}\n")
     return process, timed_out, timeout_reason
@@ -228,17 +234,63 @@ def timeout_rows(entries, log_path, reason):
     return rows
 
 
-def run_entries_with_benchmark(entries, config_path, manifest_path, log_path, exe, cwd=None, shell_init=None, timeout=None):
+def chunked_path(path, chunk_index):
+    return path.with_name(f"{path.stem}_part{chunk_index:03d}{path.suffix}")
+
+
+def rows_seen_keys(rows):
+    return {
+        (row["stage"], int(row["attempt_index"]), row["shape_id"], row["candidate_id"])
+        for row in rows
+    }
+
+
+def entries_missing_rows(entries, rows):
+    seen = rows_seen_keys(rows)
+    return [
+        entry for entry in entries
+        if (
+            entry["stage"],
+            int(entry["attempt_index"]),
+            entry["shape"]["shape_id"],
+            entry["candidate"]["candidate_id"],
+        ) not in seen
+    ]
+
+
+def run_entries_with_benchmark_once(entries, config_path, manifest_path, log_path, exe, cwd=None, shell_init=None, timeout=None):
     metadata = write_config(entries, config_path)
     write_json(manifest_path, metadata)
     command = [exe, f"--config_file={config_path}"]
     result, timed_out, timeout_reason = run_benchmark(command, log_path, cwd=cwd, shell_init=shell_init, timeout=timeout)
     rows = parse_benchmark_log(log_path, metadata, run_id=entries[0]["stage"]) if entries else []
-    if timed_out and not rows:
-        rows = timeout_rows(entries, log_path, timeout_reason)
+    if timed_out:
+        rows.extend(timeout_rows(entries_missing_rows(entries, rows), log_path, timeout_reason))
     if result.returncode != 0 and not rows:
         raise RuntimeError(f"Benchmark subprocess failed with return code {result.returncode}. See {log_path}")
     return rows, command
+
+
+def run_entries_with_benchmark(entries, config_path, manifest_path, log_path, exe, cwd=None, shell_init=None, timeout=None, chunk_size=0):
+    if not entries or chunk_size <= 0 or len(entries) <= chunk_size:
+        return run_entries_with_benchmark_once(entries, config_path, manifest_path, log_path, exe, cwd=cwd, shell_init=shell_init, timeout=timeout)
+    rows = []
+    commands = []
+    for chunk_index, start in enumerate(range(0, len(entries), chunk_size)):
+        chunk = entries[start:start + chunk_size]
+        chunk_rows, command = run_entries_with_benchmark_once(
+            chunk,
+            chunked_path(config_path, chunk_index),
+            chunked_path(manifest_path, chunk_index),
+            chunked_path(log_path, chunk_index),
+            exe,
+            cwd=cwd,
+            shell_init=shell_init,
+            timeout=timeout,
+        )
+        rows.extend(chunk_rows)
+        commands.append(command)
+    return rows, commands
 
 
 def run_entries_with_streamk_example(entries, logs_dir, exe, cwd=None, shell_init=None, timeout=None):

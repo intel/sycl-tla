@@ -376,6 +376,23 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
     return constraints, env_caps, verified_hw_caps_path, probe_rows, probe_logs, probe_commands
 
 
+def benchmark_command_strings(command_or_commands):
+    if not command_or_commands:
+        return []
+    if isinstance(command_or_commands[0], (list, tuple)):
+        return [shell_join(command) for command in command_or_commands]
+    return [shell_join(command_or_commands)]
+
+
+def benchmark_log_paths(log_path, command_or_commands):
+    if not command_or_commands or not isinstance(command_or_commands[0], (list, tuple)):
+        return [str(log_path)]
+    return [
+        str(log_path.with_name(f"{log_path.stem}_part{chunk_index:03d}{log_path.suffix}"))
+        for chunk_index in range(len(command_or_commands))
+    ]
+
+
 def workflow(args):
     workspace = ensure_dir(Path(args.workspace).resolve())
     inputs_dir = ensure_dir(workspace / "inputs")
@@ -497,10 +514,10 @@ def workflow(args):
         screening_rows = []
         if screening_benchmark_entries:
             screening_log = logs_dir / "screening.log"
-            rows, command = run_entries_with_benchmark(screening_benchmark_entries, configs_dir / "screening.in", manifests_dir / "screening_manifest.json", screening_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
+            rows, command = run_entries_with_benchmark(screening_benchmark_entries, configs_dir / "screening.in", manifests_dir / "screening_manifest.json", screening_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout, chunk_size=args.benchmark_entry_chunk_size)
             screening_rows.extend(rows)
-            log_paths.append(str(screening_log))
-            benchmark_commands.append(shell_join(command))
+            log_paths.extend(benchmark_log_paths(screening_log, command))
+            benchmark_commands.extend(benchmark_command_strings(command))
         if screening_streamk_entries:
             rows, commands = run_entries_with_streamk_example(screening_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
             screening_rows.extend(rows)
@@ -515,10 +532,10 @@ def workflow(args):
                 confirm_rows = []
                 if confirm_benchmark_entries:
                     confirm_log = logs_dir / "confirm.log"
-                    rows, command = run_entries_with_benchmark(confirm_benchmark_entries, configs_dir / "confirm.in", manifests_dir / "confirm_manifest.json", confirm_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
+                    rows, command = run_entries_with_benchmark(confirm_benchmark_entries, configs_dir / "confirm.in", manifests_dir / "confirm_manifest.json", confirm_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout, chunk_size=args.benchmark_entry_chunk_size)
                     confirm_rows.extend(rows)
-                    log_paths.append(str(confirm_log))
-                    benchmark_commands.append(shell_join(command))
+                    log_paths.extend(benchmark_log_paths(confirm_log, command))
+                    benchmark_commands.extend(benchmark_command_strings(command))
                 if confirm_streamk_entries:
                     rows, commands = run_entries_with_streamk_example(confirm_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
                     confirm_rows.extend(rows)
@@ -600,6 +617,7 @@ def build_parser():
     parser.add_argument("--skip-run", action="store_true", help="Only emit generated artifacts without invoking the benchmark.")
     parser.add_argument("--dry-run", action="store_true", help="Run a minimal benchmark-backed screening smoke with a tiny shape set and no confirmation.")
     parser.add_argument("--timeout", type=int, default=600, help="Per-subprocess timeout in seconds for benchmark and example runs.")
+    parser.add_argument("--benchmark-entry-chunk-size", type=int, default=0, help="Split screening and confirmation benchmark config execution into chunks of N entries. 0 runs each stage as one subprocess.")
     parser.add_argument("--top-k", type=int, default=3, help="Top-k candidates kept for confirmation.")
     parser.add_argument("--confirm-runs", type=int, default=3, help="Number of confirmation attempts for top-k candidates.")
     parser.add_argument("--close-call-threshold", type=float, default=3.0, help="Gap threshold in percent for close-call labeling.")

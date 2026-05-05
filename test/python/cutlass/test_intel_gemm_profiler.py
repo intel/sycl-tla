@@ -1293,14 +1293,67 @@ class TestIntelGemmProfiler(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "timeout.log"
             process, timed_out, reason = profiler.run_benchmark(
-                ["python3", "-c", "import time; time.sleep(2)"],
+                ["python3", "-c", "import sys, time; sys.stdout.buffer.write(b'partial\\xff output\\n'); sys.stdout.flush(); time.sleep(2)"],
                 log_path,
                 timeout=1,
             )
+            log_text = log_path.read_text(encoding="utf-8")
 
         self.assertTrue(timed_out)
         self.assertEqual(process.returncode, 124)
         self.assertIn("timeout after 1s", reason)
+        self.assertIn("partial", log_text)
+        self.assertIn("TIMEOUT: timeout after 1s", log_text)
+
+    def test_run_entries_with_benchmark_supports_chunking(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fake_exe = tmp / "fake_benchmark.py"
+            fake_exe.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "config = sys.argv[1].split('=', 1)[1]\n"
+                "for line in open(config, encoding='utf-8'):\n"
+                "    bm = line.split('--bm_name=', 1)[1].split()[0]\n"
+                "    print(f'BM/{bm}/manual_time avg_runtime_ms=1.0 avg_tflops=2.0')\n",
+                encoding="utf-8",
+            )
+            fake_exe.chmod(0o755)
+            shape = {
+                "shape_id": "shape_a",
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 64,
+                "n": 4096,
+                "k": 4096,
+            }
+            candidate = {
+                "candidate_id": "cand_a",
+                "compiler_profile_id": "profile_a",
+                "kernel_name": "kernel_a",
+                "split_k": 1,
+            }
+            entries = [
+                {"bm_name": f"bm_{idx}", "stage": "screening", "attempt_index": idx, "shape": shape, "candidate": candidate}
+                for idx in range(5)
+            ]
+
+            rows, commands = profiler.run_entries_with_benchmark(
+                entries,
+                tmp / "screening.in",
+                tmp / "screening_manifest.json",
+                tmp / "screening.log",
+                str(fake_exe),
+                chunk_size=2,
+            )
+
+            self.assertEqual(len(rows), 5)
+            self.assertEqual(len(commands), 3)
+            self.assertTrue((tmp / "screening_part000.in").exists())
+            self.assertTrue((tmp / "screening_part002.log").exists())
 
     def test_run_entries_with_streamk_example_supports_streamk_and_dp_modes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
