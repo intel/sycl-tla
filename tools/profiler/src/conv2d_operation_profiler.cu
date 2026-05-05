@@ -39,6 +39,7 @@
 
 #include "cutlass/core_io.h"
 
+#include "cutlass/profiler/cuda_helpers.h"
 #include "cutlass/profiler/conv2d_operation_profiler.h"
 #include "cutlass/profiler/gpu_timer.h"
 /////////////////////////////////////////////////////////////////////////////////////////////////
