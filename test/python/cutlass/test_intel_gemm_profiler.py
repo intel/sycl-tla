@@ -877,6 +877,109 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertIn("bmg.large_tile.default", probe_ids)
         self.assertEqual(entries[0]["compiler_profile_id"], entries[0]["compiler_profile_probe_id"])
 
+    def test_static_probe_constraints_record_splitk_feedback(self):
+        constraints = profiler.default_constraints()
+        env_caps = {
+            "executables": {
+                "benchmark_available": True,
+                "streamk_example_available": False,
+            }
+        }
+
+        updated = profiler.apply_static_probe_constraints(constraints, env_caps)
+
+        self.assertEqual(updated["constraint_source"], "phase_a_static_probe")
+        self.assertEqual(updated["limits"]["max_split_k"], 1)
+        self.assertEqual(updated["allowed_values"]["split_k"], [1])
+        self.assertEqual(updated["probe_feedback"]["mode"], "static")
+        self.assertEqual(updated["probe_feedback"]["actions"][0]["action"], "limit_split_k")
+        self.assertEqual(updated["probe_feedback"]["actions"][0]["reason"], "streamk_example_unavailable")
+
+    def test_run_probe_constraints_record_pruning_feedback(self):
+        constraints = profiler.default_constraints()
+        static_constraints = profiler.apply_static_probe_constraints(
+            constraints,
+            {
+                "executables": {
+                    "benchmark_available": True,
+                    "streamk_example_available": True,
+                }
+            },
+        )
+        failing_candidate = "rcr_bf16bf16f32_tm64_tn128_tk32_sg4x4_st2_sk1"
+        anomalous_candidate = "rcr_bf16bf16f32_tm128_tn128_tk32_sg4x4_st2_sk1"
+        probe_rows = [
+            {
+                "candidate_id": failing_candidate,
+                "shape_id": "shape_a",
+                "status": "fail",
+                "failure_reason": "Disposition Failed",
+                "split_k": "1",
+                "stdout_log": "probe.log",
+            },
+            {
+                "candidate_id": "rcr_bf16bf16f32_tm8_tn64_tk32_sg1x4_st2_sk1",
+                "shape_id": "shape_b",
+                "status": "pass",
+                "avg_tflops": "10.0",
+                "split_k": "1",
+                "stdout_log": "probe.log",
+            },
+        ]
+        anomaly_report = {
+            "anomalies": [{"candidate_id": anomalous_candidate}],
+            "auto_block_rules": [
+                {
+                    "rule_id": f"probe.auto_block.anomaly.{anomalous_candidate}",
+                    "match": {
+                        "tile_m": 128,
+                        "tile_n": 128,
+                        "tile_k": 32,
+                        "sg_m": 4,
+                        "sg_n": 4,
+                        "split_k": 1,
+                    },
+                    "reason": "large_tile_slower_than_small_tile",
+                    "evidence_tflops": 1.0,
+                }
+            ],
+        }
+
+        updated = profiler.apply_run_probe_constraints(static_constraints, probe_rows, anomaly_report)
+        feedback = updated["probe_feedback"]
+
+        self.assertEqual(updated["constraint_source"], "phase_a_run_probe")
+        self.assertEqual(updated["limits"]["max_split_k"], 1)
+        self.assertEqual(feedback["mode"], "run")
+        self.assertEqual(feedback["probe_rows"], 2)
+        self.assertEqual(feedback["passed_probe_rows"], 1)
+        self.assertEqual(feedback["failed_probe_rows"], 1)
+        self.assertEqual(feedback["anomaly_count"], 1)
+        self.assertEqual(feedback["auto_block_rule_count"], 1)
+        self.assertEqual(feedback["blocked_rule_count"], 2)
+        action_reasons = {action["reason"] for action in feedback["actions"]}
+        self.assertIn("no_successful_split_k_probe", action_reasons)
+        self.assertIn("probe_failure", action_reasons)
+        self.assertIn("large_tile_slower_than_small_tile", action_reasons)
+        failure_rule = next(rule for rule in updated["blocked_rules"] if rule["rule_id"] == f"probe.blocked.{failing_candidate}")
+        self.assertEqual(failure_rule["source"], "phase_a_probe_failure")
+        self.assertEqual(failure_rule["evidence"]["stdout_log"], "probe.log")
+        self.assertTrue(
+            profiler.blocked(
+                {
+                    "tile_m": 128,
+                    "tile_n": 128,
+                    "tile_k": 32,
+                    "sg_m": 4,
+                    "sg_n": 4,
+                    "stages": 2,
+                    "split_k": 1,
+                    "grf_mode": 256,
+                },
+                updated,
+            )
+        )
+
     def test_dry_run_workflow_uses_minimal_shape_set_and_no_confirmation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             args = profiler.build_parser().parse_args(
@@ -896,6 +999,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(shapes_doc["source"], "dry_run")
             phase_a_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_a_summary.json")
             self.assertEqual(phase_a_summary["probe_mode"], "dry_run_off")
+            self.assertEqual(phase_a_summary["probe_feedback"]["mode"], "default")
             phase_b_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_b_summary.json")
             self.assertEqual(phase_b_summary["candidate_count"], 8)
 

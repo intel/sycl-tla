@@ -159,13 +159,16 @@ Use representative tile classes plus neighboring shapes:
 Results are transformed into:
 
 - `blocked_rules` in `safe_search_constraints.json`
+- `probe_feedback.actions[]` entries explaining why pruning changed
 
 Rule shape should stay declarative, for example:
 
 ```json
 {
   "rule_id": "block_copy.bad_16x256",
-  "match": { "tile_m": 16, "tile_n": 256 }
+  "match": { "tile_m": 16, "tile_n": 256 },
+  "reason": "probe_failure",
+  "source": "phase_a_probe_failure"
 }
 ```
 
@@ -336,6 +339,48 @@ If `stages = 3` is unstable or consistently slower, Phase 1 can clamp to `[1, 2]
 | `occupancy_probe` | yes | yes | optional |
 | `compiler_flags_probe` | yes | no | yes |
 | `prefetch_stages_probe` | yes | yes | no |
+
+## Probe feedback contract
+
+`safe_search_constraints.json` includes a `probe_feedback` object so Phase B can explain how Phase A changed pruning behavior.
+
+Minimal shape:
+
+```json
+{
+  "mode": "run",
+  "probe_rows": 4,
+  "passed_probe_rows": 3,
+  "failed_probe_rows": 1,
+  "anomaly_count": 1,
+  "auto_block_rule_count": 1,
+  "blocked_rule_count": 2,
+  "actions": [
+    {
+      "action": "limit_split_k",
+      "reason": "no_successful_split_k_probe",
+      "max_split_k": 1
+    },
+    {
+      "action": "block_candidate",
+      "reason": "probe_failure",
+      "rule_id": "probe.blocked.rcr_bf16bf16f32_tm64_tn128_tk32_sg4x4_st2_sk1",
+      "candidate_id": "rcr_bf16bf16f32_tm64_tn128_tk32_sg4x4_st2_sk1",
+      "shape_id": "rcr_bf16_64_4096_4096",
+      "status": "fail"
+    }
+  ]
+}
+```
+
+The same object is copied into `phase_a_summary.json` for easier dashboard/report consumption.
+
+Current implemented feedback actions:
+
+- `limit_split_k` with `reason=streamk_example_unavailable` in static probe mode.
+- `limit_split_k` with `reason=no_successful_split_k_probe` in run probe mode.
+- `block_candidate` with `reason=probe_failure` for failed probe rows.
+- `block_candidate` with anomaly reasons from `auto_block_rules`.
 
 ## Recommended execution order
 

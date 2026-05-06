@@ -198,6 +198,7 @@ def build_phase_a_summary(verified_hw_caps, constraints, probe_rows):
         "allowed_values": constraints["allowed_values"],
         "limits": constraints["limits"],
         "blocked_rules": constraints.get("blocked_rules", []),
+        "probe_feedback": constraints.get("probe_feedback", {}),
     }
 
 
