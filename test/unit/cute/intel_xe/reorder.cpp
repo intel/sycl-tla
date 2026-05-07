@@ -372,6 +372,17 @@ void pack_subbyte_to_bytes(cutlass::host_vector<SubbyteType>& src,
   }
 }
 
+// Helper: convert a raw 4-bit nibble to the appropriate integer value
+template <class SubbyteType>
+int nibble_to_int(uint8_t nibble) {
+  // For signed 4-bit types, sign-extend: values 8-15 map to -8 to -1
+  if constexpr (std::is_same_v<SubbyteType, int4_t>) {
+    return (nibble & 0x08) ? (static_cast<int>(nibble) - 16) : static_cast<int>(nibble);
+  } else {
+    return static_cast<int>(nibble);
+  }
+}
+
 // Helper: unpack bytes to sub-byte values on host
 template <class SubbyteType>
 void unpack_bytes_to_subbyte(cutlass::host_vector<uint8_t>& packed,
@@ -379,9 +390,9 @@ void unpack_bytes_to_subbyte(cutlass::host_vector<uint8_t>& packed,
 {
   for (size_t i = 0; i < packed.size(); ++i) {
     uint8_t byte = packed[i];
-    dst[i * 2]     = SubbyteType(byte & 0x0F);
+    dst[i * 2]     = SubbyteType(nibble_to_int<SubbyteType>(byte & 0x0F));
     if (i * 2 + 1 < dst.size()) {
-      dst[i * 2 + 1] = SubbyteType((byte >> 4) & 0x0F);
+      dst[i * 2 + 1] = SubbyteType(nibble_to_int<SubbyteType>((byte >> 4) & 0x0F));
     }
   }
 }
