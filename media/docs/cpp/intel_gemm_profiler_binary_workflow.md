@@ -14,6 +14,8 @@ The workflow must stay compatible with the current repository reality:
 - benchmark binaries already consume `--config_file=...`
 - benchmark logs already expose `avg_runtime_ms`, `avg_tflops`, and `avg_throughput`
 
+The native `tools/profiler/cutlass_profiler` path is still useful as a validation and compatibility track. It now has a remote BMG proof for one generated SYCL GEMM operation with `reference_host` verification and a real profile CSV row, but the Phase 1 search workflow continues to use generated benchmark binaries as the primary tuning execution boundary.
+
 ## Pipeline overview
 
 The Phase 1 flow is:

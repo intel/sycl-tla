@@ -37,6 +37,7 @@ The current workflow also supports:
 - optional screening/confirmation routing to preflighted per-batch benchmark binaries through `--use-candidate-build-preflight-benchmarks`
 - generated Intel Xe `StageCountAuto` candidates represented as `stages=0`
 - generated candidate coverage and exception summaries in `gemm_candidate_space.json`
+- native C++ `tools/profiler/cutlass_profiler` generated GEMM profiling with host-reference verification
 
 Confirmation smoke proof:
 
@@ -98,6 +99,22 @@ Generated StreamK limitation tracking:
 - `candidate_exception_summary` aggregates this by reason and includes sample kernel names.
 - `candidate_coverage` records catalog, matched-signature, accepted, blocked, and exception counts for auditability.
 - BF16/RCR level1 artifact smoke recorded 76 `intel_xe_generated_streamk_tile_scheduler_unsupported` exceptions and 28 accepted candidates.
+
+Native `tools/profiler/cutlass_profiler` GEMM proof:
+
+- remote BMG node
+- generated manifest filtered to 1 operation
+- operation: `cutlass3x_xe20_tensorop_gemm_bf16_bf16_f32_f32_f32_128x128x32_1x1x1_0_tnt_align8`
+- shape: `m=128, n=128, k=32`
+- tensors: `A=bf16:row, B=bf16:column, C=f32:row, D=f32:row`
+- verification provider: `reference_host`
+- disposition: `passed`
+- status: `success`
+- runtime: `0.006636 ms`
+- throughput: `162.951 GFLOP/s`
+- output: `/home/intel/tianfeng/cutlas_profile_validation/profiler_gemm_f32d.gemm.csv`
+
+This proof is separate from the Python-orchestrated benchmark workflow: it validates the native CUTLASS profiler executable path can register, run, verify, time, and report a generated SYCL GEMM operation. A `D=bf16` generated kernel was also able to profile but reported `not_verified`; broader `D=bf16` native reference coverage remains a follow-up item.
 
 ## MVP scope
 
@@ -200,10 +217,12 @@ Failure handling:
 Required capability:
 
 - generated candidates can report `verify_status`
+- native `cutlass_profiler` can report a verified GEMM row for at least one generated SYCL GEMM operation
 
 Minimum proof:
 
 - at least one target shape completes with `verify_status=pass`
+- at least one native `tools/profiler/cutlass_profiler` generated GEMM row completes with `Disposition=passed`
 
 ### 8. Selection path
 

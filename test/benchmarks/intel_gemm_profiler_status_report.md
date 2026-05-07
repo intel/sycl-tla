@@ -4,7 +4,7 @@
 
 当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强和 candidate batch build/routing** 的主要工作。
 
-现阶段代码处于 **GEMM MVP 主链路已端到端打通，可继续做性能可信度和非 GEMM family 扩展** 的状态。
+现阶段代码处于 **GEMM MVP 主链路已端到端打通，native `tools/profiler/cutlass_profiler` 已完成单 GEMM generated kernel 的 SYCL 正确性+性能闭环，可继续做非 GEMM family 扩展** 的状态。
 
 最新全量 Ali workbook generated workflow 已在远端 BMG 节点通过：
 
@@ -19,6 +19,22 @@
 - 0 missing dispatch
 
 本地 profiler Python 回归当前为 **74/74 OK**。
+
+补充 native C++ `tools/profiler/cutlass_profiler` GEMM smoke 也已在远端 BMG 节点通过：
+
+- generated manifest 使用 `KERNEL_FILTER_FILE` 精确注册 1 个 GEMM operation
+- operation：`cutlass3x_xe20_tensorop_gemm_bf16_bf16_f32_f32_f32_128x128x32_1x1x1_0_tnt_align8`
+- shape：`m=128, n=128, k=32`
+- tensors：`A=bf16:row, B=bf16:column, C=f32:row, D=f32:row`
+- verification provider：`reference_host`
+- `Disposition: Passed`
+- `reference_host: Passed`
+- `Status: Success`
+- runtime：`0.006636 ms`
+- math throughput：`162.951 GFLOP/s`
+- output CSV：`/home/intel/tianfeng/cutlas_profile_validation/profiler_gemm_f32d.gemm.csv`
+
+这个 smoke 证明 `tools/profiler` 本体已经可以在 Intel/SYCL 路径上执行 generated GEMM operation、运行 host reference correctness，并写出真实 profile row。之前 `D=bf16` generated kernel 可 profile 但显示 `not_verified`，当前 verified smoke 先选用 `D=f32` kernel，后续若要覆盖 `D=bf16` reference 仍需单独补验证路径。
 
 补充确认阶段 smoke 也已在远端 BMG 节点通过：
 
@@ -321,6 +337,7 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 - timeout robustness
 - confirmation selector evidence
 - 多个 tools/profiler family 的 SYCL build/CLI 纳入
+- native `tools/profiler/cutlass_profiler` generated GEMM host-reference verified profile row
 - 本地与远端回归闭环
 
-项目现在的状态是：**GEMM MVP 已能作为离线调优基线使用，后续重点转向结果可信度、Phase A probe、搜索空间扩展、非 GEMM family 真实运行能力和 runtime dispatch table 集成。**
+项目现在的状态是：**GEMM MVP 已能作为离线调优基线使用，native C++ profiler 的 GEMM 主线也已具备最小 verified profile 能力；后续重点转向 Phase A probe、搜索空间扩展、非 GEMM family 真实运行能力和 runtime dispatch table 集成。**
