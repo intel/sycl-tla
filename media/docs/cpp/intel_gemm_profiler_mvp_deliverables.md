@@ -271,6 +271,7 @@ For the first successful MVP run, the minimum artifact set is:
 | `gemm_profile_results.csv` | normalized measurements |
 | `gemm_dispatch_table.json` | final selection result |
 | `optimal_dispatch_table.json` | alias of the final best-dispatch artifact for downstream consumers; accepted by runtime dispatch lookup |
+| `gemm_product_bundle_manifest.json` | product handoff manifest listing required/optional artifacts and the dispatch lookup CLI template |
 | `reference_comparison.json` | optional comparison against Ali/reference performance data |
 | `run_summary.json` | row counts, pass/fail counts, benchmark commands, and log paths |
 | `phase_a_summary.json` | Phase A/probe summary |

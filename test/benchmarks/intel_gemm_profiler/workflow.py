@@ -39,7 +39,7 @@ if __package__ in (None, ""):
     from intel_gemm_profiler.dispatch import lookup_dispatch_entry
     from intel_gemm_profiler.runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
-    from intel_gemm_profiler.utils import ensure_dir, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
+    from intel_gemm_profiler.utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
     from intel_gemm_profiler.schemas import SEARCH_RUNTIME_SCHEMA
 else:
     from .catalog import SEED_KERNELS, build_kernel_catalog
@@ -67,7 +67,7 @@ else:
     from .dispatch import lookup_dispatch_entry
     from .runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
-    from .utils import ensure_dir, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
+    from .utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
     from .schemas import SEARCH_RUNTIME_SCHEMA
 
 
@@ -543,6 +543,98 @@ def benchmark_log_paths(log_path, command_or_commands):
     ]
 
 
+def artifact_record(name, path, purpose, required=True):
+    if not path:
+        return {
+            "name": name,
+            "path": "",
+            "required": required,
+            "exists": False,
+            "purpose": purpose,
+        }
+    artifact_path = Path(path)
+    return {
+        "name": name,
+        "path": str(artifact_path),
+        "required": required,
+        "exists": artifact_path.exists(),
+        "purpose": purpose,
+    }
+
+
+def build_artifact_bundle_manifest(workspace, artifacts):
+    required_artifacts = [
+        artifact_record("gemm_target_shapes", artifacts["target_shapes"], "Requested exact GEMM shape set."),
+        artifact_record("safe_search_constraints", artifacts["constraints"], "Safe Phase A / Phase B search boundary."),
+        artifact_record("compiler_profiles", artifacts["compiler_profiles"], "Compiler and runtime profile presets."),
+        artifact_record("kernel_catalog", artifacts["kernel_catalog"], "Candidate kernel catalog used for this run."),
+        artifact_record("safe_candidates", artifacts["safe_candidates"], "Filtered buildable/searchable candidate space."),
+        artifact_record("candidate_build_manifest", artifacts["build_manifest"], "Selected generated kernels and build metadata."),
+        artifact_record("gemm_profile_results", artifacts["results_csv"], "Normalized benchmark/profile result rows."),
+        artifact_record("gemm_dispatch_table", artifacts["dispatch_table"], "Selected exact-shape dispatch entries."),
+        artifact_record("optimal_dispatch_table", artifacts["optimal_dispatch_table"], "Product-facing best dispatch artifact."),
+        artifact_record("run_summary", artifacts["run_summary"], "Run row counts, commands, and logs."),
+        artifact_record("phase_a_summary", artifacts["phase_a_summary"], "Probe and hardware constraint summary."),
+        artifact_record("phase_b_summary", artifacts["phase_b_summary"], "Candidate/search/dispatch summary."),
+    ]
+    optional_artifacts = [
+        artifact_record("reference_comparison", artifacts["reference_comparison"], "Optional reference-vs-dispatch comparison.", required=False),
+        artifact_record("candidate_build_summary", artifacts["candidate_build_summary"], "Candidate benchmark aggregate build status.", required=False),
+        artifact_record("candidate_build_preflight_summary", artifacts["candidate_build_preflight_summary"], "Per-batch candidate build preflight status.", required=False),
+        artifact_record("verified_hw_caps", artifacts["verified_hw_caps"], "Collected or probed hardware capability metadata.", required=False),
+    ]
+    lookup_args = [
+        "python3",
+        "test/benchmarks/intel_gemm_profiler.py",
+        "--lookup-dispatch-table",
+        artifacts["optimal_dispatch_table"],
+        "--lookup-layout",
+        "<layout>",
+        "--lookup-dtype-a",
+        "<dtype_a>",
+        "--lookup-dtype-b",
+        "<dtype_b>",
+        "--lookup-dtype-c",
+        "<dtype_c>",
+        "--lookup-dtype-acc",
+        "<dtype_acc>",
+        "--lookup-m",
+        "<m>",
+        "--lookup-n",
+        "<n>",
+        "--lookup-k",
+        "<k>",
+        "--fallback-candidate-id",
+        "<optional_fallback_candidate_id>",
+    ]
+    return {
+        "schema_version": SEARCH_RUNTIME_SCHEMA["schema_version"],
+        "generated_at": now_iso(),
+        "bundle_id": f"intel_gemm_product_bundle_{Path(workspace).name}",
+        "workspace": str(workspace),
+        "required_artifacts": required_artifacts,
+        "optional_artifacts": optional_artifacts,
+        "missing_required_artifacts": [
+            artifact["name"] for artifact in required_artifacts if not artifact["exists"]
+        ],
+        "missing_optional_artifacts": [
+            artifact["name"] for artifact in optional_artifacts if not artifact["exists"]
+        ],
+        "runtime_lookup": {
+            "dispatch_table": artifacts["optimal_dispatch_table"],
+            "key_fields": ["layout", "dtype_a", "dtype_b", "dtype_c", "dtype_acc", "m", "n", "k"],
+            "cli_args_template": lookup_args,
+            "cli_template": shell_join(lookup_args),
+            "fallback_behavior": "Exact shape miss returns status=missing unless --fallback-candidate-id is set, in which case status=fallback is returned with reason=shape_not_found.",
+        },
+        "handoff_notes": [
+            "Use optimal_dispatch_table.json as the product-facing dispatch artifact.",
+            "Keep gemm_profile_results.csv and phase_b_summary.json with the dispatch table for auditability.",
+            "Do not silently substitute a kernel on lookup miss; consume the explicit missing/fallback status.",
+        ],
+    }
+
+
 def workflow(args):
     if not args.workspace:
         raise ValueError("--workspace is required unless --lookup-dispatch-table is used.")
@@ -748,11 +840,17 @@ def workflow(args):
         )
     summary = build_run_summary(all_rows, dispatch_table, benchmark_commands, log_paths)
     write_json(reports_dir / "run_summary.json", summary)
-    write_json(reports_dir / "phase_a_summary.json", build_phase_a_summary(env_caps, constraints, probe_rows))
-    write_json(reports_dir / "phase_b_summary.json", build_phase_b_summary(candidate_space, dispatch_table, summary))
-    return {
+    phase_a_summary_path = reports_dir / "phase_a_summary.json"
+    phase_b_summary_path = reports_dir / "phase_b_summary.json"
+    run_summary_path = reports_dir / "run_summary.json"
+    write_json(phase_a_summary_path, build_phase_a_summary(env_caps, constraints, probe_rows))
+    write_json(phase_b_summary_path, build_phase_b_summary(candidate_space, dispatch_table, summary))
+    outputs = {
         "workspace": str(workspace),
         "search_runtime_schema": str(inputs_dir / "search_runtime_schema.json"),
+        "target_shapes": str(inputs_dir / "gemm_target_shapes.json"),
+        "constraints": str(inputs_dir / "safe_search_constraints.json"),
+        "compiler_profiles": str(inputs_dir / "compiler_profiles.json"),
         "kernel_catalog": str(reports_dir / "kernel_catalog.json"),
         "candidate_space": str(reports_dir / "gemm_candidate_space.json"),
         "build_manifest": str(reports_dir / "candidate_build_manifest.json"),
@@ -769,11 +867,16 @@ def workflow(args):
         "optimal_dispatch_table": str(reports_dir / "optimal_dispatch_table.json"),
         "reference_doc": str(reference_doc_path) if reference_doc is not None else "",
         "reference_comparison": str(reports_dir / "reference_comparison.json") if reference_doc is not None else "",
-        "phase_a_summary": str(reports_dir / "phase_a_summary.json"),
-        "phase_b_summary": str(reports_dir / "phase_b_summary.json"),
-        "summary": str(reports_dir / "run_summary.json"),
+        "phase_a_summary": str(phase_a_summary_path),
+        "phase_b_summary": str(phase_b_summary_path),
+        "run_summary": str(run_summary_path),
+        "summary": str(run_summary_path),
         "dry_run": dry_run_mode,
     }
+    artifact_bundle_manifest_path = reports_dir / "gemm_product_bundle_manifest.json"
+    write_json(artifact_bundle_manifest_path, build_artifact_bundle_manifest(workspace, outputs))
+    outputs["artifact_bundle_manifest"] = str(artifact_bundle_manifest_path)
+    return outputs
 
 
 def build_parser():

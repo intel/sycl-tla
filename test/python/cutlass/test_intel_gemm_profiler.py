@@ -1300,6 +1300,21 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(phase_a_summary["probe_feedback"]["mode"], "default")
             phase_b_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_b_summary.json")
             self.assertEqual(phase_b_summary["candidate_count"], 8)
+            bundle = profiler.read_json(Path(outputs["artifact_bundle_manifest"]))
+            self.assertEqual(bundle["schema_version"], profiler.SCHEMA_VERSION)
+            self.assertEqual(bundle["workspace"], str(Path(tmpdir).resolve()))
+            self.assertEqual(bundle["missing_required_artifacts"], [])
+            required_names = {artifact["name"] for artifact in bundle["required_artifacts"]}
+            self.assertIn("optimal_dispatch_table", required_names)
+            self.assertIn("gemm_profile_results", required_names)
+            self.assertIn("phase_b_summary", required_names)
+            self.assertIn("reference_comparison", bundle["missing_optional_artifacts"])
+            self.assertEqual(
+                bundle["runtime_lookup"]["key_fields"],
+                ["layout", "dtype_a", "dtype_b", "dtype_c", "dtype_acc", "m", "n", "k"],
+            )
+            self.assertIn("--lookup-dispatch-table", bundle["runtime_lookup"]["cli_template"])
+            self.assertIn(outputs["optimal_dispatch_table"], bundle["runtime_lookup"]["cli_args_template"])
 
     def test_skip_run_workflow_can_emit_generator_backed_catalog(self):
         with tempfile.TemporaryDirectory() as tmpdir:

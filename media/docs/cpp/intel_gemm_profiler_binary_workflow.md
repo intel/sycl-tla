@@ -234,6 +234,23 @@ python3 test/benchmarks/intel_gemm_profiler.py \
 
 The CLI prints a JSON result. Exact hits return `status=found` and the selected dispatch entry. Misses return `status=missing`, or `status=fallback` when `--fallback-candidate-id` is provided.
 
+### `ProductBundleManifest`
+
+Input:
+
+- generated workflow artifacts under `<workspace>/inputs` and `<workspace>/reports`
+
+Output:
+
+- `reports/gemm_product_bundle_manifest.json`
+
+Responsibility:
+
+- list product handoff artifacts with path, purpose, required/optional classification, and existence status
+- surface `missing_required_artifacts` and `missing_optional_artifacts`
+- include the product-facing dispatch lookup CLI template
+- remind downstream consumers to keep profile CSV and phase summaries with the dispatch table for auditability
+
 ## Workspace layout
 
 The profiler workflow should use a dedicated workspace under a generated run directory.
@@ -271,6 +288,7 @@ Recommended structure:
     gemm_profile_results.csv
     gemm_dispatch_table.json
     optimal_dispatch_table.json
+    gemm_product_bundle_manifest.json
     run_summary.json
 ```
 

@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强、candidate batch build/routing 和 runtime dispatch lookup CLI** 的主要工作。
+当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强、candidate batch build/routing、runtime dispatch lookup CLI 和 product bundle manifest** 的主要工作。
 
 现阶段代码处于 **GEMM MVP 主链路已端到端打通，native `tools/profiler/cutlass_profiler` 已完成单 GEMM generated kernel 的 SYCL 正确性+性能闭环，并具备产品化可调用的 exact-shape runtime dispatch table lookup/fallback CLI** 的状态。
 
@@ -326,6 +326,7 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 - exact-shape 命中返回 selected dispatch entry
 - shape miss 时返回显式 `missing` 或 `fallback` 结果，包含 fallback reason 和 fallback candidate id
 - CLI 入口：`python3 test/benchmarks/intel_gemm_profiler.py --lookup-dispatch-table <optimal_dispatch_table.json> --lookup-m ... --lookup-n ... --lookup-k ...`
+- 每次 workflow 现在都会写出 `reports/gemm_product_bundle_manifest.json`，集中列出交付 artifacts、缺失项和 lookup CLI template
 
 仍未完成的是把该 helper 接入真实推理 runtime 的发布/加载流程。
 
