@@ -137,6 +137,7 @@ Failure handling:
 - Failed summaries include `status`, `failure_step`, `failure_reason`, `selected_kernel_count`, `kernel_filter_file`, and per-step command/log/returncode metadata.
 - `--candidate-build-batch-size` can emit additional `selected_kernel_filter_partXXX.list` files and `selected_kernel_batches` metadata for large-catalog preflight and retry isolation.
 - `candidate_build_plan.json` includes `batch_preflight_plans` with per-batch configure/build commands and isolated build directories when batch artifacts are enabled.
+- `--run-candidate-build-preflight` executes those plans and writes `candidate_build_preflight_summary.json` before raising on failed batch preflight.
 
 ### 7. Correctness path
 

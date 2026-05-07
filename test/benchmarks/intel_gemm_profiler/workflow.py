@@ -207,6 +207,9 @@ def build_batch_preflight_plans(build_manifest, source_dir, build_dir, base_cmak
         )
         plans.append(
             {
+                "schema_version": build_manifest["schema_version"],
+                "generated_at": build_manifest["generated_at"],
+                "build_target": build_target,
                 "batch_id": batch["batch_id"],
                 "batch_index": batch["batch_index"],
                 "kernel_count": batch["kernel_count"],
@@ -268,11 +271,11 @@ def build_candidate_build_plan(
     }
 
 
-def execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=None):
+def execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=None, log_prefix="candidate_build"):
     ensure_dir(Path(log_dir))
     steps = [
-        ("configure", build_plan["configure_command"], Path(log_dir) / "candidate_build_configure.log"),
-        ("build", build_plan["build_command"], Path(log_dir) / "candidate_build.log"),
+        ("configure", build_plan["configure_command"], Path(log_dir) / f"{log_prefix}_configure.log"),
+        ("build", build_plan["build_command"], Path(log_dir) / f"{log_prefix}.log"),
     ]
     results = []
     for step, command, log_path in steps:
@@ -299,6 +302,7 @@ def execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=Non
                 "benchmark_exe": build_plan["benchmark_exe"],
                 "selected_kernel_count": build_plan.get("selected_kernel_count", ""),
                 "kernel_filter_file": build_plan.get("kernel_filter_file", ""),
+                "batch_id": build_plan.get("batch_id", ""),
                 "steps": results,
             }
     return {
@@ -309,7 +313,46 @@ def execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=Non
         "benchmark_exe": build_plan["benchmark_exe"],
         "selected_kernel_count": build_plan.get("selected_kernel_count", ""),
         "kernel_filter_file": build_plan.get("kernel_filter_file", ""),
+        "batch_id": build_plan.get("batch_id", ""),
         "steps": results,
+    }
+
+
+def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", timeout=None):
+    preflight_plans = build_plan.get("batch_preflight_plans", [])
+    if not preflight_plans:
+        return {
+            "schema_version": build_plan["schema_version"],
+            "generated_at": build_plan["generated_at"],
+            "status": "not_run",
+            "reason": "no batch_preflight_plans",
+            "batch_count": 0,
+            "batches": [],
+        }
+    batches = []
+    for plan in preflight_plans:
+        summary = execute_candidate_build_plan(
+            plan,
+            log_dir,
+            shell_init=shell_init,
+            timeout=timeout,
+            log_prefix=f"candidate_build_preflight_{plan['batch_id']}",
+        )
+        summary["batch_id"] = plan["batch_id"]
+        summary["batch_index"] = plan["batch_index"]
+        summary["kernel_count"] = plan["kernel_count"]
+        batches.append(summary)
+    failed = [batch for batch in batches if batch["status"] != "pass"]
+    status = "pass" if not failed else ("timeout" if any(batch["status"] == "timeout" for batch in failed) else "fail")
+    return {
+        "schema_version": build_plan["schema_version"],
+        "generated_at": build_plan["generated_at"],
+        "status": status,
+        "batch_count": len(batches),
+        "passed_batches": sum(1 for batch in batches if batch["status"] == "pass"),
+        "failed_batches": len(failed),
+        "failure_reason": failed[0].get("failure_reason", "") if failed else "",
+        "batches": batches,
     }
 
 
@@ -551,8 +594,22 @@ def workflow(args):
     )
     write_json(candidate_build_plan_path, candidate_build_plan)
     candidate_build_summary_path = reports_dir / "candidate_build_summary.json"
+    candidate_build_preflight_summary_path = reports_dir / "candidate_build_preflight_summary.json"
     candidate_build_summary = {"status": "not_run", "reason": "build_candidate_benchmark disabled"}
+    candidate_build_preflight_summary = {"status": "not_run", "reason": "run_candidate_build_preflight disabled"}
     effective_benchmark_exe = args.benchmark_exe
+    if args.run_candidate_build_preflight:
+        candidate_build_preflight_summary = execute_candidate_build_preflight_plans(
+            candidate_build_plan,
+            logs_dir,
+            shell_init=args.shell_init,
+            timeout=args.timeout,
+        )
+        write_json(candidate_build_preflight_summary_path, candidate_build_preflight_summary)
+        if candidate_build_preflight_summary.get("status") not in {"pass", "not_run"}:
+            raise RuntimeError(candidate_build_preflight_summary["failure_reason"])
+    else:
+        write_json(candidate_build_preflight_summary_path, candidate_build_preflight_summary)
     if args.build_candidate_benchmark:
         candidate_build_summary = execute_candidate_build_plan(
             candidate_build_plan,
@@ -643,6 +700,7 @@ def workflow(args):
         "candidate_build_cmake_config": str(candidate_build_cmake_config_path),
         "candidate_build_plan": str(candidate_build_plan_path),
         "candidate_build_summary": str(candidate_build_summary_path),
+        "candidate_build_preflight_summary": str(candidate_build_preflight_summary_path),
         "safe_candidates": str(reports_dir / "bmg_safe_candidates.json"),
         "verified_hw_caps": str(verified_hw_caps_path),
         "results_csv": str(reports_dir / "gemm_profile_results.csv"),
@@ -681,6 +739,7 @@ def build_parser():
     parser.add_argument("--cmake-cxx-compiler", default="", help="Optional CMAKE_CXX_COMPILER value injected into the generated candidate benchmark CMake build plan, e.g. 'icpx' for oneAPI SYCL builds.")
     parser.add_argument("--build-candidate-benchmark", action="store_true", help="Execute the generated candidate benchmark CMake configure/build plan before Phase B runs, then use the built benchmark executable for screening and confirmation.")
     parser.add_argument("--candidate-build-batch-size", type=int, default=0, help="Emit additional selected-kernel filter files in batches of N kernels for isolated generated benchmark build preflight/retry. 0 disables batch artifacts.")
+    parser.add_argument("--run-candidate-build-preflight", action="store_true", help="Execute per-batch candidate benchmark preflight build plans before the aggregate candidate benchmark build. Requires --candidate-build-batch-size to produce batch plans.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")

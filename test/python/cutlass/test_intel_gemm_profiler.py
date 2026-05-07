@@ -1055,6 +1055,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             cmake_config = profiler.read_json(Path(outputs["candidate_build_cmake_config"]))
             build_plan = profiler.read_json(Path(outputs["candidate_build_plan"]))
             build_summary = profiler.read_json(Path(outputs["candidate_build_summary"]))
+            preflight_summary = profiler.read_json(Path(outputs["candidate_build_preflight_summary"]))
             selected_kernel_list = Path(outputs["selected_kernel_list"]).read_text(encoding="utf-8").splitlines()
             selected_kernel_filter = Path(outputs["selected_kernel_filter"]).read_text(encoding="utf-8").splitlines()
 
@@ -1103,6 +1104,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertIn(f"-DKERNEL_FILTER_FILE={outputs['selected_kernel_filter']}", build_plan["configure_command"])
             self.assertEqual(build_plan["build_command"][4], "cutlass_benchmarks_gemm_sycl")
             self.assertEqual(build_summary["status"], "not_run")
+            self.assertEqual(preflight_summary["status"], "not_run")
 
     def test_execute_candidate_build_plan_runs_configure_and_build_steps(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1149,6 +1151,54 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(summary["steps"][1]["returncode"], 7)
         self.assertTrue(build_log_text.strip().endswith("build failed"))
 
+    def test_execute_candidate_build_preflight_plans_reports_batch_status(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            build_plan = {
+                "schema_version": profiler.SCHEMA_VERSION,
+                "generated_at": profiler.now_iso(),
+                "batch_preflight_plans": [
+                    {
+                        "schema_version": profiler.SCHEMA_VERSION,
+                        "generated_at": profiler.now_iso(),
+                        "build_target": "fake_benchmark",
+                        "batch_id": "selected_kernel_batch_000",
+                        "batch_index": 0,
+                        "kernel_count": 2,
+                        "benchmark_exe": str(tmp / "batch0" / "fake_benchmark"),
+                        "kernel_filter_file": str(tmp / "selected_kernel_filter_part000.list"),
+                        "configure_command": ["python3", "-c", "print('configure batch0')"],
+                        "build_command": ["python3", "-c", "print('build batch0')"],
+                    },
+                    {
+                        "schema_version": profiler.SCHEMA_VERSION,
+                        "generated_at": profiler.now_iso(),
+                        "build_target": "fake_benchmark",
+                        "batch_id": "selected_kernel_batch_001",
+                        "batch_index": 1,
+                        "kernel_count": 1,
+                        "benchmark_exe": str(tmp / "batch1" / "fake_benchmark"),
+                        "kernel_filter_file": str(tmp / "selected_kernel_filter_part001.list"),
+                        "configure_command": ["python3", "-c", "print('configure batch1')"],
+                        "build_command": ["python3", "-c", "import sys; print('build batch1 failed'); sys.exit(9)"],
+                    },
+                ],
+            }
+
+            summary = profiler.execute_candidate_build_preflight_plans(build_plan, tmp / "logs")
+            failed_log_text = Path(summary["batches"][1]["steps"][1]["log"]).read_text(encoding="utf-8")
+
+        self.assertEqual(summary["status"], "fail")
+        self.assertEqual(summary["batch_count"], 2)
+        self.assertEqual(summary["passed_batches"], 1)
+        self.assertEqual(summary["failed_batches"], 1)
+        self.assertEqual(summary["batches"][0]["status"], "pass")
+        self.assertEqual(summary["batches"][1]["status"], "fail")
+        self.assertEqual(summary["batches"][1]["batch_id"], "selected_kernel_batch_001")
+        self.assertEqual(summary["batches"][1]["kernel_count"], 1)
+        self.assertIn("candidate_build_preflight_selected_kernel_batch_001.log", summary["batches"][1]["steps"][1]["log"])
+        self.assertTrue(failed_log_text.strip().endswith("build batch1 failed"))
+
     def test_workflow_persists_candidate_build_failure_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -1167,7 +1217,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
                     str(tmp / "workspace"),
                     "--dtype",
                     "bf16",
-                    "--dry-run",
+                    "--skip-run",
                     "--probe-mode",
                     "off",
                     "--kernel-catalog-source",
@@ -1209,6 +1259,96 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(summary["steps"][0]["status"], "pass")
         self.assertEqual(summary["steps"][1]["status"], "fail")
         self.assertEqual(summary["steps"][1]["returncode"], 5)
+        self.assertTrue(build_log_exists)
+
+    def test_workflow_persists_candidate_build_preflight_failure_summary(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    str(tmp / "workspace"),
+                    "--dtype",
+                    "bf16",
+                    "--dry-run",
+                    "--probe-mode",
+                    "off",
+                    "--kernel-catalog-source",
+                    "generator",
+                    "--candidate-build-batch-size",
+                    "1",
+                    "--run-candidate-build-preflight",
+                    "--cmake-source-dir",
+                    str(tmp),
+                    "--benchmark-build-dir",
+                    str(tmp / "build"),
+                ]
+            )
+            fake_log = tmp / "fake_preflight_build.log"
+
+            def fake_execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", timeout=None):
+                fake_log.write_text("preflight failed\n", encoding="utf-8")
+                batches = []
+                preflight_plans = build_plan["batch_preflight_plans"] or [
+                    {
+                        "build_target": "fake_benchmark",
+                        "benchmark_exe": str(tmp / "fake_benchmark"),
+                        "batch_id": "selected_kernel_batch_000",
+                        "kernel_count": 1,
+                    }
+                ]
+                for index, plan in enumerate(preflight_plans):
+                    batches.append(
+                        {
+                            "schema_version": profiler.SCHEMA_VERSION,
+                            "generated_at": profiler.now_iso(),
+                            "status": "fail",
+                            "failure_step": "build",
+                            "failure_reason": f"Candidate benchmark build failed with status fail. See {fake_log}.",
+                            "build_target": plan["build_target"],
+                            "benchmark_exe": plan["benchmark_exe"],
+                            "batch_id": plan["batch_id"],
+                            "batch_index": index,
+                            "kernel_count": plan["kernel_count"],
+                            "steps": [
+                                {"step": "configure", "status": "pass", "returncode": 0, "command": "configure", "log": str(fake_log)},
+                                {"step": "build", "status": "fail", "returncode": 6, "command": "build", "log": str(fake_log)},
+                            ],
+                        }
+                    )
+                return {
+                    "schema_version": profiler.SCHEMA_VERSION,
+                    "generated_at": profiler.now_iso(),
+                    "status": "fail",
+                    "batch_count": len(batches),
+                    "passed_batches": 0,
+                    "failed_batches": len(batches),
+                    "failure_reason": batches[0]["failure_reason"],
+                    "batches": batches,
+                }
+
+            workflow_globals = profiler.workflow.__globals__
+            original_workflow_execute_preflight = workflow_globals["execute_candidate_build_preflight_plans"]
+            profiler.execute_candidate_build_preflight_plans = fake_execute_candidate_build_preflight_plans
+            workflow_globals["execute_candidate_build_preflight_plans"] = fake_execute_candidate_build_preflight_plans
+            try:
+                with self.assertRaisesRegex(RuntimeError, "Candidate benchmark build failed"):
+                    profiler.workflow(args)
+            finally:
+                profiler.execute_candidate_build_preflight_plans = original_workflow_execute_preflight
+                workflow_globals["execute_candidate_build_preflight_plans"] = original_workflow_execute_preflight
+
+            summary_path = tmp / "workspace" / "reports" / "candidate_build_preflight_summary.json"
+            summary = profiler.read_json(summary_path)
+            build_log_exists = Path(summary["batches"][0]["steps"][1]["log"]).exists()
+
+        self.assertEqual(summary["status"], "fail")
+        self.assertGreaterEqual(summary["batch_count"], 1)
+        self.assertEqual(summary["passed_batches"], 0)
+        self.assertEqual(summary["failed_batches"], summary["batch_count"])
+        self.assertEqual(summary["batches"][0]["status"], "fail")
+        self.assertEqual(summary["batches"][0]["batch_id"], "selected_kernel_batch_000")
+        self.assertEqual(summary["batches"][0]["steps"][1]["returncode"], 6)
         self.assertTrue(build_log_exists)
 
     def test_build_candidate_benchmark_requires_phase_a_inputs_or_probe_off(self):

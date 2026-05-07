@@ -128,9 +128,12 @@ Responsibility:
 - persist configure/build success or failure before surfacing workflow errors
 - retain the failing step, return code, command, log path, selected kernel count, and kernel filter file
 - emit optional selected-kernel batch filter files for isolated large-catalog preflight or retry
+- optionally execute batch preflight plans and persist `candidate_build_preflight_summary.json`
 - keep incremental rebuild support
 
 `--candidate-build-batch-size=N` does not change the default aggregate benchmark executable used by the current screening path. It adds `selected_kernel_batches` to `candidate_build_manifest.json`, writes `selected_kernel_filter_partXXX.list` files, and records `batch_preflight_plans` in `candidate_build_plan.json` so larger generated catalogs can be bisected or preflighted in smaller compile groups. Each preflight plan has its own build directory under `candidate_batch_preflight/<batch_id>/`.
+
+`--run-candidate-build-preflight` executes those per-batch plans before the aggregate candidate build. The workflow writes `candidate_build_preflight_summary.json` before raising on a failed preflight batch, preserving per-batch step logs and return codes.
 
 ### `BenchmarkRunner`
 
