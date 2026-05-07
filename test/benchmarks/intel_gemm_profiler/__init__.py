@@ -72,6 +72,15 @@ from .selector import (
     median_or_nan,
     write_results_csv,
 )
+from .dispatch import (
+    DISPATCH_KEY_FIELDS,
+    build_dispatch_index,
+    dispatch_shape_key_tuple,
+    load_dispatch_table,
+    lookup_dispatch_entry,
+    normalize_dispatch_shape_key,
+    validate_dispatch_table,
+)
 from .ali_dataset import build_ali_gemm_docs
 from .workflow import build_candidate_build_plan, benchmark_batch_plan_by_kernel_id, benchmark_exe_for_build_plan, execute_candidate_build_plan, execute_candidate_build_preflight_plans, limit_shapes_and_reference, load_target_shapes_and_reference, run_entries_with_batch_benchmarks, validate_candidate_auto_build_mode
 from .workflow import build_compiler_flags_probe_summary, build_parser, empty_anomaly_report, main, run_phase_a_probe, workflow
@@ -83,6 +92,7 @@ __all__ = [
     "DEFAULT_BUILD_CONFIG_PATH",
     "DEFAULT_RUNTIME_CONFIG_PATH",
     "DEFAULT_HW_REFERENCE_SPECS_PATH",
+    "DISPATCH_KEY_FIELDS",
     "SCHEMA_VERSION",
     "SEARCH_RUNTIME_SCHEMA",
     "SEED_KERNELS",
@@ -100,6 +110,7 @@ __all__ = [
     "compute_efficiency_bounds",
     "detect_probe_anomalies",
     "build_dispatch_table",
+    "build_dispatch_index",
     "build_dpas_probe_entry",
     "build_kernel_catalog",
     "build_parser",
@@ -128,15 +139,18 @@ __all__ = [
     "generated_level0_kernel_catalog",
     "ilp_class",
     "kernel_catalog_entry",
+    "load_dispatch_table",
     "load_persisted_kernel_catalog",
     "limit_shapes_and_reference",
     "load_target_shapes_and_reference",
     "load_hw_reference_specs",
     "load_persisted_build_config",
     "load_persisted_runtime_config",
+    "lookup_dispatch_entry",
     "main",
     "median_or_nan",
     "now_iso",
+    "normalize_dispatch_shape_key",
     "parse_benchmark_log",
     "parse_metric",
     "parse_streamk_example_log",
@@ -155,6 +169,7 @@ __all__ = [
     "shell_join",
     "timeout_rows",
     "validate_candidate_auto_build_mode",
+    "validate_dispatch_table",
     "workflow",
     "write_config",
     "write_json",

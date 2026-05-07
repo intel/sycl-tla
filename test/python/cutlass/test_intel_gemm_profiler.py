@@ -698,6 +698,133 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(dispatch["selection_summary"]["entries_with_confirmation"], 1)
         self.assertEqual(dispatch["selection_summary"]["close_calls"], 1)
 
+    def test_runtime_dispatch_lookup_matches_exact_shape(self):
+        dispatch_table = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "entries": [
+                {
+                    "shape_key": {
+                        "layout": "rcr",
+                        "dtype_a": "bf16",
+                        "dtype_b": "bf16",
+                        "dtype_c": "f32",
+                        "dtype_acc": "f32",
+                        "m": 128,
+                        "n": 256,
+                        "k": 64,
+                    },
+                    "candidate_id": "winner",
+                    "compiler_profile_id": "bmg.default",
+                }
+            ],
+        }
+
+        result = profiler.lookup_dispatch_entry(
+            dispatch_table,
+            {
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": "128",
+                "n": "256",
+                "k": "64",
+            },
+        )
+
+        self.assertEqual(result["status"], "found")
+        self.assertEqual(result["match"], "exact")
+        self.assertFalse(result["fallback"]["used"])
+        self.assertEqual(result["entry"]["candidate_id"], "winner")
+
+    def test_runtime_dispatch_lookup_reports_explicit_fallback(self):
+        dispatch_table = {"schema_version": profiler.SCHEMA_VERSION, "entries": []}
+
+        result = profiler.lookup_dispatch_entry(
+            dispatch_table,
+            {
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 128,
+                "n": 256,
+                "k": 64,
+            },
+            fallback_candidate_id="safe_default",
+        )
+
+        self.assertEqual(result["status"], "fallback")
+        self.assertEqual(result["match"], "none")
+        self.assertIsNone(result["entry"])
+        self.assertTrue(result["fallback"]["used"])
+        self.assertEqual(result["fallback"]["reason"], "shape_not_found")
+        self.assertEqual(result["fallback"]["candidate_id"], "safe_default")
+
+    def test_runtime_dispatch_loader_rejects_bad_schema_and_duplicates(self):
+        with self.assertRaisesRegex(ValueError, "unsupported dispatch table schema_version"):
+            profiler.validate_dispatch_table({"schema_version": "0.9", "entries": []})
+
+        entry = {
+            "shape_key": {
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 128,
+                "n": 256,
+                "k": 64,
+            },
+            "candidate_id": "winner",
+        }
+        with self.assertRaisesRegex(ValueError, "duplicate dispatch shape_key"):
+            profiler.validate_dispatch_table(
+                {"schema_version": profiler.SCHEMA_VERSION, "entries": [entry, dict(entry)]}
+            )
+
+    def test_runtime_dispatch_loader_accepts_file_path(self):
+        dispatch_table = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "entries": [
+                {
+                    "shape_key": {
+                        "layout": "rcr",
+                        "dtype_a": "f16",
+                        "dtype_b": "f16",
+                        "dtype_c": "f32",
+                        "dtype_acc": "f32",
+                        "m": 64,
+                        "n": 64,
+                        "k": 32,
+                    },
+                    "candidate_id": "file_winner",
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            table_path = Path(tmpdir) / "optimal_dispatch_table.json"
+            profiler.write_json(table_path, dispatch_table)
+
+            result = profiler.lookup_dispatch_entry(
+                table_path,
+                {
+                    "layout": "rcr",
+                    "dtype_a": "f16",
+                    "dtype_b": "f16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 64,
+                    "n": 64,
+                    "k": 32,
+                },
+            )
+
+        self.assertEqual(result["status"], "found")
+        self.assertEqual(result["entry"]["candidate_id"], "file_winner")
+
     def test_confirmation_median_can_override_screening_rank(self):
         shapes = {
             "schema_version": profiler.SCHEMA_VERSION,

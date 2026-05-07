@@ -2,9 +2,9 @@
 
 ## 当前结论
 
-当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强和 candidate batch build/routing** 的主要工作。
+当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强、candidate batch build/routing 和 runtime dispatch lookup** 的主要工作。
 
-现阶段代码处于 **GEMM MVP 主链路已端到端打通，native `tools/profiler/cutlass_profiler` 已完成单 GEMM generated kernel 的 SYCL 正确性+性能闭环，可继续做非 GEMM family 扩展** 的状态。
+现阶段代码处于 **GEMM MVP 主链路已端到端打通，native `tools/profiler/cutlass_profiler` 已完成单 GEMM generated kernel 的 SYCL 正确性+性能闭环，并具备 exact-shape runtime dispatch table lookup/fallback 基础能力** 的状态。
 
 最新全量 Ali workbook generated workflow 已在远端 BMG 节点通过：
 
@@ -18,7 +18,7 @@
 - 76 个 Ali reference matches
 - 0 missing dispatch
 
-本地 profiler Python 回归当前为 **74/74 OK**。
+本地 profiler Python 回归当前为 **78/78 OK**。
 
 补充 native C++ `tools/profiler/cutlass_profiler` GEMM smoke 也已在远端 BMG 节点通过：
 
@@ -307,14 +307,26 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 
 其中 RankK/Rank2K/TRMM/SYMM 目前在 SYCL reference verification 下显式 `NotSupported`，需要后续补 ReferenceHost/ReferenceDevice 或合适 baseline。
 
+最新 audit 也确认 Intel Xe library generator 当前只生成 GEMM instances；因此这些非 GEMM family 虽然 profiler CLI/build 已纳入，但不能通过 `KERNEL_FILTER_FILE` 直接构建出真实 BMG operation row。下一步若继续推进非 GEMM，需要先在 generator/library 侧补 Intel operation instance，再回到 profiler smoke。
+
 ### 6. Runtime dispatch table 集成
 
-当前 `gemm_dispatch_table.json` 和 `optimal_dispatch_table.json` 已能生成，但尚未接入真实推理 runtime。后续需要定义：
+当前 `gemm_dispatch_table.json` 和 `optimal_dispatch_table.json` 已能生成，并新增了 Python runtime lookup helper：
 
 - runtime lookup key。
 - fallback 策略。
 - artifact 版本兼容。
-- 发布和加载流程。
+
+已完成部分：
+
+- lookup key 固定为 `layout, dtype_a, dtype_b, dtype_c, dtype_acc, m, n, k`
+- 支持 `gemm_dispatch_table.json` / `optimal_dispatch_table.json` file path 或内存 dict 加载
+- 校验 `schema_version`
+- 拒绝 duplicate `shape_key`
+- exact-shape 命中返回 selected dispatch entry
+- shape miss 时返回显式 `missing` 或 `fallback` 结果，包含 fallback reason 和 fallback candidate id
+
+仍未完成的是把该 helper 接入真实推理 runtime 的发布/加载流程。
 
 ## 当前建议
 
@@ -323,8 +335,9 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 1. 使用 `--confirm-runs` 做 Ali 子集或全量确认复测，检查 close-call 和 variance。
 2. 深化 Phase A probe，将 probe 结果真正反馈到 pruning。
 3. 扩展 generated candidate search space。
-4. 选择一个非 GEMM family 做真实 instance 端到端突破，优先 Sparse GEMM 或 Conv2d。
-5. 继续推进 StreamK generated benchmark 支持。
+4. 为非 GEMM family 先补 Intel Xe generator/library operation instances，再做 profiler 真实 profile smoke。
+5. 把 runtime dispatch lookup 接到真实推理 runtime 的 artifact 发布/加载流程。
+6. 继续推进 StreamK generated benchmark 支持。
 
 ## 结论
 
@@ -338,6 +351,7 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 - confirmation selector evidence
 - 多个 tools/profiler family 的 SYCL build/CLI 纳入
 - native `tools/profiler/cutlass_profiler` generated GEMM host-reference verified profile row
+- runtime dispatch table exact-shape lookup / schema validation / explicit fallback helper
 - 本地与远端回归闭环
 
-项目现在的状态是：**GEMM MVP 已能作为离线调优基线使用，native C++ profiler 的 GEMM 主线也已具备最小 verified profile 能力；后续重点转向 Phase A probe、搜索空间扩展、非 GEMM family 真实运行能力和 runtime dispatch table 集成。**
+项目现在的状态是：**GEMM MVP 已能作为离线调优基线使用，native C++ profiler 的 GEMM 主线也已具备最小 verified profile 能力，dispatch artifact 已具备基础 lookup/fallback 能力；后续重点转向 Phase A probe、搜索空间扩展、非 GEMM generator/library instances 和真实 runtime 集成。**

@@ -197,6 +197,25 @@ Responsibility:
 - use confirmation median TFLOPS when confirmation rows are available
 - emit evidence for median runtime, median TFLOPS, variance, confirmation completeness, screening rank, runner-up metrics, and close-call status
 
+### `RuntimeDispatchLookup`
+
+Input:
+
+- `gemm_dispatch_table.json` or `optimal_dispatch_table.json`
+- runtime shape descriptor
+
+Output:
+
+- exact dispatch entry when the shape key is present
+- explicit `missing` / `fallback` result when the shape key is absent
+
+Responsibility:
+
+- validate the dispatch table `schema_version`
+- normalize the exact-shape key: `layout, dtype_a, dtype_b, dtype_c, dtype_acc, m, n, k`
+- reject duplicate dispatch `shape_key` entries
+- avoid silent defaulting by returning fallback metadata with a reason and optional fallback candidate id
+
 ## Workspace layout
 
 The profiler workflow should use a dedicated workspace under a generated run directory.

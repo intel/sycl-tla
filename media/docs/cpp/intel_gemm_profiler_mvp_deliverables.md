@@ -31,6 +31,7 @@ The current workflow also supports:
 - chunked benchmark subprocess execution through `--benchmark-entry-chunk-size`
 - top-k confirmation through `--top-k` and `--confirm-runs`
 - median-based final selection evidence in `gemm_dispatch_table.json`
+- exact-shape runtime dispatch lookup with schema validation and explicit fallback metadata
 - close-call labeling through `--close-call-threshold`
 - selected-kernel batch filter emission through `--candidate-build-batch-size`
 - per-batch build preflight execution through `--run-candidate-build-preflight`
@@ -269,7 +270,7 @@ For the first successful MVP run, the minimum artifact set is:
 | run logs | runtime failure diagnosis |
 | `gemm_profile_results.csv` | normalized measurements |
 | `gemm_dispatch_table.json` | final selection result |
-| `optimal_dispatch_table.json` | alias of the final best-dispatch artifact for downstream consumers |
+| `optimal_dispatch_table.json` | alias of the final best-dispatch artifact for downstream consumers; accepted by runtime dispatch lookup |
 | `reference_comparison.json` | optional comparison against Ali/reference performance data |
 | `run_summary.json` | row counts, pass/fail counts, benchmark commands, and log paths |
 | `phase_a_summary.json` | Phase A/probe summary |
@@ -287,6 +288,7 @@ The MVP must:
 4. run them through subprocess execution
 5. collect normalized results
 6. emit an exact-shape dispatch table
+7. load and query that dispatch table by exact runtime shape key without silent fallback
 
 ### B. Correctness acceptance
 
