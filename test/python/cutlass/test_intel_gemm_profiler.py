@@ -222,6 +222,27 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertIn("runtime_sweep", variant)
         self.assertEqual(variant["runtime_sweep"]["allowed_fields"], ["shape_id", "m", "n", "k"])
 
+    def test_build_candidate_build_manifest_can_emit_kernel_batches(self):
+        shapes = profiler.default_shapes("bf16")
+        constraints = profiler.default_constraints()
+        profiles = profiler.default_compiler_profiles()
+        candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles)
+
+        manifest = profiler.build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=3)
+
+        self.assertEqual(manifest["selected_kernel_count"], 8)
+        self.assertEqual(manifest["selected_kernel_batch_size"], 3)
+        self.assertEqual([batch["kernel_count"] for batch in manifest["selected_kernel_batches"]], [3, 3, 2])
+        self.assertEqual(manifest["selected_kernel_batches"][0]["batch_id"], "selected_kernel_batch_000")
+        self.assertEqual(manifest["selected_kernel_batches"][0]["selected_kernel_list"], manifest["selected_kernel_list"][:3])
+        self.assertTrue(
+            all(
+                line.startswith("^") and line.endswith("$")
+                for batch in manifest["selected_kernel_batches"]
+                for line in batch["kernel_filter_file"]["lines"]
+            )
+        )
+
     def test_default_constraints_use_calibrated_slm_limit(self):
         constraints = profiler.default_constraints()
 
@@ -1022,6 +1043,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
                     str(Path(tmpdir) / "googlebenchmark-src"),
                     "--cmake-cxx-compiler",
                     "icpx",
+                    "--candidate-build-batch-size",
+                    "4",
                 ]
             )
             outputs = profiler.workflow(args)
@@ -1050,11 +1073,18 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(build_manifest["selected_kernel_count"], len(selected_kernel_list))
             self.assertEqual(build_manifest["selected_kernel_list"], selected_kernel_list)
             self.assertEqual(build_manifest["kernel_filter_file"]["lines"], selected_kernel_filter)
+            self.assertEqual(build_manifest["selected_kernel_batch_size"], 4)
+            self.assertGreater(len(build_manifest["selected_kernel_batches"]), 1)
+            first_batch = build_manifest["selected_kernel_batches"][0]
+            first_batch_filter = Path(first_batch["kernel_filter_path"]).read_text(encoding="utf-8").splitlines()
+            self.assertEqual(first_batch_filter, first_batch["kernel_filter_file"]["lines"])
             self.assertEqual(cmake_config["kernel_filter_cmake_var"], "KERNEL_FILTER_FILE")
             self.assertEqual(cmake_config["cmake_vars"]["CUTLASS_LIBRARY_INSTANTIATION_LEVEL"], "1")
             self.assertEqual(build_plan["build_target"], "cutlass_benchmarks_gemm_sycl")
             self.assertTrue(build_plan["benchmark_exe"].endswith("/benchmarks/gemm/cutlass_benchmarks_gemm_sycl"))
             self.assertEqual(build_plan["kernel_filter_file"], outputs["selected_kernel_filter"])
+            self.assertEqual(build_plan["selected_kernel_batch_size"], 4)
+            self.assertEqual(build_plan["selected_kernel_batches"][0]["kernel_filter_path"], first_batch["kernel_filter_path"])
             self.assertEqual(build_plan["cmake_vars"]["KERNEL_FILTER_FILE"], outputs["selected_kernel_filter"])
             self.assertEqual(build_plan["googlebenchmark_dir"], str(Path(tmpdir) / "googlebenchmark-src"))
             self.assertEqual(build_plan["cmake_vars"]["GOOGLEBENCHMARK_DIR"], str(Path(tmpdir) / "googlebenchmark-src"))

@@ -210,6 +210,8 @@ def build_candidate_build_plan(
         "googlebenchmark_dir": str(googlebenchmark_dir) if googlebenchmark_dir else "",
         "cmake_cxx_compiler": cmake_cxx_compiler,
         "selected_kernel_count": build_manifest["selected_kernel_count"],
+        "selected_kernel_batch_size": build_manifest.get("selected_kernel_batch_size", 0),
+        "selected_kernel_batches": build_manifest.get("selected_kernel_batches", []),
         "cmake_vars": cmake_vars,
         "configure_command": configure_command,
         "build_command": build_command,
@@ -475,14 +477,18 @@ def workflow(args):
     )
     write_json(reports_dir / "gemm_candidate_space.json", candidate_space)
     write_json(reports_dir / "bmg_safe_candidates.json", candidate_space)
-    build_manifest = build_candidate_build_manifest(candidate_space)
-    write_json(reports_dir / "candidate_build_manifest.json", build_manifest)
+    build_manifest = build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=args.candidate_build_batch_size)
     selected_kernel_list_path = reports_dir / "selected_kernel_list.txt"
     selected_kernel_filter_path = reports_dir / "selected_kernel_filter.list"
     candidate_build_cmake_config_path = reports_dir / "candidate_build_cmake_config.json"
     candidate_build_plan_path = reports_dir / "candidate_build_plan.json"
     selected_kernel_list_path.write_text("\n".join(build_manifest["selected_kernel_list"]) + "\n", encoding="utf-8")
     selected_kernel_filter_path.write_text("\n".join(build_manifest["kernel_filter_file"]["lines"]) + "\n", encoding="utf-8")
+    for batch in build_manifest.get("selected_kernel_batches", []):
+        batch_filter_path = reports_dir / f"selected_kernel_filter_part{batch['batch_index']:03d}.list"
+        batch_filter_path.write_text("\n".join(batch["kernel_filter_file"]["lines"]) + "\n", encoding="utf-8")
+        batch["kernel_filter_path"] = str(batch_filter_path)
+    write_json(reports_dir / "candidate_build_manifest.json", build_manifest)
     write_json(candidate_build_cmake_config_path, build_manifest["cmake_config"])
     source_dir = Path(args.cmake_source_dir).resolve() if args.cmake_source_dir else (Path(args.cwd).resolve() if args.cwd else Path.cwd().resolve())
     build_dir = Path(args.benchmark_build_dir).resolve() if args.benchmark_build_dir else workspace / "build" / "candidate_benchmarks"
@@ -626,6 +632,7 @@ def build_parser():
     parser.add_argument("--googlebenchmark-dir", default="", help="Optional local Google Benchmark source directory injected into the generated CMake build plan as GOOGLEBENCHMARK_DIR to avoid FetchContent downloads.")
     parser.add_argument("--cmake-cxx-compiler", default="", help="Optional CMAKE_CXX_COMPILER value injected into the generated candidate benchmark CMake build plan, e.g. 'icpx' for oneAPI SYCL builds.")
     parser.add_argument("--build-candidate-benchmark", action="store_true", help="Execute the generated candidate benchmark CMake configure/build plan before Phase B runs, then use the built benchmark executable for screening and confirmation.")
+    parser.add_argument("--candidate-build-batch-size", type=int, default=0, help="Emit additional selected-kernel filter files in batches of N kernels for isolated generated benchmark build preflight/retry. 0 disables batch artifacts.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")

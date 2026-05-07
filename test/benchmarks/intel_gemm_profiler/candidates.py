@@ -206,7 +206,29 @@ def generate_candidate_space(
     }
 
 
-def build_candidate_build_manifest(candidate_space):
+def build_selected_kernel_batches(selected_kernel_list, batch_size):
+    if batch_size <= 0:
+        return []
+    batches = []
+    for batch_index, start in enumerate(range(0, len(selected_kernel_list), batch_size)):
+        kernels = selected_kernel_list[start:start + batch_size]
+        batches.append(
+            {
+                "batch_id": f"selected_kernel_batch_{batch_index:03d}",
+                "batch_index": batch_index,
+                "kernel_count": len(kernels),
+                "selected_kernel_list": kernels,
+                "kernel_filter_file": {
+                    "format": "python-regex-lines",
+                    "recommended_cmake_var": "KERNEL_FILTER_FILE",
+                    "lines": [f"^{kernel_id}$" for kernel_id in kernels],
+                },
+            }
+        )
+    return batches
+
+
+def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0):
     selected_kernel_list = []
     seen_kernel_ids = set()
     variants = []
@@ -257,6 +279,8 @@ def build_candidate_build_manifest(candidate_space):
             "recommended_cmake_var": "KERNEL_FILTER_FILE",
             "lines": [f"^{kernel_id}$" for kernel_id in selected_kernel_list],
         },
+        "selected_kernel_batch_size": selected_kernel_batch_size,
+        "selected_kernel_batches": build_selected_kernel_batches(selected_kernel_list, selected_kernel_batch_size),
         "cmake_config": {
             "build_target": "cutlass_benchmarks_gemm_sycl",
             "cmake_vars": {

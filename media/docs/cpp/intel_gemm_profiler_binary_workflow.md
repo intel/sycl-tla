@@ -127,7 +127,10 @@ Responsibility:
 - configure and build candidate batches
 - persist configure/build success or failure before surfacing workflow errors
 - retain the failing step, return code, command, log path, selected kernel count, and kernel filter file
+- emit optional selected-kernel batch filter files for isolated large-catalog preflight or retry
 - keep incremental rebuild support
+
+`--candidate-build-batch-size=N` does not change the default aggregate benchmark executable used by the current screening path. It adds `selected_kernel_batches` to `candidate_build_manifest.json` and writes `selected_kernel_filter_partXXX.list` files so larger generated catalogs can be bisected or preflighted in smaller compile groups.
 
 ### `BenchmarkRunner`
 
