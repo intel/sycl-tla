@@ -251,6 +251,15 @@ Responsibility:
 - include the product-facing dispatch lookup CLI template
 - remind downstream consumers to keep profile CSV and phase summaries with the dispatch table for auditability
 
+Validation CLI:
+
+```bash
+python3 test/benchmarks/intel_gemm_profiler.py \
+  --validate-product-bundle /path/to/gemm_product_bundle_manifest.json
+```
+
+The validation CLI prints JSON with `status=pass` or `status=fail`. It checks required artifact paths, validates the dispatch table referenced by `runtime_lookup.dispatch_table`, verifies the dispatch key contract, and exits nonzero on failure so it can be used as a release or CI gate.
+
 ## Workspace layout
 
 The profiler workflow should use a dedicated workspace under a generated run directory.

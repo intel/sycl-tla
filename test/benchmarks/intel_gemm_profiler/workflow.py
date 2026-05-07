@@ -36,7 +36,7 @@ if __package__ in (None, ""):
     )
     from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from intel_gemm_profiler.ali_dataset import build_ali_gemm_docs
-    from intel_gemm_profiler.dispatch import lookup_dispatch_entry
+    from intel_gemm_profiler.dispatch import DISPATCH_KEY_FIELDS, load_dispatch_table, lookup_dispatch_entry
     from intel_gemm_profiler.runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from intel_gemm_profiler.utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
@@ -64,7 +64,7 @@ else:
     )
     from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from .ali_dataset import build_ali_gemm_docs
-    from .dispatch import lookup_dispatch_entry
+    from .dispatch import DISPATCH_KEY_FIELDS, load_dispatch_table, lookup_dispatch_entry
     from .runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from .utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
@@ -635,6 +635,69 @@ def build_artifact_bundle_manifest(workspace, artifacts):
     }
 
 
+def validate_product_bundle_manifest(bundle_manifest_or_path):
+    bundle = read_json(bundle_manifest_or_path) if isinstance(bundle_manifest_or_path, (str, Path)) else bundle_manifest_or_path
+    errors = []
+    warnings = []
+    required_artifacts = bundle.get("required_artifacts", [])
+    optional_artifacts = bundle.get("optional_artifacts", [])
+    if not isinstance(required_artifacts, list):
+        errors.append("required_artifacts must be a list")
+        required_artifacts = []
+    if not isinstance(optional_artifacts, list):
+        errors.append("optional_artifacts must be a list")
+        optional_artifacts = []
+    missing_required = []
+    for artifact in required_artifacts:
+        artifact_name = artifact.get("name", "")
+        artifact_path = artifact.get("path", "")
+        if not artifact_path or not Path(artifact_path).exists():
+            missing_required.append(artifact_name or artifact_path or "<unnamed>")
+    missing_optional = []
+    for artifact in optional_artifacts:
+        artifact_name = artifact.get("name", "")
+        artifact_path = artifact.get("path", "")
+        if not artifact_path or not Path(artifact_path).exists():
+            missing_optional.append(artifact_name or artifact_path or "<unnamed>")
+    if missing_required:
+        errors.append(f"missing required artifacts: {', '.join(missing_required)}")
+    if missing_optional:
+        warnings.append(f"missing optional artifacts: {', '.join(missing_optional)}")
+    runtime_lookup = bundle.get("runtime_lookup", {})
+    key_fields = runtime_lookup.get("key_fields")
+    if key_fields != list(DISPATCH_KEY_FIELDS):
+        errors.append("runtime_lookup.key_fields does not match dispatch key contract")
+    dispatch_table_path = runtime_lookup.get("dispatch_table", "")
+    dispatch_entry_count = 0
+    if not dispatch_table_path:
+        errors.append("runtime_lookup.dispatch_table is missing")
+    elif not Path(dispatch_table_path).exists():
+        errors.append(f"runtime lookup dispatch table does not exist: {dispatch_table_path}")
+    else:
+        try:
+            dispatch_table = load_dispatch_table(dispatch_table_path)
+            dispatch_entry_count = len(dispatch_table["entries"])
+        except Exception as exc:
+            errors.append(f"dispatch table validation failed: {exc}")
+    cli_args_template = runtime_lookup.get("cli_args_template", [])
+    if "--lookup-dispatch-table" not in cli_args_template:
+        errors.append("runtime_lookup.cli_args_template is missing --lookup-dispatch-table")
+    status = "fail" if errors else "pass"
+    return {
+        "schema_version": SEARCH_RUNTIME_SCHEMA["schema_version"],
+        "generated_at": now_iso(),
+        "status": status,
+        "errors": errors,
+        "warnings": warnings,
+        "required_artifact_count": len(required_artifacts),
+        "optional_artifact_count": len(optional_artifacts),
+        "missing_required_artifacts": missing_required,
+        "missing_optional_artifacts": missing_optional,
+        "dispatch_table": dispatch_table_path,
+        "dispatch_entry_count": dispatch_entry_count,
+    }
+
+
 def workflow(args):
     if not args.workspace:
         raise ValueError("--workspace is required unless --lookup-dispatch-table is used.")
@@ -916,6 +979,7 @@ def build_parser():
     parser.add_argument("--confirm-runs", type=int, default=3, help="Number of confirmation attempts for top-k candidates.")
     parser.add_argument("--close-call-threshold", type=float, default=3.0, help="Gap threshold in percent for close-call labeling.")
     parser.add_argument("--lookup-dispatch-table", default="", help="Lookup mode: path to gemm_dispatch_table.json or optimal_dispatch_table.json. When set, the CLI prints a lookup JSON result instead of running the profiler workflow.")
+    parser.add_argument("--validate-product-bundle", default="", help="Validation mode: path to gemm_product_bundle_manifest.json. Prints JSON suitable for release/CI gates and exits nonzero on failure.")
     parser.add_argument("--lookup-layout", default="rcr", help="Lookup mode GEMM layout key, e.g. rcr.")
     parser.add_argument("--lookup-dtype-a", default="bf16", help="Lookup mode A dtype.")
     parser.add_argument("--lookup-dtype-b", default="bf16", help="Lookup mode B dtype.")
@@ -959,8 +1023,17 @@ def dispatch_lookup_from_args(args):
 
 def main():
     args = build_parser().parse_args()
-    result = dispatch_lookup_from_args(args) if args.lookup_dispatch_table else workflow(args)
+    if args.lookup_dispatch_table and args.validate_product_bundle:
+        raise ValueError("--lookup-dispatch-table and --validate-product-bundle are mutually exclusive.")
+    if args.validate_product_bundle:
+        result = validate_product_bundle_manifest(args.validate_product_bundle)
+    elif args.lookup_dispatch_table:
+        result = dispatch_lookup_from_args(args)
+    else:
+        result = workflow(args)
     print(json.dumps(result, indent=2))
+    if args.validate_product_bundle and result["status"] != "pass":
+        sys.exit(1)
 
 
 if __name__ == "__main__":

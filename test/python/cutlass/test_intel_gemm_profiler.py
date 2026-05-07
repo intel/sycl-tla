@@ -915,6 +915,58 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(result["status"], "fallback")
         self.assertEqual(result["fallback"]["candidate_id"], "safe_default")
 
+    def test_product_bundle_validation_reports_missing_required_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            dispatch_path = tmp / "optimal_dispatch_table.json"
+            profiler.write_json(dispatch_path, {"schema_version": profiler.SCHEMA_VERSION, "entries": []})
+            bundle_path = tmp / "gemm_product_bundle_manifest.json"
+            profiler.write_json(
+                bundle_path,
+                {
+                    "schema_version": profiler.SCHEMA_VERSION,
+                    "required_artifacts": [
+                        {
+                            "name": "optimal_dispatch_table",
+                            "path": str(dispatch_path),
+                            "required": True,
+                            "exists": True,
+                            "purpose": "dispatch",
+                        },
+                        {
+                            "name": "gemm_profile_results",
+                            "path": str(tmp / "missing.csv"),
+                            "required": True,
+                            "exists": False,
+                            "purpose": "profile rows",
+                        },
+                    ],
+                    "optional_artifacts": [],
+                    "runtime_lookup": {
+                        "dispatch_table": str(dispatch_path),
+                        "key_fields": list(profiler.DISPATCH_KEY_FIELDS),
+                        "cli_args_template": ["python3", "test/benchmarks/intel_gemm_profiler.py", "--lookup-dispatch-table", str(dispatch_path)],
+                    },
+                },
+            )
+
+            validation = profiler.validate_product_bundle_manifest(bundle_path)
+            self.assertEqual(validation["status"], "fail")
+            self.assertEqual(validation["missing_required_artifacts"], ["gemm_profile_results"])
+
+            repo_root = Path(__file__).resolve().parents[3]
+            script_path = repo_root / "test" / "benchmarks" / "intel_gemm_profiler.py"
+            completed = subprocess.run(
+                [sys.executable, str(script_path), "--validate-product-bundle", str(bundle_path)],
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertNotEqual(completed.returncode, 0)
+        cli_validation = json.loads(completed.stdout)
+        self.assertEqual(cli_validation["status"], "fail")
+        self.assertIn("gemm_profile_results", cli_validation["missing_required_artifacts"])
+
     def test_confirmation_median_can_override_screening_rank(self):
         shapes = {
             "schema_version": profiler.SCHEMA_VERSION,
@@ -1315,6 +1367,26 @@ class TestIntelGemmProfiler(unittest.TestCase):
             )
             self.assertIn("--lookup-dispatch-table", bundle["runtime_lookup"]["cli_template"])
             self.assertIn(outputs["optimal_dispatch_table"], bundle["runtime_lookup"]["cli_args_template"])
+            validation = profiler.validate_product_bundle_manifest(outputs["artifact_bundle_manifest"])
+            self.assertEqual(validation["status"], "pass")
+            self.assertEqual(validation["missing_required_artifacts"], [])
+            self.assertEqual(validation["dispatch_entry_count"], 0)
+
+            repo_root = Path(__file__).resolve().parents[3]
+            script_path = repo_root / "test" / "benchmarks" / "intel_gemm_profiler.py"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    "--validate-product-bundle",
+                    outputs["artifact_bundle_manifest"],
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            cli_validation = json.loads(completed.stdout)
+            self.assertEqual(cli_validation["status"], "pass")
 
     def test_skip_run_workflow_can_emit_generator_backed_catalog(self):
         with tempfile.TemporaryDirectory() as tmpdir:
