@@ -138,6 +138,7 @@ Failure handling:
 - `--candidate-build-batch-size` can emit additional `selected_kernel_filter_partXXX.list` files and `selected_kernel_batches` metadata for large-catalog preflight and retry isolation.
 - `candidate_build_plan.json` includes `batch_preflight_plans` with per-batch configure/build commands and isolated build directories when batch artifacts are enabled.
 - `--run-candidate-build-preflight` executes those plans and writes `candidate_build_preflight_summary.json` before raising on failed batch preflight.
+- `--use-candidate-build-preflight-benchmarks` routes screening/confirmation entries to the successful per-batch benchmark binaries and emits batch-specific config/manifest/log artifacts. It requires successful preflight execution and does not silently fall back to the aggregate binary.
 
 ### 7. Correctness path
 

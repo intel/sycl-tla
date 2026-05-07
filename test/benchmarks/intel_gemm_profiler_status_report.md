@@ -74,7 +74,7 @@ python3 test/benchmarks/intel_gemm_profiler.py \
 
 大规模 benchmark 建议使用 `--benchmark-entry-chunk-size`。chunked mode 会生成 `screening_partXXX.in`、`screening_manifest_partXXX.json` 和 `screening_partXXX.log`，避免单个大 config 长时间无输出、超时后难以恢复或诊断。
 
-大规模 generated catalog 的构建诊断建议使用 `--candidate-build-batch-size N` 额外生成 `selected_kernel_filter_partXXX.list`、`selected_kernel_batches` metadata 和 `batch_preflight_plans`。当前 screening 仍使用 aggregate benchmark binary；batch filter files 用于更高 instantiation level 下的隔离编译 preflight、失败二分和手动 retry。需要自动执行 batch preflight 时，可加 `--run-candidate-build-preflight`，workflow 会写出 `candidate_build_preflight_summary.json`。
+大规模 generated catalog 的构建诊断建议使用 `--candidate-build-batch-size N` 额外生成 `selected_kernel_filter_partXXX.list`、`selected_kernel_batches` metadata 和 `batch_preflight_plans`。默认 screening 仍使用 aggregate benchmark binary；batch filter files 用于更高 instantiation level 下的隔离编译 preflight、失败二分和手动 retry。需要自动执行 batch preflight 时，可加 `--run-candidate-build-preflight`，workflow 会写出 `candidate_build_preflight_summary.json`。如果要直接消费 per-batch build 产物执行 screening/confirmation，可同时开启 `--use-candidate-build-preflight-benchmarks`；该模式要求 preflight 全部通过，并会按 `candidate.kernel_id` 路由到对应 batch executable。
 
 如果需要更可信的最终调优结果，建议打开确认阶段：
 

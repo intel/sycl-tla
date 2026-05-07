@@ -1814,6 +1814,70 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertTrue((tmp / "screening_part000.in").exists())
             self.assertTrue((tmp / "screening_part002.log").exists())
 
+    def test_run_entries_with_batch_benchmarks_routes_by_kernel_id(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fake_exe = tmp / "fake_benchmark.py"
+            fake_exe.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "config = sys.argv[1].split('=', 1)[1]\n"
+                "for line in open(config, encoding='utf-8'):\n"
+                "    bm = line.split('--bm_name=', 1)[1].split()[0]\n"
+                "    print(f'BM/{bm}/manual_time avg_runtime_ms=1.0 avg_tflops=2.0')\n",
+                encoding="utf-8",
+            )
+            fake_exe.chmod(0o755)
+            shape = {
+                "shape_id": "shape_a",
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 64,
+                "n": 4096,
+                "k": 4096,
+            }
+            candidate_a = {
+                "candidate_id": "cand_a",
+                "compiler_profile_id": "profile_a",
+                "kernel_name": "kernel_a",
+                "kernel_id": "kernel_a",
+                "split_k": 1,
+            }
+            candidate_b = {
+                "candidate_id": "cand_b",
+                "compiler_profile_id": "profile_a",
+                "kernel_name": "kernel_b",
+                "kernel_id": "kernel_b",
+                "split_k": 1,
+            }
+            entries = [
+                {"bm_name": "bm_a", "stage": "screening", "attempt_index": 0, "shape": shape, "candidate": candidate_a},
+                {"bm_name": "bm_b", "stage": "screening", "attempt_index": 0, "shape": shape, "candidate": candidate_b},
+            ]
+            batch_plan_by_kernel_id = {
+                "kernel_a": {"batch_id": "selected_kernel_batch_000", "benchmark_exe": str(fake_exe)},
+                "kernel_b": {"batch_id": "selected_kernel_batch_001", "benchmark_exe": str(fake_exe)},
+            }
+
+            rows, commands, logs = profiler.run_entries_with_batch_benchmarks(
+                entries,
+                tmp / "screening.in",
+                tmp / "screening_manifest.json",
+                tmp / "screening.log",
+                batch_plan_by_kernel_id,
+            )
+
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(len(commands), 2)
+            self.assertEqual(len(logs), 2)
+            self.assertTrue((tmp / "screening_selected_kernel_batch_000.in").exists())
+            self.assertTrue((tmp / "screening_selected_kernel_batch_001.log").exists())
+            self.assertTrue(any("selected_kernel_batch_000" in log for log in logs))
+            self.assertTrue(any("selected_kernel_batch_001" in log for log in logs))
+
     def test_run_entries_with_streamk_example_supports_streamk_and_dp_modes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             logs_dir = Path(tmpdir) / "logs"

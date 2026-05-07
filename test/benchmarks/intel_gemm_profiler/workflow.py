@@ -356,6 +356,48 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
     }
 
 
+def benchmark_batch_plan_by_kernel_id(build_plan):
+    mapping = {}
+    for plan in build_plan.get("batch_preflight_plans", []):
+        for kernel_id in plan.get("selected_kernel_list", []):
+            mapping[kernel_id] = plan
+    return mapping
+
+
+def batched_stage_path(path, batch_id):
+    return path.with_name(f"{path.stem}_{batch_id}{path.suffix}")
+
+
+def run_entries_with_batch_benchmarks(entries, config_path, manifest_path, log_path, batch_plan_by_kernel_id, cwd=None, shell_init=None, timeout=None, chunk_size=0):
+    grouped = {}
+    for entry in entries:
+        kernel_id = entry["candidate"]["kernel_id"]
+        plan = batch_plan_by_kernel_id.get(kernel_id)
+        if plan is None:
+            raise ValueError(f"No batch preflight benchmark plan found for kernel '{kernel_id}'.")
+        grouped.setdefault(plan["batch_id"], {"plan": plan, "entries": []})["entries"].append(entry)
+    rows = []
+    commands = []
+    log_paths = []
+    for batch_id, item in sorted(grouped.items()):
+        batch_log_path = batched_stage_path(log_path, batch_id)
+        batch_rows, command = run_entries_with_benchmark(
+            item["entries"],
+            batched_stage_path(config_path, batch_id),
+            batched_stage_path(manifest_path, batch_id),
+            batch_log_path,
+            item["plan"]["benchmark_exe"],
+            cwd=cwd,
+            shell_init=shell_init,
+            timeout=timeout,
+            chunk_size=chunk_size,
+        )
+        rows.extend(batch_rows)
+        commands.extend(command if command and isinstance(command[0], (list, tuple)) else [command])
+        log_paths.extend(benchmark_log_paths(batch_log_path, command))
+    return rows, commands, log_paths
+
+
 def validate_candidate_auto_build_mode(args, dry_run_mode, probe_mode):
     if not args.build_candidate_benchmark or dry_run_mode or args.skip_run or args.constraints_json:
         return
@@ -610,6 +652,8 @@ def workflow(args):
             raise RuntimeError(candidate_build_preflight_summary["failure_reason"])
     else:
         write_json(candidate_build_preflight_summary_path, candidate_build_preflight_summary)
+    if args.use_candidate_build_preflight_benchmarks and candidate_build_preflight_summary.get("status") != "pass":
+        raise ValueError("--use-candidate-build-preflight-benchmarks requires successful --run-candidate-build-preflight.")
     if args.build_candidate_benchmark:
         candidate_build_summary = execute_candidate_build_plan(
             candidate_build_plan,
@@ -634,15 +678,24 @@ def workflow(args):
     if candidate_build_summary.get("status") == "pass":
         log_paths.extend(step["log"] for step in candidate_build_summary["steps"])
         benchmark_commands.extend(step["command"] for step in candidate_build_summary["steps"])
+    if candidate_build_preflight_summary.get("status") == "pass":
+        for batch in candidate_build_preflight_summary["batches"]:
+            log_paths.extend(step["log"] for step in batch["steps"])
+            benchmark_commands.extend(step["command"] for step in batch["steps"])
+    batch_plan_by_kernel = benchmark_batch_plan_by_kernel_id(candidate_build_plan) if args.use_candidate_build_preflight_benchmarks else {}
     if not args.skip_run:
         screening_benchmark_entries = [entry for entry in screening_entries if entry["candidate"].get("runner", "benchmark") == "benchmark"]
         screening_streamk_entries = [entry for entry in screening_entries if entry["candidate"].get("runner") == "streamk_example"]
         screening_rows = []
         if screening_benchmark_entries:
             screening_log = logs_dir / "screening.log"
-            rows, command = run_entries_with_benchmark(screening_benchmark_entries, configs_dir / "screening.in", manifests_dir / "screening_manifest.json", screening_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout, chunk_size=args.benchmark_entry_chunk_size)
+            if args.use_candidate_build_preflight_benchmarks:
+                rows, command, batch_logs = run_entries_with_batch_benchmarks(screening_benchmark_entries, configs_dir / "screening.in", manifests_dir / "screening_manifest.json", screening_log, batch_plan_by_kernel, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout, chunk_size=args.benchmark_entry_chunk_size)
+            else:
+                rows, command = run_entries_with_benchmark(screening_benchmark_entries, configs_dir / "screening.in", manifests_dir / "screening_manifest.json", screening_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout, chunk_size=args.benchmark_entry_chunk_size)
+                batch_logs = benchmark_log_paths(screening_log, command)
             screening_rows.extend(rows)
-            log_paths.extend(benchmark_log_paths(screening_log, command))
+            log_paths.extend(batch_logs)
             benchmark_commands.extend(benchmark_command_strings(command))
         if screening_streamk_entries:
             rows, commands = run_entries_with_streamk_example(screening_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
@@ -658,9 +711,13 @@ def workflow(args):
                 confirm_rows = []
                 if confirm_benchmark_entries:
                     confirm_log = logs_dir / "confirm.log"
-                    rows, command = run_entries_with_benchmark(confirm_benchmark_entries, configs_dir / "confirm.in", manifests_dir / "confirm_manifest.json", confirm_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout, chunk_size=args.benchmark_entry_chunk_size)
+                    if args.use_candidate_build_preflight_benchmarks:
+                        rows, command, batch_logs = run_entries_with_batch_benchmarks(confirm_benchmark_entries, configs_dir / "confirm.in", manifests_dir / "confirm_manifest.json", confirm_log, batch_plan_by_kernel, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout, chunk_size=args.benchmark_entry_chunk_size)
+                    else:
+                        rows, command = run_entries_with_benchmark(confirm_benchmark_entries, configs_dir / "confirm.in", manifests_dir / "confirm_manifest.json", confirm_log, effective_benchmark_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout, chunk_size=args.benchmark_entry_chunk_size)
+                        batch_logs = benchmark_log_paths(confirm_log, command)
                     confirm_rows.extend(rows)
-                    log_paths.extend(benchmark_log_paths(confirm_log, command))
+                    log_paths.extend(batch_logs)
                     benchmark_commands.extend(benchmark_command_strings(command))
                 if confirm_streamk_entries:
                     rows, commands = run_entries_with_streamk_example(confirm_streamk_entries, logs_dir, args.streamk_example_exe, cwd=args.cwd, shell_init=base_runtime_shell_init, timeout=args.timeout)
@@ -740,6 +797,7 @@ def build_parser():
     parser.add_argument("--build-candidate-benchmark", action="store_true", help="Execute the generated candidate benchmark CMake configure/build plan before Phase B runs, then use the built benchmark executable for screening and confirmation.")
     parser.add_argument("--candidate-build-batch-size", type=int, default=0, help="Emit additional selected-kernel filter files in batches of N kernels for isolated generated benchmark build preflight/retry. 0 disables batch artifacts.")
     parser.add_argument("--run-candidate-build-preflight", action="store_true", help="Execute per-batch candidate benchmark preflight build plans before the aggregate candidate benchmark build. Requires --candidate-build-batch-size to produce batch plans.")
+    parser.add_argument("--use-candidate-build-preflight-benchmarks", action="store_true", help="Route benchmark screening and confirmation entries to per-batch benchmark executables produced by --run-candidate-build-preflight instead of the aggregate benchmark executable.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")
