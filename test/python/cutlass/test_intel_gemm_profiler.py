@@ -1086,6 +1086,94 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual([step["step"] for step in summary["steps"]], ["configure", "build"])
         self.assertTrue(all(step["status"] == "pass" for step in summary["steps"]))
 
+    def test_execute_candidate_build_plan_returns_failure_summary(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            build_plan = {
+                "schema_version": profiler.SCHEMA_VERSION,
+                "generated_at": profiler.now_iso(),
+                "build_target": "fake_benchmark",
+                "benchmark_exe": str(tmp / "build" / "benchmarks" / "gemm" / "fake_benchmark"),
+                "selected_kernel_count": 3,
+                "kernel_filter_file": str(tmp / "selected_kernel_filter.list"),
+                "configure_command": ["python3", "-c", "print('configure ok')"],
+                "build_command": ["python3", "-c", "import sys; print('build failed'); sys.exit(7)"],
+            }
+
+            summary = profiler.execute_candidate_build_plan(build_plan, tmp / "logs")
+            build_log_text = Path(summary["steps"][1]["log"]).read_text(encoding="utf-8")
+
+        self.assertEqual(summary["status"], "fail")
+        self.assertEqual(summary["failure_step"], "build")
+        self.assertIn("Candidate benchmark build failed", summary["failure_reason"])
+        self.assertEqual(summary["selected_kernel_count"], 3)
+        self.assertEqual(summary["kernel_filter_file"], build_plan["kernel_filter_file"])
+        self.assertEqual([step["step"] for step in summary["steps"]], ["configure", "build"])
+        self.assertEqual(summary["steps"][1]["returncode"], 7)
+        self.assertTrue(build_log_text.strip().endswith("build failed"))
+
+    def test_workflow_persists_candidate_build_failure_summary(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fake_cmake = tmp / "fake_cmake.py"
+            fake_cmake.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "print('fake cmake ' + ' '.join(sys.argv[1:]))\n"
+                "sys.exit(5 if '--build' in sys.argv else 0)\n",
+                encoding="utf-8",
+            )
+            fake_cmake.chmod(0o755)
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    str(tmp / "workspace"),
+                    "--dtype",
+                    "bf16",
+                    "--dry-run",
+                    "--probe-mode",
+                    "off",
+                    "--kernel-catalog-source",
+                    "generator",
+                    "--build-candidate-benchmark",
+                    "--cmake-source-dir",
+                    str(tmp),
+                    "--benchmark-build-dir",
+                    str(tmp / "build"),
+                    "--cmake-cxx-compiler",
+                    "icpx",
+                ]
+            )
+            original_build_candidate_build_plan = profiler.build_candidate_build_plan
+
+            def fake_build_candidate_build_plan(*args, **kwargs):
+                plan = original_build_candidate_build_plan(*args, **kwargs)
+                plan["configure_command"][0] = str(fake_cmake)
+                plan["build_command"][0] = str(fake_cmake)
+                return plan
+
+            workflow_globals = profiler.workflow.__globals__
+            original_workflow_build_candidate_build_plan = workflow_globals["build_candidate_build_plan"]
+            profiler.build_candidate_build_plan = fake_build_candidate_build_plan
+            workflow_globals["build_candidate_build_plan"] = fake_build_candidate_build_plan
+            try:
+                with self.assertRaisesRegex(RuntimeError, "Candidate benchmark build failed"):
+                    profiler.workflow(args)
+            finally:
+                profiler.build_candidate_build_plan = original_build_candidate_build_plan
+                workflow_globals["build_candidate_build_plan"] = original_workflow_build_candidate_build_plan
+
+            summary_path = tmp / "workspace" / "reports" / "candidate_build_summary.json"
+            summary = profiler.read_json(summary_path)
+            build_log_exists = Path(summary["steps"][1]["log"]).exists()
+
+        self.assertEqual(summary["status"], "fail")
+        self.assertEqual(summary["failure_step"], "build")
+        self.assertEqual(summary["steps"][0]["status"], "pass")
+        self.assertEqual(summary["steps"][1]["status"], "fail")
+        self.assertEqual(summary["steps"][1]["returncode"], 5)
+        self.assertTrue(build_log_exists)
+
     def test_build_candidate_benchmark_requires_phase_a_inputs_or_probe_off(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             args = profiler.build_parser().parse_args(

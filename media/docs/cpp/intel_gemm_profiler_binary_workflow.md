@@ -120,12 +120,13 @@ Output:
 
 - benchmark executables
 - build logs
-- updated `build_manifest.json`
+- `candidate_build_summary.json`
 
 Responsibility:
 
 - configure and build candidate batches
-- persist build success/failure per candidate
+- persist configure/build success or failure before surfacing workflow errors
+- retain the failing step, return code, command, log path, selected kernel count, and kernel filter file
 - keep incremental rebuild support
 
 ### `BenchmarkRunner`

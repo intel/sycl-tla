@@ -125,10 +125,16 @@ Outcome:
 Required capability:
 
 - generated `RCR` benchmark registrations can be built on the target node
+- configure/build failures are captured in `candidate_build_summary.json`
 
 Minimum proof:
 
 - at least one generated `RCR bf16` candidate batch builds successfully on B60
+
+Failure handling:
+
+- `candidate_build_summary.json` is written before the workflow raises on candidate benchmark build failure.
+- Failed summaries include `status`, `failure_step`, `failure_reason`, `selected_kernel_count`, `kernel_filter_file`, and per-step command/log/returncode metadata.
 
 ### 7. Correctness path
 

@@ -239,13 +239,26 @@ def execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=Non
             item["timeout_reason"] = timeout_reason
         results.append(item)
         if status != "pass":
-            raise RuntimeError(f"Candidate benchmark {step} failed with status {status}. See {log_path}.")
+            return {
+                "schema_version": build_plan["schema_version"],
+                "generated_at": build_plan["generated_at"],
+                "status": status,
+                "failure_step": step,
+                "failure_reason": f"Candidate benchmark {step} failed with status {status}. See {log_path}.",
+                "build_target": build_plan["build_target"],
+                "benchmark_exe": build_plan["benchmark_exe"],
+                "selected_kernel_count": build_plan.get("selected_kernel_count", ""),
+                "kernel_filter_file": build_plan.get("kernel_filter_file", ""),
+                "steps": results,
+            }
     return {
         "schema_version": build_plan["schema_version"],
         "generated_at": build_plan["generated_at"],
         "status": "pass",
         "build_target": build_plan["build_target"],
         "benchmark_exe": build_plan["benchmark_exe"],
+        "selected_kernel_count": build_plan.get("selected_kernel_count", ""),
+        "kernel_filter_file": build_plan.get("kernel_filter_file", ""),
         "steps": results,
     }
 
@@ -494,6 +507,8 @@ def workflow(args):
             timeout=args.timeout,
         )
         write_json(candidate_build_summary_path, candidate_build_summary)
+        if candidate_build_summary.get("status") != "pass":
+            raise RuntimeError(candidate_build_summary["failure_reason"])
         effective_benchmark_exe = candidate_build_plan["benchmark_exe"]
         env_caps["executables"]["benchmark_exe"] = effective_benchmark_exe
         env_caps["executables"]["benchmark_available"] = True
