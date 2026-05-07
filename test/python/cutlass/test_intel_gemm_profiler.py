@@ -80,6 +80,49 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(splitk["allowed_runtime_sweeps"], ["shape_id", "m", "n", "k"])
         self.assertEqual(data_parallel["benchmark_target"], "03_bmg_gemm_streamk")
 
+    def test_generated_level0_candidates_allow_stage_count_auto(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "generated-level0",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rcr_bf16_128_128_32",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_acc": "f32",
+                    "m": 128,
+                    "n": 128,
+                    "k": 32,
+                }
+            ],
+        }
+
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="generator",
+            generator_arch="bmg",
+            generator_instantiation_level=0,
+        )
+
+        self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "generator")
+        self.assertEqual(candidate_space["kernel_catalog"]["generator_instantiation_level"], 0)
+        self.assertGreater(len(candidate_space["candidates"]), 0)
+        self.assertTrue(all(candidate["stages"] == 0 for candidate in candidate_space["candidates"]))
+        self.assertTrue(
+            any(
+                candidate["kernel_id"]
+                == "cutlass3x_xe20_tensorop_gemm_bf16_bf16_f32_f32_bf16_dbf16_128x128x32_1x1x1_0_tnt_align8"
+                for candidate in candidate_space["candidates"]
+            )
+        )
+
     def test_kernel_catalog_prefers_repo_json(self):
         catalog = profiler.load_persisted_kernel_catalog()
 

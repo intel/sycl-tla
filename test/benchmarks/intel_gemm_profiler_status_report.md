@@ -18,7 +18,7 @@
 - 76 个 Ali reference matches
 - 0 missing dispatch
 
-本地 profiler Python 回归当前为 **73/73 OK**。
+本地 profiler Python 回归当前为 **74/74 OK**。
 
 补充确认阶段 smoke 也已在远端 BMG 节点通过：
 
@@ -55,6 +55,22 @@
   - `screening_selected_kernel_batch_001.in`
   - `screening_manifest_selected_kernel_batch_001.json`
   - `screening_selected_kernel_batch_001.log`
+
+补充 generated level0 StageCountAuto smoke 也已在远端 BMG 节点通过：
+
+- 手工 BF16 RCR shape：`m=128, n=128, k=32`
+- generator catalog：`--kernel-catalog-source generator --generator-instantiation-level 0`
+- compiled-kernel-list 限定 1 个 StageCountAuto generated kernel
+- `--candidate-build-batch-size 1`
+- `--run-candidate-build-preflight`
+- `--use-candidate-build-preflight-benchmarks`
+- preflight batches: 1
+- passed preflight batches: 1
+- screening rows: 1
+- passed rows: 1
+- failed rows: 0
+- dispatch entries: 1
+- selected candidate 使用 `st0`，对应 generator `StageCountAuto`
 
 ## 当前可复现的 GEMM MVP workflow
 

@@ -35,6 +35,7 @@ The current workflow also supports:
 - selected-kernel batch filter emission through `--candidate-build-batch-size`
 - per-batch build preflight execution through `--run-candidate-build-preflight`
 - optional screening/confirmation routing to preflighted per-batch benchmark binaries through `--use-candidate-build-preflight-benchmarks`
+- generated Intel Xe `StageCountAuto` candidates represented as `stages=0`
 
 Confirmation smoke proof:
 
@@ -62,6 +63,20 @@ Batch routing smoke proof:
 - failed rows: 0
 - dispatch entries: 1
 - batch-specific config/manifest/log artifacts emitted for both batches
+
+Generated level0 StageCountAuto smoke proof:
+
+- remote BMG node
+- manual BF16 RCR shape: `m=128, n=128, k=32`
+- generator catalog: level 0
+- compiled-kernel-list: 1 generated StageCountAuto kernel
+- candidate stage: `st0`
+- preflight batches: 1
+- passed preflight batches: 1
+- screening rows: 1
+- passed rows: 1
+- failed rows: 0
+- dispatch entries: 1
 
 ## MVP scope
 
