@@ -91,6 +91,21 @@
   - failed rows: 0
   - dispatch entries: 1
 
+补充 generated StreamK 限制现在已显式进入 artifact：
+
+- Intel Xe `GemmUniversal` 当前只允许 `void` 或 `PersistentScheduler`，generated `StreamKScheduler` 会触发 compile-time static_assert
+- workflow 继续把 generated StreamK kernels 排除在 `candidate_build_manifest.json` 之外
+- `gemm_candidate_space.json` 现在新增：
+  - `candidate_coverage`
+  - `candidate_exception_summary`
+- BF16/RCR level1 artifact smoke：
+  - catalog kernels: 1824
+  - matched-signature kernels: 152
+  - accepted candidates: 28
+  - blocked candidates: 20
+  - StreamK exceptions: 76
+  - exception reason: `intel_xe_generated_streamk_tile_scheduler_unsupported`
+
 ## 当前可复现的 GEMM MVP workflow
 
 典型全量 Ali generated benchmark search 命令如下：

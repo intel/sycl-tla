@@ -138,6 +138,8 @@ Responsibility:
 
 `--use-candidate-build-preflight-benchmarks` switches benchmark execution from the aggregate binary to the per-batch binaries produced by successful preflight builds. The workflow groups screening and confirmation entries by `candidate.kernel_id`, writes batch-specific config/manifest/log artifacts such as `screening_selected_kernel_batch_000.in`, and runs each group with its batch `benchmark_exe`. This flag requires `--run-candidate-build-preflight` to complete with `status=pass`; otherwise the workflow fails instead of silently falling back to an aggregate binary.
 
+Generated Intel Xe StreamK kernels are intentionally excluded from generated benchmark build manifests until Xe `GemmUniversal` supports `StreamKScheduler` specialization. `gemm_candidate_space.json` records this as `intel_xe_generated_streamk_tile_scheduler_unsupported` in both `candidate_exceptions` and the aggregated `candidate_exception_summary`, while `candidate_coverage` keeps catalog, matched-signature, accepted, blocked, and exception counts visible for large generated catalogs.
+
 ### `BenchmarkRunner`
 
 Input:

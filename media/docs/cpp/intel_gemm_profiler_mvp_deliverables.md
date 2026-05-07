@@ -36,6 +36,7 @@ The current workflow also supports:
 - per-batch build preflight execution through `--run-candidate-build-preflight`
 - optional screening/confirmation routing to preflighted per-batch benchmark binaries through `--use-candidate-build-preflight-benchmarks`
 - generated Intel Xe `StageCountAuto` candidates represented as `stages=0`
+- generated candidate coverage and exception summaries in `gemm_candidate_space.json`
 
 Confirmation smoke proof:
 
@@ -89,6 +90,14 @@ F16 non-RCR generated layout smoke proof:
 - RRR selected candidate: `rrr_f16f16f32_tm128_tn128_tk32_sg4x4_st0_sk1`
 - CCR selected candidate: `ccr_f16f16f32_tm128_tn128_tk32_sg4x4_st0_sk1`
 - each run passed: 1 preflight batch, 1 screening row, 0 failed rows, 1 dispatch entry
+
+Generated StreamK limitation tracking:
+
+- Intel Xe `GemmUniversal` currently rejects generated `StreamKScheduler` specialization at compile time.
+- The workflow keeps generated StreamK candidates out of `candidate_build_manifest.json` and records the reason in `candidate_exceptions`.
+- `candidate_exception_summary` aggregates this by reason and includes sample kernel names.
+- `candidate_coverage` records catalog, matched-signature, accepted, blocked, and exception counts for auditability.
+- BF16/RCR level1 artifact smoke recorded 76 `intel_xe_generated_streamk_tile_scheduler_unsupported` exceptions and 28 accepted candidates.
 
 ## MVP scope
 

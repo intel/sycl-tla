@@ -183,10 +183,27 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "generator")
         self.assertEqual(candidate_space["kernel_catalog"]["generator_instantiation_level"], 1)
         self.assertGreater(candidate_space["kernel_catalog"]["kernel_count"], 8)
+        self.assertEqual(candidate_space["candidate_coverage"]["requested_layouts"], ["rcr"])
+        self.assertEqual(candidate_space["candidate_coverage"]["accepted_candidate_count"], len(candidate_space["candidates"]))
+        self.assertEqual(
+            candidate_space["candidate_coverage"]["exception_count"],
+            len(candidate_space["candidate_exceptions"]),
+        )
         self.assertFalse(any(candidate["streamk_mode"] == "streamk" for candidate in candidate_space["candidates"]))
+        self.assertEqual(
+            candidate_space["candidate_exception_summary"][0]["reason"],
+            "intel_xe_generated_streamk_tile_scheduler_unsupported",
+        )
+        self.assertEqual(
+            candidate_space["candidate_exception_summary"][0]["count"],
+            candidate_space["candidate_coverage"]["exception_count"],
+        )
+        self.assertTrue(candidate_space["candidate_exception_summary"][0]["sample_kernel_names"][0].endswith("_stream_k"))
         self.assertTrue(
             any(
                 item["reason"] == "intel_xe_generated_streamk_tile_scheduler_unsupported"
+                and item["layout"] == "rcr"
+                and item["dtype_a"] == "bf16"
                 for item in candidate_space["candidate_exceptions"]
             )
         )
@@ -1106,6 +1123,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(kernel_catalog["generator_instantiation_level"], 1)
             self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "generator")
             self.assertTrue(any(entry["stages"] == 0 for entry in kernel_catalog["kernels"]))
+            self.assertEqual(candidate_space["candidate_coverage"]["accepted_candidate_count"], len(candidate_space["candidates"]))
+            self.assertEqual(candidate_space["candidate_coverage"]["exception_count"], len(candidate_space["candidate_exceptions"]))
+            self.assertTrue(candidate_space["candidate_exception_summary"][0]["sample_kernel_names"][0].endswith("_stream_k"))
             self.assertGreater(len(build_manifest["variants"]), 8)
             self.assertFalse(any("_stream_k" in variant["kernel_id"] for variant in build_manifest["variants"]))
             self.assertTrue(

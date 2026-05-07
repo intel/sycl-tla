@@ -113,6 +113,8 @@ def generate_candidate_space(
 ):
     seen = set()
     candidates = []
+    matched_signature_count = 0
+    blocked_candidate_count = 0
     dtypes = sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]})
     requested_layouts = {shape["layout"] for shape in shapes_doc["shapes"]}
     requested_signatures = {
@@ -141,16 +143,27 @@ def generate_candidate_space(
         signature = (seed["layout"], seed["dtype_a"], seed["dtype_b"], seed["dtype_c"], seed["dtype_acc"])
         if signature not in requested_signatures:
             continue
+        matched_signature_count += 1
         if seed.get("source") == "generator_manifest" and seed.get("streamk_mode") == "streamk":
             candidate_exceptions.append(
                 {
                     "kernel_name": seed["kernel_name"],
                     "reason": "intel_xe_generated_streamk_tile_scheduler_unsupported",
                     "detail": "Intel Xe generated library kernels currently reject StreamK tile scheduler specialization.",
+                    "layout": seed["layout"],
+                    "dtype_a": seed["dtype_a"],
+                    "dtype_b": seed["dtype_b"],
+                    "dtype_c": seed["dtype_c"],
+                    "dtype_acc": seed["dtype_acc"],
+                    "tile_m": seed["tile_m"],
+                    "tile_n": seed["tile_n"],
+                    "tile_k": seed["tile_k"],
+                    "stages": seed["stages"],
                 }
             )
             continue
         if blocked(seed, constraints):
+            blocked_candidate_count += 1
             continue
         ident = candidate_id_for(seed)
         if ident in seen:
@@ -188,6 +201,13 @@ def generate_candidate_space(
                 "filters_applied": ["kernel_catalog", constraints["constraint_source"]],
             }
         )
+    exception_summary = {}
+    for exception in candidate_exceptions:
+        reason = exception["reason"]
+        summary = exception_summary.setdefault(reason, {"reason": reason, "count": 0, "sample_kernel_names": []})
+        summary["count"] += 1
+        if len(summary["sample_kernel_names"]) < 5:
+            summary["sample_kernel_names"].append(exception["kernel_name"])
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
@@ -201,6 +221,25 @@ def generate_candidate_space(
             "generator_instantiation_level": kernel_catalog.get("generator_instantiation_level", 0),
             "kernel_count": len(kernel_catalog["kernels"]),
         },
+        "candidate_coverage": {
+            "requested_layouts": sorted(requested_layouts),
+            "requested_signatures": [
+                {
+                    "layout": layout,
+                    "dtype_a": dtype_a,
+                    "dtype_b": dtype_b,
+                    "dtype_c": dtype_c,
+                    "dtype_acc": dtype_acc,
+                }
+                for layout, dtype_a, dtype_b, dtype_c, dtype_acc in sorted(requested_signatures)
+            ],
+            "catalog_kernel_count": len(kernel_catalog["kernels"]),
+            "matched_signature_kernel_count": matched_signature_count,
+            "accepted_candidate_count": len(candidates),
+            "blocked_candidate_count": blocked_candidate_count,
+            "exception_count": len(candidate_exceptions),
+        },
+        "candidate_exception_summary": sorted(exception_summary.values(), key=lambda item: item["reason"]),
         "candidate_exceptions": candidate_exceptions,
         "candidates": candidates,
     }
