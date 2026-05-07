@@ -4,6 +4,9 @@
 #################################################################################################
 
 import importlib.util
+import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -824,6 +827,93 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertEqual(result["status"], "found")
         self.assertEqual(result["entry"]["candidate_id"], "file_winner")
+
+    def test_runtime_dispatch_cli_lookup_returns_json(self):
+        dispatch_table = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "entries": [
+                {
+                    "shape_key": {
+                        "layout": "rcr",
+                        "dtype_a": "bf16",
+                        "dtype_b": "bf16",
+                        "dtype_c": "f32",
+                        "dtype_acc": "f32",
+                        "m": 128,
+                        "n": 128,
+                        "k": 32,
+                    },
+                    "candidate_id": "cli_winner",
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            table_path = Path(tmpdir) / "optimal_dispatch_table.json"
+            profiler.write_json(table_path, dispatch_table)
+            repo_root = Path(__file__).resolve().parents[3]
+            script_path = repo_root / "test" / "benchmarks" / "intel_gemm_profiler.py"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    "--lookup-dispatch-table",
+                    str(table_path),
+                    "--lookup-layout",
+                    "rcr",
+                    "--lookup-dtype-a",
+                    "bf16",
+                    "--lookup-dtype-b",
+                    "bf16",
+                    "--lookup-dtype-c",
+                    "f32",
+                    "--lookup-dtype-acc",
+                    "f32",
+                    "--lookup-m",
+                    "128",
+                    "--lookup-n",
+                    "128",
+                    "--lookup-k",
+                    "32",
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["status"], "found")
+        self.assertEqual(result["entry"]["candidate_id"], "cli_winner")
+
+    def test_runtime_dispatch_cli_lookup_returns_fallback_json(self):
+        dispatch_table = {"schema_version": profiler.SCHEMA_VERSION, "entries": []}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            table_path = Path(tmpdir) / "optimal_dispatch_table.json"
+            profiler.write_json(table_path, dispatch_table)
+            repo_root = Path(__file__).resolve().parents[3]
+            script_path = repo_root / "test" / "benchmarks" / "intel_gemm_profiler.py"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    "--lookup-dispatch-table",
+                    str(table_path),
+                    "--lookup-m",
+                    "128",
+                    "--lookup-n",
+                    "128",
+                    "--lookup-k",
+                    "32",
+                    "--fallback-candidate-id",
+                    "safe_default",
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["status"], "fallback")
+        self.assertEqual(result["fallback"]["candidate_id"], "safe_default")
 
     def test_confirmation_median_can_override_screening_rank(self):
         shapes = {

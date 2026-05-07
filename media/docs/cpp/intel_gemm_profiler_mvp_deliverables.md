@@ -31,7 +31,7 @@ The current workflow also supports:
 - chunked benchmark subprocess execution through `--benchmark-entry-chunk-size`
 - top-k confirmation through `--top-k` and `--confirm-runs`
 - median-based final selection evidence in `gemm_dispatch_table.json`
-- exact-shape runtime dispatch lookup with schema validation and explicit fallback metadata
+- exact-shape runtime dispatch lookup CLI with schema validation and explicit fallback metadata
 - close-call labeling through `--close-call-threshold`
 - selected-kernel batch filter emission through `--candidate-build-batch-size`
 - per-batch build preflight execution through `--run-candidate-build-preflight`

@@ -2,9 +2,9 @@
 
 ## 当前结论
 
-当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强、candidate batch build/routing 和 runtime dispatch lookup** 的主要工作。
+当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强、candidate batch build/routing 和 runtime dispatch lookup CLI** 的主要工作。
 
-现阶段代码处于 **GEMM MVP 主链路已端到端打通，native `tools/profiler/cutlass_profiler` 已完成单 GEMM generated kernel 的 SYCL 正确性+性能闭环，并具备 exact-shape runtime dispatch table lookup/fallback 基础能力** 的状态。
+现阶段代码处于 **GEMM MVP 主链路已端到端打通，native `tools/profiler/cutlass_profiler` 已完成单 GEMM generated kernel 的 SYCL 正确性+性能闭环，并具备产品化可调用的 exact-shape runtime dispatch table lookup/fallback CLI** 的状态。
 
 最新全量 Ali workbook generated workflow 已在远端 BMG 节点通过：
 
@@ -18,7 +18,7 @@
 - 76 个 Ali reference matches
 - 0 missing dispatch
 
-本地 profiler Python 回归当前为 **78/78 OK**。
+本地 profiler Python 回归当前为 **80/80 OK**。
 
 补充 native C++ `tools/profiler/cutlass_profiler` GEMM smoke 也已在远端 BMG 节点通过：
 
@@ -311,7 +311,7 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 
 ### 6. Runtime dispatch table 集成
 
-当前 `gemm_dispatch_table.json` 和 `optimal_dispatch_table.json` 已能生成，并新增了 Python runtime lookup helper：
+当前 `gemm_dispatch_table.json` 和 `optimal_dispatch_table.json` 已能生成，并新增了 Python runtime lookup helper 与 CLI 查询入口：
 
 - runtime lookup key。
 - fallback 策略。
@@ -325,6 +325,7 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 - 拒绝 duplicate `shape_key`
 - exact-shape 命中返回 selected dispatch entry
 - shape miss 时返回显式 `missing` 或 `fallback` 结果，包含 fallback reason 和 fallback candidate id
+- CLI 入口：`python3 test/benchmarks/intel_gemm_profiler.py --lookup-dispatch-table <optimal_dispatch_table.json> --lookup-m ... --lookup-n ... --lookup-k ...`
 
 仍未完成的是把该 helper 接入真实推理 runtime 的发布/加载流程。
 
@@ -351,7 +352,7 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 - confirmation selector evidence
 - 多个 tools/profiler family 的 SYCL build/CLI 纳入
 - native `tools/profiler/cutlass_profiler` generated GEMM host-reference verified profile row
-- runtime dispatch table exact-shape lookup / schema validation / explicit fallback helper
+- runtime dispatch table exact-shape lookup / schema validation / explicit fallback helper and CLI
 - 本地与远端回归闭环
 
 项目现在的状态是：**GEMM MVP 已能作为离线调优基线使用，native C++ profiler 的 GEMM 主线也已具备最小 verified profile 能力，dispatch artifact 已具备基础 lookup/fallback 能力；后续重点转向 Phase A probe、搜索空间扩展、非 GEMM generator/library instances 和真实 runtime 集成。**

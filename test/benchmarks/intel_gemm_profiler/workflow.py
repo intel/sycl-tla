@@ -36,6 +36,7 @@ if __package__ in (None, ""):
     )
     from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from intel_gemm_profiler.ali_dataset import build_ali_gemm_docs
+    from intel_gemm_profiler.dispatch import lookup_dispatch_entry
     from intel_gemm_profiler.runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from intel_gemm_profiler.utils import ensure_dir, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
@@ -63,6 +64,7 @@ else:
     )
     from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from .ali_dataset import build_ali_gemm_docs
+    from .dispatch import lookup_dispatch_entry
     from .runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from .utils import ensure_dir, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
@@ -542,6 +544,8 @@ def benchmark_log_paths(log_path, command_or_commands):
 
 
 def workflow(args):
+    if not args.workspace:
+        raise ValueError("--workspace is required unless --lookup-dispatch-table is used.")
     workspace = ensure_dir(Path(args.workspace).resolve())
     inputs_dir = ensure_dir(workspace / "inputs")
     generated_dir = ensure_dir(workspace / "generated")
@@ -774,7 +778,7 @@ def workflow(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Intel GEMM profiler MVP runner for non-legacy registered RCR kernels.")
-    parser.add_argument("--workspace", required=True, help="Workspace directory for generated files and reports.")
+    parser.add_argument("--workspace", default="", help="Workspace directory for generated files and reports.")
     parser.add_argument("--benchmark-exe", default="./build/benchmarks/gemm/cutlass_benchmarks_gemm_sycl", help="Benchmark executable to run.")
     parser.add_argument("--streamk-example-exe", default="./build/examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk", help="StreamK example executable used for split-k candidates.")
     parser.add_argument("--cwd", default=None, help="Working directory for the benchmark subprocess.")
@@ -808,12 +812,52 @@ def build_parser():
     parser.add_argument("--top-k", type=int, default=3, help="Top-k candidates kept for confirmation.")
     parser.add_argument("--confirm-runs", type=int, default=3, help="Number of confirmation attempts for top-k candidates.")
     parser.add_argument("--close-call-threshold", type=float, default=3.0, help="Gap threshold in percent for close-call labeling.")
+    parser.add_argument("--lookup-dispatch-table", default="", help="Lookup mode: path to gemm_dispatch_table.json or optimal_dispatch_table.json. When set, the CLI prints a lookup JSON result instead of running the profiler workflow.")
+    parser.add_argument("--lookup-layout", default="rcr", help="Lookup mode GEMM layout key, e.g. rcr.")
+    parser.add_argument("--lookup-dtype-a", default="bf16", help="Lookup mode A dtype.")
+    parser.add_argument("--lookup-dtype-b", default="bf16", help="Lookup mode B dtype.")
+    parser.add_argument("--lookup-dtype-c", default="f32", help="Lookup mode C dtype.")
+    parser.add_argument("--lookup-dtype-acc", default="f32", help="Lookup mode accumulator dtype.")
+    parser.add_argument("--lookup-m", type=int, default=0, help="Lookup mode M dimension.")
+    parser.add_argument("--lookup-n", type=int, default=0, help="Lookup mode N dimension.")
+    parser.add_argument("--lookup-k", type=int, default=0, help="Lookup mode K dimension.")
+    parser.add_argument("--fallback-candidate-id", default="", help="Optional fallback candidate id returned when lookup mode misses the exact shape.")
     return parser
+
+
+def dispatch_lookup_from_args(args):
+    missing = [
+        flag
+        for flag, value in (
+            ("--lookup-m", args.lookup_m),
+            ("--lookup-n", args.lookup_n),
+            ("--lookup-k", args.lookup_k),
+        )
+        if value <= 0
+    ]
+    if missing:
+        raise ValueError(f"{', '.join(missing)} must be positive when --lookup-dispatch-table is used.")
+    shape = {
+        "layout": args.lookup_layout,
+        "dtype_a": args.lookup_dtype_a,
+        "dtype_b": args.lookup_dtype_b,
+        "dtype_c": args.lookup_dtype_c,
+        "dtype_acc": args.lookup_dtype_acc,
+        "m": args.lookup_m,
+        "n": args.lookup_n,
+        "k": args.lookup_k,
+    }
+    return lookup_dispatch_entry(
+        args.lookup_dispatch_table,
+        shape,
+        fallback_candidate_id=args.fallback_candidate_id,
+    )
 
 
 def main():
     args = build_parser().parse_args()
-    print(json.dumps(workflow(args), indent=2))
+    result = dispatch_lookup_from_args(args) if args.lookup_dispatch_table else workflow(args)
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

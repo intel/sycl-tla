@@ -216,6 +216,24 @@ Responsibility:
 - reject duplicate dispatch `shape_key` entries
 - avoid silent defaulting by returning fallback metadata with a reason and optional fallback candidate id
 
+CLI form:
+
+```bash
+python3 test/benchmarks/intel_gemm_profiler.py \
+  --lookup-dispatch-table /path/to/optimal_dispatch_table.json \
+  --lookup-layout rcr \
+  --lookup-dtype-a bf16 \
+  --lookup-dtype-b bf16 \
+  --lookup-dtype-c f32 \
+  --lookup-dtype-acc f32 \
+  --lookup-m 128 \
+  --lookup-n 128 \
+  --lookup-k 32 \
+  --fallback-candidate-id safe_default
+```
+
+The CLI prints a JSON result. Exact hits return `status=found` and the selected dispatch entry. Misses return `status=missing`, or `status=fallback` when `--fallback-candidate-id` is provided.
+
 ## Workspace layout
 
 The profiler workflow should use a dedicated workspace under a generated run directory.

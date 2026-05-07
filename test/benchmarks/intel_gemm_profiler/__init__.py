@@ -83,7 +83,7 @@ from .dispatch import (
 )
 from .ali_dataset import build_ali_gemm_docs
 from .workflow import build_candidate_build_plan, benchmark_batch_plan_by_kernel_id, benchmark_exe_for_build_plan, execute_candidate_build_plan, execute_candidate_build_preflight_plans, limit_shapes_and_reference, load_target_shapes_and_reference, run_entries_with_batch_benchmarks, validate_candidate_auto_build_mode
-from .workflow import build_compiler_flags_probe_summary, build_parser, empty_anomaly_report, main, run_phase_a_probe, workflow
+from .workflow import build_compiler_flags_probe_summary, build_parser, dispatch_lookup_from_args, empty_anomaly_report, main, run_phase_a_probe, workflow
 
 __all__ = [
     "BENCHMARK_ERROR_RE",
@@ -109,6 +109,7 @@ __all__ = [
     "build_compiler_flags_probe_summary",
     "compute_efficiency_bounds",
     "detect_probe_anomalies",
+    "dispatch_lookup_from_args",
     "build_dispatch_table",
     "build_dispatch_index",
     "build_dpas_probe_entry",
