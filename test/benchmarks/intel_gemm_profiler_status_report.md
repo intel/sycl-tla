@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行和确认选择器补强** 的主要工作。
+当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强和 candidate batch build/routing** 的主要工作。
 
 现阶段代码处于 **GEMM MVP 主链路已端到端打通，可继续做性能可信度和非 GEMM family 扩展** 的状态。
 
@@ -18,7 +18,7 @@
 - 76 个 Ali reference matches
 - 0 missing dispatch
 
-本地 profiler Python 回归当前为 **65/65 OK**。
+本地 profiler Python 回归当前为 **73/73 OK**。
 
 补充确认阶段 smoke 也已在远端 BMG 节点通过：
 
@@ -32,6 +32,29 @@
 - `selection_summary.entries_with_confirmation = 2`
 - `selection_summary.incomplete_confirmation_entries = 0`
 - dispatch evidence 已记录 median runtime、median TFLOPS、stdev、CV、screening rank、runner-up 和 ranked candidates
+
+补充 candidate batch routing smoke 也已在远端 BMG 节点通过：
+
+- 手工 BF16 RCR shape：`m=128, n=128, k=32`
+- generator catalog：`--kernel-catalog-source generator --generator-instantiation-level 1`
+- compiled-kernel-list 限定 2 个 generated kernels
+- `--candidate-build-batch-size 1`
+- `--run-candidate-build-preflight`
+- `--use-candidate-build-preflight-benchmarks`
+- preflight batches: 2
+- passed preflight batches: 2
+- aggregate candidate build: not run
+- screening rows: 2
+- passed rows: 2
+- failed rows: 0
+- dispatch entries: 1
+- routing artifacts 已生成：
+  - `screening_selected_kernel_batch_000.in`
+  - `screening_manifest_selected_kernel_batch_000.json`
+  - `screening_selected_kernel_batch_000.log`
+  - `screening_selected_kernel_batch_001.in`
+  - `screening_manifest_selected_kernel_batch_001.json`
+  - `screening_selected_kernel_batch_001.log`
 
 ## 当前可复现的 GEMM MVP workflow
 

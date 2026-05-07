@@ -32,6 +32,9 @@ The current workflow also supports:
 - top-k confirmation through `--top-k` and `--confirm-runs`
 - median-based final selection evidence in `gemm_dispatch_table.json`
 - close-call labeling through `--close-call-threshold`
+- selected-kernel batch filter emission through `--candidate-build-batch-size`
+- per-batch build preflight execution through `--run-candidate-build-preflight`
+- optional screening/confirmation routing to preflighted per-batch benchmark binaries through `--use-candidate-build-preflight-benchmarks`
 
 Confirmation smoke proof:
 
@@ -43,6 +46,22 @@ Confirmation smoke proof:
 - dispatch entries: 2
 - entries with confirmation evidence: 2
 - incomplete confirmation entries: 0
+
+Batch routing smoke proof:
+
+- remote BMG node
+- manual BF16 RCR shape: `m=128, n=128, k=32`
+- generator catalog: level 1
+- compiled-kernel-list: 2 generated kernels
+- batch size: 1 kernel per preflight build
+- preflight batches: 2
+- passed preflight batches: 2
+- aggregate candidate build: not run
+- screening rows: 2
+- passed rows: 2
+- failed rows: 0
+- dispatch entries: 1
+- batch-specific config/manifest/log artifacts emitted for both batches
 
 ## MVP scope
 
