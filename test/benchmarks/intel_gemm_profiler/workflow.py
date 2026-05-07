@@ -173,6 +173,57 @@ def benchmark_exe_for_build_plan(build_dir, build_target):
     return str(Path(build_dir) / "benchmarks" / "gemm" / build_target)
 
 
+def candidate_build_commands(source_dir, build_dir, build_target, cmake_vars):
+    configure_command = ["cmake", "-S", str(source_dir), "-B", str(build_dir)]
+    configure_command.extend(f"-D{name}={value}" for name, value in sorted(cmake_vars.items()))
+    build_command = [
+        "cmake",
+        "--build",
+        str(build_dir),
+        "--target",
+        build_target,
+        "--parallel",
+    ]
+    return configure_command, build_command
+
+
+def build_batch_preflight_plans(build_manifest, source_dir, build_dir, base_cmake_vars):
+    cmake_config = build_manifest["cmake_config"]
+    build_target = cmake_config["build_target"]
+    kernel_filter_var = cmake_config["kernel_filter_cmake_var"]
+    plans = []
+    for batch in build_manifest.get("selected_kernel_batches", []):
+        batch_filter_path = batch.get("kernel_filter_path", "")
+        if not batch_filter_path:
+            continue
+        batch_build_dir = Path(build_dir) / "candidate_batch_preflight" / batch["batch_id"]
+        batch_cmake_vars = dict(base_cmake_vars)
+        batch_cmake_vars[kernel_filter_var] = batch_filter_path
+        configure_command, build_command = candidate_build_commands(
+            source_dir,
+            batch_build_dir,
+            build_target,
+            batch_cmake_vars,
+        )
+        plans.append(
+            {
+                "batch_id": batch["batch_id"],
+                "batch_index": batch["batch_index"],
+                "kernel_count": batch["kernel_count"],
+                "selected_kernel_list": batch["selected_kernel_list"],
+                "kernel_filter_file": batch_filter_path,
+                "build_dir": str(batch_build_dir),
+                "benchmark_exe": benchmark_exe_for_build_plan(batch_build_dir, build_target),
+                "cmake_vars": batch_cmake_vars,
+                "configure_command": configure_command,
+                "build_command": build_command,
+                "configure_command_line": shell_join(configure_command),
+                "build_command_line": shell_join(build_command),
+            }
+        )
+    return plans
+
+
 def build_candidate_build_plan(
     build_manifest,
     source_dir,
@@ -189,16 +240,12 @@ def build_candidate_build_plan(
         cmake_vars["GOOGLEBENCHMARK_DIR"] = str(googlebenchmark_dir)
     if cmake_cxx_compiler:
         cmake_vars["CMAKE_CXX_COMPILER"] = cmake_cxx_compiler
-    configure_command = ["cmake", "-S", str(source_dir), "-B", str(build_dir)]
-    configure_command.extend(f"-D{name}={value}" for name, value in sorted(cmake_vars.items()))
-    build_command = [
-        "cmake",
-        "--build",
-        str(build_dir),
-        "--target",
+    configure_command, build_command = candidate_build_commands(
+        source_dir,
+        build_dir,
         cmake_config["build_target"],
-        "--parallel",
-    ]
+        cmake_vars,
+    )
     return {
         "schema_version": build_manifest["schema_version"],
         "generated_at": build_manifest["generated_at"],
@@ -212,6 +259,7 @@ def build_candidate_build_plan(
         "selected_kernel_count": build_manifest["selected_kernel_count"],
         "selected_kernel_batch_size": build_manifest.get("selected_kernel_batch_size", 0),
         "selected_kernel_batches": build_manifest.get("selected_kernel_batches", []),
+        "batch_preflight_plans": build_batch_preflight_plans(build_manifest, source_dir, build_dir, cmake_vars),
         "cmake_vars": cmake_vars,
         "configure_command": configure_command,
         "build_command": build_command,

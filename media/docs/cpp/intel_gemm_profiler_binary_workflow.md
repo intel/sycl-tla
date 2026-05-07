@@ -130,7 +130,7 @@ Responsibility:
 - emit optional selected-kernel batch filter files for isolated large-catalog preflight or retry
 - keep incremental rebuild support
 
-`--candidate-build-batch-size=N` does not change the default aggregate benchmark executable used by the current screening path. It adds `selected_kernel_batches` to `candidate_build_manifest.json` and writes `selected_kernel_filter_partXXX.list` files so larger generated catalogs can be bisected or preflighted in smaller compile groups.
+`--candidate-build-batch-size=N` does not change the default aggregate benchmark executable used by the current screening path. It adds `selected_kernel_batches` to `candidate_build_manifest.json`, writes `selected_kernel_filter_partXXX.list` files, and records `batch_preflight_plans` in `candidate_build_plan.json` so larger generated catalogs can be bisected or preflighted in smaller compile groups. Each preflight plan has its own build directory under `candidate_batch_preflight/<batch_id>/`.
 
 ### `BenchmarkRunner`
 

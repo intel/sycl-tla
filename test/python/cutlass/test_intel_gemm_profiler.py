@@ -1085,6 +1085,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(build_plan["kernel_filter_file"], outputs["selected_kernel_filter"])
             self.assertEqual(build_plan["selected_kernel_batch_size"], 4)
             self.assertEqual(build_plan["selected_kernel_batches"][0]["kernel_filter_path"], first_batch["kernel_filter_path"])
+            self.assertEqual(len(build_plan["batch_preflight_plans"]), len(build_manifest["selected_kernel_batches"]))
+            first_preflight = build_plan["batch_preflight_plans"][0]
+            self.assertEqual(first_preflight["batch_id"], first_batch["batch_id"])
+            self.assertEqual(first_preflight["kernel_filter_file"], first_batch["kernel_filter_path"])
+            self.assertIn("candidate_batch_preflight/selected_kernel_batch_000", first_preflight["build_dir"])
+            self.assertIn(f"-DKERNEL_FILTER_FILE={first_batch['kernel_filter_path']}", first_preflight["configure_command"])
+            self.assertTrue(first_preflight["benchmark_exe"].endswith("/benchmarks/gemm/cutlass_benchmarks_gemm_sycl"))
             self.assertEqual(build_plan["cmake_vars"]["KERNEL_FILTER_FILE"], outputs["selected_kernel_filter"])
             self.assertEqual(build_plan["googlebenchmark_dir"], str(Path(tmpdir) / "googlebenchmark-src"))
             self.assertEqual(build_plan["cmake_vars"]["GOOGLEBENCHMARK_DIR"], str(Path(tmpdir) / "googlebenchmark-src"))

@@ -136,6 +136,7 @@ Failure handling:
 - `candidate_build_summary.json` is written before the workflow raises on candidate benchmark build failure.
 - Failed summaries include `status`, `failure_step`, `failure_reason`, `selected_kernel_count`, `kernel_filter_file`, and per-step command/log/returncode metadata.
 - `--candidate-build-batch-size` can emit additional `selected_kernel_filter_partXXX.list` files and `selected_kernel_batches` metadata for large-catalog preflight and retry isolation.
+- `candidate_build_plan.json` includes `batch_preflight_plans` with per-batch configure/build commands and isolated build directories when batch artifacts are enabled.
 
 ### 7. Correctness path
 
