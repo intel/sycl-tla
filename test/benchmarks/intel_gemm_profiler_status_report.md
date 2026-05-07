@@ -72,6 +72,25 @@
 - dispatch entries: 1
 - selected candidate 使用 `st0`，对应 generator `StageCountAuto`
 
+补充 F16 / 非 RCR generated layout smoke 也已在远端 BMG 节点通过：
+
+- F16 RRR shape：`m=128, n=128, k=32`
+- F16 CCR shape：`m=128, n=128, k=32`
+- generator catalog：`--kernel-catalog-source generator --generator-instantiation-level 0`
+- compiled-kernel-list 每次限定 1 个 StageCountAuto generated kernel
+- `--candidate-build-batch-size 1`
+- `--run-candidate-build-preflight`
+- `--use-candidate-build-preflight-benchmarks`
+- RRR selected candidate：`rrr_f16f16f32_tm128_tn128_tk32_sg4x4_st0_sk1`
+- CCR selected candidate：`ccr_f16f16f32_tm128_tn128_tk32_sg4x4_st0_sk1`
+- RRR / CCR 均为：
+  - preflight batches: 1
+  - passed preflight batches: 1
+  - screening rows: 1
+  - passed rows: 1
+  - failed rows: 0
+  - dispatch entries: 1
+
 ## 当前可复现的 GEMM MVP workflow
 
 典型全量 Ali generated benchmark search 命令如下：

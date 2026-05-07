@@ -78,6 +78,18 @@ Generated level0 StageCountAuto smoke proof:
 - failed rows: 0
 - dispatch entries: 1
 
+F16 non-RCR generated layout smoke proof:
+
+- remote BMG node
+- generator catalog: level 0
+- candidate stage: `st0`
+- F16 RRR shape: `m=128, n=128, k=32`
+- F16 CCR shape: `m=128, n=128, k=32`
+- compiled-kernel-list: 1 generated StageCountAuto kernel per run
+- RRR selected candidate: `rrr_f16f16f32_tm128_tn128_tk32_sg4x4_st0_sk1`
+- CCR selected candidate: `ccr_f16f16f32_tm128_tn128_tk32_sg4x4_st0_sk1`
+- each run passed: 1 preflight batch, 1 screening row, 0 failed rows, 1 dispatch entry
+
 ## MVP scope
 
 The MVP includes:
