@@ -28,6 +28,7 @@ jobs:
       compiler: '["RELEASE"]'
       intel_graphics: '["ROLLING"]'
       gpu: '["PVC", "BMG"]'
+      CACHE_ENABLED: true
       DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
 
   # Full testing for pushes - 2 configurations
@@ -38,4 +39,5 @@ jobs:
       compiler: '["RELEASE", "NIGHTLY"]'
       intel_graphics: '["ROLLING"]'
       gpu: '["PVC", "BMG"]'
+      CACHE_ENABLED: false
       DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}

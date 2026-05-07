@@ -23,6 +23,11 @@ on:
         description: 'DPC++ path'
         required: false
         type: string
+      CACHE_ENABLED:
+        description: 'Enable compiler cache for PR jobs'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   run-tests:
@@ -52,7 +57,7 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
-      
+
       - name: Install Intel graphics drivers
         uses: ./.github/actions/install-intel-graphics
         with:
@@ -70,34 +75,94 @@ jobs:
       - name: Setup virtual environment
         shell: bash
         run: |
-          if ! command -v cmake &> /dev/null || ! command -v ninja &> /dev/null; then
-            echo "Installing cmake and/or ninja..."
+          if ! command -v cmake &> /dev/null || ! command -v ninja &> /dev/null || ! command -v ccache &> /dev/null; then
+            echo "Installing cmake, ninja, and/or ccache..."
             sudo apt update
-            sudo apt install -y cmake ninja-build
+            sudo apt install -y cmake ninja-build ccache
           else
-            echo "cmake and ninja already available"
+            echo "cmake, ninja, and ccache already available"
           fi
           . setvars.sh
           export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
           export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           export IGC_VectorAliasBBThreshold=100000000000
+          export CCACHE_DIR="$HOME/.cache/ccache"
+          export CCACHE_BASEDIR="$GITHUB_WORKSPACE"
+          export CCACHE_COMPILERCHECK=content
+          export CCACHE_MAXSIZE=2G
           env >> $GITHUB_ENV
           which $CXX
           $CXX --version
           sycl-ls
+
+      - name: Capture cache fingerprint
+        id: cache_fingerprint
+        if: inputs.CACHE_ENABLED
+        shell: bash
+        run: |
+          DPCPP_VERSION_DETECTED=$($CXX --version | sed -n 's/^Intel(R) oneAPI DPC++\/C++ Compiler \([0-9.]*\).*/\1/p' | head -1)
+          if [ -z "$DPCPP_VERSION_DETECTED" ]; then
+            DPCPP_VERSION_DETECTED=$($CXX --version | sed -n 's/.*clang version \([^ )]*\).*/\1/p' | head -1)
+          fi
+          if [ -z "$DPCPP_VERSION_DETECTED" ]; then
+            DPCPP_VERSION_DETECTED="unknown"
+          fi
+
+          GRAPHICS_RUNTIME_VERSION=$(sycl-ls --ignore-device-selectors 2>/dev/null | sed -n 's/.*Graphics \([^ ]*\) \[.*/\1/p' | head -1)
+          if [ -z "$GRAPHICS_RUNTIME_VERSION" ]; then
+            GRAPHICS_RUNTIME_VERSION=$(sycl-ls 2>/dev/null | sed -n 's/.*Graphics \([^ ]*\) \[.*/\1/p' | head -1)
+          fi
+          if [ -z "$GRAPHICS_RUNTIME_VERSION" ]; then
+            GRAPHICS_RUNTIME_VERSION="unknown"
+          fi
+
+          IGC_PACKAGE_VERSION=$(dpkg-query -W -f='${Version}' libigc2 2>/dev/null || true)
+          ZE_PACKAGE_VERSION=$(dpkg-query -W -f='${Version}' libze-intel-gpu1 2>/dev/null || true)
+          if [ -z "$IGC_PACKAGE_VERSION" ]; then
+            IGC_PACKAGE_VERSION="unknown"
+          fi
+          if [ -z "$ZE_PACKAGE_VERSION" ]; then
+            ZE_PACKAGE_VERSION="unknown"
+          fi
+
+          echo "dpcpp=$DPCPP_VERSION_DETECTED" >> $GITHUB_OUTPUT
+          echo "gfx_rt=$GRAPHICS_RUNTIME_VERSION" >> $GITHUB_OUTPUT
+          echo "igc=$IGC_PACKAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "ze=$ZE_PACKAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "Detected cache fingerprint: dpcpp=$DPCPP_VERSION_DETECTED, gfx_rt=$GRAPHICS_RUNTIME_VERSION, igc=$IGC_PACKAGE_VERSION, ze=$ZE_PACKAGE_VERSION"
+
+      - name: Restore ccache
+        if: inputs.CACHE_ENABLED
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-intel-test-${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.gpu }}-${{ matrix.intel_graphics }}-${{ steps.cache_fingerprint.outputs.dpcpp }}-${{ steps.cache_fingerprint.outputs.gfx_rt }}-${{ steps.cache_fingerprint.outputs.igc }}-${{ steps.cache_fingerprint.outputs.ze }}-${{ hashFiles('CMakeLists.txt', 'SYCL.cmake', 'include/**', 'test/**', 'examples/**') }}
+          restore-keys: |
+            ccache-intel-test-${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.gpu }}-${{ matrix.intel_graphics }}-${{ steps.cache_fingerprint.outputs.dpcpp }}-${{ steps.cache_fingerprint.outputs.gfx_rt }}-${{ steps.cache_fingerprint.outputs.igc }}-${{ steps.cache_fingerprint.outputs.ze }}-
+            ccache-intel-test-${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.gpu }}-${{ matrix.intel_graphics }}-
       
       - name: Build
         shell: bash
         run: |
+          if [ "${{ inputs.CACHE_ENABLED }}" = "true" ]; then
+            ccache --zero-stats || true
+          fi
           cmake -G Ninja  \
             -DCUTLASS_ENABLE_SYCL=ON \
             -DDPCPP_SYCL_TARGET=${{ env.SYCL_TARGET }} \
             -DIGC_VERSION_MAJOR=${{ env.IGC_VERSION_MAJOR }} \
             -DIGC_VERSION_MINOR=${{ env.IGC_VERSION_MINOR }} \
             -DCMAKE_CXX_FLAGS="-Werror" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCUTLASS_SYCL_RUNNING_CI=ON
           cmake --build . 
+
+      - name: Show ccache stats
+        if: inputs.CACHE_ENABLED
+        shell: bash
+        run: ccache --show-stats || true
       
       - name: Unit test
         shell: bash
@@ -108,11 +173,19 @@ jobs:
         shell: bash
         run: |
           cmake --build . --target test_examples -j 1
-      
-      - name: Benchmarks
+
+      - name: Inspect ccache directory
+        if: always() && inputs.CACHE_ENABLED
         shell: bash
         run: |
-          cmake --build . --target cutlass_benchmarks
+          echo "CCACHE_DIR=${CCACHE_DIR:-$HOME/.cache/ccache}"
+          if [ -d "${CCACHE_DIR:-$HOME/.cache/ccache}" ]; then
+            du -sh "${CCACHE_DIR:-$HOME/.cache/ccache}" || true
+            find "${CCACHE_DIR:-$HOME/.cache/ccache}" -maxdepth 2 -type f | sort | head -100 || true
+          else
+            echo "ccache directory does not exist"
+          fi
+          ccache --show-stats || true
       
       - name: Cleanup DPC++
         if: always()
