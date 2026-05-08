@@ -246,7 +246,7 @@ Output:
 
 Responsibility:
 
-- list product handoff artifacts with path, purpose, required/optional classification, and existence status
+- list product handoff artifacts with path, purpose, required/optional classification, existence status, file size, and SHA256
 - surface `missing_required_artifacts` and `missing_optional_artifacts`
 - include the product-facing dispatch lookup CLI template
 - remind downstream consumers to keep profile CSV and phase summaries with the dispatch table for auditability
@@ -258,7 +258,7 @@ python3 test/benchmarks/intel_gemm_profiler.py \
   --validate-product-bundle /path/to/gemm_product_bundle_manifest.json
 ```
 
-The validation CLI prints JSON with `status=pass` or `status=fail`. It checks required artifact paths, validates the dispatch table referenced by `runtime_lookup.dispatch_table`, verifies the dispatch key contract, and exits nonzero on failure so it can be used as a release or CI gate.
+The validation CLI prints JSON with `status=pass` or `status=fail`. It checks required artifact paths, verifies required artifact `size_bytes` and `sha256` metadata, validates the dispatch table referenced by `runtime_lookup.dispatch_table`, verifies the dispatch key contract, and exits nonzero on failure so it can be used as a release or CI gate.
 
 ## Workspace layout
 

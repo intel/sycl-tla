@@ -5,6 +5,7 @@
 
 import argparse
 import copy
+import hashlib
 import json
 import statistics
 import sys
@@ -553,13 +554,24 @@ def artifact_record(name, path, purpose, required=True):
             "purpose": purpose,
         }
     artifact_path = Path(path)
+    exists = artifact_path.exists()
     return {
         "name": name,
         "path": str(artifact_path),
         "required": required,
-        "exists": artifact_path.exists(),
+        "exists": exists,
+        "size_bytes": artifact_path.stat().st_size if exists else "",
+        "sha256": file_sha256(artifact_path) if exists else "",
         "purpose": purpose,
     }
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def build_artifact_bundle_manifest(workspace, artifacts):
@@ -648,21 +660,48 @@ def validate_product_bundle_manifest(bundle_manifest_or_path):
         errors.append("optional_artifacts must be a list")
         optional_artifacts = []
     missing_required = []
+    integrity_errors = []
+    integrity_warnings = []
+
+    def validate_artifact_integrity(artifact, mismatch_target):
+        artifact_name = artifact.get("name", "")
+        artifact_path = artifact.get("path", "")
+        path = Path(artifact_path) if artifact_path else None
+        if not path or not path.exists():
+            return False
+        expected_size = artifact.get("size_bytes", "")
+        if expected_size != "":
+            actual_size = path.stat().st_size
+            if int(expected_size) != actual_size:
+                mismatch_target.append(f"{artifact_name or artifact_path}: size_bytes expected {expected_size}, got {actual_size}")
+        expected_sha256 = artifact.get("sha256", "")
+        if expected_sha256:
+            actual_sha256 = file_sha256(path)
+            if expected_sha256 != actual_sha256:
+                mismatch_target.append(f"{artifact_name or artifact_path}: sha256 mismatch")
+        return True
+
     for artifact in required_artifacts:
         artifact_name = artifact.get("name", "")
         artifact_path = artifact.get("path", "")
         if not artifact_path or not Path(artifact_path).exists():
             missing_required.append(artifact_name or artifact_path or "<unnamed>")
+        else:
+            validate_artifact_integrity(artifact, integrity_errors)
     missing_optional = []
     for artifact in optional_artifacts:
         artifact_name = artifact.get("name", "")
         artifact_path = artifact.get("path", "")
         if not artifact_path or not Path(artifact_path).exists():
             missing_optional.append(artifact_name or artifact_path or "<unnamed>")
+        else:
+            validate_artifact_integrity(artifact, integrity_warnings)
     if missing_required:
         errors.append(f"missing required artifacts: {', '.join(missing_required)}")
     if missing_optional:
         warnings.append(f"missing optional artifacts: {', '.join(missing_optional)}")
+    errors.extend(integrity_errors)
+    warnings.extend(integrity_warnings)
     runtime_lookup = bundle.get("runtime_lookup", {})
     key_fields = runtime_lookup.get("key_fields")
     if key_fields != list(DISPATCH_KEY_FIELDS):
@@ -693,6 +732,8 @@ def validate_product_bundle_manifest(bundle_manifest_or_path):
         "optional_artifact_count": len(optional_artifacts),
         "missing_required_artifacts": missing_required,
         "missing_optional_artifacts": missing_optional,
+        "integrity_errors": integrity_errors,
+        "integrity_warnings": integrity_warnings,
         "dispatch_table": dispatch_table_path,
         "dispatch_entry_count": dispatch_entry_count,
     }

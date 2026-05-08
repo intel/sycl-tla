@@ -1360,6 +1360,11 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertIn("optimal_dispatch_table", required_names)
             self.assertIn("gemm_profile_results", required_names)
             self.assertIn("phase_b_summary", required_names)
+            optimal_artifact = next(
+                artifact for artifact in bundle["required_artifacts"] if artifact["name"] == "optimal_dispatch_table"
+            )
+            self.assertGreater(optimal_artifact["size_bytes"], 0)
+            self.assertRegex(optimal_artifact["sha256"], r"^[0-9a-f]{64}$")
             self.assertIn("reference_comparison", bundle["missing_optional_artifacts"])
             self.assertEqual(
                 bundle["runtime_lookup"]["key_fields"],
@@ -1370,6 +1375,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             validation = profiler.validate_product_bundle_manifest(outputs["artifact_bundle_manifest"])
             self.assertEqual(validation["status"], "pass")
             self.assertEqual(validation["missing_required_artifacts"], [])
+            self.assertEqual(validation["integrity_errors"], [])
             self.assertEqual(validation["dispatch_entry_count"], 0)
 
             repo_root = Path(__file__).resolve().parents[3]
@@ -1387,6 +1393,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
             )
             cli_validation = json.loads(completed.stdout)
             self.assertEqual(cli_validation["status"], "pass")
+
+            Path(outputs["results_csv"]).write_text("tampered\n", encoding="utf-8")
+            tampered_validation = profiler.validate_product_bundle_manifest(outputs["artifact_bundle_manifest"])
+            self.assertEqual(tampered_validation["status"], "fail")
+            self.assertTrue(
+                any("gemm_profile_results" in error for error in tampered_validation["integrity_errors"])
+            )
 
     def test_skip_run_workflow_can_emit_generator_backed_catalog(self):
         with tempfile.TemporaryDirectory() as tmpdir:

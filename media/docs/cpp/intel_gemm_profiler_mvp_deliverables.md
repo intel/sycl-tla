@@ -32,7 +32,7 @@ The current workflow also supports:
 - top-k confirmation through `--top-k` and `--confirm-runs`
 - median-based final selection evidence in `gemm_dispatch_table.json`
 - exact-shape runtime dispatch lookup CLI with schema validation and explicit fallback metadata
-- product bundle validation CLI suitable for release/CI gates
+- product bundle validation CLI with artifact size/SHA256 integrity checks suitable for release/CI gates
 - close-call labeling through `--close-call-threshold`
 - selected-kernel batch filter emission through `--candidate-build-batch-size`
 - per-batch build preflight execution through `--run-candidate-build-preflight`
