@@ -2,9 +2,9 @@
 
 ## 当前结论
 
-当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强、candidate batch build/routing、runtime dispatch lookup CLI、product bundle manifest 和带 size/SHA256 完整性校验的 bundle validation CLI** 的主要工作。
+当前 `main` 分支已经完成本轮 **Intel/BMG GEMM profiler 迁移纠偏、generated benchmark 搜索闭环、Ali workbook 集成、chunked benchmark 执行、确认选择器补强、candidate batch build/routing、runtime dispatch lookup CLI、product bundle manifest、带 size/SHA256 完整性校验的 bundle validation CLI 和 standalone bundle export CLI** 的主要工作。
 
-现阶段代码处于 **GEMM MVP 主链路已端到端打通，native `tools/profiler/cutlass_profiler` 已完成单 GEMM generated kernel 的 SYCL 正确性+性能闭环，并具备产品化可调用的 exact-shape runtime dispatch table lookup/fallback CLI 与交付 bundle 完整性校验** 的状态。
+现阶段代码处于 **GEMM MVP 主链路已端到端打通，native `tools/profiler/cutlass_profiler` 已完成单 GEMM generated kernel 的 SYCL 正确性+性能闭环，并具备产品化可调用的 exact-shape runtime dispatch table lookup/fallback CLI、交付 bundle 完整性校验与独立导出能力** 的状态。
 
 最新全量 Ali workbook generated workflow 已在远端 BMG 节点通过：
 
@@ -328,6 +328,7 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 - CLI 入口：`python3 test/benchmarks/intel_gemm_profiler.py --lookup-dispatch-table <optimal_dispatch_table.json> --lookup-m ... --lookup-n ... --lookup-k ...`
 - 每次 workflow 现在都会写出 `reports/gemm_product_bundle_manifest.json`，集中列出交付 artifacts、缺失项、artifact size/SHA256 和 lookup CLI template
 - 发布/CI gate 入口：`python3 test/benchmarks/intel_gemm_profiler.py --validate-product-bundle <gemm_product_bundle_manifest.json>`，校验 required artifacts、artifact size/SHA256、dispatch table、lookup key contract，并在失败时返回非零退出码
+- 独立交付导出入口：`python3 test/benchmarks/intel_gemm_profiler.py --export-product-bundle <gemm_product_bundle_manifest.json> --bundle-output-dir <export_dir>`，复制 artifacts、重写 manifest paths/lookup template、重新计算 size/SHA256 并校验导出结果
 
 仍未完成的是把该 helper 接入真实推理 runtime 的发布/加载流程。
 

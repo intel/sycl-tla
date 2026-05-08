@@ -260,6 +260,16 @@ python3 test/benchmarks/intel_gemm_profiler.py \
 
 The validation CLI prints JSON with `status=pass` or `status=fail`. It checks required artifact paths, verifies required artifact `size_bytes` and `sha256` metadata, validates the dispatch table referenced by `runtime_lookup.dispatch_table`, verifies the dispatch key contract, and exits nonzero on failure so it can be used as a release or CI gate.
 
+Export CLI:
+
+```bash
+python3 test/benchmarks/intel_gemm_profiler.py \
+  --export-product-bundle /path/to/gemm_product_bundle_manifest.json \
+  --bundle-output-dir /path/to/exported_gemm_bundle
+```
+
+The export CLI copies required and existing optional artifacts into an `artifacts/` directory under the requested output directory, rewrites the manifest paths and dispatch lookup template to point at the exported files, recomputes size/SHA256 metadata, and validates the exported manifest before reporting `status=pass`.
+
 ## Workspace layout
 
 The profiler workflow should use a dedicated workspace under a generated run directory.

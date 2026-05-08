@@ -7,6 +7,7 @@ import argparse
 import copy
 import hashlib
 import json
+import shutil
 import statistics
 import sys
 from pathlib import Path
@@ -739,6 +740,77 @@ def validate_product_bundle_manifest(bundle_manifest_or_path):
     }
 
 
+def export_product_bundle_manifest(bundle_manifest_or_path, output_dir):
+    bundle = read_json(bundle_manifest_or_path)
+    output_dir = ensure_dir(Path(output_dir))
+    artifacts_dir = ensure_dir(output_dir / "artifacts")
+    exported = copy.deepcopy(bundle)
+    copied_by_name = {}
+
+    def export_records(records):
+        exported_records = []
+        used_names = set()
+        for artifact in records:
+            source_path = Path(artifact.get("path", "")) if artifact.get("path", "") else None
+            if not source_path or not source_path.exists():
+                exported_records.append(
+                    artifact_record(
+                        artifact.get("name", ""),
+                        "",
+                        artifact.get("purpose", ""),
+                        required=artifact.get("required", False),
+                    )
+                )
+                continue
+            filename = source_path.name
+            if filename in used_names:
+                filename = f"{artifact.get('name', source_path.stem)}_{source_path.name}"
+            used_names.add(filename)
+            destination = artifacts_dir / filename
+            if source_path.resolve() != destination.resolve():
+                shutil.copy2(source_path, destination)
+            exported_record = artifact_record(
+                artifact.get("name", ""),
+                destination,
+                artifact.get("purpose", ""),
+                required=artifact.get("required", False),
+            )
+            exported_records.append(exported_record)
+            copied_by_name[exported_record["name"]] = exported_record
+        return exported_records
+
+    exported["workspace"] = str(output_dir.resolve())
+    exported["required_artifacts"] = export_records(bundle.get("required_artifacts", []))
+    exported["optional_artifacts"] = export_records(bundle.get("optional_artifacts", []))
+    exported["missing_required_artifacts"] = [
+        artifact["name"] for artifact in exported["required_artifacts"] if not artifact["exists"]
+    ]
+    exported["missing_optional_artifacts"] = [
+        artifact["name"] for artifact in exported["optional_artifacts"] if not artifact["exists"]
+    ]
+    optimal_dispatch = copied_by_name.get("optimal_dispatch_table")
+    if optimal_dispatch:
+        exported["runtime_lookup"]["dispatch_table"] = optimal_dispatch["path"]
+        cli_args = list(exported["runtime_lookup"].get("cli_args_template", []))
+        if "--lookup-dispatch-table" in cli_args:
+            cli_args[cli_args.index("--lookup-dispatch-table") + 1] = optimal_dispatch["path"]
+        exported["runtime_lookup"]["cli_args_template"] = cli_args
+        exported["runtime_lookup"]["cli_template"] = shell_join(cli_args)
+    exported_manifest_path = output_dir / "gemm_product_bundle_manifest.json"
+    write_json(exported_manifest_path, exported)
+    validation = validate_product_bundle_manifest(exported_manifest_path)
+    return {
+        "schema_version": SEARCH_RUNTIME_SCHEMA["schema_version"],
+        "generated_at": now_iso(),
+        "status": validation["status"],
+        "source_manifest": str(Path(bundle_manifest_or_path)),
+        "export_dir": str(output_dir.resolve()),
+        "exported_manifest": str(exported_manifest_path),
+        "artifact_count": len(exported["required_artifacts"]) + len(exported["optional_artifacts"]),
+        "validation": validation,
+    }
+
+
 def workflow(args):
     if not args.workspace:
         raise ValueError("--workspace is required unless --lookup-dispatch-table is used.")
@@ -1021,6 +1093,8 @@ def build_parser():
     parser.add_argument("--close-call-threshold", type=float, default=3.0, help="Gap threshold in percent for close-call labeling.")
     parser.add_argument("--lookup-dispatch-table", default="", help="Lookup mode: path to gemm_dispatch_table.json or optimal_dispatch_table.json. When set, the CLI prints a lookup JSON result instead of running the profiler workflow.")
     parser.add_argument("--validate-product-bundle", default="", help="Validation mode: path to gemm_product_bundle_manifest.json. Prints JSON suitable for release/CI gates and exits nonzero on failure.")
+    parser.add_argument("--export-product-bundle", default="", help="Export mode: path to gemm_product_bundle_manifest.json to copy into a standalone product handoff directory.")
+    parser.add_argument("--bundle-output-dir", default="", help="Export mode output directory for --export-product-bundle.")
     parser.add_argument("--lookup-layout", default="rcr", help="Lookup mode GEMM layout key, e.g. rcr.")
     parser.add_argument("--lookup-dtype-a", default="bf16", help="Lookup mode A dtype.")
     parser.add_argument("--lookup-dtype-b", default="bf16", help="Lookup mode B dtype.")
@@ -1064,9 +1138,14 @@ def dispatch_lookup_from_args(args):
 
 def main():
     args = build_parser().parse_args()
-    if args.lookup_dispatch_table and args.validate_product_bundle:
-        raise ValueError("--lookup-dispatch-table and --validate-product-bundle are mutually exclusive.")
-    if args.validate_product_bundle:
+    selected_modes = sum(bool(value) for value in (args.lookup_dispatch_table, args.validate_product_bundle, args.export_product_bundle))
+    if selected_modes > 1:
+        raise ValueError("--lookup-dispatch-table, --validate-product-bundle, and --export-product-bundle are mutually exclusive.")
+    if args.export_product_bundle:
+        if not args.bundle_output_dir:
+            raise ValueError("--bundle-output-dir is required with --export-product-bundle.")
+        result = export_product_bundle_manifest(args.export_product_bundle, args.bundle_output_dir)
+    elif args.validate_product_bundle:
         result = validate_product_bundle_manifest(args.validate_product_bundle)
     elif args.lookup_dispatch_table:
         result = dispatch_lookup_from_args(args)

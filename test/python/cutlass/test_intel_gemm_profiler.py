@@ -1394,6 +1394,40 @@ class TestIntelGemmProfiler(unittest.TestCase):
             cli_validation = json.loads(completed.stdout)
             self.assertEqual(cli_validation["status"], "pass")
 
+            export_dir = Path(tmpdir) / "exported_bundle"
+            export_result = profiler.export_product_bundle_manifest(outputs["artifact_bundle_manifest"], export_dir)
+            self.assertEqual(export_result["status"], "pass")
+            exported_manifest = profiler.read_json(Path(export_result["exported_manifest"]))
+            self.assertEqual(exported_manifest["workspace"], str(export_dir.resolve()))
+            exported_optimal = next(
+                artifact for artifact in exported_manifest["required_artifacts"] if artifact["name"] == "optimal_dispatch_table"
+            )
+            self.assertTrue(Path(exported_optimal["path"]).is_file())
+            self.assertTrue(Path(exported_optimal["path"]).is_relative_to(export_dir))
+            self.assertEqual(exported_manifest["runtime_lookup"]["dispatch_table"], exported_optimal["path"])
+            self.assertEqual(
+                profiler.validate_product_bundle_manifest(export_result["exported_manifest"])["status"],
+                "pass",
+            )
+
+            cli_export_dir = Path(tmpdir) / "cli_exported_bundle"
+            export_completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    "--export-product-bundle",
+                    outputs["artifact_bundle_manifest"],
+                    "--bundle-output-dir",
+                    str(cli_export_dir),
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            cli_export = json.loads(export_completed.stdout)
+            self.assertEqual(cli_export["status"], "pass")
+            self.assertTrue(Path(cli_export["exported_manifest"]).is_file())
+
             Path(outputs["results_csv"]).write_text("tampered\n", encoding="utf-8")
             tampered_validation = profiler.validate_product_bundle_manifest(outputs["artifact_bundle_manifest"])
             self.assertEqual(tampered_validation["status"], "fail")
