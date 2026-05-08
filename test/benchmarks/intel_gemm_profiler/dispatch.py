@@ -9,17 +9,20 @@ from .schemas import SCHEMA_VERSION
 from .utils import read_json
 
 
-DISPATCH_KEY_FIELDS = ("layout", "dtype_a", "dtype_b", "dtype_c", "dtype_acc", "m", "n", "k")
+DISPATCH_KEY_FIELDS = ("layout", "dtype_a", "dtype_b", "dtype_c", "dtype_d", "dtype_acc", "m", "n", "k", "batch_count")
 
 
 def normalize_dispatch_shape_key(shape):
+    shape = dict(shape)
+    shape.setdefault("dtype_d", shape.get("dtype_c"))
+    shape.setdefault("batch_count", shape.get("l", 1))
     missing = [field for field in DISPATCH_KEY_FIELDS if field not in shape]
     if missing:
         raise ValueError(f"dispatch shape key missing fields: {', '.join(missing)}")
     key = {}
     for field in DISPATCH_KEY_FIELDS:
         value = shape[field]
-        key[field] = int(value) if field in {"m", "n", "k"} else str(value)
+        key[field] = int(value) if field in {"m", "n", "k", "batch_count"} else str(value)
     return key
 
 

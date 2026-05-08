@@ -212,7 +212,7 @@ Output:
 Responsibility:
 
 - validate the dispatch table `schema_version`
-- normalize the exact-shape key: `layout, dtype_a, dtype_b, dtype_c, dtype_acc, m, n, k`
+- normalize the exact-shape key: `layout, dtype_a, dtype_b, dtype_c, dtype_d, dtype_acc, m, n, k, batch_count`
 - reject duplicate dispatch `shape_key` entries
 - avoid silent defaulting by returning fallback metadata with a reason and optional fallback candidate id
 
@@ -225,10 +225,12 @@ python3 test/benchmarks/intel_gemm_profiler.py \
   --lookup-dtype-a bf16 \
   --lookup-dtype-b bf16 \
   --lookup-dtype-c f32 \
+  --lookup-dtype-d f32 \
   --lookup-dtype-acc f32 \
   --lookup-m 128 \
   --lookup-n 128 \
   --lookup-k 32 \
+  --lookup-batch-count 1 \
   --fallback-candidate-id safe_default
 ```
 

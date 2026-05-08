@@ -55,6 +55,7 @@ def ilp_class(seed):
 
 def kernel_catalog_entry(dtype, seed):
     entry = copy.deepcopy(seed)
+    entry.setdefault("dtype_d", entry["dtype_c"])
     entry.setdefault("runner", "benchmark")
     entry["kernel_id"] = seed["kernel_name"]
     entry["instantiation_level"] = 0
@@ -62,10 +63,18 @@ def kernel_catalog_entry(dtype, seed):
     entry["grf_mode"] = 256
     entry["ilp_class"] = ilp_class(entry)
     entry["streamk_mode"] = entry.get("streamk_mode", "")
+    entry["batch_count"] = 1
     entry["runtime_defaults"] = {}
     entry["allowed_runtime_sweeps"] = ["shape_id", "m", "n", "k"]
     entry["source"] = "seed_catalog_level0"
     entry["dtype_family"] = dtype
+    entry.setdefault("mma_atom", "XE_DPAS_TT")
+    entry.setdefault("gmem_copy_atom_a", "auto")
+    entry.setdefault("gmem_copy_atom_b", "auto")
+    entry.setdefault("epilogue_op", "LinearCombination")
+    entry.setdefault("epilogue_tile", "auto")
+    entry.setdefault("epilogue_copy_atom_c", "auto")
+    entry.setdefault("epilogue_copy_atom_d", "auto")
     return entry
 
 
@@ -90,7 +99,19 @@ def generated_level0_kernel_catalog():
 def load_persisted_kernel_catalog(path=DEFAULT_KERNEL_CATALOG_PATH):
     path = path or DEFAULT_KERNEL_CATALOG_PATH
     if path.exists():
-        return read_json(path)
+        catalog = read_json(path)
+        catalog["search_runtime_schema"] = SEARCH_RUNTIME_SCHEMA
+        for entry in catalog.get("kernels", []):
+            entry.setdefault("dtype_d", entry["dtype_c"])
+            entry.setdefault("batch_count", 1)
+            entry.setdefault("mma_atom", "XE_DPAS_TT")
+            entry.setdefault("gmem_copy_atom_a", "auto")
+            entry.setdefault("gmem_copy_atom_b", "auto")
+            entry.setdefault("epilogue_op", "LinearCombination")
+            entry.setdefault("epilogue_tile", "auto")
+            entry.setdefault("epilogue_copy_atom_c", "auto")
+            entry.setdefault("epilogue_copy_atom_d", "auto")
+        return catalog
     return generated_level0_kernel_catalog()
 
 
@@ -145,6 +166,7 @@ def _generator_kernel_catalog_entry(operation, data_type_names, tile_scheduler_t
     dtype_a = data_type_names[operation.A.element]
     dtype_b = data_type_names[operation.B.element]
     dtype_c = data_type_names[operation.C.element]
+    dtype_d = data_type_names[getattr(operation, "D", operation.C).element]
     dtype_acc = data_type_names[operation.accumulator_type()]
     entry = {
         "kernel_name": operation.procedural_name(),
@@ -155,6 +177,7 @@ def _generator_kernel_catalog_entry(operation, data_type_names, tile_scheduler_t
         "dtype_a": dtype_a,
         "dtype_b": dtype_b,
         "dtype_c": dtype_c,
+        "dtype_d": dtype_d,
         "dtype_acc": dtype_acc,
         "tile_m": tile_shape[0],
         "tile_n": tile_shape[1],
@@ -172,6 +195,13 @@ def _generator_kernel_catalog_entry(operation, data_type_names, tile_scheduler_t
         "runtime_defaults": {},
         "allowed_runtime_sweeps": ["shape_id", "m", "n", "k"],
         "source": "generator_manifest",
+        "mma_atom": "XE_DPAS_TT",
+        "gmem_copy_atom_a": "auto",
+        "gmem_copy_atom_b": "auto",
+        "epilogue_op": "LinearCombination",
+        "epilogue_tile": "auto",
+        "epilogue_copy_atom_c": "auto",
+        "epilogue_copy_atom_d": "auto",
     }
     entry["ilp_class"] = ilp_class(entry)
     entry["dtype_family"] = _generator_dtype_family(dtype_a)

@@ -39,6 +39,8 @@ The current workflow also supports:
 - per-batch build preflight execution through `--run-candidate-build-preflight`
 - optional screening/confirmation routing to preflighted per-batch benchmark binaries through `--use-candidate-build-preflight-benchmarks`
 - generated Intel Xe `StageCountAuto` candidates represented as `stages=0`
+- first-class `dtype_d` and `batch_count` metadata in candidate, result, dispatch, and lookup artifacts
+- explicit candidate metadata for currently fixed GEMM knobs such as `mma_atom`, GMEM copy atoms, and epilogue operation/tile/copy atoms
 - generated candidate coverage and exception summaries in `gemm_candidate_space.json`
 - native C++ `tools/profiler/cutlass_profiler` generated GEMM profiling with host-reference verification
 

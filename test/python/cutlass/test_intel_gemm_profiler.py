@@ -121,10 +121,105 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertTrue(
             any(
                 candidate["kernel_id"]
-                == "cutlass3x_xe20_tensorop_gemm_bf16_bf16_f32_f32_bf16_dbf16_128x128x32_1x1x1_0_tnt_align8"
+                == "cutlass3x_xe20_tensorop_gemm_bf16_bf16_f32_f32_f32_128x128x32_1x1x1_0_tnt_align8"
                 for candidate in candidate_space["candidates"]
             )
         )
+
+    def test_generated_candidates_model_dtype_d_and_batch_count(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "generated-dtyped",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rrr_bf16_256_256_32_d_bf16_b2",
+                    "layout": "rrr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_d": "bf16",
+                    "dtype_acc": "f32",
+                    "m": 256,
+                    "n": 256,
+                    "k": 32,
+                    "batch_count": 2,
+                }
+            ],
+        }
+
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="generator",
+            generator_arch="bmg",
+            generator_instantiation_level=1,
+        )
+
+        self.assertTrue(candidate_space["candidates"])
+        self.assertTrue(all(candidate["dtype_d"] == "bf16" for candidate in candidate_space["candidates"]))
+        self.assertTrue(any(candidate["candidate_id"].endswith("_dbf16") for candidate in candidate_space["candidates"]))
+        candidate = next(
+            candidate
+            for candidate in candidate_space["candidates"]
+            if candidate["tile_m"] == 256
+            and candidate["tile_n"] == 256
+            and candidate["tile_k"] == 32
+            and candidate["sg_m"] == 8
+            and candidate["sg_n"] == 4
+            and candidate["stages"] == 2
+            and candidate["streamk_mode"] == ""
+        )
+        self.assertEqual(candidate["gmem_copy_atom_a"], "auto")
+        self.assertEqual(candidate["gmem_copy_atom_b"], "auto")
+        self.assertEqual(candidate["epilogue_op"], "LinearCombination")
+        dispatch = profiler.build_dispatch_table(
+            [
+                {
+                    "run_id": "screening",
+                    "stage": "screening",
+                    "attempt_index": 0,
+                    "shape_id": shapes["shapes"][0]["shape_id"],
+                    "candidate_id": candidate["candidate_id"],
+                    "compiler_profile_id": candidate["compiler_profile_id"],
+                    "status": "pass",
+                    "verify_status": "pass",
+                    "layout": "rrr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_d": "bf16",
+                    "dtype_acc": "f32",
+                    "m": 256,
+                    "n": 256,
+                    "k": 32,
+                    "batch_count": 2,
+                    "split_k": 1,
+                    "avg_runtime_ms": "0.1",
+                    "best_runtime_ms": "0.1",
+                    "worst_runtime_ms": "0.1",
+                    "avg_tflops": "1.0",
+                    "avg_throughput": "",
+                    "max_error": "",
+                    "close_call_group": "",
+                    "failure_reason": "",
+                    "stdout_log": "screening.log",
+                }
+            ],
+            shapes,
+            top_k=1,
+            confirm_runs=0,
+            close_call_threshold=3.0,
+        )
+        shape_key = dispatch["entries"][0]["shape_key"]
+        self.assertEqual(shape_key["dtype_d"], "bf16")
+        self.assertEqual(shape_key["batch_count"], 2)
+        lookup = profiler.lookup_dispatch_entry(dispatch, shape_key)
+        self.assertEqual(lookup["status"], "found")
+        self.assertEqual(lookup["entry"]["candidate_id"], candidate["candidate_id"])
 
     def test_kernel_catalog_prefers_repo_json(self):
         catalog = profiler.load_persisted_kernel_catalog()
@@ -1368,7 +1463,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertIn("reference_comparison", bundle["missing_optional_artifacts"])
             self.assertEqual(
                 bundle["runtime_lookup"]["key_fields"],
-                ["layout", "dtype_a", "dtype_b", "dtype_c", "dtype_acc", "m", "n", "k"],
+                list(profiler.DISPATCH_KEY_FIELDS),
             )
             self.assertIn("--lookup-dispatch-table", bundle["runtime_lookup"]["cli_template"])
             self.assertIn(outputs["optimal_dispatch_table"], bundle["runtime_lookup"]["cli_args_template"])

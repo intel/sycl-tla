@@ -609,6 +609,8 @@ def build_artifact_bundle_manifest(workspace, artifacts):
         "<dtype_b>",
         "--lookup-dtype-c",
         "<dtype_c>",
+        "--lookup-dtype-d",
+        "<dtype_d>",
         "--lookup-dtype-acc",
         "<dtype_acc>",
         "--lookup-m",
@@ -617,6 +619,8 @@ def build_artifact_bundle_manifest(workspace, artifacts):
         "<n>",
         "--lookup-k",
         "<k>",
+        "--lookup-batch-count",
+        "<batch_count>",
         "--fallback-candidate-id",
         "<optional_fallback_candidate_id>",
     ]
@@ -635,7 +639,7 @@ def build_artifact_bundle_manifest(workspace, artifacts):
         ],
         "runtime_lookup": {
             "dispatch_table": artifacts["optimal_dispatch_table"],
-            "key_fields": ["layout", "dtype_a", "dtype_b", "dtype_c", "dtype_acc", "m", "n", "k"],
+            "key_fields": list(DISPATCH_KEY_FIELDS),
             "cli_args_template": lookup_args,
             "cli_template": shell_join(lookup_args),
             "fallback_behavior": "Exact shape miss returns status=missing unless --fallback-candidate-id is set, in which case status=fallback is returned with reason=shape_not_found.",
@@ -1099,10 +1103,12 @@ def build_parser():
     parser.add_argument("--lookup-dtype-a", default="bf16", help="Lookup mode A dtype.")
     parser.add_argument("--lookup-dtype-b", default="bf16", help="Lookup mode B dtype.")
     parser.add_argument("--lookup-dtype-c", default="f32", help="Lookup mode C dtype.")
+    parser.add_argument("--lookup-dtype-d", default="", help="Lookup mode D/output dtype. Defaults to --lookup-dtype-c.")
     parser.add_argument("--lookup-dtype-acc", default="f32", help="Lookup mode accumulator dtype.")
     parser.add_argument("--lookup-m", type=int, default=0, help="Lookup mode M dimension.")
     parser.add_argument("--lookup-n", type=int, default=0, help="Lookup mode N dimension.")
     parser.add_argument("--lookup-k", type=int, default=0, help="Lookup mode K dimension.")
+    parser.add_argument("--lookup-batch-count", type=int, default=1, help="Lookup mode batch/L dimension.")
     parser.add_argument("--fallback-candidate-id", default="", help="Optional fallback candidate id returned when lookup mode misses the exact shape.")
     return parser
 
@@ -1114,6 +1120,7 @@ def dispatch_lookup_from_args(args):
             ("--lookup-m", args.lookup_m),
             ("--lookup-n", args.lookup_n),
             ("--lookup-k", args.lookup_k),
+            ("--lookup-batch-count", args.lookup_batch_count),
         )
         if value <= 0
     ]
@@ -1124,10 +1131,12 @@ def dispatch_lookup_from_args(args):
         "dtype_a": args.lookup_dtype_a,
         "dtype_b": args.lookup_dtype_b,
         "dtype_c": args.lookup_dtype_c,
+        "dtype_d": args.lookup_dtype_d or args.lookup_dtype_c,
         "dtype_acc": args.lookup_dtype_acc,
         "m": args.lookup_m,
         "n": args.lookup_n,
         "k": args.lookup_k,
+        "batch_count": args.lookup_batch_count,
     }
     return lookup_dispatch_entry(
         args.lookup_dispatch_table,

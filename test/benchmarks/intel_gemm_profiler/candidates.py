@@ -25,13 +25,15 @@ def default_shapes(dtype):
                 "shape_id": f"rcr_{dtype}_{item['m']}_{item['n']}_{item['k']}",
                 "layout": "rcr",
                 "dtype_a": dtype,
-                "dtype_b": dtype,
-                "dtype_c": "f32",
-                "dtype_acc": "f32",
-                "m": item["m"],
-                "n": item["n"],
-                "k": item["k"],
-                "runtime_defaults": {},
+                    "dtype_b": dtype,
+                    "dtype_c": "f32",
+                    "dtype_d": "f32",
+                    "dtype_acc": "f32",
+                    "m": item["m"],
+                    "n": item["n"],
+                    "k": item["k"],
+                    "batch_count": 1,
+                    "runtime_defaults": {},
                 "tags": item["tags"],
             }
         )
@@ -49,13 +51,15 @@ def dry_run_shapes(dtype):
                 "shape_id": f"dry_run_rcr_{dtype}_1_64_32",
                 "layout": "rcr",
                 "dtype_a": dtype,
-                "dtype_b": dtype,
-                "dtype_c": "f32",
-                "dtype_acc": "f32",
-                "m": 1,
-                "n": 64,
-                "k": 32,
-                "runtime_defaults": {},
+                    "dtype_b": dtype,
+                    "dtype_c": "f32",
+                    "dtype_d": "f32",
+                    "dtype_acc": "f32",
+                    "m": 1,
+                    "n": 64,
+                    "k": 32,
+                    "batch_count": 1,
+                    "runtime_defaults": {},
                 "tags": ["dry_run"],
             }
         ],
@@ -95,6 +99,8 @@ def select_compiler_profile_id(profiles, tile_m, sg_count):
 
 def candidate_id_for(seed):
     candidate_id = f"{seed['layout']}_{seed['dtype_a']}{seed['dtype_b']}{seed['dtype_c']}_tm{seed['tile_m']}_tn{seed['tile_n']}_tk{seed['tile_k']}_sg{seed['sg_m']}x{seed['sg_n']}_st{seed['stages']}_sk{seed['split_k']}"
+    if seed.get("dtype_d", seed["dtype_c"]) != seed["dtype_c"]:
+        candidate_id = f"{candidate_id}_d{seed['dtype_d']}"
     streamk_mode = seed.get("streamk_mode", "")
     if streamk_mode:
         candidate_id = f"{candidate_id}_{streamk_mode}"
@@ -118,7 +124,7 @@ def generate_candidate_space(
     dtypes = sorted({shape["dtype_a"] for shape in shapes_doc["shapes"]})
     requested_layouts = {shape["layout"] for shape in shapes_doc["shapes"]}
     requested_signatures = {
-        (shape["layout"], shape["dtype_a"], shape["dtype_b"], shape["dtype_c"], shape["dtype_acc"])
+        (shape["layout"], shape["dtype_a"], shape["dtype_b"], shape["dtype_c"], shape.get("dtype_d", shape["dtype_c"]), shape["dtype_acc"])
         for shape in shapes_doc["shapes"]
     }
     kernel_catalog = build_kernel_catalog(
@@ -140,7 +146,7 @@ def generate_candidate_space(
     for seed in kernel_catalog["kernels"]:
         if seed["layout"] not in requested_layouts:
             continue
-        signature = (seed["layout"], seed["dtype_a"], seed["dtype_b"], seed["dtype_c"], seed["dtype_acc"])
+        signature = (seed["layout"], seed["dtype_a"], seed["dtype_b"], seed["dtype_c"], seed.get("dtype_d", seed["dtype_c"]), seed["dtype_acc"])
         if signature not in requested_signatures:
             continue
         matched_signature_count += 1
@@ -154,11 +160,20 @@ def generate_candidate_space(
                     "dtype_a": seed["dtype_a"],
                     "dtype_b": seed["dtype_b"],
                     "dtype_c": seed["dtype_c"],
+                    "dtype_d": seed.get("dtype_d", seed["dtype_c"]),
                     "dtype_acc": seed["dtype_acc"],
                     "tile_m": seed["tile_m"],
                     "tile_n": seed["tile_n"],
                     "tile_k": seed["tile_k"],
                     "stages": seed["stages"],
+                    "batch_count": 1,
+                    "mma_atom": seed.get("mma_atom", "XE_DPAS_TT"),
+                    "gmem_copy_atom_a": seed.get("gmem_copy_atom_a", "auto"),
+                    "gmem_copy_atom_b": seed.get("gmem_copy_atom_b", "auto"),
+                    "epilogue_op": seed.get("epilogue_op", "LinearCombination"),
+                    "epilogue_tile": seed.get("epilogue_tile", "auto"),
+                    "epilogue_copy_atom_c": seed.get("epilogue_copy_atom_c", "auto"),
+                    "epilogue_copy_atom_d": seed.get("epilogue_copy_atom_d", "auto"),
                 }
             )
             continue
@@ -179,6 +194,7 @@ def generate_candidate_space(
                 "dtype_a": seed["dtype_a"],
                 "dtype_b": seed["dtype_b"],
                 "dtype_c": seed["dtype_c"],
+                "dtype_d": seed.get("dtype_d", seed["dtype_c"]),
                 "dtype_acc": seed["dtype_acc"],
                 "tile_m": seed["tile_m"],
                 "tile_n": seed["tile_n"],
@@ -187,12 +203,20 @@ def generate_candidate_space(
                 "sg_n": seed["sg_n"],
                 "stages": seed["stages"],
                 "split_k": seed["split_k"],
+                "batch_count": 1,
                 "streamk_mode": seed.get("streamk_mode", ""),
                 "runner": seed.get("runner", "benchmark"),
                 "benchmark_target": seed["benchmark_target"],
                 "grf_mode": seed["grf_mode"],
                 "ilp_class": seed["ilp_class"],
                 "instantiation_level": seed["instantiation_level"],
+                "mma_atom": seed.get("mma_atom", "XE_DPAS_TT"),
+                "gmem_copy_atom_a": seed.get("gmem_copy_atom_a", "auto"),
+                "gmem_copy_atom_b": seed.get("gmem_copy_atom_b", "auto"),
+                "epilogue_op": seed.get("epilogue_op", "LinearCombination"),
+                "epilogue_tile": seed.get("epilogue_tile", "auto"),
+                "epilogue_copy_atom_c": seed.get("epilogue_copy_atom_c", "auto"),
+                "epilogue_copy_atom_d": seed.get("epilogue_copy_atom_d", "auto"),
                 "runtime_defaults": seed["runtime_defaults"],
                 "allowed_runtime_sweeps": seed["allowed_runtime_sweeps"],
                 "source": seed.get("source", ""),
@@ -229,9 +253,10 @@ def generate_candidate_space(
                     "dtype_a": dtype_a,
                     "dtype_b": dtype_b,
                     "dtype_c": dtype_c,
+                    "dtype_d": dtype_d,
                     "dtype_acc": dtype_acc,
                 }
-                for layout, dtype_a, dtype_b, dtype_c, dtype_acc in sorted(requested_signatures)
+                for layout, dtype_a, dtype_b, dtype_c, dtype_d, dtype_acc in sorted(requested_signatures)
             ],
             "catalog_kernel_count": len(kernel_catalog["kernels"]),
             "matched_signature_kernel_count": matched_signature_count,
@@ -287,6 +312,7 @@ def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0
                     "dtype_b": candidate["dtype_b"],
                     "dtype_c": candidate["dtype_c"],
                     "dtype_acc": candidate["dtype_acc"],
+                    "dtype_d": candidate.get("dtype_d", candidate["dtype_c"]),
                     "tile_m": candidate["tile_m"],
                     "tile_n": candidate["tile_n"],
                     "tile_k": candidate["tile_k"],
@@ -296,6 +322,13 @@ def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0
                     "split_k": candidate["split_k"],
                     "streamk_mode": candidate.get("streamk_mode", ""),
                     "grf_mode": candidate["grf_mode"],
+                    "mma_atom": candidate.get("mma_atom", "XE_DPAS_TT"),
+                    "gmem_copy_atom_a": candidate.get("gmem_copy_atom_a", "auto"),
+                    "gmem_copy_atom_b": candidate.get("gmem_copy_atom_b", "auto"),
+                    "epilogue_op": candidate.get("epilogue_op", "LinearCombination"),
+                    "epilogue_tile": candidate.get("epilogue_tile", "auto"),
+                    "epilogue_copy_atom_c": candidate.get("epilogue_copy_atom_c", "auto"),
+                    "epilogue_copy_atom_d": candidate.get("epilogue_copy_atom_d", "auto"),
                     "ilp_class": candidate["ilp_class"],
                     "instantiation_level": candidate["instantiation_level"],
                 },
@@ -346,10 +379,19 @@ def choose_candidates_for_shape(shape, candidates):
             continue
         if candidate["dtype_a"] != shape["dtype_a"] or candidate["dtype_b"] != shape["dtype_b"]:
             continue
+        if candidate["dtype_c"] != shape["dtype_c"] or candidate["dtype_acc"] != shape["dtype_acc"]:
+            continue
+        if candidate.get("dtype_d", candidate["dtype_c"]) != shape.get("dtype_d", shape["dtype_c"]):
+            continue
         if candidate["split_k"] > 1 and shape["n"] < 16384 and shape["k"] < 8192:
             continue
         matched.append(candidate)
-    return matched or [candidate for candidate in candidates if candidate["layout"] == shape["layout"] and candidate["dtype_a"] == shape["dtype_a"]]
+    return matched or [
+        candidate for candidate in candidates
+        if candidate["layout"] == shape["layout"]
+        and candidate["dtype_a"] == shape["dtype_a"]
+        and candidate.get("dtype_d", candidate["dtype_c"]) == shape.get("dtype_d", shape["dtype_c"])
+    ]
 
 
 def select_probe_shape(shapes_doc, dtype, layout, target_m, target_n, target_k, predicate=None):
@@ -481,10 +523,12 @@ def write_config(entries, config_path):
                 "dtype_a": shape["dtype_a"],
                 "dtype_b": shape["dtype_b"],
                 "dtype_c": shape["dtype_c"],
+                "dtype_d": shape.get("dtype_d", shape["dtype_c"]),
                 "dtype_acc": shape["dtype_acc"],
                 "m": shape["m"],
                 "n": shape["n"],
                 "k": shape["k"],
+                "batch_count": shape.get("batch_count", 1),
                 "kernel_name": candidate["kernel_name"],
                 "split_k": candidate["split_k"],
                 "streamk_mode": candidate.get("streamk_mode", ""),

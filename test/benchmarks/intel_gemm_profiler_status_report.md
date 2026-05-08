@@ -18,7 +18,7 @@
 - 76 个 Ali reference matches
 - 0 missing dispatch
 
-本地 profiler Python 回归当前为 **81/81 OK**。
+本地 profiler Python 回归当前为 **82/82 OK**。
 
 补充 native C++ `tools/profiler/cutlass_profiler` GEMM smoke 也已在远端 BMG 节点通过：
 
@@ -319,7 +319,10 @@ StreamK example 可用于功能验证，但 generated `_stream_k` kernels 当前
 
 已完成部分：
 
-- lookup key 固定为 `layout, dtype_a, dtype_b, dtype_c, dtype_acc, m, n, k`
+- lookup key 固定为 `layout, dtype_a, dtype_b, dtype_c, dtype_d, dtype_acc, m, n, k, batch_count`
+- `dtype_d` 已作为 D/output dtype 一等字段进入 candidate、CSV、dispatch 和 lookup；旧 artifact 缺省按 `dtype_d=dtype_c` 兼容
+- `batch_count` 已作为 L/batch 一等字段进入 shape、CSV、dispatch 和 lookup；旧 artifact 缺省按 `batch_count=1` 兼容
+- candidate artifact 显式记录当前固定的 `mma_atom`、`gmem_copy_atom_a/b`、`epilogue_op`、`epilogue_tile`、`epilogue_copy_atom_c/d`，当前值多为 `XE_DPAS_TT` / `auto` / `LinearCombination`
 - 支持 `gemm_dispatch_table.json` / `optimal_dispatch_table.json` file path 或内存 dict 加载
 - 校验 `schema_version`
 - 拒绝 duplicate `shape_key`

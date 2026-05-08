@@ -98,6 +98,18 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
             gap = ((winner["median_tflops"] - runner_up["median_tflops"]) / runner_up["median_tflops"]) * 100.0
             close_call = gap < close_call_threshold
         shape = shapes[shape_id]
+        shape_key = {
+            "layout": shape["layout"],
+            "dtype_a": shape["dtype_a"],
+            "dtype_b": shape["dtype_b"],
+            "dtype_c": shape["dtype_c"],
+            "dtype_d": shape.get("dtype_d", shape["dtype_c"]),
+            "dtype_acc": shape["dtype_acc"],
+            "m": shape["m"],
+            "n": shape["n"],
+            "k": shape["k"],
+            "batch_count": shape.get("batch_count", 1),
+        }
         selected_efficiency = ""
         peak_tflops = ""
         efficiency_warning = ""
@@ -116,7 +128,7 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
                     )
         entries.append(
             {
-                "shape_key": {"layout": shape["layout"], "dtype_a": shape["dtype_a"], "dtype_b": shape["dtype_b"], "dtype_c": shape["dtype_c"], "dtype_acc": shape["dtype_acc"], "m": shape["m"], "n": shape["n"], "k": shape["k"]},
+                "shape_key": shape_key,
                 "shape_id": shape_id,
                 "candidate_id": winner["candidate_id"],
                 "compiler_profile_id": winner["compiler_profile_id"],
