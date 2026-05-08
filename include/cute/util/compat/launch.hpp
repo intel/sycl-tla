@@ -126,8 +126,8 @@ namespace compat::experimental {
 
 namespace detail {
 
-template <auto F, class N, typename LaunchPolicy, typename... Args>
-sycl::event launch(LaunchPolicy launch_policy, sycl::queue q, Args... args) {
+template <auto F, class N = sycl::detail::auto_name, bool EventNeeded = true, typename LaunchPolicy, typename... Args>
+auto launch(LaunchPolicy launch_policy, sycl::queue q, Args... args) {
   static_assert(compat::args_compatible<LaunchPolicy, F, Args...>,
                 "Mismatch between device function signature and supplied "
                 "arguments. Have you correctly handled local memory/char*?");
@@ -135,32 +135,50 @@ sycl::event launch(LaunchPolicy launch_policy, sycl::queue q, Args... args) {
   sycl_exp::launch_config config(launch_policy.get_range(),
                                  launch_policy.get_launch_properties());
 
-  return sycl_exp::submit_with_event(q, [&](sycl::handler &cgh) {
-    auto KernelFunctor = build_kernel_functor<F>(cgh, launch_policy, args...);
-    if constexpr (compat::detail::is_range_v<
-                      typename LaunchPolicy::RangeT>) {
-      sycl_exp::parallel_for<N>(cgh, config, KernelFunctor);
+  if constexpr (EventNeeded) {
+    return sycl_exp::submit_with_event(q, [&](sycl::handler &cgh) {
+      auto KernelFunctor = build_kernel_functor<F>(cgh, launch_policy, args...);
+      if constexpr (compat::detail::is_range_v<typename LaunchPolicy::RangeT>) {
+        sycl_exp::parallel_for<N>(cgh, config, KernelFunctor);
+      } else {
+        static_assert(compat::detail::is_nd_range_v<typename LaunchPolicy::RangeT>);
+        sycl_exp::nd_launch<N>(cgh, config, KernelFunctor);
+      }
+    });
+  } else if constexpr (LaunchPolicy::HasLocalMem && launch_policy.get_local_mem_size() != 0) {
+    sycl_exp::submit(q, [&](sycl::handler &cgh) {
+      auto KernelFunctor = build_kernel_functor<F>(cgh, launch_policy, args...);
+      if constexpr (compat::detail::is_range_v<typename LaunchPolicy::RangeT>) {
+        sycl_exp::parallel_for<N>(cgh, config, KernelFunctor);
+      } else {
+        static_assert(compat::detail::is_nd_range_v<typename LaunchPolicy::RangeT>);
+        sycl_exp::nd_launch<N>(cgh, config, KernelFunctor);
+      }
+    });
+  } else {
+    auto KernelFunctor = build_kernel_functor<F>(launch_policy, args...);
+    if constexpr (compat::detail::is_range_v<typename LaunchPolicy::RangeT>) {
+      sycl_exp::parallel_for(q, config, KernelFunctor);
     } else {
-      static_assert(
-          compat::detail::is_nd_range_v<typename LaunchPolicy::RangeT>);
-      sycl_exp::nd_launch<N>(cgh, config, KernelFunctor);
+      static_assert(compat::detail::is_nd_range_v<typename LaunchPolicy::RangeT>);
+      sycl_exp::nd_launch(q, config, KernelFunctor);
     }
-  });
+  }
 }
 
 }
 
 
-template <auto F, class N=sycl::detail::auto_name, typename LaunchPolicy, typename... Args>
-sycl::event launch(LaunchPolicy launch_policy, sycl::queue q, Args... args) {
+template <auto F, class N = sycl::detail::auto_name, bool EventNeeded = true, typename LaunchPolicy, typename... Args>
+auto launch(LaunchPolicy launch_policy, sycl::queue q, Args... args) {
   static_assert(detail::is_launch_policy_v<LaunchPolicy>);
-  return detail::launch<F, N>(launch_policy, q, args...);
+  return detail::launch<F, N, EventNeeded>(launch_policy, q, args...);
 }
 
-template <auto F, class N=sycl::detail::auto_name, typename LaunchPolicy, typename... Args>
-sycl::event launch(LaunchPolicy launch_policy, Args... args) {
+template <auto F, class N = sycl::detail::auto_name, bool EventNeeded = true, typename LaunchPolicy, typename... Args>
+auto launch(LaunchPolicy launch_policy, Args... args) {
   static_assert(detail::is_launch_policy_v<LaunchPolicy>);
-  return launch<F, N>(launch_policy, get_default_queue(), args...);
+  return launch<F, N, EventNeeded>(launch_policy, get_default_queue(), args...);
 }
 
 } // namespace compat::experimental
