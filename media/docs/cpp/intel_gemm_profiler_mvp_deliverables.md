@@ -113,6 +113,22 @@ Generated `dtype_d=bf16` and `batch_count=2` runtime smoke proof:
 - product bundle validation: `status=pass`
 - exact lookup with `dtype_d=bf16` and `batch_count=2`: `status=found`
 
+True `bf16/bf16/bf16` Ali one-case search proof:
+
+- remote BMG node: `172.16.114.105`
+- dedicated workspace: `/home/intel/tianfeng/gemm_productization_20260509/ali_onecase_true_bf16bf16bf16_search_ws`
+- shape: `layout=rcr, A/B/C/D/acc=bf16, m=8192, n=12288, k=4096, batch_count=1`
+- generator catalog: `--kernel-catalog-source generator --generator-instantiation-level 1`
+- candidate count: 28
+- screening rows: 28
+- confirmation rows: 9
+- passed rows: 37
+- failed rows: 0
+- selected candidate: `rcr_bf16bf16bf16_tm256_tn128_tk32_sg8x4_st2_sk1`
+- selected median: `79.5058 TFLOP/s`, `10.372 ms`
+- dispatch key records `dtype_c=bf16`, `dtype_d=bf16`, and `dtype_acc=bf16`
+- product bundle validation: `status=pass`
+
 Generated StreamK limitation tracking:
 
 - Intel Xe `GemmUniversal` currently rejects generated `StreamKScheduler` specialization at compile time.

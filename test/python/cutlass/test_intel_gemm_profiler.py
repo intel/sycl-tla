@@ -362,10 +362,55 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertIn('operation_name.find("_bf16_dbf16_")', text)
         self.assertIn('cmd.get_cmd_line_argument("dtype_d"', text)
+        self.assertIn("library GEMM C/accumulator mismatch", text)
         self.assertIn("library GEMM dtype_d mismatch", text)
         self.assertIn(
-            "run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t>",
+            "run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t>",
             text,
+        )
+
+    def test_generated_candidates_support_true_bf16bf16bf16(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "true-bf16",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rcr_bf16_8192_12288_4096_cbf16_dbf16_accbf16",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "bf16",
+                    "dtype_d": "bf16",
+                    "dtype_acc": "bf16",
+                    "m": 8192,
+                    "n": 12288,
+                    "k": 4096,
+                    "batch_count": 1,
+                }
+            ],
+        }
+
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="generator",
+            generator_arch="bmg",
+            generator_instantiation_level=1,
+        )
+
+        self.assertEqual(len(candidate_space["candidates"]), 28)
+        self.assertTrue(all(candidate["dtype_c"] == "bf16" for candidate in candidate_space["candidates"]))
+        self.assertTrue(all(candidate["dtype_d"] == "bf16" for candidate in candidate_space["candidates"]))
+        self.assertTrue(all(candidate["dtype_acc"] == "bf16" for candidate in candidate_space["candidates"]))
+        self.assertTrue(
+            any(
+                candidate["candidate_id"] == "rcr_bf16bf16bf16_tm256_tn64_tk32_sg8x2_st0_sk1"
+                for candidate in candidate_space["candidates"]
+            )
         )
 
     def test_build_candidate_build_manifest_splits_compile_and_runtime_fields(self):

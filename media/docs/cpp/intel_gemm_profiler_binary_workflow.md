@@ -236,7 +236,7 @@ python3 test/benchmarks/intel_gemm_profiler.py \
 
 The CLI prints a JSON result. Exact hits return `status=found` and the selected dispatch entry. Misses return `status=missing`, or `status=fallback` when `--fallback-candidate-id` is provided.
 
-Runtime config emission now writes the benchmark-supported `--l=<batch_count>`, `--alpha`, `--beta`, and `--dtype_d` options into generated `.in` files. The C++ generated-library GEMM benchmark also parses `dtype_d` and rejects mismatches between the requested output dtype and the selected `--operation_name`, so dispatch/search metadata cannot silently run a different D dtype operation.
+Runtime config emission now writes the benchmark-supported `--l=<batch_count>`, `--alpha`, `--beta`, and `--dtype_d` options into generated `.in` files. The C++ generated-library GEMM benchmark also parses `dtype_d`, supports matching C/accumulator pairs (`f32/f32`, `bf16/bf16`, `f16/f16`), and rejects mismatches between the requested metadata and the selected `--operation_name`, so dispatch/search metadata cannot silently run a different C, D, or accumulator dtype operation.
 
 Remote BMG smoke proof for this contract:
 
@@ -246,6 +246,15 @@ Remote BMG smoke proof for this contract:
 - result: 1 screening row, 1 passed row, 0 failed rows, 1 dispatch entry
 - product bundle validation: `status=pass`
 - exact runtime lookup with `--lookup-dtype-d bf16 --lookup-batch-count 2`: `status=found`
+
+True `bf16/bf16/bf16` remote BMG search proof:
+
+- shape: `layout=rcr, A/B/C/D/acc=bf16, m=8192, n=12288, k=4096, batch_count=1`
+- generator level1 candidates: 28
+- result rows: 37, with 28 screening rows and 9 confirmation rows
+- selected candidate: `rcr_bf16bf16bf16_tm256_tn128_tk32_sg8x4_st2_sk1`
+- selected confirmation median: `79.5058 TFLOP/s`, `10.372 ms`
+- dispatch key records `dtype_c=bf16`, `dtype_d=bf16`, and `dtype_acc=bf16`
 
 ### `ProductBundleManifest`
 

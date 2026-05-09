@@ -18,7 +18,7 @@
 - 76 个 Ali reference matches
 - 0 missing dispatch
 
-本地 profiler Python 回归当前为 **82/82 OK**。同一回归也已在新远端 BMG 环境 `intel@172.16.114.105` 的 `/home/intel/tianfeng/gemm_productization_20260509/sycl-tla` 中通过。
+本地 profiler Python 回归当前为 **83/83 OK**。同一回归也已在新远端 BMG 环境 `intel@172.16.114.105` 的 `/home/intel/tianfeng/gemm_productization_20260509/sycl-tla` 中通过。
 
 补充 `dtype_d=bf16 + batch_count=2` generated benchmark runtime smoke 已在新远端 BMG 节点通过：
 
@@ -33,6 +33,22 @@
 - dispatch entries：1
 - product bundle validation：`status=pass`
 - runtime lookup 使用 `--lookup-dtype-d bf16 --lookup-batch-count 2` 精确命中
+
+补充 true `bf16/bf16/bf16` Ali 单 case 搜索 gap 已修正并在新远端 BMG 节点通过：
+
+- workspace：`/home/intel/tianfeng/gemm_productization_20260509/ali_onecase_true_bf16bf16bf16_search_ws`
+- shape：`layout=rcr, A/B/C/D/acc=bf16, m=8192, n=12288, k=4096, batch_count=1`
+- candidate count：28
+- screening rows：28
+- confirmation rows：9
+- passed rows：37
+- failed rows：0
+- selected candidate：`rcr_bf16bf16bf16_tm256_tn128_tk32_sg8x4_st2_sk1`
+- selected median：`79.5058 TFLOP/s`, `10.372 ms`
+- runner-up：`rcr_bf16bf16bf16_tm256_tn128_tk32_sg8x4_st0_sk1`
+- runner-up gap：`0.000377%`
+- dispatch key 已记录 `dtype_c=bf16`, `dtype_d=bf16`, `dtype_acc=bf16`
+- product bundle validation：`status=pass`
 
 补充 native C++ `tools/profiler/cutlass_profiler` GEMM smoke 也已在远端 BMG 节点通过：
 

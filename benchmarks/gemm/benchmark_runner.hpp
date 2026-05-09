@@ -62,6 +62,7 @@
 #include <benchmark/benchmark.h>
 #include <cmath>
 #include <limits>
+#include <type_traits>
 #include <vector>
 
 using namespace cute;
@@ -192,7 +193,7 @@ struct GEMMOptions {
 
 #if defined(CUTLASS_BENCHMARK_ENABLE_LIBRARY_GEMM)
 struct LibraryGemmBenchmarkRunner {
-  template <typename ElementA, typename ElementB, typename ElementD>
+  template <typename ElementA, typename ElementB, typename ElementC, typename ElementD, typename ElementCompute>
   static void run_typed(::benchmark::State& state, GEMMOptions const& options, KernelHardwareInfo const& hw_info) {
     using namespace cutlass;
     using namespace cutlass::library;
@@ -243,7 +244,7 @@ struct LibraryGemmBenchmarkRunner {
 
     std::vector<ElementA> host_a(static_cast<size_t>(options.m) * options.k);
     std::vector<ElementB> host_b(static_cast<size_t>(options.k) * options.n);
-    std::vector<float> host_c(static_cast<size_t>(options.m) * options.n);
+    std::vector<ElementC> host_c(static_cast<size_t>(options.m) * options.n);
     std::vector<ElementD> host_d(static_cast<size_t>(options.m) * options.n);
 
     for (int row = 0; row < options.m; ++row) {
@@ -260,17 +261,19 @@ struct LibraryGemmBenchmarkRunner {
     }
     for (int row = 0; row < options.m; ++row) {
       for (int col = 0; col < options.n; ++col) {
-        host_c[element_offset(layout_c, row, col, ldc)] = static_cast<float>(((row * 3 + col * 2) % 11) - 5) / 11.0f;
+        host_c[element_offset(layout_c, row, col, ldc)] = ElementC(static_cast<float>(((row * 3 + col * 2) % 11) - 5) / 11.0f);
       }
     }
 
     DeviceAllocation<ElementA> device_a(host_a.size());
     DeviceAllocation<ElementB> device_b(host_b.size());
-    DeviceAllocation<float> device_c(host_c.size());
+    DeviceAllocation<ElementC> device_c(host_c.size());
     DeviceAllocation<ElementD> device_d(host_d.size());
     device_a.copy_from_host(host_a.data());
     device_b.copy_from_host(host_b.data());
     device_c.copy_from_host(host_c.data());
+    ElementCompute alpha = ElementCompute(options.alpha);
+    ElementCompute beta = ElementCompute(options.beta);
 
     GemmUniversalConfiguration configuration{
       GemmUniversalMode::kGemm,
@@ -294,8 +297,8 @@ struct LibraryGemmBenchmarkRunner {
       device_b.get(),
       device_c.get(),
       device_d.get(),
-      &options.alpha,
-      &options.beta,
+      &alpha,
+      &beta,
       ScalarPointerMode::kHost,
       lda,
       ldb,
@@ -344,12 +347,13 @@ struct LibraryGemmBenchmarkRunner {
             accum += float(host_a[element_offset(layout_a, row, kk, lda)]) *
                      float(host_b[element_offset(layout_b, kk, col, ldb)]);
           }
-          float const ref = options.alpha * accum + options.beta * host_c[element_offset(layout_c, row, col, ldc)];
+          float const ref = options.alpha * accum + options.beta * float(host_c[element_offset(layout_c, row, col, ldc)]);
           float const got = float(host_d[element_offset(layout_c, row, col, ldd)]);
           max_error = std::max(max_error, std::abs(double(got) - double(ref)));
         }
       }
-      if (max_error > 0.5) {
+      double const tolerance = std::is_same<ElementCompute, cutlass::bfloat16_t>::value ? 1.0 : 0.5;
+      if (max_error > tolerance) {
         state.SkipWithError("Disposition Failed.");
         return;
       }
@@ -401,31 +405,47 @@ struct LibraryGemmBenchmarkRunner {
       state.SkipWithError("library GEMM requires --operation_name.");
       return;
     }
-    if (options.dtype_c != "f32" || options.dtype_acc != "f32") {
-      state.SkipWithError("library GEMM benchmark currently supports f32 C and accumulator only.");
+    if (!((options.dtype_c == "f32" && options.dtype_acc == "f32") ||
+          (options.dtype_c == "bf16" && options.dtype_acc == "bf16") ||
+          (options.dtype_c == "f16" && options.dtype_acc == "f16"))) {
+      state.SkipWithError("library GEMM benchmark currently supports matching C/accumulator pairs: f32/f32, bf16/bf16, or f16/f16.");
       return;
     }
     bool const d_is_f16 = options.operation_name.find("_f16_df16_") != std::string::npos;
     bool const d_is_bf16 = options.operation_name.find("_bf16_dbf16_") != std::string::npos;
-    std::string const operation_dtype_d = d_is_f16 ? "f16" : (d_is_bf16 ? "bf16" : "f32");
+    bool const op_is_f16_acc = options.operation_name.find("_f16_f16_f16_f16_f16_") != std::string::npos;
+    bool const op_is_bf16_acc = options.operation_name.find("_bf16_bf16_bf16_bf16_bf16_") != std::string::npos;
+    std::string const operation_dtype_d = d_is_f16 || op_is_f16_acc ? "f16" : (d_is_bf16 || op_is_bf16_acc ? "bf16" : "f32");
+    std::string const operation_dtype_c = op_is_f16_acc ? "f16" : (op_is_bf16_acc ? "bf16" : "f32");
+    std::string const operation_dtype_acc = operation_dtype_c;
+    if (options.dtype_c != operation_dtype_c || options.dtype_acc != operation_dtype_acc) {
+      state.SkipWithError(("library GEMM C/accumulator mismatch: requested " + options.dtype_c + "/" + options.dtype_acc + " but operation provides " + operation_dtype_c + "/" + operation_dtype_acc).c_str());
+      return;
+    }
     if (options.dtype_d != operation_dtype_d) {
       state.SkipWithError(("library GEMM dtype_d mismatch: requested " + options.dtype_d + " but operation provides " + operation_dtype_d).c_str());
       return;
     }
-    if (options.dtype_a == "f16" && options.dtype_b == "f16" && d_is_f16) {
-      run_typed<cutlass::half_t, cutlass::half_t, cutlass::half_t>(state, options, hw_info);
+    if (options.dtype_a == "f16" && options.dtype_b == "f16" && op_is_f16_acc) {
+      run_typed<cutlass::half_t, cutlass::half_t, cutlass::half_t, cutlass::half_t, cutlass::half_t>(state, options, hw_info);
+    }
+    else if (options.dtype_a == "f16" && options.dtype_b == "f16" && d_is_f16) {
+      run_typed<cutlass::half_t, cutlass::half_t, float, cutlass::half_t, float>(state, options, hw_info);
     }
     else if (options.dtype_a == "f16" && options.dtype_b == "f16") {
-      run_typed<cutlass::half_t, cutlass::half_t, float>(state, options, hw_info);
+      run_typed<cutlass::half_t, cutlass::half_t, float, float, float>(state, options, hw_info);
+    }
+    else if (options.dtype_a == "bf16" && options.dtype_b == "bf16" && op_is_bf16_acc) {
+      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t>(state, options, hw_info);
     }
     else if (options.dtype_a == "bf16" && options.dtype_b == "bf16" && d_is_f16) {
-      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::half_t>(state, options, hw_info);
+      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, float, cutlass::half_t, float>(state, options, hw_info);
     }
     else if (options.dtype_a == "bf16" && options.dtype_b == "bf16" && d_is_bf16) {
-      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t>(state, options, hw_info);
+      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, float, cutlass::bfloat16_t, float>(state, options, hw_info);
     }
     else if (options.dtype_a == "bf16" && options.dtype_b == "bf16") {
-      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, float>(state, options, hw_info);
+      run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, float, float, float>(state, options, hw_info);
     }
     else {
       state.SkipWithError("library GEMM benchmark currently supports f16/f16 and bf16/bf16 inputs only.");
