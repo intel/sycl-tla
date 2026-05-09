@@ -500,6 +500,11 @@ def write_config(entries, config_path):
         for entry in entries:
             candidate = entry["candidate"]
             shape = entry["shape"]
+            runtime_defaults = dict(candidate.get("runtime_defaults", {}))
+            runtime_defaults.update(shape.get("runtime_defaults", {}))
+            batch_count = shape.get("batch_count", runtime_defaults.get("batch_count", 1))
+            alpha = runtime_defaults.get("alpha", 1.0)
+            beta = runtime_defaults.get("beta", 0.0)
             is_generated_library_kernel = candidate.get("source") == "generator_manifest" or candidate["kernel_name"].startswith("cutlass3x_")
             benchmark_name = "cutlass_library_gemm" if is_generated_library_kernel else candidate["kernel_name"]
             library_options = ""
@@ -510,9 +515,10 @@ def write_config(entries, config_path):
                     f" --dtype_a={shape['dtype_a']}"
                     f" --dtype_b={shape['dtype_b']}"
                     f" --dtype_c={shape['dtype_c']}"
+                    f" --dtype_d={shape.get('dtype_d', shape['dtype_c'])}"
                     f" --dtype_acc={shape['dtype_acc']}"
                 )
-            handle.write(f"{benchmark_name} --bm_name={entry['bm_name']} --m={shape['m']} --n={shape['n']} --k={shape['k']}{library_options}\n")
+            handle.write(f"{benchmark_name} --bm_name={entry['bm_name']} --m={shape['m']} --n={shape['n']} --k={shape['k']} --l={batch_count} --alpha={alpha} --beta={beta}{library_options}\n")
             metadata[entry["bm_name"]] = {
                 "shape_id": shape["shape_id"],
                 "candidate_id": candidate["candidate_id"],
@@ -528,7 +534,7 @@ def write_config(entries, config_path):
                 "m": shape["m"],
                 "n": shape["n"],
                 "k": shape["k"],
-                "batch_count": shape.get("batch_count", 1),
+                "batch_count": batch_count,
                 "kernel_name": candidate["kernel_name"],
                 "split_k": candidate["split_k"],
                 "streamk_mode": candidate.get("streamk_mode", ""),

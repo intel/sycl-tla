@@ -236,6 +236,17 @@ python3 test/benchmarks/intel_gemm_profiler.py \
 
 The CLI prints a JSON result. Exact hits return `status=found` and the selected dispatch entry. Misses return `status=missing`, or `status=fallback` when `--fallback-candidate-id` is provided.
 
+Runtime config emission now writes the benchmark-supported `--l=<batch_count>`, `--alpha`, `--beta`, and `--dtype_d` options into generated `.in` files. The C++ generated-library GEMM benchmark also parses `dtype_d` and rejects mismatches between the requested output dtype and the selected `--operation_name`, so dispatch/search metadata cannot silently run a different D dtype operation.
+
+Remote BMG smoke proof for this contract:
+
+- shape: `layout=rrr, A/B=bf16, C=f32, D=bf16, acc=f32, m=n=256, k=32, batch_count=2`
+- generated candidate: `rrr_bf16bf16f32_tm256_tn256_tk32_sg8x4_st2_sk1_dbf16`
+- config line included `--l=2 --dtype_d=bf16`
+- result: 1 screening row, 1 passed row, 0 failed rows, 1 dispatch entry
+- product bundle validation: `status=pass`
+- exact runtime lookup with `--lookup-dtype-d bf16 --lookup-batch-count 2`: `status=found`
+
 ### `ProductBundleManifest`
 
 Input:

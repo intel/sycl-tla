@@ -65,7 +65,7 @@ def kernel_catalog_entry(dtype, seed):
     entry["streamk_mode"] = entry.get("streamk_mode", "")
     entry["batch_count"] = 1
     entry["runtime_defaults"] = {}
-    entry["allowed_runtime_sweeps"] = ["shape_id", "m", "n", "k"]
+    entry["allowed_runtime_sweeps"] = ["shape_id", "m", "n", "k", "batch_count"]
     entry["source"] = "seed_catalog_level0"
     entry["dtype_family"] = dtype
     entry.setdefault("mma_atom", "XE_DPAS_TT")
@@ -104,6 +104,9 @@ def load_persisted_kernel_catalog(path=DEFAULT_KERNEL_CATALOG_PATH):
         for entry in catalog.get("kernels", []):
             entry.setdefault("dtype_d", entry["dtype_c"])
             entry.setdefault("batch_count", 1)
+            entry.setdefault("allowed_runtime_sweeps", ["shape_id", "m", "n", "k", "batch_count"])
+            if "batch_count" not in entry["allowed_runtime_sweeps"]:
+                entry["allowed_runtime_sweeps"].append("batch_count")
             entry.setdefault("mma_atom", "XE_DPAS_TT")
             entry.setdefault("gmem_copy_atom_a", "auto")
             entry.setdefault("gmem_copy_atom_b", "auto")
@@ -193,7 +196,7 @@ def _generator_kernel_catalog_entry(operation, data_type_names, tile_scheduler_t
         "grf_mode": 256,
         "streamk_mode": streamk_mode,
         "runtime_defaults": {},
-        "allowed_runtime_sweeps": ["shape_id", "m", "n", "k"],
+        "allowed_runtime_sweeps": ["shape_id", "m", "n", "k", "batch_count"],
         "source": "generator_manifest",
         "mma_atom": "XE_DPAS_TT",
         "gmem_copy_atom_a": "auto",

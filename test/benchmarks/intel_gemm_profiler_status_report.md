@@ -18,7 +18,21 @@
 - 76 个 Ali reference matches
 - 0 missing dispatch
 
-本地 profiler Python 回归当前为 **82/82 OK**。
+本地 profiler Python 回归当前为 **82/82 OK**。同一回归也已在新远端 BMG 环境 `intel@172.16.114.105` 的 `/home/intel/tianfeng/gemm_productization_20260509/sycl-tla` 中通过。
+
+补充 `dtype_d=bf16 + batch_count=2` generated benchmark runtime smoke 已在新远端 BMG 节点通过：
+
+- workspace：`/home/intel/tianfeng/gemm_productization_20260509/bf16_b2_smoke_ws`
+- shape：`layout=rrr, A/B=bf16, C=f32, D=bf16, acc=f32, m=256, n=256, k=32, batch_count=2`
+- candidate：`rrr_bf16bf16f32_tm256_tn256_tk32_sg8x4_st2_sk1_dbf16`
+- generated operation：`cutlass3x_xe20_tensorop_gemm_bf16_bf16_f32_f32_bf16_dbf16_256x256x32_1x1x1_2_ttt_align8`
+- generated config 已实际写入：`--l=2 --alpha=1.0 --beta=0.0 --dtype_d=bf16`
+- screening rows：1
+- passed rows：1
+- failed rows：0
+- dispatch entries：1
+- product bundle validation：`status=pass`
+- runtime lookup 使用 `--lookup-dtype-d bf16 --lookup-batch-count 2` 精确命中
 
 补充 native C++ `tools/profiler/cutlass_profiler` GEMM smoke 也已在远端 BMG 节点通过：
 

@@ -132,6 +132,7 @@ struct GEMMOptions {
   std::string dtype_a;
   std::string dtype_b;
   std::string dtype_c;
+  std::string dtype_d;
   std::string dtype_acc;
   int verify_library;
   int library_verify_max_ops;
@@ -146,6 +147,7 @@ struct GEMMOptions {
           dtype_a("f16"),
           dtype_b("f16"),
           dtype_c("f32"),
+          dtype_d("f32"),
           dtype_acc("f32"),
           verify_library(1),
           library_verify_max_ops(1 << 26)
@@ -167,6 +169,7 @@ struct GEMMOptions {
     cmd.get_cmd_line_argument("dtype_a", dtype_a, std::string("f16"));
     cmd.get_cmd_line_argument("dtype_b", dtype_b, std::string("f16"));
     cmd.get_cmd_line_argument("dtype_c", dtype_c, std::string("f32"));
+    cmd.get_cmd_line_argument("dtype_d", dtype_d, std::string("f32"));
     cmd.get_cmd_line_argument("dtype_acc", dtype_acc, std::string("f32"));
     cmd.get_cmd_line_argument("verify_library", verify_library, 1);
     cmd.get_cmd_line_argument("library_verify_max_ops", library_verify_max_ops, 1 << 26);
@@ -404,6 +407,11 @@ struct LibraryGemmBenchmarkRunner {
     }
     bool const d_is_f16 = options.operation_name.find("_f16_df16_") != std::string::npos;
     bool const d_is_bf16 = options.operation_name.find("_bf16_dbf16_") != std::string::npos;
+    std::string const operation_dtype_d = d_is_f16 ? "f16" : (d_is_bf16 ? "bf16" : "f32");
+    if (options.dtype_d != operation_dtype_d) {
+      state.SkipWithError(("library GEMM dtype_d mismatch: requested " + options.dtype_d + " but operation provides " + operation_dtype_d).c_str());
+      return;
+    }
     if (options.dtype_a == "f16" && options.dtype_b == "f16" && d_is_f16) {
       run_typed<cutlass::half_t, cutlass::half_t, cutlass::half_t>(state, options, hw_info);
     }

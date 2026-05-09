@@ -80,7 +80,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         data_parallel = next(entry for entry in catalog["kernels"] if entry["streamk_mode"] == "data_parallel")
         self.assertEqual(splitk["instantiation_level"], 0)
         self.assertEqual(splitk["runtime_defaults"], {})
-        self.assertEqual(splitk["allowed_runtime_sweeps"], ["shape_id", "m", "n", "k"])
+        self.assertEqual(splitk["allowed_runtime_sweeps"], ["shape_id", "m", "n", "k", "batch_count"])
         self.assertEqual(data_parallel["benchmark_target"], "03_bmg_gemm_streamk")
 
     def test_generated_level0_candidates_allow_stage_count_auto(self):
@@ -322,10 +322,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
                     "dtype_a": "f16",
                     "dtype_b": "f16",
                     "dtype_c": "f32",
+                    "dtype_d": "f16",
                     "dtype_acc": "f32",
                     "m": 16,
                     "n": 32,
                     "k": 64,
+                    "batch_count": 2,
+                    "runtime_defaults": {"alpha": 1.5, "beta": 0.25},
                 },
                 "candidate": {
                     "candidate_id": "generated",
@@ -345,6 +348,11 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertIn("--layout=rcr", line)
             self.assertIn("--dtype_a=f16", line)
             self.assertIn("--dtype_c=f32", line)
+            self.assertIn("--dtype_d=f16", line)
+            self.assertIn("--l=2", line)
+            self.assertIn("--alpha=1.5", line)
+            self.assertIn("--beta=0.25", line)
+            self.assertEqual(metadata["generated__shape__screening__0"]["batch_count"], 2)
             self.assertEqual(metadata["generated__shape__screening__0"]["kernel_name"], entry["candidate"]["kernel_name"])
 
     def test_library_benchmark_runner_recognizes_bf16_d_generated_kernels(self):
@@ -353,6 +361,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
         text = runner_path.read_text(encoding="utf-8")
 
         self.assertIn('operation_name.find("_bf16_dbf16_")', text)
+        self.assertIn('cmd.get_cmd_line_argument("dtype_d"', text)
+        self.assertIn("library GEMM dtype_d mismatch", text)
         self.assertIn(
             "run_typed<cutlass::bfloat16_t, cutlass::bfloat16_t, cutlass::bfloat16_t>",
             text,
@@ -378,7 +388,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         variant = manifest["variants"][0]
         self.assertIn("compile_time_variant", variant)
         self.assertIn("runtime_sweep", variant)
-        self.assertEqual(variant["runtime_sweep"]["allowed_fields"], ["shape_id", "m", "n", "k"])
+        self.assertEqual(variant["runtime_sweep"]["allowed_fields"], ["shape_id", "m", "n", "k", "batch_count"])
 
     def test_build_candidate_build_manifest_can_emit_kernel_batches(self):
         shapes = profiler.default_shapes("bf16")

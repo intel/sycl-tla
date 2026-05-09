@@ -40,6 +40,7 @@ The current workflow also supports:
 - optional screening/confirmation routing to preflighted per-batch benchmark binaries through `--use-candidate-build-preflight-benchmarks`
 - generated Intel Xe `StageCountAuto` candidates represented as `stages=0`
 - first-class `dtype_d` and `batch_count` metadata in candidate, result, dispatch, and lookup artifacts
+- generated benchmark config emission for `--l=<batch_count>`, `--alpha`, `--beta`, and `--dtype_d`
 - explicit candidate metadata for currently fixed GEMM knobs such as `mma_atom`, GMEM copy atoms, and epilogue operation/tile/copy atoms
 - generated candidate coverage and exception summaries in `gemm_candidate_space.json`
 - native C++ `tools/profiler/cutlass_profiler` generated GEMM profiling with host-reference verification
@@ -96,6 +97,21 @@ F16 non-RCR generated layout smoke proof:
 - RRR selected candidate: `rrr_f16f16f32_tm128_tn128_tk32_sg4x4_st0_sk1`
 - CCR selected candidate: `ccr_f16f16f32_tm128_tn128_tk32_sg4x4_st0_sk1`
 - each run passed: 1 preflight batch, 1 screening row, 0 failed rows, 1 dispatch entry
+
+Generated `dtype_d=bf16` and `batch_count=2` runtime smoke proof:
+
+- remote BMG node: `172.16.114.105`
+- dedicated workspace: `/home/intel/tianfeng/gemm_productization_20260509/bf16_b2_smoke_ws`
+- shape: `layout=rrr, A/B=bf16, C=f32, D=bf16, acc=f32, m=256, n=256, k=32, batch_count=2`
+- generator catalog: `--kernel-catalog-source generator --generator-instantiation-level 1`
+- compiled-kernel-list limited to: `cutlass3x_xe20_tensorop_gemm_bf16_bf16_f32_f32_bf16_dbf16_256x256x32_1x1x1_2_ttt_align8`
+- generated config line included `--l=2 --alpha=1.0 --beta=0.0 --dtype_d=bf16`
+- screening rows: 1
+- passed rows: 1
+- failed rows: 0
+- dispatch entries: 1
+- product bundle validation: `status=pass`
+- exact lookup with `dtype_d=bf16` and `batch_count=2`: `status=found`
 
 Generated StreamK limitation tracking:
 
