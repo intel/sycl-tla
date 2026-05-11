@@ -47,6 +47,7 @@ using namespace compat::experimental;
 // ============================================================================
 
 template<class...> class ReorderKernelName;
+template<class...> class SubbyteReorderKernelName;
 
 // Generic reorder test kernel for SubgroupTensor
 template <class SrcType, class DstType, int M, int N>
@@ -312,18 +313,136 @@ TEST(PVC_CuTe_Xe_Reorder, subgroup_int8) {
 }
 
 // Test: Sub-byte types (uint4_t, int4_t) identity tests
-// NOTE: These tests are disabled due to sub-byte packing issues in device memory.
-// Sub-byte types (uint4_t, int4_t) require special byte-packing handling that is not
-// properly supported in the current reorder kernel implementation. When two 4-bit values
-// are packed into a single byte, the kernel's round-robin memory access pattern causes
-// data corruption. For example, int4_t value -5 gets corrupted to 65 due to improper
-// byte packing/unpacking during the reorder operation.
-TEST(PVC_CuTe_Xe_Reorder, DISABLED_subbyte_uint4_identity) {
-  IdentityReorderTest<uint4_t, 8, 32, 9>::run();
+// Sub-byte types use packed byte storage: two 4-bit values per byte.
+// The kernel works in uint8_t space with packed data, then the host
+// unpacks and verifies individual 4-bit values.
+
+// Sub-byte reorder kernel: operates on packed uint8_t data where each byte
+// holds two 4-bit values (low nibble = even index, high nibble = odd index).
+// The reorder is performed in uint8_t space (identity reorder), then results
+// are unpacked and compared on the host.
+template <class SubbyteType, int M, int N>
+void subbyte_reorder_kernel(uint8_t* src_global, uint8_t* dst_global)
+{
+  const int tid = ThreadIdxX();
+  // Each byte holds 2 sub-byte elements, so packed element count is half
+  constexpr int total_packed = (M * N) / 2;
+  constexpr int values_per_thread = total_packed / intel::sg_size;
+
+  uint8_t src_local[values_per_thread];
+  uint8_t dst_local[values_per_thread];
+
+  // Load packed bytes from global memory (round-robin)
+  for (int i = 0; i < values_per_thread; ++i) {
+    src_local[i] = src_global[tid + i * intel::sg_size];
+  }
+
+  // Create tensors over uint8_t packed data
+  auto src_tensor = make_tensor(make_rmem_ptr(src_local),
+                                make_layout(Shape<Int<values_per_thread>>{}));
+  auto dst_tensor = make_tensor(make_rmem_ptr(dst_local),
+                                make_layout(Shape<Int<values_per_thread>>{}));
+
+  // Subgroup TV layout for round-robin ownership (in packed byte space)
+  constexpr auto sg_tv_layout = make_layout(
+      Shape<Int<intel::sg_size>, Int<values_per_thread>>{},
+      Stride<_1, Int<intel::sg_size>>{});
+
+  // Create SubgroupTensors and perform identity reorder in uint8_t space
+  auto src_sg = make_subgroup_tensor(src_tensor, sg_tv_layout);
+  auto dst_sg = make_subgroup_tensor(dst_tensor, sg_tv_layout);
+  reorder(src_sg, dst_sg);
+
+  // Store packed bytes back to global memory
+  for (int i = 0; i < values_per_thread; ++i) {
+    dst_global[tid + i * intel::sg_size] = dst_local[i];
+  }
 }
 
-TEST(PVC_CuTe_Xe_Reorder, DISABLED_subbyte_int4_identity) {
-  IdentityReorderTest<int4_t, 8, 32, 10>::run();
+// Helper: pack sub-byte values into bytes on host (2 elements per byte)
+template <class SubbyteType>
+void pack_subbyte_to_bytes(cutlass::host_vector<SubbyteType>& src,
+                           cutlass::host_vector<uint8_t>& packed)
+{
+  constexpr uint8_t mask = 0x0F;
+  for (size_t i = 0; i < src.size(); i += 2) {
+    uint8_t lo = static_cast<uint8_t>(src[i]) & mask;
+    uint8_t hi = (i + 1 < src.size()) ? (static_cast<uint8_t>(src[i + 1]) & mask) : 0;
+    packed[i / 2] = static_cast<uint8_t>(lo | (hi << 4));
+  }
+}
+
+// Helper: convert a raw 4-bit nibble to the appropriate integer value
+template <class SubbyteType>
+int nibble_to_int(uint8_t nibble) {
+  // For signed 4-bit types, sign-extend: values 8-15 map to -8 to -1
+  if constexpr (std::is_same_v<SubbyteType, int4_t>) {
+    return (nibble & 0x08) ? (static_cast<int>(nibble) - 16) : static_cast<int>(nibble);
+  } else {
+    return static_cast<int>(nibble);
+  }
+}
+
+// Helper: unpack bytes to sub-byte values on host
+template <class SubbyteType>
+void unpack_bytes_to_subbyte(cutlass::host_vector<uint8_t>& packed,
+                             cutlass::host_vector<SubbyteType>& dst)
+{
+  for (size_t i = 0; i < packed.size(); ++i) {
+    uint8_t byte = packed[i];
+    dst[i * 2]     = SubbyteType(nibble_to_int<SubbyteType>(byte & 0x0F));
+    if (i * 2 + 1 < dst.size()) {
+      dst[i * 2 + 1] = SubbyteType(nibble_to_int<SubbyteType>((byte >> 4) & 0x0F));
+    }
+  }
+}
+
+template <class SubbyteType, int M, int N, int TestID>
+struct SubbyteIdentityReorderTest {
+  static void run() {
+    constexpr int total = M * N;
+    constexpr int packed_size = total / 2;
+
+    // Initialize sub-byte source data
+    cutlass::host_vector<SubbyteType> host_src(total);
+    initialize_test_data(host_src);
+
+    // Pack into bytes
+    cutlass::host_vector<uint8_t> host_packed_src(packed_size);
+    pack_subbyte_to_bytes(host_src, host_packed_src);
+
+    // Transfer to device
+    cutlass::device_vector<uint8_t> device_packed_src = host_packed_src;
+    cutlass::device_vector<uint8_t> device_packed_dst(packed_size);
+
+    // Run kernel in uint8_t packed space
+    launch<subbyte_reorder_kernel<SubbyteType, M, N>,
+           SubbyteReorderKernelName<SubbyteType, Int<TestID>>>(
+        launch_policy{compat::dim3(1), compat::dim3(intel::sg_size),
+                      kernel_properties{sycl_exp::sub_group_size<intel::sg_size>}},
+        device_packed_src.data(), device_packed_dst.data());
+
+    compat::wait_and_throw();
+
+    // Transfer back and unpack
+    cutlass::host_vector<uint8_t> host_packed_dst = device_packed_dst;
+    cutlass::host_vector<SubbyteType> host_dst(total);
+    unpack_bytes_to_subbyte(host_packed_dst, host_dst);
+
+    // Verify all values match
+    for (size_t i = 0; i < host_src.size(); ++i) {
+      EXPECT_EQ(static_cast<int>(host_dst[i]), static_cast<int>(host_src[i]))
+          << "Mismatch at index " << i;
+    }
+  }
+};
+
+TEST(PVC_CuTe_Xe_Reorder, subbyte_uint4_identity) {
+  SubbyteIdentityReorderTest<uint4_t, 8, 32, 9>::run();
+}
+
+TEST(PVC_CuTe_Xe_Reorder, subbyte_int4_identity) {
+  SubbyteIdentityReorderTest<int4_t, 8, 32, 10>::run();
 }
 
 // Note: Sub-byte types (uint4_t, int4_t) require special handling due to bit-packing
