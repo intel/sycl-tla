@@ -137,7 +137,9 @@ struct Options {
     cmd.get_cmd_line_argument("verify", verify, 1);
     cmd.get_cmd_line_argument("dtype", dtype, std::string("bf16"));
 
-    if (dtype != "bf16" && dtype != "f16") {
+    if (dtype != "bf16" && dtype != "f16" &&
+        dtype != "bf16_bf16" && dtype != "f16_f16" &&
+        dtype != "tf32" && dtype != "s8") {
       error = true;
     }
   }
@@ -157,7 +159,7 @@ struct Options {
       << "  --splits=<int>              Sets the splitting factor for GEMM\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
-      << "  --dtype=<bf16|f16>          Input dtype preset\n"
+      << "  --dtype=<bf16|f16|bf16_bf16|f16_f16|tf32|s8>  Dtype preset\n"
       << "  --iterations=<int>          Iterations\n"
       << "  --verify=<int>              Specify whether to verify.\n\n";
 
@@ -337,13 +339,9 @@ struct ExampleRunner {
 
 };
 
-template <class ElementInput>
+template <class ElementInputA, class ElementInputB, class ElementAccumulator, class ElementOutput>
 int run_gemm(Options const& options, cutlass::KernelHardwareInfo const& hw_info) {
-  using ElementAccumulator = float;
-  using ElementComputeEpilogue = float;
-  using ElementInputA = ElementInput;
-  using ElementInputB = ElementInput;
-  using ElementOutput = float;
+  using ElementComputeEpilogue = ElementAccumulator;
 
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
@@ -355,8 +353,8 @@ int run_gemm(Options const& options, cutlass::KernelHardwareInfo const& hw_info)
 
   using TileShape = Shape<_256, _256, _32>;
   using TiledMma =
-      typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, ElementInput>>, Layout<TileShape>,
-                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+      typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, ElementAccumulator, ElementInputA, ElementInputB, ElementAccumulator>>, Layout<TileShape>,
+                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages, cutlass::gemm::KernelXeCooperative>;
@@ -420,7 +418,7 @@ int main(int argc, const char** argv)
   }
 
   if (options.error) {
-    std::cerr << "Aborting execution. Supported --dtype values: bf16, f16." << std::endl;
+    std::cerr << "Aborting execution. Supported --dtype values: bf16, f16, bf16_bf16, f16_f16, tf32, s8." << std::endl;
     return -1;
   }
 
@@ -437,7 +435,19 @@ int main(int argc, const char** argv)
   hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
 
   if (options.dtype == "f16") {
-    return run_gemm<half_t>(options, hw_info);
+    return run_gemm<half_t, half_t, float, float>(options, hw_info);
   }
-  return run_gemm<bfloat16_t>(options, hw_info);
+  if (options.dtype == "bf16_bf16") {
+    return run_gemm<bfloat16_t, bfloat16_t, bfloat16_t, bfloat16_t>(options, hw_info);
+  }
+  if (options.dtype == "f16_f16") {
+    return run_gemm<half_t, half_t, half_t, half_t>(options, hw_info);
+  }
+  if (options.dtype == "tf32") {
+    return run_gemm<tfloat32_t, tfloat32_t, float, float>(options, hw_info);
+  }
+  if (options.dtype == "s8") {
+    return run_gemm<int8_t, int8_t, int32_t, int32_t>(options, hw_info);
+  }
+  return run_gemm<bfloat16_t, bfloat16_t, float, float>(options, hw_info);
 }
