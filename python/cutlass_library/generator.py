@@ -10969,6 +10969,8 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
                 schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
                 CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+                schedules_cooperative = [[KernelScheduleType.XeCooperative, EpilogueScheduleType.ScheduleAuto]]
+                CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules_cooperative, tile_schedulers=[TileSchedulerType.StreamK])
    
 def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate FP8 (E4M3/E5M2) GEMM kernels for Intel Xe architecture using DPAS.
