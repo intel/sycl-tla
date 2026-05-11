@@ -46,31 +46,24 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 |0.6 | 4.2.0 |
 |0.7 | 4.2.1 |
 |0.8 | 4.2.1 |
+|0.9 | 4.2.1 |
 
-# What's New in SYCL*TLA 0.8
+# What's New in SYCL*TLA 0.9
 
-## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-25)
+## [SYCL*TLA 0.9](https://github.com/intel/sycl-tla/releases/tag/v0.9) (2026-04-30)
 
-### Major Architecture Changes
-- **Support BMG G31 Platform ([#755](https://github.com/intel/sycl-tla/pull/755))**
-- **SLM Copy API functionalities and examples**
-  - Support CuTe copy engines for 1D LDSM/STSM operations with vISA ([#753](https://github.com/intel/sycl-tla/pull/753))
-  - Enable fusion example of 2 matmul operations through SLM Copy API ([#747](https://github.com/intel/sycl-tla/pull/747))
-  - Enable subgroup specialization example with SLM Copy API ([#735](https://github.com/intel/sycl-tla/pull/735))
-- **Support default sub-byte reorder for low-precision data types ([#709](https://github.com/intel/sycl-tla/pull/709))**
 
 ### Enhancements
-- **Flash Attention Performance Improvements (for BMG and BF16)**:  
-  - Fix long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
-  - Overall performance improved from ~45% to ~78% of peak([#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743),[#749](https://github.com/intel/sycl-tla/pull/749),[#750](https://github.com/intel/sycl-tla/pull/750))
-  - Refine code and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715), [#716](https://github.com/intel/sycl-tla/pull/716),[#720](https://github.com/intel/sycl-tla/pull/720))
-- **Epilogue Visitor Tree (EVT) Enhancements**:
-  - Combine with SIGMOID function ([#686](https://github.com/intel/sycl-tla/pull/686))
-  - Add Relu variation test cases ([#693](https://github.com/intel/sycl-tla/pull/693))
-  - Enhance and refine code and test case([#703](https://github.com/intel/sycl-tla/pull/703), [#717](https://github.com/intel/sycl-tla/pull/717))
-- **GEMM Enhancements**:
-  - Support all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
-  - Enhance examples ([#726](https://github.com/intel/sycl-tla/pull/726))
+- **Support FP8 upconversion for CuTe SLM Copy ([#772](https://github.com/intel/sycl-tla/pull/772))**
+- **Support AOT (Ahead-Of-Time) compilation instead of JIT ([#763](https://github.com/intel/sycl-tla/pull/763))**
+- **Add vectorized test cases for CuTe SLM Copy ([#766](https://github.com/intel/sycl-tla/pull/766))**
+- **Add some GEMM and Flash Attention benchmark cases ([#773](https://github.com/intel/sycl-tla/pull/773))**
+
+### Bug Fixes
+- **Fix example06 memory bandwidth computation bugs ([#778](https://github.com/intel/sycl-tla/pull/778))**
+- **Fix Python GEMM Generation bugs ([#768](https://github.com/intel/sycl-tla/pull/768))**
+- **Fix Python EVT test cases bugs ([#762](https://github.com/intel/sycl-tla/pull/762))**
+- **Fix AOT multitarget support bugs ([#765](https://github.com/intel/sycl-tla/pull/765))**
   
 **See the [CHANGELOG](https://github.com/intel/sycl-tla/blob/main/CHANGELOG-SYCL.md) for details of all past releases and updates.**
 

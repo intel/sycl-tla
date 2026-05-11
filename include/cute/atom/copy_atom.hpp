@@ -458,16 +458,27 @@ struct ThrCopy
   CUTE_HOST_DEVICE
   auto
   partition_sg_fragment_S(STensor&& stensor) const {
+    // Use subgroup size (16 for Intel Xe) for the WI layout grouping, not atom's ThrID.
+    // This ensures SubgroupTensors always have T-dim = subgroup size (16),
+    // which is required for reorder() to compose static-stride layouts.
+    auto tf_layout0 = TiledCopy::tidfrg_S(stensor.layout());
+    auto tf_layout = logical_divide(tf_layout0, Shape<Int<16>>{});
+    auto thr_tensor = make_tensor(static_cast<STensor&&>(stensor).data(), tf_layout);
+    auto thr = idx2crd(thr_idx_, shape<0>(thr_tensor));
     return make_subgroup_tensor(partition_fragment_S(stensor),
-                                layout(atom_partition_S(stensor)));
+                                layout(thr_tensor(replace<0>(thr,_),_,_)));
   }
 
   template <class DTensor>
   CUTE_HOST_DEVICE
   auto
   partition_sg_fragment_D(DTensor&& dtensor) const {
+    auto tf_layout0 = TiledCopy::tidfrg_D(dtensor.layout());
+    auto tf_layout = logical_divide(tf_layout0, Shape<Int<16>>{});
+    auto thr_tensor = make_tensor(static_cast<DTensor&&>(dtensor).data(), tf_layout);
+    auto thr = idx2crd(thr_idx_, shape<0>(thr_tensor));
     return make_subgroup_tensor(partition_fragment_D(dtensor),
-                                layout(atom_partition_D(dtensor)));
+                                layout(thr_tensor(replace<0>(thr,_),_,_)));
   }
 };
 

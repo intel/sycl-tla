@@ -44,8 +44,7 @@ jobs:
         id: install_dpcpp
         uses: ./.github/actions/install-dpcpp
         with:
-          DPCPP_RELEASE: RELEASE
-          #DPCPP_VERSION: ${{ inputs.DPCPP_VERSION }}
+          DPCPP_RELEASE: TORCH_SUPPORTED
           DPCPP_PATH: ~/dpcpp
 
       - name: Setup virtual environment
@@ -99,15 +98,8 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "Cleaning up DPC++ installation..."
-          echo "Removing OneAPI packages..."
-          sudo apt remove -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp || true
-          sudo rm -f /etc/apt/sources.list.d/oneAPI.list
-          sudo rm -f /usr/share/keyrings/oneapi-archive-keyring.gpg
           # Clean up environment files
           rm -f setvars.sh
-          # Clean up build artifacts
-          rm -rf build/ || true
           echo "DPC++ cleanup completed"
 
       - name: Cleanup DPCTL
