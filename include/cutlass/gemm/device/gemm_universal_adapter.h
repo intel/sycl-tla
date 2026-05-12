@@ -1,6 +1,6 @@
 /***************************************************************************************************
  * Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * Copyright (C) 2025 Intel Corporation, All rights reserved.
+ * Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -552,11 +552,18 @@ public:
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
         using namespace compat::experimental;
         if constexpr (cute::is_same_v<DispatchPolicy, MainloopDeviceAgnostic>) {
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
           auto event = launch<device_kernel<GemmKernel>>(launch_policy{
             sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
           }, q, params);
           EventManager::getInstance().addEvent(event);
+#else
+          launch<device_kernel<GemmKernel>, sycl::detail::auto_name, false>(launch_policy{
+            sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
+          }, q, params);
+#endif
         } else {
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
           auto event = launch<device_kernel<GemmKernel>>(launch_policy{
             sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
 #if defined(SYCL_INTEL_TARGET)
@@ -564,6 +571,14 @@ public:
 #endif
           }, q, params);
           EventManager::getInstance().addEvent(event);
+#else
+          launch<device_kernel<GemmKernel>, sycl::detail::auto_name, false>(launch_policy{
+            sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
+#if defined(SYCL_INTEL_TARGET)
+            , kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
+#endif
+          }, q, params);
+#endif
         }
 #else
 #if defined (SYCL_INTEL_TARGET)
@@ -589,8 +604,12 @@ public:
         compat::experimental::launch_policy policy{
           sycl_grid, sycl_block, launch_props, kernel_props
         };
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
         auto event = compat::experimental::launch<device_kernel<GemmKernel>, GemmKernel>(policy, q, params);
         EventManager::getInstance().addEvent(event);
+#else
+        compat::experimental::launch<device_kernel<GemmKernel>, GemmKernel, false>(policy, q, params);
+#endif
 #endif // !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 #else
 #if (CUTLASS_DEBUG_TRACE_LEVEL > 1)

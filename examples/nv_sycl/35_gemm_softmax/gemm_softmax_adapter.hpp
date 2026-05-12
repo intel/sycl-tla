@@ -462,6 +462,7 @@ public:
           sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size)
         };
         compat::experimental::launch_properties launch_props{smem_prop};
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
         auto event = compat::experimental::launch<device_kernel<GemmKernel>, GemmKernel>(compat::experimental::launch_policy{
           sycl_grid,
           sycl_block,
@@ -470,12 +471,23 @@ public:
           , compat::experimental::kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
 #endif // defined(SYCL_INTEL_TARGET)
         }, params.gemm_params);
+#else
+        compat::experimental::launch<device_kernel<GemmKernel>, GemmKernel, false>(compat::experimental::launch_policy{
+          sycl_grid,
+          sycl_block,
+          launch_props
+#if defined(SYCL_INTEL_TARGET)
+          , compat::experimental::kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
+#endif // defined(SYCL_INTEL_TARGET)
+        }, params.gemm_params);
+#endif
 
         compat::experimental::launch_properties kernel_launch_props_finalize{
           sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size_finalize)
         };
         const compat::dim3 sycl_grid_finalize(grid_finalize.x, grid_finalize.y, grid_finalize.z);
         const compat::dim3 sycl_block_finalize(block_finalize.x, block_finalize.y, block_finalize.z);
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
         auto event_finalize = compat::experimental::launch<device_kernel<SoftmaxFinalizeKernel>, SoftmaxFinalizeKernel>(compat::experimental::launch_policy{
             sycl_grid_finalize,
             sycl_block_finalize,
@@ -483,19 +495,41 @@ public:
           }, params.softmax_params);
         EventManager::getInstance().addEvent(event_finalize);
 #else
+        compat::experimental::launch<device_kernel<SoftmaxFinalizeKernel>, SoftmaxFinalizeKernel, false>(compat::experimental::launch_policy{
+            sycl_grid_finalize,
+            sycl_block_finalize,
+            kernel_launch_props_finalize,
+          }, params.softmax_params);
+#endif
+#else
         using namespace compat::experimental;
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
         auto event = launch<device_kernel<GemmKernel>>(launch_policy{
           sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
 #if defined (SYCL_INTEL_TARGET)
           , kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
 #endif
         }, params.gemm_params);
+#else
+        launch<device_kernel<GemmKernel>, sycl::detail::auto_name, false>(launch_policy{
+          sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)}
+#if defined (SYCL_INTEL_TARGET)
+          , kernel_properties{sycl_exp::sub_group_size<DispatchPolicy::SubgroupSize>}
+#endif
+        }, params.gemm_params);
+#endif
         const auto sycl_block_finalize = compat::dim3(block_finalize.x, block_finalize.y, block_finalize.z);
         const auto sycl_grid_finalize = compat::dim3(grid_finalize.x, grid_finalize.y, grid_finalize.z);
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
         auto event2 = launch<device_kernel<SoftmaxFinalizeKernel>>(launch_policy{
           sycl_grid_finalize, sycl_block_finalize, local_mem_size{static_cast<std::size_t>(smem_size_finalize)}},
           params.softmax_params);
         EventManager::getInstance().addEvent(event2);
+#else
+        launch<device_kernel<SoftmaxFinalizeKernel>, sycl::detail::auto_name, false>(launch_policy{
+          sycl_grid_finalize, sycl_block_finalize, local_mem_size{static_cast<std::size_t>(smem_size_finalize)}},
+          params.softmax_params);
+#endif
 #endif // defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
 #else
         device_kernel<GemmKernel><<<grid, block, smem_size, stream>>>(params.gemm_params);

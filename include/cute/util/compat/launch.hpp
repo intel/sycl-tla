@@ -158,10 +158,10 @@ auto launch(LaunchPolicy launch_policy, sycl::queue q, Args... args) {
   } else {
     auto KernelFunctor = build_kernel_functor<F>(launch_policy, args...);
     if constexpr (compat::detail::is_range_v<typename LaunchPolicy::RangeT>) {
-      sycl_exp::parallel_for(q, config, KernelFunctor);
+      sycl_exp::parallel_for<N>(q, config, KernelFunctor);
     } else {
       static_assert(compat::detail::is_nd_range_v<typename LaunchPolicy::RangeT>);
-      sycl_exp::nd_launch(q, config, KernelFunctor);
+      sycl_exp::nd_launch<N>(q, config, KernelFunctor);
     }
   }
 }
