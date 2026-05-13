@@ -34,6 +34,7 @@
 
 #include <sycl/sycl.hpp>
 #include "cutlass/cutlass.h"
+#include "cutlass/numeric_conversion.h"
 #include "cutlass/epilogue/dispatch_policy.hpp"
 #include "cutlass/epilogue/collective/collective_builder.hpp"
 #include "cutlass/epilogue/collective/collective_epilogue.hpp"
@@ -121,6 +122,12 @@ public:
 private:
   constexpr static bool is_source_supported      = !is_void_v<ElementC>;
   constexpr static bool is_destination_supported = !is_void_v<ElementD>;
+
+  // SFINAE: detect FusionCallbacks that provide is_identity()
+  template <class T, class = void>
+  struct has_is_identity : cute::false_type {};
+  template <class T>
+  struct has_is_identity<T, cute::void_t<decltype(cute::declval<T const&>().is_identity())>> : cute::true_type {};
 
 public:
   struct SharedStorage {
@@ -291,8 +298,6 @@ public:
 
     auto batch_idx = get<3>(tile_coord_mnkl);
 
-    bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
-
     auto MN = take<0,2>(problem_shape_mnkl);
     auto cCD = make_identity_tensor(MN);                                                // (m,n)
     auto gCD = local_tile(cCD, take<0,2>(WGTileMNK{}), take<0,2>(tile_coord_mnkl));     // (m_in_wg_tile, n_in_wg_tile)
@@ -310,124 +315,143 @@ public:
     auto sg_v_coord = prepend(flat_divide(remove<0>(tCDgCD.layout()), mma_per_epi),
                               get<0>(tCDgCD.layout()));                                 // (mma_v,mma_m,mma_n,epi_m,epi_n) -> coord
 
-    // Copy C/D one epilogue tile at a time. Prepare:
-    //   - subgroup-scope TiledCopy objects
-    //   - global coordinate tensors, partitioned into epilogue tiles
-    //   - copy fragments
-    //   - compute fragments (same layout as accumulator)
-    // Both copy and compute fragments are SubgroupTensors, holding coordinate mappings
-    //   within the epilogue tile.
-    auto copy_c = make_block_2d_copy(ActualGmemTiledCopyC{}, params.mC(_,_,batch_idx));
+    // Prepare D store copy objects (needed by both identity and full paths).
     auto copy_d = make_block_2d_copy(ActualGmemTiledCopyD{}, params.mD(_,_,batch_idx));
-
     int wi_idx = thread_idx % intel::sg_size;
-    auto thr_copy_c = copy_c.get_slice(wi_idx);
     auto thr_copy_d = copy_d.get_slice(wi_idx);
 
-    // Partition global coordinate tensors into epilogue tiles, matching
-    //  the work-division from the TiledMMA.
+    // Partition global coordinate tensors into epilogue tiles,
+    // matching the work-division from the TiledMMA.
     auto gCD_epi_layout = append(append(make_identity_layout(EpilogueTile{}),
                                         get<3>(sg_v_coord)), get<4>(sg_v_coord));
     auto gCD_epi = make_tensor(tCDgCD.data(), gCD_epi_layout);                          // (m,n,epi_m,epi_n) -> coord
 
-    auto tCgC = thr_copy_c.partition_S(gCD_epi);                                        // (atom_v,atom_m,atom_n,epi_m,epi_n)
     auto tDgD = thr_copy_d.partition_D(gCD_epi);                                        // (atom_v,atom_m,atom_n,epi_m,epi_n)
 
-    auto tCrC = thr_copy_c.partition_sg_fragment_D(gCD_epi(_,_,0,0));                   // (atom_v,atom_m,atom_n,epi_m,epi_n)
-    auto tDrD = thr_copy_d.partition_sg_fragment_S(gCD_epi(_,_,0,0));                   // (atom_v,atom_m,atom_n,epi_m,epi_n)
+    auto tDrD = thr_copy_d.partition_sg_fragment_S(gCD_epi(_,_,0,0));                   // (atom_v,atom_m,atom_n)
 
-    // Create C subgroup fragments for epilogue compute.
+    // Accumulator TV layout for reorder operations.
     using AccTVLayout = decltype(thr_mma.partition_sg_fragment_C(gCD).tv_layout());
     auto cd_compute_tv = make_layout(get<0>(AccTVLayout{}),
                                      sg_v_coord(_,_,_,_0{},_0{}));
 
-    auto tCrC_compute_wi = make_fragment_like<NonVoidElementC>(tiled_acc(_,_0{},_0{}));
-    auto tCrC_compute = make_subgroup_tensor(tCrC_compute_wi, cd_compute_tv);           // (mma_v,mma_m,mma_n)
-
-    // Calculate residues.
-    auto residue_gCD    = MN - gCD(_0{});                                               // (res_m, res_n)
-    auto residue_tCDgCD = MN - tCDgCD(_0{});                                            // (res_m, res_n)
-
-    // Pass data to fusions.
-    // FIXME: Some Xe visitors expect subgroup tiles/coordinates here and should be updated to accept
-    //        workgroup tiles/coordinates, like the NV code. Note that CuTe has no concept of a "subgroup tile."
-    //        Work division within a TiledMMA is flexible, and a subgroup's data need not be contiguous.
-    //        Instead, visitors should retrieve data coordinates within the WG tile via tDgD.
-    constexpr bool RefSrc = true;
-    auto cst_args = cutlass::epilogue::fusion::detail::ConsumerStoreArgs {
-        problem_shape_mnkl,
-        WGTileMNK{},
-        tile_coord_mnkl,
-        TiledMMA{},
-        EpilogueTile{},
-        copy_d,
-        gCD,
-        residue_gCD,
-        tDgD,
-        residue_tCDgCD,
-        tCrC_compute,
-        thread_idx,
-    };
-    auto cst_callbacks = fusion_callbacks.template get_consumer_store_callbacks<RefSrc>(cst_args);
-
-    // Epilogue visitors work on cutlass::Arrays of values for better vectorization.
-    // For now, choose array size so there is one array per MMA atom C tile -- later
-    //   we might want to make it configurable (FragmentSize in NV code).
-    using ElementAccumulator = typename Accumulator::element_type;
-    constexpr int ComputeVectorLen = size<0>(Accumulator{});
-    auto tiled_acc_v = recast<Array<ElementAccumulator, ComputeVectorLen>>(tiled_acc);
-
-    // Create D subgroup fragments for epilogue compute.
-    using FragmentVisit = decltype(cst_callbacks.visit(tiled_acc_v(0), 0, 0, 0));
-    using ElementVisit = typename FragmentVisit::Element;
-
-    auto tDrD_compute_wi = make_fragment_like<ElementVisit>(tiled_acc(_,_0{},_0{}));
-    auto tDrD_compute = make_subgroup_tensor(tDrD_compute_wi, cd_compute_tv);           // (mma_v,mma_m,mma_n)
-    auto tDrD_compute_v = recast<FragmentVisit>(tDrD_compute_wi);
-
-    // Outer loops over epilogue tiles.
     constexpr auto EpiTilesM = size<2>(gCD_epi);
     constexpr auto EpiTilesN = size<3>(gCD_epi);
 
-    cst_callbacks.begin();
-
-    CUTLASS_PRAGMA_UNROLL
-    for (int epi_m = 0; epi_m < EpiTilesM; epi_m++) {
-      CUTLASS_PRAGMA_UNROLL
-      for (int epi_n = 0; epi_n < EpiTilesN; epi_n++) {
-        cst_callbacks.begin_loop(epi_m, epi_n);
-
-        // Load C + reorder.
-        if constexpr (is_source_supported) {
-          if (is_C_load_needed) {
-            copy(copy_c, tCgC(_,_,_,epi_m,epi_n), tCrC);
-            reorder(tCrC, tCrC_compute);
-          }
-        }
-
-        cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);
-
-        // Epilogue computation, one ComputeVectorLen-sized array at a time.
-        CUTLASS_PRAGMA_UNROLL
-        for (int epi_v = 0; epi_v < size<0>(tiled_acc_v); ++epi_v) {
-          tDrD_compute_v(epi_v) = cst_callbacks.visit(tiled_acc_v(epi_v, epi_m, epi_n),
-                                                      epi_v, epi_m, epi_n);
-        }
-
-        bool last_epi = (epi_m == EpiTilesM - 1) && (epi_n == EpiTilesN - 1);
-        cst_callbacks.reduce(nullptr, [=]{}, epi_m, epi_n, last_epi, tDrD_compute_v);
-
-        // Reorder D (possibly including data conversion) and store.
-        if constexpr (is_destination_supported) {
-          reorder(tDrD_compute, tDrD);
-          copy(copy_d, tDrD, tDgD(_,_,_,epi_m,epi_n));
-        }
-
-        cst_callbacks.end_loop(epi_m, epi_n);
-      }
+    //
+    // Identity fast path: when the epilogue is D = Acc (alpha == 1, beta == 0),
+    // skip all callback overhead and directly reorder + store.
+    // reorder() handles both type conversion and layout transformation.
+    //
+    bool is_identity_epilogue = false;
+    if constexpr (has_is_identity<FusionCallbacks>::value) {
+      is_identity_epilogue = fusion_callbacks.is_identity();
     }
 
-    cst_callbacks.end();
+    if (is_identity_epilogue) {
+      CUTLASS_PRAGMA_UNROLL
+      for (int epi_m = 0; epi_m < EpiTilesM; epi_m++) {
+        CUTLASS_PRAGMA_UNROLL
+        for (int epi_n = 0; epi_n < EpiTilesN; epi_n++) {
+          auto acc_epi_wi = make_tensor(tiled_acc(_,epi_m,epi_n).data(), tiled_acc(_,_0{},_0{}).layout());
+          auto acc_epi = make_subgroup_tensor(acc_epi_wi, cd_compute_tv);
+          if constexpr (is_destination_supported) {
+            reorder(acc_epi, tDrD);
+            copy(copy_d, tDrD, tDgD(_,_,_,epi_m,epi_n));
+          }
+        }
+      }
+    } else {
+      //
+      // Full epilogue path: C load, fusion callbacks, compute, and D store.
+      //
+
+      bool is_C_load_needed = is_source_supported && fusion_callbacks.is_C_load_needed();
+
+      // Prepare C load copy objects.
+      auto copy_c = make_block_2d_copy(ActualGmemTiledCopyC{}, params.mC(_,_,batch_idx));
+      auto thr_copy_c = copy_c.get_slice(wi_idx);
+      auto tCgC = thr_copy_c.partition_S(gCD_epi);                                        // (atom_v,atom_m,atom_n,epi_m,epi_n)
+      auto tCrC = thr_copy_c.partition_sg_fragment_D(gCD_epi(_,_,0,0));                   // (atom_v,atom_m,atom_n)
+
+      auto tCrC_compute_wi = make_fragment_like<NonVoidElementC>(tiled_acc(_,_0{},_0{}));
+      auto tCrC_compute = make_subgroup_tensor(tCrC_compute_wi, cd_compute_tv);           // (mma_v,mma_m,mma_n)
+
+      // Calculate residues for boundary checks.
+      auto residue_gCD    = MN - gCD(_0{});                                               // (res_m, res_n)
+      auto residue_tCDgCD = MN - tCDgCD(_0{});                                            // (res_m, res_n)
+
+      // Set up fusion visitor callbacks.
+      constexpr bool RefSrc = true;
+      auto cst_args = cutlass::epilogue::fusion::detail::ConsumerStoreArgs {
+          problem_shape_mnkl,
+          WGTileMNK{},
+          tile_coord_mnkl,
+          TiledMMA{},
+          EpilogueTile{},
+          copy_d,
+          gCD,
+          residue_gCD,
+          tDgD,
+          residue_tCDgCD,
+          tCrC_compute,
+          thread_idx,
+      };
+      auto cst_callbacks = fusion_callbacks.template get_consumer_store_callbacks<RefSrc>(cst_args);
+
+      // Recast accumulator as arrays for vectorized visitor operations.
+      using ElementAccumulator = typename Accumulator::element_type;
+      constexpr int ComputeVectorLen = size<0>(Accumulator{});
+      auto tiled_acc_v = recast<Array<ElementAccumulator, ComputeVectorLen>>(tiled_acc);
+
+      // Create D subgroup fragments for epilogue compute.
+      using FragmentVisit = decltype(cst_callbacks.visit(tiled_acc_v(0), 0, 0, 0));
+      using ElementVisit = typename FragmentVisit::Element;
+      auto tDrD_compute_wi = make_fragment_like<ElementVisit>(tiled_acc(_,_0{},_0{}));
+      auto tDrD_compute = make_subgroup_tensor(tDrD_compute_wi, cd_compute_tv);           // (mma_v,mma_m,mma_n)
+      auto tDrD_compute_v = recast<FragmentVisit>(tDrD_compute_wi);
+
+      // Epilogue tile loops with fusion callbacks.
+      cst_callbacks.begin();
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int epi_m = 0; epi_m < EpiTilesM; epi_m++) {
+        CUTLASS_PRAGMA_UNROLL
+        for (int epi_n = 0; epi_n < EpiTilesN; epi_n++) {
+          cst_callbacks.begin_loop(epi_m, epi_n);
+
+          // Load C and reorder to compute layout.
+          if constexpr (is_source_supported) {
+            if (is_C_load_needed) {
+              copy(copy_c, tCgC(_,_,_,epi_m,epi_n), tCrC);
+              reorder(tCrC, tCrC_compute);
+            }
+          }
+
+          cst_callbacks.previsit(epi_m, epi_n, 0, is_C_load_needed);
+
+          // Apply epilogue compute via visitor, one vector at a time.
+          CUTLASS_PRAGMA_UNROLL
+          for (int epi_v = 0; epi_v < size<0>(tiled_acc_v); ++epi_v) {
+            tDrD_compute_v(epi_v) = cst_callbacks.visit(tiled_acc_v(epi_v, epi_m, epi_n),
+                                                        epi_v, epi_m, epi_n);
+          }
+
+          bool last_epi = (epi_m == EpiTilesM - 1) && (epi_n == EpiTilesN - 1);
+          cst_callbacks.reduce(nullptr, [=]{}, epi_m, epi_n, last_epi, tDrD_compute_v);
+
+          // Reorder D (type conversion + layout) and store.
+          if constexpr (is_destination_supported) {
+            reorder(tDrD_compute, tDrD);
+            copy(copy_d, tDrD, tDgD(_,_,_,epi_m,epi_n));
+          }
+
+          cst_callbacks.end_loop(epi_m, epi_n);
+        }
+      }
+
+      cst_callbacks.end();
+    }
   }
 
 private:
