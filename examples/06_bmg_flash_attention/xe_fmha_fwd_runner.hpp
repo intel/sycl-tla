@@ -208,6 +208,42 @@ using HNDVLayoutStep = Step<_0, _1, _2, _3>;
 using NHDQLayoutStep = Step<_2, _0, _1, _3>;
 using NHDVLayoutStep = Step<_0, _2, _1, _3>;
 
+enum class CopySliceOp { Q, KCache, VCache, K, V, O };
+
+template <typename Owner, CopySliceOp Op, typename SrcT, typename DstT, typename Stride>
+class CopySliceKernelTag {};
+
+template <typename Owner, CopySliceOp Op, typename SrcT, typename DstT, typename Stride>
+void copy_slice(const SrcT* src, DstT* dst, int seq_start, int seq_len, int head_size,
+                int head_idx, int batch_idx, Stride stride, bool is_v = false,
+                bool store = false, int page_size = 0, const int* page_table = nullptr,
+                int start_page_idx = 0) {
+  std::size_t size = static_cast<std::size_t>(seq_len) * head_size;
+  if (size == 0) {
+    return;
+  }
+  using Tag = CopySliceKernelTag<Owner, Op, SrcT, DstT, Stride>;
+  compat::get_default_queue().parallel_for<Tag>(size, [=](auto indx) {
+    int linear_idx = indx;
+    int row = linear_idx / head_size;
+    int col = linear_idx % head_size;
+    int seq_idx = seq_start + row;
+    if (page_table != nullptr && page_size > 0) {
+      int page_offset = row % page_size;
+      int logical_page = row / page_size;
+      seq_idx = seq_start + page_table[start_page_idx + logical_page] * page_size + page_offset;
+    }
+    int tensor_idx = is_v ? col * get<0>(stride) + seq_idx * get<1>(stride)
+                          : seq_idx * get<0>(stride) + col * get<1>(stride);
+    tensor_idx += head_idx * get<2>(stride) + batch_idx * get<3>(stride);
+    if (store) {
+      dst[tensor_idx] = src[linear_idx];
+    } else {
+      dst[linear_idx] = src[tensor_idx];
+    }
+  }).wait();
+}
+
 template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
 
   using StrideQ = typename FMHAKernel::StrideQ;
@@ -364,33 +400,6 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
     using ElementV_ = std::remove_pointer_t<decltype(block_V_.get())>;
     using ElementK_ = std::remove_pointer_t<decltype(block_K_.get())>;
 
-    auto copy_slice = [](const auto* src, auto* dst, int seq_start, int seq_len, int head_size, int head_idx, int batch_idx, auto stride,
-                         bool is_v = false, bool store = false, int page_size = 0, const int* page_table = nullptr, int start_page_idx = 0) {
-      std::size_t size = static_cast<std::size_t>(seq_len) * head_size;
-      if (size == 0) {
-        return;
-      }
-      compat::get_default_queue().parallel_for(size, [=](auto indx) {
-        int linear_idx = indx;
-        int row = linear_idx / head_size;
-        int col = linear_idx % head_size;
-        int seq_idx = seq_start + row;
-        if (page_table != nullptr && page_size > 0) {
-          int page_offset = row % page_size;
-          int logical_page = row / page_size;
-          seq_idx = seq_start + page_table[start_page_idx + logical_page] * page_size + page_offset;
-        }
-        int tensor_idx = is_v ? col * get<0>(stride) + seq_idx * get<1>(stride)
-                              : seq_idx * get<0>(stride) + col * get<1>(stride);
-        tensor_idx += head_idx * get<2>(stride) + batch_idx * get<3>(stride);
-        if (store) {
-          dst[tensor_idx] = src[linear_idx];
-        } else {
-          dst[linear_idx] = src[tensor_idx];
-        }
-      }).wait();
-    };
-
     std::vector<int> page_table_host;
     std::vector<int> num_pages_per_seq_host;
     if (paged_kv_cache.page_size > 0) {
@@ -473,7 +482,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
             start_page_idx = isVarLen ? num_pages_per_seq_host[b] : b * (seq_len_kv_cache / page_size);
           }
 
-          copy_slice(
+          copy_slice<ExampleRunner, CopySliceOp::KCache>(
             k_cache,
             block_K_concat.get(),
             kv_cache_base,
@@ -488,7 +497,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
             page_table,
             start_page_idx);
 
-          copy_slice(
+          copy_slice<ExampleRunner, CopySliceOp::VCache>(
             v_cache,
             block_V_concat.get(),
             kv_cache_base,
@@ -504,7 +513,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
             start_page_idx);
         }
 
-        copy_slice(
+        copy_slice<ExampleRunner, CopySliceOp::K>(
           k,
           block_K_concat.get() + static_cast<std::size_t>(head_size_qk) * seq_len_kv_cache,
           kv_base,
@@ -514,7 +523,7 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
           batch_idx,
           dK);
 
-        copy_slice(
+        copy_slice<ExampleRunner, CopySliceOp::V>(
           v,
           block_V_concat.get() + static_cast<std::size_t>(seq_len_kv_cache) * head_size_vo,
           kv_base,
@@ -533,7 +542,8 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
 
           cutlass::DeviceAllocation<std::remove_pointer_t<decltype(block_Q_.get())>> block_Q_chunk;
           block_Q_chunk.reset(static_cast<std::size_t>(current_q_len) * head_size_qk);
-          copy_slice(q, block_Q_chunk.get(), q_seq_start, current_q_len, head_size_qk, h, batch_idx, dQ);
+          copy_slice<ExampleRunner, CopySliceOp::Q>(
+            q, block_Q_chunk.get(), q_seq_start, current_q_len, head_size_qk, h, batch_idx, dQ);
 
           cutlass::DeviceAllocation<ElementS> block_S;
           block_S.reset(current_q_len * seq_len_kv_total);
@@ -663,7 +673,8 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
           cutlass::DeviceAllocation<ElementO> block_O_chunk;
           block_O_chunk.reset(vec_out.size());
           compat::memcpy<ElementO>(block_O_chunk.get(), vec_out.data(), vec_out.size());
-          copy_slice(block_O_chunk.get(), o, q_seq_start, current_q_len, head_size_vo, h, batch_idx, dO, false, true);
+          copy_slice<ExampleRunner, CopySliceOp::O>(
+            block_O_chunk.get(), o, q_seq_start, current_q_len, head_size_vo, h, batch_idx, dO, false, true);
         }
       }
     }
