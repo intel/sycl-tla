@@ -386,9 +386,9 @@ void launcher(int *M_per_expert, int N, int K, const int &num_experts, const boo
   cutlass::DeviceAllocation<bfloat16_t> activations_data;
   cutlass::DeviceAllocation<bfloat16_t> weights_data;
   cutlass::DeviceAllocation<bfloat16_t> output_data;
-  size_t A_size = size_t(num_tokens_incl_duplicated) * k_moe;
-  size_t B_size = size_t(num_experts) * n_moe * k_moe;
-  size_t D_size = size_t(num_tokens_incl_duplicated) * n_moe;
+  int64_t A_size = int64_t(num_tokens_incl_duplicated) * k_moe;
+  int64_t B_size = int64_t(num_experts) * n_moe * k_moe;
+  int64_t D_size = int64_t(num_tokens_incl_duplicated) * n_moe;
   num_rows_per_expert_device.reset(num_experts);
   num_rows_per_expert_device.copy_from_host(M_per_expert);
   activations_data.reset(A_size);
