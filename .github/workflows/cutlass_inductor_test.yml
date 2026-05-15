@@ -52,7 +52,7 @@ jobs:
         run: |
           source ~/.pytorch-venv/bin/activate
           python3 --version
-          python3 -m pip install --pre torch=2.13.0.dev20260421+xpu --index-url https://download.pytorch.org/whl/nightly/xpu --force-reinstall
+          python3 -m pip install --pre torch==2.13.0.dev20260421+xpu --index-url https://download.pytorch.org/whl/nightly/xpu --force-reinstall
 
       - name: Print IGC2 version
         shell: bash
