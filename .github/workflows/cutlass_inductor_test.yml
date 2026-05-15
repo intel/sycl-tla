@@ -76,11 +76,25 @@ jobs:
           python3 -m pip install -r requirements.txt
           python3 -m pip install unittest-xml-reporting
 
+      - name: Check Device compatibility
+        shell: bash
+        run: |
+          source ~/.pytorch-venv/bin/activate
+          export USE_XPU=1
+          export CUTLASS_USE_SYCL=1
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          export TORCH_XPU_ARCH_LIST=bmg
+          export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
+          python -c "import torch; print(torch.__version__)"
+          python -c "import torch; print(torch.xpu.get_device_capability()["device_id"])"
+
       - name: Run TorchInductor EVT test
         shell: bash
         run: |
           source ~/.pytorch-venv/bin/activate
           export USE_XPU=1
+          export CUTLASS_USE_SYCL=1
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           export TORCH_XPU_ARCH_LIST=bmg
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           mkdir -p ${GITHUB_WORKSPACE}/logs/
@@ -92,6 +106,8 @@ jobs:
         run: |
           source ~/.pytorch-venv/bin/activate
           export USE_XPU=1
+          export CUTLASS_USE_SYCL=1
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           export TORCH_XPU_ARCH_LIST=bmg
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           mkdir -p ${GITHUB_WORKSPACE}/logs/
