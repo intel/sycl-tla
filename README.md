@@ -215,10 +215,10 @@ $  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_HOST_COMPI
 From the `build/` directory, compile and run the SYCL*TLA unit tests by building the target `test_unit` with make.
 
 The unit tests are organized as several binaries mirroring the top-level namespaces of SYCL*TLA,
-and they may be executed in parallel via make's `-j` command line argument.
+and they may be executed in parallel via Ninja's `-j` command line argument.
 
 ```bash
-$ make test_unit -j
+$ ninja test_unit -j$(nproc)
 ...
 ...
 ...

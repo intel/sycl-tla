@@ -49,7 +49,7 @@
 #endif
 
 // TODO: Remove these function definitions once they exist in the DPC++ compiler
-#if defined(__SYCL_DEVICE_ONLY__) && defined(__INTEL_LLVM_COMPILER)
+#if defined(__SYCL_DEVICE_ONLY__)
 template <typename T>
 __SYCL_CONVERGENT__ extern SYCL_EXTERNAL __SYCL_EXPORT
     __attribute__((noduplicate)) T
@@ -446,7 +446,7 @@ T select_from_sub_group(unsigned int member_mask, sycl::sub_group g, T x,
       g.get_local_linear_id() / logical_sub_group_size * logical_sub_group_size;
   unsigned logical_remote_id =
       start_index + remote_local_id % logical_sub_group_size;
-#if defined(__SYCL_DEVICE_ONLY__) && defined(__INTEL_LLVM_COMPILER)
+#if defined(__SYCL_DEVICE_ONLY__)
 #if defined(__SPIR__)
   return __spirv_GroupNonUniformShuffle(__spv::Scope::Subgroup, x,
                                         logical_remote_id);
@@ -468,7 +468,7 @@ T select_from_sub_group(unsigned int member_mask, sycl::sub_group g, T x,
       sycl::errc::runtime,
       "[Compat] Masked version of select_from_sub_group not "
       "supported on host device and non intel compiler.");
-#endif // __SYCL_DEVICE_ONLY__ && __INTEL_LLVM_COMPILER
+#endif // __SYCL_DEVICE_ONLY__
 }
 
 /// Masked version of shift_sub_group_left, which execute masked sub-group
@@ -490,7 +490,7 @@ T shift_sub_group_left(unsigned int member_mask, sycl::sub_group g, T x,
   unsigned int id = g.get_local_linear_id();
   unsigned int end_index =
       (id / logical_sub_group_size + 1) * logical_sub_group_size;
-#if defined(__SYCL_DEVICE_ONLY__) && defined(__INTEL_LLVM_COMPILER)
+#if defined(__SYCL_DEVICE_ONLY__)
 #if defined(__SPIR__)
   T result =
       __spirv_GroupNonUniformShuffleDown(__spv::Scope::Subgroup, x, delta);
@@ -516,7 +516,7 @@ T shift_sub_group_left(unsigned int member_mask, sycl::sub_group g, T x,
       sycl::errc::runtime,
       "[Compat] Masked version of shift_sub_group_left not "
       "supported on host device and non intel compiler.");
-#endif // __SYCL_DEVICE_ONLY__ && __INTEL_LLVM_COMPILER
+#endif // __SYCL_DEVICE_ONLY__
 }
 
 /// Masked version of shift_sub_group_right, which execute masked sub-group
@@ -538,7 +538,7 @@ T shift_sub_group_right(unsigned int member_mask, sycl::sub_group g, T x,
   unsigned int id = g.get_local_linear_id();
   unsigned int start_index =
       id / logical_sub_group_size * logical_sub_group_size;
-#if defined(__SYCL_DEVICE_ONLY__) && defined(__INTEL_LLVM_COMPILER)
+#if defined(__SYCL_DEVICE_ONLY__)
 #if defined(__SPIR__)
   T result = __spirv_GroupNonUniformShuffleUp(__spv::Scope::Subgroup, x, delta);
   if ((id - start_index) < delta) {
@@ -562,7 +562,7 @@ T shift_sub_group_right(unsigned int member_mask, sycl::sub_group g, T x,
   throw sycl::exception(sycl::errc::runtime,
                         "Masked version of shift_sub_group_right not "
                         "supported on host device and non intel compiler.");
-#endif // __SYCL_DEVICE_ONLY && __INTEL_LLVM_COMPILER
+#endif // __SYCL_DEVICE_ONLY
 }
 
 /// Masked version of permute_sub_group_by_xor, which execute masked sub-group
@@ -588,7 +588,7 @@ T permute_sub_group_by_xor(unsigned int member_mask, sycl::sub_group g, T x,
   unsigned logical_remote_id = (target_offset < logical_sub_group_size)
                                    ? start_index + target_offset
                                    : id;
-#if defined(__SYCL_DEVICE_ONLY__) && defined(__INTEL_LLVM_COMPILER)
+#if defined(__SYCL_DEVICE_ONLY__)
 #if defined(__SPIR__)
   return __spirv_GroupNonUniformShuffle(__spv::Scope::Subgroup, x,
                                         logical_remote_id);
@@ -611,7 +611,7 @@ T permute_sub_group_by_xor(unsigned int member_mask, sycl::sub_group g, T x,
       sycl::errc::runtime,
       "[Compat]Masked version of permute_sub_group_by_xor not "
       "supported on host device and non intel compiler.");
-#endif // __SYCL_DEVICE_ONLY__ && __INTEL_LLVM_COMPILER
+#endif // __SYCL_DEVICE_ONLY__
 }
 } // namespace experimental
 

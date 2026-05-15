@@ -206,12 +206,12 @@ struct VerificationHelper {
     for (int32_t i = 0; i < groups; ++i) {
       auto problem = problem_sizes_host.at(i);
       auto M = get<0>(problem);
-      cutlass::TensorRef ref_A(activations + cumulative_sum * k,
+      cutlass::TensorRef ref_A(activations + int64_t(cumulative_sum) * k,
                                LayoutA::packed({M, k}));
-      cutlass::TensorRef ref_B(weights + i * n * k, LayoutB::packed({k, n}));
-      cutlass::TensorRef ref_C(unused_c_matrix.get() + cumulative_sum * n,
+      cutlass::TensorRef ref_B(weights + int64_t(i) * n * k, LayoutB::packed({k, n}));
+      cutlass::TensorRef ref_C(unused_c_matrix.get() + int64_t(cumulative_sum) * n,
                                LayoutC::packed({M, n}));
-      cutlass::TensorRef ref_D(output_ref.get() + cumulative_sum * n,
+      cutlass::TensorRef ref_D(output_ref.get() + int64_t(cumulative_sum) * n,
                                LayoutD::packed({M, n}));
 
       //
@@ -234,7 +234,7 @@ struct VerificationHelper {
       // Check if output from CUTLASS kernel and reference kernel are equal or
       // not
       passed &= cutlass::reference::device::BlockCompareEqual(
-          output_ref.get() + cumulative_sum * n, outputs + cumulative_sum * n,
+          output_ref.get() + int64_t(cumulative_sum) * n, outputs + int64_t(cumulative_sum) * n,
           M * n);
       if (!passed) {
         break;
@@ -386,9 +386,9 @@ void launcher(int *M_per_expert, int N, int K, const int &num_experts, const boo
   cutlass::DeviceAllocation<bfloat16_t> activations_data;
   cutlass::DeviceAllocation<bfloat16_t> weights_data;
   cutlass::DeviceAllocation<bfloat16_t> output_data;
-  size_t A_size = num_tokens_incl_duplicated * k_moe;
-  size_t B_size = num_experts * n_moe * k_moe;
-  size_t D_size = num_tokens_incl_duplicated * n_moe;
+  int64_t A_size = int64_t(num_tokens_incl_duplicated) * k_moe;
+  int64_t B_size = int64_t(num_experts) * n_moe * k_moe;
+  int64_t D_size = int64_t(num_tokens_incl_duplicated) * n_moe;
   num_rows_per_expert_device.reset(num_experts);
   num_rows_per_expert_device.copy_from_host(M_per_expert);
   activations_data.reset(A_size);
