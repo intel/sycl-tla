@@ -1,5 +1,11 @@
 name: "TorchInductor CUTLASS UTs"
 on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  merge_group:
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions: {}
@@ -46,7 +52,7 @@ jobs:
         run: |
           source ~/.pytorch-venv/bin/activate
           python3 --version
-          python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/xpu --force-reinstall
+          python3 -m pip install --pre torch==2.13.0.dev20260421+xpu --index-url https://download.pytorch.org/whl/nightly/xpu --force-reinstall
 
       - name: Print IGC2 version
         shell: bash
@@ -66,19 +72,47 @@ jobs:
           cd ${{ runner.temp }}
           git clone https://github.com/pytorch/pytorch.git
           cd pytorch
-          git checkout origin/nightly
+          git checkout 03ca313c8043443b3efab2e21e7a9a09489fe974
           python3 -m pip install -r requirements.txt
           python3 -m pip install unittest-xml-reporting
+
+      - name: Check Device compatibility
+        shell: bash
+        run: |
+          source ~/.pytorch-venv/bin/activate
+          export USE_XPU=1
+          export CUTLASS_USE_SYCL=1
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          export TORCH_XPU_ARCH_LIST=bmg
+          export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
+          python -c "import torch; print(torch.__version__)"
+          python -c "import torch; print(torch.xpu.get_device_capability()['device_id'])"
 
       - name: Run TorchInductor EVT test
         shell: bash
         run: |
           source ~/.pytorch-venv/bin/activate
           export USE_XPU=1
+          export CUTLASS_USE_SYCL=1
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          export TORCH_XPU_ARCH_LIST=bmg
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
-          mkdir ${GITHUB_WORKSPACE}/logs/
+          mkdir -p ${GITHUB_WORKSPACE}/logs/
           cd ${{ runner.temp }}/pytorch
           python3 test/inductor/test_cutlass_evt.py -v 2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_evt.log
+
+      - name: Run TorchInductor EVT test
+        shell: bash
+        run: |
+          source ~/.pytorch-venv/bin/activate
+          export USE_XPU=1
+          export CUTLASS_USE_SYCL=1
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          export TORCH_XPU_ARCH_LIST=bmg
+          export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
+          mkdir -p ${GITHUB_WORKSPACE}/logs/
+          cd ${{ runner.temp }}/pytorch
+          python3 test/inductor/test_cutlass_backend.py -v  2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_backend.log
 
       - name: Upload logs
         uses: actions/upload-artifact@v4
@@ -91,4 +125,5 @@ jobs:
         shell: bash
         run: |
           rm -rf ${{ runner.temp }}/pytorch
+
 
