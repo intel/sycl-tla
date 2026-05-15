@@ -86,7 +86,7 @@ jobs:
           export TORCH_XPU_ARCH_LIST=bmg
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           python -c "import torch; print(torch.__version__)"
-          python -c "import torch; print(torch.xpu.get_device_capability()["device_id"])"
+          python -c "import torch; print(torch.xpu.get_device_capability()['device_id'])"
 
       - name: Run TorchInductor EVT test
         shell: bash
