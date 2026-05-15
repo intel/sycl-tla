@@ -81,6 +81,7 @@ jobs:
         run: |
           source ~/.pytorch-venv/bin/activate
           export USE_XPU=1
+          export TORCH_XPU_ARCH_LIST=bmg
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           mkdir -p ${GITHUB_WORKSPACE}/logs/
           cd ${{ runner.temp }}/pytorch
@@ -91,6 +92,7 @@ jobs:
         run: |
           source ~/.pytorch-venv/bin/activate
           export USE_XPU=1
+          export TORCH_XPU_ARCH_LIST=bmg
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           mkdir -p ${GITHUB_WORKSPACE}/logs/
           cd ${{ runner.temp }}/pytorch
