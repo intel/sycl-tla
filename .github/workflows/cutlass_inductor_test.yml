@@ -94,7 +94,7 @@ jobs:
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           mkdir ${GITHUB_WORKSPACE}/logs/
           cd ${{ runner.temp }}/pytorch
-          python3 test/inductor/test_cutlass_backend.py -v -v 2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_backend.log
+          python3 test/inductor/test_cutlass_backend.py -v  2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_backend.log
 
       - name: Upload logs
         uses: actions/upload-artifact@v4
