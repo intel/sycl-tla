@@ -498,10 +498,18 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
 // Launch parameters depend on whether SYCL compiler supports work-group scratch memory extension
 #if !defined(SYCL_EXT_ONEAPI_WORK_GROUP_SCRATCH_MEMORY)
     using namespace compat::experimental;
+    #if defined(CUTLASS_SYCL_PROFILING_ENABLED)
     auto event = launch<cutlass::device_kernel<FMHAPrefillKernel>>(
         launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
                       kernel_properties{sycl_exp::sub_group_size<FMHAPrefillKernel::DispatchPolicy::SubgroupSize>}},
         params);
+    EventManager::getInstance().addEvent(event);
+    #else
+    launch<cutlass::device_kernel<FMHAPrefillKernel>, sycl::detail::auto_name, false>(
+        launch_policy{sycl_grid, sycl_block, local_mem_size{static_cast<std::size_t>(smem_size)},
+                      kernel_properties{sycl_exp::sub_group_size<FMHAPrefillKernel::DispatchPolicy::SubgroupSize>}},
+        params);
+    #endif
 #else
     compat::experimental::launch_properties launch_props {
       sycl::ext::oneapi::experimental::work_group_scratch_size(smem_size),
@@ -510,10 +518,13 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
       sycl::ext::oneapi::experimental::sub_group_size<FMHAPrefillKernel::DispatchPolicy::SubgroupSize>
     };
     compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
+    #if defined(CUTLASS_SYCL_PROFILING_ENABLED)
     auto event = compat::experimental::launch<cutlass::device_kernel<FMHAPrefillKernel>, FMHAPrefillKernel>(policy, params);
-#endif
-
     EventManager::getInstance().addEvent(event);
+    #else
+        compat::experimental::launch<cutlass::device_kernel<FMHAPrefillKernel>, FMHAPrefillKernel, false>(policy, params);
+    #endif
+#endif
   }
 
   cutlass::Status run(const Options &options, const cutlass::KernelHardwareInfo &hw_info) {

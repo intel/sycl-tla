@@ -138,6 +138,7 @@ public:
     RasterOrderOptions raster_order = RasterOrderOptions::Heuristic;
     ReductionMode reduction_mode = ReductionMode::Deterministic;
     DecompositionMode decomposition_mode = DecompositionMode::Heuristic;
+    int max_swizzle_size = 1;
   };
 
   // Sink scheduler params as a member
@@ -461,7 +462,7 @@ template <class FrgTensorC>
   initialize_workspace(
     Arguments const& args,
     void* workspace,
-    [[maybe_unused]] cudaStream_t stream,
+    cudaStream_t stream,
     ProblemShape const& problem_shape,
     KernelHardwareInfo const& hw_info,
     [[maybe_unused]] uint32_t mma_warp_groups = 1,
@@ -485,7 +486,8 @@ template <class FrgTensorC>
       args.splits,
       args.decomposition_mode,
       sizeof_bits<BarrierType>::value,
-      sizeof_bits<ElementAccumulator>::value
+      sizeof_bits<ElementAccumulator>::value,
+      stream
     );
   }
 

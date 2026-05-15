@@ -115,10 +115,10 @@ MoEGEMM(const ElementA *Activations, const ElementB *Weights,
       prev_group = curr_group;
 
       ElementA *ptr_A_curr_batch =
-          const_cast<ElementA *>(Activations) + cumulative_M * K;
+          const_cast<ElementA *>(Activations) + int64_t(cumulative_M) * K;
       ElementB *ptr_B_curr_batch =
-          const_cast<ElementB *>(Weights) + curr_group * K * N;
-      ElementD *ptr_D_curr_batch = Outputs + cumulative_M * N;
+          const_cast<ElementB *>(Weights) + int64_t(curr_group) * K * N;
+      ElementD *ptr_D_curr_batch = Outputs + int64_t(cumulative_M) * N;
 
       A_tensor = make_moe_tensor<ElementA, LayoutKindA>(ptr_A_curr_batch, M, K);
       B_tensor =

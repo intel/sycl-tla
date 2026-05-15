@@ -71,16 +71,24 @@ class GenerateXe(unittest.TestCase):
             ) from e
         xe_ops = pytree.tree_flatten(manifest.operations)[0]
 
-        # Verify BF16 and F16 configurations have same number of ops
+        # Verify BF16 and F16 configurations have same number of non-StreamK ops.
+        # StreamK ops may differ because bf16 accumulator doesn't support SYCL atomics
+        # needed by BlockStripedReduce, while f16 accumulator does.
         bf16_operations = []
         f16_operations = []
+        bf16_non_sk = []
+        f16_non_sk = []
         for op in xe_ops:
             if "_bf16_" in op._procedural_name:
                 bf16_operations.append(op._procedural_name)
+                if "stream_k" not in op._procedural_name:
+                    bf16_non_sk.append(op._procedural_name)
             if "_f16_" in op._procedural_name:
                 f16_operations.append(op._procedural_name)
+                if "stream_k" not in op._procedural_name:
+                    f16_non_sk.append(op._procedural_name)
 
-        assert len(bf16_operations) == len(f16_operations), f"{arch_name.upper()}: Number of bf16 and f16 operations should be the same"
+        assert len(bf16_non_sk) == len(f16_non_sk), f"{arch_name.upper()}: Number of non-StreamK bf16 and f16 operations should be the same"
 
         # Verify all generated ops against reference
         with open(os.path.join(DIR_PATH, reference_file), "r") as f:
