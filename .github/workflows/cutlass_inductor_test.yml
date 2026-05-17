@@ -72,7 +72,7 @@ jobs:
           cd ${{ runner.temp }}
           git clone https://github.com/pytorch/pytorch.git
           cd pytorch
-          git checkout 03ca313c8043443b3efab2e21e7a9a09489fe974
+          git checkout aff3311fabd30ebffa9153e1bcf577512291a8a1
           python3 -m pip install -r requirements.txt
           python3 -m pip install unittest-xml-reporting
 
