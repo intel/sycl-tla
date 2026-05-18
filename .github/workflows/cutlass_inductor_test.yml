@@ -45,6 +45,7 @@ jobs:
           python3 -m venv ~/.pytorch-venv
           source ~/.pytorch-venv/bin/activate
           . setvars.sh
+          . /opt/intel/oneapi/mkl/latest/env/vars.sh
           env >> $GITHUB_ENV
 
       - name: Install nightly PyTorch
