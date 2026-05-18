@@ -105,6 +105,29 @@ jobs:
           python -c "import torch; print(torch.__version__)"
           python -c "import torch; print(torch.xpu.get_device_capability()['device_id'])"
 
+      - name: Debug big GPU detection
+        shell: bash
+        run: |
+          source ~/.pytorch-venv/bin/activate
+          export USE_XPU=1
+          export CUTLASS_USE_SYCL=1
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          export TORCH_XPU_ARCH_LIST=bmg
+          export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
+          python3 - <<'PY'
+          import torch
+          from torch._inductor.utils import is_big_gpu
+          from torch.testing._internal.inductor_utils import HAS_CPU
+
+          print("HAS_CPU =", HAS_CPU)
+          print("xpu available =", torch.xpu.is_available())
+          if torch.xpu.is_available():
+              p = torch.xpu.get_device_properties(0)
+              print("device props =", p)
+              print("multi_processor_count =", getattr(p, "multi_processor_count", None))
+          print("is_big_gpu =", is_big_gpu())
+          PY
+
       - name: Run TorchInductor EVT test
         shell: bash
         run: |
