@@ -46,10 +46,11 @@ jobs:
             echo "MKL already installed at /home/ghrunner/intel/oneapi/mkl"
           else
             echo "Installing MKL..."
-            if [-f $PWD/intel-deep-learning-essentials-2025.3.2.36_offline.sh]
+            if [ -f $PWD/intel-deep-learning-essentials-2025.3.2.36_offline.sh ]; then
               echo "DL Installer exists!"
             else
               sudo wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
+            fi
             bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.mkl.devel
           fi
           . /home/ghrunner/intel/oneapi/mkl/latest/env/vars.sh
