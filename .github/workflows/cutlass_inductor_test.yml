@@ -36,7 +36,7 @@ jobs:
         id: install_dpcpp
         uses: ./.github/actions/install-dpcpp
         with:
-          DPCPP_RELEASE: RELEASE
+          DPCPP_RELEASE: TORCH_SUPPORTED
           DPCPP_PATH: ~/dpcpp
 
       - name: Setup virtual environment
