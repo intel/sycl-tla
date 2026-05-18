@@ -104,6 +104,7 @@ jobs:
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           python -c "import torch; print(torch.__version__)"
           python -c "import torch; print(torch.xpu.get_device_capability()['device_id'])"
+          python3 -m pip list | grep -i triton
 
       - name: Debug big GPU detection
         shell: bash
