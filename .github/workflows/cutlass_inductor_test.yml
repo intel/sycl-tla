@@ -39,14 +39,25 @@ jobs:
           DPCPP_RELEASE: TORCH_SUPPORTED
           DPCPP_PATH: ~/dpcpp
 
+      - name: Install MKL
+        shell: bash
+        run: |
+          if [ -d /home/ghrunner/intel/oneapi/mkl ]; then
+            echo "MKL already installed at /home/ghrunner/intel/oneapi/mkl"
+          else
+            echo "Installing MKL..."
+            sudo wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
+            bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.mkl.devel
+          fi
+          . /home/ghrunner/intel/oneapi/mkl/latest/env/vars.sh
+          env >> $GITHUB_ENV
+
       - name: Setup virtual environment
         shell: bash
         run: |
           python3 -m venv ~/.pytorch-venv
           source ~/.pytorch-venv/bin/activate
           . setvars.sh
-          #. /opt/intel/oneapi/mkl/latest/env/vars.sh
-          . /home/ghrunner/intel/oneapi/mkl/latest/env/vars.sh
           env >> $GITHUB_ENV
 
       - name: Install nightly PyTorch
