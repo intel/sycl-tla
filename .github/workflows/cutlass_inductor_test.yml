@@ -114,7 +114,7 @@ jobs:
           cd ${{ runner.temp }}/pytorch
           python3 test/inductor/test_cutlass_evt.py -v 2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_evt.log
 
-      - name: Run TorchInductor EVT test
+      - name: Run TorchInductor Backend test
         shell: bash
         run: |
           source ~/.pytorch-venv/bin/activate
