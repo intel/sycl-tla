@@ -121,7 +121,7 @@ CUTE_DEVICE void moe_gemm(ATensor const &A, // (M,K)
   auto pAgA = thr_prefetch_A.partition_S(gA);
   auto pBgB = thr_prefetch_B.partition_S(gB);
 
-  constexpr int barrier_scope = 2;
+  constexpr SPIRVScope barrier_scope = ScopeWorkgroup;
   int k_start_idx = 0;
   int prefetch_k = k_start_idx;
   const int prefetch_dist = 3;
