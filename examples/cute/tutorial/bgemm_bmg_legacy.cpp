@@ -235,7 +235,7 @@ gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, int stages,
   Tensor tCrC = partition_fragment_C(tiled_mma, take<0,2>(cta_tiler));
   clear(tCrC);
 
-  constexpr int barrier_scope = 2;
+  constexpr SPIRVScope barrier_scope = ScopeWorkgroup;
   int k_tile_count = ceil_div(get<2>(shape_MNK), get<2>(cta_tiler));
 
   CUTLASS_PRAGMA_UNROLL

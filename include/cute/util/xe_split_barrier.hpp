@@ -57,6 +57,8 @@ SYCL_EXTERNAL __attribute__((convergent)) void __spirv_ControlBarrierArriveINTEL
 namespace cute
 {
 
+// Split barrier with unified scope: execution_scope == memory_scope.
+// Use when all participating threads share the same memory domain (e.g., within one Xe Core).
 CUTE_HOST_DEVICE void barrier_arrive(SPIRVScope scope, int memory_semantics = SemanticsNone) {
 #ifdef __SYCL_DEVICE_ONLY__
   __spirv_ControlBarrierArriveINTEL(scope, scope, memory_semantics);
@@ -68,14 +70,18 @@ CUTE_HOST_DEVICE void barrier_wait(SPIRVScope scope, int memory_semantics = Sema
 #endif
 }
 
-CUTE_HOST_DEVICE void barrier_arrive(int scope, int memory_scope = ScopeCrossDevice, int memory_semantics = SemanticsNone) {
+// Split barrier with separate execution and memory scopes.
+// Use when the memory fence needs a wider scope than the execution sync, e.g.:
+//   execution_scope = ScopeWorkgroup (sync threads within one WG)
+//   memory_scope    = ScopeDevice    (flush stores visible to all Xe Cores)
+CUTE_HOST_DEVICE void barrier_arrive(SPIRVScope execution_scope, SPIRVScope memory_scope, int memory_semantics = SemanticsNone) {
 #ifdef __SYCL_DEVICE_ONLY__
-  __spirv_ControlBarrierArriveINTEL(scope, memory_scope, memory_semantics);
+  __spirv_ControlBarrierArriveINTEL(execution_scope, memory_scope, memory_semantics);
 #endif
 }
-CUTE_HOST_DEVICE void barrier_wait(int scope, int memory_scope = ScopeCrossDevice, int memory_semantics = SemanticsNone) {
+CUTE_HOST_DEVICE void barrier_wait(SPIRVScope execution_scope, SPIRVScope memory_scope, int memory_semantics = SemanticsNone) {
 #ifdef __SYCL_DEVICE_ONLY__
-  __spirv_ControlBarrierWaitINTEL(scope, memory_scope, memory_semantics);
+  __spirv_ControlBarrierWaitINTEL(execution_scope, memory_scope, memory_semantics);
 #endif
 }
 
