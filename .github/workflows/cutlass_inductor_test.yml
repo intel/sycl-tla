@@ -132,6 +132,7 @@ jobs:
       - name: Run TorchInductor EVT test
         shell: bash
         run: |
+          rm -rf /tmp/torchinductor_*
           source ~/.pytorch-venv/bin/activate
           export USE_XPU=1
           export CUTLASS_USE_SYCL=1
@@ -145,6 +146,7 @@ jobs:
       - name: Run TorchInductor Backend test
         shell: bash
         run: |
+          rm -rf /tmp/torchinductor_*
           source ~/.pytorch-venv/bin/activate
           export USE_XPU=1
           export CUTLASS_USE_SYCL=1
