@@ -291,6 +291,16 @@ public:
     return work_tile_info.is_valid() && work_tile_info.k_tile_count != params.divmod_tiles_per_output_tile_.divisor;
   }
 
+  // IGC sums named_barrier_init calls over all kernels of a device image and fails above 31, so the
+  // fixup uses the lowest hardware id: one call per kernel instead of one per id up to StreamkBarrier0.
+  static constexpr uint32_t FixupBarrierId = 1;
+
+  CUTLASS_DEVICE
+  static void
+  init_barrier() {
+    cute::named_barrier_init<FixupBarrierId>();
+  }
+
   // Performs the reduction across splits for a given output tile.
 template <class FrgTensorC>
   CUTLASS_DEVICE
@@ -301,7 +311,7 @@ template <class FrgTensorC>
     FrgTensorC& accumulators,
     uint32_t num_barriers = 1,
     uint32_t barrier_idx = 0) {
-    static constexpr uint32_t Offset = static_cast<int>(cutlass::arch::ReservedNamedBarriers::StreamkBarrier0);
+    static constexpr uint32_t Offset = FixupBarrierId;
     static constexpr uint32_t MaxNumNamedBarriers = 1;
     using BarrierManager = NamedBarrierManager<ThreadsPerBlock, Offset, MaxNumNamedBarriers>;
     return fixup_helper<FrgTensorC, BarrierManager>(
