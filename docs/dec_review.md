@@ -441,6 +441,95 @@ Using `BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64` (BF16 input, FP32 output, Str
 
 ---
 
+
+
+---
+
+## 2.C Timing & TFLOPS Measurement
+
+### Dual Timer Architecture
+
+Each kernel execution uses two independent timers:
+
+```
+  for (auto _ : state) {                    // Google Benchmark controls iteration count
+      state.PauseTiming();                  // ← pause GB clock
+      // ... argument setup, SYCL init ...  //    (NOT timed)
+      gemm_op.initialize(arguments);        //    (NOT timed)
+      state.ResumeTiming();                 // ← resume GB clock
+
+      GPU_Clock timer;                      // ← independent GPU timer
+      timer.start();
+      gemm_op.run();                        // ★ ONLY kernel execution is timed
+      double ms = timer.milliseconds();
+
+      state.SetIterationTime(ms / 1000);    // report to GB
+      update_counters(state, ms);
+  }
+```
+
+| Timer | Purpose |
+|---|---|
+| `GPU_Clock` (custom) | Precise kernel execution measurement |
+| Google Benchmark `state` | Warmup control, total-iterations gating, statistical reporting |
+
+### Iteration Count & Warmup
+
+The profiler does NOT set explicit `--benchmark_repetitions` or `--benchmark_min_time`.  Google Benchmark defaults apply:
+
+- **Warmup:** GB runs one untimed warmup iteration before any timed iterations.
+- **MinTime:** default `0.5` seconds cumulative kernel time per benchmark invocation.
+- **Iteration count:** auto-determined by GB.  For a ~2ms kernel: `0.5s / 0.002s ≈ 250` iterations.  For a ~0.8ms kernel: `0.5s / 0.0008s ≈ 625` iterations.
+- **Screening:** 1 GB invocation per (candidate, shape) pair.
+- **Confirmation:** `--confirm-runs 2` → 2 independent GB invocations, taking the **median** TFLOPS.
+
+### TFLOPS Formula
+
+```cpp
+  // benchmark_runner.hpp:389
+  double gflop = 2.0 × M × N × K × batch_count / 1e9;
+
+  // finalize_counters():1126-1131
+  avg_runtime_ms = (total - best - worst) / (iterations - 2);
+  // ↑ removes fastest and slowest iterations, uses trimmed mean
+
+  avg_tflops = gflop / avg_runtime_ms;
+  best_tflop = gflop / best_runtime_ms;
+```
+
+**Example (8192×4096×1536, StreamK 512×256×64):**
+
+```
+  gflop = 2 × 8192 × 4096 × 1536 × 1 / 1e9 = 102.9 GFLOP
+  avg_runtime_ms ≈ 0.78 ms
+  avg_tflops = 102.9 / 0.78 ≈ 131.8 TFLOPS
+```
+
+### Per-Kernel Screening Time
+
+```
+  ┌─────────────────────────────────────────────┐
+  │ GB warmup:   1 iteration  (untimed)         │
+  │ GB timed:    ~600 iterations × 0.8ms        │
+  │              stops when cumulative ≥ 0.5s   │
+  │ Total:       ~0.5 seconds per benchmark     │
+  └─────────────────────────────────────────────┘
+
+  3568 candidates × 0.5s = ~1784s ≈ 30 min (pure GPU time)
+  + SYCL launch overhead: ~0.1s per entry = ~357s
+  + shape switching: ~0.01s
+  Total screening: ~35-40 min for all 3568 candidates
+```
+
+### Three-Stage Timing Pipeline
+
+| Stage | Iterations | Statistical Method | Purpose |
+|---|---|---|---|
+| **Screening** | 1 GB invocation, ~0.5s | Trimmed mean (drop best+worst) | Fast ranking of all candidates |
+| **Confirmation** | 2 GB invocations, ~0.5s each | Median of 2 runs | Eliminate outlier noise |
+| **Dispatch** | confirmation median | Single value | Final optimal kernel selection |
+
+
 ## 3. Search Space Coverage
 
 ### 3.1 Why 3000+ Combinations Per Shape
