@@ -523,6 +523,41 @@ The profiler does NOT set explicit `--benchmark_repetitions` or `--benchmark_min
 
 
 
+### Timer Implementation: GPU_Clock → SYCLTimer → std::chrono::steady_clock
+
+```
+  GPU_Clock (GPU_Clock.hpp)
+    └─ #if SYCL → SYCLTimer (sycl_timer.hpp)
+         ├─ default (CUTLASS_SYCL_PROFILING_ENABLED=OFF):
+         │   start(): queue.wait() → std::chrono::steady_clock::now()
+         │   stop():  queue.wait() → std::chrono::steady_clock::now()
+         │   ms():    std::chrono::duration<float, std::milli>(stop - start)
+         │
+         └─ profiling (not currently enabled):
+             start/stop via SYCL events → GPU hardware timestamps
+```
+
+**Measured comparison (B70, 128MB vector add, 200 iterations):**
+
+| Metric | chrono::steady_clock | SYCL event (GPU timestamp) |
+|---|---|---|
+| Mean | 375.8 μs | 365.6 μs |
+| Median | 375.5 μs | 365.9 μs |
+| StdDev | 3.4 μs | 2.0 μs |
+| Min/Max | 359-413 μs | 350-367 μs |
+
+```
+  Ratio:  1.03x (chrono / event)
+  Difference: 10.2 μs (SYCL kernel launch + queue.wait overhead)
+  For a 800 μs GEMM kernel: overhead ≈ 1.3% — negligible
+```
+
+**Verdict:** `std::chrono::steady_clock` with queue synchronization is sufficient
+for GEMM profiling.  SYCL events offer ~2× lower jitter but require
+`enable_profiling` on the queue and are not needed for our use case.
+
+The test code is at `tools/util/test/sycl_timer_compare.cpp`.
+
 ### What Is (and Isn't) Timed
 
 Verification runs **once before** the timing loop — never inside timed iterations:
