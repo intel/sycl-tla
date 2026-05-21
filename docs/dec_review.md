@@ -552,6 +552,28 @@ The profiler does NOT set explicit `--benchmark_repetitions` or `--benchmark_min
   For a 800 μs GEMM kernel: overhead ≈ 1.3% — negligible
 ```
 
+**Workload scaling test (B70, various kernel sizes):**
+
+| Kernel size | chrono (μs) | event GPU (μs) | ratio | delta (μs) |
+|---|---|---|---|---|
+| tiny (1K elem) | 9.3 | 0.8 | 11.0× | 8.4 |
+| small (64K) | 8.1 | 0.9 | 8.7× | 7.2 |
+| medium (1M) | 14.2 | 6.5 | 2.2× | 7.7 |
+| large (32M) | 434.8 | 425.1 | 1.02× | 9.7 |
+
+```
+  Key finding: delta = 8-10 μs is CONSTANT regardless of kernel workload.
+  → launch overhead + queue wait = ~9 μs fixed cost
+  → ratio depends entirely on kernel execution time:
+      tiny kernel (1μs): ratio = 10×  (chrono useless)
+      GEMM kernel (400μs+): ratio = 1.02× (chrono fine)
+```
+
+**Implication for different GEMM types (plain/StreamK/DP/SplitK, stages 1/2/3):**
+all have the same ~9 μs launch overhead.  The chrono/event ratio depends only
+on how long the kernel runs, not on the scheduler type.  For any GEMM kernel
+on shape 8192×4096×1536 (runtime 400μs-4ms), both timers produce equivalent results.
+
 **Verdict:** `std::chrono::steady_clock` with queue synchronization is sufficient
 for GEMM profiling.  SYCL events offer ~2× lower jitter but require
 `enable_profiling` on the queue and are not needed for our use case.
