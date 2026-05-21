@@ -413,16 +413,18 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
         summary["batch_id"] = plan["batch_id"]
         summary["batch_index"] = plan["batch_index"]
         summary["kernel_count"] = plan["kernel_count"]
-        # Persist progress for resume
-        if progress_path and summary["status"] == "pass":
-            _save_preflight_progress(
-                Path(progress_path),
-                {**_load_preflight_progress(Path(progress_path)), plan["batch_id"]: "pass"},
-            )
         return summary
 
     if max_workers <= 1:
         batches = [_build_one(plan) for plan in plans_sorted]
+        # Save progress once after all builds complete
+        if progress_path:
+            all_done = dict(resumed_batches)
+            for b in batches:
+                if b.get("status") == "pass":
+                    all_done[b["batch_id"]] = "pass"
+            if all_done:
+                _save_preflight_progress(Path(progress_path), all_done)
     else:
         import concurrent.futures
         import threading
@@ -478,6 +480,15 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
         # Prepend resumed batches (they go first in order)
         if resumed_batches:
             batches = [resumed_batches[i] for i in sorted(resumed_batches)] + batches
+
+        # Save progress once after all builds complete (avoids race condition)
+        if progress_path:
+            all_done = dict(resumed_batches)
+            for b in batches:
+                if b.get("status") == "pass":
+                    all_done[b["batch_id"]] = "pass"
+            if all_done:
+                _save_preflight_progress(Path(progress_path), all_done)
 
     failed = [batch for batch in batches if batch["status"] != "pass"]
     status = "pass" if not failed else ("timeout" if any(batch["status"] == "timeout" for batch in failed) else "fail")
