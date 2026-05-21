@@ -1026,6 +1026,108 @@ Each batch compile (`cmake --build`) produces one statically-linked executable c
 **Key point:** The 2-minute `icpx` time is dominated by instantiating the `GemmConfiguration` template chain and compiling the resulting SPIR-V device code into BMG GPU ISA.  There is no separate GEMM library — it is all header-only templates instantiated in `main.cpp`.
 
 
+
+
+### 4.7 Hand-Written Benchmarks vs Generated Library — Two Architecture Paths
+
+SYCL-TLA offers two distinct mechanisms for registering GEMM kernels with the profiler:
+
+```
+  Path A: Generated Library (cutlass_lib_static)     Path B: Hand-Written Benchmarks
+  ┌──────────────────────────────────────┐           ┌──────────────────────────────────┐
+  │ Python: cutlass_library/generator    │           │ C++: benchmarks_sycl.hpp          │
+  │ → IntelXe manifest (JSON)            │           │ → template aliases + macros       │
+  │ → auto-generate .cpp files           │           │ → CUTLASS_CREATE_GEMM_BENCHMARK() │
+  │ → compile → cutlass_lib_static.a     │           │ → compiled directly into main.cpp │
+  │                                      │           │                                   │
+  │ benchmark runner:                     │           │ benchmark runner:                  │
+  │ → links cutlass_lib_static.a         │           │ → no external library needed       │
+  │ → registers via manifest iterator    │           │ → registers via CUTLASS_BENCHMARK  │
+  └──────────────────────────────────────┘           └──────────────────────────────────┘
+```
+
+#### Comparison
+
+| Aspect | Path A (library) | Path B (hand-written) |
+|---|---|---|
+| **Kernel source** | Python generator + manifest | C++ templates + macros in benchmarks_sycl.hpp |
+| **Compile model** | Static library (`.a`), link once | Each kernel compiled into the benchmark executable TU |
+| **Add new kernel** | Add entry to Python manifest/catalog | Write `using` + `CUTLASS_CREATE_GEMM_BENCHMARK()` in C++ |
+| **Add new dtype/layout** | Generator handles combinatorially | Write new template alias + registration block |
+| **Compile parallelism** | Library targets compiled in parallel by CMake | Single TU per batch (当前的 bs=1) |
+| **Binary size** | Multiple `.o` in `.a`, linker deduplicates | One executable per batch (当前的, ~100MB each) |
+| **Search space** | Determined by generator manifest | Determined by which registrations are `#ifdef`'d in |
+| **Filter gating** | KERNEL_FILTER_FILE controls manifest | KERNEL_FILTER_FILE + per-batch `#define ENABLE_*` |
+| **Maturity** | NVIDIA CUTLASS default approach | Our current approach |
+| **Screening** | Single executable runs all kernels | Per-batch executables (当前的) |
+
+#### Pros & Cons
+
+**Path A (library) — Pros:**
+- **Single executable**: one build, one binary, all kernels available → much simpler screening
+- **Build parallelism**: CMake compiles library objects in parallel naturally
+- **Ecosystem maturity**: same as NVIDIA CUTLASS profiler; all tooling expects this model
+- **Incremental build**: changing one kernel only recompiles its `.o`, not everything
+- **Binary reuse**: same library can be used across different shape inputs
+
+**Path A (library) — Cons:**
+- **SYCL static library maturity**: `icpx` support for SYCL device code in static libraries is still maturing
+- **Generator complexity**: must maintain Python generator → manifest → C++ codegen pipeline
+- **Initial setup**: first build compiles ALL kernels (could be even slower than batch approach initially)
+- **Overhead for small searches**: compiling 3000 kernels into a library for a 2-shape search is wasteful
+
+**Path B (hand-written) — Pros:**
+- **Direct control**: every kernel registration is explicit C++ code, easy to audit
+- **No generator dependency**: no Python codegen chain, simpler toolchain
+- **Per-batch isolation**: a broken kernel only fails its batch, not the whole library
+- **Filter gating is natural**: `#ifdef` on a per-batch basis works cleanly with `if constexpr`
+
+**Path B (hand-written) — Cons:**
+- **Per-batch executable**: 3424 separate binaries = disk space (3424 × ~100MB ≈ 340GB)
+- **Screening complexity**: must route each (shape, kernel) to the correct per-batch exe
+- **Single-TU bottleneck**: one `main.cpp` per batch, no intra-batch parallelism
+- **Manual enumeration**: every new kernel = new C++ code in benchmarks_sycl.hpp
+- **Code bloat**: benchmarks_sycl.hpp + bmg_gemm_source_tile_sg.def already 800+ lines
+
+#### Recommended Hybrid Architecture (Future)
+
+```
+  Layer 1: Seed + Expanded kernels  (Path B, current)
+  ┌─────────────────────────────────────────────┐
+  │ benchmarks_sycl.hpp                          │
+  │ → hand-written, well-tested, always included │
+  │ → 165 kernels/dtype (330 total for BF16+F16) │
+  └─────────────────────────────────────────────┘
+
+  Layer 2: Exhaustive regular GEMM  (Path B, current)
+  ┌─────────────────────────────────────────────┐
+  │ bmg_gemm_source_tile_sg.def + CMake headers  │
+  │ → legality-filtered Cartesian enumeration    │
+  │ → generated at CMake time from filter list   │
+  │ → 1547 kernels/dtype                         │
+  └─────────────────────────────────────────────┘
+
+  Layer 3: Generator library  (Path A, future)
+  ┌─────────────────────────────────────────────┐
+  │ CUTLASS Python generator                     │
+  │ → manifest of ALL legal IntelXe GEMM kernels │
+  │ → compiled into cutlass_lib_static.a once    │
+  │ → profiler links and filters at runtime      │
+  │ → replaces manual enumeration for L2+L3      │
+  └─────────────────────────────────────────────┘
+```
+
+**Migration path:** Once SYCL static library support is mature, Layer 2 can be migrated
+from hand-written `BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE` macros to generator-produced
+`cutlass_lib_static`.  Layer 1 (seed + expanded) stays as hand-written for the
+well-validated "anchor" kernels.
+
+**Key design principle:** The profiler Python layer (`catalog.py`) already abstracts the
+source.  Switching from `source="exhaustive_regular_gemm_catalog"` to `source="generator_manifest"`
+requires only changing the catalog generation function — the rest of the pipeline
+(manifest, batch builds, screening, dispatch) is identical.
+
+
 ## 5. Deployment Summary
 
 | Parameter | Value |
