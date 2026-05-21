@@ -521,6 +521,46 @@ The profiler does NOT set explicit `--benchmark_repetitions` or `--benchmark_min
   Total screening: ~35-40 min for all 3568 candidates
 ```
 
+
+
+### What Is (and Isn't) Timed
+
+Verification runs **once before** the timing loop — never inside timed iterations:
+
+```cpp
+  // ★ ONE-TIME (before loop, NOT timed):
+  gemm_op.run();                              // warmup run
+  compat::wait();
+  bool passed = verify(problem_size, alpha, beta);
+  if (!passed) state.SkipWithError("Disposition Failed.");
+
+  // ★ TIMING LOOP (only kernel execution):
+  for (auto _ : state) {
+      state.PauseTiming();
+      // ... argument setup ...              // NOT timed
+      gemm_op.initialize(arguments, ...);    // NOT timed
+      state.ResumeTiming();
+
+      GPU_Clock timer;                       // ← timing starts
+      timer.start();
+      gemm_op.run();                         // ★ ONLY THIS
+      double ms = timer.milliseconds();      // ← timing ends
+  }
+```
+
+| Component | Timed? | Note |
+|---|---|---|
+| SYCL kernel submit | ✅ Yes | `gemm_op.run()` submits to queue |
+| GPU execution | ✅ Yes | Xe cores compute GEMM |
+| SYCL queue wait | ✅ Yes | Implicit inside `gemm_op.run()` |
+| Argument setup | ❌ No | During `PauseTiming()` |
+| Memory allocation | ❌ No | Done before timing loop |
+| Correctness verify | ❌ No | Runs once before loop starts |
+| Launch overhead | ✅ Yes | ~0.05-0.1ms per launch |
+
+For a ~0.8ms kernel: launch overhead ≈ 6-12%. For a ~2ms kernel: ≈ 2-5%.
+
+
 ### Three-Stage Timing Pipeline
 
 | Stage | Iterations | Statistical Method | Purpose |
