@@ -308,6 +308,139 @@ Screening entries are partitioned into config chunks (32 entries per chunk). A s
 
 ---
 
+## 2.B End-to-End Walkthrough: One Kernel From Catalog to TFLOPs
+
+Using `BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64` (BF16 input, FP32 output, StreamK scheduler, 512×256×64 tile) as a concrete running example through the entire pipeline.
+
+### Step 1: Catalog — "Which kernels exist?"
+
+```
+  # catalog.py — "catalog" = a menu listing all searchable kernels
+
+  benchmark_streamk_tile_candidates(
+      "BmgGemmBF16BF16FP32",
+      "bf16", "bf16", "f32", "f32",
+      tile_shapes=[..., (512, 256, 64), ...]    # ← this tile
+  )
+
+  → produces:
+  {
+      "kernel_name": "BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64",
+      "layout": "rcr",
+      "tile_m": 512, "tile_n": 256, "tile_k": 64,
+      "sg_m": 8, "sg_n": 4,
+      "streamk_mode": "streamk",
+  }
+```
+
+**Catalog source names explained in plain language:**
+
+| Catalog | Meaning | Size |
+|---|---|---|
+| `persisted` | Pre-saved menu — hand-validated kernels from level0 | 28 entries |
+| `generator` | Auto-generated menu — CUTLASS Python generator output | dynamic |
+| `expanded_bmg` | Extended menu — seed + tile variants + StreamK family | 330 kernels |
+| `layered_bmg` | Full buffet — expanded_bmg + exhaustive regular GEMM enumeration | 3424 kernels |
+
+### Step 2: Candidate — "Which (kernel, shape) pairs to test?"
+
+```
+  # candidates.py — "candidate" = one (kernel, shape) pair
+
+  Input shape: M=8192, N=4096, K=1536, dtype=bf16, layout=rcr
+  Matched kernel: BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64
+
+  → candidate:
+  {
+      "candidate_id": "rcr_bf16bf16f32_tm512_tn256_tk64_sg8x4_st2_sk1_streamk",
+      "kernel_id":    "BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64",
+      "shape_id":     "rcr_bf16_8192_4096_1536",
+  }
+```
+
+### Step 3: Batch Filter — "Which kernel does this batch compile?"
+
+```
+  kernel_id → selected_kernel_list → filter file:
+    selected_kernel_filter_part042.list:
+      ^BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64$
+
+  → CMake generates C++ header:
+    #define CUTLASS_BENCHMARK_ENABLE_BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64 1
+```
+
+### Step 4: C++ Template — "How the kernel becomes code"
+
+```cpp
+  // Hand-written in benchmarks_sycl.hpp:
+  using BmgGemm_BF16BF16FP32_StreamK_TileShape_512_256_64 = Shape<_512, _256, _64>;
+
+  using BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64 =
+      Gemm_Bench_BF16BF16FP32_RCR_StreamK<
+          Shape<_512, _256, _64>,                    // tile
+          Scheduler::GemmStreamK>;                   // StreamK scheduler
+
+  // Macro expands to:
+  CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64);
+
+  // → static void Bmg..._func(State& state, ...) {
+  //     if constexpr (ENABLED) {
+  //       BenchmarkRunnerGemm<Bmg...>().run(state, ...);
+  //     }
+  //   }
+```
+
+### Step 5: Compilation — on CPU, ~2 minutes
+
+```
+  icpx -fsycl main.cpp
+    → template chain: GemmConfiguration<...> → CollectiveMma → CollectiveEpilogue
+    → LLVM IR → SPIR-V device code → IGC → BMG G31 GPU ISA
+    → link → cutlass_benchmarks_gemm_sycl (~100MB executable)
+```
+
+### Step 6: Screening — on GPU, ~2 milliseconds
+
+```
+  ./cutlass_benchmarks_gemm_sycl     --benchmark_filter=BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64     --m=8192 --n=4096 --k=1536
+
+  GPU execution:
+    load A(bf16, 8192×1536) + B(bf16, 1536×4096)
+    → 512×256 tile, StreamK decomposition
+    → each work-item: (512/8/8)×(256/4/16) = 32 DPAS instructions
+    → output C(f32, 8192×4096)
+    → correctness: BlockCompareRelativelyEqual(epsilon=0.5)
+
+  stdout:
+    avg_runtime_ms: 2.134
+    avg_tflops: 131.8          ← ★ THE PERFORMANCE NUMBER
+```
+
+### Step 7: Parsing + Dispatch — "Which kernel wins?"
+
+```
+  parse_benchmark_log() → row: {status:"pass", avg_tflops:131.8}
+  → screening: all 3568 candidates, 1 iteration each
+  → top-8 per shape → confirmation: 2 iterations, median
+  → dispatch_table.json:
+  {
+    "8192x4096x1536_bf16": {
+      "kernel": "BmgGemmBF16BF16FP32_RCR_StreamK_512x256x64",
+      "tflops": 131.8
+    }
+  }
+```
+
+### Complete Data Flow
+
+```
+  catalog (Python) → candidate → filter file → C++ header → icpx (CPU, 2min)
+    → executable → GPU run (2ms) → TFLOPs = 2×M×N×K÷runtime÷1e12
+      → parse → dispatch table
+```
+
+---
+
 ## 3. Search Space Coverage
 
 ### 3.1 Why 3000+ Combinations Per Shape
