@@ -1074,38 +1074,93 @@ struct BenchmarkRunnerGemm {
         (options.beta != 0 ? 2 : 1) * options.m * options.n * sizeof_c
       ) * 1e-6 * options.l;
 
-    initialize_counters(state);
-    int32_t counter = 1;
-    for(auto _ : state) {
-      state.PauseTiming();
-      int input_num = std::max(int(0), counter % count);
+    static constexpr int kWarmupIters = 50;
+    static constexpr int kMeasureIters = 50;
+
+    auto run_args = [&](int input_idx) {
       typename Gemm::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
       set_scheduler_splits(arguments, options.split_k_slices);
       arguments.mode = gemm::GemmUniversalMode::kGemm;
       arguments.problem_shape = problem_size;
-      arguments.mainloop = {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B};
-      arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[input_num].get(), stride_C, block_D.get(), stride_D};
+      arguments.mainloop = {block_A[input_idx].get(), stride_A, block_B[input_idx].get(), stride_B};
+      arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[input_idx].get(), stride_C, block_D.get(), stride_D};
       arguments.hw_info = hw_info;
       if constexpr (is_mixed_dtype<DispatchPolicy>) {
-        arguments.mainloop = {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B, block_scale.get(),
+        arguments.mainloop = {block_A[input_idx].get(), stride_A, block_B[input_idx].get(), stride_B, block_scale.get(),
                 stride_S, block_zero.get(), stride_Z, 128};
       }
       if constexpr(epi_is_deeltactmul){
-        arguments.epilogue.thread.aux_ptr = block_Aux[input_num].get();
+        arguments.epilogue.thread.aux_ptr = block_Aux[input_idx].get();
         arguments.epilogue.thread.dAux = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
       }
       gemm_op.initialize(arguments, workspace.get());
+      return arguments;
+    };
+
+    // --- explicit warmup (discarded, NOT timed) ---
+    state.PauseTiming();
+    for (int w = 0; w < kWarmupIters; ++w) {
+      run_args(0);
+      gemm_op.run();
+    }
+    state.ResumeTiming();
+
+    // --- timed measurement (50 iterations) ---
+    std::vector<double> runtimes;
+    runtimes.reserve(kMeasureIters);
+    for (int i = 0; i < kMeasureIters; ++i) {
+      state.PauseTiming();
+      run_args(0);
       state.ResumeTiming();
 
       GPU_Clock timer;
       timer.start();
       gemm_op.run();
-      auto ms_elapsed = timer.milliseconds();
-      update_counters(state, ms_elapsed);
-      state.SetIterationTime(ms_elapsed / 1000);
-      counter++;
+      double ms = timer.milliseconds();
+      runtimes.push_back(ms);
+      state.SetIterationTime(ms / 1000.0);
     }
-    finalize_counters(state, gflop, mega_bytes_transferred);
+    state.SetItemsProcessed(kMeasureIters);
+
+    // --- statistics ---
+    std::sort(runtimes.begin(), runtimes.end());
+    double best = runtimes.front();
+    double worst = runtimes.back();
+    double median = (runtimes[kMeasureIters/2] + runtimes[(kMeasureIters-1)/2]) / 2.0;
+
+    double total = 0.0;
+    for (double t : runtimes) total += t;
+    double avg = total / kMeasureIters;
+
+    // trimmed mean: drop top/bottom 10% (= 5 each)
+    static constexpr int kTrim = kMeasureIters / 10;
+    double trimmed_total = 0.0;
+    for (int i = kTrim; i < kMeasureIters - kTrim; ++i)
+      trimmed_total += runtimes[i];
+    double trimmed_mean = trimmed_total / (kMeasureIters - 2 * kTrim);
+
+    // standard deviation
+    double variance = 0.0;
+    for (double t : runtimes) {
+      double d = t - avg;
+      variance += d * d;
+    }
+    double stddev = std::sqrt(variance / kMeasureIters);
+
+    state.counters["runtime_min_ms"] = best;
+    state.counters["runtime_max_ms"] = worst;
+    state.counters["runtime_median_ms"] = median;
+    state.counters["runtime_avg_ms"] = avg;
+    state.counters["runtime_trimmed_mean_ms"] = trimmed_mean;
+    state.counters["runtime_stddev_ms"] = stddev;
+    state.counters["warmup_iters"] = kWarmupIters;
+    state.counters["measure_iters"] = kMeasureIters;
+
+    state.counters["avg_tflops"] = gflop / trimmed_mean;
+    state.counters["avg_throughput"] = mega_bytes_transferred / trimmed_mean;
+    state.counters["best_tflop"] = gflop / best;
+    state.counters["best_bandwidth"] = mega_bytes_transferred / best;
+    state.counters["median_tflops"] = gflop / median;
   }
 
 private:
