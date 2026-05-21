@@ -1122,8 +1122,9 @@ def workflow(args):
         benchmark_commands.extend(step["command"] for step in candidate_build_summary["steps"])
     if candidate_build_preflight_summary.get("status") == "pass":
         for batch in candidate_build_preflight_summary["batches"]:
-            log_paths.extend(step["log"] for step in batch["steps"])
-            benchmark_commands.extend(step["command"] for step in batch["steps"])
+            for step in batch.get("steps", []):
+                log_paths.append(step.get("log", ""))
+                benchmark_commands.append(step.get("command", ""))
     batch_plan_by_kernel = benchmark_batch_plan_by_kernel_id(candidate_build_plan) if args.use_candidate_build_preflight_benchmarks else {}
     if not args.skip_run:
         screening_benchmark_entries = [entry for entry in screening_entries if entry["candidate"].get("runner", "benchmark") == "benchmark"]
