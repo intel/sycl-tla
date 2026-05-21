@@ -1071,9 +1071,9 @@ SYCL-TLA offers two distinct mechanisms for registering GEMM kernels with the pr
 - **Binary reuse**: same library can be used across different shape inputs
 
 **Path A (library) — Cons:**
-- **SYCL static library maturity**: `icpx` support for SYCL device code in static libraries is still maturing
+- **Not yet validated in our profiler pipeline**: the `cutlass_lib_static` path exists in the CMake build but has not been tested end-to-end for BMG GEMM benchmark screening; testing is needed to confirm it works correctly with SYCL device code and batch filtering
 - **Generator complexity**: must maintain Python generator → manifest → C++ codegen pipeline
-- **Initial setup**: first build compiles ALL kernels (could be even slower than batch approach initially)
+- **Initial build overhead**: first build compiles ALL kernels into the static library (could be even slower than batch approach for large catalogs)
 - **Overhead for small searches**: compiling 3000 kernels into a library for a 2-shape search is wasteful
 
 **Path B (hand-written) — Pros:**
