@@ -1447,6 +1447,217 @@ requires only changing the catalog generation function — the rest of the pipel
 (manifest, batch builds, screening, dispatch) is identical.
 
 
+
+---
+
+## 5.B Additional Features
+
+### 1. Hardware Efficiency Analysis — Roofline Model
+
+Not a simple TFLOPS comparison.  `analyze_efficiency()` computes a full roofline analysis per (candidate, shape) pair:
+
+```
+  ① Arithmetic intensity = FLOPS / bytes_read
+       = (2×M×N×K) / ((M×K + K×N) × element_bytes)
+
+  ② Ridge point = peak_TFLOPS / measured_BW
+       → above ridge = compute bound
+       → below ridge = memory bound
+
+  ③ Wave efficiency = total_tiles / (waves × max_concurrent_workgroups)
+
+  ④ Tile utilization  = actual_M_tiles × actual_N_tiles / grid_M × grid_N
+
+  ⑤ Cross-Xe-core penalty: if one workgroup spans multiple Xe cores,
+       penalty = 0.85^(cores - 1), capped at ×0.5 for >2 cores
+
+  ⑥ SLM budget check: tile_buffer_kb ≤ 64 KB (BMG limit)
+
+  ⑦ GRF pressure: accumulator_bytes / (256 regs × 32 bytes)
+
+  ⑧ Efficiency bounds:
+       compute bound → wave × tile × core × [0.25, 0.92]
+       memory bound → (arithmetic_intensity × BW) / peak_TFLOPS × [0.3, 1.1]
+
+  ⑨ Root cause hints: auto-annotates SLM overflow, GRF exceed, Xe-core penalty
+```
+
+In the dispatch table, each winner carries `selected_efficiency` — ratio of measured TFLOPS to peak TFLOPS.  Winners below 40% peak efficiency are flagged with `efficiency_warning`.
+
+---
+
+### 2. Reference Comparison — vs oneMKL / oneDNN / PyTorch
+
+`build_reference_comparison()` compares profiler dispatch results against reference TFLOPS from the Ali GEMM performance workbook:
+
+```
+  Per shape: ratio = profiler_best_tflops / reference_best_tflops
+
+  Example (BF16, 8192×4096×1536):
+    profiler: 131.8 TFLOPS (StreamK 512×256×64)
+    oneDNN:   140.2 TFLOPS
+    ratio:    94.0%
+
+  Cross 74 shapes:
+    median:  53.2%
+    average: 68.2%
+    ≥100%:   15 shapes
+    ≥90%:    27 shapes
+    <80%:    43 shapes — needs improvement
+```
+
+This is the primary evidence for reporting search quality to stakeholders.
+
+---
+
+### 3. Device Auto-Detection
+
+`resolve_device_target()` eliminates per-machine configuration:
+
+```
+  xpu-smi discovery -d 7
+    → PCI ID: 0xe223
+    → arch mapping: 0xe223 → "bmg" → CMake: "intel_gpu_bmg_g31"
+    → auto-sets ZE_AFFINITY_MASK=7
+    → resolves hw_spec_id: "bmg_g21"
+
+  Zero manual --cmake-source-dir or DPCPP_SYCL_TARGET changes
+  when moving between machines.
+```
+
+---
+
+### 4. Ali Dataset Integration
+
+`build_ali_gemm_docs()` auto-extracts shapes and references from Excel workbooks:
+
+```
+  build_ali_gemm_docs("ali_gemm_perf_v0.1.xlsx", layout="rcr")
+    → iterates sheets, identifies {dtype}_{layout} columns
+    → extracts M/N/K dimensions (76 BF16 + 76 F16 = 152 shapes)
+    → for each shape, finds best reference provider
+        (oneMKL BLAS, oneDNN matmul, PyTorch→oneDNN, SYCL-TLA XeTLA)
+    → outputs: ali_shapes.json + ali_reference.json
+```
+
+No manual JSON writing needed for shape inputs.
+
+---
+
+### 5. Runtime Dispatch Lookup
+
+After the search completes, `optimal_dispatch_table.json` enables instant kernel lookup at inference time:
+
+```bash
+  python3 -m intel_gemm_profiler.dispatch \
+    --dispatch-table optimal_dispatch_table.json \
+    --m 8192 --n 4096 --k 1536 --layout rcr --dtype bf16
+
+  → {"candidate_id": "rcr_bf16...streamk", "kernel_id": "BmgGemm...",
+      "avg_tflops": 131.8}
+```
+
+Validates the dispatch table schema, builds a shape-key index, and supports fallback candidate IDs for shapes not in the table.
+
+---
+
+### 6. Close-Call Detection
+
+When the top-2 candidates are nearly tied in TFLOPS, the dispatch table records both:
+
+```
+  gap = (winner_tflops - runner_up_tflops) / runner_up_tflops × 100
+  close_call = gap < close_call_threshold  (default 5%)
+
+  A 1% gap between #1 and #2 is recorded as "close_call": true,
+  with the runner-up metadata preserved for follow-up A/B testing.
+```
+
+---
+
+### 7. Phase A Probe Pipeline
+
+Before Phase B search begins, Phase A validates the environment (all on GPU, ~5 seconds):
+
+```
+  Step 1: collect_environment_metadata()
+    → check oneAPI env, xpu-smi device, benchmark binary
+
+  Step 2: DPAS baseline probe
+    → smallest kernel + smallest shape, 1 iteration
+    → smoke-test entire compile→run→verify chain
+    → provides minimum TFLOPS reference for anomaly detection
+
+  Step 3: compiler profile probes (4 entries)
+    → small_tile (M≤8), medium_tile (M=64), large_tile (M≥128), splitk
+    → each runs with its designated IGC flags variant
+
+  Step 4: anomaly detection
+    → compare probe TFLOPS against DPAS baseline + B60 HW specs
+    → flag "severely_below_spec" → auto-blocked in Phase B
+
+  Step 5: constraint update
+    → failed profiles → persistent blocked_rules
+    → Phase B inherits these, no re-running known-bad candidates
+```
+
+---
+
+### 8. Chunk Timeout with Recursive Retry
+
+Screening entries are partitioned into config chunks (32 entries each).  A single pathological entry timing out previously killed the entire chunk.  The retry mechanism fixes this:
+
+```
+  chunk_000: 32 entries → timeout at 1800s
+    → parse all completed rows (entries 0-17)
+    → compute missing entries (entry 18 has no row)
+    → recursive split: entries 0-17 → already done
+                       entry 18      → solo retry → success
+                       entries 19-31 → retry as smaller chunk → all pass
+    → report: 0 lost entries, 1 timed out but recovered
+
+  Before this fix: entire chunk discarded → 31 false negatives
+```
+
+---
+
+### 9. Confirmation Overrides Screening
+
+Screening ranking (1 iteration, fast) can be overridden by confirmation ranking (N iterations, median):
+
+```python
+  confirm_rows = [row for row in shape_rows if row.stage == "confirm"]
+  selection_rows = confirm_rows if confirm_rows else screening_rows
+
+  # Take MEDIAN of confirmation runs, sort by median_tflops
+  # Final dispatch uses confirmation winner, even if different from screening #1
+```
+
+The dispatch table records which stage produced the winner and whether confirmation was complete (expected_samples vs actual).
+
+---
+
+### 10. Compiler Flags Variant Probing
+
+Four IGC flags presets, tested against three tile-class candidates before the main search:
+
+```
+  Profiles:
+    perf_default:   256-GRF + large-register-file + line-tables
+    perf_perfmodel: +perfmodel (VISA perf estimation)
+    perf_enableBCR: +enableBCR (bank conflict reduction)
+    perf_128grf:    128-GRF experimental (marked needs_validation)
+
+  Probe per tile class:
+    small_tile  → M=8  shape,   smallest tile candidate
+    medium_tile → M=64 shape,   mid-range tile candidate
+    large_tile  → M=256 shape,  largest tile candidate
+
+  Failed profiles → excluded from Phase B candidate generation.
+  Results persist across runs via build_config_bmg_perf.json.
+```
+
+
 ## 5. Deployment Summary
 
 | Parameter | Value |
