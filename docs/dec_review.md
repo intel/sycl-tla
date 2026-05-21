@@ -968,6 +968,64 @@ Each batch build uses `cmake --build --parallel` (equivalent to `make -j` with n
 **Conclusion:** `--parallel` is not the bottleneck and does not cause oversubscription.  The true bottleneck is the ~2-minute `icpx` SYCL device compilation of `main.cpp` per batch.  The 32-batch concurrency is already well-matched to the available CPU resources (37-50% utilization).
 
 
+
+
+### 4.6 What Each Batch Compilation Includes
+
+Each batch compile (`cmake --build`) produces one statically-linked executable containing the full SYCL-TLA GEMM implementation for exactly one kernel configuration.  SYCL-TLA is **header-only C++ templates** — there is no pre-compiled GEMM library involved in the benchmark path:
+
+```
+  main.cpp compilation chain (each batch):
+  ┌────────────────────────────────────────────────────────────┐
+  │ main.cpp                                                    │
+  │  └─ #include "benchmarks_sycl.hpp"                         │
+  │       ├─ declares: Gemm_Bench_BF16FP32_RCR<Tile,SG,...>    │
+  │       ├─ instantiates: CUTLASS_CREATE_GEMM_BENCHMARK(F)    │
+  │       │    └─ BenchmarkRunnerGemm<GemmConfiguration>        │
+  │       │         └─ GemmConfiguration<                       │
+  │       │              IntelXe, bf16(row), bf16(col),         │
+  │       │              f32(row), f32,                         │
+  │       │              Shape<M,N,K>, Scheduler, TiledMma,    │
+  │       │              void, void, Epilogue, Stages>          │
+  │       │              │                                      │
+  │       │              ├─ CollectiveMma<                      │
+  │       │              │    MainloopXeL1Staged<Stages>,      │
+  │       │              │    TileShape, ElementA/B,            │
+  │       │              │    TiledMma<XE_DPAS_TT<8,...>,       │
+  │       │              │           Layout<M,N,K>,             │
+  │       │              │           Layout<sgM,sgN,1>>>>       │
+  │       │              │    ← 2D block IO + DPAS MMA          │
+  │       │              │                                      │
+  │       │              ├─ CollectiveEpilogue<                 │
+  │       │              │    IntelXeGeneric,                   │
+  │       │              │    LinearCombination<f32,...>>       │
+  │       │              │    ← epilogue fusion + store         │
+  │       │              │                                      │
+  │       │              ├─ GemmKernel = GemmUniversal<...>     │
+  │       │              │    ← Xe kernel dispatch              │
+  │       │              │                                      │
+  │       │              └─ Gemm = GemmUniversalAdapter<...>    │
+  │       │                   ← SYCL host-device bridge         │
+  │       │                                                     │
+  │       ├─ correctness verify: BlockCompareRelativelyEqual    │
+  │       └─ timing: Google Benchmark harness                   │
+  │                                                            │
+  │  ALSO: googlebenchmark + googletest static libraries        │
+  │        (compiled once, cached across batches)               │
+  └────────────────────────────────────────────────────────────┘
+
+  Compilation output per batch:
+  ┌────────────────────────────────────────────────────────────┐
+  │ x86_64 host code:  benchmark main(), argument parsing       │
+  │ SPIR-V device code: GEMM kernel (icpx → LLVM → SPIR-V)     │
+  │ BMG G31 ISA:        ahead-of-time compiled GPU binary      │
+  │                      (IGC: SPIR-V → BMG machine code)       │
+  └────────────────────────────────────────────────────────────┘
+```
+
+**Key point:** The 2-minute `icpx` time is dominated by instantiating the `GemmConfiguration` template chain and compiling the resulting SPIR-V device code into BMG GPU ISA.  There is no separate GEMM library — it is all header-only templates instantiated in `main.cpp`.
+
+
 ## 5. Deployment Summary
 
 | Parameter | Value |
