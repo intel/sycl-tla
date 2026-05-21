@@ -941,6 +941,33 @@ Potential additions:
 | **Total potential** | **6.0d** | **~1.0d** | **~6×** |
 
 
+
+
+### 4.5 Why `--parallel` Doesn't Cause Oversubscription
+
+Each batch build uses `cmake --build --parallel` (equivalent to `make -j` with no job limit), and 32 batches run concurrently.  At first glance this appears to create 32 × 256 = 8192 concurrent jobs.  In practice it does not:
+
+```
+  Per-batch Make targets for cutlass_benchmarks_gemm_sycl:
+  ┌────────────────────────────────────────────────────────┐
+  │ main.cpp (SYCL device compile)     ← 1 heavy job, ~2min │
+  │ googlebenchmark objects            ← 2-3 light jobs     │
+  │   (cached after first build)                            │
+  │ googletest objects                 ← 2-3 light jobs     │
+  │   (cached after first build)                            │
+  │ library objects (cutlass_lib_static) ← 1-2 light jobs   │
+  │ link step                          ← 1 serial job       │
+  └────────────────────────────────────────────────────────┘
+
+  Actual parallelism per batch: ~3-5 concurrent jobs
+  32 batches × ~4 jobs ≈ 128 concurrent processes
+
+  Measured CPU load: 95 / 256 vCPUs = 37%  ← matches the model
+```
+
+**Conclusion:** `--parallel` is not the bottleneck and does not cause oversubscription.  The true bottleneck is the ~2-minute `icpx` SYCL device compilation of `main.cpp` per batch.  The 32-batch concurrency is already well-matched to the available CPU resources (37-50% utilization).
+
+
 ## 5. Deployment Summary
 
 | Parameter | Value |
