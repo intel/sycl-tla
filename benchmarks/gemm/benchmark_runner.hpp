@@ -63,6 +63,7 @@
 #include <cmath>
 #include <limits>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 using namespace cute;
@@ -118,6 +119,21 @@ struct ZeroStride<T, cute::void_t<typename T::StrideZero>> {
   using type = typename T::StrideZero;
 };
 
+template <class T, class = void>
+struct HasSchedulerSplits : std::false_type {};
+
+template <class T>
+struct HasSchedulerSplits<T, std::void_t<decltype(std::declval<T&>().scheduler.splits)>> : std::true_type {};
+
+template <class Arguments>
+void set_scheduler_splits(Arguments& arguments, int split_k_slices) {
+  if constexpr (HasSchedulerSplits<Arguments>::value) {
+    if (split_k_slices > 0) {
+      arguments.scheduler.splits = split_k_slices;
+    }
+  }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Command line options parsing
@@ -127,6 +143,7 @@ struct GEMMOptions {
 
   int m, n, k, l;
   float alpha, beta;
+  int split_k_slices;
   std::string bm_name;
   std::string operation_name;
   std::string layout;
@@ -142,6 +159,7 @@ struct GEMMOptions {
           error(false),
           m(5120), n(4096), k(4096), l(1),
           alpha(1.f), beta(0.f),
+          split_k_slices(0),
           bm_name("GEMM"),
           operation_name(""),
           layout("rcr"),
@@ -164,6 +182,7 @@ struct GEMMOptions {
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
+    cmd.get_cmd_line_argument("split_k_slices", split_k_slices, 0);
     cmd.get_cmd_line_argument("bm_name", bm_name, std::string("GEMM"));
     cmd.get_cmd_line_argument("operation_name", operation_name, std::string(""));
     cmd.get_cmd_line_argument("layout", layout, std::string("rcr"));
@@ -857,8 +876,15 @@ struct BenchmarkRunnerGemm {
     compat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
-    bool passed = reference::device::BlockCompareEqual(
-      block_ref_D.get(), block_D.get(), block_D.size());
+    bool passed = false;
+    if constexpr (std::is_same_v<ElementOutput, cutlass::half_t> ||
+                  std::is_same_v<ElementOutput, cutlass::bfloat16_t>) {
+      passed = reference::device::BlockCompareRelativelyEqual(
+        block_ref_D.get(), block_D.get(), block_D.size(), ElementOutput(0.5f), ElementOutput(1.0f));
+    } else {
+      passed = reference::device::BlockCompareEqual(
+        block_ref_D.get(), block_D.get(), block_D.size());
+    }
 
     return passed;
   }
@@ -957,6 +983,7 @@ struct BenchmarkRunnerGemm {
     initialize(state, problem_size);
 
     typename Gemm::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
+    set_scheduler_splits(arguments, options.split_k_slices);
     arguments.mode = gemm::GemmUniversalMode::kGemm;
     arguments.problem_shape = problem_size;
 
@@ -1003,7 +1030,7 @@ struct BenchmarkRunnerGemm {
 #endif
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
+    bool passed = verify(problem_size, ElementCompute(options.alpha), ElementCompute(options.beta));
     if(not passed) {
       state.SkipWithError("Disposition Failed.");
     }
@@ -1014,6 +1041,7 @@ struct BenchmarkRunnerGemm {
     state.counters["l"] = options.l;
     state.counters["alpha"] = options.alpha;
     state.counters["beta"] = options.beta;
+    state.counters["split_k_slices"] = options.split_k_slices > 0 ? options.split_k_slices : 1;
 
     std::stringstream extra_label;
     if constexpr (cute::size<0>(StrideA{}) == 1) {
@@ -1051,13 +1079,13 @@ struct BenchmarkRunnerGemm {
     for(auto _ : state) {
       state.PauseTiming();
       int input_num = std::max(int(0), counter % count);
-      typename Gemm::GemmKernel::Arguments arguments{
-        gemm::GemmUniversalMode::kGemm,
-        problem_size,
-        {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B},
-        {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[input_num].get(), stride_C, block_D.get(), stride_D},
-        hw_info
-      };
+      typename Gemm::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
+      set_scheduler_splits(arguments, options.split_k_slices);
+      arguments.mode = gemm::GemmUniversalMode::kGemm;
+      arguments.problem_shape = problem_size;
+      arguments.mainloop = {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B};
+      arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[input_num].get(), stride_C, block_D.get(), stride_D};
+      arguments.hw_info = hw_info;
       if constexpr (is_mixed_dtype<DispatchPolicy>) {
         arguments.mainloop = {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B, block_scale.get(),
                 stride_S, block_zero.get(), stride_Z, 128};
@@ -1107,6 +1135,20 @@ private:
 
 }
 
+#if defined(CUTLASS_BENCHMARK_FILTER_ENABLED)
+#include "cutlass_benchmark_filter.hpp"
+#define CUTLASS_BENCHMARK_CAT_IMPL(A, B) A##B
+#define CUTLASS_BENCHMARK_CAT(A, B) CUTLASS_BENCHMARK_CAT_IMPL(A, B)
+#define CUTLASS_BENCHMARK_PROBE() ~, 1
+#define CUTLASS_BENCHMARK_SECOND(A, B, ...) B
+#define CUTLASS_BENCHMARK_IS_PROBE(...) CUTLASS_BENCHMARK_SECOND(__VA_ARGS__, 0)
+#define CUTLASS_BENCHMARK_IS_DEFINED(X) CUTLASS_BENCHMARK_IS_PROBE(CUTLASS_BENCHMARK_CAT(CUTLASS_BENCHMARK_IS_DEFINED_, X))
+#define CUTLASS_BENCHMARK_IS_DEFINED_1 CUTLASS_BENCHMARK_PROBE()
+#define CUTLASS_BENCHMARK_KERNEL_ENABLED(F) CUTLASS_BENCHMARK_IS_DEFINED(CUTLASS_BENCHMARK_CAT(CUTLASS_BENCHMARK_ENABLE_, F))
+#else
+#define CUTLASS_BENCHMARK_KERNEL_ENABLED(F) 1
+#endif
+
 #define CUTLASS_BENCHMARK(F) cutlass::benchmark::BenchmarkRegistry<cutlass::benchmark::GEMMOptions>::Register(#F, &F##_func)
 
 #define CUTLASS_CREATE_GEMM_BENCHMARK(F)                          \
@@ -1114,6 +1156,10 @@ private:
       ::benchmark::State& state,                                  \
       cutlass::benchmark::GEMMOptions const& options,                 \
       cutlass::KernelHardwareInfo const& hw_info) {               \
-    auto bench = cutlass::benchmark::BenchmarkRunnerGemm<F>();    \
-    bench.run(state, options, hw_info);                           \
+    if constexpr (CUTLASS_BENCHMARK_KERNEL_ENABLED(F)) {          \
+      auto bench = cutlass::benchmark::BenchmarkRunnerGemm<F>();  \
+      bench.run(state, options, hw_info);                         \
+    } else {                                                      \
+      state.SkipWithError("benchmark disabled by build filter");  \
+    }                                                            \
   }

@@ -18,7 +18,7 @@
 - 76 个 Ali reference matches
 - 0 missing dispatch
 
-本地 profiler Python 回归当前为 **83/83 OK**。同一回归也已在新远端 BMG 环境 `intel@172.16.114.105` 的 `/home/intel/tianfeng/gemm_productization_20260509/sycl-tla` 中通过。
+本地 profiler Python 回归当前为 **84/84 OK**。同一回归也已在新远端 BMG 环境 `intel@172.16.114.105` 的 `/home/intel/tianfeng/gemm_productization_20260509/sycl-tla` 中通过。
 
 补充 `dtype_d=bf16 + batch_count=2` generated benchmark runtime smoke 已在新远端 BMG 节点通过：
 
@@ -151,6 +151,21 @@
   - blocked candidates: 20
   - StreamK exceptions: 76
   - exception reason: `intel_xe_generated_streamk_tile_scheduler_unsupported`
+
+补充 examples GEMM 组合复扫和 seed catalog 修正：
+
+- 已复扫 `examples/00_bmg_gemm`、`01_bmg_gemm_with_collective_builder`、`02_bmg_gemm_mixed_dtype`、`03_bmg_gemm_streamk`、`04/09/10 grouped GEMM`、`05_bmg_gemm_with_epilogues`、`07_bmg_dual_gemm`、`08_bmg_gemm_f8`、`13_bmg_gemm_bias`。
+- 当前可直接进入 profiler 搜索主链路的 example-derived 特殊 scheduler 组合是 `03_bmg_gemm_streamk`：
+  - `streamk_mode=streamk`
+  - `streamk_mode=data_parallel`
+  - `streamk_mode=splitk`
+  - dtype presets: `bf16` and `f16`
+  - real example tile: `TileShape=256x256x32`
+  - real example subgroup layout: `sg=8x4`
+  - stages: `2`
+- 已修正 level0 seed catalog 中上述 6 个 `streamk_example` candidates；之前误写为 `8x64x32 / sg1x4`，现在与 `examples/03_bmg_gemm_streamk/03_bmg_gemm_streamk.cpp` 对齐。
+- 这些 candidates 会在 `streamk_example_exe` 可用时被 `allowed_runners=("benchmark", "streamk_example")` 纳入 screening/confirmation；若只使用 generated library benchmark path，则仍按 artifact 记录 generated StreamK 当前不可编译的限制。
+- 其他 examples 中的 mixed dtype、FP8、grouped、dual GEMM、bias/activation/custom split-K epilogue属于不同 runner/epilogue/operator family，当前不伪装成普通 GEMM benchmark candidate；后续需要对应 benchmark runner 支持后再纳入同一 search workflow。
 
 ## 当前可复现的 GEMM MVP workflow
 

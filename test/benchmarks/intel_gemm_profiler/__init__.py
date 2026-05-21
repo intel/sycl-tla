@@ -7,13 +7,24 @@ from .schemas import BENCHMARK_ERROR_RE, CSV_FIELDS, SCHEMA_VERSION, SEARCH_RUNT
 from .utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
 from .catalog import (
     DEFAULT_KERNEL_CATALOG_PATH,
+    EXPANDED_GEMM_TILE_SHAPES,
+    EXPANDED_STREAMK_TILE_SHAPES,
     SEED_KERNELS,
     build_kernel_catalog,
+    generated_expanded_streamk_kernel_catalog,
     generated_generator_kernel_catalog,
+    generated_layered_bmg_kernel_catalog,
     generated_level0_kernel_catalog,
     ilp_class,
     kernel_catalog_entry,
     load_persisted_kernel_catalog,
+)
+from .source_templates import is_valid_xe2_tile_sg, observed_bmg_template_space
+from .prefilter import (
+    compute_ilp,
+    prefilter_candidates,
+    priority_score,
+    sort_candidates_by_priority,
 )
 from .constraints import (
     DEFAULT_BUILD_CONFIG_PATH,
@@ -27,6 +38,7 @@ from .constraints import (
     default_constraints,
     load_persisted_build_config,
     load_persisted_runtime_config,
+    selected_compile_env,
     selected_runtime_env,
 )
 from .hw_specs import (
@@ -35,6 +47,15 @@ from .hw_specs import (
     detect_probe_anomalies,
     load_hw_reference_specs,
     resolve_hw_reference_spec,
+)
+from .device_target import (
+    discover_xpu_smi_devices,
+    parse_xpu_smi_discovery,
+    parse_xpu_smi_json,
+    resolve_device_target,
+    resolve_profiles_device_target,
+    selected_device_id,
+    target_from_device_info,
 )
 from .candidates import (
     build_candidate_build_manifest,
@@ -65,6 +86,7 @@ from .runner import (
 )
 from .selector import (
     build_dispatch_table,
+    build_candidate_coverage_report,
     build_phase_a_summary,
     build_phase_b_summary,
     build_reference_comparison,
@@ -89,6 +111,8 @@ __all__ = [
     "BENCHMARK_ERROR_RE",
     "CSV_FIELDS",
     "DEFAULT_KERNEL_CATALOG_PATH",
+    "EXPANDED_GEMM_TILE_SHAPES",
+    "EXPANDED_STREAMK_TILE_SHAPES",
     "DEFAULT_BUILD_CONFIG_PATH",
     "DEFAULT_RUNTIME_CONFIG_PATH",
     "DEFAULT_HW_REFERENCE_SPECS_PATH",
@@ -103,12 +127,14 @@ __all__ = [
     "blocked_rule_for_row",
     "build_candidate_build_manifest",
     "build_candidate_build_plan",
+    "build_candidate_coverage_report",
     "benchmark_batch_plan_by_kernel_id",
     "benchmark_exe_for_build_plan",
     "build_compiler_profile_probe_entries",
     "build_compiler_flags_probe_summary",
     "compute_efficiency_bounds",
     "detect_probe_anomalies",
+    "discover_xpu_smi_devices",
     "dispatch_lookup_from_args",
     "build_dispatch_table",
     "build_dispatch_index",
@@ -138,12 +164,16 @@ __all__ = [
     "ensure_dir",
     "generate_candidate_space",
     "generated_generator_kernel_catalog",
+    "generated_expanded_streamk_kernel_catalog",
+    "generated_layered_bmg_kernel_catalog",
     "generate_confirmation_entries",
     "generated_level0_kernel_catalog",
     "ilp_class",
     "kernel_catalog_entry",
+    "is_valid_xe2_tile_sg",
     "load_dispatch_table",
     "load_persisted_kernel_catalog",
+    "observed_bmg_template_space",
     "limit_shapes_and_reference",
     "load_target_shapes_and_reference",
     "load_hw_reference_specs",
@@ -160,7 +190,11 @@ __all__ = [
     "read_json",
     "resolve_executable",
     "resolve_hw_reference_spec",
+    "resolve_device_target",
+    "resolve_profiles_device_target",
     "selected_runtime_env",
+    "selected_device_id",
+    "selected_compile_env",
     "run_benchmark",
     "run_entries_with_benchmark",
     "run_entries_with_batch_benchmarks",
@@ -170,6 +204,9 @@ __all__ = [
     "select_probe_shape",
     "shell_init_with_env",
     "shell_join",
+    "parse_xpu_smi_discovery",
+    "parse_xpu_smi_json",
+    "target_from_device_info",
     "timeout_rows",
     "validate_candidate_auto_build_mode",
     "validate_product_bundle_manifest",

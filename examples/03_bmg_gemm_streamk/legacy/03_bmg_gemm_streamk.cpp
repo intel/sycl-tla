@@ -93,6 +93,7 @@ struct Options {
   bool error;
   bool splitk;
   bool dp;
+  bool time_run_only;
 
   int m, n, k, l, iterations, splits, verify;
   float alpha, beta;
@@ -102,6 +103,7 @@ struct Options {
     error(false),
     splitk(false),
     dp(false),
+    time_run_only(false),
     m(5120), n(4096), k(4096), l(1), iterations(20), verify(1), splits(1),
     alpha(1.f), beta(0.f)
   { }
@@ -123,6 +125,10 @@ struct Options {
       dp = true;
     }
 
+    if (cmd.check_cmd_line_flag("time_run_only")) {
+      time_run_only = true;
+    }
+
     cmd.get_cmd_line_argument("m", m, 5120);
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
@@ -142,6 +148,7 @@ struct Options {
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --dp                        If specified, uses Data Parallel decomposition\n"
       << "  --splitk                    If specified, uses SplitK decomposition\n"
+      << "  --time_run_only             If specified, excludes per-iteration initialize from timing\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
@@ -310,7 +317,9 @@ struct ExampleRunner {
       float elapsed_time_seconds = 0.f;
       for (int i = 0; i < options.iterations; ++i) {
         GPU_Clock timer;
-        gemm_op.initialize(arguments, workspace.get());
+        if (!options.time_run_only) {
+          gemm_op.initialize(arguments, workspace.get());
+        }
         timer.start();
         gemm_op.run();
         compat::wait();

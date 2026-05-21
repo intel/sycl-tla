@@ -6,7 +6,104 @@
 import re
 
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
+
+SCHEDULER_METADATA_FIELDS = [
+    "operator_family",
+    "mainloop_dispatch_policy",
+    "kernel_schedule",
+    "tile_scheduler",
+    "decomposition_mode",
+    "epilogue_dispatch_policy",
+    "example_family",
+    "padding_mode",
+    "activation",
+    "bias_mode",
+    "quant_mode",
+    "scale_mode",
+]
+
+DEFAULT_SCHEDULER_METADATA = {
+    "operator_family": "gemm",
+    "mainloop_dispatch_policy": "MainloopXeL1Staged",
+    "kernel_schedule": "KernelXe",
+    "tile_scheduler": "Gemm",
+    "decomposition_mode": "Gemm",
+    "epilogue_dispatch_policy": "IntelXeGeneric",
+    "example_family": "",
+    "padding_mode": "",
+    "activation": "",
+    "bias_mode": "",
+    "quant_mode": "",
+    "scale_mode": "",
+}
+
+EPILOGUE_METADATA_FIELDS = [
+    "element_output_epilogue",
+    "element_compute_epilogue",
+    "element_source_epilogue",
+    "element_scalar_epilogue",
+    "epilogue_op",
+    "epilogue_tile",
+    "epilogue_copy_atom_c",
+    "epilogue_copy_atom_d",
+]
+
+STREAMK_EXAMPLE_SCHEDULER_METADATA = {
+    "kernel_schedule": "KernelXeCooperative",
+    "tile_scheduler": "StreamKScheduler",
+    "example_family": "03_bmg_gemm_streamk",
+}
+
+RESULT_METADATA_FIELDS = [
+    "runner",
+    "benchmark_target",
+    "streamk_mode",
+    "streamk_dtype_preset",
+    *SCHEDULER_METADATA_FIELDS,
+    "support_status",
+    "support_reason",
+    "mma_atom",
+    "gmem_copy_atom_a",
+    "gmem_copy_atom_b",
+    *EPILOGUE_METADATA_FIELDS,
+]
+
+REPORT_TRACKED_DIMENSIONS = [
+    "runner",
+    "benchmark_target",
+    "operator_family",
+    "layout",
+    "dtype_a",
+    "dtype_b",
+    "dtype_c",
+    "dtype_d",
+    "dtype_acc",
+    "streamk_mode",
+    "streamk_dtype_preset",
+    "support_status",
+    "support_reason",
+    "split_k",
+    "mainloop_dispatch_policy",
+    "kernel_schedule",
+    "tile_scheduler",
+    "decomposition_mode",
+    "epilogue_dispatch_policy",
+    "element_output_epilogue",
+    "element_compute_epilogue",
+    "element_source_epilogue",
+    "element_scalar_epilogue",
+    "epilogue_op",
+    "activation",
+    "bias_mode",
+    "quant_mode",
+    "scale_mode",
+    "mma_atom",
+    "gmem_copy_atom_a",
+    "gmem_copy_atom_b",
+    "epilogue_copy_atom_c",
+    "epilogue_copy_atom_d",
+]
 
 SEARCH_RUNTIME_SCHEMA = {
     "schema_version": SCHEMA_VERSION,
@@ -26,6 +123,23 @@ SEARCH_RUNTIME_SCHEMA = {
         "stages",
         "split_k",
         "streamk_mode",
+        "streamk_dtype_preset",
+        "operator_family",
+        "mainloop_dispatch_policy",
+        "kernel_schedule",
+        "tile_scheduler",
+        "decomposition_mode",
+        "epilogue_dispatch_policy",
+        "element_output_epilogue",
+        "element_compute_epilogue",
+        "element_source_epilogue",
+        "element_scalar_epilogue",
+        "example_family",
+        "padding_mode",
+        "activation",
+        "bias_mode",
+        "quant_mode",
+        "scale_mode",
         "grf_mode",
         "mma_atom",
         "gmem_copy_atom_a",
@@ -78,6 +192,35 @@ CSV_FIELDS = [
     "k",
     "batch_count",
     "split_k",
+    "runner",
+    "benchmark_target",
+    "streamk_mode",
+    "streamk_dtype_preset",
+    "support_status",
+    "support_reason",
+    "operator_family",
+    "mainloop_dispatch_policy",
+    "kernel_schedule",
+    "tile_scheduler",
+    "decomposition_mode",
+    "epilogue_dispatch_policy",
+    "example_family",
+    "padding_mode",
+    "activation",
+    "bias_mode",
+    "quant_mode",
+    "scale_mode",
+    "mma_atom",
+    "gmem_copy_atom_a",
+    "gmem_copy_atom_b",
+    "element_output_epilogue",
+    "element_compute_epilogue",
+    "element_source_epilogue",
+    "element_scalar_epilogue",
+    "epilogue_op",
+    "epilogue_tile",
+    "epilogue_copy_atom_c",
+    "epilogue_copy_atom_d",
     "avg_runtime_ms",
     "best_runtime_ms",
     "worst_runtime_ms",
@@ -90,3 +233,23 @@ CSV_FIELDS = [
 ]
 
 BENCHMARK_ERROR_RE = re.compile(r"(^ERROR\b|\bERROR OCCURRED\b|Disposition Failed)")
+
+
+def streamk_decomposition_mode(streamk_mode):
+    return {
+        "streamk": "StreamK",
+        "data_parallel": "DataParallel",
+        "splitk": "SplitK",
+    }.get(streamk_mode, "Gemm")
+
+
+def infer_epilogue_metadata(entry):
+    dtype_c = entry.get("dtype_c", "")
+    dtype_d = entry.get("dtype_d", dtype_c)
+    dtype_acc = entry.get("dtype_acc", "")
+    return {
+        "element_output_epilogue": dtype_d,
+        "element_compute_epilogue": dtype_acc,
+        "element_source_epilogue": dtype_c,
+        "element_scalar_epilogue": dtype_acc,
+    }

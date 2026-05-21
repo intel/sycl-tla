@@ -7,6 +7,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import shutil
 import statistics
 import sys
@@ -34,13 +35,15 @@ if __package__ in (None, ""):
         apply_static_probe_constraints,
         default_compiler_profiles,
         default_constraints,
+        selected_compile_env,
         selected_runtime_env,
     )
     from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from intel_gemm_profiler.ali_dataset import build_ali_gemm_docs
     from intel_gemm_profiler.dispatch import DISPATCH_KEY_FIELDS, load_dispatch_table, lookup_dispatch_entry
+    from intel_gemm_profiler.device_target import resolve_profiles_device_target
     from intel_gemm_profiler.runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
-    from intel_gemm_profiler.selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
+    from intel_gemm_profiler.selector import build_candidate_coverage_report, build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from intel_gemm_profiler.utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
     from intel_gemm_profiler.schemas import SEARCH_RUNTIME_SCHEMA
 else:
@@ -62,13 +65,15 @@ else:
         apply_static_probe_constraints,
         default_compiler_profiles,
         default_constraints,
+        selected_compile_env,
         selected_runtime_env,
     )
     from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
     from .ali_dataset import build_ali_gemm_docs
     from .dispatch import DISPATCH_KEY_FIELDS, load_dispatch_table, lookup_dispatch_entry
+    from .device_target import resolve_profiles_device_target
     from .runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
-    from .selector import build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
+    from .selector import build_candidate_coverage_report, build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from .utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
     from .schemas import SEARCH_RUNTIME_SCHEMA
 
@@ -322,7 +327,47 @@ def execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=Non
     }
 
 
-def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", timeout=None):
+def _batch_build_already_done(build_log_path, batch_plan):
+    """Check if a batch was already successfully built (idempotent check)."""
+    import os
+    log = Path(build_log_path) if not isinstance(build_log_path, Path) else build_log_path
+    exe = Path(batch_plan.get("benchmark_exe", ""))
+    if not log.exists():
+        return False
+    if not exe.exists():
+        # log exists but no executable → partial build, must rebuild
+        return False
+    # Check last 3 lines for build success marker
+    try:
+        tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-5:]
+        for line in tail:
+            if "Build succeeded" in line or "[100%] Built target" in line:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _load_preflight_progress(progress_path):
+    """Load batch completion state from JSON progress file."""
+    try:
+        return read_json(progress_path).get("completed_batches", {})
+    except Exception:
+        return {}
+
+
+def _save_preflight_progress(progress_path, completed_batches):
+    """Atomically save batch completion state."""
+    tmp = Path(str(progress_path) + ".tmp")
+    write_json(tmp, {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "completed_batches": completed_batches,
+    })
+    os.replace(tmp, progress_path)
+
+
+def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", timeout=None, max_workers=1, resume=False, progress_path=None):
     preflight_plans = build_plan.get("batch_preflight_plans", [])
     if not preflight_plans:
         return {
@@ -333,8 +378,31 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
             "batch_count": 0,
             "batches": [],
         }
-    batches = []
-    for plan in preflight_plans:
+    # Sort plans by batch_index for predictable output
+    plans_sorted = sorted(preflight_plans, key=lambda p: p["batch_index"])
+
+    # Resume support: skip batches already built successfully
+    resumed_batches = {}
+    if resume and progress_path:
+        progress_state = _load_preflight_progress(Path(progress_path))
+        for plan in plans_sorted:
+            bid = plan["batch_id"]
+            log_path = Path(log_dir) / f"candidate_build_preflight_{bid}.log"
+            # Check persisted progress first, then fallback to log inspection
+            if progress_state.get(bid) == "pass" and _batch_build_already_done(log_path, plan):
+                resumed_batches[plan["batch_index"]] = {
+                    "batch_id": bid,
+                    "batch_index": plan["batch_index"],
+                    "kernel_count": plan["kernel_count"],
+                    "status": "pass",
+                    "resumed": True,
+                }
+        if resumed_batches:
+            remaining = [p for p in plans_sorted if p["batch_index"] not in resumed_batches]
+            print(f"  [resume] {len(resumed_batches)} batches already built, {len(remaining)} remaining")
+            plans_sorted = remaining
+
+    def _build_one(plan):
         summary = execute_candidate_build_plan(
             plan,
             log_dir,
@@ -345,10 +413,75 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
         summary["batch_id"] = plan["batch_id"]
         summary["batch_index"] = plan["batch_index"]
         summary["kernel_count"] = plan["kernel_count"]
-        batches.append(summary)
+        # Persist progress for resume
+        if progress_path and summary["status"] == "pass":
+            _save_preflight_progress(
+                Path(progress_path),
+                {**_load_preflight_progress(Path(progress_path)), plan["batch_id"]: "pass"},
+            )
+        return summary
+
+    if max_workers <= 1:
+        batches = [_build_one(plan) for plan in plans_sorted]
+    else:
+        import concurrent.futures
+        import threading
+        import os
+
+        # Determine total available vCPUs
+        try:
+            total_vcpus = len(os.sched_getaffinity(0))
+        except Exception:
+            total_vcpus = os.cpu_count() or 1
+
+        # Allocate cores to workers: split total_vcpus into max_workers groups
+        # Each worker gets a dedicated subset to avoid cache thrashing
+        cores_per_worker = max(2, total_vcpus // max_workers)
+        assigned = [None] * max_workers  # round-robin assignment
+
+        semaphore = threading.Semaphore(max_workers)
+        lock = threading.Lock()
+        results_by_index = {}
+        completed = [0]
+        worker_cores = {}  # worker_idx → [core_list]
+
+        def _build_affinity(plan, worker_idx):
+            # Set CPU affinity on this thread (subprocess inherits it)
+            start = (worker_idx * cores_per_worker) % total_vcpus
+            affinity = list(range(start, min(start + cores_per_worker, total_vcpus)))
+            if len(affinity) < cores_per_worker:
+                affinity += list(range(0, cores_per_worker - len(affinity)))
+            try:
+                os.sched_setaffinity(0, affinity)
+            except Exception:
+                pass
+
+            with semaphore:
+                result = _build_one(plan)
+            with lock:
+                results_by_index[plan["batch_index"]] = result
+                completed[0] += 1
+                if completed[0] % 50 == 0 or completed[0] <= 5:
+                    passed = sum(1 for r in results_by_index.values() if r["status"] == "pass")
+                    print(f"  [preflight] {completed[0]}/{len(plans_sorted)} batches ({passed} passed, {max_workers} workers)", flush=True)
+            return result
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for i, plan in enumerate(plans_sorted):
+                worker_idx = i % max_workers
+                futures.append(executor.submit(_build_affinity, plan, worker_idx))
+            concurrent.futures.wait(futures)
+
+        # Reassemble in batch_index order (merge resumed + newly built)
+        batches = [results_by_index[i] for i in sorted(results_by_index)]
+        # Prepend resumed batches (they go first in order)
+        if resumed_batches:
+            batches = [resumed_batches[i] for i in sorted(resumed_batches)] + batches
+
     failed = [batch for batch in batches if batch["status"] != "pass"]
     status = "pass" if not failed else ("timeout" if any(batch["status"] == "timeout" for batch in failed) else "fail")
-    return {
+    result = {
         "schema_version": build_plan["schema_version"],
         "generated_at": build_plan["generated_at"],
         "status": status,
@@ -357,7 +490,17 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
         "failed_batches": len(failed),
         "failure_reason": failed[0].get("failure_reason", "") if failed else "",
         "batches": batches,
+        "max_workers": max_workers,
+        "resumed_batches": len(resumed_batches),
     }
+    try:
+        result["total_vcpus"] = total_vcpus
+        result["cores_per_worker"] = cores_per_worker
+    except NameError:
+        result["total_vcpus"] = 1
+        result["cores_per_worker"] = 1
+    return result
+
 
 
 def benchmark_batch_plan_by_kernel_id(build_plan):
@@ -461,9 +604,13 @@ def limit_shapes_and_reference(shapes_doc, reference_doc=None, max_shapes=0):
 
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
     base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
+    compile_shell_init = shell_init_with_env(args.shell_init, selected_compile_env(profiles))
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
     static_constraints = apply_static_probe_constraints(base_constraints, env_caps)
-    hw_spec = resolve_hw_reference_spec(static_constraints["device_arch"], getattr(args, "hw_spec_id", ""))
+    hw_spec = resolve_hw_reference_spec(
+        static_constraints["device_arch"],
+        getattr(args, "hw_spec_id", "") or profiles.get("device_target_detection", {}).get("resolved_hw_spec_id", ""),
+    )
     allowed_runners = ("benchmark", "streamk_example") if env_caps["executables"].get("streamk_example_available") else ("benchmark",)
     static_candidate_space = generate_candidate_space(shapes_doc, static_constraints, profiles, allowed_runners=allowed_runners)
     probe_rows = []
@@ -594,6 +741,7 @@ def build_artifact_bundle_manifest(workspace, artifacts):
         artifact_record("reference_comparison", artifacts["reference_comparison"], "Optional reference-vs-dispatch comparison.", required=False),
         artifact_record("candidate_build_summary", artifacts["candidate_build_summary"], "Candidate benchmark aggregate build status.", required=False),
         artifact_record("candidate_build_preflight_summary", artifacts["candidate_build_preflight_summary"], "Per-batch candidate build preflight status.", required=False),
+        artifact_record("device_target_detection", artifacts["device_target_detection"], "Auto-detected SYCL device target used for candidate benchmark builds.", required=False),
         artifact_record("verified_hw_caps", artifacts["verified_hw_caps"], "Collected or probed hardware capability metadata.", required=False),
     ]
     lookup_args = [
@@ -826,6 +974,7 @@ def workflow(args):
     logs_dir = ensure_dir(workspace / "logs")
     reports_dir = ensure_dir(workspace / "reports")
     profiles = read_json(args.compiler_profiles_json) if args.compiler_profiles_json else default_compiler_profiles()
+    profiles, device_target_detection = resolve_profiles_device_target(profiles, shell_init=args.shell_init)
     dry_run_mode = getattr(args, "dry_run", False)
     shapes_doc, reference_doc = load_target_shapes_and_reference(args, dry_run_mode)
     base_constraints = read_json(args.constraints_json) if args.constraints_json else default_constraints()
@@ -838,12 +987,17 @@ def workflow(args):
     probe_commands = []
     benchmark_commands = []
     base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
+    compile_shell_init = shell_init_with_env(args.shell_init, selected_compile_env(profiles))
     if args.constraints_json or probe_mode == "off":
         constraints = copy.deepcopy(base_constraints)
         env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
-        hw_spec = resolve_hw_reference_spec(constraints["device_arch"], getattr(args, "hw_spec_id", ""))
+        hw_spec = resolve_hw_reference_spec(
+            constraints["device_arch"],
+            getattr(args, "hw_spec_id", "") or device_target_detection.get("resolved_hw_spec_id", ""),
+        )
         env_caps["probe_mode"] = "dry_run_off" if dry_run_mode else ("off" if probe_mode == "off" else "external_constraints")
-        env_caps["hw_reference_spec_id"] = hw_spec["device_id"]
+        env_caps["device_target_detection"] = device_target_detection
+        env_caps["hw_reference_spec_id"] = device_target_detection.get("resolved_hw_spec_id", hw_spec["device_id"])
         env_caps["hw_reference_spec"] = hw_spec
         env_caps["constraint_source"] = constraints["constraint_source"]
         env_caps["anomaly_report"] = empty_anomaly_report(hw_spec)
@@ -853,8 +1007,11 @@ def workflow(args):
     else:
         constraints, env_caps, verified_hw_caps_path, probe_rows, probe_logs, probe_commands = run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir)
         profiles = apply_probe_results_to_profiles(profiles, env_caps.get("compiler_flags_probe", {}))
+        env_caps["device_target_detection"] = device_target_detection
     allowed_runners = ("benchmark", "streamk_example") if env_caps["executables"].get("streamk_example_available") else ("benchmark",)
     write_json(inputs_dir / "safe_search_constraints.json", constraints)
+    device_target_detection_path = reports_dir / "device_target_detection.json"
+    write_json(device_target_detection_path, device_target_detection)
     write_json(inputs_dir / "compiler_profiles.json", profiles)
     write_json(inputs_dir / "gemm_target_shapes.json", shapes_doc)
     reference_doc_path = reports_dir / "ali_reference.json"
@@ -886,7 +1043,13 @@ def workflow(args):
     )
     write_json(reports_dir / "gemm_candidate_space.json", candidate_space)
     write_json(reports_dir / "bmg_safe_candidates.json", candidate_space)
-    build_manifest = build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=args.candidate_build_batch_size)
+    candidate_coverage_report_path = reports_dir / "candidate_coverage_report.json"
+    write_json(candidate_coverage_report_path, build_candidate_coverage_report(candidate_space))
+    build_manifest = build_candidate_build_manifest(
+        candidate_space,
+        selected_kernel_batch_size=args.candidate_build_batch_size,
+        build_config=profiles.get("build_config", {}),
+    )
     selected_kernel_list_path = reports_dir / "selected_kernel_list.txt"
     selected_kernel_filter_path = reports_dir / "selected_kernel_filter.list"
     candidate_build_cmake_config_path = reports_dir / "candidate_build_cmake_config.json"
@@ -920,8 +1083,11 @@ def workflow(args):
         candidate_build_preflight_summary = execute_candidate_build_preflight_plans(
             candidate_build_plan,
             logs_dir,
-            shell_init=args.shell_init,
+            shell_init=compile_shell_init,
             timeout=args.timeout,
+            max_workers=getattr(args, "candidate_build_parallelism", 1),
+            resume=getattr(args, "resume_candidate_build_preflight", False),
+            progress_path=str(reports_dir / "preflight_progress.json"),
         )
         write_json(candidate_build_preflight_summary_path, candidate_build_preflight_summary)
         if candidate_build_preflight_summary.get("status") not in {"pass", "not_run"}:
@@ -934,7 +1100,7 @@ def workflow(args):
         candidate_build_summary = execute_candidate_build_plan(
             candidate_build_plan,
             logs_dir,
-            shell_init=args.shell_init,
+            shell_init=compile_shell_init,
             timeout=args.timeout,
         )
         write_json(candidate_build_summary_path, candidate_build_summary)
@@ -1033,6 +1199,7 @@ def workflow(args):
         "compiler_profiles": str(inputs_dir / "compiler_profiles.json"),
         "kernel_catalog": str(reports_dir / "kernel_catalog.json"),
         "candidate_space": str(reports_dir / "gemm_candidate_space.json"),
+        "candidate_coverage_report": str(candidate_coverage_report_path),
         "build_manifest": str(reports_dir / "candidate_build_manifest.json"),
         "selected_kernel_list": str(selected_kernel_list_path),
         "selected_kernel_filter": str(selected_kernel_filter_path),
@@ -1040,6 +1207,7 @@ def workflow(args):
         "candidate_build_plan": str(candidate_build_plan_path),
         "candidate_build_summary": str(candidate_build_summary_path),
         "candidate_build_preflight_summary": str(candidate_build_preflight_summary_path),
+        "device_target_detection": str(device_target_detection_path),
         "safe_candidates": str(reports_dir / "bmg_safe_candidates.json"),
         "verified_hw_caps": str(verified_hw_caps_path),
         "results_csv": str(reports_dir / "gemm_profile_results.csv"),
@@ -1074,8 +1242,9 @@ def build_parser():
     parser.add_argument("--max-shapes", type=int, default=0, help="Limit target shapes to the first N entries after loading --shapes-json, --ali-workbook, or the default shape set. 0 disables the limit.")
     parser.add_argument("--constraints-json", default="", help="Optional path to safe_search_constraints.json.")
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")
-    parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator"], default="persisted", help="Catalog source for Phase B candidates. 'generator' bridges Intel Xe library generation into the benchmark/search catalog but requires a benchmark binary built from the same generated kernels.")
+    parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator", "expanded_streamk", "expanded_bmg", "layered_bmg"], default="persisted", help="Catalog source for Phase B candidates. 'expanded_bmg' enables the opt-in BMG Gemm/StreamK/DataParallel/SplitK tile expansion and requires rebuilding the benchmark with the generated build plan. 'layered_bmg' adds regular GEMM legal tile/subgroup/stage enumeration on top of expanded_bmg. 'expanded_streamk' is kept as a compatibility alias.")
     parser.add_argument("--kernel-catalog-path", default="", help="Optional path to a persisted kernel catalog JSON. Used when --kernel-catalog-source=persisted.")
+    parser.add_argument("--prefilter", choices=["none", "light", "medium", "aggressive"], default="none", help="Candidate prefilter strategy: skip configs unlikely to perform well for the target shapes. 'light' removes physically incompatible configs. 'medium' adds ILP-based pruning. 'aggressive' is for fastest search with some risk of missing optimal configs.")
     parser.add_argument("--compiled-kernel-list", default="", help="Optional newline-delimited compiled kernel list or regex filter file. When set, Phase B only runs benchmark candidates present in this list.")
     parser.add_argument("--cmake-source-dir", default="", help="Optional source directory used in the generated candidate benchmark CMake build plan. Defaults to --cwd or the current directory.")
     parser.add_argument("--benchmark-build-dir", default="", help="Optional build directory used in the generated candidate benchmark CMake build plan. Defaults to <workspace>/build/candidate_benchmarks.")
@@ -1085,6 +1254,8 @@ def build_parser():
     parser.add_argument("--candidate-build-batch-size", type=int, default=0, help="Emit additional selected-kernel filter files in batches of N kernels for isolated generated benchmark build preflight/retry. 0 disables batch artifacts.")
     parser.add_argument("--run-candidate-build-preflight", action="store_true", help="Execute per-batch candidate benchmark preflight build plans before the aggregate candidate benchmark build. Requires --candidate-build-batch-size to produce batch plans.")
     parser.add_argument("--use-candidate-build-preflight-benchmarks", action="store_true", help="Route benchmark screening and confirmation entries to per-batch benchmark executables produced by --run-candidate-build-preflight instead of the aggregate benchmark executable.")
+    parser.add_argument("--resume-candidate-build-preflight", action="store_true", help="Resume a previous preflight build: skip batches whose log shows successful completion. Uses preflight_progress.json in the reports directory.")
+    parser.add_argument("--candidate-build-parallelism", type=int, default=1, help="Number of concurrent batch compilations during preflight. 1 = sequential (default). On a 256-vCPU server, N=8 uses ~30 percent of CPU for ~8x speedup.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")

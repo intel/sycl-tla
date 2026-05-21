@@ -41,19 +41,19 @@ class TestIntelGemmProfiler(unittest.TestCase):
             candidate_space["search_runtime_schema"]["compile_time_dimensions"][0],
             "dtype_a",
         )
-        self.assertEqual(len(candidate_space["candidates"]), 8)
+        self.assertEqual(len(candidate_space["candidates"]), 56)
         candidate_ids = {candidate["candidate_id"] for candidate in candidate_space["candidates"]}
         self.assertIn("rcr_bf16bf16f32_tm8_tn128_tk32_sg1x4_st2_sk1", candidate_ids)
         self.assertIn("rcr_bf16bf16f32_tm256_tn256_tk32_sg8x4_st2_sk1", candidate_ids)
         self.assertIn("rcr_bf16bf16f32_tm128_tn256_tk32_sg4x4_st2_sk1", candidate_ids)
-        self.assertFalse(any(candidate["split_k"] > 1 for candidate in candidate_space["candidates"]))
+        self.assertTrue(any(candidate["streamk_mode"] == "splitk" and candidate["split_k"] > 1 for candidate in candidate_space["candidates"]))
         self.assertTrue(all(candidate["filters_applied"][0] == "kernel_catalog" for candidate in candidate_space["candidates"]))
         self.assertTrue(all(candidate["grf_mode"] == 256 for candidate in candidate_space["candidates"]))
 
         probe_candidate_space = profiler.generate_candidate_space(
             shapes, constraints, profiles, allowed_runners=("benchmark", "streamk_example")
         )
-        self.assertEqual(len(probe_candidate_space["candidates"]), 11)
+        self.assertEqual(len(probe_candidate_space["candidates"]), 56)
         streamk = next(
             candidate
             for candidate in probe_candidate_space["candidates"]
@@ -65,23 +65,121 @@ class TestIntelGemmProfiler(unittest.TestCase):
             if candidate["streamk_mode"] == "data_parallel"
         )
         splitk = next(candidate for candidate in probe_candidate_space["candidates"] if candidate["split_k"] == 2)
-        self.assertEqual(streamk["runner"], "streamk_example")
-        self.assertEqual(data_parallel["runner"], "streamk_example")
-        self.assertEqual(splitk["runner"], "streamk_example")
-        self.assertEqual(splitk["benchmark_target"], "03_bmg_gemm_streamk")
+        self.assertEqual(streamk["runner"], "benchmark")
+        self.assertEqual(data_parallel["runner"], "benchmark")
+        self.assertEqual(splitk["runner"], "benchmark")
+        self.assertEqual(splitk["benchmark_target"], "cutlass_benchmarks_gemm_sycl")
+        streamk_tiles = {
+            (candidate["tile_m"], candidate["tile_n"], candidate["tile_k"], candidate["streamk_mode"])
+            for candidate in probe_candidate_space["candidates"]
+            if candidate["streamk_mode"]
+        }
+        self.assertTrue(
+            {
+                (128, 128, 32, "streamk"),
+                (128, 256, 32, "streamk"),
+                (256, 128, 32, "data_parallel"),
+                (256, 256, 32, "splitk"),
+            }.issubset(streamk_tiles)
+        )
+        for candidate in (streamk, data_parallel, splitk):
+            self.assertEqual(candidate["tile_k"], 32)
+            self.assertEqual(candidate["sg_m"], 8)
+            self.assertEqual(candidate["sg_n"], 4)
+            self.assertEqual(candidate["stages"], 2)
+            self.assertEqual(candidate["mainloop_dispatch_policy"], "MainloopXeL1Staged")
+            self.assertEqual(candidate["kernel_schedule"], "KernelXeCooperative")
+            self.assertEqual(candidate["tile_scheduler"], "StreamKScheduler")
+            self.assertEqual(candidate["epilogue_dispatch_policy"], "IntelXeGeneric")
+            self.assertEqual(candidate["example_family"], "")
+
+        benchmark = next(candidate for candidate in candidate_space["candidates"] if candidate["runner"] == "benchmark")
+        self.assertEqual(benchmark["kernel_schedule"], "KernelXe")
+        self.assertEqual(benchmark["tile_scheduler"], "Gemm")
 
     def test_build_kernel_catalog_includes_runtime_metadata(self):
         catalog = profiler.build_kernel_catalog(dtypes=["bf16"], allowed_runners=("benchmark", "streamk_example"))
 
         self.assertEqual(catalog["catalog_version"], "level0-seed-catalog")
         self.assertEqual(catalog["search_runtime_schema"]["runtime_dimensions"][0], "shape_id")
-        self.assertEqual(len(catalog["kernels"]), 12)
+        self.assertEqual(len(catalog["kernels"]), 60)
         splitk = next(entry for entry in catalog["kernels"] if entry["split_k"] == 2)
         data_parallel = next(entry for entry in catalog["kernels"] if entry["streamk_mode"] == "data_parallel")
         self.assertEqual(splitk["instantiation_level"], 0)
         self.assertEqual(splitk["runtime_defaults"], {})
         self.assertEqual(splitk["allowed_runtime_sweeps"], ["shape_id", "m", "n", "k", "batch_count"])
-        self.assertEqual(data_parallel["benchmark_target"], "03_bmg_gemm_streamk")
+        self.assertEqual(data_parallel["benchmark_target"], "cutlass_benchmarks_gemm_sycl")
+        self.assertIn(
+            (data_parallel["tile_m"], data_parallel["tile_n"]),
+            {(64, 128), (64, 256), (128, 128), (128, 256), (256, 128), (256, 256), (512, 128), (512, 256)},
+        )
+        self.assertEqual(data_parallel["sg_m"], 8)
+        self.assertEqual(data_parallel["sg_n"], 4)
+        self.assertEqual(data_parallel["kernel_schedule"], "KernelXeCooperative")
+        self.assertEqual(data_parallel["tile_scheduler"], "StreamKScheduler")
+        self.assertEqual(data_parallel["epilogue_dispatch_policy"], "IntelXeGeneric")
+        true_bf16 = next(entry for entry in catalog["kernels"] if entry["dtype_c"] == "bf16" and entry["streamk_mode"] == "streamk")
+        self.assertEqual(true_bf16["dtype_d"], "bf16")
+        self.assertEqual(true_bf16["dtype_acc"], "bf16")
+        self.assertEqual(true_bf16["runner"], "streamk_example")
+        self.assertEqual(true_bf16["support_status"], "unsupported")
+        self.assertEqual(
+            true_bf16["support_reason"],
+            "bf16_accumulate_streamk_not_practical_sycl_atomic_unsupported",
+        )
+        self.assertIn("disabled placeholder", true_bf16["support_detail"])
+        self.assertEqual(true_bf16["kernel_schedule"], "KernelXeCooperative")
+
+    def test_search_schema_and_csv_include_scheduler_metadata(self):
+        expected_fields = {
+            "mainloop_dispatch_policy",
+            "kernel_schedule",
+            "tile_scheduler",
+            "epilogue_dispatch_policy",
+            "example_family",
+            "runner",
+            "benchmark_target",
+            "streamk_mode",
+            "streamk_dtype_preset",
+        }
+
+        self.assertTrue(expected_fields.issubset(set(profiler.SEARCH_RUNTIME_SCHEMA["compile_time_dimensions"])))
+        self.assertTrue(expected_fields.issubset(set(profiler.CSV_FIELDS)))
+
+    def test_streamk_seed_catalog_matches_example_tile_shape(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        example_path = repo_root / "examples" / "03_bmg_gemm_streamk" / "03_bmg_gemm_streamk.cpp"
+        example = example_path.read_text(encoding="utf-8")
+
+        self.assertIn("--dtype=<bf16|f16|bf16_bf16|f16_f16|tf32|s8>", example)
+        self.assertIn("requires BF16 atomic add in StreamK reduction", example)
+        self.assertIn("using TileShape = Shape<_256, _256, _32>;", example)
+        self.assertIn("Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>", example)
+        catalog = profiler.build_kernel_catalog(dtypes=["bf16", "f16"], allowed_runners=("benchmark", "streamk_example"))
+        streamk_entries = [entry for entry in catalog["kernels"] if entry.get("runner") == "streamk_example"]
+        self.assertEqual(len(streamk_entries), 6)
+        self.assertEqual(
+            {(entry["dtype_a"], entry["dtype_c"], entry["dtype_acc"], entry["streamk_mode"]) for entry in streamk_entries},
+            {
+                ("bf16", "bf16", "bf16", "streamk"),
+                ("bf16", "bf16", "bf16", "data_parallel"),
+                ("bf16", "bf16", "bf16", "splitk"),
+                ("f16", "f32", "f32", "streamk"),
+                ("f16", "f32", "f32", "data_parallel"),
+                ("f16", "f32", "f32", "splitk"),
+            },
+        )
+        self.assertTrue(
+            all(
+                entry["tile_m"] == 256
+                and entry["tile_n"] == 256
+                and entry["tile_k"] == 32
+                and entry["sg_m"] == 8
+                and entry["sg_n"] == 4
+                and entry["stages"] == 2
+                for entry in streamk_entries
+            )
+        )
 
     def test_generated_level0_candidates_allow_stage_count_auto(self):
         shapes = {
@@ -255,6 +353,113 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertTrue(any(entry["stages"] == 0 for entry in catalog["kernels"]))
         self.assertTrue(all(entry["benchmark_target"] == "cutlass_benchmarks_gemm_sycl" for entry in catalog["kernels"]))
 
+    def test_expanded_streamk_catalog_enumerates_opt_in_tiles(self):
+        catalog = profiler.build_kernel_catalog(
+            dtypes=["bf16"],
+            allowed_runners=("benchmark",),
+            catalog_source="expanded_streamk",
+        )
+
+        self.assertEqual(catalog["catalog_source"], "expanded_streamk")
+        self.assertEqual(catalog["catalog_version"], "expanded-bmg-level1")
+        streamk_family = [entry for entry in catalog["kernels"] if entry["streamk_mode"]]
+        self.assertEqual(
+            sorted({(entry["tile_m"], entry["tile_n"], entry["tile_k"]) for entry in streamk_family}),
+            profiler.EXPANDED_STREAMK_TILE_SHAPES,
+        )
+        gemm_family = [
+            entry
+            for entry in catalog["kernels"]
+            if not entry["streamk_mode"] and entry.get("source") == "expanded_gemm_catalog"
+        ]
+        self.assertEqual(
+            sorted({(entry["tile_m"], entry["tile_n"], entry["tile_k"]) for entry in gemm_family}),
+            profiler.EXPANDED_GEMM_TILE_SHAPES,
+        )
+        self.assertTrue({"rcr", "rrr"}.issubset({entry["layout"] for entry in gemm_family}))
+        self.assertTrue(all(entry["sg_m"] == 8 and entry["sg_n"] == 4 for entry in streamk_family))
+        expanded_entry = next(
+            entry
+            for entry in streamk_family
+            if entry["kernel_id"] == "BmgGemmBF16BF16FP32_RCR_StreamK_64x64x64"
+        )
+        self.assertEqual(expanded_entry["instantiation_level"], 1)
+        self.assertEqual(expanded_entry["source"], "expanded_streamk_catalog")
+        source_space = catalog["source_template_space"]
+        self.assertIn([256, 192, 64], source_space["tile_shapes"])
+        self.assertIn([8, 2, 1], source_space["sg_layouts"])
+        self.assertTrue(
+            any(
+                pair["tile_shape"] == [256, 128, 32]
+                and pair["sg_layout"] == [8, 2, 1]
+                for pair in source_space["valid_tile_sg_pairs"]
+            )
+        )
+        self.assertTrue(
+            any(
+                entry["kernel_id"] == "BmgGemmBF16BF16FP32_RCR_Gemm_256x128x32_SG8x2"
+                and entry["source"] == "source_template_gemm_catalog"
+                for entry in catalog["kernels"]
+            )
+        )
+
+    def test_observed_bmg_template_space_extracts_non_default_values(self):
+        source_space = profiler.observed_bmg_template_space()
+
+        self.assertIn([128, 96, 64], source_space["tile_shapes"])
+        self.assertIn([4, 8, 1], source_space["sg_layouts"])
+        self.assertIn("GemmStreamK", source_space["schedulers"])
+        self.assertTrue(profiler.is_valid_xe2_tile_sg((256, 128, 32), (8, 2, 1)))
+        self.assertFalse(profiler.is_valid_xe2_tile_sg((8, 64, 32), (8, 4, 1)))
+
+    def test_expanded_streamk_candidate_space_enables_benchmark_registration(self):
+        candidate_space = profiler.generate_candidate_space(
+            profiler.default_shapes("bf16"),
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="expanded_streamk",
+        )
+
+        self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "expanded_streamk")
+        self.assertEqual(len(candidate_space["candidates"]), 237)
+        self.assertTrue(
+            any(
+                candidate["tile_m"] == 64
+                and candidate["tile_n"] == 64
+                and candidate["tile_k"] == 64
+                and candidate["streamk_mode"] == "streamk"
+                for candidate in candidate_space["candidates"]
+            )
+        )
+        self.assertTrue(
+            any(
+                candidate["kernel_id"] == "BmgGemmBF16BF16FP32_RCR_Gemm_64x64x64_SG8x4"
+                for candidate in candidate_space["candidates"]
+            )
+        )
+        self.assertTrue(
+            any(
+                candidate["kernel_id"] == "BmgGemmBF16BF16FP32_RCR_Gemm_256x192x64_SG8x4"
+                for candidate in candidate_space["candidates"]
+            )
+        )
+        self.assertTrue(
+            any(
+                candidate["kernel_id"] == "BmgGemmBF16BF16FP32_RCR_Gemm_256x128x32_SG8x2"
+                for candidate in candidate_space["candidates"]
+            )
+        )
+
+        manifest = profiler.build_candidate_build_manifest(candidate_space)
+
+        self.assertEqual(manifest["selected_kernel_count"], 165)
+        self.assertEqual(
+            manifest["cmake_config"]["cmake_vars"]["CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK"],
+            "ON",
+        )
+        self.assertEqual(manifest["cmake_config"]["cmake_vars"]["CUTLASS_LIBRARY_INSTANTIATION_LEVEL"], "0")
+
     def test_xe_generator_emits_auto_stage_count_for_staged_operations(self):
         repo_root = Path(__file__).resolve().parents[3]
         gemm_operation_path = repo_root / "python" / "cutlass_library" / "gemm_operation.py"
@@ -413,6 +618,52 @@ class TestIntelGemmProfiler(unittest.TestCase):
             )
         )
 
+    def test_streamk_example_reports_true_bf16_atomic_add_unsupported(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "true-bf16-streamk-mismatch",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rcr_bf16_true",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "bf16",
+                    "dtype_d": "bf16",
+                    "dtype_acc": "bf16",
+                    "m": 8192,
+                    "n": 12288,
+                    "k": 4096,
+                }
+            ],
+        }
+
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark", "streamk_example"),
+            catalog_source="persisted",
+        )
+
+        self.assertFalse(candidate_space["candidates"])
+        self.assertEqual(
+            {exception["reason"] for exception in candidate_space["candidate_exceptions"]},
+            {"bf16_accumulate_streamk_not_practical_sycl_atomic_unsupported"},
+        )
+        self.assertEqual(
+            {exception["streamk_mode"] for exception in candidate_space["candidate_exceptions"]},
+            {"streamk", "data_parallel", "splitk"},
+        )
+        self.assertTrue(
+            all(
+                "FP32 accumulation with BF16 output" in exception["future_enable_condition"]
+                for exception in candidate_space["candidate_exceptions"]
+            )
+        )
+
     def test_build_candidate_build_manifest_splits_compile_and_runtime_fields(self):
         shapes = profiler.default_shapes("bf16")
         constraints = profiler.default_constraints()
@@ -422,9 +673,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
         manifest = profiler.build_candidate_build_manifest(candidate_space)
 
         self.assertEqual(manifest["search_runtime_schema"]["microbench_guided_defaults"]["grf_mode"], 256)
-        self.assertEqual(len(manifest["variants"]), 8)
-        self.assertEqual(manifest["selected_kernel_count"], 8)
-        self.assertEqual(len(manifest["selected_kernel_list"]), 8)
+        self.assertEqual(len(manifest["variants"]), 56)
+        self.assertEqual(manifest["selected_kernel_count"], 32)
+        self.assertEqual(len(manifest["selected_kernel_list"]), 32)
         self.assertTrue(all(line.startswith("^") and line.endswith("$") for line in manifest["kernel_filter_file"]["lines"]))
         self.assertEqual(manifest["kernel_filter_file"]["recommended_cmake_var"], "KERNEL_FILTER_FILE")
         self.assertEqual(manifest["cmake_config"]["cmake_vars"]["CUTLASS_LIBRARY_OPERATIONS"], "gemm")
@@ -443,9 +694,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         manifest = profiler.build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=3)
 
-        self.assertEqual(manifest["selected_kernel_count"], 8)
+        self.assertEqual(manifest["selected_kernel_count"], 32)
         self.assertEqual(manifest["selected_kernel_batch_size"], 3)
-        self.assertEqual([batch["kernel_count"] for batch in manifest["selected_kernel_batches"]], [3, 3, 2])
+        self.assertEqual([batch["kernel_count"] for batch in manifest["selected_kernel_batches"]], [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2])
         self.assertEqual(manifest["selected_kernel_batches"][0]["batch_id"], "selected_kernel_batch_000")
         self.assertEqual(manifest["selected_kernel_batches"][0]["selected_kernel_list"], manifest["selected_kernel_list"][:3])
         self.assertTrue(
@@ -503,6 +754,51 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertIn("Advisory only", metadata["notes"])
         self.assertIn("do not pass -cl-intel-256-GRF-per-thread", metadata["notes"])
         self.assertIn("do not use in production", metadata["notes"])
+
+    def test_device_target_detection_maps_xpu_smi_b70_to_bmg_g31(self):
+        discovery = """
++-----------+--------------------------------------------------------------------------------------+
+| Device ID | Device Information                                                                   |
++-----------+--------------------------------------------------------------------------------------+
+| 0         | Device Name: Intel(R) Graphics [0xe20b]                                              |
+|           | PCI BDF Address: 0000:3a:00.0                                                        |
++-----------+--------------------------------------------------------------------------------------+
+| 7         | Device Name: Intel(R) Graphics [0xe223]                                              |
+|           | PCI BDF Address: 0000:ce:00.0                                                        |
++-----------+--------------------------------------------------------------------------------------+
+"""
+        profiles = profiler.default_compiler_profiles()
+        profiles["runtime_config"]["selected_runtime_variant"] = "ze_affinity_7"
+
+        resolved_profiles, detection = profiler.resolve_profiles_device_target(
+            profiles,
+            discovery_devices=profiler.parse_xpu_smi_discovery(discovery),
+        )
+
+        self.assertEqual(detection["status"], "detected")
+        self.assertEqual(detection["selected_device_id"], "7")
+        self.assertEqual(detection["resolved_target"], "intel_gpu_bmg_g31")
+        self.assertEqual(detection["resolved_hw_spec_id"], "bmg_g31")
+        self.assertEqual(
+            resolved_profiles["build_config"]["cmake_vars"]["DPCPP_SYCL_TARGET"],
+            "intel_gpu_bmg_g31",
+        )
+
+    def test_device_target_detection_falls_back_to_generic_bmg_when_unavailable(self):
+        build_config = {
+            "cmake_vars": {"DPCPP_SYCL_TARGET": "auto"},
+            "device_target_detection": {
+                "mode": "auto",
+                "fallback_target": "bmg",
+                "strict": False,
+            },
+        }
+
+        resolved, detection = profiler.resolve_device_target(build_config, discovery_devices=[])
+
+        self.assertEqual(detection["status"], "fallback")
+        self.assertEqual(detection["resolved_target"], "bmg")
+        self.assertEqual(resolved["cmake_vars"]["DPCPP_SYCL_TARGET"], "bmg")
 
     def test_load_persisted_build_config_fallback_matches_experimental_variants(self):
         persisted = profiler.load_persisted_build_config(profiler.DEFAULT_BUILD_CONFIG_PATH)
@@ -616,6 +912,10 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(row["verify_status"], "pass")
         self.assertEqual(row["shape_id"], "rcr_bf16_1_4096_14336")
         self.assertEqual(row["avg_tflops"], "1.13")
+        self.assertEqual(row["mainloop_dispatch_policy"], "MainloopXeL1Staged")
+        self.assertEqual(row["kernel_schedule"], "KernelXe")
+        self.assertEqual(row["tile_scheduler"], "Gemm")
+        self.assertEqual(row["epilogue_dispatch_policy"], "IntelXeGeneric")
 
     def test_parse_benchmark_log_does_not_treat_max_error_metric_as_failure(self):
         metadata = {
@@ -1259,7 +1559,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertTrue(any(candidate["tile_m"] == 128 for candidate in m16_candidates))
         self.assertTrue(any(candidate["tile_m"] == 256 for candidate in m128_candidates))
 
-    def test_f16_streamk_modes_use_streamk_runner(self):
+    def test_f16_streamk_modes_use_productized_benchmark_runner(self):
         shapes = profiler.default_shapes("f16")
         constraints = profiler.default_constraints()
         profiles = profiler.default_compiler_profiles()
@@ -1271,11 +1571,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
         data_parallel = next(candidate for candidate in candidate_space["candidates"] if candidate["streamk_mode"] == "data_parallel")
         splitk = next(candidate for candidate in candidate_space["candidates"] if candidate["split_k"] == 2)
         self.assertEqual(streamk["dtype_a"], "f16")
-        self.assertEqual(streamk["runner"], "streamk_example")
+        self.assertEqual(streamk["dtype_c"], "f32")
+        self.assertEqual(streamk["dtype_acc"], "f32")
+        self.assertEqual(streamk["runner"], "benchmark")
         self.assertEqual(data_parallel["dtype_a"], "f16")
-        self.assertEqual(data_parallel["runner"], "streamk_example")
+        self.assertEqual(data_parallel["runner"], "benchmark")
         self.assertEqual(splitk["dtype_a"], "f16")
-        self.assertEqual(splitk["runner"], "streamk_example")
+        self.assertEqual(splitk["runner"], "benchmark")
 
     def test_f16_candidate_space_includes_large_tile(self):
         shapes = profiler.default_shapes("f16")
@@ -1501,7 +1803,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(phase_a_summary["probe_mode"], "dry_run_off")
             self.assertEqual(phase_a_summary["probe_feedback"]["mode"], "default")
             phase_b_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_b_summary.json")
-            self.assertEqual(phase_b_summary["candidate_count"], 8)
+            self.assertEqual(phase_b_summary["candidate_count"], 56)
             bundle = profiler.read_json(Path(outputs["artifact_bundle_manifest"]))
             self.assertEqual(bundle["schema_version"], profiler.SCHEMA_VERSION)
             self.assertEqual(bundle["workspace"], str(Path(tmpdir).resolve()))
@@ -2378,6 +2680,63 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertTrue((tmp / "screening_part000.in").exists())
             self.assertTrue((tmp / "screening_part002.log").exists())
 
+    def test_run_entries_with_benchmark_retries_missing_rows_after_chunk_timeout(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fake_exe = tmp / "fake_timeout_benchmark.py"
+            fake_exe.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys, time\n"
+                "config = sys.argv[1].split('=', 1)[1]\n"
+                "lines = list(open(config, encoding='utf-8'))\n"
+                "if 'retry' not in config and len(lines) > 1:\n"
+                "    bm = lines[0].split('--bm_name=', 1)[1].split()[0]\n"
+                "    print(f'BM/{bm}/manual_time avg_runtime_ms=1.0 avg_tflops=2.0', flush=True)\n"
+                "    time.sleep(2)\n"
+                "else:\n"
+                "    for line in lines:\n"
+                "        bm = line.split('--bm_name=', 1)[1].split()[0]\n"
+                "        print(f'BM/{bm}/manual_time avg_runtime_ms=1.0 avg_tflops=2.0')\n",
+                encoding="utf-8",
+            )
+            fake_exe.chmod(0o755)
+            shape = {
+                "shape_id": "shape_a",
+                "layout": "rcr",
+                "dtype_a": "bf16",
+                "dtype_b": "bf16",
+                "dtype_c": "f32",
+                "dtype_acc": "f32",
+                "m": 64,
+                "n": 4096,
+                "k": 4096,
+            }
+            candidate = {
+                "candidate_id": "cand_a",
+                "compiler_profile_id": "profile_a",
+                "kernel_name": "kernel_a",
+                "split_k": 1,
+            }
+            entries = [
+                {"bm_name": f"bm_{idx}", "stage": "screening", "attempt_index": idx, "shape": shape, "candidate": candidate}
+                for idx in range(3)
+            ]
+
+            rows, commands = profiler.run_entries_with_benchmark(
+                entries,
+                tmp / "screening.in",
+                tmp / "screening_manifest.json",
+                tmp / "screening.log",
+                str(fake_exe),
+                timeout=1,
+                chunk_size=3,
+            )
+
+            self.assertEqual(len(rows), 3)
+            self.assertTrue(all(row["status"] == "pass" for row in rows))
+            self.assertGreater(len(commands), 1)
+            self.assertTrue((tmp / "screening_retry00_000.log").exists())
+
     def test_run_entries_with_batch_benchmarks_routes_by_kernel_id(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -2483,20 +2842,43 @@ class TestIntelGemmProfiler(unittest.TestCase):
                 "split_k": 1,
                 "streamk_mode": "data_parallel",
             }
+            splitk_candidate = {
+                "candidate_id": "cand_splitk",
+                "compiler_profile_id": "bmg.medium_tile.default",
+                "dtype_a": "bf16",
+                "kernel_name": "03_bmg_gemm_streamk_splitk_bf16",
+                "split_k": 2,
+                "streamk_mode": "splitk",
+            }
+            true_bf16_candidate = {
+                "candidate_id": "cand_true_bf16",
+                "compiler_profile_id": "bmg.medium_tile.default",
+                "dtype_a": "bf16",
+                "kernel_name": "03_bmg_gemm_streamk_streamk_bf16_bf16",
+                "split_k": 1,
+                "streamk_mode": "streamk",
+                "streamk_dtype_preset": "bf16_bf16",
+            }
             entries = [
                 {"bm_name": "cand_streamk__shape_a__screening__0", "stage": "screening", "attempt_index": 0, "shape": shape, "candidate": streamk_candidate},
                 {"bm_name": "cand_dp__shape_a__screening__0", "stage": "screening", "attempt_index": 0, "shape": shape, "candidate": data_parallel_candidate},
+                {"bm_name": "cand_splitk__shape_a__screening__0", "stage": "screening", "attempt_index": 0, "shape": shape, "candidate": splitk_candidate},
+                {"bm_name": "cand_true_bf16__shape_a__screening__0", "stage": "screening", "attempt_index": 0, "shape": shape, "candidate": true_bf16_candidate},
             ]
 
             rows, commands = profiler.run_entries_with_streamk_example(entries, logs_dir, str(fake_exe))
 
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows), 4)
         self.assertTrue(all(row["status"] == "pass" for row in rows))
         self.assertIn("--dtype=bf16", commands[0])
         self.assertNotIn("--splitk", commands[0])
         self.assertNotIn("--dp", commands[0])
         self.assertIn("--dp", commands[1])
         self.assertNotIn("--splitk", commands[1])
+        self.assertIn("--splitk", commands[2])
+        self.assertIn("--splits=2", commands[2])
+        self.assertNotIn("--dp", commands[2])
+        self.assertIn("--dtype=bf16_bf16", commands[3])
 
     def test_static_probe_disables_splitk_without_streamk_binary(self):
         constraints = profiler.default_constraints()

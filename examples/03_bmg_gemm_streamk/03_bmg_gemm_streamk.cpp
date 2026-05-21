@@ -83,6 +83,7 @@
 
 #include "cutlass/gemm/kernel/xe_persistent_tile_scheduler_params_streamk.hpp"
 #include <string>
+#include <type_traits>
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -94,9 +95,10 @@ struct Options {
   bool error;
   bool splitk;
   bool dp;
+  bool time_run_only;
   std::string dtype;
 
-  int m, n, k, l, iterations, splits, verify;
+  int m, n, k, l, iterations, warmup_iterations, splits, verify;
   float alpha, beta;
 
   Options():
@@ -104,8 +106,9 @@ struct Options {
     error(false),
     splitk(false),
     dp(false),
+    time_run_only(false),
     dtype("bf16"),
-    m(5120), n(4096), k(4096), l(1), iterations(20), verify(1), splits(1),
+    m(5120), n(4096), k(4096), l(1), iterations(20), warmup_iterations(0), verify(1), splits(1),
     alpha(1.f), beta(0.f)
   { }
 
@@ -126,6 +129,10 @@ struct Options {
       dp = true;
     }
 
+    if (cmd.check_cmd_line_flag("time_run_only")) {
+      time_run_only = true;
+    }
+
     cmd.get_cmd_line_argument("m", m, 5120);
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
@@ -133,6 +140,7 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("warmup_iterations", warmup_iterations, 0);
     cmd.get_cmd_line_argument("splits", splits, 1);
     cmd.get_cmd_line_argument("verify", verify, 1);
     cmd.get_cmd_line_argument("dtype", dtype, std::string("bf16"));
@@ -152,6 +160,7 @@ struct Options {
       << "  --help                      If specified, displays this usage statement\n\n"
       << "  --dp                        If specified, uses Data Parallel decomposition\n"
       << "  --splitk                    If specified, uses SplitK decomposition\n"
+      << "  --time_run_only             If specified, excludes per-iteration initialize from timing\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
@@ -160,6 +169,7 @@ struct Options {
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
       << "  --dtype=<bf16|f16|bf16_bf16|f16_f16|tf32|s8>  Dtype preset\n"
+      << "  --warmup_iterations=<int> Warmup iterations before measurement\n"
       << "  --iterations=<int>          Iterations\n"
       << "  --verify=<int>              Specify whether to verify.\n\n";
 
@@ -248,8 +258,15 @@ struct ExampleRunner {
     compat::wait();
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
-    bool passed = cutlass::reference::device::BlockCompareEqual(
-      block_ref_D.get(), block_D.get(), block_D.size());
+    bool passed = false;
+    if constexpr (std::is_same_v<ElementOutput, cutlass::half_t> ||
+                  std::is_same_v<ElementOutput, cutlass::bfloat16_t>) {
+      passed = cutlass::reference::device::BlockCompareRelativelyEqual(
+        block_ref_D.get(), block_D.get(), block_D.size(), ElementOutput(0.5f), ElementOutput(1.0f));
+    } else {
+      passed = cutlass::reference::device::BlockCompareEqual(
+        block_ref_D.get(), block_D.get(), block_D.size());
+    }
 
     return passed;
   }
@@ -284,7 +301,7 @@ struct ExampleRunner {
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
       {block_A.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
+      {{ElementCompute(options.alpha), ElementCompute(options.beta)}, block_C.get(), stride_C, block_D.get(), stride_D},
       hw_info,
       {options.splits, // Setting splits > 1 will force SplitK decomposition
       // Set the decomposition mode based on user provided options
@@ -309,7 +326,7 @@ struct ExampleRunner {
 
     if (options.verify != 0) {
       // Verify that the result is correct
-      bool passed = verify(problem_size, options.alpha, options.beta);
+      bool passed = verify(problem_size, ElementCompute(options.alpha), ElementCompute(options.beta));
       std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
       if (!passed) return cutlass::Status::kErrorInternal;
@@ -318,10 +335,18 @@ struct ExampleRunner {
     }
 
     if (options.iterations > 0) {
+      for (int i = 0; i < options.warmup_iterations; ++i) {
+        gemm_op.initialize(arguments, workspace.get());
+        gemm_op.run();
+      }
+      compat::wait();
+
       float elapsed_time_seconds = 0.f;
       for (int i = 0; i < options.iterations; ++i) {
         GPU_Clock timer;
-        gemm_op.initialize(arguments, workspace.get());
+        if (!options.time_run_only) {
+          gemm_op.initialize(arguments, workspace.get());
+        }
         timer.start();
         gemm_op.run();
         compat::wait();
@@ -438,7 +463,8 @@ int main(int argc, const char** argv)
     return run_gemm<half_t, half_t, float, float>(options, hw_info);
   }
   if (options.dtype == "bf16_bf16") {
-    return run_gemm<bfloat16_t, bfloat16_t, bfloat16_t, bfloat16_t>(options, hw_info);
+    std::cerr << "Aborting execution. --dtype=bf16_bf16 requires BF16 atomic add in StreamK reduction, which is not supported by SYCL atomic_ref." << std::endl;
+    return -1;
   }
   if (options.dtype == "f16_f16") {
     return run_gemm<half_t, half_t, half_t, half_t>(options, hw_info);

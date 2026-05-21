@@ -10,7 +10,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from .hw_specs import analyze_efficiency
-from .schemas import CSV_FIELDS, SCHEMA_VERSION
+from .schemas import CSV_FIELDS, REPORT_TRACKED_DIMENSIONS, SCHEMA_VERSION
 from .utils import now_iso
 
 
@@ -22,14 +22,21 @@ def write_results_csv(rows, path):
 
 
 def median_or_nan(values):
-    numeric = [float(value) for value in values if str(value) != ""]
+    numeric = numeric_values(values)
     if not numeric:
         return math.nan
     return statistics.median(numeric)
 
 
 def numeric_values(values):
-    return [float(value) for value in values if str(value) != ""]
+    numeric = []
+    for value in values:
+        if str(value) == "":
+            continue
+        parsed = float(value)
+        if math.isfinite(parsed):
+            numeric.append(parsed)
+    return numeric
 
 
 def pstdev_or_nan(values):
@@ -41,6 +48,42 @@ def pstdev_or_nan(values):
 
 def round_or_empty(value):
     return round(value, 6) if not math.isnan(value) else ""
+
+
+def tracked_metadata(source):
+    return {field: source.get(field, "") for field in REPORT_TRACKED_DIMENSIONS if field in source}
+
+
+def summarize_dimension_values(items):
+    items = list(items)
+    summary = {}
+    for field in REPORT_TRACKED_DIMENSIONS:
+        counts = defaultdict(int)
+        for item in items:
+            value = item.get(field, "")
+            if value == "":
+                value = "<empty>"
+            counts[str(value)] += 1
+        if counts:
+            summary[field] = {
+                "unique_count": len(counts),
+                "values": dict(sorted(counts.items())),
+            }
+    return summary
+
+
+def build_candidate_coverage_report(candidate_space):
+    candidates = candidate_space.get("candidates", [])
+    exceptions = candidate_space.get("candidate_exceptions", [])
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "candidate_count": len(candidates),
+        "candidate_exception_count": len(exceptions),
+        "accepted_dimension_values": summarize_dimension_values(candidates),
+        "exception_dimension_values": summarize_dimension_values(exceptions),
+        "exception_reasons": candidate_space.get("candidate_exception_summary", []),
+    }
 
 
 def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_threshold, candidate_space=None, hw_spec=None, low_efficiency_threshold=0.4):
@@ -71,6 +114,8 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
         for candidate_id, candidate_rows in by_candidate.items():
             median_tflops = median_or_nan(row["avg_tflops"] for row in candidate_rows)
             median_runtime_ms = median_or_nan(row["avg_runtime_ms"] for row in candidate_rows)
+            if math.isnan(median_tflops):
+                continue
             tflops_stdev = pstdev_or_nan(row["avg_tflops"] for row in candidate_rows)
             runtime_stdev = pstdev_or_nan(row["avg_runtime_ms"] for row in candidate_rows)
             ranked.append(
@@ -92,6 +137,8 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
             continue
         winner = ranked[0]
         runner_up = ranked[1] if len(ranked) > 1 else None
+        winner_row = by_candidate[winner["candidate_id"]][0]
+        runner_up_row = by_candidate[runner_up["candidate_id"]][0] if runner_up else None
         gap = None
         close_call = False
         if runner_up and runner_up["median_tflops"] > 0:
@@ -137,7 +184,9 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
                 "selected_efficiency": selected_efficiency,
                 "peak_tflops": peak_tflops,
                 "efficiency_warning": efficiency_warning,
+                "selected_candidate_metadata": tracked_metadata(winner_row),
                 "runner_up_candidate_id": runner_up["candidate_id"] if runner_up else "",
+                "runner_up_candidate_metadata": tracked_metadata(runner_up_row) if runner_up_row else {},
                 "runner_up_gap_percent": round(gap, 6) if gap is not None else "",
                 "close_call": close_call,
                 "evidence": {
@@ -159,6 +208,7 @@ def build_dispatch_table(rows, shapes_doc, top_k, confirm_runs, close_call_thres
                     "ranked_candidates": [
                         {
                             "candidate_id": item["candidate_id"],
+                            "candidate_metadata": tracked_metadata(by_candidate[item["candidate_id"]][0]),
                             "median_tflops": round_or_empty(item["median_tflops"]),
                             "median_runtime_ms": round_or_empty(item["median_runtime_ms"]),
                             "samples": item["samples"],
@@ -235,6 +285,10 @@ def build_phase_b_summary(candidate_space, dispatch_table, summary):
         "rows": summary["rows"],
         "passed": summary["passed"],
         "failed": summary["failed"],
+        "candidate_dimension_coverage": build_candidate_coverage_report(candidate_space),
+        "selected_dimension_values": summarize_dimension_values(
+            [entry.get("selected_candidate_metadata", {}) for entry in dispatch_table["entries"]]
+        ),
         "low_efficiency_warnings": low_efficiency_warnings,
     }
 
@@ -255,6 +309,7 @@ def build_reference_comparison(dispatch_table, reference_doc):
                     "reference_provider": reference["reference_provider"],
                     "reference_tflops": reference["reference_tflops"],
                     "selected_candidate_id": "",
+                    "selected_candidate_metadata": {},
                     "selected_tflops": "",
                     "selected_vs_reference_ratio": "",
                     "status": "missing_dispatch",
@@ -271,6 +326,7 @@ def build_reference_comparison(dispatch_table, reference_doc):
                 "reference_provider": reference["reference_provider"],
                 "reference_tflops": reference_tflops,
                 "selected_candidate_id": dispatch_entry["candidate_id"],
+                "selected_candidate_metadata": dispatch_entry.get("selected_candidate_metadata", {}),
                 "selected_tflops": selected_tflops,
                 "selected_vs_reference_ratio": ratio,
                 "status": "matched",

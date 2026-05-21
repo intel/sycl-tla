@@ -43,6 +43,8 @@
 #include "cutlass/gemm/dispatch_policy.hpp"
 #include "cutlass/gemm/collective/collective_mma.hpp"
 #include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/gemm/kernel/tile_scheduler.hpp"
+#include "cutlass/gemm/kernel/xe_persistent_tile_scheduler_params_streamk.hpp"
 #include "cutlass/epilogue/collective/collective_builder.hpp"
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
@@ -52,7 +54,7 @@ using namespace cute;
 
 namespace cutlass::gemm::device {
 
-enum class Scheduler { Gemm, GemmSplitK, GemmStreamK };
+enum class Scheduler { Gemm, GemmDataParallel, GemmSplitK, GemmStreamK };
 
 template<
   class ArchTag,
@@ -62,7 +64,9 @@ template<
   class ElementAccumulator,
   class TileShape, Scheduler TileScheduler, class TiledMma = void,
   class GmemTiledCopyA = void, class GmemTiledCopyB = void,
-  class EpilogueOp = epilogue::fusion::LinearCombination<float, float, float, float, FloatRoundStyle::round_to_nearest>>
+  class EpilogueOp = epilogue::fusion::LinearCombination<float, float, float, float, FloatRoundStyle::round_to_nearest>,
+  int PipelineStages = 2,
+  class KernelSchedule = cutlass::gemm::KernelXe>
 struct GemmConfiguration {
   static_assert(sizeof(ElementA) == 0, "No valid GemmConfiguration configuration exists.");
 };
@@ -70,20 +74,19 @@ struct GemmConfiguration {
 /////////////////////////////////////////////////////////////////////////
 
 template<class ElementA, class LayoutA,
-  class ElementB, class LayoutB, typename LayoutC,
+  class ElementB, class LayoutB, class ElementC, typename LayoutC, class ElementAccumulator,
   class TileShape, Scheduler TileScheduler,
-  class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB,  class EpilogueOp>
+  class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB, class EpilogueOp, int PipelineStages, class KernelSchedule>
 struct GemmConfiguration<
       arch::IntelXe,
       ElementA, LayoutA,
       ElementB, LayoutB,
-      float, LayoutC,
-      float,
+      ElementC, LayoutC,
+      ElementAccumulator,
       TileShape, TileScheduler, TiledMma,
-      GmemTiledCopyA, GmemTiledCopyB, EpilogueOp>
+      GmemTiledCopyA, GmemTiledCopyB, EpilogueOp, PipelineStages, KernelSchedule>
 {
-  static constexpr int PipelineStages = 2;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages, KernelSchedule>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;
 
   // Configurations in benchmarks.hpp can pass either a layout tag (e.g. RowMajor) or a Stride directly
@@ -108,18 +111,24 @@ struct GemmConfiguration<
           EpilogueDispatchPolicy,
           TileShape,
           void,                 // Epilogue tile (void = automatic)
-          float,// ElementAccumulator
+          ElementAccumulator,
           cutlass::gemm::TagToStrideC_t<LayoutC>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
-          float,// ElementOutput
+          ElementC,
           cutlass::gemm::TagToStrideC_t<LayoutD>, // Converts CUTLASS 2.x to CUTLASS 3.x representation
           FusionCallbacks,
           void,                 // The copy atom used to load matrix C  (void = automatic)
           void>;                // The copy atom used to store matrix D (void = automatic)
-    using GemmKernel = kernel::GemmUniversal<
-    Shape<int, int, int, int>,
-    CollectiveMainloop,
-    CollectiveEpilogue
-  >;
+  using GemmKernel = std::conditional_t<
+    TileScheduler == Scheduler::Gemm,
+    kernel::GemmUniversal<
+      Shape<int, int, int, int>,
+      CollectiveMainloop,
+      CollectiveEpilogue>,
+    kernel::GemmUniversal<
+      Shape<int, int, int, int>,
+      CollectiveMainloop,
+      CollectiveEpilogue,
+      cutlass::gemm::StreamKScheduler>>;
 
   using Gemm = GemmUniversalAdapter<GemmKernel>;
 
@@ -128,6 +137,10 @@ struct GemmConfiguration<
       cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode;
     if constexpr (TileScheduler == Scheduler::Gemm) {
       return {};
+    } else if constexpr (TileScheduler == Scheduler::GemmDataParallel) {
+      typename GemmKernel::Arguments arguments{};
+      arguments.scheduler = {1, StreamKMode::DataParallel};
+      return arguments;
     } else if constexpr (TileScheduler == Scheduler::GemmStreamK) {
       typename GemmKernel::Arguments arguments{};
       arguments.scheduler = {1, StreamKMode::StreamK};

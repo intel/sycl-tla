@@ -7,7 +7,7 @@ import copy
 
 from .catalog import SEED_KERNELS, build_kernel_catalog
 from .constraints import blocked
-from .schemas import SCHEMA_VERSION, SEARCH_RUNTIME_SCHEMA
+from .schemas import RESULT_METADATA_FIELDS, SCHEMA_VERSION, SEARCH_RUNTIME_SCHEMA
 from .utils import now_iso
 
 
@@ -107,6 +107,10 @@ def candidate_id_for(seed):
     return candidate_id
 
 
+def copy_result_metadata(source):
+    return {field: source.get(field, "") for field in RESULT_METADATA_FIELDS}
+
+
 def generate_candidate_space(
     shapes_doc,
     constraints,
@@ -116,6 +120,7 @@ def generate_candidate_space(
     catalog_path=None,
     generator_arch="bmg",
     generator_instantiation_level=0,
+    prefilter_strategy="none",
 ):
     seen = set()
     candidates = []
@@ -127,6 +132,10 @@ def generate_candidate_space(
         (shape["layout"], shape["dtype_a"], shape["dtype_b"], shape["dtype_c"], shape.get("dtype_d", shape["dtype_c"]), shape["dtype_acc"])
         for shape in shapes_doc["shapes"]
     }
+    requested_input_signatures = {
+        (shape["layout"], shape["dtype_a"], shape["dtype_b"])
+        for shape in shapes_doc["shapes"]
+    }
     kernel_catalog = build_kernel_catalog(
         dtypes=dtypes,
         allowed_runners=allowed_runners,
@@ -135,6 +144,11 @@ def generate_candidate_space(
         generator_arch=generator_arch,
         generator_instantiation_level=generator_instantiation_level,
     )
+    available_streamk_signatures = {
+        (entry["layout"], entry["dtype_a"], entry["dtype_b"], entry["dtype_c"], entry.get("dtype_d", entry["dtype_c"]), entry["dtype_acc"])
+        for entry in kernel_catalog["kernels"]
+        if entry.get("runner") == "streamk_example"
+    }
     available_layouts = {entry["layout"] for entry in kernel_catalog["kernels"]}
     unsupported_layouts = sorted({shape["layout"] for shape in shapes_doc["shapes"] if shape["layout"] not in available_layouts})
     candidate_exceptions = []
@@ -146,8 +160,105 @@ def generate_candidate_space(
     for seed in kernel_catalog["kernels"]:
         if seed["layout"] not in requested_layouts:
             continue
+        if seed.get("support_status") == "unsupported":
+            signature = (seed["layout"], seed["dtype_a"], seed["dtype_b"], seed["dtype_c"], seed.get("dtype_d", seed["dtype_c"]), seed["dtype_acc"])
+            if signature in requested_signatures:
+                candidate_exceptions.append(
+                    {
+                        "kernel_name": seed["kernel_name"],
+                        "reason": seed.get("support_reason", "unsupported_candidate"),
+                        "detail": seed.get("support_detail", "Candidate is cataloged but not buildable in the benchmark path."),
+                        "future_enable_condition": seed.get("support_future_enable_condition", ""),
+                        "layout": seed["layout"],
+                        "dtype_a": seed["dtype_a"],
+                        "dtype_b": seed["dtype_b"],
+                        "dtype_c": seed["dtype_c"],
+                        "dtype_d": seed.get("dtype_d", seed["dtype_c"]),
+                        "dtype_acc": seed["dtype_acc"],
+                        "tile_m": seed["tile_m"],
+                        "tile_n": seed["tile_n"],
+                        "tile_k": seed["tile_k"],
+                        "stages": seed["stages"],
+                        "split_k": seed.get("split_k", 1),
+                        "streamk_mode": seed.get("streamk_mode", ""),
+                        "batch_count": 1,
+                        **copy_result_metadata(seed),
+                        "mma_atom": seed.get("mma_atom", "XE_DPAS_TT"),
+                        "gmem_copy_atom_a": seed.get("gmem_copy_atom_a", "auto"),
+                        "gmem_copy_atom_b": seed.get("gmem_copy_atom_b", "auto"),
+                        "epilogue_op": seed.get("epilogue_op", "LinearCombination"),
+                        "epilogue_tile": seed.get("epilogue_tile", "auto"),
+                        "epilogue_copy_atom_c": seed.get("epilogue_copy_atom_c", "auto"),
+                        "epilogue_copy_atom_d": seed.get("epilogue_copy_atom_d", "auto"),
+                        "mainloop_dispatch_policy": seed.get("mainloop_dispatch_policy", ""),
+                        "kernel_schedule": seed.get("kernel_schedule", ""),
+                        "tile_scheduler": seed.get("tile_scheduler", ""),
+                        "epilogue_dispatch_policy": seed.get("epilogue_dispatch_policy", ""),
+                        "example_family": seed.get("example_family", ""),
+                        "padding_mode": seed.get("padding_mode", ""),
+                        "activation": seed.get("activation", ""),
+                        "bias_mode": seed.get("bias_mode", ""),
+                        "quant_mode": seed.get("quant_mode", ""),
+                        "scale_mode": seed.get("scale_mode", ""),
+                    }
+                )
+            continue
         signature = (seed["layout"], seed["dtype_a"], seed["dtype_b"], seed["dtype_c"], seed.get("dtype_d", seed["dtype_c"]), seed["dtype_acc"])
         if signature not in requested_signatures:
+            requested_streamk_signature_available = any(
+                requested_signature in available_streamk_signatures
+                for requested_signature in requested_signatures
+            )
+            if (
+                seed.get("runner") == "streamk_example"
+                and (seed["layout"], seed["dtype_a"], seed["dtype_b"]) in requested_input_signatures
+                and not requested_streamk_signature_available
+            ):
+                candidate_exceptions.append(
+                    {
+                        "kernel_name": seed["kernel_name"],
+                        "reason": "streamk_example_dtype_signature_mismatch",
+                        "detail": "StreamK example runner matches layout/input dtype but not requested C/D/accumulator dtype semantics.",
+                        "layout": seed["layout"],
+                        "dtype_a": seed["dtype_a"],
+                        "dtype_b": seed["dtype_b"],
+                        "dtype_c": seed["dtype_c"],
+                        "dtype_d": seed.get("dtype_d", seed["dtype_c"]),
+                        "dtype_acc": seed["dtype_acc"],
+                        "requested_signatures": [
+                            {
+                                "dtype_c": dtype_c,
+                                "dtype_d": dtype_d,
+                                "dtype_acc": dtype_acc,
+                            }
+                            for layout, dtype_a, dtype_b, dtype_c, dtype_d, dtype_acc in sorted(requested_signatures)
+                            if layout == seed["layout"] and dtype_a == seed["dtype_a"] and dtype_b == seed["dtype_b"]
+                        ],
+                        "tile_m": seed["tile_m"],
+                        "tile_n": seed["tile_n"],
+                        "tile_k": seed["tile_k"],
+                        "stages": seed["stages"],
+                        "batch_count": 1,
+                        **copy_result_metadata(seed),
+                        "mma_atom": seed.get("mma_atom", "XE_DPAS_TT"),
+                        "gmem_copy_atom_a": seed.get("gmem_copy_atom_a", "auto"),
+                        "gmem_copy_atom_b": seed.get("gmem_copy_atom_b", "auto"),
+                        "epilogue_op": seed.get("epilogue_op", "LinearCombination"),
+                        "epilogue_tile": seed.get("epilogue_tile", "auto"),
+                        "epilogue_copy_atom_c": seed.get("epilogue_copy_atom_c", "auto"),
+                        "epilogue_copy_atom_d": seed.get("epilogue_copy_atom_d", "auto"),
+                        "mainloop_dispatch_policy": seed.get("mainloop_dispatch_policy", ""),
+                        "kernel_schedule": seed.get("kernel_schedule", ""),
+                        "tile_scheduler": seed.get("tile_scheduler", ""),
+                        "epilogue_dispatch_policy": seed.get("epilogue_dispatch_policy", ""),
+                        "example_family": seed.get("example_family", ""),
+                        "padding_mode": seed.get("padding_mode", ""),
+                        "activation": seed.get("activation", ""),
+                        "bias_mode": seed.get("bias_mode", ""),
+                        "quant_mode": seed.get("quant_mode", ""),
+                        "scale_mode": seed.get("scale_mode", ""),
+                    }
+                )
             continue
         matched_signature_count += 1
         if seed.get("source") == "generator_manifest" and seed.get("streamk_mode") == "streamk":
@@ -167,6 +278,7 @@ def generate_candidate_space(
                     "tile_k": seed["tile_k"],
                     "stages": seed["stages"],
                     "batch_count": 1,
+                    **copy_result_metadata(seed),
                     "mma_atom": seed.get("mma_atom", "XE_DPAS_TT"),
                     "gmem_copy_atom_a": seed.get("gmem_copy_atom_a", "auto"),
                     "gmem_copy_atom_b": seed.get("gmem_copy_atom_b", "auto"),
@@ -174,6 +286,16 @@ def generate_candidate_space(
                     "epilogue_tile": seed.get("epilogue_tile", "auto"),
                     "epilogue_copy_atom_c": seed.get("epilogue_copy_atom_c", "auto"),
                     "epilogue_copy_atom_d": seed.get("epilogue_copy_atom_d", "auto"),
+                    "mainloop_dispatch_policy": seed.get("mainloop_dispatch_policy", ""),
+                    "kernel_schedule": seed.get("kernel_schedule", ""),
+                    "tile_scheduler": seed.get("tile_scheduler", ""),
+                    "epilogue_dispatch_policy": seed.get("epilogue_dispatch_policy", ""),
+                    "example_family": seed.get("example_family", ""),
+                    "padding_mode": seed.get("padding_mode", ""),
+                    "activation": seed.get("activation", ""),
+                    "bias_mode": seed.get("bias_mode", ""),
+                    "quant_mode": seed.get("quant_mode", ""),
+                    "scale_mode": seed.get("scale_mode", ""),
                 }
             )
             continue
@@ -203,10 +325,12 @@ def generate_candidate_space(
                 "sg_n": seed["sg_n"],
                 "stages": seed["stages"],
                 "split_k": seed["split_k"],
+                "streamk_dtype_preset": seed.get("streamk_dtype_preset", ""),
                 "batch_count": 1,
                 "streamk_mode": seed.get("streamk_mode", ""),
                 "runner": seed.get("runner", "benchmark"),
                 "benchmark_target": seed["benchmark_target"],
+                **copy_result_metadata(seed),
                 "grf_mode": seed["grf_mode"],
                 "ilp_class": seed["ilp_class"],
                 "instantiation_level": seed["instantiation_level"],
@@ -217,6 +341,16 @@ def generate_candidate_space(
                 "epilogue_tile": seed.get("epilogue_tile", "auto"),
                 "epilogue_copy_atom_c": seed.get("epilogue_copy_atom_c", "auto"),
                 "epilogue_copy_atom_d": seed.get("epilogue_copy_atom_d", "auto"),
+                "mainloop_dispatch_policy": seed.get("mainloop_dispatch_policy", ""),
+                "kernel_schedule": seed.get("kernel_schedule", ""),
+                "tile_scheduler": seed.get("tile_scheduler", ""),
+                "epilogue_dispatch_policy": seed.get("epilogue_dispatch_policy", ""),
+                "example_family": seed.get("example_family", ""),
+                "padding_mode": seed.get("padding_mode", ""),
+                "activation": seed.get("activation", ""),
+                "bias_mode": seed.get("bias_mode", ""),
+                "quant_mode": seed.get("quant_mode", ""),
+                "scale_mode": seed.get("scale_mode", ""),
                 "runtime_defaults": seed["runtime_defaults"],
                 "allowed_runtime_sweeps": seed["allowed_runtime_sweeps"],
                 "source": seed.get("source", ""),
@@ -232,41 +366,69 @@ def generate_candidate_space(
         summary["count"] += 1
         if len(summary["sample_kernel_names"]) < 5:
             summary["sample_kernel_names"].append(exception["kernel_name"])
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "generated_at": now_iso(),
-        "device_arch": constraints["device_arch"],
-        "constraint_source": constraints["constraint_source"],
-        "search_runtime_schema": SEARCH_RUNTIME_SCHEMA,
-        "kernel_catalog": {
-            "catalog_version": kernel_catalog["catalog_version"],
-            "catalog_source": kernel_catalog.get("catalog_source", "persisted"),
-            "generator_arch": kernel_catalog.get("generator_arch", ""),
-            "generator_instantiation_level": kernel_catalog.get("generator_instantiation_level", 0),
-            "kernel_count": len(kernel_catalog["kernels"]),
-        },
-        "candidate_coverage": {
-            "requested_layouts": sorted(requested_layouts),
-            "requested_signatures": [
+    if prefilter_strategy != "none" and prefilter_strategy in {"light", "medium", "aggressive"}:
+        from .prefilter import prefilter_candidates as _prefilter
+        pre_count = len(candidates)
+        candidates = _prefilter(candidates, shapes_doc.get("shapes", []), strategy=prefilter_strategy)
+        post_count = len(candidates)
+        if post_count < pre_count:
+            from .utils import now_iso as _now
+            candidate_exceptions.insert(
+                0,
                 {
-                    "layout": layout,
-                    "dtype_a": dtype_a,
-                    "dtype_b": dtype_b,
-                    "dtype_c": dtype_c,
-                    "dtype_d": dtype_d,
-                    "dtype_acc": dtype_acc,
-                }
-                for layout, dtype_a, dtype_b, dtype_c, dtype_d, dtype_acc in sorted(requested_signatures)
-            ],
-            "catalog_kernel_count": len(kernel_catalog["kernels"]),
-            "matched_signature_kernel_count": matched_signature_count,
-            "accepted_candidate_count": len(candidates),
-            "blocked_candidate_count": blocked_candidate_count,
-            "exception_count": len(candidate_exceptions),
-        },
-        "candidate_exception_summary": sorted(exception_summary.values(), key=lambda item: item["reason"]),
-        "candidate_exceptions": candidate_exceptions,
-        "candidates": candidates,
+                    "kernel_name": f"prefilter_{prefilter_strategy}",
+                    "reason": f"prefilter_{prefilter_strategy}",
+                    "detail": f"Prefilter ({prefilter_strategy}) removed {pre_count - post_count} of {pre_count} candidates.",
+                    "layout": "",
+                    "dtype_a": "",
+                    "dtype_b": "",
+                    "dtype_c": "",
+                    "dtype_acc": "",
+                    "tile_m": 0,
+                    "tile_n": 0,
+                    "tile_k": 0,
+                    "stages": 0,
+                    "batch_count": 0,
+                },
+            )
+
+    return {
+    "schema_version": SCHEMA_VERSION,
+    "generated_at": now_iso(),
+    "device_arch": constraints["device_arch"],
+    "constraint_source": constraints["constraint_source"],
+    "search_runtime_schema": SEARCH_RUNTIME_SCHEMA,
+    "kernel_catalog": {
+        "catalog_version": kernel_catalog["catalog_version"],
+        "catalog_source": kernel_catalog.get("catalog_source", "persisted"),
+        "generator_arch": kernel_catalog.get("generator_arch", ""),
+        "generator_instantiation_level": kernel_catalog.get("generator_instantiation_level", 0),
+        "source_template_space": kernel_catalog.get("source_template_space", {}),
+        "regular_gemm_exhaustive_space": kernel_catalog.get("regular_gemm_exhaustive_space", {}),
+        "kernel_count": len(kernel_catalog["kernels"]),
+    },
+    "candidate_coverage": {
+        "requested_layouts": sorted(requested_layouts),
+        "requested_signatures": [
+            {
+                "layout": layout,
+                "dtype_a": dtype_a,
+                "dtype_b": dtype_b,
+                "dtype_c": dtype_c,
+                "dtype_d": dtype_d,
+                "dtype_acc": dtype_acc,
+            }
+            for layout, dtype_a, dtype_b, dtype_c, dtype_d, dtype_acc in sorted(requested_signatures)
+        ],
+        "catalog_kernel_count": len(kernel_catalog["kernels"]),
+        "matched_signature_kernel_count": matched_signature_count,
+        "accepted_candidate_count": len(candidates),
+        "blocked_candidate_count": blocked_candidate_count,
+        "exception_count": len(candidate_exceptions),
+    },
+    "candidate_exception_summary": sorted(exception_summary.values(), key=lambda item: item["reason"]),
+    "candidate_exceptions": candidate_exceptions,
+    "candidates": candidates,
     }
 
 
@@ -292,7 +454,7 @@ def build_selected_kernel_batches(selected_kernel_list, batch_size):
     return batches
 
 
-def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0):
+def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0, build_config=None):
     selected_kernel_list = []
     seen_kernel_ids = set()
     variants = []
@@ -321,14 +483,31 @@ def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0
                     "stages": candidate["stages"],
                     "split_k": candidate["split_k"],
                     "streamk_mode": candidate.get("streamk_mode", ""),
+                    "streamk_dtype_preset": candidate.get("streamk_dtype_preset", ""),
+                    "operator_family": candidate.get("operator_family", ""),
                     "grf_mode": candidate["grf_mode"],
                     "mma_atom": candidate.get("mma_atom", "XE_DPAS_TT"),
                     "gmem_copy_atom_a": candidate.get("gmem_copy_atom_a", "auto"),
                     "gmem_copy_atom_b": candidate.get("gmem_copy_atom_b", "auto"),
+                    "element_output_epilogue": candidate.get("element_output_epilogue", ""),
+                    "element_compute_epilogue": candidate.get("element_compute_epilogue", ""),
+                    "element_source_epilogue": candidate.get("element_source_epilogue", ""),
+                    "element_scalar_epilogue": candidate.get("element_scalar_epilogue", ""),
                     "epilogue_op": candidate.get("epilogue_op", "LinearCombination"),
                     "epilogue_tile": candidate.get("epilogue_tile", "auto"),
                     "epilogue_copy_atom_c": candidate.get("epilogue_copy_atom_c", "auto"),
                     "epilogue_copy_atom_d": candidate.get("epilogue_copy_atom_d", "auto"),
+                    "mainloop_dispatch_policy": candidate.get("mainloop_dispatch_policy", ""),
+                    "kernel_schedule": candidate.get("kernel_schedule", ""),
+                    "tile_scheduler": candidate.get("tile_scheduler", ""),
+                    "decomposition_mode": candidate.get("decomposition_mode", ""),
+                    "epilogue_dispatch_policy": candidate.get("epilogue_dispatch_policy", ""),
+                    "example_family": candidate.get("example_family", ""),
+                    "padding_mode": candidate.get("padding_mode", ""),
+                    "activation": candidate.get("activation", ""),
+                    "bias_mode": candidate.get("bias_mode", ""),
+                    "quant_mode": candidate.get("quant_mode", ""),
+                    "scale_mode": candidate.get("scale_mode", ""),
                     "ilp_class": candidate["ilp_class"],
                     "instantiation_level": candidate["instantiation_level"],
                 },
@@ -336,7 +515,31 @@ def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0
                 "compiler_profile_id": candidate["compiler_profile_id"],
             }
         )
-    generator_level = int(candidate_space.get("kernel_catalog", {}).get("generator_instantiation_level", 0))
+    kernel_catalog = candidate_space.get("kernel_catalog", {})
+    catalog_source = kernel_catalog.get("catalog_source", "persisted")
+    generator_level = int(kernel_catalog.get("generator_instantiation_level", 0)) if catalog_source == "generator" else 0
+    cmake_vars = {
+        "CUTLASS_ENABLE_SYCL": "ON",
+        "CUTLASS_ENABLE_BENCHMARKS": "ON",
+        "CUTLASS_ENABLE_TESTS": "OFF",
+        "CUTLASS_ENABLE_EXAMPLES": "OFF",
+        "CUTLASS_LIBRARY_OPERATIONS": "gemm",
+        "CUTLASS_LIBRARY_INSTANTIATION_LEVEL": str(generator_level),
+        "SYCL_INTEL_TARGET": candidate_space["device_arch"],
+        "BENCHMARK_ENABLE_TESTING": "OFF",
+        "BENCHMARK_ENABLE_GTEST_TESTS": "OFF",
+    }
+    cmake_vars.update((build_config or {}).get("cmake_vars", {}))
+    cmake_vars["CUTLASS_LIBRARY_OPERATIONS"] = "gemm"
+    cmake_vars["CUTLASS_LIBRARY_INSTANTIATION_LEVEL"] = str(generator_level)
+    cmake_vars["BENCHMARK_ENABLE_TESTING"] = "OFF"
+    cmake_vars["BENCHMARK_ENABLE_GTEST_TESTS"] = "OFF"
+    if catalog_source in {"expanded_streamk", "expanded_bmg", "layered_bmg"}:
+        cmake_vars["CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK"] = "ON"
+    if catalog_source == "layered_bmg":
+        cmake_vars["CUTLASS_BENCHMARK_EXHAUSTIVE_GEMM"] = "ON"
+    if cmake_vars.get("DPCPP_SYCL_TARGET"):
+        cmake_vars.pop("SYCL_INTEL_TARGET", None)
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
@@ -355,17 +558,7 @@ def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0
         "selected_kernel_batches": build_selected_kernel_batches(selected_kernel_list, selected_kernel_batch_size),
         "cmake_config": {
             "build_target": "cutlass_benchmarks_gemm_sycl",
-            "cmake_vars": {
-                "CUTLASS_ENABLE_SYCL": "ON",
-                "CUTLASS_ENABLE_BENCHMARKS": "ON",
-                "CUTLASS_ENABLE_TESTS": "OFF",
-                "CUTLASS_ENABLE_EXAMPLES": "OFF",
-                "CUTLASS_LIBRARY_OPERATIONS": "gemm",
-                "CUTLASS_LIBRARY_INSTANTIATION_LEVEL": str(generator_level),
-                "SYCL_INTEL_TARGET": candidate_space["device_arch"],
-                "BENCHMARK_ENABLE_TESTING": "OFF",
-                "BENCHMARK_ENABLE_GTEST_TESTS": "OFF",
-            },
+            "cmake_vars": cmake_vars,
             "kernel_filter_cmake_var": "KERNEL_FILTER_FILE",
         },
         "variants": variants,
@@ -382,8 +575,6 @@ def choose_candidates_for_shape(shape, candidates):
         if candidate["dtype_c"] != shape["dtype_c"] or candidate["dtype_acc"] != shape["dtype_acc"]:
             continue
         if candidate.get("dtype_d", candidate["dtype_c"]) != shape.get("dtype_d", shape["dtype_c"]):
-            continue
-        if candidate["split_k"] > 1 and shape["n"] < 16384 and shape["k"] < 8192:
             continue
         matched.append(candidate)
     return matched or [
@@ -518,7 +709,8 @@ def write_config(entries, config_path):
                     f" --dtype_d={shape.get('dtype_d', shape['dtype_c'])}"
                     f" --dtype_acc={shape['dtype_acc']}"
                 )
-            handle.write(f"{benchmark_name} --bm_name={entry['bm_name']} --m={shape['m']} --n={shape['n']} --k={shape['k']} --l={batch_count} --alpha={alpha} --beta={beta}{library_options}\n")
+            split_options = f" --split_k_slices={candidate['split_k']}" if candidate.get("split_k", 1) > 1 else ""
+            handle.write(f"{benchmark_name} --bm_name={entry['bm_name']} --m={shape['m']} --n={shape['n']} --k={shape['k']} --l={batch_count} --alpha={alpha} --beta={beta}{split_options}{library_options}\n")
             metadata[entry["bm_name"]] = {
                 "shape_id": shape["shape_id"],
                 "candidate_id": candidate["candidate_id"],
@@ -537,7 +729,6 @@ def write_config(entries, config_path):
                 "batch_count": batch_count,
                 "kernel_name": candidate["kernel_name"],
                 "split_k": candidate["split_k"],
-                "streamk_mode": candidate.get("streamk_mode", ""),
-                "runner": candidate.get("runner", "benchmark"),
             }
+            metadata[entry["bm_name"]].update(copy_result_metadata(candidate))
     return metadata

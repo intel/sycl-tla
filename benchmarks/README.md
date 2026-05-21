@@ -46,6 +46,7 @@ The Intel GEMM profiler workflow under `test/benchmarks/` now splits configurati
 - `test/benchmarks/runtime_config_bmg_perf.json`: runtime environment used by the search workflow
 
 `default_compiler_profiles()` loads both files and emits them into the workspace `compiler_profiles.json`.
+When `build_config.cmake_vars.DPCPP_SYCL_TARGET` is set to `auto`, the workflow detects the visible Intel GPU with `xpu-smi discovery`, honors `ZE_AFFINITY_MASK` when selecting a device, and writes the resolved target to `reports/device_target_detection.json` plus the generated CMake build plan. Explicit non-`auto` targets still take precedence.
 
 ### Default configuration
 
@@ -59,6 +60,27 @@ The checked-in default is the current **best-known validated BMG performance bas
 - runtime env only injects the active execution settings such as `ONEAPI_DEVICE_SELECTOR=level_zero:gpu`
 
 This means the out-of-box config is already tuned for the current BMG search flow. Experimental build variants remain available, but they are not treated as validated replacements for the default baseline.
+
+### Expanded BMG GEMM/StreamK tile search
+
+The default persisted catalog remains the validated level-0 set. For larger B70/BMG exploration, the profiler can opt into an expanded benchmark-backed Gemm/StreamK/DataParallel/SplitK catalog:
+
+```
+python3 -m intel_gemm_profiler.workflow \
+  --kernel-catalog-source expanded_bmg \
+  --build-candidate-benchmark \
+  ...
+```
+
+This catalog enumerates StreamK/DataParallel/SplitK `TileShape=(M,N,K)` with `M={64,128,256,512}`, `N={64,128,256}`, and `K={32,64}` for the fixed BMG subgroup layout `(sg_m,sg_n)=(8,4)`. Ordinary GEMM uses the same Cartesian set plus source-observed SG8x4 shapes such as `128x256x16`, `128x512x32`, `256x192x64`, and `256x256x16`, and also registers source-observed valid tile/subgroup pairs such as `256x128x32/SG8x2` and `32x128x32/SG4x8`. It covers the current benchmark-backed ordinary GEMM dtype/layout families plus the StreamK/DataParallel/SplitK families. The generated candidate build plan automatically sets:
+
+```
+-DCUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK=ON
+```
+
+That CMake option registers the matching C++ benchmark entries in `benchmarks/gemm/benchmarks_sycl.hpp`. The split count remains a runtime sweep (`--split_k_slices`) for the single registered SplitK kernel per tile, so only tile/scheduler variants require compile-time registration.
+
+`expanded_streamk` remains accepted as a compatibility alias for the same expanded BMG catalog.
 
 ### Custom configuration for experiments
 

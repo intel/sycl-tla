@@ -22,52 +22,60 @@ def _default_build_config():
         "purpose": "optimal_performance_profiling",
         "cmake_vars": {
             "CUTLASS_ENABLE_SYCL": "ON",
-            "DPCPP_SYCL_TARGET": "bmg",
+            "DPCPP_SYCL_TARGET": "auto",
+            "DPCPP_HOST_COMPILER": "g++-13",
             "CMAKE_BUILD_TYPE": "Release",
             "CUTLASS_SYCL_PROFILING_ENABLED": "OFF",
             "CUTLASS_ENABLE_BENCHMARKS": "ON",
             "CUTLASS_ENABLE_EXAMPLES": "OFF",
-            "CUTLASS_ENABLE_TESTS": "OFF",
+            "CUTLASS_ENABLE_TESTS": "ON",
+        },
+        "device_target_detection": {
+            "mode": "auto",
+            "cmake_var": "DPCPP_SYCL_TARGET",
+            "fallback_target": "bmg",
+            "strict": False,
+            "selected_device_env": "ZE_AFFINITY_MASK",
         },
         "compile_env": {
             "CC": "icx",
             "CXX": "icpx",
             "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
-            "IGC_VectorAliasBBThreshold": "100000000000",
-            "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+            "IGC_VectorAliasBBThreshold": "10000",
+            "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
         },
         "compile_env_variants": {
             "perf_default": {
                 "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
-                "IGC_VectorAliasBBThreshold": "100000000000",
-                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+                "IGC_VectorAliasBBThreshold": "10000",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
             },
             "perf_perfmodel": {
                 "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
-                "IGC_VectorAliasBBThreshold": "100000000000",
+                "IGC_VectorAliasBBThreshold": "10000",
                 "IGC_VISAOptions": "-perfmodel",
-                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
             },
             "perf_128grf_experiment": {
-                "IGC_VectorAliasBBThreshold": "100000000000",
+                "IGC_VectorAliasBBThreshold": "10000",
                 "IGC_TotalGRFNum": "128",
             },
             "perf_enableBCR": {
                 "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
-                "IGC_VectorAliasBBThreshold": "100000000000",
+                "IGC_VectorAliasBBThreshold": "10000",
                 "IGC_VISAOptions": "-enableBCR",
-                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
             },
             "debug_with_lines": {
                 "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
-                "IGC_VectorAliasBBThreshold": "100000000000",
+                "IGC_VectorAliasBBThreshold": "10000",
                 "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
             },
         },
         "compile_env_variant_metadata": {
             "perf_default": {
                 "status": "validated",
-                "notes": "Current best-known validated BMG baseline. Use 256-GRF with large-register-file.",
+                "notes": "Validated on BMG G31: g++-13 host compiler, 256-GRF, large-register-file, and line tables at compile and runtime.",
             },
             "perf_perfmodel": {
                 "status": "experimental",
@@ -101,18 +109,37 @@ def _default_runtime_config():
         "device_arch": "bmg",
         "runtime_env": {
             "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+            "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+            "IGC_VectorAliasBBThreshold": "10000",
+            "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
         },
         "runtime_env_variants": {
             "default": {
                 "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "10000",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
             },
             "ze_affinity_0": {
                 "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "10000",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
                 "ZE_AFFINITY_MASK": "0",
             },
             "ze_affinity_1": {
                 "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "10000",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
                 "ZE_AFFINITY_MASK": "1",
+            },
+            "ze_affinity_7": {
+                "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+                "IGC_VectorAliasBBThreshold": "10000",
+                "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
+                "ZE_AFFINITY_MASK": "7",
             },
         },
         "selected_runtime_variant": "default",
@@ -138,21 +165,30 @@ def selected_runtime_env(profiles, profile=None):
     return runtime_env
 
 
+def selected_compile_env(profiles):
+    build_config = profiles.get("build_config", {})
+    compile_env = dict(build_config.get("compile_env", {}))
+    selected_variant = build_config.get("selected_compile_variant")
+    variant_overrides = build_config.get("compile_env_variants", {}).get(selected_variant, {})
+    compile_env.update(variant_overrides)
+    return compile_env
+
+
 def default_constraints():
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
         "constraint_source": "default_bmg",
         "device_arch": "bmg",
-        "limits": {"max_slm_kb": 64, "subgroup_size": 16, "max_split_k": 2, "max_stages": 3},
+        "limits": {"max_slm_kb": 64, "subgroup_size": 16, "max_split_k": 6, "max_stages": 3},
         "allowed_values": {
             "tile_m": [8, 16, 32, 64, 128, 256, 512],
-            "tile_n": [64, 128, 256],
-            "tile_k": [32, 64],
+            "tile_n": [32, 64, 96, 128, 192, 256, 512],
+            "tile_k": [16, 32, 64],
             "sg_m": [1, 2, 4, 8],
             "sg_n": [2, 4, 8],
             "stages": [0, 1, 2, 3],
-            "split_k": [1, 2],
+            "split_k": [1, 2, 3, 4, 6],
             "grf_mode": [256],
         },
         "blocked_rules": [],

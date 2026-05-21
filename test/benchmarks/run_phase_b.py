@@ -30,7 +30,7 @@ def main():
     parser.add_argument("--shell-init", default="")
     parser.add_argument("--constraints-json", default="")
     parser.add_argument("--compiler-profiles-json", default="")
-    parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator"], default="persisted")
+    parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator", "expanded_streamk", "expanded_bmg", "layered_bmg"], default="persisted")
     parser.add_argument("--kernel-catalog-path", default="")
     parser.add_argument("--compiled-kernel-list", default="")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg")
