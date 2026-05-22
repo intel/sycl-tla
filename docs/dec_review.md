@@ -481,7 +481,7 @@ The profiler does NOT set explicit `--benchmark_repetitions` or `--benchmark_min
 - **MinTime:** default `0.5` seconds cumulative kernel time per benchmark invocation.
 - **Iteration count:** auto-determined by GB.  For a ~2ms kernel: `0.5s / 0.002s ≈ 250` iterations.  For a ~0.8ms kernel: `0.5s / 0.0008s ≈ 625` iterations.
 - **Screening:** 1 GB invocation per (candidate, shape) pair.
-- **Confirmation:** `--confirm-runs 2` → 2 independent GB invocations, taking the **median** TFLOPS.
+- **Confirmation:** `--confirm-runs 3` → 2 independent GB invocations, taking the **median** TFLOPS.
 
 ### TFLOPS Formula
 
@@ -1656,6 +1656,87 @@ Four IGC flags presets, tested against three tile-class candidates before the ma
   Failed profiles → excluded from Phase B candidate generation.
   Results persist across runs via build_config_bmg_perf.json.
 ```
+
+
+
+---
+
+## 6. Quality Assurance — Bugs Found and Fixed
+
+The following issues were discovered during a systematic code review of all 12 profiler modules
+and fixed before the definitive screening run.
+
+### Critical (would produce invalid results)
+
+| # | Bug | File | Fix |
+|---|---|---|---|
+| 1 | **IGC/SYCL performance flags not exported** — `IGC_ExtraOCLOptions`, `IGC_VectorAliasBBThreshold`, `SYCL_PROGRAM_COMPILE_OPTIONS` were in persisted configs but not exported in the run script. GPU ran in 128-GRF mode instead of 256-GRF. | `run script` | Export all flags before Python invocation |
+| 2 | **Confirm runs = 2** — median of 2 values is meaningless (equals either value). | `workflow.py` | Changed `--confirm-runs` default from 2 to 3 |
+| 3 | **`--prefilter` CLI flag dead code** — Defined with full implementation in `prefilter.py` but never wired to `generate_candidate_space()`; always defaulted to `"none"`. | `workflow.py` | Added `prefilter_strategy=getattr(args, "prefilter", "none")` to both call sites |
+
+### High (would cause crashes or hangs)
+
+| # | Bug | File | Fix |
+|---|---|---|---|
+| 4 | **`SCHEMA_VERSION` NameError in `_save_preflight_progress`** — module-level function referenced symbol not in scope on older remote code. | `workflow.py` | Replaced with string literal `"1.0"` |
+| 5 | **`KeyError: steps` on resumed batches** — resumed batches lack `steps` field; iteration crashed. | `workflow.py` | Changed to `batch.get("steps", [])` |
+| 6 | **preflight_progress.json race condition** — 32 threads read-modify-wrote the same JSON file; only last writer survived (~1004/3424 entries). | `workflow.py` | Removed per-batch save; write once after all builds complete |
+
+### Medium (silent bugs)
+
+| # | Bug | File | Fix |
+|---|---|---|---|
+| 7 | **CPU affinity race** — `os.sched_setaffinity(0, …)` before semaphore acquire meant affinity was overwritten between threads. | `workflow.py` | Moved `sched_setaffinity` inside `with semaphore:` block |
+| 8 | **GPU device numbering mismatch** — `xpu-smi discovery -j` and `-d N` use different numbering; profiler detected wrong device. | `device_target.py` | Use `xpu-smi discovery -d N` for targeted queries |
+| 9 | **xpu-smi executed after ZE_AFFINITY_MASK** — masked device invisible to xpu-smi. | `run script` | Moved xpu-smi before `export ZE_AFFINITY_MASK` |
+
+### Low (cosmetic / edge cases)
+
+| # | Bug | File | Fix |
+|---|---|---|---|
+| 10 | **Duplicate `raise RuntimeError`** — dead code from copy-paste. | `device_target.py` | Removed duplicate |
+| 11 | **Python stdout buffering** — `print()` output invisible in log for minutes. | `run script` | Added `PYTHONUNBUFFERED=1` |
+
+
+
+---
+
+## 7. Q&A — Profiler Design
+
+### 1. What does the Phase A compiler probe do?
+Tests small/medium/large-tile candidates with different IGC compiler flags (256-GRF, large-register-file, enableBCR, 128-GRF). Failed profiles are added to `blocked_rules`. Phase B automatically skips those tile classes. Default mode is `--probe-mode off` (no probing, all profiles pass).
+
+### 2. Screening vs Confirmation — what is the difference?
+- **Screening**: all 3568 candidates × 2 shapes, 1 Google Benchmark invocation each (~0.5s). Fast ranking.
+- **Confirmation**: top-8 per shape only, 3 GB invocations each (`--confirm-runs 3`). Takes **median** TFLOPS. Can override screening rank if a candidate's median differs from its single-run value.
+
+### 3. What is the Artifact Bundle?
+Final output package: `dispatch_table.json` + `gemm_profile_results.csv` + `phase_b_summary.json` + `reference_comparison.json` + `run_summary.json`. Used by downstream inference engines as the kernel selection lookup.
+
+### 4. What does schemas.py do?
+Defines all data field names, types, and CSV columns. `infer_epilogue_metadata()` auto-detects epilogue type (LinearCombination, SiLU, etc.) from (dtype, layout, accumulator), so users don't need to manually specify epilogue configs.
+
+### 5. Does Phase A check correctness?
+Yes — the DPAS baseline probe runs a full GEMM (smallest kernel × smallest shape) and verifies with `BlockCompareRelativelyEqual(epsilon=0.5)`. If it fails, Phase B does not start.
+
+### 6. Multi-Level Catalog — differences between levels?
+| Level | Name | Kernels | Description |
+|---|---|---|---|
+| L0 | `persisted` | 28 | Hand-validated seed kernels |
+| L1 | `expanded_bmg` | 330 | Seed + SG8x4 expanded tiles + source-observed multi-SG + StreamK/DP/SplitK |
+| L2 | `layered_bmg` | 3424 | expanded_bmg + 579 legal (tile,SG) × 3 stages × 2 dtypes exhaustive enumeration |
+| L3 | `generator` | dynamic | CUTLASS Python generator manifest |
+
+### 7. How is 3568 candidates calculated?
+579 legal (tile_m, tile_n, tile_k, sg_m, sg_n) pairs × 3 stages = 1737/dtype × 2 dtypes (BF16, F16) = 3474 exhaustive entries + 474 expanded_bmg − 380 dedup overlap = **3568 accepted candidates** (3424 unique kernels). The number 1764 is the raw Cartesian product (7×7×3×4×3) before legality filtering.
+
+### 8. How does Priority Scoring work?
+`score = ILP×10 + tile_fit(0/20/40) + SG_occupancy(−5/0/10) + stages×5 + mode_bonus(StreamK/DP+30, SplitK+10or−5) + tile_k_bonus(+10/0/−5)`. High-ILP + StreamK + balanced tile → highest score → screened first to establish TFLOPS baseline quickly.
+
+### 9. Current iteration configuration for screening and confirmation?
+- **Screening**: 50 warmup + 50 measure iterations, trimmed mean (drop top/bottom 10%), median, stddev, min, max statistics.
+- **Confirmation**: `--confirm-runs 3` (3 separate benchmark invocations), median TFLOPS used for final ranking.
+- Timer: `std::chrono::steady_clock` (host-side, ~1.02× ratio vs SYCL GPU events for GEMM-size kernels).
 
 
 ## 5. Deployment Summary
