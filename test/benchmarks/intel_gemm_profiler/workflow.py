@@ -1037,7 +1037,6 @@ def workflow(args):
         catalog_source=args.kernel_catalog_source,
         generator_arch=args.generator_arch,
         generator_instantiation_level=args.generator_instantiation_level,
-        prefilter_strategy=getattr(args, "prefilter", "none"),
     )
     write_json(reports_dir / "kernel_catalog.json", kernel_catalog)
     candidate_space = generate_candidate_space(
