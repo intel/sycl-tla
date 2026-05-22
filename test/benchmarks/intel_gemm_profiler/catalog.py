@@ -39,6 +39,20 @@ EXPANDED_STREAMK_TILE_SHAPES = [
     for tile_n in (64, 128, 256)
     for tile_k in (32, 64)
 ]
+# All SG=8×4 legal tiles (48, used by layered_bmg exhaustive StreamK)
+EXHAUSTIVE_STREAMK_8X4_TILES = None  # computed lazily via _get_exhaustive_8x4_tiles()
+
+def _get_exhaustive_8x4_tiles():
+    from .constraints import default_constraints as _dc
+    from .source_templates import is_valid_xe2_tile_sg as _valid
+    global EXHAUSTIVE_STREAMK_8X4_TILES
+    if EXHAUSTIVE_STREAMK_8X4_TILES is None:
+        cons = _dc()["allowed_values"]
+        EXHAUSTIVE_STREAMK_8X4_TILES = [
+            (m, n, k) for m in cons["tile_m"] for n in cons["tile_n"] for k in cons["tile_k"]
+            if _valid((m, n, k), (8, 4, 1))
+        ]
+    return EXHAUSTIVE_STREAMK_8X4_TILES
 SOURCE_OBSERVED_SG8X4_GEMM_TILE_SHAPES = [
     (128, 256, 16),
     (128, 512, 32),
@@ -436,7 +450,7 @@ def generated_expanded_streamk_kernel_catalog():
             "bf16",
             "f32",
             "f32",
-            tile_shapes=EXPANDED_STREAMK_TILE_SHAPES,
+            tile_shapes=_get_exhaustive_8x4_tiles(),
             source="expanded_streamk_catalog",
             instantiation_level=1,
         ),
@@ -447,7 +461,7 @@ def generated_expanded_streamk_kernel_catalog():
                 "f16",
                 "f32",
                 "f32",
-                tile_shapes=EXPANDED_STREAMK_TILE_SHAPES,
+                tile_shapes=_get_exhaustive_8x4_tiles(),
                 source="expanded_streamk_catalog",
                 instantiation_level=1,
             ),
@@ -458,7 +472,7 @@ def generated_expanded_streamk_kernel_catalog():
                 "f16",
                 "f16",
                 dtype_d="f16",
-                tile_shapes=EXPANDED_STREAMK_TILE_SHAPES,
+                tile_shapes=_get_exhaustive_8x4_tiles(),
                 source="expanded_streamk_catalog",
                 instantiation_level=1,
             ),
