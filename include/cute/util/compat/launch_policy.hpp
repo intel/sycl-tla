@@ -249,6 +249,14 @@ struct KernelFunctor {
 //====================================================================
 // This helper function avoids 2 nested `if constexpr` in detail::launch
 template <auto F, typename LaunchPolicy, typename... Args>
+auto build_kernel_functor(LaunchPolicy launch_policy, Args... args) {
+  return KernelFunctor<F, typename LaunchPolicy::RangeT,
+                       typename LaunchPolicy::KPropsT,
+                       LaunchPolicy::HasLocalMem, Args...>(
+      launch_policy.get_kernel_properties(), args...);
+}
+
+template <auto F, typename LaunchPolicy, typename... Args>
 auto build_kernel_functor(sycl::handler &cgh, LaunchPolicy launch_policy,
                           Args... args)
     -> KernelFunctor<F, typename LaunchPolicy::RangeT,
@@ -262,10 +270,7 @@ auto build_kernel_functor(sycl::handler &cgh, LaunchPolicy launch_policy,
                          LaunchPolicy::HasLocalMem, Args...>(
         launch_policy.get_kernel_properties(), local_memory, args...);
   } else {
-    return KernelFunctor<F, typename LaunchPolicy::RangeT,
-                         typename LaunchPolicy::KPropsT,
-                         LaunchPolicy::HasLocalMem, Args...>(
-        launch_policy.get_kernel_properties(), args...);
+    return build_kernel_functor<F, LaunchPolicy, Args...>(launch_policy, args...);
   }
 }
 

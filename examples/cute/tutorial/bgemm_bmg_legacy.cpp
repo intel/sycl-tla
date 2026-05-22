@@ -235,7 +235,7 @@ gemm_device(ProblemShape shape_MNK, CtaTiler cta_tiler, int stages,
   Tensor tCrC = partition_fragment_C(tiled_mma, take<0,2>(cta_tiler));
   clear(tCrC);
 
-  constexpr int barrier_scope = 2;
+  constexpr SPIRVScope barrier_scope = ScopeWorkgroup;
   int k_tile_count = ceil_div(get<2>(shape_MNK), get<2>(cta_tiler));
 
   CUTLASS_PRAGMA_UNROLL
@@ -331,6 +331,7 @@ gemm_nt(int m, int n, int k,
   compat::experimental::launch_policy policy{
     dimGrid, dimBlock, launch_props, kernel_props
   };
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
   auto event = compat::experimental::launch<
     gemm_device<decltype(prob_shape), decltype(cta_tiler),
                 TA, decltype(dA), decltype(copyA),
@@ -345,8 +346,23 @@ gemm_nt(int m, int n, int k,
                     B, dB, copyB,
                     C, dC, copyC, mmaC,
                     alpha, beta);
-
   EventManager::getInstance().addEvent(event);
+#else
+  compat::experimental::launch<
+    gemm_device<decltype(prob_shape), decltype(cta_tiler),
+                TA, decltype(dA), decltype(copyA),
+                TB, decltype(dB), decltype(copyB),
+                TC, decltype(dC), decltype(copyC), decltype(mmaC),
+                Alpha, Beta>, GemmDeviceName<decltype(prob_shape), decltype(cta_tiler),
+                TA, decltype(dA), decltype(copyA),
+                TB, decltype(dB), decltype(copyB),
+                TC, decltype(dC), decltype(copyC), decltype(mmaC),
+                Alpha, Beta>, false>(policy, prob_shape, cta_tiler, bP,
+                    A, dA, copyA,
+                    B, dB, copyB,
+                    C, dC, copyC, mmaC,
+                    alpha, beta);
+#endif
 }
 
 // Setup params for a NT GEMM
@@ -412,6 +428,7 @@ gemm_tn(int m, int n, int k,
   compat::experimental::launch_policy policy{
     dimGrid, dimBlock, launch_props, kernel_props
   };
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
   auto event = compat::experimental::launch<
     gemm_device<decltype(prob_shape), decltype(cta_tiler),
                 TA, decltype(dA), decltype(copyA),
@@ -427,6 +444,22 @@ gemm_tn(int m, int n, int k,
                     C, dC, copyC, mmaC,
                     alpha, beta);
   EventManager::getInstance().addEvent(event);
+#else
+  compat::experimental::launch<
+    gemm_device<decltype(prob_shape), decltype(cta_tiler),
+                TA, decltype(dA), decltype(copyA),
+                TB, decltype(dB), decltype(copyB),
+                TC, decltype(dC), decltype(copyC), decltype(mmaC),
+                Alpha, Beta>, GemmDeviceName<decltype(prob_shape), decltype(cta_tiler),
+                TA, decltype(dA), decltype(copyA),
+                TB, decltype(dB), decltype(copyB),
+                TC, decltype(dC), decltype(copyC), decltype(mmaC),
+                Alpha, Beta>, false>(policy, prob_shape, cta_tiler, bP,
+                    A, dA, copyA,
+                    B, dB, copyB,
+                    C, dC, copyC, mmaC,
+                    alpha, beta);
+#endif
 }
 
 template <class TA, class TB, class TC,
@@ -492,6 +525,7 @@ gemm_tt(int m, int n, int k,
   compat::experimental::launch_policy policy{
     dimGrid, dimBlock, launch_props, kernel_props
   };
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
   auto event = compat::experimental::launch<
     gemm_device<decltype(prob_shape), decltype(cta_tiler),
                 TA, decltype(dA), decltype(copyA),
@@ -506,8 +540,23 @@ gemm_tt(int m, int n, int k,
                     B, dB, copyB,
                     C, dC, copyC, mmaC,
                     alpha, beta);
-
   EventManager::getInstance().addEvent(event);
+#else
+  compat::experimental::launch<
+    gemm_device<decltype(prob_shape), decltype(cta_tiler),
+                TA, decltype(dA), decltype(copyA),
+                TB, decltype(dB), decltype(copyB),
+                TC, decltype(dC), decltype(copyC), decltype(mmaC),
+                Alpha, Beta>, GemmDeviceName<decltype(prob_shape), decltype(cta_tiler),
+                TA, decltype(dA), decltype(copyA),
+                TB, decltype(dB), decltype(copyB),
+                TC, decltype(dC), decltype(copyC), decltype(mmaC),
+                Alpha, Beta>, false>(policy, prob_shape, cta_tiler, bP,
+                    A, dA, copyA,
+                    B, dB, copyB,
+                    C, dC, copyC, mmaC,
+                    alpha, beta);
+#endif
 }
 
 template <class TA, class TB, class TC,

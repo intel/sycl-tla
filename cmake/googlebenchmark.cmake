@@ -39,7 +39,7 @@ set(GBENCH_REPOSITORY "https://github.com/google/benchmark.git" CACHE STRING "Go
 FetchContent_Declare(
   googlebenchmark
   GIT_REPOSITORY ${GBENCH_REPOSITORY}
-  GIT_TAG        v1.9.0
+  GIT_TAG        v1.9.5
   EXCLUDE_FROM_ALL
   )
 

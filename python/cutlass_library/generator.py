@@ -10969,6 +10969,15 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
                 schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
                 CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+                # StreamK uses atomic reduction on the accumulator type in fixup()
+                # via BlockStripedReduce::reduce() -> atomic_add<ElementAccumulator>.
+                # SYCL atomic_ref only supports: int, unsigned int, long, unsigned long,
+                # long long, unsigned long long, half, float, double and pointer types.
+                # bfloat16_t is NOT supported, so skip StreamK when accumulator is bf16.
+                sycl_streamk_safe_types = [DataType.f16, DataType.f32, DataType.f64]
+                if data_type["acc_type"] in sycl_streamk_safe_types:
+                    schedules_cooperative = [[KernelScheduleType.XeCooperative, EpilogueScheduleType.ScheduleAuto]]
+                    CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules_cooperative, tile_schedulers=[TileSchedulerType.StreamK])
    
 def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate FP8 (E4M3/E5M2) GEMM kernels for Intel Xe architecture using DPAS.

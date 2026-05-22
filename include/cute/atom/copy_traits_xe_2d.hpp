@@ -1470,7 +1470,12 @@ make_block_2d_copy_CD_subtiled(CopyOp             const& op,          // Copy op
   //   - SubtileSGLayout must have a subtile for each ThrK, OR ThrK must be the last mode.
   decltype(coalesce(get<0>(svC))) sC{};
   constexpr auto mode_thr_k = find_if(stride(sC), [](auto const &x) { return C<is_constant_v<0, decltype(x)>>{}; });
-  static_assert(shape<mode_thr_k>(sC) == shape<3>(thr_vmnk), "ThrK split into multiple modes; unsupported");
+  using SCShape =
+      cute::remove_cvref_t<decltype(shape<mode_thr_k>(sC))>;
+  using TVShape =
+      cute::remove_cvref_t<decltype(shape<3>(thr_vmnk))>;
+  static_assert(cute::is_same_v<SCShape, TVShape>,
+                "ThrK split into multiple modes; unsupported");
 
   auto k_to_mn = composition(make_layout(tile_mn), xssg_layout);                    // ThrK -> (M,N)
 

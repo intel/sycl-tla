@@ -355,7 +355,9 @@ gemm_nt(int m, int n, int k,
                     B, dB, sB, copyB,
                     C, dC, sC, mmaC,
                     alpha, beta);
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
   EventManager::getInstance().addEvent(event);
+#endif
 }
 
 // Setup params for a NT GEMM
@@ -434,7 +436,9 @@ gemm_tn(int m, int n, int k,
                     B, dB, sB, copyB,
                     C, dC, sC, mmaC,
                     alpha, beta);
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
   EventManager::getInstance().addEvent(event);
+#endif
 }
 
 template <class TA, class TB, class TC,

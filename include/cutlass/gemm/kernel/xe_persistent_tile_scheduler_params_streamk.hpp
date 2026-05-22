@@ -609,7 +609,8 @@ struct PersistentTileSchedulerXeStreamKParams {
     int splits,
     DecompositionMode decomposition_mode,
     uint32_t barrier_bits,
-    uint32_t element_accumulator_bits) {
+    uint32_t element_accumulator_bits,
+    cudaStream_t stream = nullptr) {
 
     dim3 problem_blocks = get_tiled_wg_shape_mnl(problem_shape, tile_shape);
     uint32_t k_tiles_per_output_tile = (problem_shape.k() + tile_shape.k() - 1) / tile_shape.k();
@@ -623,7 +624,8 @@ struct PersistentTileSchedulerXeStreamKParams {
       splits,
       decomposition_mode,
       barrier_bits,
-      element_accumulator_bits
+      element_accumulator_bits,
+      stream
     );
   }
 
@@ -640,7 +642,8 @@ struct PersistentTileSchedulerXeStreamKParams {
     int splits,
     DecompositionMode decomposition_mode,
     uint32_t barrier_bits,
-    uint32_t element_accumulator_bits) {
+    uint32_t element_accumulator_bits,
+    cudaStream_t stream = nullptr) {
 
       uint64_t barrier_workspace_size = 0;
       uint64_t reduction_workspace_size = 0;
@@ -666,7 +669,7 @@ struct PersistentTileSchedulerXeStreamKParams {
         // Only the barrier workspace needs to be cleared for stream-K.
         // Barrier workspace follows reduction workspace.
         uint8_t* barrier_workspace = reinterpret_cast<uint8_t*>(workspace) + reduction_workspace_size;
-        return zero_workspace(static_cast<void*>(barrier_workspace), barrier_workspace_size);
+        return zero_workspace(static_cast<void*>(barrier_workspace), barrier_workspace_size, stream);
       }
 
     return Status::kSuccess;
