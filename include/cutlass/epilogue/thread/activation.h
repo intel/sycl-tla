@@ -433,6 +433,15 @@ struct Sigmoid<Array<T, N>> {
     return fma(tanh(mul(z, cutlass::constants::half<T>())),
                cutlass::constants::half<T>(),
                cutlass::constants::half<T>());
+#elif defined(__SYCL_DEVICE_ONLY__)
+    // Use SYCL native math for better throughput on Intel GPUs
+    Array<T, N> result;
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < N; ++i) {
+      float val = static_cast<float>(z[i]);
+      result[i] = static_cast<T>(sycl::native::recip(1.0f + sycl::native::exp(-val)));
+    }
+    return result;
 #else
     plus<Array<T, N>> add;
     divides<Array<T, N>> div;

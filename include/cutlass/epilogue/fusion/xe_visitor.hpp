@@ -453,7 +453,8 @@ template <
   class CopyOpG2R_ = void,
   int Alignment = 128 / sizeof_bits_v<Element>,
   bool EnableNullptr = true,
-  bool UseBlock2DCopy = false
+  bool UseBlock2DCopy = false,
+  bool SkipBoundsCheck = false
 >
 struct XeAuxLoad {
   using SharedStorage = Element;
@@ -569,34 +570,43 @@ struct XeAuxLoad {
          }
        }
 
-       // Load from global memory using vectorized copy_if with bounds checking (matches XeRowBroadcastLegacy pattern)
        auto tCgAux_mn = tCgAux_epi(_,epi_m,epi_n);
-       auto coord_mn = gAux_coord(_,_,epi_m,epi_n);
-       auto [M, N, L] = params_ptr->mAux.shape();
-       auto problem_shape_mn = make_coord(M, N);
-       
-       // Zero-fill out-of-bounds elements first
-       clear(tC_rAux);
-       
+
        constexpr auto MCL = decltype(max_common_layout(tCgAux_mn, tC_rAux)){};
        constexpr int V = cute::min(Alignment, size(MCL));
-       if constexpr (V > 1) {
-        // vectorized load
-         using VecType = uint_bit_t<V * sizeof_bits_v<Element>>;
-         Tensor tCgAux_vec = recast<VecType>(coalesce(tCgAux_mn));
-         Tensor tCrAux_vec = recast<VecType>(coalesce(tC_rAux));
-         Tensor coord_vec = tensor<1>(zipped_divide(coord_mn, MCL.compose(Int<V>{})));
-         
-         auto pred_fn = [&](auto const&... coords) CUTLASS_LAMBDA_FUNC_INLINE {
-           return elem_less(coord_vec(coords...), problem_shape_mn);
-         };
-         copy_if(pred_fn, tCgAux_vec, tCrAux_vec);
+
+       if constexpr (SkipBoundsCheck) {
+         // Fast path: no bounds checking (use when M%tile_M==0 && N%tile_N==0)
+         if constexpr (V > 1) {
+           using VecType = uint_bit_t<V * sizeof_bits_v<Element>>;
+           Tensor tCgAux_vec = recast<VecType>(coalesce(tCgAux_mn));
+           Tensor tCrAux_vec = recast<VecType>(coalesce(tC_rAux));
+           copy(tCgAux_vec, tCrAux_vec);
+         } else {
+           copy(tCgAux_mn, tC_rAux);
+         }
        } else {
-        // scalar load
-         auto pred_fn = [&](auto const&... coords) CUTLASS_LAMBDA_FUNC_INLINE {
-           return elem_less(coord_mn(coords...), problem_shape_mn);
-         };
-         copy_if(pred_fn, tCgAux_mn, tC_rAux);
+         // Safe path: bounds checking with copy_if
+         auto coord_mn = gAux_coord(_,_,epi_m,epi_n);
+         auto [M, N, L] = params_ptr->mAux.shape();
+         auto problem_shape_mn = make_coord(M, N);
+         clear(tC_rAux);
+
+         if constexpr (V > 1) {
+           using VecType = uint_bit_t<V * sizeof_bits_v<Element>>;
+           Tensor tCgAux_vec = recast<VecType>(coalesce(tCgAux_mn));
+           Tensor tCrAux_vec = recast<VecType>(coalesce(tC_rAux));
+           Tensor coord_vec = tensor<1>(zipped_divide(coord_mn, MCL.compose(Int<V>{})));
+           auto pred_fn = [&](auto const&... coords) CUTLASS_LAMBDA_FUNC_INLINE {
+             return elem_less(coord_vec(coords...), problem_shape_mn);
+           };
+           copy_if(pred_fn, tCgAux_vec, tCrAux_vec);
+         } else {
+           auto pred_fn = [&](auto const&... coords) CUTLASS_LAMBDA_FUNC_INLINE {
+             return elem_less(coord_mn(coords...), problem_shape_mn);
+           };
+           copy_if(pred_fn, tCgAux_mn, tC_rAux);
+         }
        }
     }
 
