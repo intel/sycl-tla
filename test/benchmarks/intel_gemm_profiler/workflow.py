@@ -1269,7 +1269,7 @@ def build_parser():
     parser.add_argument("--run-candidate-build-preflight", action="store_true", help="Execute per-batch candidate benchmark preflight build plans before the aggregate candidate benchmark build. Requires --candidate-build-batch-size to produce batch plans.")
     parser.add_argument("--use-candidate-build-preflight-benchmarks", action="store_true", help="Route benchmark screening and confirmation entries to per-batch benchmark executables produced by --run-candidate-build-preflight instead of the aggregate benchmark executable.")
     parser.add_argument("--resume-candidate-build-preflight", action="store_true", help="Resume a previous preflight build: skip batches whose log shows successful completion. Uses preflight_progress.json in the reports directory.")
-    parser.add_argument("--candidate-build-parallelism", type=int, default=1, help="Number of concurrent batch compilations during preflight. 1 = sequential (default). On a 256-vCPU server, N=8 uses ~30 percent of CPU for ~8x speedup.")
+    parser.add_argument("--candidate-build-parallelism", type=int, default=16, help="Number of concurrent batch compilations during preflight. 1 = sequential (default). On a 256-vCPU server, N=8 uses ~30 percent of CPU for ~8x speedup.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")
