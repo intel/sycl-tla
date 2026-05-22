@@ -228,12 +228,14 @@ def resolve_device_target(build_config, runtime_config=None, shell_init="", envi
     if not should_detect:
         return resolved, record
 
+    selected_id = record["selected_device_id"]
+
     devices = discovery_devices
     if devices is None:
         devices, command, errors = discover_xpu_smi_devices(shell_init=shell_init, target_device_id=selected_id)
         record["discovery_command"] = command
         record["errors"].extend(errors)
-    selected_id = record["selected_device_id"]
+
     selected = None
     if selected_id:
         selected = next((device for device in devices if str(device.get("device_id", "")) == selected_id), None)
@@ -261,6 +263,12 @@ def resolve_device_target(build_config, runtime_config=None, shell_init="", envi
         cmake_vars[cmake_var] = fallback
         record.update({"status": "fallback", "resolved_target": fallback, "reason": "device target detection did not match a known device"})
         return resolved, record
+
+    raise RuntimeError(
+        "Unable to auto-detect DPCPP_SYCL_TARGET. "
+        "Set build_config.cmake_vars.DPCPP_SYCL_TARGET explicitly or provide device_target_detection.fallback_target. "
+        f"Detection errors: {'; '.join(record['errors'])}"
+    )
 
     raise RuntimeError(
         "Unable to auto-detect DPCPP_SYCL_TARGET. "
