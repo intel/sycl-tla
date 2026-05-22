@@ -448,17 +448,18 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
         worker_cores = {}  # worker_idx → [core_list]
 
         def _build_affinity(plan, worker_idx):
-            # Set CPU affinity on this thread (subprocess inherits it)
+            # Compute CPU affinity for this worker
             start = (worker_idx * cores_per_worker) % total_vcpus
             affinity = list(range(start, min(start + cores_per_worker, total_vcpus)))
             if len(affinity) < cores_per_worker:
                 affinity += list(range(0, cores_per_worker - len(affinity)))
-            try:
-                os.sched_setaffinity(0, affinity)
-            except Exception:
-                pass
 
             with semaphore:
+                # Set affinity INSIDE semaphore to avoid race between threads
+                try:
+                    os.sched_setaffinity(0, affinity)
+                except Exception:
+                    pass
                 result = _build_one(plan)
             with lock:
                 results_by_index[plan["batch_index"]] = result
@@ -623,7 +624,7 @@ def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir,
         getattr(args, "hw_spec_id", "") or profiles.get("device_target_detection", {}).get("resolved_hw_spec_id", ""),
     )
     allowed_runners = ("benchmark", "streamk_example") if env_caps["executables"].get("streamk_example_available") else ("benchmark",)
-    static_candidate_space = generate_candidate_space(shapes_doc, static_constraints, profiles, allowed_runners=allowed_runners)
+    static_candidate_space = generate_candidate_space(shapes_doc, static_constraints, profiles, allowed_runners=allowed_runners, prefilter_strategy=getattr(args, "prefilter", "none"))
     probe_rows = []
     probe_logs = []
     probe_commands = []
@@ -1036,6 +1037,7 @@ def workflow(args):
         catalog_source=args.kernel_catalog_source,
         generator_arch=args.generator_arch,
         generator_instantiation_level=args.generator_instantiation_level,
+        prefilter_strategy=getattr(args, "prefilter", "none"),
     )
     write_json(reports_dir / "kernel_catalog.json", kernel_catalog)
     candidate_space = generate_candidate_space(
@@ -1047,6 +1049,7 @@ def workflow(args):
         catalog_source=args.kernel_catalog_source,
         generator_arch=args.generator_arch,
         generator_instantiation_level=args.generator_instantiation_level,
+        prefilter_strategy=getattr(args, "prefilter", "none"),
     )
     candidate_space = filter_candidate_space_by_compiled_kernels(
         candidate_space,

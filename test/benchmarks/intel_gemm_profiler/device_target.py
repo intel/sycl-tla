@@ -270,12 +270,6 @@ def resolve_device_target(build_config, runtime_config=None, shell_init="", envi
         f"Detection errors: {'; '.join(record['errors'])}"
     )
 
-    raise RuntimeError(
-        "Unable to auto-detect DPCPP_SYCL_TARGET. "
-        "Set build_config.cmake_vars.DPCPP_SYCL_TARGET explicitly or provide device_target_detection.fallback_target. "
-        f"Detection errors: {'; '.join(record['errors'])}"
-    )
-
 
 def resolve_profiles_device_target(profiles, shell_init="", environ=None, discovery_devices=None):
     resolved = copy.deepcopy(profiles)
