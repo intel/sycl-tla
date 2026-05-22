@@ -476,9 +476,20 @@ struct SiLu<Array<T, N>> {
 
   CUTLASS_HOST_DEVICE
   Array<T, N> operator()(Array<T, N> const &value) const {
+#if defined(__SYCL_DEVICE_ONLY__)
+    // Fused SiLu: x * sigmoid(x) in a single loop using native math
+    Array<T, N> result;
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < N; ++i) {
+      float v = static_cast<float>(value[i]);
+      result[i] = static_cast<T>(v * sycl::native::recip(1.0f + sycl::native::exp(-v)));
+    }
+    return result;
+#else
     Sigmoid<Array<T, N>> sigmoid_op;
     multiplies<Array<T, N>>     mul;
     return mul(value, sigmoid_op(value));
+#endif
   }
 };
 
