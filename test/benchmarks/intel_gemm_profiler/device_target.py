@@ -154,8 +154,33 @@ def _run_discovery_command(command, shell_init):
     return subprocess.run(["bash", "-lc", payload], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False, timeout=30)
 
 
-def discover_xpu_smi_devices(shell_init=""):
+def discover_xpu_smi_devices(shell_init="", target_device_id=""):
     errors = []
+    # When a specific device is requested, use targeted discovery first
+    # (JSON mode may use different numbering than ZE_AFFINITY_MASK)
+    if target_device_id:
+        for command, parser in (
+            (["xpu-smi", "discovery", "-d", target_device_id], parse_xpu_smi_discovery),
+            (["xpu-smi", "discovery", "-j"], parse_xpu_smi_json),
+        ):
+            try:
+                process = _run_discovery_command(command, shell_init)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                errors.append(f"{shell_join(command)}: {exc}")
+                continue
+            if process.returncode != 0:
+                errors.append(f"{shell_join(command)} returned {process.returncode}: {process.stdout.strip()}")
+                continue
+            try:
+                devices = parser(process.stdout)
+            except (json.JSONDecodeError, ValueError) as exc:
+                errors.append(f"{shell_join(command)} parse failed: {exc}")
+                continue
+            if devices:
+                return devices, shell_join(command), errors
+        return [], "", errors
+
+    # No specific device: try JSON first, fall back to text
     for command, parser in (
         (["xpu-smi", "discovery", "-j"], parse_xpu_smi_json),
         (["xpu-smi", "discovery"], parse_xpu_smi_discovery),
@@ -205,7 +230,7 @@ def resolve_device_target(build_config, runtime_config=None, shell_init="", envi
 
     devices = discovery_devices
     if devices is None:
-        devices, command, errors = discover_xpu_smi_devices(shell_init=shell_init)
+        devices, command, errors = discover_xpu_smi_devices(shell_init=shell_init, target_device_id=selected_id)
         record["discovery_command"] = command
         record["errors"].extend(errors)
     selected_id = record["selected_device_id"]
