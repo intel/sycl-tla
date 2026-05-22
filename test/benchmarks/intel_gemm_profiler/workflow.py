@@ -360,7 +360,7 @@ def _save_preflight_progress(progress_path, completed_batches):
     """Atomically save batch completion state."""
     tmp = Path(str(progress_path) + ".tmp")
     write_json(tmp, {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": "1.0",
         "generated_at": now_iso(),
         "completed_batches": completed_batches,
     })
