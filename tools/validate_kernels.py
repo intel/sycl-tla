@@ -36,10 +36,10 @@ def load_manifest(path):
         return json.load(f)
 
 
-def build_kernel_batch_map(manifest):
+def build_kernel_batch_map(manifest, workspace_dir):
     """Build {kernel_id: {batch_id, exe_path}} map from manifest."""
     kernel_map = {}
-    base_dir = Path(manifest.get("_workspace_dir", "."))
+    base_dir = Path(manifest.get("_workspace_dir", workspace_dir))
     for batch in manifest.get("selected_kernel_batches", []):
         batch_id = batch["batch_id"]
         batch_dir = base_dir / "build" / "candidate_benchmarks" / "candidate_batch_preflight" / batch_id
@@ -72,8 +72,7 @@ def build_config_file(kernel_id, shapes, output_path):
     for sid, m, n, k, da, dc, layout in shapes:
         lines.append(
             f"{kernel_id} --bm_name={kernel_id}__{sid}__validate__0 "
-            f"--m={m} --n={n} --k={k} --l=1 --alpha=1 --beta=0 --layout={layout} "
-            f"--A=dtype:{da} --B=dtype:{da} --C=dtype:{dc} --D=dtype:{dc}"
+            f"--m={m} --n={n} --k={k} --l=1 --alpha=1.0 --beta=0.0"
         )
     Path(output_path).write_text("\n".join(lines) + "\n")
 
@@ -114,6 +113,7 @@ def run_kernel(exe_path, config_path, log_path, timeout):
             os.killpg(proc.pid, signal.SIGKILL)
             stdout, _ = proc.communicate()
 
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
     Path(log_path).write_text(stdout or "")
     return proc.returncode if not timed_out else 124, timed_out, stdout or ""
 
@@ -189,7 +189,7 @@ def main():
 
     # Load manifest + shapes
     manifest = load_manifest(args.manifest)
-    kernel_map = build_kernel_batch_map(manifest)
+    kernel_map = build_kernel_batch_map(manifest, args.workspace)
     shapes = load_shapes(args.shapes)
 
     print(f"Manifest: {len(kernel_map)} kernels")
