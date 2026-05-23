@@ -105,12 +105,17 @@ def run_kernel(exe_path, config_path, log_path, timeout):
         stdout, _ = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
+        # Try best-effort cleanup, but don't block on hung GPU processes
         try:
             os.killpg(proc.pid, signal.SIGTERM)
-            stdout, _ = proc.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            stdout, _ = proc.communicate()
+            stdout, _ = proc.communicate(timeout=3)
+        except (subprocess.TimeoutExpired, OSError):
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+                stdout, _ = proc.communicate(timeout=3)
+            except (subprocess.TimeoutExpired, OSError):
+                # GPU hung in D-state — cannot kill, move on
+                stdout = "TIMEOUT_GPU_HUNG"
 
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
     Path(log_path).write_text(stdout or "")
