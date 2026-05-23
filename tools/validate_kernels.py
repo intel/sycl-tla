@@ -196,6 +196,14 @@ def main():
     kernel_map = build_kernel_batch_map(manifest, args.workspace)
     shapes = load_shapes(args.shapes)
 
+    # --- Performance-critical flags (compile + runtime) ---
+    os.environ.setdefault("IGC_ExtraOCLOptions", "-cl-intel-256-GRF-per-thread")
+    os.environ.setdefault("IGC_VectorAliasBBThreshold", "10000")
+    os.environ.setdefault("SYCL_PROGRAM_COMPILE_OPTIONS", "-ze-opt-large-register-file -gline-tables-only")
+    os.environ.setdefault("CC", "icx")
+    os.environ.setdefault("CXX", "icpx")
+    os.environ.setdefault("ONEAPI_DEVICE_SELECTOR", "level_zero:gpu")
+    print(f"Flags: 256GRF large-register-file VectorAliasBB=10000")
     print(f"Manifest: {len(kernel_map)} kernels")
     print(f"Shapes: {len(shapes)} shapes")
     print(f"Timeout: {args.timeout}s")
