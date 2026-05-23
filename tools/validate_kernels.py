@@ -78,12 +78,11 @@ def build_config_file(kernel_id, shapes, output_path):
 
 
 def parse_benchmark_output(text, kernel_id, shape_id):
-    """Parse Google Benchmark output to extract avg_tflops and avg_runtime_ms."""
-    # Pattern: benchmark_name ... avg_runtime_ms=X.XX avg_tflops=Y.YY ...
+    """Parse Google Benchmark output (new 50+50 timer format)."""
     for line in text.splitlines():
-        if "avg_tflops" in line and "avg_runtime_ms" in line:
+        if "avg_tflops=" in line:
             tflops_match = re.search(r"avg_tflops=([0-9.]+)", line)
-            runtime_match = re.search(r"avg_runtime_ms=([0-9.]+)", line)
+            runtime_match = re.search(r"(?:runtime_trimmed_mean_ms|avg_runtime_ms)=([0-9.]+)", line)
             if tflops_match and runtime_match:
                 return float(tflops_match.group(1)), float(runtime_match.group(1))
     return None, None
