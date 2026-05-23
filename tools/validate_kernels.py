@@ -206,7 +206,13 @@ def main():
     results = ckpt["results"]
 
     # Resume
-    remaining = [k for k in sorted(kernel_map.keys()) if k not in completed]
+    # Build a sorted list from the manifest batch order
+    batch_order = {}
+    for batch in manifest.get("selected_kernel_batches", []):
+        for kid in batch.get("selected_kernel_list", []):
+            if kid not in batch_order:
+                batch_order[kid] = batch["batch_index"]
+    remaining = [k for k in sorted(kernel_map.keys(), key=lambda x: batch_order.get(x, 9999)) if k not in completed]
     print(f"Completed: {len(completed)}, Remaining: {len(remaining)}")
 
     if args.dry_run:
