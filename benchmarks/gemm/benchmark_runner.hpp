@@ -1102,6 +1102,9 @@ struct BenchmarkRunnerGemm {
     for (int w = 0; w < kWarmupIters; ++w) {
       run_args(0);
       gemm_op.run();
+#if defined(CUTLASS_ENABLE_SYCL)
+      compat::wait();
+#endif
     }
     state.ResumeTiming();
 
@@ -1116,6 +1119,9 @@ struct BenchmarkRunnerGemm {
       GPU_Clock timer;
       timer.start();
       gemm_op.run();
+#if defined(CUTLASS_ENABLE_SYCL)
+      compat::wait();
+#endif
       double ms = timer.milliseconds();
       runtimes.push_back(ms);
       state.SetIterationTime(ms / 1000.0);
