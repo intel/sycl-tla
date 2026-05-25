@@ -1157,15 +1157,11 @@ private:
   // ── GB-free profiler: bypasses Google Benchmark entirely ──
   // Uses batch-wait pattern (matches 00_bmg_gemm example at 126 TFLOPS).
   double run_direct(const GEMMOptions& options, const KernelHardwareInfo& hw_info) {
+    // Use the PROVEN initialize() code path from run() — identical buffer setup
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
-    auto [M, N, K, L] = cute::append<4>(problem_size, 1);
-    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
-    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
-    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
-    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
-    block_A[0].reset(M * K * L); block_B[0].reset(K * N * L);
-    block_C[0].reset(M * N * L); block_D.reset(M * N * L);
-    initialize_block(block_A[0], 2023); initialize_block(block_B[0], 2022); initialize_block(block_C[0], 2021);
+    alignas(64) char state_buf[256] = {};
+    auto& sref = *reinterpret_cast<::benchmark::State*>(state_buf);
+    initialize(sref, problem_size);
 
     typename GemmConfiguration::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
     arguments.mode = gemm::GemmUniversalMode::kGemm; arguments.problem_shape = problem_size;
