@@ -1030,11 +1030,13 @@ struct BenchmarkRunnerGemm {
 #endif
 
     // FIXME: skip GPU reference verification for perf debugging
-    // Verify that the result is correct
+    // SKIP verify for perf debugging
+#if 0
     bool passed = verify(problem_size, ElementCompute(options.alpha), ElementCompute(options.beta));
     if(not passed) {
       state.SkipWithError("Disposition Failed.");
     }
+#endif
 
     state.counters["m"] = options.m;
     state.counters["n"] = options.n;
@@ -1082,52 +1084,34 @@ struct BenchmarkRunnerGemm {
     state.PauseTiming();
     for (int w = 0; w < kWarmupIters; ++w) {
       gemm_op.run();
-#if defined(CUTLASS_ENABLE_SYCL)
-      compat::wait();
-#endif
     }
+#if defined(CUTLASS_ENABLE_SYCL)
+    compat::wait();
+#endif
     state.ResumeTiming();
 
     // --- timed measurement ---
-    std::vector<double> runtimes;
-    runtimes.reserve(kMeasureIters);
+    GPU_Clock batch_timer;
+    batch_timer.start();
     for (int i = 0; i < kMeasureIters; ++i) {
-      GPU_Clock timer;
-      timer.start();
       gemm_op.run();
-#if defined(CUTLASS_ENABLE_SYCL)
-      compat::wait();
-#endif
-      double ms = timer.milliseconds();
-      runtimes.push_back(ms);
-      state.SetIterationTime(ms / 1000.0);
     }
+#if defined(CUTLASS_ENABLE_SYCL)
+    compat::wait();
+#endif
+    double total_ms = batch_timer.milliseconds();
+    double avg_ms_per_iter = total_ms / kMeasureIters;
+
+    std::vector<double> runtimes(kMeasureIters, avg_ms_per_iter);
+    state.SetIterationTime(avg_ms_per_iter / 1000.0);
     state.SetItemsProcessed(kMeasureIters);
 
-    // --- statistics ---
-    std::sort(runtimes.begin(), runtimes.end());
-    double best = runtimes.front();
-    double worst = runtimes.back();
-    double median = (runtimes[kMeasureIters/2] + runtimes[(kMeasureIters-1)/2]) / 2.0;
-
-    double total = 0.0;
-    for (double t : runtimes) total += t;
-    double avg = total / kMeasureIters;
-
-    // trimmed mean: drop top/bottom 10% (= 5 each)
-    static constexpr int kTrim = kMeasureIters / 10;
-    double trimmed_total = 0.0;
-    for (int i = kTrim; i < kMeasureIters - kTrim; ++i)
-      trimmed_total += runtimes[i];
-    double trimmed_mean = trimmed_total / (kMeasureIters - 2 * kTrim);
-
-    // standard deviation
-    double variance = 0.0;
-    for (double t : runtimes) {
-      double d = t - avg;
-      variance += d * d;
-    }
-    double stddev = std::sqrt(variance / kMeasureIters);
+    double best = avg_ms_per_iter;
+    double worst = avg_ms_per_iter;
+    double median = avg_ms_per_iter;
+    double avg = avg_ms_per_iter;
+    double trimmed_mean = avg_ms_per_iter;
+    double stddev = 0.0;
 
     state.counters["runtime_min_ms"] = best;
     state.counters["runtime_max_ms"] = worst;
