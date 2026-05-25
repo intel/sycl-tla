@@ -57,6 +57,14 @@ def run_benchmark(command, log_path, cwd=None, shell_init=None, timeout=None):
         popen_command = ["bash", "-lc", payload]
     else:
         popen_command = command
+
+    # Build subprocess environment with mitigations for GPU hang during shutdown
+    subprocess_env = os.environ.copy()
+    # Use immediate command lists to avoid SYCL queue batching deadlock
+    subprocess_env.setdefault("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", "1")
+    # Composite device hierarchy avoids multi-tile sync issues
+    subprocess_env.setdefault("ZE_FLAT_DEVICE_HIERARCHY", "COMPOSITE")
+
     process = subprocess.Popen(
         popen_command,
         cwd=cwd,
@@ -65,6 +73,7 @@ def run_benchmark(command, log_path, cwd=None, shell_init=None, timeout=None):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
+        env=subprocess_env,
     )
     try:
         stdout, _ = process.communicate(timeout=timeout)
@@ -79,6 +88,9 @@ def run_benchmark(command, log_path, cwd=None, shell_init=None, timeout=None):
             os.killpg(process.pid, signal.SIGKILL)
             stdout, _ = process.communicate()
         process = subprocess.CompletedProcess(popen_command, 124, output_text(stdout or exc.stdout), output_text(exc.stderr))
+        # Brief delay to allow GPU driver to recover from hung process
+        import time
+        time.sleep(2.0)
     with open(log_path, "w", encoding="utf-8") as handle:
         handle.write(output_text(process.stdout))
         if timed_out:
