@@ -1175,9 +1175,11 @@ private:
     if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess) return 0.0;
     if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess) return 0.0;
 
-    for (int w = 0; w < 50; ++w) gemm_op.run(); compat::wait();
+    for (int w = 0; w < 50; ++w) gemm_op.run();
+    compat::wait();
     GPU_Clock timer; timer.start();
-    for (int i = 0; i < 50; ++i) gemm_op.run(); compat::wait();
+    for (int i = 0; i < 50; ++i) gemm_op.run();
+    compat::wait();
     return (2.0 * options.m * options.n * options.k * options.l * 1e-9) / (timer.milliseconds() / 50.0);
   }
 };
