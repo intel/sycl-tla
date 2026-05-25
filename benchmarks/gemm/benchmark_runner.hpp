@@ -1029,6 +1029,7 @@ struct BenchmarkRunnerGemm {
     cudaDeviceSynchronize();
 #endif
 
+    // FIXME: skip GPU reference verification for perf debugging
     // Verify that the result is correct
     bool passed = verify(problem_size, ElementCompute(options.alpha), ElementCompute(options.beta));
     if(not passed) {
@@ -1077,30 +1078,9 @@ struct BenchmarkRunnerGemm {
     static constexpr int kWarmupIters = 50;
     static constexpr int kMeasureIters = 50;
 
-    auto run_args = [&](int input_idx) {
-      typename Gemm::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
-      set_scheduler_splits(arguments, options.split_k_slices);
-      arguments.mode = gemm::GemmUniversalMode::kGemm;
-      arguments.problem_shape = problem_size;
-      arguments.mainloop = {block_A[input_idx].get(), stride_A, block_B[input_idx].get(), stride_B};
-      arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[input_idx].get(), stride_C, block_D.get(), stride_D};
-      arguments.hw_info = hw_info;
-      if constexpr (is_mixed_dtype<DispatchPolicy>) {
-        arguments.mainloop = {block_A[input_idx].get(), stride_A, block_B[input_idx].get(), stride_B, block_scale.get(),
-                stride_S, block_zero.get(), stride_Z, 128};
-      }
-      if constexpr(epi_is_deeltactmul){
-        arguments.epilogue.thread.aux_ptr = block_Aux[input_idx].get();
-        arguments.epilogue.thread.dAux = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
-      }
-      gemm_op.initialize(arguments, workspace.get());
-      return arguments;
-    };
-
     // --- explicit warmup (discarded, NOT timed) ---
     state.PauseTiming();
     for (int w = 0; w < kWarmupIters; ++w) {
-      run_args(0);
       gemm_op.run();
 #if defined(CUTLASS_ENABLE_SYCL)
       compat::wait();
@@ -1108,14 +1088,10 @@ struct BenchmarkRunnerGemm {
     }
     state.ResumeTiming();
 
-    // --- timed measurement (50 iterations) ---
+    // --- timed measurement ---
     std::vector<double> runtimes;
     runtimes.reserve(kMeasureIters);
     for (int i = 0; i < kMeasureIters; ++i) {
-      state.PauseTiming();
-      run_args(0);
-      state.ResumeTiming();
-
       GPU_Clock timer;
       timer.start();
       gemm_op.run();
