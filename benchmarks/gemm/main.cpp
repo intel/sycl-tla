@@ -1,97 +1,67 @@
-/***************************************************************************************************
-* Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
- * Copyright (C) 2026 Intel Corporation, All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- **************************************************************************************************/
-
 #include "cutlass/cutlass.h"
 #include "cutlass/kernel_hardware_info.h"
 #include "cutlass/util/command_line.h"
-
-#include "benchmark_runner.hpp"
+#include <iostream>
 #if defined(SYCL_NVIDIA_TARGET) || !defined(CUTLASS_ENABLE_SYCL)
 #include "benchmarks_cuda.hpp"
 #elif defined(SYCL_INTEL_TARGET)
 #include "benchmarks_sycl.hpp"
 #endif
+#include "benchmark_runner.hpp"
+
+// ── Dual-mode profiler main ──
+// --config_file=PATH  → Google Benchmark path (legacy)
+// --kernel=NAME        → GB-free direct profiling (new)
 
 int main(int argc, const char** argv) {
+  cutlass::CommandLine cmd(argc, argv);
 
-  BenchmarkOptions options;
-
-  options.parse(argc, argv);
-
-  if (options.help) {
-    options.print_usage(std::cout) << std::endl;
+  // Legacy GB mode
+  std::string config_file;
+  cmd.get_cmd_line_argument("config_file", config_file, std::string(""));
+  if (!config_file.empty()) {
+    BenchmarkOptions options;
+    options.parse(argc, argv);
+    if (options.error) return -1;
+    std::ifstream file(options.config_file);
+    if (!file.is_open()) { std::cerr << "Cannot open config" << std::endl; return 1; }
+    register_gemm_benchmarks();
+    std::string line;
+    while (std::getline(file, line))
+      if (!line.empty() && line[0] != '#') register_benchmarks<cutlass::benchmark::GEMMOptions>(line);
+    file.close();
+    ::benchmark::Initialize(nullptr, nullptr);
+    ::benchmark::SetDefaultTimeUnit(::benchmark::kMillisecond);
+    ::benchmark::RunSpecifiedBenchmarks();
+    compat::wait();
+    ::benchmark::Shutdown();
     return 0;
   }
 
-  if (options.config_file.empty()) {
-    std::cerr << "Benchmark configuration file not found." << std::endl;
-    options.error = true;
-  }
-
-  if (options.error) {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
-  }
-
-  std::ifstream file(options.config_file);
-
-  if (!file.is_open()) {
-    std::cerr << "Failed to open configuration file: " << options.config_file << std::endl;
-    return 1;
-  }
+  // ── Direct profiling (GB-free, matches NVIDIA CUTLASS profiler pattern) ──
+  std::string kernel;
+  cmd.get_cmd_line_argument("kernel", kernel, std::string(""));
+  if (kernel.empty()) { std::cerr << "--kernel=NAME [--m=8192 --n=4096 --k=1536]" << std::endl; return 1; }
 
   register_gemm_benchmarks();
+  cutlass::KernelHardwareInfo hw;
+  hw.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw.device_id);
+  cutlass::benchmark::GEMMOptions opts;
+  cmd.get_cmd_line_argument("m", opts.m, 8192); cmd.get_cmd_line_argument("n", opts.n, 4096);
+  cmd.get_cmd_line_argument("k", opts.k, 1536); cmd.get_cmd_line_argument("l", opts.l, 1);
+  cmd.get_cmd_line_argument("alpha", opts.alpha, 1.0f); cmd.get_cmd_line_argument("beta", opts.beta, 0.0f);
+  opts.verify_library = 0; opts.split_k_slices = 0;
 
-  std::string line;
-  while (std::getline(file, line)) {
-    if (!line.empty() && line.find("#") != 0) {
-      register_benchmarks<cutlass::benchmark::GEMMOptions>(line);
-    }
-  }
-  file.close();
-
-  int argc_bm = 0;
-  ::benchmark::SetDefaultTimeUnit(::benchmark::kMillisecond);
-  ::benchmark::Initialize(&argc_bm, nullptr);
-
-  ::benchmark::RunSpecifiedBenchmarks();
-
-  // Flush SYCL queue before GB shutdown to prevent GPU hang.
-  // GemmUniversalAdapter::run() accumulates sycl::event in EventManager
-  // singleton. Without this wait, Shutdown() triggers static destructors
-  // that destroy pending events while SYCL runtime tears down → deadlock.
-  compat::wait();
-
-  ::benchmark::Shutdown();
-
+  double tflops = 0; bool ok = false;
+#define RUN(K) if (kernel == #K) { tflops = cutlass::benchmark::BenchmarkRunnerGemm<K>().run_direct(opts, hw); ok = true; }
+  RUN(BmgGemmBF16BF16FP32_RRR_Gemm_256x256x32_SG8x4)
+  RUN(BmgGemmBF16BF16FP32_RRR_Gemm_256x256x64_SG8x4)
+  RUN(BmgGemmBF16BF16FP32_RCR_6)
+  RUN(BmgGemmBF16BF16FP32_RCR_17)
+  RUN(BmgGemmBF16BF16FP32_RCR_18)
+  RUN(BmgGemmBF16BF16FP32_RCR_19)
+#undef RUN
+  if (!ok) { std::cerr << "not found: " << kernel << std::endl; return 1; }
+  std::cout << "median_tflops=" << tflops << " KERNEL=" << kernel << " STATUS=OK" << std::endl;
   return 0;
 }

@@ -1152,6 +1152,37 @@ private:
     state.counters["best_tflop"] = gflop / state.counters["best_runtime_ms"];
     state.counters["best_bandwidth"] = mega_bytes_transferred / state.counters["best_runtime_ms"];
   }
+
+  // ── GB-free profiler: bypasses Google Benchmark entirely ──
+  // Uses batch-wait pattern (matches 00_bmg_gemm example at 126 TFLOPS).
+  double run_direct(const GEMMOptions& options, const KernelHardwareInfo& hw_info) {
+    ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
+    auto [M, N, K, L] = cute::append<4>(problem_size, 1);
+    stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(M, K, L));
+    stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(N, K, L));
+    stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
+    stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
+    block_A[0].reset(M * K * L); block_B[0].reset(K * N * L);
+    block_C[0].reset(M * N * L); block_D.reset(M * N * L);
+    initialize_block(block_A[0], 2023); initialize_block(block_B[0], 2022); initialize_block(block_C[0], 2021);
+
+    typename GemmConfiguration::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
+    arguments.mode = gemm::GemmUniversalMode::kGemm; arguments.problem_shape = problem_size;
+    arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B};
+    arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[0].get(), stride_C, block_D.get(), stride_D};
+    arguments.hw_info = hw_info;
+
+    Gemm gemm_op; size_t ws = Gemm::get_workspace_size(arguments);
+    device_memory::allocation<uint8_t> workspace;
+    try { workspace.reset(ws); } catch (...) { return 0.0; }
+    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess) return 0.0;
+    if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess) return 0.0;
+
+    for (int w = 0; w < 50; ++w) gemm_op.run(); compat::wait();
+    GPU_Clock timer; timer.start();
+    for (int i = 0; i < 50; ++i) gemm_op.run(); compat::wait();
+    return (2.0 * options.m * options.n * options.k * options.l * 1e-9) / (timer.milliseconds() / 50.0);
+  }
 };
 
 }
