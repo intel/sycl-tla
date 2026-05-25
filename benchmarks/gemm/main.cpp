@@ -2,12 +2,13 @@
 #include "cutlass/kernel_hardware_info.h"
 #include "cutlass/util/command_line.h"
 #include <iostream>
+#include "benchmark_runner.hpp"
+
 #if defined(SYCL_NVIDIA_TARGET) || !defined(CUTLASS_ENABLE_SYCL)
 #include "benchmarks_cuda.hpp"
 #elif defined(SYCL_INTEL_TARGET)
 #include "benchmarks_sycl.hpp"
 #endif
-#include "benchmark_runner.hpp"
 
 // ── Dual-mode profiler main ──
 // --config_file=PATH  → Google Benchmark path (legacy)
