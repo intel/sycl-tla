@@ -1153,6 +1153,7 @@ private:
     state.counters["best_bandwidth"] = mega_bytes_transferred / state.counters["best_runtime_ms"];
   }
 
+  public:
   // ── GB-free profiler: bypasses Google Benchmark entirely ──
   // Uses batch-wait pattern (matches 00_bmg_gemm example at 126 TFLOPS).
   double run_direct(const GEMMOptions& options, const KernelHardwareInfo& hw_info) {
