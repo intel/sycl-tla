@@ -84,6 +84,13 @@ int main(int argc, const char** argv) {
   ::benchmark::Initialize(&argc_bm, nullptr);
 
   ::benchmark::RunSpecifiedBenchmarks();
+
+  // Flush SYCL queue before GB shutdown to prevent GPU hang.
+  // GemmUniversalAdapter::run() accumulates sycl::event in EventManager
+  // singleton. Without this wait, Shutdown() triggers static destructors
+  // that destroy pending events while SYCL runtime tears down → deadlock.
+  compat::wait();
+
   ::benchmark::Shutdown();
 
   return 0;
