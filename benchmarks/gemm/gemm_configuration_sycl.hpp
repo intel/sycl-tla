@@ -43,6 +43,8 @@
 #include "cutlass/gemm/dispatch_policy.hpp"
 #include "cutlass/gemm/collective/collective_mma.hpp"
 #include "cutlass/gemm/collective/collective_builder.hpp"
+#include "cutlass/gemm/kernel/gemm_universal.hpp"
+#include "cutlass/gemm/device/gemm_universal_adapter.h"
 #include "cutlass/gemm/kernel/tile_scheduler.hpp"
 #include "cutlass/gemm/kernel/xe_persistent_tile_scheduler_params_streamk.hpp"
 #include "cutlass/epilogue/collective/collective_builder.hpp"
