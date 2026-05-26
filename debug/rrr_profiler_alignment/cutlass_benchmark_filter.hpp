@@ -1,0 +1,2 @@
+#pragma once
+#define CUTLASS_BENCHMARK_ENABLE_BmgGemmBF16BF16FP32_RRR_6 1

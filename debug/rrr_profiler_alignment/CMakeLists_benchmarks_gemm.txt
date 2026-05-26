@@ -1,0 +1,124 @@
+# Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# Pass these configuration files for the CI
+set(CONFIG_FILE_INTEL_SMALL --config_file=${CUTLASS_DIR}/benchmarks/device/bmg/input_files/input_small_gemm.in)
+set(CONFIG_FILE_CUDA --config_file=${CUTLASS_DIR}/benchmarks/device/ampere/input_files/input_gemm.in)
+
+cutlass_benchmark_add_suite(cutlass_benchmarks_gemm)
+
+if(CUTLASS_ENABLE_SYCL)
+
+if(SYCL_INTEL_TARGET)
+
+option(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK "Enable expanded BMG StreamK/DataParallel/SplitK benchmark registrations." OFF)
+option(CUTLASS_BENCHMARK_EXHAUSTIVE_GEMM "Enable filter-generated BMG regular GEMM exhaustive registrations." OFF)
+
+set(CUTLASS_GEMM_BENCHMARK_LIBRARIES)
+if(KERNEL_FILTER_FILE AND TARGET cutlass_lib_static)
+  list(APPEND CUTLASS_GEMM_BENCHMARK_LIBRARIES cutlass_lib_static)
+  set(CUTLASS_GEMM_BENCHMARK_ENABLE_LIBRARY_GEMM ON)
+else()
+  set(CUTLASS_GEMM_BENCHMARK_ENABLE_LIBRARY_GEMM OFF)
+endif()
+
+cutlass_benchmark_add_executable(
+    cutlass_benchmarks_gemm_sycl
+    main.cpp
+    SUITE cutlass_benchmarks_gemm
+    LIBRARIES ${CUTLASS_GEMM_BENCHMARK_LIBRARIES}
+    TEST_COMMAND_OPTIONS
+    CONFIG_FILE_INTEL_SMALL
+)
+
+if(CUTLASS_GEMM_BENCHMARK_ENABLE_LIBRARY_GEMM)
+  target_compile_definitions(cutlass_benchmarks_gemm_sycl PRIVATE CUTLASS_BENCHMARK_ENABLE_LIBRARY_GEMM=1)
+endif()
+if(KERNEL_FILTER_FILE)
+  set(CUTLASS_BENCHMARK_FILTER_HEADER "${CMAKE_CURRENT_BINARY_DIR}/cutlass_benchmark_filter.hpp")
+  set(CUTLASS_BENCHMARK_EXHAUSTIVE_DECLARE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/cutlass_benchmark_exhaustive_gemm_declare.hpp")
+  set(CUTLASS_BENCHMARK_EXHAUSTIVE_REGISTER_HEADER "${CMAKE_CURRENT_BINARY_DIR}/cutlass_benchmark_exhaustive_gemm_register.hpp")
+  file(STRINGS "${KERNEL_FILTER_FILE}" CUTLASS_BENCHMARK_FILTER_LINES REGEX "^\\^[A-Za-z0-9_]+\\$$")
+  file(WRITE "${CUTLASS_BENCHMARK_FILTER_HEADER}" "#pragma once\n")
+  file(WRITE "${CUTLASS_BENCHMARK_EXHAUSTIVE_DECLARE_HEADER}" "#pragma once\n")
+  file(WRITE "${CUTLASS_BENCHMARK_EXHAUSTIVE_REGISTER_HEADER}" "#pragma once\n")
+  foreach(CUTLASS_BENCHMARK_FILTER_LINE IN LISTS CUTLASS_BENCHMARK_FILTER_LINES)
+    string(REGEX REPLACE "^\\^([A-Za-z0-9_]+)\\$$" "\\1" CUTLASS_BENCHMARK_FILTER_KERNEL "${CUTLASS_BENCHMARK_FILTER_LINE}")
+    file(APPEND "${CUTLASS_BENCHMARK_FILTER_HEADER}" "#define CUTLASS_BENCHMARK_ENABLE_${CUTLASS_BENCHMARK_FILTER_KERNEL} 1\n")
+    if(CUTLASS_BENCHMARK_EXHAUSTIVE_GEMM AND CUTLASS_BENCHMARK_FILTER_KERNEL MATCHES "^BmgGemm(BF16BF16FP32|FP16FP16FP32)_RCR_GemmExhaustive_([0-9]+)x([0-9]+)x([0-9]+)_SG([0-9]+)x([0-9]+)_ST([0-9]+)$")
+      set(CUTLASS_BENCHMARK_EXHAUSTIVE_FAMILY "${CMAKE_MATCH_1}")
+      set(CUTLASS_BENCHMARK_EXHAUSTIVE_M "${CMAKE_MATCH_2}")
+      set(CUTLASS_BENCHMARK_EXHAUSTIVE_N "${CMAKE_MATCH_3}")
+      set(CUTLASS_BENCHMARK_EXHAUSTIVE_K "${CMAKE_MATCH_4}")
+      set(CUTLASS_BENCHMARK_EXHAUSTIVE_SGM "${CMAKE_MATCH_5}")
+      set(CUTLASS_BENCHMARK_EXHAUSTIVE_SGN "${CMAKE_MATCH_6}")
+      set(CUTLASS_BENCHMARK_EXHAUSTIVE_STAGES "${CMAKE_MATCH_7}")
+      if(CUTLASS_BENCHMARK_EXHAUSTIVE_FAMILY STREQUAL "BF16BF16FP32")
+        set(CUTLASS_BENCHMARK_EXHAUSTIVE_PREFIX "BmgGemmBF16BF16FP32_RCR")
+        set(CUTLASS_BENCHMARK_EXHAUSTIVE_CONFIG "Gemm_Bench_BF16FP32_RCR")
+        set(CUTLASS_BENCHMARK_EXHAUSTIVE_ATOM "MMAAtom")
+      else()
+        set(CUTLASS_BENCHMARK_EXHAUSTIVE_PREFIX "BmgGemmFP16FP16FP32_RCR")
+        set(CUTLASS_BENCHMARK_EXHAUSTIVE_CONFIG "Gemm_Bench_F16FP32_RCR")
+        set(CUTLASS_BENCHMARK_EXHAUSTIVE_ATOM "MMAAtomF16")
+      endif()
+      file(APPEND "${CUTLASS_BENCHMARK_EXHAUSTIVE_DECLARE_HEADER}" "BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE(${CUTLASS_BENCHMARK_EXHAUSTIVE_PREFIX}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_CONFIG}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_ATOM}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_M}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_N}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_K}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_SGM}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_SGN}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_STAGES})\n")
+      file(APPEND "${CUTLASS_BENCHMARK_EXHAUSTIVE_REGISTER_HEADER}" "BMG_REGISTER_EXHAUSTIVE_GEMM_TILE_STAGE(${CUTLASS_BENCHMARK_EXHAUSTIVE_PREFIX}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_M}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_N}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_K}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_SGM}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_SGN}, ${CUTLASS_BENCHMARK_EXHAUSTIVE_STAGES})\n")
+    endif()
+  endforeach()
+  target_compile_definitions(cutlass_benchmarks_gemm_sycl PRIVATE CUTLASS_BENCHMARK_FILTER_ENABLED=1)
+  if(CUTLASS_BENCHMARK_EXHAUSTIVE_GEMM)
+    target_compile_definitions(cutlass_benchmarks_gemm_sycl PRIVATE CUTLASS_BENCHMARK_EXHAUSTIVE_GEMM=1)
+  endif()
+  target_include_directories(cutlass_benchmarks_gemm_sycl PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+if(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)
+  target_compile_definitions(cutlass_benchmarks_gemm_sycl PRIVATE CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK=1)
+endif()
+
+else()
+cutlass_benchmark_add_executable(
+    cutlass_benchmarks_gemm_sycl
+    main.cpp
+    SUITE cutlass_benchmarks_gemm
+    TEST_COMMAND_OPTIONS
+    CONFIG_FILE_CUDA
+)
+endif()
+
+else()
+
+cutlass_benchmark_add_executable(
+    cutlass_benchmarks_gemm_cuda
+    main.cu
+    SUITE cutlass_benchmarks_gemm
+    TEST_COMMAND_OPTIONS
+    CONFIG_FILE_CUDA
+)
+
+endif()

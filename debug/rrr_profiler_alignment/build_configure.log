@@ -1,0 +1,105 @@
+-- CMake Version: 3.28.3
+-- CUTLASS 4.2.1
+-- The CXX compiler identification is IntelLLVM 2025.3.2
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /opt/intel/oneapi/compiler/2025.3/bin/icpx - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- DPCPP_SYCL_TARGET as list intel_gpu_bmg_g31
+-- DPCPP INCLUDE DIR: /opt/intel/oneapi/compiler/2025.3/bin/../include/sycl;/opt/intel/oneapi/compiler/2025.3/bin/../include
+-- Using DPCPP compile flags: -fsycl;;-fsycl-host-compiler=g++-13;-fsycl-host-compiler-options=-Wno-changes-meaning $<$<BOOL:$<TARGET_PROPERTY:POSITION_INDEPENDENT_CODE>>:-fPIC> -D$<JOIN:$<TARGET_PROPERTY:COMPILE_DEFINITIONS>, -D> -I$<JOIN:$<TARGET_PROPERTY:INCLUDE_DIRECTORIES>, -I>;-fno-sycl-instrument-device-code;-fsycl-targets=spir64_gen;
+-- Using DPCPP link flags: -fsycl;;-fsycl-host-compiler=g++-13;-fsycl-host-compiler-options=-Wno-changes-meaning $<$<BOOL:$<TARGET_PROPERTY:POSITION_INDEPENDENT_CODE>>:-fPIC> -D$<JOIN:$<TARGET_PROPERTY:COMPILE_DEFINITIONS>, -D> -I$<JOIN:$<TARGET_PROPERTY:INCLUDE_DIRECTORIES>, -I>;-fno-sycl-instrument-device-code;-fsycl-targets=spir64_gen;-Xsycl-target-backend=spir64_gen;-device bmg-g31;-Xspirv-translator;-spirv-ext=+SPV_INTEL_split_barrier,+SPV_INTEL_2d_block_io,+SPV_INTEL_subgroup_matrix_multiply_accumulate
+-- Default Install Location: install
+-- Found Python3: /usr/bin/python3 (found suitable version "3.12.3", minimum required is "3.5") found components: Interpreter 
+-- oneMKL found.
+-- Full path of filter file: /root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/reports/selected_kernel_filter_part001.list
+-- Enable caching of reference results in conv unit tests
+-- Enable rigorous conv problem sizes in conv unit tests
+-- Grid Dependency Control (GDC) is enabled for SM100 kernels (required for programmatic dependent launches).
+CUDA_VERSION check pass 
+-- Using the following NVCC flags: 
+  --expt-relaxed-constexpr
+  -ftemplate-backtrace-limit=0
+  -DCUTLASS_TEST_LEVEL=0
+  -DCUTLASS_TEST_ENABLE_CACHED_RESULTS=1
+  -DCUTLASS_CONV_UNIT_TEST_RIGOROUS_SIZE_ENABLED=1
+  -DCUTLASS_DEBUG_TRACE_LEVEL=0
+  -Xcompiler=-Wconversion
+  -Xcompiler=-fno-strict-aliasing
+  -Xcudafe
+  --diag_suppress=implicit_return_from_non_void_function
+-- The C compiler identification is IntelLLVM 2025.3.2
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /opt/intel/oneapi/compiler/2025.3/bin/icx - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Configuring cublas ...
+-- cuBLAS Disabled.
+-- Configuring cuBLAS ... done.
+-- Completed generation of library instances. See /root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001/tools/library/library_instance_generation.log for more information.
+-- Found Python3: /usr/bin/python3 (found suitable version "3.12.3", minimum required is "3.5") found components: Interpreter 
+-- Failed to find LLVM FileCheck
+-- Found Git: /usr/bin/git (found version "2.43.0") 
+-- Google Benchmark version: v1.9.0, normalized to 1.9.0
+-- Looking for shm_open in rt
+-- Looking for shm_open in rt - found
+-- Performing Test HAVE_CXX_FLAG_WALL
+-- Performing Test HAVE_CXX_FLAG_WALL - Success
+-- Performing Test HAVE_CXX_FLAG_WEXTRA
+-- Performing Test HAVE_CXX_FLAG_WEXTRA - Success
+-- Performing Test HAVE_CXX_FLAG_WSHADOW
+-- Performing Test HAVE_CXX_FLAG_WSHADOW - Success
+-- Performing Test HAVE_CXX_FLAG_WFLOAT_EQUAL
+-- Performing Test HAVE_CXX_FLAG_WFLOAT_EQUAL - Success
+-- Performing Test HAVE_CXX_FLAG_WOLD_STYLE_CAST
+-- Performing Test HAVE_CXX_FLAG_WOLD_STYLE_CAST - Success
+-- Performing Test HAVE_CXX_FLAG_WCONVERSION
+-- Performing Test HAVE_CXX_FLAG_WCONVERSION - Success
+-- Performing Test HAVE_CXX_FLAG_WERROR
+-- Performing Test HAVE_CXX_FLAG_WERROR - Success
+-- Performing Test HAVE_CXX_FLAG_WSUGGEST_OVERRIDE
+-- Performing Test HAVE_CXX_FLAG_WSUGGEST_OVERRIDE - Success
+-- Performing Test HAVE_CXX_FLAG_PEDANTIC
+-- Performing Test HAVE_CXX_FLAG_PEDANTIC - Success
+-- Performing Test HAVE_CXX_FLAG_PEDANTIC_ERRORS
+-- Performing Test HAVE_CXX_FLAG_PEDANTIC_ERRORS - Success
+-- Performing Test HAVE_CXX_FLAG_WSHORTEN_64_TO_32
+-- Performing Test HAVE_CXX_FLAG_WSHORTEN_64_TO_32 - Success
+-- Performing Test HAVE_CXX_FLAG_FSTRICT_ALIASING
+-- Performing Test HAVE_CXX_FLAG_FSTRICT_ALIASING - Success
+-- Performing Test HAVE_CXX_FLAG_WNO_DEPRECATED_DECLARATIONS
+-- Performing Test HAVE_CXX_FLAG_WNO_DEPRECATED_DECLARATIONS - Success
+-- Performing Test HAVE_CXX_FLAG_WD1786
+-- Performing Test HAVE_CXX_FLAG_WD1786 - Failed
+-- Performing Test HAVE_CXX_FLAG_FNO_FINITE_MATH_ONLY
+-- Performing Test HAVE_CXX_FLAG_FNO_FINITE_MATH_ONLY - Failed
+-- Performing Test HAVE_CXX_FLAG_WNO_DEPRECATED
+-- Performing Test HAVE_CXX_FLAG_WNO_DEPRECATED - Success
+-- Performing Test HAVE_CXX_FLAG_WD654
+-- Performing Test HAVE_CXX_FLAG_WD654 - Failed
+-- Performing Test HAVE_CXX_FLAG_WTHREAD_SAFETY
+-- Performing Test HAVE_CXX_FLAG_WTHREAD_SAFETY - Success
+-- Enabling additional flags: -DINCLUDE_DIRECTORIES=/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001/_deps/googlebenchmark-src/include
+-- Compiling and running to test HAVE_THREAD_SAFETY_ATTRIBUTES
+-- Performing Test HAVE_THREAD_SAFETY_ATTRIBUTES -- success
+-- Performing Test HAVE_CXX_FLAG_COVERAGE
+-- Performing Test HAVE_CXX_FLAG_COVERAGE - Success
+-- Compiling and running to test HAVE_STD_REGEX
+-- Performing Test HAVE_STD_REGEX -- success
+-- Compiling and running to test HAVE_GNU_POSIX_REGEX
+-- Performing Test HAVE_GNU_POSIX_REGEX -- failed to compile
+-- Compiling and running to test HAVE_POSIX_REGEX
+-- Performing Test HAVE_POSIX_REGEX -- success
+-- Compiling and running to test HAVE_STEADY_CLOCK
+-- Performing Test HAVE_STEADY_CLOCK -- success
+-- Compiling and running to test HAVE_PTHREAD_AFFINITY
+-- Performing Test HAVE_PTHREAD_AFFINITY -- success
+-- Configuring done (40.5s)
+-- Generating done (0.2s)
+-- Build files have been written to: /root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001
