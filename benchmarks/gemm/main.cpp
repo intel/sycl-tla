@@ -61,6 +61,7 @@ int main(int argc, const char** argv) {
   RUN(BmgGemmBF16BF16FP32_RCR_17)
   RUN(BmgGemmBF16BF16FP32_RCR_18)
   RUN(BmgGemmBF16BF16FP32_RCR_19)
+  RUN(BmgGemmBF16BF16FP32_RRR_6)
 #undef RUN
   if (!ok) { std::cerr << "not found: " << kernel << std::endl; return 1; }
   std::cout << "median_tflops=" << tflops << " KERNEL=" << kernel << " STATUS=OK" << std::endl;
