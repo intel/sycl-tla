@@ -71,7 +71,7 @@ def _best_provider(metrics, provider_names=None):
     return provider, value
 
 
-def build_ali_gemm_docs(workbook_path, layout="rcr", supported_dtypes=("bf16", "f16")):
+def build_ali_gemm_docs(workbook_path, layouts=("rcr", "rrr"), supported_dtypes=("bf16", "f16")):
     from openpyxl import load_workbook
 
     workbook = load_workbook(Path(workbook_path), data_only=True, read_only=True)
@@ -111,53 +111,54 @@ def build_ali_gemm_docs(workbook_path, layout="rcr", supported_dtypes=("bf16", "
                 provider, best_tflops = _best_provider(metrics, ALI_REFERENCE_PROVIDERS.get(dtype))
                 if best_tflops is None:
                     continue
-                entry = {
-                    "sheet": sheet.title,
-                    "layout": layout,
-                    "dtype_a": dtype,
-                    "dtype_b": dtype,
-                    "dtype_c": "f32",
-                    "dtype_d": "f32",
-                    "dtype_acc": "f32",
-                    "m": int(m),
-                    "n": int(n),
-                    "k": int(k),
-                    "batch_count": 1,
-                    "shape_type": str(shape_type or "").strip(),
-                    "shape_id": _shape_id(layout, dtype, int(m), int(n), int(k)),
-                    "providers": metrics,
-                    "reference_provider": provider,
-                    "reference_tflops": best_tflops,
-                    "supported": dtype in supported_dtypes,
-                }
-                entries.append(entry)
-                if entry["supported"]:
-                    shape_key = (
-                        entry["shape_id"],
-                        entry["dtype_a"],
-                        entry["m"],
-                        entry["n"],
-                        entry["k"],
-                    )
-                    if shape_key not in seen_shapes:
-                        seen_shapes.add(shape_key)
-                        shapes.append(
-                            {
-                                "shape_id": entry["shape_id"],
-                                "layout": layout,
-                                "dtype_a": dtype,
-                                "dtype_b": dtype,
-                                "dtype_c": "f32",
-                                "dtype_d": "f32",
-                                "dtype_acc": "f32",
-                                "m": int(m),
-                                "n": int(n),
-                                "k": int(k),
-                                "batch_count": 1,
-                                "runtime_defaults": {},
-                                "tags": [entry["shape_type"].replace(" ", "_").lower()] if entry["shape_type"] else [],
-                            }
+                for layout in layouts:
+                    entry = {
+                        "sheet": sheet.title,
+                        "layout": layout,
+                        "dtype_a": dtype,
+                        "dtype_b": dtype,
+                        "dtype_c": "f32",
+                        "dtype_d": "f32",
+                        "dtype_acc": "f32",
+                        "m": int(m),
+                        "n": int(n),
+                        "k": int(k),
+                        "batch_count": 1,
+                        "shape_type": str(shape_type or "").strip(),
+                        "shape_id": _shape_id(layout, dtype, int(m), int(n), int(k)),
+                        "providers": metrics,
+                        "reference_provider": provider,
+                        "reference_tflops": best_tflops,
+                        "supported": dtype in supported_dtypes,
+                    }
+                    entries.append(entry)
+                    if entry["supported"]:
+                        shape_key = (
+                            entry["shape_id"],
+                            entry["dtype_a"],
+                            entry["m"],
+                            entry["n"],
+                            entry["k"],
                         )
+                        if shape_key not in seen_shapes:
+                            seen_shapes.add(shape_key)
+                            shapes.append(
+                                {
+                                    "shape_id": entry["shape_id"],
+                                    "layout": layout,
+                                    "dtype_a": dtype,
+                                    "dtype_b": dtype,
+                                    "dtype_c": "f32",
+                                    "dtype_d": "f32",
+                                    "dtype_acc": "f32",
+                                    "m": int(m),
+                                    "n": int(n),
+                                    "k": int(k),
+                                    "batch_count": 1,
+                                    "runtime_defaults": {},
+                                    "tags": [entry["shape_type"].replace(" ", "_").lower()] if entry["shape_type"] else [],
+                                }
+                            )
                 else:
                     skipped.append(
                         {

@@ -261,9 +261,12 @@ using BmgTile_19 = TiledMMAHelper<MMAAtom, Layout<BmgGemm_BF16FP32_TileShape_128
 using BmgGemmBF16BF16FP32_RCR_19 = Gemm_Bench_BF16FP32_RCR<BmgGemm_BF16FP32_TileShape_128_256_32, BmgTile_19, void, void>;
 CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_19);
 
-using BmgTile_1 = TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>, Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
-using BmgGemmBF16BF16FP32_RRR_6 = Gemm_Bench_BF16FP32_RRR<Shape<_256, _256, _32>, BmgTile_1, void, void>;
+// RRR kernel using TiledMMAHelper (auto-tuned tile) — matches inner-source 122 TFLOPS approach
+using BmgGemmBF16BF16FP32_RRR_TiledMMAHelper_256x256x32_Tile = typename TiledMMAHelper<MMAAtom, Layout<Shape<_256, _256, _32>>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+using BmgGemmBF16BF16FP32_RRR_6 = Gemm_Bench_BF16FP32_RRR<Shape<_256, _256, _32>, BmgGemmBF16BF16FP32_RRR_TiledMMAHelper_256x256x32_Tile, void, void>;
 CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RRR_6);
+
+using BmgTile_1 = TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>, Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
 using BmgGemmBF16BF16FP32_RCR_6 = Gemm_Bench_BF16FP32_RCR<Shape<_256, _256, _32>, BmgTile_1, void, void>;
 CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_6);
 #if defined(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)

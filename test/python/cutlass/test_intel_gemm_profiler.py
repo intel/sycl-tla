@@ -3123,10 +3123,12 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
             shapes_doc, reference_doc = profiler.build_ali_gemm_docs(workbook_path)
 
-        self.assertEqual(len(shapes_doc["shapes"]), 2)
+        self.assertEqual(len(shapes_doc["shapes"]), 4)
         shape_ids = {shape["shape_id"] for shape in shapes_doc["shapes"]}
         self.assertIn("rcr_bf16_8192_4096_4096", shape_ids)
         self.assertIn("rcr_f16_8192_4096_4096", shape_ids)
+        self.assertIn("rrr_bf16_8192_4096_4096", shape_ids)
+        self.assertIn("rrr_f16_8192_4096_4096", shape_ids)
         bf16_entry = next(entry for entry in reference_doc["entries"] if entry["dtype_a"] == "bf16")
         self.assertEqual(bf16_entry["reference_provider"], "Sycl_TLA(03_dp)")
         self.assertEqual(bf16_entry["reference_tflops"], 160.2)
@@ -3185,10 +3187,10 @@ class TestIntelGemmProfiler(unittest.TestCase):
             comparison = profiler.read_json(Path(outputs["reference_comparison"]))
 
         self.assertEqual(shapes_doc["source"], str(workbook_path))
-        self.assertEqual(len(shapes_doc["shapes"]), 1)
+        self.assertEqual(len(shapes_doc["shapes"]), 2)  # rcr + rrr for bf16
         self.assertEqual(reference_doc["dataset_id"], "ali_gemm_perf_reference")
-        self.assertEqual(comparison["summary"]["reference_entries"], 1)
-        self.assertEqual(comparison["summary"]["missing_dispatch"], 1)
+        self.assertEqual(comparison["summary"]["reference_entries"], 2)  # rcr + rrr layout variants
+        self.assertEqual(comparison["summary"]["missing_dispatch"], 2)  # rcr + rrr
 
     def test_workflow_limits_ali_shapes_and_reference_entries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3246,10 +3248,10 @@ class TestIntelGemmProfiler(unittest.TestCase):
             comparison = profiler.read_json(Path(outputs["reference_comparison"]))
 
         self.assertEqual(shapes_doc["shape_limit"], 1)
-        self.assertEqual(shapes_doc["unlimited_shape_count"], 3)
+        self.assertEqual(shapes_doc["unlimited_shape_count"], 6)  # 2 rows × (1 bf16 + 1 f16 with data) × 2 layouts
         self.assertEqual(len(shapes_doc["shapes"]), 1)
         self.assertEqual(len(reference_doc["entries"]), 1)
-        self.assertEqual(reference_doc["unlimited_reference_entries"], 3)
+        self.assertEqual(reference_doc["unlimited_reference_entries"], 6)
         self.assertEqual(comparison["summary"]["reference_entries"], 1)
 
     def test_negative_max_shapes_is_rejected(self):
