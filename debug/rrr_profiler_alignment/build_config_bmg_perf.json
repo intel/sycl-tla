@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0",
+  "device_arch": "bmg",
+  "purpose": "optimal_performance_profiling",
+  "cmake_vars": {
+    "CUTLASS_ENABLE_SYCL": "ON",
+    "DPCPP_SYCL_TARGET": "auto",
+    "DPCPP_HOST_COMPILER": "g++-13",
+    "CMAKE_BUILD_TYPE": "Release",
+    "CUTLASS_SYCL_PROFILING_ENABLED": "OFF",
+    "CUTLASS_ENABLE_BENCHMARKS": "ON",
+    "CUTLASS_ENABLE_EXAMPLES": "OFF",
+    "CUTLASS_ENABLE_TESTS": "ON"
+  },
+  "device_target_detection": {
+    "mode": "auto",
+    "cmake_var": "DPCPP_SYCL_TARGET",
+    "fallback_target": "bmg",
+    "strict": false,
+    "selected_device_env": "ZE_AFFINITY_MASK"
+  },
+  "compile_env": {
+    "CC": "icx",
+    "CXX": "icpx",
+    "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+    "IGC_VectorAliasBBThreshold": "10000",
+    "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only"
+  },
+  "compile_env_variants": {
+    "perf_default": {
+      "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+      "IGC_VectorAliasBBThreshold": "10000",
+      "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only"
+    },
+    "perf_perfmodel": {
+      "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+      "IGC_VectorAliasBBThreshold": "10000",
+      "IGC_VISAOptions": "-perfmodel",
+      "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only"
+    },
+    "perf_128grf_experiment": {
+      "IGC_VectorAliasBBThreshold": "10000",
+      "IGC_TotalGRFNum": "128"
+    },
+    "perf_enableBCR": {
+      "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+      "IGC_VectorAliasBBThreshold": "10000",
+      "IGC_VISAOptions": "-enableBCR",
+      "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only"
+    },
+    "debug_with_lines": {
+      "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
+      "IGC_VectorAliasBBThreshold": "10000",
+      "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only"
+    }
+  },
+  "compile_env_variant_metadata": {
+    "perf_default": {
+      "status": "validated",
+      "notes": "Validated on BMG G31: g++-13 host compiler, 256-GRF, large-register-file, and line tables at compile and runtime."
+    },
+    "perf_perfmodel": {
+      "status": "experimental",
+      "notes": "Optional perfmodel sweep. Not selected by default and not enforced by the workflow."
+    },
+    "perf_128grf_experiment": {
+      "status": "needs_validation",
+      "notes": "Experimental 128-GRF trial. Leaves both 256-GRF hints unset on purpose: do not pass -cl-intel-256-GRF-per-thread and do not pass -ze-opt-large-register-file. Advisory only; do not use in production until B60 A/B validation confirms benefit over perf_default."
+    },
+    "perf_enableBCR": {
+      "status": "experimental",
+      "notes": "Optional enableBCR sweep. Not selected by default and not enforced by the workflow."
+    },
+    "debug_with_lines": {
+      "status": "debug_only",
+      "notes": "Adds line tables for debug or profiling workflows."
+    }
+  },
+  "selected_compile_variant": "perf_default"
+}
