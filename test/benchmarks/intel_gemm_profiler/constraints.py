@@ -154,10 +154,58 @@ def load_persisted_runtime_config(path=DEFAULT_RUNTIME_CONFIG_PATH):
     return read_json(path) if path.exists() else _default_runtime_config()
 
 
-def selected_runtime_env(profiles, profile=None):
+def update_build_config_variant(variant_name, path=DEFAULT_BUILD_CONFIG_PATH):
+    """Persist a new selected_compile_variant to the build config file."""
+    config = load_persisted_build_config(path)
+    config["selected_compile_variant"] = variant_name
+    from .utils import write_json
+    write_json(path, config)
+    return config
+
+
+def update_runtime_config_variant(variant_name, path=DEFAULT_RUNTIME_CONFIG_PATH):
+    """Persist a new selected_runtime_variant to the runtime config file."""
+    config = load_persisted_runtime_config(path)
+    config["selected_runtime_variant"] = variant_name
+    from .utils import write_json
+    write_json(path, config)
+    return config
+
+
+def list_compile_variants(path=DEFAULT_BUILD_CONFIG_PATH):
+    """List available compile env variants."""
+    config = load_persisted_build_config(path)
+    variants = config.get("compile_env_variants", {})
+    metadata = config.get("compile_env_variant_metadata", {})
+    result = []
+    for name, env in variants.items():
+        meta = metadata.get(name, {})
+        result.append({
+            "name": name,
+            "status": meta.get("status", "unknown"),
+            "notes": meta.get("notes", ""),
+            "env_keys": sorted(env.keys()),
+        })
+    return result
+
+
+def list_runtime_variants(path=DEFAULT_RUNTIME_CONFIG_PATH):
+    """List available runtime env variants."""
+    config = load_persisted_runtime_config(path)
+    variants = config.get("runtime_env_variants", {})
+    result = []
+    for name, env in variants.items():
+        result.append({
+            "name": name,
+            "env_keys": sorted(env.keys()),
+        })
+    return result
+
+
+def selected_runtime_env(profiles, profile=None, variant_override=None):
     runtime_config = profiles.get("runtime_config", {})
     runtime_env = dict(runtime_config.get("runtime_env", {}))
-    selected_variant = runtime_config.get("selected_runtime_variant")
+    selected_variant = variant_override or runtime_config.get("selected_runtime_variant")
     variant_overrides = runtime_config.get("runtime_env_variants", {}).get(selected_variant, {})
     runtime_env.update(variant_overrides)
     if profile:
@@ -165,10 +213,10 @@ def selected_runtime_env(profiles, profile=None):
     return runtime_env
 
 
-def selected_compile_env(profiles):
+def selected_compile_env(profiles, variant_override=None):
     build_config = profiles.get("build_config", {})
     compile_env = dict(build_config.get("compile_env", {}))
-    selected_variant = build_config.get("selected_compile_variant")
+    selected_variant = variant_override or build_config.get("selected_compile_variant")
     variant_overrides = build_config.get("compile_env_variants", {}).get(selected_variant, {})
     compile_env.update(variant_overrides)
     return compile_env

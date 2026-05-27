@@ -615,8 +615,8 @@ def limit_shapes_and_reference(shapes_doc, reference_doc=None, max_shapes=0):
 
 
 def run_phase_a_probe(args, shapes_doc, base_constraints, profiles, reports_dir, configs_dir, manifests_dir, logs_dir):
-    base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
-    compile_shell_init = shell_init_with_env(args.shell_init, selected_compile_env(profiles))
+    base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles, variant_override=getattr(args, "runtime_variant", None) or None))
+    compile_shell_init = shell_init_with_env(args.shell_init, selected_compile_env(profiles, variant_override=getattr(args, "compile_variant", None) or None))
     env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
     static_constraints = apply_static_probe_constraints(base_constraints, env_caps)
     hw_spec = resolve_hw_reference_spec(
@@ -986,6 +986,30 @@ def workflow(args):
     logs_dir = ensure_dir(workspace / "logs")
     reports_dir = ensure_dir(workspace / "reports")
     profiles = read_json(args.compiler_profiles_json) if args.compiler_profiles_json else default_compiler_profiles()
+
+    # --- Handle variant list/update operations ---
+    from .constraints import (
+        list_compile_variants,
+        list_runtime_variants,
+        update_build_config_variant,
+        update_runtime_config_variant,
+    )
+    if args.list_compile_variants:
+        import json as _json
+        print(_json.dumps(list_compile_variants(), indent=2))
+        return {}
+    if args.list_runtime_variants:
+        import json as _json
+        print(_json.dumps(list_runtime_variants(), indent=2))
+        return {}
+    if args.update_compile_variant:
+        update_build_config_variant(args.update_compile_variant)
+        print(f"Updated build_config_bmg_perf.json selected_compile_variant → {args.update_compile_variant}")
+    if args.update_runtime_variant:
+        update_runtime_config_variant(args.update_runtime_variant)
+        print(f"Updated runtime_config_bmg_perf.json selected_runtime_variant → {args.update_runtime_variant}")
+    if args.update_compile_variant or args.update_runtime_variant:
+        profiles = default_compiler_profiles()  # reload after update
     profiles, device_target_detection = resolve_profiles_device_target(profiles, shell_init=args.shell_init)
     dry_run_mode = getattr(args, "dry_run", False)
     shapes_doc, reference_doc = load_target_shapes_and_reference(args, dry_run_mode)
@@ -998,8 +1022,8 @@ def workflow(args):
     probe_logs = []
     probe_commands = []
     benchmark_commands = []
-    base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles))
-    compile_shell_init = shell_init_with_env(args.shell_init, selected_compile_env(profiles))
+    base_runtime_shell_init = shell_init_with_env(args.shell_init, selected_runtime_env(profiles, variant_override=args.runtime_variant or None))
+    compile_shell_init = shell_init_with_env(args.shell_init, selected_compile_env(profiles, variant_override=args.compile_variant or None))
     if args.constraints_json or probe_mode == "off":
         constraints = copy.deepcopy(base_constraints)
         env_caps = collect_environment_metadata(args.shell_init, args.benchmark_exe, args.streamk_example_exe, cwd=args.cwd)
@@ -1256,6 +1280,12 @@ def build_parser():
     parser.add_argument("--max-shapes", type=int, default=0, help="Limit target shapes to the first N entries after loading --shapes-json, --ali-workbook, or the default shape set. 0 disables the limit.")
     parser.add_argument("--constraints-json", default="", help="Optional path to safe_search_constraints.json.")
     parser.add_argument("--compiler-profiles-json", default="", help="Optional path to compiler_profiles.json.")
+    parser.add_argument("--compile-variant", default="", help="Override the selected compile env variant (e.g., perf_default, perf_perfmodel, debug_with_lines). Uses the variant from build_config_bmg_perf.json when empty.")
+    parser.add_argument("--runtime-variant", default="", help="Override the selected runtime env variant (e.g., default, ze_affinity_7). Uses the variant from runtime_config_bmg_perf.json when empty.")
+    parser.add_argument("--update-compile-variant", default="", help="Persist a new compile variant selection to build_config_bmg_perf.json. Use --list-compile-variants to see available options.")
+    parser.add_argument("--update-runtime-variant", default="", help="Persist a new runtime variant selection to runtime_config_bmg_perf.json. Use --list-runtime-variants to see available options.")
+    parser.add_argument("--list-compile-variants", action="store_true", help="List available compile env variants and exit.")
+    parser.add_argument("--list-runtime-variants", action="store_true", help="List available runtime env variants and exit.")
     parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator", "expanded_streamk", "expanded_bmg", "layered_bmg"], default="persisted", help="Catalog source for Phase B candidates. 'expanded_bmg' enables the opt-in BMG Gemm/StreamK/DataParallel/SplitK tile expansion and requires rebuilding the benchmark with the generated build plan. 'layered_bmg' adds regular GEMM legal tile/subgroup/stage enumeration on top of expanded_bmg. 'expanded_streamk' is kept as a compatibility alias.")
     parser.add_argument("--kernel-catalog-path", default="", help="Optional path to a persisted kernel catalog JSON. Used when --kernel-catalog-source=persisted.")
     parser.add_argument("--prefilter", choices=["none", "light", "medium", "aggressive"], default="none", help="Candidate prefilter strategy: skip configs unlikely to perform well for the target shapes. 'light' removes physically incompatible configs. 'medium' adds ILP-based pruning. 'aggressive' is for fastest search with some risk of missing optimal configs.")
