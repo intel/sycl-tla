@@ -32,6 +32,8 @@ def _read_template_sources(source_root=DEFAULT_SOURCE_ROOT, scan_dirs=DEFAULT_TE
             continue
         for suffix in ("*.hpp", "*.cpp", "*.py"):
             for path in root.rglob(suffix):
+                if 'legacy/' in str(path) or '/legacy/' in str(path):
+                    continue
                 chunks.append(path.read_text(encoding="utf-8", errors="ignore"))
     return "\n".join(chunks)
 
