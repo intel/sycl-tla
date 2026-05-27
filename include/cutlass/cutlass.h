@@ -110,11 +110,15 @@ CUTLASS_HOST_DEVICE bool thread0() {
   #endif
 }
 
-/// Returns a lane index in the warp. The threads in warp may not be convergent
+/// Returns a lane index in the warp/subgroup. The threads in warp may not be convergent
 CUTLASS_DEVICE
-int canonical_lane_idx() { 
+int canonical_lane_idx() {
   #if defined(__CUDA_ARCH__)
     return threadIdx.x % NumThreadsPerWarp;
+  #elif defined(__SYCL_DEVICE_ONLY__)
+    return sycl::ext::oneapi::this_work_item::get_nd_item<3>()
+                      .get_sub_group()
+                      .get_local_id()[0];
   #else
     return 0;
   #endif
