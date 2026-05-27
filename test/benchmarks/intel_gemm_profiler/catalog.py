@@ -121,6 +121,67 @@ def benchmark_streamk_tile_candidates(
     return entries
 
 
+def exhaustive_streamk_tile_candidates(
+    name_prefix,
+    dtype_a,
+    dtype_b,
+    dtype_c,
+    dtype_acc,
+    dtype_d=None,
+    constraints=None,
+    source="exhaustive_streamk_catalog",
+    instantiation_level=3,
+    min_tile_k=32,
+):
+    """Generate StreamK/DataParallel/SplitK candidates for all legal tile shapes
+    from the exhaustive enumeration.  Only emits tiles with tile_k >= min_tile_k
+    (small K does not benefit from K-splitting).  SG is locked to 8x4 because
+    the StreamK C++ template hardcodes this layout.
+    """
+    allowed = (constraints or {}).get("allowed_values", {})
+    limits = (constraints or {}).get("limits", {})
+    valid_sg_sizes = limits.get("valid_subgroup_sizes")
+    tile_m_values = allowed.get("tile_m", [8, 16, 32, 64, 128, 256, 512])
+    tile_n_values = allowed.get("tile_n", [32, 64, 96, 128, 192, 256, 512])
+    tile_k_values = [k for k in allowed.get("tile_k", [16, 32, 64]) if k >= min_tile_k]
+    entries = []
+    for tile_m in tile_m_values:
+        for tile_n in tile_n_values:
+            for tile_k in tile_k_values:
+                # StreamK uses SG 8x4 fixed
+                if not is_valid_xe2_tile_sg((tile_m, tile_n, tile_k), (8, 4, 1), sg_product_set=valid_sg_sizes):
+                    continue
+                for name_mode, streamk_mode, split_k in (
+                    ("StreamK", "streamk", 1),
+                    ("DataParallel", "data_parallel", 1),
+                    *[("SplitK", "splitk", sk) for sk in STREAMK_SPLIT_SIZES if sk > 1],
+                ):
+                    entries.append(
+                        {
+                            "kernel_name": f"{name_prefix}_RCR_{name_mode}_{tile_m}x{tile_n}x{tile_k}",
+                            "layout": "rcr",
+                            "dtype_a": dtype_a,
+                            "dtype_b": dtype_b,
+                            "dtype_c": dtype_c,
+                            "dtype_d": dtype_d or dtype_c,
+                            "dtype_acc": dtype_acc,
+                            "tile_m": tile_m,
+                            "tile_n": tile_n,
+                            "tile_k": tile_k,
+                            "sg_m": 8,
+                            "sg_n": 4,
+                            "stages": 2,
+                            "split_k": split_k,
+                            "streamk_mode": streamk_mode,
+                            "kernel_schedule": "KernelXeCooperative",
+                            "tile_scheduler": "StreamKScheduler",
+                            "source": source,
+                            "instantiation_level": instantiation_level,
+                        }
+                    )
+    return entries
+
+
 def benchmark_gemm_tile_candidates(
     name_prefix,
     dtype_a,
@@ -596,6 +657,28 @@ def generated_layered_bmg_kernel_catalog(constraints=None):
             for entry in entries
             if entry["kernel_name"] not in existing
         )
+
+    # Phase 2: StreamK/DataParallel/SplitK for all exhaustive tile shapes (K ≥ 32)
+    exhaustive_streamk = {
+        "bf16": exhaustive_streamk_tile_candidates(
+            "BmgGemmBF16BF16FP32",
+            "bf16", "bf16", "f32", "f32",
+            constraints=constraints,
+        ),
+        "f16": exhaustive_streamk_tile_candidates(
+            "BmgGemmFP16FP16FP32",
+            "f16", "f16", "f32", "f32",
+            constraints=constraints,
+        ),
+    }
+    sk_added = {"bf16": 0, "f16": 0}
+    for dtype, entries in exhaustive_streamk.items():
+        existing = {entry["kernel_name"] for entry in expanded.get(dtype, [])}
+        for entry in entries:
+            if entry["kernel_name"] not in existing:
+                expanded.setdefault(dtype, []).append(kernel_catalog_entry(dtype, entry))
+                sk_added[dtype] += 1
+    total_sk_added = sum(sk_added.values())
     kernels = []
     for dtype in sorted(expanded.keys()):
         kernels.extend(expanded[dtype])
@@ -603,11 +686,22 @@ def generated_layered_bmg_kernel_catalog(constraints=None):
     catalog["instantiation_levels"]["3"] = (
         "regular GEMM legal tile/subgroup/stage enumeration generated from default constraints"
     )
+    catalog["instantiation_levels"]["4"] = (
+        "StreamK/DataParallel/SplitK for all exhaustive tile shapes with K ≥ 32 and SG 8x4"
+    )
     catalog["regular_gemm_exhaustive_space"] = {
         "stages": list(EXHAUSTIVE_REGULAR_GEMM_STAGES),
         "validity_model": "is_valid_xe2_tile_sg plus selected stage values",
         "bf16_kernel_count": len(exhaustive_regular_gemm["bf16"]),
         "f16_kernel_count": len(exhaustive_regular_gemm["f16"]),
+    }
+    catalog["exhaustive_streamk_space"] = {
+        "modes": ["StreamK", "DataParallel", "SplitK"],
+        "sg_layout": [8, 4],
+        "min_tile_k": 32,
+        "bf16_kernel_count": len(exhaustive_streamk["bf16"]),
+        "f16_kernel_count": len(exhaustive_streamk["f16"]),
+        "new_kernels_added": sk_added,
     }
     catalog["kernels"] = kernels
     return catalog
