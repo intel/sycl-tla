@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "",
+  "constraint_source": "b60_xe2",
+  "device_arch": "bmg",
+  "description": "B60 (Xe2) constraints: subgroup product must be exactly 32 or 64 (no 4/8/16)",
+  "limits": {
+    "max_slm_kb": 64,
+    "subgroup_size": 16,
+    "max_split_k": 6,
+    "max_stages": 3,
+    "valid_subgroup_sizes": [32, 64]
+  },
+  "allowed_values": {
+    "tile_m": [8, 16, 32, 64, 128, 256, 512],
+    "tile_n": [32, 64, 96, 128, 192, 256, 512],
+    "tile_k": [16, 32, 64],
+    "sg_m": [1, 2, 4, 8],
+    "sg_n": [2, 4, 8],
+    "stages": [0, 1, 2, 3],
+    "split_k": [1, 2, 3, 4, 6],
+    "grf_mode": [256]
+  },
+  "blocked_rules": [],
+  "probe_feedback": {
+    "mode": "default",
+    "probe_rows": 0,
+    "passed_probe_rows": 0,
+    "failed_probe_rows": 0,
+    "actions": []
+  }
+}
