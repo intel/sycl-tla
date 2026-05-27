@@ -235,23 +235,22 @@ def selected_compile_env(profiles, variant_override=None):
 def default_constraints():
     """
     Default B70 (BMG G31) constraints.
-    The sg_m × sg_n product (number of subgroups per workgroup) is limited
-    to ≤ 32 because XE_DPAS_TT uses 32-thread subgroups and B70 max_workgroup
-    = 1024 threads: 32 subgroups × 32 threads = 1024. Set
-    ``valid_subgroup_sizes`` to restrict further (e.g. B60 only allows [32, 64]).
+    sg_m × sg_n restricted to {16, 32, 64} to reduce search space.
+    Set ``valid_subgroup_sizes`` to null for unrestricted (≤32), or pass
+    a device-specific constraints JSON (e.g. constraints_b60.json).
     """
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),
         "constraint_source": "b70_default",
         "device_arch": "bmg",
-        "description": "B70 (BMG G31) defaults: sg_m × sg_n ≤ 32",
+        "description": "B70 (BMG G31) restricted: sg_m × sg_n ∈ {16, 32, 64}",
         "limits": {
             "max_slm_kb": 64,
             "subgroup_size": 16,
             "max_split_k": 6,
             "max_stages": 3,
-            "valid_subgroup_sizes": None,  # None = B70: product ≤ 32. [32, 64] = B60: product in {32, 64}
+            "valid_subgroup_sizes": [16, 32, 64],
         },
         "allowed_values": {
             "tile_m": [8, 16, 32, 64, 128, 256, 512],
@@ -335,8 +334,9 @@ def blocked(seed, constraints):
     Seed-level filter using constraints JSON.
     
     Subgroup product gate (limits.valid_subgroup_sizes):
-      null   → B70: sg_m × sg_n ≤ 32  (32 subgroups × 32 threads = 1024 = max_workgroup)
-      [32,64]→ B60: sg_m × sg_n ∈ {32, 64}
+      [16,32,64] → B70 default: sg_m × sg_n ∈ {16, 32, 64}
+      [32,64]    → B60:         sg_m × sg_n ∈ {32, 64}
+      null       → legacy:      sg_m × sg_n ≤ 32
     """
     valid_sg_sizes = (constraints.get("limits") or {}).get("valid_subgroup_sizes")
     sg_product = seed["sg_m"] * seed["sg_n"]
