@@ -261,11 +261,14 @@ using BmgTile_19 = TiledMMAHelper<MMAAtom, Layout<BmgGemm_BF16FP32_TileShape_128
 using BmgGemmBF16BF16FP32_RCR_19 = Gemm_Bench_BF16FP32_RCR<BmgGemm_BF16FP32_TileShape_128_256_32, BmgTile_19, void, void>;
 CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_19);
 
-// RRR kernel using TiledMMAHelper (auto-tuned tile) — matches inner-source 122 TFLOPS approach
-using BmgGemmBF16BF16FP32_RRR_TiledMMAHelper_256x256x32_Tile = typename TiledMMAHelper<MMAAtom, Layout<Shape<_256, _256, _32>>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+// RRR kernel using DIRECT GemmUniversalAdapter path (matches example 00 structure)
+// Bypasses GemmConfiguration to isolate the 1.75x perf gap root cause
+// RRR kernel using TiledMMAHelper (auto-tuned tile) — matches inner-source approach
+using BmgGemmBF16BF16FP32_RRR_TiledMMAHelper_256x256x32_Tile = typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, Layout<Shape<_256, _256, _32>>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 using BmgGemmBF16BF16FP32_RRR_6 = Gemm_Bench_BF16FP32_RRR<Shape<_256, _256, _32>, BmgGemmBF16BF16FP32_RRR_TiledMMAHelper_256x256x32_Tile, void, void>;
 CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RRR_6);
-
+using BmgGemmBF16BF16FP32_RRR_6_stage3 = Gemm_Bench_BF16FP32_RRR<Shape<_256, _256, _32>, BmgGemmBF16BF16FP32_RRR_TiledMMAHelper_256x256x32_Tile, void, void, 3>;
+CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RRR_6_stage3);
 using BmgTile_1 = TiledMMA<MMAAtom, Layout<Shape<_8,_4,_1>, Stride<_4,_1,_0>>, Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>, Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
 using BmgGemmBF16BF16FP32_RCR_6 = Gemm_Bench_BF16FP32_RCR<Shape<_256, _256, _32>, BmgTile_1, void, void>;
 CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_6);
@@ -713,6 +716,8 @@ static void register_gemm_benchmarks() {
       &cutlass::benchmark::cutlass_library_gemm_func);
 #endif
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32);
+  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RRR_6);
+  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RRR_6_stage3);
 #if defined(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)
   BMG_REGISTER_EXPANDED_GEMM_TILES(BmgGemmBF16BF16FP32_RRR)
 #define BMG_SOURCE_GEMM_TILE_SG(M, N, K, SGM, SGN) BMG_REGISTER_GEMM_TILE_SG(BmgGemmBF16BF16FP32_RRR, M, N, K, SGM, SGN)
@@ -721,7 +726,6 @@ static void register_gemm_benchmarks() {
 #endif
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_5);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_6);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RRR_6);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_7);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_9);
   CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_16);
