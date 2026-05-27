@@ -238,7 +238,13 @@ def default_constraints():
         "generated_at": now_iso(),
         "constraint_source": "default_bmg",
         "device_arch": "bmg",
-        "limits": {"max_slm_kb": 64, "subgroup_size": 16, "max_split_k": 6, "max_stages": 3},
+        "limits": {
+            "max_slm_kb": 64,
+            "subgroup_size": 16,
+            "max_split_k": 6,
+            "max_stages": 3,
+            "valid_subgroup_sizes": None,
+        },
         "allowed_values": {
             "tile_m": [8, 16, 32, 64, 128, 256, 512],
             "tile_n": [32, 64, 96, 128, 192, 256, 512],
@@ -317,7 +323,15 @@ def apply_static_probe_constraints(base_constraints, env_caps):
 
 
 def blocked(seed, constraints):
-    if seed["sg_m"] * seed["sg_n"] > 32:
+    # Subgroup product constraint:
+    #   null (default, B70): max product 32 (upper bound)
+    #   [32, 64] (B60):       product must be exactly 32 or 64
+    valid_sg_sizes = (constraints.get("limits") or {}).get("valid_subgroup_sizes")
+    sg_product = seed["sg_m"] * seed["sg_n"]
+    if valid_sg_sizes is not None:
+        if sg_product not in valid_sg_sizes:
+            return True
+    elif sg_product > 32:
         return True
     allowed = constraints["allowed_values"]
     for key in ("tile_m", "tile_n", "tile_k", "sg_m", "sg_n", "stages", "split_k", "grf_mode"):

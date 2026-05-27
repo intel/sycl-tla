@@ -70,7 +70,7 @@ def _schedulers(text):
     return sorted(set(re.findall(r"Scheduler::(Gemm\w*)", text)))
 
 
-def is_valid_xe2_tile_sg(tile_shape, sg_layout, atom_shape=(8, 16, 16), grf_mode=256):
+def is_valid_xe2_tile_sg(tile_shape, sg_layout, atom_shape=(8, 16, 16), grf_mode=256, sg_product_set=None):
     tile_m, tile_n, tile_k = tile_shape
     sg_m, sg_n, sg_k = sg_layout
     atom_m, atom_n, atom_k = atom_shape
@@ -79,6 +79,8 @@ def is_valid_xe2_tile_sg(tile_shape, sg_layout, atom_shape=(8, 16, 16), grf_mode
     if tile_n % (sg_n * atom_n) != 0:
         return False
     if tile_k % (sg_k * atom_k) != 0:
+        return False
+    if sg_product_set is not None and sg_m * sg_n * sg_k not in sg_product_set:
         return False
     reg_m = tile_m // sg_m // atom_m
     reg_n = tile_n // sg_n // atom_n

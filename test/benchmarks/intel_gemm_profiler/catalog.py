@@ -220,13 +220,16 @@ def exhaustive_regular_gemm_tile_candidates(
     sg_m_values = allowed.get("sg_m", [1, 2, 4, 8])
     sg_n_values = allowed.get("sg_n", [2, 4, 8])
     stage_values = [stage for stage in stages if stage in allowed.get("stages", list(stages))]
+    limits = (constraints or {}).get("limits", {})
+    valid_sg_sizes = limits.get("valid_subgroup_sizes")  # None=B70 default, [32,64]=B60
     entries = []
     for tile_m in tile_m_values:
         for tile_n in tile_n_values:
             for tile_k in tile_k_values:
                 for sg_m in sg_m_values:
                     for sg_n in sg_n_values:
-                        if not is_valid_xe2_tile_sg((tile_m, tile_n, tile_k), (sg_m, sg_n, 1)):
+                        if not is_valid_xe2_tile_sg((tile_m, tile_n, tile_k), (sg_m, sg_n, 1),
+                                                    sg_product_set=valid_sg_sizes):
                             continue
                         for stage in stage_values:
                             entries.append(
