@@ -109,6 +109,8 @@ def _default_runtime_config():
         "device_arch": "bmg",
         "runtime_env": {
             "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+            "SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS": "1",
+            "ZE_FLAT_DEVICE_HIERARCHY": "COMPOSITE",
             "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
             "IGC_VectorAliasBBThreshold": "10000",
             "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
@@ -116,12 +118,16 @@ def _default_runtime_config():
         "runtime_env_variants": {
             "default": {
                 "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS": "1",
+                "ZE_FLAT_DEVICE_HIERARCHY": "COMPOSITE",
                 "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
                 "IGC_VectorAliasBBThreshold": "10000",
                 "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
             },
             "ze_affinity_0": {
                 "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS": "1",
+                "ZE_FLAT_DEVICE_HIERARCHY": "COMPOSITE",
                 "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
                 "IGC_VectorAliasBBThreshold": "10000",
                 "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
@@ -129,6 +135,8 @@ def _default_runtime_config():
             },
             "ze_affinity_1": {
                 "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS": "1",
+                "ZE_FLAT_DEVICE_HIERARCHY": "COMPOSITE",
                 "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
                 "IGC_VectorAliasBBThreshold": "10000",
                 "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",
@@ -136,6 +144,8 @@ def _default_runtime_config():
             },
             "ze_affinity_7": {
                 "ONEAPI_DEVICE_SELECTOR": "level_zero:gpu",
+                "SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS": "1",
+                "ZE_FLAT_DEVICE_HIERARCHY": "COMPOSITE",
                 "IGC_ExtraOCLOptions": "-cl-intel-256-GRF-per-thread",
                 "IGC_VectorAliasBBThreshold": "10000",
                 "SYCL_PROGRAM_COMPILE_OPTIONS": "-ze-opt-large-register-file -gline-tables-only",

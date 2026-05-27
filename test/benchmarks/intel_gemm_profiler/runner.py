@@ -19,7 +19,7 @@ from .candidates import write_config
 
 def collect_environment_metadata(shell_init, benchmark_exe, streamk_example_exe, cwd=None):
     tracked_env = {}
-    for name in ("ONEAPI_DEVICE_SELECTOR", "SYCL_PROGRAM_COMPILE_OPTIONS", "IGC_ExtraOCLOptions", "IGC_VectorAliasBBThreshold", "IGC_VISAOptions"):
+    for name in ("ONEAPI_DEVICE_SELECTOR", "SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", "ZE_FLAT_DEVICE_HIERARCHY", "SYCL_PROGRAM_COMPILE_OPTIONS", "IGC_ExtraOCLOptions", "IGC_VectorAliasBBThreshold", "IGC_VISAOptions"):
         value = os.environ.get(name)
         if value:
             tracked_env[name] = value
@@ -58,12 +58,8 @@ def run_benchmark(command, log_path, cwd=None, shell_init=None, timeout=None):
     else:
         popen_command = command
 
-    # Build subprocess environment with mitigations for GPU hang during shutdown
+    # Build subprocess environment — runtime env vars are set via shell_init from the config
     subprocess_env = os.environ.copy()
-    # Use immediate command lists to avoid SYCL queue batching deadlock
-    subprocess_env.setdefault("SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS", "1")
-    # Composite device hierarchy avoids multi-tile sync issues
-    subprocess_env.setdefault("ZE_FLAT_DEVICE_HIERARCHY", "COMPOSITE")
 
     process = subprocess.Popen(
         popen_command,
