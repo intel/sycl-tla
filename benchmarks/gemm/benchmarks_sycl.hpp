@@ -35,7 +35,7 @@
 #include "gemm_configuration_sycl.hpp"
 
 using Scheduler = cutlass::gemm::device::Scheduler;
-using MMAAtom = MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>;
+using MMAAtom = MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>;  // modern DPAS (was legacy XE_8x16x16_F32BF16BF16F32_TT)
 
 #define BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, M, N, K) \
 using PREFIX##_StreamK_##M##x##N##x##K = \
@@ -463,7 +463,7 @@ BMG_DECLARE_STREAMK_TILE(BmgGemmTF32TF32FP32_RCR, Gemm_Bench_TF32TF32FP32_RCR_St
 BMG_DECLARE_EXPANDED_STREAMK_TILES(BmgGemmTF32TF32FP32_RCR, Gemm_Bench_TF32TF32FP32_RCR_StreamK)
 #endif
 
-using MMAAtomF16 = MMA_Atom<XE_8x16x16_F32F16F16F32_TT>;
+using MMAAtomF16 = MMA_Atom<XE_DPAS_TT<8, float, half_t>>;  // modern DPAS (was legacy XE_8x16x16_F32F16F16F32_TT)
 
 template <
   typename TileShape,
