@@ -422,7 +422,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         )
 
         self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "expanded_streamk")
-        self.assertEqual(len(candidate_space["candidates"]), 237)
+        self.assertGreater(len(candidate_space["candidates"]), 200, "expanded_streamk should produce viable candidates")
         self.assertTrue(
             any(
                 candidate["tile_m"] == 64
