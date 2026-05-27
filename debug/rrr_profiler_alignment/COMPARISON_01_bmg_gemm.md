@@ -173,3 +173,38 @@ using CollectiveMainloop = cutlass::gemm::collective::CollectiveBuilder<
 ```
 
 And similarly for `CollectiveEpilogue`.
+
+---
+
+## ROOT CAUSE FOUND & FIXED — 2026-05-27
+
+### The Fix (1 line change)
+
+```cpp
+// BEFORE (69.6 TFLOPS):
+using RRR_Tile = TiledMMAHelper<MMAAtom, ...>::TiledMMA;
+// MMAAtom = MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>  ← LEGACY DPAS type
+
+// AFTER (122.3 TFLOPS):
+using RRR_Tile = TiledMMAHelper<
+    MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>,  ← MODERN DPAS type
+    ...
+>::TiledMMA;
+```
+
+### Root Cause
+
+`XE_8x16x16_F32BF16BF16F32_TT` (in `mma_xe_legacy.hpp`) and `XE_DPAS_TT<8, float, bf16>` 
+(in `mma_xe.hpp`) represent the SAME DPAS operation, but `TiledMMAHelper` computes 
+**different atom-to-thread mappings** for each type. The legacy mapping produces 
+suboptimal tiling for RowMajor B (RRR), causing a 1.75x slowdown.
+
+### Verified
+
+| Kernel | DPAS Atom | Performance @ 8192³ |
+|--------|-----------|---------------------|
+| RRR_6 | Legacy XE_8x16x16_F32BF16BF16F32_TT | 69.6 TFLOPS |
+| RRR_6 | Modern XE_DPAS_TT<8, float, bf16> | **122.3 TFLOPS** ✅ |
+| Example 00 | Modern XE_DPAS_TT<8, float, bf16> | 122.2 TFLOPS |
+
+**Gap closed 100%.**
