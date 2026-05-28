@@ -60,7 +60,7 @@ def gen_mini(kernels, output):
         if t == 'ge':
             declares.append(f'BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]}, {p["ST"]})')
         else:
-            declares.append(f'BMG_DECLARE_STREAMK_TILE({pfx}, {c}, {p["M"]}, {p["N"]}, {p["K"]})')
+            declares.append(f'BMG_DECLARE_STREAMK_TILE({pfx}, {c}_StreamK, {p["M"]}, {p["N"]}, {p["K"]})')
     
     registers = []
     for k in sorted(set(kernels)):
