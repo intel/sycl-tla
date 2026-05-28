@@ -21,21 +21,23 @@ def parse_full():
         return f.readlines()
 
 def find_block(lines, kernel_name):
-    """Return all lines needed to define a kernel type (type def + CREATE)."""
+    """Return all lines needed to define a kernel type (type def + CREATE + exact deps)."""
     needed = []
     for i, line in enumerate(lines):
         if f"using {kernel_name} = " in line:
-            # Include dependency: if it references BmgTile_X or RRR_TiledMMAHelper, include that too
+            # Find EXACT tile dependencies referenced in this line
             deps = set()
-            for tile_name in re.findall(r'(BmgTile_\w+|BmgGemm\w+_Tile\w*|BmgF16Tile_\w+)', line):
+            for tile_name in re.findall(r'(BmgTile_\w+|BmgGemm_\w+_Tile\w*|BmgF16Tile_\w+)', line):
                 deps.add(tile_name)
-            for j in range(max(0, i-15), i+1):
-                for dep in deps:
-                    if f"using {dep}" in lines[j]:
-                        if dep not in [l.strip() for l in needed]:
-                            needed.append(lines[j])
+            for tile_name in re.findall(r'(BmgGemm\w+_TileShape\w+)', line):
+                deps.add(tile_name)
+            # Find each dependency definition
+            for dep in deps:
+                for j, dep_line in enumerate(lines):
+                    if f"using {dep}" in dep_line and ("= TiledMMA" in dep_line or "= Shape" in dep_line or "= typename TiledMMAHelper" in dep_line):
+                        needed.append(dep_line)
+                        break
             needed.append(line)
-            # Include CREATE line
             if i+1 < len(lines) and "CUTLASS_CREATE_GEMM_BENCHMARK" in lines[i+1]:
                 needed.append(lines[i+1])
     return needed
