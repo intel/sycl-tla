@@ -102,8 +102,7 @@ static void register_gemm_benchmarks() {
     # Overwrite source file for correct #include resolution
     src_path = REPO / "benchmarks/gemm/benchmarks_sycl.hpp"
     import shutil
-    with open(src_path, "w") as f:
-        f.write("\n".join(out))
+    shutil.copy2(output_path, src_path)
     print(f"Generated {output_path}: {len(kernels)} kernels, {len(uniq_blocks) + 60} lines → overwrote {src_path}")
 
 if __name__ == "__main__":
