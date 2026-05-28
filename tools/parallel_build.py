@@ -51,11 +51,10 @@ class BuildManager:
         ]
         for cand in candidates:
             gtest = Path(cand) / "_deps/googletest-src"
-            gb = Path(cand) / "_deps/googlebenchmark-src"
-            if gtest.is_dir() and gb.is_dir():
-                return {"gtest": str(gtest), "gb": str(gb)}
+            if gtest.is_dir():
+                return {"gtest": str(gtest)}
         log("WARNING: no working deps found — cmake may try to download")
-        return {"gtest": "", "gb": ""}
+        return {"gtest": ""}
     
     def generate_kernels(self):
         """Phase 1: Generate kernel list from catalog."""
@@ -183,7 +182,6 @@ int main(int argc, const char** argv) {
             "-DCUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK=ON",
             f"-DCUTLASS_KERNEL_FILTER_FILE={filter_f}",
             f"-DGOOGLETEST_DIR={self.deps['gtest']}",
-            f"-DGOOGLEBENCHMARK_DIR={self.deps['gb']}",
         ], capture_output=True, text=True, timeout=120)
         if cmake_result.returncode != 0:
             return f"CMAKE_FAIL: {bid}"

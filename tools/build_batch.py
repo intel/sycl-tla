@@ -37,8 +37,8 @@ def main():
         "-DCUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK=ON",
         "-DCUTLASS_BENCHMARK_EXHAUSTIVE_GEMM=ON",
         f"-DCUTLASS_KERNEL_FILTER_FILE={filter_path}",
-        f"-DGOOGLETEST_DIR={args.repo_root}/_deps/googletest-src",
-        f"-DGOOGLEBENCHMARK_DIR={deps}/googlebenchmark-src",
+        f"-DGOOGLETEST_DIR={os.path.dirname(args.build_dir)}/../../shared_deps/googletest-src",
+        f"-DGOOGLEBENCHMARK_DIR={os.path.dirname(args.build_dir)}/../../shared_deps/googlebenchmark-src",
     ]
     subprocess.run(cmake_cmd, check=True, capture_output=True, text=True)
 
