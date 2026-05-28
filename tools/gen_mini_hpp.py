@@ -16,9 +16,15 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 FULL_HPP = REPO / "benchmarks/gemm/benchmarks_sycl.hpp"
 
+FULL_CACHE = REPO / "benchmarks/gemm/benchmarks_sycl.hpp.cache"
+
 def parse_full():
-    with open(FULL_HPP) as f:
-        return f.readlines()
+    # Use cached full version to avoid parsing already-overwritten mini version
+    if not FULL_CACHE.exists():
+        import shutil
+        shutil.copy2(REPO / "benchmarks/gemm/benchmarks_sycl.hpp", FULL_CACHE)
+    with open(FULL_CACHE) as f:
+    with open(FULL_CACHE) as f: return f.readlines()
 
 def find_block(lines, kernel_name):
     """Return all lines needed to define a kernel type (type def + CREATE + exact deps)."""
