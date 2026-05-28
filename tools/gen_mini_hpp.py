@@ -31,10 +31,11 @@ def find_block(lines, kernel_name):
                 deps.add(tile_name)
             for tile_name in re.findall(r'(BmgGemm\w+_TileShape\w+)', line):
                 deps.add(tile_name)
-            # Find each dependency definition
+            # Find each dependency definition (exact name match)
             for dep in deps:
-                for j, dep_line in enumerate(lines):
-                    if f"using {dep}" in dep_line and ("= TiledMMA" in dep_line or "= Shape" in dep_line or "= typename TiledMMAHelper" in dep_line):
+                for dep_line in lines:
+                    # Exact match: "using DepName =" not "using DepName_other ="
+                    if re.match(rf'\s*using\s+{re.escape(dep)}\s*=', dep_line):
                         needed.append(dep_line)
                         break
             needed.append(line)
