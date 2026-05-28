@@ -1,23 +1,25 @@
 #!/bin/bash
-# Reboot-safe batch build + screen pipeline
-# Run after machine reboot: bash tools/reboot_screen.sh
+# Reboot-safe parallel batch build + screen pipeline
 # Usage:
-#   BATCHES=4 bash tools/reboot_screen.sh        # dry-run: first 4 batches
-#   BATCHES=all bash tools/reboot_screen.sh      # full screening
+#   PARALLEL=3 BATCHES=4 bash tools/reboot_screen.sh      # 3 workers, dry-run
+#   PARALLEL=3 BATCHES=all bash tools/reboot_screen.sh    # full screening
+set -euo pipefail
 
 S=$(cd "$(dirname "$0")/.." && pwd)
 WS=/root/cutlass_profile_device7_b70_2500mhz/screen_ws
-BDIR=/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001
-GOOD_D=$BDIR/_deps
-GB_LIB=$BDIR/_deps/googlebenchmark-build/src/libbenchmark.a
-CUTLASS_LIB=$BDIR/tools/library/libcutlass.a
+BDIR_TEMPLATE=/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001
+GOOD_D=$BDIR_TEMPLATE/_deps
+GB_LIB=$BDIR_TEMPLATE/_deps/googlebenchmark-build/src/libbenchmark.a
+CUTLASS_LIB=$BDIR_TEMPLATE/tools/library/libcutlass.a
+PARALLEL=${PARALLEL:-3}
+JOBS_PER_BATCH=${JOBS_PER_BATCH:-$((256 / PARALLEL))}
+LOCK=/tmp/gen_mini.lock
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
 # ---- Setup ----
 log "Restoring deps..."
-mkdir -p $S/_deps/googlebenchmark-src/include/benchmark
-mkdir -p $S/_deps/googletest-src
+mkdir -p $S/_deps/googlebenchmark-src/include/benchmark $S/_deps/googletest-src
 cp -r $GOOD_D/googlebenchmark-src/include/benchmark/* $S/_deps/googlebenchmark-src/include/benchmark/ 2>/dev/null || true
 cp -r $GOOD_D/googletest-src/googletest $S/_deps/googletest-src/ 2>/dev/null || true
 cp -r $GOOD_D/googletest-src/googlemock $S/_deps/googletest-src/ 2>/dev/null || true
@@ -27,16 +29,25 @@ export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-o
 export IGC_VectorAliasBBThreshold=10000 IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
 
 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $gov 2>/dev/null; done
-log "CPU=performance, perf flags exported"
+log "CPU=performance, PARALLEL=$PARALLEL, JOBS=$JOBS_PER_BATCH"
 
-# Touch compiler_depend.ts to ensure it exists (hard dependency in build.make)
-touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.ts
-touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.make
+# ---- Pre-copy cmake build dirs for each worker slot ----
+log "Preparing $PARALLEL cmake build dirs..."
+for s in $(seq 0 $((PARALLEL-1))); do
+  slot_dir="$WS/build_dirs/slot_$s"
+  if [ ! -d "$slot_dir" ]; then
+    cp -a "$BDIR_TEMPLATE" "$slot_dir"
+    log "  slot $s: copied"
+  else
+    log "  slot $s: exists"
+  fi
+done
+log "Build dirs ready."
 
 # ---- Generate manifest ----
 if [ ! -f "$WS/manifest.json" ]; then
   log "Creating kernel batches..."
-  rm -rf $WS; mkdir -p $WS/{builds,results}
+  rm -rf $WS/builds $WS/results $WS/SCREEN_COMPLETE; mkdir -p $WS/{builds,results}
   cd $S/test && python3 -c "
 import sys,json,os; sys.path.insert(0,'benchmarks')
 from intel_gemm_profiler.catalog import generated_layered_bmg_kernel_catalog
@@ -56,28 +67,30 @@ fi
 BATCHES=${BATCHES:-4}
 TOTAL=$(python3 -c "import json; print(json.load(open('$WS/manifest.json'))['batches'])")
 [ "$BATCHES" = "all" ] && BATCHES=$TOTAL
-
 log "Processing $BATCHES of $TOTAL batches..."
 
-# ---- Batch loop ----
-for i in $(seq 0 $((BATCHES-1))); do
-  bid=$(printf "batch_%04d" $i)
-  bf="$WS/builds/${bid}.txt"
-  [ ! -f "$bf" ] && continue
-  gpu=$(( 5 + (i % 2) ))
+# ---- Worker function ----
+process_batch() {
+  local i=$1 bid=$2 bf=$3 gpu=$4
+  local slot=$(( i % PARALLEL ))
+  local bdir="$WS/build_dirs/slot_$slot"
   
-  # Backup source
-  cp $S/benchmarks/gemm/benchmarks_sycl.hpp /tmp/bak_hpp_$$
-  cp $S/benchmarks/gemm/main.cpp /tmp/bak_main_$$
-  rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
+  # Ensure deps
+  touch $bdir/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.ts
+  touch $bdir/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.make
   
-  # Mini HPP
-  python3 $S/tools/gen_mini_hpp.py --manifest "$bf" --output /tmp/${bid}.hpp 2>&1 | tail -1
-  cp /tmp/${bid}.hpp $S/benchmarks/gemm/benchmarks_sycl.hpp
-  
-  # Mini main.cpp
-  python3 -c "
-kernels=[]; 
+  # ---- Mini HPP + main.cpp (serialized via flock) ----
+  (
+    flock -x 200
+    cp $S/benchmarks/gemm/benchmarks_sycl.hpp /tmp/bak_${bid}_hpp
+    cp $S/benchmarks/gemm/main.cpp /tmp/bak_${bid}_main
+    rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
+    
+    python3 $S/tools/gen_mini_hpp.py --manifest "$bf" --output /tmp/${bid}.hpp 2>&1 | tail -1
+    cp /tmp/${bid}.hpp $S/benchmarks/gemm/benchmarks_sycl.hpp
+    
+    python3 -c "
+kernels=[]
 with open('$bf') as f:
     for l in f:
         if l.strip(): kernels.append(l.strip())
@@ -93,7 +106,7 @@ m=f'''#include \"cutlass/cutlass.h\"
 int main(int argc, const char** argv) {{
   cutlass::CommandLine cmd(argc, argv);
   std::string kernel; cmd.get_cmd_line_argument(\"kernel\", kernel, std::string(\"\"));
-  if (kernel.empty()) {{ std::cerr << \"--kernel=NAME\" << std::endl; return 1; }}
+  if (kernel.empty()) {{ return 1; }}
   register_gemm_benchmarks();
   cutlass::KernelHardwareInfo hw;
   hw.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw.device_id);
@@ -111,41 +124,33 @@ int main(int argc, const char** argv) {{
 '''
 with open('$S/benchmarks/gemm/main.cpp','w') as f: f.write(m)
 " 2>&1
+  ) 200>$LOCK
   
-  # ---- Compile .o via cmake make ----
-  # make will compile .o successfully but fail at link (expected — GB stub)
-  # We catch the link error and do manual link below
-  rm -f $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o
-  rm -f $BDIR/benchmarks/gemm/cutlass_benchmarks_gemm_sycl
+  # ---- Compile ----
+  rm -f $bdir/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o
+  rm -f $bdir/benchmarks/gemm/cutlass_benchmarks_gemm_sycl
   
-  log "[$bid] Compiling..."
-  make -C $BDIR cutlass_benchmarks_gemm_sycl -j128 2>&1 | grep -E "Built target|error:" | head -3 || true
+  make -C $bdir cutlass_benchmarks_gemm_sycl -j${JOBS_PER_BATCH} > /tmp/make_${bid}.log 2>&1
   
-  OBJ=$BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o
+  OBJ=$bdir/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o
   if [ ! -s "$OBJ" ]; then
     log "[$bid] COMPILE FAILED"
-    cp /tmp/bak_hpp_$$ $S/benchmarks/gemm/benchmarks_sycl.hpp
-    cp /tmp/bak_main_$$ $S/benchmarks/gemm/main.cpp
-    rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
-    continue
+    return 1
   fi
   
-  # ---- Manual link ----
-  BIN=$BDIR/benchmarks/gemm/cutlass_benchmarks_gemm_sycl
+  # ---- Link ----
+  BIN=$bdir/benchmarks/gemm/cutlass_benchmarks_gemm_sycl
   icpx -fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen "-device bmg-g31" \
     -Xspirv-translator -spirv-ext=+SPV_INTEL_split_barrier,+SPV_INTEL_2d_block_io,+SPV_INTEL_subgroup_matrix_multiply_accumulate \
     -O3 $OBJ -o $BIN $GB_LIB -L/lib64/stubs -Wl,-rpath,/lib64/stubs: $CUTLASS_LIB \
     -Wl,-rpath=/opt/intel/oneapi/mkl/2025.3/lib \
     /opt/intel/oneapi/mkl/2025.3/lib/libmkl_intel_ilp64.so /opt/intel/oneapi/mkl/2025.3/lib/libmkl_intel_thread.so \
     /opt/intel/oneapi/mkl/2025.3/lib/libmkl_core.so /opt/intel/oneapi/compiler/2025.3/lib/libiomp5.so \
-    -lm -ldl -lpthread /opt/intel/oneapi/compiler/2025.3/lib/libsycl.so 2>/dev/null
+    -lm -ldl -lpthread /opt/intel/oneapi/compiler/2025.3/lib/libsycl.so > /tmp/link_${bid}.log 2>&1
   
   if [ ! -x "$BIN" ]; then
     log "[$bid] LINK FAILED"
-    cp /tmp/bak_hpp_$$ $S/benchmarks/gemm/benchmarks_sycl.hpp
-    cp /tmp/bak_main_$$ $S/benchmarks/gemm/main.cpp
-    rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
-    continue
+    return 1
   fi
   log "[$bid] BUILD OK ($(stat -c%s $BIN) bytes)"
   
@@ -165,10 +170,31 @@ with open('$S/benchmarks/gemm/main.cpp','w') as f: f.write(m)
   done < "$bf"
   log "  GPU$gpu $bid: $kp/$kc passed"
   
-  # Restore source
-  cp /tmp/bak_hpp_$$ $S/benchmarks/gemm/benchmarks_sycl.hpp
-  cp /tmp/bak_main_$$ $S/benchmarks/gemm/main.cpp
-  rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
+  # ---- Restore source ----
+  (
+    flock -x 200
+    cp /tmp/bak_${bid}_hpp $S/benchmarks/gemm/benchmarks_sycl.hpp 2>/dev/null
+    cp /tmp/bak_${bid}_main $S/benchmarks/gemm/main.cpp 2>/dev/null
+    rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
+  ) 200>$LOCK
+}
+
+# ---- Launch workers ----
+running=0
+for i in $(seq 0 $((BATCHES-1))); do
+  bid=$(printf "batch_%04d" $i)
+  bf="$WS/builds/${bid}.txt"
+  [ ! -f "$bf" ] && continue
+  gpu=$(( 5 + (i % 2) ))
+  
+  while [ $running -ge $PARALLEL ]; do
+    wait -n 2>/dev/null || true
+    running=$((running - 1))
+  done
+  
+  process_batch "$i" "$bid" "$bf" "$gpu" &
+  running=$((running + 1))
 done
 
+wait
 log "Done. Results: $WS/results/"
