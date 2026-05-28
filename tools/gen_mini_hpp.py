@@ -52,11 +52,9 @@ def gen_mini(kernels, output):
     declares = []
     for k in sorted(set(kernels)):
         t, pfx, p = classify(k)
-        if t == 'hw' or covered(k, text): continue
+        if t == 'hw' or t == 'gs' or covered(k, text): continue
         c, a = cfg_atom(pfx)
-        if t == 'gs':
-            declares.append(f'BMG_DECLARE_GEMM_TILE_SG({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]})')
-        elif t == 'ge':
+        if t == 'ge':
             declares.append(f'BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]}, {p["ST"]})')
         else:
             declares.append(f'BMG_DECLARE_STREAMK_TILE({pfx}, {c}, {p["M"]}, {p["N"]}, {p["K"]})')
