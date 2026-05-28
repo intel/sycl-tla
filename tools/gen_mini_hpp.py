@@ -16,7 +16,10 @@ EXPANDED_TILES_SG8x4 = {
 }
 
 def full_text():
-    if not CACHE.exists(): shutil.copy2(FULL, CACHE)
+    # Always re-read from canonical source to avoid stale cache
+    if CACHE.exists():
+        CACHE.unlink()
+    shutil.copy2(FULL, CACHE)
     with open(CACHE) as f: return f.read()
 
 def classify(name):
