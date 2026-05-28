@@ -24,7 +24,8 @@ def parse_full():
         import shutil
         shutil.copy2(REPO / "benchmarks/gemm/benchmarks_sycl.hpp", FULL_CACHE)
     with open(FULL_CACHE) as f:
-    with open(FULL_CACHE) as f: return f.readlines()
+    with open(FULL_CACHE) as f:
+        return f.readlines()
 
 def find_block(lines, kernel_name):
     """Return all lines needed to define a kernel type (type def + CREATE + exact deps)."""
