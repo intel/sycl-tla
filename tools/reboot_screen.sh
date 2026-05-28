@@ -154,21 +154,8 @@ with open('$S/benchmarks/gemm/main.cpp','w') as f: f.write(m)
   fi
   log "[$bid] BUILD OK ($(stat -c%s $BIN) bytes)"
   
-  # ---- Screen ----
-  export ZE_AFFINITY_MASK=$gpu
-  R="$WS/results/${bid}_gpu${gpu}.csv"
-  echo "kernel,tflops,status,gpu" > $R
-  kp=0; kc=0
-  while read kernel; do
-    [ -z "$kernel" ] && continue
-    kc=$((kc+1))
-    out=$(timeout 120 $BIN --kernel=$kernel --m=8192 --n=4096 --k=1536 2>&1) || true
-    tf=$(echo "$out" | grep -oP "median_tflops=\K[0-9.]+" || echo "0")
-    st=$(echo "$out" | grep -oP "STATUS=\K[A-Z]+" || echo "TIMEOUT")
-    echo "$kernel,$tf,$st,$gpu" >> $R
-    [ "$st" = "OK" ] && kp=$((kp+1))
-  done < "$bf"
-  log "  GPU$gpu $bid: $kp/$kc passed"
+  # ---- Save binary for sequential screening ----
+  echo "$BIN|$bf|$gpu|$bid" >> "$WS/screen_queue.txt"
   
   # ---- Restore source ----
   (
@@ -179,7 +166,9 @@ with open('$S/benchmarks/gemm/main.cpp','w') as f: f.write(m)
   ) 200>$LOCK
 }
 
-# ---- Launch workers ----
+# ---- Phase 1: Parallel compile + link ----
+log "Phase 1: Parallel build ($PARALLEL workers)..."
+> "$WS/screen_queue.txt"
 running=0
 for i in $(seq 0 $((BATCHES-1))); do
   bid=$(printf "batch_%04d" $i)
@@ -195,6 +184,32 @@ for i in $(seq 0 $((BATCHES-1))); do
   process_batch "$i" "$bid" "$bf" "$gpu" &
   running=$((running + 1))
 done
-
 wait
+log "Phase 1 complete. $(wc -l < "$WS/screen_queue.txt") binaries built."
+
+# ---- Phase 2: Sequential screening ----
+log "Phase 2: Sequential screening..."
+while IFS='|' read -r BIN bf gpu bid; do
+  [ -z "$BIN" ] && continue
+  if [ ! -x "$BIN" ]; then
+    log "[$bid] BIN MISSING"
+    continue
+  fi
+  
+  export ZE_AFFINITY_MASK=$gpu
+  R="$WS/results/${bid}_gpu${gpu}.csv"
+  echo "kernel,tflops,status,gpu" > $R
+  kp=0; kc=0
+  while read kernel; do
+    [ -z "$kernel" ] && continue
+    kc=$((kc+1))
+    out=$(timeout 120 $BIN --kernel=$kernel --m=8192 --n=4096 --k=1536 2>&1) || true
+    tf=$(echo "$out" | grep -oP "median_tflops=\K[0-9.]+" || echo "0")
+    st=$(echo "$out" | grep -oP "STATUS=\K[A-Z]+" || echo "TIMEOUT")
+    echo "$kernel,$tf,$st,$gpu" >> $R
+    [ "$st" = "OK" ] && kp=$((kp+1))
+  done < "$bf"
+  log "  GPU$gpu $bid: $kp/$kc passed"
+done < "$WS/screen_queue.txt"
+
 log "Done. Results: $WS/results/"
