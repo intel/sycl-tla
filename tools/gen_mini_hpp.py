@@ -25,7 +25,7 @@ def parse_full():
         return f.readlines()
 
 def find_block(lines, kernel_name):
-    """Return all lines needed to define a kernel type (type def + CREATE + exact deps)."""
+    """Return all lines needed to define a kernel type (type def + CREATE + recursed deps)."""
     needed = []
     for i, line in enumerate(lines):
         if f"using {kernel_name} = " in line:
@@ -35,10 +35,23 @@ def find_block(lines, kernel_name):
                 deps.add(tile_name)
             for tile_name in re.findall(r'(BmgGemm\w+_TileShape\w+)', line):
                 deps.add(tile_name)
-            # Find each dependency definition (exact name match)
-            for dep in deps:
+            # Recursively resolve transitive dependencies
+            resolved = set()
+            while deps:
+                dep = deps.pop()
+                if dep in resolved:
+                    continue
+                resolved.add(dep)
                 for dep_line in lines:
-                    # Exact match: "using DepName =" not "using DepName_other ="
+                    if re.match(rf'\s*using\s+{re.escape(dep)}\s*=', dep_line):
+                        # Find sub-dependencies of this dep
+                        for sub_name in re.findall(r'(BmgTile_\w+|BmgGemm_\w+_Tile\w*|BmgF16Tile_\w+|BmgGemm\w+_TileShape\w+)', dep_line):
+                            if sub_name != dep and sub_name not in resolved:
+                                deps.add(sub_name)
+                        break
+            # Find each dependency definition (exact name match)
+            for dep in resolved:
+                for dep_line in lines:
                     if re.match(rf'\s*using\s+{re.escape(dep)}\s*=', dep_line):
                         needed.append(dep_line)
                         break
@@ -46,6 +59,49 @@ def find_block(lines, kernel_name):
             if i+1 < len(lines) and "CUTLASS_CREATE_GEMM_BENCHMARK" in lines[i+1]:
                 needed.append(lines[i+1])
     return needed
+
+def topological_sort_blocks(blocks):
+    """Sort blocks so dependencies come before dependents."""
+    # Build dependency graph
+    deps_of = {}  # name -> set of names it depends on
+    name_to_block = {}
+    for b in blocks:
+        m = re.match(r'\s*using\s+(\w+)\s*=', b)
+        if m:
+            name = m.group(1)
+            name_to_block[name] = b
+            deps = set()
+            for d in re.findall(r'(BmgTile_\w+|BmgGemm_\w+_Tile\w*|BmgF16Tile_\w+|BmgGemm\w+_TileShape\w+)', b):
+                if d != name:
+                    deps.add(d)
+            deps_of[name] = deps
+    
+    # Topological sort
+    visited = set()
+    sorted_names = []
+    def visit(name):
+        if name in visited:
+            return
+        visited.add(name)
+        for dep in deps_of.get(name, set()):
+            if dep in deps_of:  # only visit if it's a named block
+                visit(dep)
+        sorted_names.append(name)
+    
+    for name in deps_of:
+        visit(name)
+    
+    # Reorder blocks
+    result = []
+    for name in sorted_names:
+        if name in name_to_block:
+            result.append(name_to_block[name])
+    # Add non-named blocks (CREATE/BENCHMARK lines) at the end
+    for b in blocks:
+        m = re.match(r'\s*using\s+(\w+)\s*=', b)
+        if not m:
+            result.append(b)
+    return result
 
 def make_mini(kernels, output_path):
     lines = parse_full()
@@ -64,6 +120,9 @@ def make_mini(kernels, output_path):
         if h not in seen:
             seen.add(h)
             uniq_blocks.append(b)
+    
+    # Topological sort: dependencies before dependents
+    uniq_blocks = topological_sort_blocks(uniq_blocks)
     
     with open(output_path, "w") as f:
         f.write("""#pragma once
