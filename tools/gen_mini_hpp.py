@@ -99,7 +99,12 @@ static void register_gemm_benchmarks() {
             f.write(f"  CUTLASS_BENCHMARK({k});\n")
         f.write("}\n")
     
-    print(f"Generated {output_path}: {len(kernels)} kernels, {len(uniq_blocks) + 60} lines")
+    # Overwrite source file for correct #include resolution
+    src_path = REPO / "benchmarks/gemm/benchmarks_sycl.hpp"
+    import shutil
+    with open(src_path, "w") as f:
+        f.write("\n".join(out))
+    print(f"Generated {output_path}: {len(kernels)} kernels, {len(uniq_blocks) + 60} lines → overwrote {src_path}")
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
