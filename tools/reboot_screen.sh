@@ -29,6 +29,7 @@ export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-o
 export IGC_VectorAliasBBThreshold=10000 IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
 
 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $gov 2>/dev/null; done
+mkdir -p "$WS/results"
 log "CPU=performance, PARALLEL=$PARALLEL, JOBS=$JOBS_PER_BATCH"
 
 # ---- Pre-copy cmake build dirs for each worker slot ----
@@ -155,6 +156,7 @@ with open('$S/benchmarks/gemm/main.cpp','w') as f: f.write(m)
   log "[$bid] BUILD OK ($(stat -c%s $BIN) bytes)"
   
   # ---- Save binary for sequential screening ----
+  mkdir -p "$WS/results"
   echo "$BIN|$bf|$gpu|$bid" >> "$WS/screen_queue.txt"
   
   # ---- Restore source ----
