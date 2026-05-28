@@ -109,3 +109,12 @@ if __name__ == "__main__":
     with open(args.manifest) as f:
         kernels = [l.strip() for l in f if l.strip()]
     make_mini(kernels, args.output)
+
+
+def restore_original():
+    src = REPO / "benchmarks/gemm/benchmarks_sycl.hpp"
+    bak = REPO / "benchmarks/gemm/benchmarks_sycl.hpp.bak"
+    if bak.exists():
+        import shutil
+        shutil.move(str(bak), str(src))
+        print(f"Restored original benchmarks_sycl.hpp from backup")

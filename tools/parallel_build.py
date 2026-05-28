@@ -195,6 +195,13 @@ int main(int argc, const char** argv) {
         elapsed = time.time() - t0
         
         binpath = bdir / "benchmarks/gemm/cutlass_benchmarks_gemm_sycl"
+        # Restore original benchmarks_sycl.hpp (backup created by gen_mini_hpp.py)
+        src_hpp = REPO / "benchmarks/gemm/benchmarks_sycl.hpp"
+        bak_hpp = REPO / "benchmarks/gemm/benchmarks_sycl.hpp.bak"
+        if bak_hpp.exists():
+            import shutil
+            shutil.move(str(bak_hpp), str(src_hpp))
+        
         if binpath.is_file():
             size = binpath.stat().st_size
             return f"BUILD_OK: {bid} ({size} bytes, {elapsed:.0f}s)"
