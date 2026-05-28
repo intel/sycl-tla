@@ -29,8 +29,9 @@ export IGC_VectorAliasBBThreshold=10000 IGC_ExtraOCLOptions="-cl-intel-256-GRF-p
 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $gov 2>/dev/null; done
 log "CPU=performance, perf flags exported"
 
-# cmake tracks dependencies automatically — don't touch compiler_depend files
-# Just delete .o and binary before each batch to force rebuild
+# Delete compiler_depend.ts to force cmake to re-scan dependencies
+# Keep compiler_depend.make (hard include in build.make, required)
+rm -f $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.ts
 
 # ---- Generate manifest ----
 if [ ! -f "$WS/manifest.json" ]; then
