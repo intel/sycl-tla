@@ -250,7 +250,7 @@ def default_constraints():
             "subgroup_size": 16,
             "max_split_k": 6,
             "max_stages": 3,
-            "valid_subgroup_sizes": [16, 32, 64],
+            "valid_subgroup_sizes": [16, 32],
         },
         "allowed_values": {
             "tile_m": [8, 16, 32, 64, 128, 256, 512],
