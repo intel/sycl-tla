@@ -66,7 +66,9 @@ def gen_mini(kernels, output):
                 M, N, K = p["M"], p["N"], p["K"]
                 sn = f'{pfx}_StreamK_TileShape_{M}_{N}_{K}'
                 tn = f'{pfx}_StreamK_Tile_{M}_{N}_{K}'
-                sched = {'streamk':'GemmStreamK','dataparallel':'GemmDataParallel','splitk':'GemmSplitK'}[t]
+                if 'DataParallel' in k: sched = 'GemmDataParallel'
+                elif 'SplitK' in k: sched = 'GemmSplitK'
+                else: sched = 'GemmStreamK'
                 c2 = c.replace('_RCR','_RCR_StreamK').replace('_RRR','_RRR_StreamK')
                 declares.append(f'using {sn} = Shape<_{M}, _{N}, _{K}>;')
                 declares.append(f'using {tn} = TiledMMAHelper<MMAAtom, Layout<{sn}>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;')
