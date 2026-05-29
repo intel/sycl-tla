@@ -73,7 +73,7 @@ def gen_mini(kernels, output):
                 c2 = c.replace('_RCR','_RCR_StreamK').replace('_RRR','_RRR_StreamK')
                 declares.append(f'using {sn} = Shape<_{M}, _{N}, _{K}>;')
                 declares.append(f'using {tn} = TiledMMAHelper<MMAAtom, Layout<{sn}>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;')
-                declares.append(f'using {k} = {c2}<{sn}, Scheduler::{sched}>;')
+                declares.append(f'using {k} = cutlass::gemm::device::GemmConfiguration<cutlass::arch::IntelXe, cutlass::bfloat16_t, cutlass::layout::RowMajor, cutlass::bfloat16_t, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, {sn}, Scheduler::{sched}, {tn}, void, void, cutlass::epilogue::fusion::LinearCombination<float,float,float,float,cutlass::FloatRoundStyle::round_to_nearest>, 2, cutlass::gemm::KernelXeCooperative>;')
                 declares.append(f'CUTLASS_CREATE_GEMM_BENCHMARK({k});')
             registers.append(f'  CUTLASS_BENCHMARK({k});')
     
