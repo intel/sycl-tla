@@ -60,16 +60,17 @@ def gen_mini(kernels, output):
         if t == 'ge':
             declares.append(f'BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]}, {p["ST"]})')
         else:
-            # Bypass BMG_DECLARE_STREAMK_TILE macro (template resolution issue)
-            # Generate type directly using GemmConfiguration
-            if not exists(k, full):
+            # Generate StreamK/DP/SplitK type directly via GemmConfiguration
+            # Bypasses BMG_DECLARE_STREAMK_TILE + Gemm_Bench_*_StreamK templates
+            if not covered(k, full):
                 M, N, K = p["M"], p["N"], p["K"]
-                tile_n = f'{pfx}_StreamK_Tile_{M}_{N}_{K}'
-                shape_n = f'{pfx}_StreamK_TileShape_{M}_{N}_{K}'
-                sched = {'streamk':'GemmStreamK','dataparallel':'GemmDataParallel','splitk':'GemmSplitK'}.get(t,'GemmStreamK')
-                declares.append(f'using {shape_n} = Shape<_{M}, _{N}, _{K}>;')
-                declares.append(f'using {tile_n} = TiledMMAHelper<MMAAtom, Layout<{shape_n}>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;')
-                declares.append(f'using {k} = {c}<{shape_n}, Scheduler::{sched}>;')
+                sn = f'{pfx}_StreamK_TileShape_{M}_{N}_{K}'
+                tn = f'{pfx}_StreamK_Tile_{M}_{N}_{K}'
+                sched = {'streamk':'GemmStreamK','dataparallel':'GemmDataParallel','splitk':'GemmSplitK'}[t]
+                c2 = c.replace('_RCR','_RCR_StreamK').replace('_RRR','_RRR_StreamK')
+                declares.append(f'using {sn} = Shape<_{M}, _{N}, _{K}>;')
+                declares.append(f'using {tn} = TiledMMAHelper<MMAAtom, Layout<{sn}>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;')
+                declares.append(f'using {k} = {c2}<{sn}, Scheduler::{sched}>;')
                 declares.append(f'CUTLASS_CREATE_GEMM_BENCHMARK({k});')
             registers.append(f'  CUTLASS_BENCHMARK({k});')
     
