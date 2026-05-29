@@ -64,16 +64,16 @@ def gen_mini(kernels, output):
             # Generate StreamK/DP/SplitK type directly via GemmConfiguration
             # Bypasses BMG_DECLARE_STREAMK_TILE + Gemm_Bench_*_StreamK templates
             if not covered(k, text):
-            M, N, K = p["M"], p["N"], p["K"]
-            sn = f'{pfx}_StreamK_TileShape_{M}_{N}_{K}'
-            tn = f'{pfx}_StreamK_Tile_{M}_{N}_{K}'
-            if 'DataParallel' in k: sched = 'GemmDataParallel'
-            elif 'SplitK' in k: sched = 'GemmSplitK'
-            else: sched = 'GemmStreamK'
-            declares.append(f'using {sn} = Shape<_{M}, _{N}, _{K}>;')
-            declares.append(f'using {tn} = TiledMMAHelper<MMAAtom, Layout<{sn}>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;')
-            declares.append(f'using {k} = cutlass::gemm::device::GemmConfiguration<cutlass::arch::IntelXe, cutlass::bfloat16_t, cutlass::layout::RowMajor, cutlass::bfloat16_t, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, {sn}, Scheduler::{sched}, {tn}, void, void, cutlass::epilogue::fusion::LinearCombination<float,float,float,float,cutlass::FloatRoundStyle::round_to_nearest>, 2, cutlass::gemm::KernelXeCooperative>;')
-            declares.append(f'CUTLASS_CREATE_GEMM_BENCHMARK({k});')
+                M, N, K = p["M"], p["N"], p["K"]
+                sn = f'{pfx}_StreamK_TileShape_{M}_{N}_{K}'
+                tn = f'{pfx}_StreamK_Tile_{M}_{N}_{K}'
+                if 'DataParallel' in k: sched = 'GemmDataParallel'
+                elif 'SplitK' in k: sched = 'GemmSplitK'
+                else: sched = 'GemmStreamK'
+                declares.append(f'using {sn} = Shape<_{M}, _{N}, _{K}>;')
+                declares.append(f'using {tn} = TiledMMAHelper<MMAAtom, Layout<{sn}>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;')
+                declares.append(f'using {k} = cutlass::gemm::device::GemmConfiguration<cutlass::arch::IntelXe, cutlass::bfloat16_t, cutlass::layout::RowMajor, cutlass::bfloat16_t, cutlass::layout::ColumnMajor, float, cutlass::layout::RowMajor, float, {sn}, Scheduler::{sched}, {tn}, void, void, cutlass::epilogue::fusion::LinearCombination<float,float,float,float,cutlass::FloatRoundStyle::round_to_nearest>, 2, cutlass::gemm::KernelXeCooperative>;')
+                declares.append(f'CUTLASS_CREATE_GEMM_BENCHMARK({k});')
             registers.append(f'  CUTLASS_BENCHMARK({k});')
     
     for k in sorted(set(kernels)):
