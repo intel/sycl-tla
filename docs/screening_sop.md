@@ -103,7 +103,18 @@ GPU screen → timeout 30s per kernel → CSV
 | cmake make hanging | compiler_depend.make deleted | Only delete .o and binary, not cmake files |
 | Direct icpx compilation failing | Missing -fsycl-host-compiler=g++-13, quoting issues | Use cmake make (proven), never direct icpx |
 
-## 6. Quick Start
+## 6. Result Directory Convention (MANDATORY)
+
+| Run | Directory | Purpose |
+|-----|-----------|---------|
+| `results/` | First full screening | 428 CSV (batches 0066-0545) |
+| `results_original/` | Backup of original run | 394 CSV (safe copy) |
+| `results_rerun/` | Rerun (lost + failed) | 118 batches, separate from original |
+| `results_rrr/` | RRR-only sweep | New RRR exhaustive patterns |
+
+**Rule**: Each screening run writes to a UNIQUE directory. Never mix results from different runs.
+
+## 7. Quick Start
 ```bash
 # Setup
 ssh root@10.239.11.149
