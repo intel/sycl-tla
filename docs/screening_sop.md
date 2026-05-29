@@ -92,7 +92,51 @@ GPU screen → timeout 30s per kernel → CSV
 3. **Verify compile + link + screen**: All 4 must return valid TFLOPS (>0)
 4. **Only then start full BATCHES=all screening**
 
-## 5. Retrospective: Today's Failures
+## 5. Corrected Analysis: StreamK/DP/SplitK vs Gemm
+
+### Scheduler Types Clarified
+```
+DataParallel:     每个 output tile 由单个 workgroup 完成，无 reduction
+SplitK(s=2):      K 维切成 2 slices, 两个 workgroup 并行, 最终 reduce/atomic
+SplitK(s=4):      K 维切成 4 slices, 更多并行度, 更高 reduction 开销
+StreamK:          tile 动态调度, work 按 K/chunk 流式分配, 提高尾部 occupancy
+```
+
+### Kernel Compute Identity
+All four schedulers share the SAME `CollectiveMma<TileShape, TiledMma, ...>`.
+Only `KernelSchedule` (KernelXe vs KernelXeCooperative) and `Scheduler` enum differ.
+→ Phase 1 optimal tile×sg IS applicable to StreamK/DP/SplitK.
+
+### SplitK splits tradeoff
+```
+splits 越多 → +并行度更高 → -每个 slice K-loop 更短
+            → +occupancy 更好 → -pipeline reuse 下降
+            → +小K GEMM 受益   → -reduction/atomic 开销增大
+```
+Optimal splits is NOT always max; exists a sweet spot.
+
+### Correct Phase Partitioning
+```
+Phase 1 (compute shape):
+  tile_m, tile_n, tile_k, sg_m, sg_n, stages, pipeline depth
+  → top-N compute configs (with diversity across occupancy buckets)
+
+Phase 2 (execution strategy):
+  scheduler ∈ {StreamK, DataParallel, SplitK}
+  split_k ∈ {1, 2, 4, 6}  (only when K/tile_k >= 2×splits)
+```
+
+### SplitK Heuristic
+- Only enable when K is large relative to tile_k: `K / tile_k >= 2 * splits`
+- Primary benefit: M/N small, K very large shapes
+- Reduction cost can dominate when K is already well-covered
+
+### Top-N Diversity
+- Do NOT select purely by GFLOPS
+- Retain top configs from different register-pressure / occupancy buckets
+- Large-tile + Small-tile both needed: DP prefers large tile, SplitK may prefer smaller tile
+
+## 6. Retrospective: Today's Failures
 
 | Issue | Root Cause | Prevention |
 |-------|-----------|------------|
