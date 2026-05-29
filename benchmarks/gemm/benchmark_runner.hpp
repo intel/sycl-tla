@@ -1164,6 +1164,7 @@ private:
     initialize(sref, problem_size);
 
     typename GemmConfiguration::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
+    set_scheduler_splits(arguments, options.split_k_slices);
     arguments.mode = gemm::GemmUniversalMode::kGemm; arguments.problem_shape = problem_size;
     arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B};
     arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[0].get(), stride_C, block_D.get(), stride_D};
