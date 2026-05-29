@@ -658,6 +658,18 @@ def generated_layered_bmg_kernel_catalog(constraints=None):
             if entry["kernel_name"] not in existing
         )
 
+    # RRR layout: re-run exhaustive search with rrr layout for bf16
+    exhaustive_regular_rrr = exhaustive_regular_gemm_tile_candidates(
+        "BmgGemmBF16BF16FP32", "bf16", "bf16", "f32", "f32",
+        layout="rrr", constraints=constraints,
+    )
+    existing_rrr = {entry["kernel_name"] for entry in expanded.get("bf16", [])}
+    expanded.setdefault("bf16", []).extend(
+        kernel_catalog_entry("bf16", entry)
+        for entry in exhaustive_regular_rrr
+        if entry["kernel_name"] not in existing_rrr
+    )
+
     # Phase 2: StreamK/DataParallel/SplitK for all exhaustive tile shapes (K ≥ 32)
     exhaustive_streamk = {
         "bf16": exhaustive_streamk_tile_candidates(
