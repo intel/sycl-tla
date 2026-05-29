@@ -1,0 +1,24 @@
+make: Entering directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make[1]: Entering directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make[2]: Entering directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make[3]: Entering directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make[3]: Leaving directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+[ 60%] Built target cutlass_library_objs
+make[3]: Entering directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make[3]: Leaving directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+[ 80%] Built target cutlass_library_static
+make[3]: Entering directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make[3]: Leaving directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make[3]: Entering directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+[100%] Building CXX object benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o
+[100%] Linking CXX executable cutlass_benchmarks_gemm_sycl
+icpx: error: no such file or directory: 'CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o'
+icpx: warning: linked binaries do not contain expected 'spir64_gen-unknown-unknown' target; found targets: 'spir64-unknown-unknown' [-Wsycl-target]
+make[3]: *** [benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/build.make:103: benchmarks/gemm/cutlass_benchmarks_gemm_sycl] Error 1
+make[3]: Leaving directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make[2]: *** [CMakeFiles/Makefile2:5251: benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/all] Error 2
+make[2]: Leaving directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make[1]: *** [CMakeFiles/Makefile2:5258: benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/rule] Error 2
+make[1]: Leaving directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
+make: *** [Makefile:2306: cutlass_benchmarks_gemm_sycl] Error 2
+make: Leaving directory '/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001'
