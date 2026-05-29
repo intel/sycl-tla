@@ -62,7 +62,7 @@ def gen_mini(kernels, output):
         else:
             # Generate StreamK/DP/SplitK type directly via GemmConfiguration
             # Bypasses BMG_DECLARE_STREAMK_TILE + Gemm_Bench_*_StreamK templates
-            if not covered(k, full):
+            if not covered(k, text):
                 M, N, K = p["M"], p["N"], p["K"]
                 sn = f'{pfx}_StreamK_TileShape_{M}_{N}_{K}'
                 tn = f'{pfx}_StreamK_Tile_{M}_{N}_{K}'
