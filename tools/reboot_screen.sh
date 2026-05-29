@@ -7,6 +7,7 @@ set -euo pipefail
 
 S=$(cd "$(dirname "$0")/.." && pwd)
 WS=/root/cutlass_profile_device7_b70_2500mhz/screen_ws
+RESULTS_DIR=${RESULTS_DIR:-$WS/results}   # override for separate runs
 BDIR_TEMPLATE=/root/cutlass_profile_device7_b70_2500mhz/ali_one_8192_4096_1536_layered_bmg_final_flagsfixed_20260522_0425_ws/build/candidate_benchmarks/candidate_batch_preflight/selected_kernel_batch_001
 GOOD_D=$BDIR_TEMPLATE/_deps
 GB_LIB=$BDIR_TEMPLATE/_deps/googlebenchmark-build/src/libbenchmark.a
@@ -29,7 +30,7 @@ export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-o
 export IGC_VectorAliasBBThreshold=10000 IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
 
 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $gov 2>/dev/null; done
-mkdir -p "$WS/results"
+mkdir -p "$RESULTS_DIR"
 log "CPU=performance, PARALLEL=$PARALLEL, JOBS=$JOBS_PER_BATCH"
 
 # ---- Pre-copy cmake build dirs for each worker slot ----
@@ -48,7 +49,7 @@ log "Build dirs ready."
 # ---- Generate manifest ----
 if [ ! -f "$WS/manifest.json" ]; then
   log "Creating kernel batches..."
-  rm -rf $WS/builds $WS/results $WS/SCREEN_COMPLETE; mkdir -p $WS/{builds,results}
+  rm -rf $WS/builds $RESULTS_DIR $WS/SCREEN_COMPLETE; mkdir -p $WS/builds $RESULTS_DIR
   cd $S/test && python3 -c "
 import sys,json,os; sys.path.insert(0,'benchmarks')
 from intel_gemm_profiler.catalog import generated_layered_bmg_kernel_catalog
@@ -156,7 +157,7 @@ with open('$S/benchmarks/gemm/main.cpp','w') as f: f.write(m)
   log "[$bid] BUILD OK ($(stat -c%s $BIN) bytes)"
   
   # ---- Save binary for sequential screening ----
-  mkdir -p "$WS/results"
+  mkdir -p "$RESULTS_DIR"
   echo "$BIN|$bf|$gpu|$bid" >> "$WS/screen_queue.txt"
   
   # ---- Restore source ----
@@ -199,7 +200,7 @@ while IFS='|' read -r BIN bf gpu bid; do
   fi
   
   export ZE_AFFINITY_MASK=$gpu
-  R="$WS/results/${bid}_gpu${gpu}.csv"
+  R="$RESULTS_DIR/${bid}_gpu${gpu}.csv"
   echo "kernel,tflops,status,gpu" > $R
   kp=0; kc=0
   while read kernel; do
@@ -214,4 +215,4 @@ while IFS='|' read -r BIN bf gpu bid; do
   log "  GPU$gpu $bid: $kp/$kc passed"
 done < "$WS/screen_queue.txt"
 
-log "Done. Results: $WS/results/"
+log "Done. Results: $RESULTS_DIR/"
