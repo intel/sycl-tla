@@ -53,6 +53,7 @@ def gen_mini(kernels, output):
     text = full_text()
     
     declares = []
+    registers = []
     for k in sorted(set(kernels)):
         t, pfx, p = classify(k)
         if t == 'hw' or t == 'gs' or covered(k, text): continue
@@ -76,7 +77,6 @@ def gen_mini(kernels, output):
                 declares.append(f'CUTLASS_CREATE_GEMM_BENCHMARK({k});')
             registers.append(f'  CUTLASS_BENCHMARK({k});')
     
-    registers = []
     for k in sorted(set(kernels)):
         t, pfx, p = classify(k)
         if t == 'hw':
@@ -85,8 +85,7 @@ def gen_mini(kernels, output):
             registers.append(f'  BMG_REGISTER_GEMM_TILE_SG({pfx}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]})')
         elif t == 'ge':
             registers.append(f'  BMG_REGISTER_EXHAUSTIVE_GEMM_TILE_STAGE({pfx}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]}, {p["ST"]})')
-        else:
-            registers.append(f'  CUTLASS_BENCHMARK({k});')
+        # sk already handled above
     
     m = re.search(r'static void register_gemm_benchmarks', text)
     pos = m.start() if m else len(text)
