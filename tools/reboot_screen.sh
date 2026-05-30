@@ -21,9 +21,14 @@ log() { echo "[$(date +%H:%M:%S)] $*"; }
 # ---- Setup ----
 log "Restoring deps..."
 mkdir -p $S/_deps/googlebenchmark-src/include/benchmark $S/_deps/googletest-src
-cp -r $GOOD_D/googlebenchmark-src/include/benchmark/* $S/_deps/googlebenchmark-src/include/benchmark/ 2>/dev/null || true
-cp -r $GOOD_D/googletest-src/googletest $S/_deps/googletest-src/ 2>/dev/null || true
-cp -r $GOOD_D/googletest-src/googlemock $S/_deps/googletest-src/ 2>/dev/null || true
+# Skip copy if benchmark.h already exists (avoids hang)
+if [ ! -f $S/_deps/googlebenchmark-src/include/benchmark/benchmark.h ]; then
+  cp -r $GOOD_D/googlebenchmark-src/include/benchmark/* $S/_deps/googlebenchmark-src/include/benchmark/ 2>/dev/null || true
+fi
+if [ ! -d $S/_deps/googletest-src/googletest ]; then
+  cp -r $GOOD_D/googletest-src/googletest $S/_deps/googletest-src/ 2>/dev/null || true
+  cp -r $GOOD_D/googletest-src/googlemock $S/_deps/googletest-src/ 2>/dev/null || true
+fi
 
 source /opt/intel/oneapi/compiler/2025.3/env/vars.sh 2>/dev/null || true
 export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
