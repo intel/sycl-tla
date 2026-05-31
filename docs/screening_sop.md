@@ -177,3 +177,31 @@ tail -f screen.log
 # Results
 ls /root/cutlass_profile_device7_b70_2500mhz/screen_ws/results/
 ```
+
+## 8. Autotune Pipeline Analysis (from 889-kernel dataset)
+
+### Data-Driven Findings
+
+| Metric | Value | Insight |
+|--------|-------|---------|
+| Overall max | 154.9 TFLOPS (RRR) | RRR beats RCR by ~7 TFLOPS |
+| Best scheduler | StreamK mean=83.8, Gemm mean=80.2 | StreamK has edge on average |
+| Optimal stages | ST2=79.3 > ST1=78.2 ≈ ST3=78.1 | pipeline_depth=2 is sweet spot |
+| Best occupancy bucket | medium (tile_area/sg=512-2048): 144.2 max | Too small or too large both worse |
+| DataParallel top | 117.3 TFLOPS | Partial data, need full DP sweep |
+| SplitK top | 0 (not yet in dataset) | Fix applied, needs re-screening |
+
+### Scheduler Preference (by tile)
+- StreamK dominates: 256-tile family (256×256, 256×192, 256×128)
+- Gemm dominates: 128-tile family (128×128, 128×256) + all RRR configs
+- DataParallel: best with large tile, limited by old manifest
+
+### Two-Phase Strategy
+
+```
+Phase 1: Fix DP scheduler, search tile×sg×stages → top-10 in each occupancy bucket
+Phase 2: Sweep {DP, StreamK, SplitK}×{splits} on Phase 1 top-10
+         Skip SplitK when K < 2048 or grid already saturated
+Expected search space: 10 configs × 4 schedulers × 3 splits = ~120 variants
+```
+
