@@ -75,6 +75,7 @@ def gen_mini(kernels, output):
         elif t == 'gs':
             declares.append(f'BMG_DECLARE_GEMM_TILE_SG({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]})')
         else:
+            if covered(k, text): continue
             # Generate StreamK/DP/SplitK type directly
             M, N, K = p["M"], p["N"], p["K"]
             sn = f'{pfx}_StreamK_TileShape_{M}_{N}_{K}'
