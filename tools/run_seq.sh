@@ -41,8 +41,9 @@ for i in $(seq 0 $((BATCHES-1))); do
   touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.ts
   touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.make
   
-  # Compile .o only (not full target) — avoids .DELETE_ON_ERROR deleting .o on link failure
-  make -C $BDIR benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o -j128 > /tmp/mk_${bid}.log 2>&1
+  # Remove .DELETE_ON_ERROR to keep .o when link fails (GB stub)
+  sed -i "/^\.DELETE_ON_ERROR/d" $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/build.make 2>/dev/null
+  make -C $BDIR cutlass_benchmarks_gemm_sycl -j128 > /tmp/mk_${bid}.log 2>&1
   OBJ=$BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o
   
   if [ ! -s "$OBJ" ]; then
