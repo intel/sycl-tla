@@ -27,7 +27,7 @@ for i in $(seq 0 $((BATCHES-1))); do
   bid=$(printf "batch_%04d" $i)
   bf="$WS/builds/${bid}.txt"
   [ ! -f "$bf" ] && continue
-  gpu=$(( 5 + (i % 2) ))
+  gpu=$(( i % 4 ))   # GPU 0,1,2,3 round-robin
   
   cp $S/benchmarks/gemm/benchmarks_sycl.hpp /tmp/bak_hpp
   cp $S/benchmarks/gemm/main.cpp /tmp/bak_main
