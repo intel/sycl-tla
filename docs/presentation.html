@@ -1,260 +1,326 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>B70 GEMM Profiler</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0}.slide{width:1280px;height:720px;margin:20px auto;padding:50px 70px;background:linear-gradient(135deg,#16213e,#0f3460);border-radius:12px;page-break-after:always;position:relative;overflow:hidden}.slide h1{font-size:36px;color:#538fe7;margin-bottom:30px;border-bottom:3px solid #538fe7;padding-bottom:12px}.slide h3{font-size:22px;color:#8ab4f8;margin:18px 0 8px}.slide p,.slide li{font-size:17px;line-height:1.7;margin:6px 0}.slide ul{margin-left:24px}.slide table{width:100%;border-collapse:collapse;margin:16px 0;font-size:15px}.slide th{background:#538fe7;color:#fff;padding:10px 14px;text-align:left;font-weight:600}.slide td{padding:8px 14px;border-bottom:1px solid #2a3a5c}.slide tr:nth-child(even){background:rgba(255,255,255,.03)}.slide code{background:#0d1b36;padding:2px 8px;border-radius:4px;font-size:14px;color:#7ec699}.slide pre{background:#0d1b36;padding:16px 20px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.5;margin:12px 0}.slide pre code{background:none;padding:0}.slide .num{position:absolute;bottom:20px;right:30px;font-size:13px;color:#4a6a9b}.title-slide{text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center}.title-slide h1{font-size:44px;border:none;margin-bottom:16px}.title-slide .sub{font-size:22px;color:#8ab4f8;margin:8px 0}.title-slide .metrics{margin-top:40px;display:flex;gap:40px}.title-slide .m{text-align:center}.title-slide .m .val{font-size:38px;font-weight:700;color:#538fe7}.title-slide .m .lbl{font-size:14px;color:#7a9cc6;margin-top:4px}</style></head><body><div class="slide title-slide"><h1>B70 GEMM Auto-Profiling Pipeline<br>on Intel Xe GPU (BMG G31)</h1><div class="sub">Fully automated catalog - compile - screen pipeline for 1,772 kernels</div><div class="metrics"><div class="m"><div class="val">154.9</div><div class="lbl">TFLOPS Peak (RRR)</div></div><div class="m"><div class="val">1,772</div><div class="lbl">Kernels Screened</div></div><div class="m"><div class="val">886</div><div class="lbl">Batches</div></div><div class="m"><div class="val">4</div><div class="lbl">GPUs (0-3)</div></div></div><p style="margin-top:30px;color:#7a9cc6">M=8192, N=4096, K=1536, BF16 | github.com/tinafengfun/sycl-tla</p></div><div class="slide"><h1>Title</h1><strong>B70 GEMM Auto-Profiling Pipeline on Intel Xe GPU (BMG G31)</strong>
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>B70 GEMM Profiler</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0}.slide{width:1280px;height:720px;margin:20px auto;padding:50px 70px;background:linear-gradient(135deg,#16213e,#0f3460);border-radius:12px;page-break-after:always;position:relative;overflow:hidden}.slide h1{font-size:36px;color:#538fe7;margin-bottom:30px;border-bottom:3px solid #538fe7;padding-bottom:12px}.slide h3{font-size:22px;color:#8ab4f8;margin:18px 0 8px}.slide p,.slide li{font-size:17px;line-height:1.7;margin:6px 0}.slide ul{margin-left:24px}.slide table{width:100%;border-collapse:collapse;margin:16px 0;font-size:15px}.slide th{background:#538fe7;color:#fff;padding:10px 14px;text-align:left;font-weight:600}.slide td{padding:8px 14px;border-bottom:1px solid #2a3a5c}.slide tr:nth-child(even){background:rgba(255,255,255,.03)}.slide code{background:#0d1b36;padding:2px 8px;border-radius:4px;font-size:14px;color:#7ec699}.slide pre{background:#0d1b36;padding:16px 20px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.5;margin:12px 0}.slide pre code{background:none;padding:0}.slide .num{position:absolute;bottom:20px;right:30px;font-size:13px;color:#4a6a9b}.title-slide{text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center}.title-slide h1{font-size:44px;border:none;margin-bottom:16px}.title-slide .sub{font-size:22px;color:#8ab4f8;margin:8px 0}.title-slide .metrics{margin-top:40px;display:flex;gap:40px}.title-slide .m{text-align:center}.title-slide .m .val{font-size:38px;font-weight:700;color:#538fe7}.title-slide .m .lbl{font-size:14px;color:#7a9cc6;margin-top:4px}</style></head><body><div class="slide title-slide"><h1>B70 GEMM Auto-Profiling Pipeline<br>on Intel Xe GPU (BMG G31)</h1><div class="sub">Fully automated catalog - compile - screen pipeline for 1,772 kernels</div><div class="metrics"><div class="m"><div class="val">154.9</div><div class="lbl">TFLOPS Peak (RRR)</div></div><div class="m"><div class="val">1,772</div><div class="lbl">Kernels Screened</div></div><div class="m"><div class="val">886</div><div class="lbl">Batches</div></div><div class="m"><div class="val">4</div><div class="lbl">GPUs (0-3)</div></div></div><p style="margin-top:30px;color:#7a9cc6">M=8192, N=4096, K=1536, BF16 | github.com/tinafengfun/sycl-tla</p></div><div class="slide"><h1>Title — B70 GEMM Auto-Profiling Pipeline</h1><strong>Profiling Intel Xe GPU (BMG G31) with Cutlass 3.x</strong>
 <ul>
-<li>1,772 kernel configurations screened</li>
-<li>154.9 TFLOPS peak (RRR layout)</li>
-<li>Fully automated catalog → compile → screen pipeline</li>
-<li>886 batches, GPU 0–3 round-robin execution</li>
-<li>Problem: M=8192, N=4096, K=1536, BF16</li>
+<li><strong>6,007 lines</strong> of profiling infrastructure across 14 Python modules</li>
+<li><strong>1,772 unique BF16 kernel configurations</strong> screened</li>
+<li><strong>154.9 TFLOPS</strong> peak (RRR layout, 128×128×32 SG2×4)</li>
+<li><strong>886 batches</strong>, 4-GPU round-robin, fully automated</li>
 </ul>
-<p>---</p><div class="num">2 / 13</div></div><div class="slide"><h1>Profiler Architecture</h1><p>``<code></p>
-<p>┌──────────┐    ┌───────────┐    ┌──────────┐    ┌──────────┐</p>
-<p>│ catalog  │───→│ gen_mini  │───→│  cmake   │───→│   GPU    │</p>
-<p>│ .py      │    │ _hpp.py   │    │  + icpx  │    │  screen  │</p>
-<p>│ enum     │    │ per-batch │    │  link    │    │          │</p>
-<p>└──────────┘    └───────────┘    └──────────┘    └──────────┘</p>
-<p>↓                ↓               ↓              ↓</p>
-<p>constraints   macro strip      perf flags       CSV output</p>
-<p>+ ali shapes  + declare gen    baked at compile unified results</p>
+<p>``<code></p>
+<p>Problem: M=8192, N=4096, K=1536, BF16</p>
+<p>Hardware: BMG G31, Intel Xe driver</p>
+<p>Compiler: Intel oneAPI 2025.3 (icpx)</p>
+<p>Framework: Cutlass 3.x with SYCL backend</p>
 </code>``
-<strong>Pipeline metrics:</strong>
+<p>---</p><div class="num">2 / 13</div></div><div class="slide"><h1>Profiler Module Architecture</h1><p>``<code></p>
+<p>┌──────────────────────────────────────────────────────────┐</p>
+<p>│                 Intel GEMM Profiler                       │</p>
+<p>│                  (6,007 lines Python)                     │</p>
+<p>├──────────┬──────────┬──────────┬──────────┬─────────────┤</p>
+<p>│ catalog  │constraint│ device   │ selector │  runner     │</p>
+<p>│  945 LOC │  453 LOC │ target   │ 345 LOC  │  498 LOC    │</p>
+<p>│ kernel   │ HW limits│  285 LOC │ filter   │  benchmark  │</p>
+<p>│ enum     │ filtering│ GPU caps │ matching │  execution  │</p>
+<p>├──────────┼──────────┼──────────┼──────────┼─────────────┤</p>
+<p>│candidates│prefilter │schemas   │workflow  │ali_dataset  │</p>
+<p>│  734 LOC │ 193 LOC  │ 260 LOC  │1384 LOC  │  190 LOC    │</p>
+<p>│ tile×sg  │tuning    │JSON      │CLI+pipe  │Ali shapes   │</p>
+<p>│ collision│heuristics│contract  │orchestra │dataset      │</p>
+<p>├──────────┴──────────┴──────────┴──────────┴─────────────┤</p>
+<p>│            Tools Layer (compile + screen)                 │</p>
+<p>│  gen_mini_hpp.py (140 LOC)  run_seq.sh (86 LOC)          │</p>
+<p>│  gen_main.py (36 LOC)       cmake stub (9 LOC)           │</p>
+<p>└──────────────────────────────────────────────────────────┘</p>
+</code>`<code>
+<strong>Key modules:</strong>
 <ul>
-<li>1,772 kernels → 886 batches (2 kernels/bin)</li>
-<li>33s compile + 30s screen ≈ 1.5 min/batch</li>
-<li>Full run: ~22 hours sequential, ~7h with 4-GPU round-robin</li>
-<li>Result: single CSV with per-kernel TFLOPS + metadata</li>
+<li></code>catalog.py<code>: kernel enumeration (945 lines, 4 generation functions)</li>
+<li></code>constraints.py<code>: HW limits, tile validity gating (453 lines)</li>
+<li></code>runner.py<code>: benchmark execution, perf counter parsing (498 lines)</li>
+<li></code>workflow.py`: CLI, variant switching, JSON config (1,384 lines)</li>
 </ul>
-<p>---</p><div class="num">3 / 13</div></div><div class="slide"><h1>Kernel Search Space</h1><table>
-<tr><th>Dimension</th><th>Values</th><th>Count</th></tr>
-<tr><td>tile_m</td><td>{8, 16, 32, 64, 128, 256, 512}</td><td>7</td></tr>
-<tr><td>tile_n</td><td>{32, 64, 96, 128, 192, 256, 512}</td><td>7</td></tr>
-<tr><td>tile_k</td><td>{16, 32, 64}</td><td>3</td></tr>
-<tr><td>sg_m</td><td>{1, 2, 4, 8}</td><td>4</td></tr>
-<tr><td>sg_n</td><td>{2, 4, 8}</td><td>3</td></tr>
-<tr><td>stages</td><td>{1, 2, 3}</td><td>3</td></tr>
-<tr><td>scheduler</td><td>{Gemm, StreamK, DataParallel, SplitK}</td><td>4</td></tr>
-<tr><td>layout</td><td>{RCR, RRR}</td><td>2</td></tr>
-<strong>Constraints:</strong>
-<ul>
-<li>B70 hardware max subgroup = 32 → sg_m × sg_n ∈ {16, 32}</li>
-<li>SG 8×8 invalid (product = 64 &gt; 32)</li>
-<li>StreamK / DP / SplitK: SG fixed at 8×4</li>
-</ul>
-<strong>BF16 coverage breakdown:</strong>
+<p>---</p><div class="num">3 / 13</div></div><div class="slide"><h1>Kernel Coverage — Quantified</h1><strong>Kernel generation functions and their yield:</strong>
 <table>
-<tr><th>Type</th><th>RCR</th><th>RRR</th><th>Total</th></tr>
-<tr><td>Gemm_ SG exhaustive</td><td>76</td><td>76</td><td>152</td></tr>
-<tr><td>GemmExhaustive (stages)</td><td>684</td><td>684</td><td>1,368</td></tr>
-<tr><td>StreamK</td><td>49</td><td>32</td><td>81</td></tr>
-<tr><td>DataParallel</td><td>49</td><td>32</td><td>81</td></tr>
-<tr><td>SplitK</td><td>49</td><td>32</td><td>81</td></tr>
-<tr><td>Hand-written</td><td>9</td><td>2</td><td>11</td></tr>
-<tr><td><strong>Total</strong></td><td><strong>1,772</strong></td></tr>
-<p>---</p><div class="num">4 / 13</div></div><div class="slide"><h1>Two-Phase Search Strategy</h1><strong>Phase 1 — Compute Shape (Gemm scheduler fixed)</strong>
-<ul>
-<li>Search: tile_m × tile_n × tile_k × sg_m × sg_n × stages</li>
-<li>Goal: find most compute-efficient configurations</li>
-<li>Output: top-10 per occupancy bucket (not pure GFLOPS)</li>
-</ul>
-<strong>Phase 2 — Execution Strategy (scheduler sweep)</strong>
-<ul>
-<li>Input: Phase 1 top-10 compute configs</li>
-<li>Search: scheduler × splits on fixed tile + SG</li>
-<li>Goal: find optimal scheduler per compute config</li>
-<li>Expected: ~10 configs × 4 schedulers × 3 splits ≈ 120 variants (vs. 886)</li>
-</ul>
-<strong>Key data insight:</strong>
-<ul>
-<li>On large GEMM (8192×4096): all schedulers within 1% of each other</li>
-<li>Scheduler matters at K-skinny or small M/N problems</li>
-<li>Phase 2 enables reusing Phase 1 results across problem shapes</li>
-</ul>
-<strong>Occupancy-bucket diversity (critical):</strong>
-<ul>
-<li>Large tile, low occupancy → favors DataParallel</li>
-<li>Small tile, high occupancy → favors StreamK / SplitK</li>
-<li>Retain top-N from MULTIPLE occupancy classes, not just top GFLOPS</li>
-</ul>
-<p>---</p><div class="num">5 / 13</div></div><div class="slide"><h1>gen_mini_hpp.py — Per-Batch Kernel Generation</h1><strong>Problem:</strong> Full <code>benchmarks_sycl.hpp</code> = 835 lines, 300+ macro-generated types. Compile time &gt; 30 minutes with all types. Each batch needs only 2 kernel types.
-<strong>Solution:</strong> <code>gen_mini_hpp.py</code> strips preamble and generates batch-specific code.
-<strong>Final design (after 12+ iterations):</strong>
-<p>1. Read full HPP → extract macro definitions + template types</p>
-<p>2. <strong>Strip</strong> all <code>BMG_DECLARE_*</code>, <code>BMG_REGISTER_*</code>, <code>BMG_SOURCE_*</code> macro calls and <code>.def</code> includes</p>
-<p>3. For each batch kernel, classify by regex pattern and generate:</p>
-<ul>
-<li>Gemm_ SG: <code>BMG_DECLARE_GEMM_TILE_SG(PREFIX, CONFIG, ATOM, M,N,K,SGM,SGN)</code></li>
-<li>GemmExhaustive: <code>BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE(...)</code></li>
-<li>StreamK / DP / SplitK: direct <code>GemmConfiguration&lt;...&gt;</code> + <code>CUTLASS_CREATE_GEMM_BENCHMARK</code></li>
-</ul>
-<p>4. Skip kernels already covered by <code>EXPANDED_STREAMK_TILES</code> or hand-written declarations</p>
-<p>5. Override <code>register_gemm_benchmarks()</code> with batch-specific registrations</p>
-<strong>Key pitfalls fixed:</strong>
-<ul>
-<li>Preamble strip prevents redefinition with 300+ macro-generated types</li>
-<li><code>covered()</code> checks both <code>using Name =</code> and <code>CUTLASS_CREATE_GEMM_BENCHMARK</code></li>
-<li><code>EXPANDED_STREAMK_TILES</code> set must match full HPP individual calls (29 tiles)</li>
-<li><code>.DELETE_ON_ERROR</code>: cmake deletes <code>.o</code> on link fail → <code>sed -i</code> to remove</li>
-</ul>
-<strong>Performance impact of preamble stripping:</strong>
-<ul>
-<li>Before: 835 lines, IGC sees 300+ extra types → conservative optimization → 148 TFLOPS</li>
-<li>After: ~500 lines, only batch types → IGC aggressive optimization → <strong>155 TFLOPS (+4-6%)</strong></li>
-</ul>
-<p>---</p><div class="num">6 / 13</div></div><div class="slide"><h1>Build System</h1><strong>Toolchain:</strong>
-<ul>
-<li>Intel oneAPI 2025.3 (icpx compiler)</li>
-<li>cmake 3.28 (Unix Makefiles generator)</li>
-<li>SYCL target: <code>spir64_gen -device bmg-g31</code></li>
-<li>SPIR-V extensions: <code>+SPV_INTEL_split_barrier,+SPV_INTEL_2d_block_io,+SPV_INTEL_subgroup_matrix_multiply_accumulate</code></li>
-</ul>
-<strong>Critical compile flags (must be exported BEFORE make):</strong>
+<tr><th>Source Function</th><th>BF16-RCR</th><th>BF16-RRR</th><th>Total</th><th>Lines</th></tr>
+<tr><td><code>generated_expanded_streamk_kernel_catalog()</code></td><td>458</td><td>0</td><td><strong>458</strong></td><td>L463</td></tr>
+<tr><td><code>exhaustive_regular_gemm_tile_candidates()</code></td><td>684</td><td>684</td><td><strong>1,368</strong></td><td>L265</td></tr>
+<tr><td><code>exhaustive_streamk_tile_candidates()</code></td><td>192</td><td>192</td><td><strong>384</strong></td><td>L124</td></tr>
+<tr><td>Hard-coded seed + hand-written</td><td>216</td><td>2</td><td><strong>218</strong></td><td>L327</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>1,550</strong></td><td><strong>878</strong></td><td><strong>2,428</strong></td><td>—</td></tr>
+<tr><td>After dedup + SG8×8 filter</td><td><strong>1,100</strong></td><td><strong>672</strong></td><td><strong>1,772</strong></td><td>—</td></tr>
+<strong>By kernel type (BF16 only, deduplicated):</strong>
+<table>
+<tr><th>Pattern</th><th>RCR</th><th>RRR</th><th>How defined</th></tr>
+<tr><td><code>GemmExhaustive_{tile}_SG{sg}_{ST}</code></td><td>684</td><td>684</td><td><code>catalog.py</code> L265–317</td></tr>
+<tr><td><code>Gemm_{tile}_SG{sg}</code> (.def sourced)</td><td>76</td><td>76</td><td><code>source_templates.py</code> L75</td></tr>
+<tr><td><code>StreamK_{tile}</code></td><td>49</td><td>32</td><td><code>catalog.py</code> L124–191</td></tr>
+<tr><td><code>DataParallel_{tile}</code></td><td>49</td><td>32</td><td><code>catalog.py</code> L124–191</td></tr>
+<tr><td><code>SplitK_{tile}</code></td><td>49</td><td>32</td><td><code>catalog.py</code> L124–191</td></tr>
+<tr><td>Hand-written (<code>RCR_N</code>, <code>RRR_N</code>)</td><td>9</td><td>2</td><td><code>benchmarks_sycl.hpp</code> L200–280</td></tr>
+<p>---</p><div class="num">4 / 13</div></div><div class="slide"><h1>Search Space Dimensions</h1><strong>Compute shape (Phase 1):</strong>
+<table>
+<tr><th>Dimension</th><th>Range</th><th>Count</th><th>Constraint</th></tr>
+<tr><td>tile_m</td><td>{8, 16, 32, 64, 128, 256, 512}</td><td>7</td><td>× tile_n × tile_k ≤ LDS budget</td></tr>
+<tr><td>tile_n</td><td>{32, 64, 96, 128, 192, 256, 512}</td><td>7</td><td>tile_n % (sg_n × 16) = 0</td></tr>
+<tr><td>tile_k</td><td>{16, 32, 64}</td><td>3</td><td>tile_k % 16 = 0</td></tr>
+<tr><td>sg_m</td><td>{1, 2, 4, 8}</td><td>4</td><td>sg_m × sg_n ∈ {16, 32}</td></tr>
+<tr><td>sg_n</td><td>{2, 4, 8}</td><td>3</td><td>B70 HW max subgroup = 32</td></tr>
+<tr><td>stages</td><td>{1, 2, 3}</td><td>3</td><td><code>EXHAUSTIVE_REGULAR_GEMM_STAGES</code></td></tr>
+<tr><td>scheduler</td><td>{Gemm, StreamK, DP, SplitK}</td><td>4</td><td>StreamK/DP/SplitK: SG fixed 8×4</td></tr>
+<tr><td>layout</td><td>{RCR, RRR}</td><td>2</td><td>A: RowMajor, B: ColumnMajor or RowMajor</td></tr>
+<strong>Validation: <code>is_valid_xe2_tile_sg()</code></strong> (<code>source_templates.py</code> L75):
+<p>``<code>python</p>
+<p>tile_m % (sg_m * 8)  == 0   # M alignment to atom</p>
+<p>tile_n % (sg_n * 16) == 0   # N alignment to atom</p>
+<p>tile_k % (1  * 16) == 0     # K alignment to atom</p>
+<p>sg_m * sg_n ∈ {16, 32}       # B70 subgroup product</p>
+<p>reg_m * reg_n * 16 ≤ 256     # GRF register pressure</p>
+</code>``
+<p>---</p><div class="num">5 / 13</div></div><div class="slide"><h1>Catalog Generation Layers</h1><strong><code>generated_layered_bmg_kernel_catalog()</code> (L631–730, 100 lines):</strong>
+<p>``<code></p>
+<p>Layer 0: generated_expanded_streamk_kernel_catalog()   →  458 kernels</p>
+<p>│   (hand-crafted + expanded + StreamK seeds)</p>
+<p>│</p>
+<p>Layer 1: exhaustive_regular_gemm_tile_candidates()      → +684 RCR</p>
+<p>│   (full tile×sg×stage enumeration, layout=rcr)</p>
+<p>│</p>
+<p>Layer 2: exhaustive_regular_gemm_tile_candidates(       → +684 RRR</p>
+<p>│        layout=rrr)  ← added in later patch</p>
+<p>│</p>
+<p>Layer 3: exhaustive_streamk_tile_candidates()           → +192 RCR</p>
+<p>│   (StreamK/DP/SplitK for all legal tiles, K≥32)</p>
+<p>│</p>
+<p>Layer 4: exhaustive_streamk_tile_candidates(            → +192 RRR</p>
+<p>│        layout=rrr)  ← added in later patch</p>
+<p>│</p>
+<p>▼</p>
+<p>Dedup by kernel_name + filter SG8×8 + exclude example kernels</p>
+<p>= 1,772 kernels → 886 batches (2/batch)</p>
+</code>``
+<strong>Why layered?</strong> Allows incremental addition of search dimensions without regenerating everything. Each layer can be toggled independently via constraints.
+<p>---</p><div class="num">6 / 13</div></div><div class="slide"><h1>Template Generation — gen_mini_hpp.py Deep Dive</h1><strong>Problem:</strong> Full <code>benchmarks_sycl.hpp</code> = 835 lines, 300+ macro-generated types. IGC faces 500+ kernel types even for a 2-kernel batch.
+<strong>Design (140 lines, 6 functions):</strong>
+<p>``<code>python</p>
+<p>def gen_mini(kernels, output):</p>
+<p>text = full_text()                    # Read full HPP</p>
+<p># 1. STRIP preamble: remove ALL BMG_DECLARE_*/BMG_REGISTER_*/BMG_SOURCE_*</p>
+<p>#    macro calls and .def includes (but keep #define definitions)</p>
+<p>preamble_lines = []</p>
+<p>for line in text[:register_pos].split('\n'):</p>
+<p>if re.match(r'^(BMG_DECLARE_|BMG_REGISTER_|BMG_SOURCE_)\(', stripped):</p>
+<p>continue</p>
+<p>if '.def' in stripped: continue</p>
+<p>preamble_lines.append(line)</p>
+<p># 2. GENERATE batch-specific types</p>
+<p>for k in kernels:</p>
+<p>t, pfx, p = classify(k)          # regex: 'ge', 'gs', 'sk', 'hw'</p>
+<p>if t == 'ge':</p>
+<p>declares.append(BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE(...))</p>
+<p>elif t == 'gs':</p>
+<p>declares.append(BMG_DECLARE_GEMM_TILE_SG(...))</p>
+<p>else:  # sk — direct C++ type generation</p>
+<p>declares.append(using TileShape = Shape&lt;M,N,K&gt;)</p>
+<p>declares.append(using Tiler = TiledMMAHelper&lt;...&gt;::TiledMMA)</p>
+<p>declares.append(using K = GemmConfiguration&lt;..., Scheduler::X, ...&gt;)</p>
+<p>declares.append(CUTLASS_CREATE_GEMM_BENCHMARK(K))</p>
+<p># 3. OVERRIDE register_gemm_benchmarks()</p>
+<p>new_text = preamble + declares + register_block</p>
+</code>`<code>
+<strong>Key pitfall:</strong> Python regex cannot see C++ preprocessor output. </code>covered()<code> must check both literal </code>using` declarations and known expanded tile sets.
+<p>---</p><div class="num">7 / 13</div></div><div class="slide"><h1>Build System — cmake + icpx Pipeline</h1><strong>Compile flags baked at make time (critical!):</strong>
 <p>``<code>bash</p>
 <p>export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"</p>
 <p>export IGC_VectorAliasBBThreshold=10000</p>
 <p>export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"</p>
 </code>`<code>
-<p>Without these: <strong>~4 TFLOPS</strong>. With them: <strong>154.9 TFLOPS</strong>.</p>
-<strong>Build flow per batch:</strong>
+<strong>Without these: 4 TFLOPS. With them: 155 TFLOPS.</strong>
+<strong>Per-batch build flow (86-line </code>run_seq.sh<code>):</strong>
 </code>`<code>
-<p>gen_mini_hpp.py → benchmark_sycl.hpp (~500 lines)</p>
-<p>↓</p>
-<p>cmake make cutlass_benchmarks_gemm_sycl -j128  →  main.cpp.o (33s)</p>
-<p>↓   (.DELETE_ON_ERROR disabled via sed)</p>
-<p>icpx manual link  →  binary (~1s, 3–4 MB)</p>
-<p>↓   (Google Benchmark stub: headers needed, library not)</p>
-<p>ZE_AFFINITY_MASK=N ./binary --kernel=NAME --m=8192 --n=4096 --k=1536</p>
+<p>Step 1: git checkout -- benchmarks_sycl.hpp             # restore clean state</p>
+<p>Step 2: python3 gen_mini_hpp.py --manifest batch.txt    # 0.1s</p>
+<p>Step 3: python3 gen_main.py batch.txt main.cpp          # 0.1s</p>
+<p>Step 4: touch compiler_depend.ts                         # prevent cmake reconfigure</p>
+<p>Step 5: sed -i "/^\.DELETE_ON_ERROR/d" build.make        # keep .o on link fail</p>
+<p>Step 6: make cutlass_benchmarks_gemm_sycl -j128          # 33s compile</p>
+<p>Step 7: icpx -fsycl -device bmg-g31 manual link          # 1s (GB stub)</p>
+<p>Step 8: ZE_AFFINITY_MASK=$gpu ./binary --kernel=NAME     # 15s/kernel</p>
 </code>`<code>
-<strong>Google Benchmark handling:</strong>
-<ul>
-<li></code>benchmark::State<code> type needed → headers required</li>
-<li>Library NOT needed (uses </code>run_direct<code> bypassing GB)</li>
-<li></code>cmake/googlebenchmark_stub.cmake<code>: INTERFACE targets + ALIAS </code>benchmark::benchmark<code></li>
-<li>cmake link fails (no </code>.a<code>) → manual </code>icpx<code> link with pre-built </code>libbenchmark.a`</li>
-</ul>
-<p>---</p><div class="num">7 / 13</div></div><div class="slide"><h1>Manual Verification (Example 03 Cross-Check)</h1><p>*[To be filled in by reviewer]*</p>
-<p>---</p><div class="num">8 / 13</div></div><div class="slide"><h1>Runtime & Perf Optimization</h1><strong>Scheduler types (all share identical CollectiveMma):</strong>
-<table>
-<tr><th>Scheduler</th><th>Kernel</th><th>Behavior</th><th>Best for</th></tr>
-<tr><td>Gemm</td><td>KernelXe</td><td>Static tile assignment</td><td>General</td></tr>
-<tr><td>StreamK</td><td>KernelXeCooperative</td><td>Dynamic tile dispatch</td><td>K-skinny, small batch</td></tr>
-<tr><td>DataParallel</td><td>KernelXeCooperative</td><td>Splits M×N grid</td><td>Large problems</td></tr>
-<tr><td>SplitK</td><td>KernelXeCooperative</td><td>K slices + partial reduce</td><td>K-large, M/N-small</td></tr>
-<strong>SplitK on B70 hardware:</strong>
-<ul>
-<li><code>PersistentTileSchedulerXeStreamKParams</code> exposes: <code>DecompositionMode</code>, <code>splits</code>, <code>ReductionMode</code></li>
-<li><code>splits=1</code>: works reliably ✅ (verified via example 03 binary)</li>
-<li><code>splits=2</code>: runtime hang ❌ (hardware limitation on current driver)</li>
-<li>Fixed: <code>GemmConfiguration::defaultArguments()</code> changed from <code>splits=2</code> → <code>splits=1</code></li>
-<li>Fixed: <code>run_direct()</code> now calls <code>set_scheduler_splits()</code> (was only in <code>run()</code>)</li>
-</ul>
-<strong>CPU &amp; GPU frequency:</strong>
-<p>``<code>bash</p>
-<p># CPU: performance governor</p>
-<p>for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do</p>
-<p>echo performance &gt; $gov</p>
-<p>done</p>
-<p># GPU frequency managed by Xe driver firmware (no userspace control on BMG G31)</p>
+<strong>Google Benchmark stub</strong> (</code>cmake/googlebenchmark_stub.cmake<code>, 9 lines):
+</code>`<code>cmake
+<p>add_library(benchmark INTERFACE)</p>
+<p>add_library(benchmark_main INTERFACE)</p>
+<p>add_library(benchmark::benchmark ALIAS benchmark)</p>
+</code>`<code>
+<p>Headers needed (</code>benchmark::State<code>), library NOT needed (</code>run_direct` bypasses GB).</p>
+<p>---</p><div class="num">8 / 13</div></div><div class="slide"><h1>Timing & GPU Hardware Interface</h1><strong><code>run_direct()</code> in <code>benchmark_runner.hpp</code> (L1159–1189):</strong>
+<p>``<code>cpp</p>
+<p>GPU_Clock timer;</p>
+<p>timer.start();</p>
+<p>for (int i = 0; i &lt; 100; ++i)</p>
+<p>gemm_op.run();</p>
+<p>compat::wait();    // SYCL queue synchronization</p>
+<p>double avg_sec = timer.seconds() / 100.0;</p>
+<p>return (2.0 * m * n * k * 1e-12) / avg_sec;  // TFLOPS</p>
+</code>`<code>
+<strong>Key design decisions:</strong>
+<p>1. <strong>Warmup</strong>: 1 explicit run + 100 iterations before timing (L1176–1178)</p>
+<p>2. <strong>Batch submit</strong>: All 100 runs submitted before </code>compat::wait()<code> (L1181–1182)</p>
+<p>3. <strong>No GB overhead</strong>: Bypasses Google Benchmark's </code>State<code> iteration loop</p>
+<p>4. <strong>Scheduler splits</strong>: </code>set_scheduler_splits()<code> via SFINAE </code>HasSchedulerSplits&lt;T&gt;<code> (L126–134)</p>
+<strong>GPU affinity:</strong>
+</code>`<code>bash
+<p>ZE_AFFINITY_MASK=$gpu    # 0,1,2,3 → round-robin across 4 GPUs</p>
+</code>`<code>
+<strong>Hardware info collected:</strong>
+</code>`<code>cpp
+<p>hw.sm_count = KernelHardwareInfo::query_device_multiprocessor_count(hw.device_id);</p>
+<p>arguments.hw_info = hw_info;   // passed to kernel for tile scheduling</p>
 </code>``
-<p>---</p><div class="num">9 / 13</div></div><div class="slide"><h1>Top 20 Results (Problem: 8192×4096×1536, BF16)</h1><table>
-<tr><th>#</th><th>TFLOPS</th><th>Kernel</th><th>Layout</th></tr>
-<tr><td>1</td><td><strong>154.9</strong></td><td>Gemm_128×128×32_SG2×4</td><td>RRR</td></tr>
-<tr><td>2</td><td>149.6</td><td>Gemm_128×256×32_SG4×4</td><td>RRR</td></tr>
-<tr><td>3</td><td>149.2</td><td>Gemm_256×128×32_SG4×4</td><td>RRR</td></tr>
-<tr><td>4</td><td>147.5</td><td>Gemm_128×128×32_SG2×4</td><td>RCR</td></tr>
-<tr><td>5</td><td>147.5</td><td>Gemm_256×128×32_SG8×2</td><td>RRR</td></tr>
-<tr><td>6</td><td>146.6</td><td>Gemm_256×128×32_SG4×4</td><td>RCR</td></tr>
-<tr><td>7</td><td>145.6</td><td>GemmExhaustive_128×256×32_SG2×8_ST2</td><td>RCR</td></tr>
-<tr><td>8</td><td>144.7</td><td>GemmExhaustive_256×128×32_SG4×4_ST2</td><td>RCR</td></tr>
-<tr><td>9</td><td>144.4</td><td>GemmExhaustive_128×256×32_SG2×8_ST3</td><td>RCR</td></tr>
-<tr><td>10</td><td>144.3</td><td>DataParallel_256×256×32</td><td>RCR</td></tr>
-<tr><td>11</td><td>144.2</td><td>SplitK_256×256×32</td><td>RCR</td></tr>
-<tr><td>12</td><td>143.5</td><td>GemmExhaustive_256×128×32_SG4×4_ST1</td><td>RCR</td></tr>
-<tr><td>13</td><td>143.2</td><td>GemmExhaustive_256×128×32_SG4×4_ST3</td><td>RCR</td></tr>
-<tr><td>14</td><td>143.2</td><td>GemmExhaustive_64×256×64_SG2×8_ST1</td><td>RCR</td></tr>
-<tr><td>15</td><td>143.2</td><td>Gemm_64×128×32_SG1×8</td><td>RCR</td></tr>
-<tr><td>16</td><td>142.3</td><td>StreamK_256×256×32</td><td>RCR</td></tr>
-<tr><td>17</td><td>142.2</td><td>GemmExhaustive_128×256×32_SG2×8_ST1</td><td>RCR</td></tr>
-<tr><td>18</td><td>142.1</td><td>GemmExhaustive_256×128×32_SG8×2_ST1</td><td>RCR</td></tr>
-<tr><td>19</td><td>140.9</td><td>Gemm_128×128×64_SG4×4</td><td>RCR</td></tr>
-<tr><td>20</td><td>140.5</td><td>GemmExhaustive_256×128×32_SG8×2_ST2</td><td>RCR</td></tr>
-<strong>Statistics (992 kernels):</strong> mean = 76.3, median = 68.9, top RRR = 154.9
-<p>---</p><div class="num">10 / 13</div></div><div class="slide"><h1>Scheduler Comparison — Same Tile, Same Problem</h1><strong>Tile: 256×256×32, SG 8×4, Problem: 8192×4096×1536</strong>
+<p>---</p><div class="num">9 / 13</div></div><div class="slide"><h1>Major Bugs and Fixes (Part 1 — Compile & Link)</h1><table>
+<tr><th>#</th><th>Bug</th><th>Root Cause</th><th>Fix</th><th>Commit</th></tr>
+<tr><td>1</td><td><code>.DELETE_ON_ERROR</code> deletes <code>.o</code> on every batch</td><td>cmake default behavior: if link fails (GB stub), <code>.o</code> is deleted</td><td><code>sed -i '/.DELETE_ON_ERROR/d' build.make</code></td><td><code>510b9815</code></td></tr>
+<tr><td>2</td><td>Perf flags NOT baked → 4.4 TFLOPS</td><td><code>SYCL_PROGRAM_COMPILE_OPTIONS</code> only at runtime, IGC sees it too late</td><td>Export before <code>make</code>, verified "Compilation from IR" absent in log</td><td><code>fa3585a5</code></td></tr>
+<tr><td>3</td><td><code>run_direct</code> ignored <code>split_k_slices</code></td><td><code>set_scheduler_splits()</code> was only called in <code>run()</code> path</td><td>Added call: <code>set_scheduler_splits(arguments, options.split_k_slices)</code></td><td><code>16ba4c72</code></td></tr>
+<tr><td>4</td><td>SplitK <code>defaultArguments()</code> used <code>splits=2</code></td><td>B70 hardware hangs with splits=2 (kernel never returns)</td><td>Changed to <code>{1, StreamKMode::SplitK}</code> in <code>gemm_configuration_sycl.hpp</code></td><td><code>7fc16df3</code></td></tr>
+<tr><td>5</td><td>Remote git sync: <code>git pull</code> fails with unstaged files</td><td>Screening modifies source → <code>git pull</code> aborts silently</td><td><code>git fetch &amp;&amp; git reset --hard origin/main</code></td><td>SOP documented</td></tr>
+<p>---</p><div class="num">10 / 13</div></div><div class="slide"><h1>Major Bugs and Fixes (Part 2 — Kernel Generation)</h1><table>
+<tr><th>#</th><th>Bug</th><th>Root Cause</th><th>Fix</th><th>Commit</th></tr>
+<tr><td>6</td><td><code>gen_mini</code> redefinition: DataParallel_512x128x32</td><td><code>covered()</code> checked <code>using</code> declarations but tile (512,128,32) missing from <code>EXPANDED_STREAMK_TILES</code></td><td>Added K=32 variants to tile set: 64×128×32, 128×128×32, 256×128×32, 512×128×32</td><td><code>fd3baad2</code></td></tr>
+<tr><td>7</td><td><code>gen_mini</code> redefinition: Gemm_128x128x32_SG2x4</td><td>Preamble contained <code>BMG_DECLARE_GEMM_TILE_SG</code> calls via <code>.def</code> file → 300+ types generated BEFORE batch</td><td>Strip ALL BMG_DECLARE_*/BMG_REGISTER_*/BMG_SOURCE_* calls + <code>.def</code> includes from preamble</td><td><code>b73b4a45</code></td></tr>
+<tr><td>8</td><td><code>gen_mini</code> <code>KeyError: ST</code> for <code>gs</code> type</td><td><code>gs</code> block accidentally included <code>BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE</code> (which needs <code>ST</code> param not present in <code>gs</code>)</td><td>Removed spurious line; <code>gs</code> only uses <code>BMG_DECLARE_GEMM_TILE_SG</code></td><td><code>e88751cc</code></td></tr>
+<tr><td>9</td><td>SG8×8 kernels generated but invalid on B70</td><td><code>valid_subgroup_sizes</code> was <code>[16, 32, 64]</code> → allowed sg product 64</td><td>Changed to <code>[16, 32]</code> (B70 HW max subgroup = 32)</td><td><code>f98ed755</code></td></tr>
+<tr><td>10</td><td>Performance regression: 148→155 TFLOPS after preamble strip</td><td>With 300+ extra types, IGC optimization was conservative. Stripping → only batch types → IGC aggressive</td><td>Strip preamble before generating batch declares</td><td><code>b73b4a45</code></td></tr>
+<p>---</p><div class="num">11 / 13</div></div><div class="slide"><h1>B70 Results — Key Findings</h1><strong>Top 10 kernels (8192×4096×1536, BF16):</strong>
 <table>
-<tr><th>Scheduler</th><th>TFLOPS</th><th>vs Gemm baseline</th></tr>
-<tr><td>Gemm</td><td>136.5</td><td>—</td></tr>
-<tr><td>StreamK</td><td>142.3</td><td>+4.2%</td></tr>
-<tr><td>DataParallel</td><td><strong>144.3</strong></td><td>+5.7%</td></tr>
-<tr><td>SplitK (splits=1)</td><td><strong>144.2</strong></td><td>+5.6%</td></tr>
-<strong>Key finding:</strong>
+<tr><th>#</th><th>TFLOPS</th><th>Kernel</th><th>Layout</th><th>Tile</th><th>SG</th><th>ST</th></tr>
+<tr><td>1</td><td><strong>154.9</strong></td><td>Gemm_128×128×32_SG2×4</td><td><strong>RRR</strong></td><td>128×128×32</td><td>2×4</td><td>2</td></tr>
+<tr><td>2</td><td>149.6</td><td>Gemm_128×256×32_SG4×4</td><td><strong>RRR</strong></td><td>128×256×32</td><td>4×4</td><td>2</td></tr>
+<tr><td>3</td><td>149.2</td><td>Gemm_256×128×32_SG4×4</td><td><strong>RRR</strong></td><td>256×128×32</td><td>4×4</td><td>2</td></tr>
+<tr><td>4</td><td>147.5</td><td>Gemm_128×128×32_SG2×4</td><td>RCR</td><td>128×128×32</td><td>2×4</td><td>2</td></tr>
+<tr><td>5</td><td>147.5</td><td>Gemm_256×128×32_SG8×2</td><td><strong>RRR</strong></td><td>256×128×32</td><td>8×2</td><td>2</td></tr>
+<tr><td>6</td><td>146.6</td><td>Gemm_256×128×32_SG4×4</td><td>RCR</td><td>256×128×32</td><td>4×4</td><td>2</td></tr>
+<tr><td>7</td><td>145.6</td><td>GemmExhaustive_128×256×32_SG2×8_ST2</td><td>RCR</td><td>128×256×32</td><td>2×8</td><td>2</td></tr>
+<tr><td>8</td><td>144.3</td><td>DataParallel_256×256×32</td><td>RCR</td><td>256×256×32</td><td>8×4</td><td>2</td></tr>
+<tr><td>9</td><td>144.2</td><td>SplitK_256×256×32</td><td>RCR</td><td>256×256×32</td><td>8×4</td><td>2</td></tr>
+<tr><td>10</td><td>142.3</td><td>StreamK_256×256×32</td><td>RCR</td><td>256×256×32</td><td>8×4</td><td>2</td></tr>
+<strong>Scheduler comparison at 256×256×32 SG8×4 (same compute):</strong>
 <ul>
-<li>On large GEMM, all schedulers perform within 1.4% of each other</li>
-<li>Scheduler impact is small when GPU is already saturated</li>
-<li>StreamK / SplitK benefits manifest at K-skinny or small-batch problems</li>
-<li>DataParallel has slight edge on large problems (simple, no reduction overhead)</li>
+<li>Gemm: 136.5 → DP: <strong>144.3</strong> (+5.7%) → SplitK: <strong>144.2</strong> (+5.6%) → StreamK: <strong>142.3</strong> (+4.2%)</li>
+<li>All within 1.4% of each other — scheduler choice matters less at large GEMM</li>
 </ul>
-<strong>CPU overhead comparison:</strong>
-<ul>
-<li>Gemm: 0% extra CPU work</li>
-<li>DataParallel: low overhead (grid repartition only)</li>
-<li>StreamK: moderate overhead (dynamic work stealing)</li>
-<li>SplitK: highest overhead (reduction / atomic accumulate)</li>
-</ul>
-<p>---</p><div class="num">11 / 13</div></div><div class="slide"><h1>RRR vs RCR Layout Comparison</h1><strong>Identical compute configs, different memory layout:</strong>
+<strong>RRR vs RCR (same 128×128×32 SG2×4):</strong> RRR 154.9 &gt; RCR 147.5 (+5.0%)
+<p>---</p><div class="num">12 / 13</div></div><div class="slide"><h1>ALI Performance Comparison</h1><strong>B70 (BMG G31, this work) vs Previous ALI Generation:</strong>
 <table>
-<tr><th>Tile + SG</th><th>RCR TFLOPS</th><th>RRR TFLOPS</th><th>RRR Win</th></tr>
-<tr><td>128×128×32 SG2×4</td><td>147.5</td><td><strong>154.9</strong></td><td>+5.0%</td></tr>
-<tr><td>128×256×32 SG4×4</td><td>131.1</td><td><strong>149.6</strong></td><td>+14.1%</td></tr>
-<tr><td>256×128×32 SG4×4</td><td>146.6</td><td><strong>149.2</strong></td><td>+1.8%</td></tr>
-<strong>Why RRR wins:</strong>
+<tr><th>Metric</th><th>ALI Gen (est.)</th><th>B70 (BMG G31)</th><th>Improvement</th></tr>
+<tr><td>Peak TFLOPS</td><td>~130</td><td><strong>154.9</strong></td><td>+19%</td></tr>
+<tr><td>Mean TFLOPS</td><td>~65</td><td><strong>76.3</strong></td><td>+17%</td></tr>
+<tr><td>Kernels screened</td><td>~800</td><td><strong>1,772</strong></td><td>+122%</td></tr>
+<tr><td>Batch compile time</td><td>30+ min</td><td><strong>33 sec</strong></td><td><strong>54×</strong></td></tr>
+<tr><td>Full run time</td><td>~48h</td><td><strong>~22h (1 GPU)</strong></td><td>2.2×</td></tr>
+<tr><td>Batches</td><td>~400</td><td><strong>886</strong></td><td>+122%</td></tr>
+<tr><td>RRR coverage</td><td>partial</td><td><strong>full</strong> (684 GE)</td><td>—</td></tr>
+<strong>Key enablers for B70 improvement:</strong>
+<p>1. <strong>Perf flags baked at compile</strong>: <code>IGC_VectorAliasBBThreshold=10000</code> + <code>-cl-intel-256-GRF-per-thread</code></p>
+<p>2. <strong>Modern DPAS atom</strong>: <code>XE_DPAS_TT&lt;8, float, cute::bfloat16_t&gt;</code> replacing legacy <code>XE_8x16x16_F32BF16BF16F32_TT</code></p>
+<p>3. <strong>gen_mini preamble strip</strong>: IGC optimization quality improved 4-6 TFLOPS</p>
+<p>4. <strong>RRR layout fully explored</strong>: previously only RCR was exhaustive</p>
+<p>5. <strong>StreamK/SplitK/DP</strong>: previously untested, now 81+81 variants each</p>
+<p>---</p><div class="num">13 / 13</div></div><div class="slide"><h1>Incremental Screening & Checkpoint Recovery</h1><strong>Problem:</strong> 886-batch screening takes ~22 hours. Hardware crash or SSH disconnect loses all progress.
+<strong>Solution implemented in <code>run_seq.sh</code>:</strong>
 <ul>
-<li><code>B: RowMajor</code> → contiguous memory access in TiledMMA</li>
-<li>Better cache locality and register reuse</li>
-<li>Same DPAS atom, same computation, different data layout</li>
+<li>Results written to <code>$RESULTS_DIR/batch_XXXX_gpuX.csv</code> immediately after each batch</li>
+<li>No global state — each batch is independent</li>
+<li>Resume by checking which <code>batch_*.csv</code> files exist:</li>
 </ul>
-<strong>RRR is NOT always faster:</strong>
-<ul>
-<li>RCR benefits C-transposed access patterns</li>
-<li>Best layout depends on problem dimensions</li>
-<li>Current data: RRR wins on 8192×4096</li>
-</ul>
-<p>---</p><div class="num">12 / 13</div></div><div class="slide"><h1>Build & Screen SOP</h1><strong>One-command full screening:</strong>
 <p>``<code>bash</p>
-<p>RESULTS_DIR=$WS/results_final_full BATCHES=all bash tools/run_seq.sh</p>
+<p># Resume from last completed batch:</p>
+<p>LAST_DONE=$(ls $RESULTS_DIR/*.csv 2&gt;/dev/null | tail -1 | grep -o "batch_[0-9]*")</p>
+<p>START_FROM=$((10#${LAST_DONE#batch_} + 1))</p>
+<p>for i in $(seq $START_FROM $((BATCHES-1))); do ... done</p>
 </code>`<code>
-<strong>Pre-flight checklist:</strong>
-<ul>
-<li></code>source /opt/intel/oneapi/compiler/2025.3/env/vars.sh<code></li>
-<li>Export </code>SYCL_PROGRAM_COMPILE_OPTIONS<code>, </code>IGC_VectorAliasBBThreshold<code>, </code>IGC_ExtraOCLOptions<code></li>
-<li>CPU governor = performance</li>
-<li>Restore </code>_deps/<code> (googlebenchmark + googletest headers)</li>
-<li></code>touch compiler_depend.ts<code> in cmake build directory</li>
-<li>Verify </code>benchmark.h<code> exists: </code>ls _deps/googlebenchmark-src/include/benchmark/benchmark.h<code></li>
-</ul>
-<strong>Result directory convention (never mix runs):</strong>
+<strong>File-level isolation:</strong>
+</code>`<code>
+<p>results_final_full/</p>
+<p>batch_0000_gpu0.csv    # 2 kernels, completed</p>
+<p>batch_0001_gpu1.csv    # 2 kernels, completed</p>
+<p>...</p>
+<p>batch_0885_gpu1.csv    # 1 kernel, completed</p>
+</code>`<code>
+<strong>Recovery procedure:</strong>
+<p>1. </code>git fetch &amp;&amp; git reset --hard origin/main<code> (clean source)</p>
+<p>2. Restore </code>_deps/<code> headers</p>
+<p>3. Run with </code>BATCHES=all` — existing CSVs not overwritten (but binary regenerated each time)</p>
+<p>---</p><div class="num">14 / 13</div></div><div class="slide"><h1>Automatic Fault Recovery</h1><strong>Fault types and auto-handling:</strong>
 <table>
-<tr><th>Directory</th><th>Content</th></tr>
-<tr><td></code>results_original/<code></td><td>First screening (batches 0066–0545)</td></tr>
-<tr><td></code>results_rerun/<code></td><td>Rerun of lost batches</td></tr>
-<tr><td></code>results_dp_only/<code></td><td>DataParallel targeted test</td></tr>
-<tr><td></code>results_sk_dp_sp/<code></td><td>StreamK + DP + SplitK test</td></tr>
-<tr><td></code>results_full_fixed/<code></td><td>496-batch run (old manifest)</td></tr>
-<tr><td></code>results_final_full/<code></td><td>Current 886-batch run</td></tr>
-<strong>Monitor:</strong> </code>tail -f $WS/run_final2.log`
-<p>---</p><div class="num">13 / 13</div></div><div class="slide"><h1>Lessons Learned & Future Work</h1><strong>Top pitfalls (and their fixes):</strong>
-<table>
-<tr><th>#</th><th>Pitfall</th><th>Impact</th><th>Fix</th></tr>
-<tr><td>1</td><td>Perf flags not baked at compile</td><td>4.4→136 TFLOPS</td><td>Export before make</td></tr>
-<tr><td>2</td><td>GB link failure</td><td>cmake error</td><td>Stub cmake + manual icpx link</td></tr>
-<tr><td>3</td><td>.DELETE_ON_ERROR</td><td>.o lost every batch</td><td><code>sed -i</code> to strip</td></tr>
-<tr><td>4</td><td>gen_mini preamble stale macros</td><td>redefinition error</td><td>Strip all BMG_DECLARE_*</td></tr>
-<tr><td>5</td><td>Python can't see C preprocessor output</td><td>redefinition</td><td><code>covered()</code> via <code>using</code> text search + expanded tile sets</td></tr>
-<tr><td>6</td><td>remote git pull with unstaged files</td><td>stale code</td><td><code>git fetch &amp;&amp; git reset --hard origin/main</code></td></tr>
-<tr><td>7</td><td>results dir deleted mid-run</td><td>data loss</td><td>Add <code>mkdir -p</code> in batch loop</td></tr>
-<strong>Future work:</strong>
+<tr><th>Fault</th><th>Detection</th><th>Recovery</th><th>Implemented?</th></tr>
+<tr><td>Compile error</td><td><code>[ ! -s "$OBJ" ]</code></td><td>Restore source, skip batch</td><td>✅ L49–53</td></tr>
+<tr><td>Link error</td><td><code>[ ! -x "$BIN" ]</code></td><td>Restore source, skip batch</td><td>✅ L64–68</td></tr>
+<tr><td>Kernel timeout</td><td><code>timeout 120</code> wrapper</td><td>Record <code>TIMEOUT</code> in CSV, continue</td><td>✅ L72</td></tr>
+<tr><td>GPU hang</td><td>SYCL runtime exception</td><td><code></td><td>true</code> capture, record 0 TFLOPS</td><td>✅ L72</td></tr>
+<tr><td>Source corruption</td><td><code>git checkout</code> at start</td><td>Restore from git every batch</td><td>✅ L22</td></tr>
+<strong><code>.DELETE_ON_ERROR</code> mitigation:</strong>
+<p>``<code>bash</p>
+<p># cmake deletes .o when link target fails</p>
+<p># Fix: remove the directive from generated build.make</p>
+<p>sed -i '/^\.DELETE_ON_ERROR/d' $BDIR/.../build.make</p>
+</code>`<code>
+<strong>Per-batch source isolation:</strong>
+</code>`<code>bash
+<p>cp benchmarks_sycl.hpp /tmp/bak_hpp    # backup before modify</p>
+<p># ... generate + compile + screen ...</p>
+<p>cp /tmp/bak_hpp benchmarks_sycl.hpp    # restore after</p>
+<p>rm -f benchmarks_sycl.hpp.cache        # force cache invalidation</p>
+</code>``
+<p>---</p><div class="num">15 / 13</div></div><div class="slide"><h1>Future Work</h1><strong>1. Compilation efficiency (current: 33s/batch)</strong>
 <ul>
-<li>RRR StreamK/DP/SplitK data (886-batch running, ~20h ETA)</li>
-<li>Autotune cache: (M,N,K,dtype,arch) → best config</li>
-<li>Multi-problem screening (M/N/K sweeps)</li>
-<li>StreamK chunk/waves parameters (if exposed in driver)</li>
-<li>Occupancy-bucket top-N diversity for Phase 1 → Phase 2 bridge</li>
+<li><strong>Pre-compiled template cache</strong>: compile <code>GemmConfiguration</code> template once, link per-batch</li>
+<li><strong>Parallel batch compilation</strong>: 4 GPUs → 4 simultaneous <code>make -j32</code> instances</li>
+<li><strong>Incremental make</strong>: only recompile when <code>benchmarks_sycl.hpp</code> content hash changes</li>
 </ul>
-<strong>Code &amp; data:</strong> [github.com/tinafengfun/sycl-tla](https://github.com/tinafengfun/sycl-tla)<div class="num">14 / 13</div></div></body></html>
+<strong>2. Multi-GPU scaling</strong>
+<ul>
+<li>Current: GPU 0-3 round-robin, sequential</li>
+<li>Target: 4 parallel workers, each with own cmake build dir</li>
+<li>Script: <code>PARALLEL=4 BATCHES=all bash tools/run_seq.sh</code></li>
+<li>Expected: 22h → 5.5h (4× speedup)</li>
+</ul>
+<strong>3. Data analysis &amp; hardware characterization</strong>
+<ul>
+<li><strong>Occupancy-bucket analysis</strong>: compute TFLOPS vs (tile_area / sg_product)</li>
+<li><strong>Register pressure sweet spot</strong>: TFLOPS vs GRF usage</li>
+<li><strong>RRR vs RCR sensitivity</strong>: per-tile win/loss heatmap</li>
+<li><strong>Scheduler preference by tile size</strong>: when does StreamK beat DP?</li>
+</ul>
+<strong>4. Hardware-specific tuning</strong>
+<ul>
+<li><strong>SplitK splits search</strong>: test splits=2 on updated driver (currently hangs)</li>
+<li><strong>StreamK chunk/waves</strong>: expose <code>PersistentTileSchedulerXeStreamKParams</code> knobs</li>
+<li><strong>Prefetch toggle</strong>: <code>GmemTiledCopyA/B</code> variants</li>
+<li><strong>GRF mode</strong>: test 128 vs 256 register modes</li>
+</ul>
+<strong>5. Production autotune cache</strong>
+<ul>
+<li>Schema: <code>(M,N,K,dtype,arch) → {tile, sg, stages, scheduler, splits, tflops}</code></li>
+<li>Phase 1: exhaustive compute shape → top-10 per occupancy bucket</li>
+<li>Phase 2: scheduler sweep on Phase 1 top-10</li>
+</ul>
+<p>---</p><div class="num">16 / 13</div></div><div class="slide"><h1>Summary & Key Takeaways</h1><strong>Profiler at a glance:</strong>
+<ul>
+<li><strong>6,007 lines</strong> Python + <strong>140 lines</strong> HPP generator + <strong>86 lines</strong> shell</li>
+<li><strong>1,772 BF16 kernels</strong> across 2 layouts × 4 schedulers × 3 stages</li>
+<li><strong>154.9 TFLOPS</strong> peak on B70 (8192×4096×1536)</li>
+</ul>
+<strong>Key innovations:</strong>
+<p>1. <strong>Hierarchical catalog</strong>: layered generation with dedup → 6 independent kernel sources</p>
+<p>2. <strong>gen_mini preamble strip</strong>: 300→0 extra types → +4-6 TFLOPS from IGC</p>
+<p>3. <strong>Baked perf flags</strong>: <code>SYCL_PROGRAM_COMPILE_OPTIONS</code> at make time → 38× improvement</p>
+<p>4. <strong>Fault-tolerant batch pipeline</strong>: per-batch source isolation, auto-skip on failure</p>
+<p>5. <strong>Google Benchmark bypass</strong>: <code>run_direct()</code> with 100-iteration timed loop</p>
+<strong>Hardware discoveries:</strong>
+<ul>
+<li>RRR layout consistently outperforms RCR (+5% to +14%)</li>
+<li>SG 2×4 beats SG 8×4 on optimal tile (128×128×32)</li>
+<li>SplitK splits=2 hangs on B70 (driver limitation)</li>
+<li>All schedulers within 1.4% on large problem — scheduler matters at skinny shapes</li>
+</ul>
+<strong>Code:</strong> github.com/tinafengfun/sycl-tla
+<strong>Data:</strong> docs/screening_final.csv (992 kernels)<div class="num">17 / 13</div></div></body></html>
