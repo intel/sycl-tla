@@ -132,6 +132,7 @@ def exhaustive_streamk_tile_candidates(
     source="exhaustive_streamk_catalog",
     instantiation_level=3,
     min_tile_k=32,
+    layout="rcr",
 ):
     """Generate StreamK/DataParallel/SplitK candidates for all legal tile shapes
     from the exhaustive enumeration.  Only emits tiles with tile_k >= min_tile_k
@@ -158,7 +159,7 @@ def exhaustive_streamk_tile_candidates(
                 ):
                     entries.append(
                         {
-                            "kernel_name": f"{name_prefix}_RCR_{name_mode}_{tile_m}x{tile_n}x{tile_k}",
+                            "kernel_name": f"{name_prefix}_{layout.upper()}_{name_mode}_{tile_m}x{tile_n}x{tile_k}",
                             "layout": "rcr",
                             "dtype_a": dtype_a,
                             "dtype_b": dtype_b,
@@ -690,6 +691,19 @@ def generated_layered_bmg_kernel_catalog(constraints=None):
             if entry["kernel_name"] not in existing:
                 expanded.setdefault(dtype, []).append(kernel_catalog_entry(dtype, entry))
                 sk_added[dtype] += 1
+    
+    # RRR layout: generate StreamK/DP/SplitK for bf16 RRR
+    exhaustive_streamk_rrr = exhaustive_streamk_tile_candidates(
+        "BmgGemmBF16BF16FP32", "bf16", "bf16", "f32", "f32",
+        constraints=constraints, layout="rrr",
+    )
+    existing_rrr_sk = {entry["kernel_name"] for entry in expanded.get("bf16", [])}
+    sk_rrr_added = 0
+    for entry in exhaustive_streamk_rrr:
+        if entry["kernel_name"] not in existing_rrr_sk:
+            expanded.setdefault("bf16", []).append(kernel_catalog_entry("bf16", entry))
+            sk_rrr_added += 1
+    sk_added["bf16"] += sk_rrr_added
     total_sk_added = sum(sk_added.values())
     kernels = []
     for dtype in sorted(expanded.keys()):
