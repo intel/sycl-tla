@@ -50,11 +50,12 @@ def covered(name, text):
     """Check if kernel type is already defined in full HPP."""
     # Direct using declaration
     if re.search(rf'using\s+{re.escape(name)}\s*=', text): return True
+    # CUTLASS_CREATE_GEMM_BENCHMARK already exists in full HPP
+    if f'CUTLASS_CREATE_GEMM_BENCHMARK({name})' in text: return True
     t, pfx, p = classify(name)
     if t == 'gs' and p['SGM'] == '8' and p['SGN'] == '4':
         sz = (int(p['M']), int(p['N']), int(p['K']))
         if sz in EXPANDED_TILES_SG8x4: return True
-    # StreamK/DP/SplitK from BMG_DECLARE_EXPANDED_STREAMK_TILES
     if t == 'sk':
         sz = (int(p['M']), int(p['N']), int(p['K']))
         if sz in EXPANDED_STREAMK_TILES: return True
