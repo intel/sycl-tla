@@ -68,9 +68,13 @@ def gen_mini(kernels, output):
     registers = []
     for k in sorted(set(kernels)):
         t, pfx, p = classify(k)
-        if t == 'hw' or t == 'gs' or covered(k, text): continue
+        if t == 'hw' or covered(k, text): continue
         c, a = cfg_atom(pfx)
         if t == 'ge':
+            declares.append(f'BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]}, {p["ST"]})')
+        elif t == 'gs':
+            if not covered(k, text):
+                declares.append(f'BMG_DECLARE_GEMM_TILE_SG({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]})')
             declares.append(f'BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]}, {p["ST"]})')
         else:
             # Generate StreamK/DP/SplitK type directly via GemmConfiguration
@@ -100,7 +104,19 @@ def gen_mini(kernels, output):
     
     m = re.search(r'static void register_gemm_benchmarks', text)
     pos = m.start() if m else len(text)
-    new_text = text[:pos]
+    
+    # Strip all BMG_DECLARE_*/BMG_REGISTER_*/BMG_SOURCE_* macro invocations
+    # from the preamble — they generate types that conflict with batch declares.
+    # Keep only #define macro definitions and template type definitions.
+    lines = text[:pos].split('\n')
+    preamble_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if re.match(r'^(BMG_DECLARE_STREAMK_TILE|BMG_REGISTER_STREAMK_TILE|BMG_DECLARE_EXPANDED|BMG_REGISTER_EXPANDED|BMG_SOURCE_GEMM_TILE_SG)\(', stripped):
+            continue
+        preamble_lines.append(line)
+    
+    new_text = '\n'.join(preamble_lines)
     if declares:
         new_text += '\n// Batch kernel declarations\n' + '\n'.join(declares) + '\n'
     new_text += '\nstatic void register_gemm_benchmarks() {\n'
