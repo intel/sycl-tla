@@ -74,7 +74,6 @@ def gen_mini(kernels, output):
             declares.append(f'BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]}, {p["ST"]})')
         elif t == 'gs':
             declares.append(f'BMG_DECLARE_GEMM_TILE_SG({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]})')
-            declares.append(f'BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]}, {p["ST"]})')
         else:
             # Generate StreamK/DP/SplitK type directly
             M, N, K = p["M"], p["N"], p["K"]
