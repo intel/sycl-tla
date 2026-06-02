@@ -80,31 +80,76 @@ print(f'Generated {tot} batches ({len(all_k)} kernels)')
 
     TOTAL=$(python3 -c "import json; print(json.load(open('$WS/manifest.json'))['batches'])")
 
-    # Validate all batches: run gen_mini_hpp and check output has no syntax markers
-    log "Validating gen_mini_hpp on $TOTAL batches..."
-    FAILS=0
-    START_TIME=$(date +%s)
-    for i in $(seq 0 $((TOTAL-1))); do
-        bid=$(printf "batch_%04d" $i)
-        bf="$WS/builds/${bid}.txt"
-        [ ! -f "$bf" ] && continue
+    # Validate all batches: run gen_mini_hpp and verify no preamble leftovers
+    log "Validating gen_mini_hpp on $TOTAL batches (expect ~3 min)..."
+    python3 -c "
+import sys, os, subprocess, shutil, re, time, json
+sys.path.insert(0, '$S/test/benchmarks')
+sys.path.insert(0, '$S/python')
 
-        python3 "$S/tools/gen_mini_hpp.py" --manifest "$bf" --output "/tmp/${bid}_check.hpp" 2>/tmp/${bid}_gen.log
-        if ! grep -q "CUTLASS_CREATE_GEMM_BENCHMARK" "/tmp/${bid}_check.hpp" 2>/dev/null; then
-            log "FAIL: $bid — gen_mini output has no CUTLASS_CREATE_GEMM_BENCHMARK"
-            head -5 /tmp/${bid}_gen.log
-            FAILS=$((FAILS+1))
-        fi
-        rm -f /tmp/${bid}_check.hpp /tmp/${bid}_gen.log
+# Cache original benchmarks_sycl.hpp
+SRC = '$S/benchmarks/gemm/benchmarks_sycl.hpp'
+CACHE = '$S/benchmarks/gemm/benchmarks_sycl.hpp.cache'
+ORIG = '/tmp/orig_benchmarks_sycl.hpp'
+shutil.copy2(SRC, ORIG)
 
-        if [ $((i % 50)) -eq 0 ]; then
-            ELAPSED=$(($(date +%s) - START_TIME))
-            log "  [$i/$TOTAL] validated, $FAILS fails, ${ELAPSED}s elapsed"
-        fi
-    done
+with open('$WS/manifest.json') as f:
+    manifest = json.load(f)
+batches = manifest['batches']
+
+def classify(name):
+    import re
+    if 'GemmExhaustive' in name: return 'ge'
+    m = re.match(r'^(\w+)_Gemm_\d', name)
+    if m: return 'gs'
+    if 'StreamK' in name or 'DataParallel' in name or 'SplitK' in name: return 'sk'
+    return 'hw'
+
+fails = 0
+t0 = time.time()
+for i, b in enumerate(batches):
+    bid = b['id']
+    bf = b['manifest']
+    shutil.copy2(ORIG, SRC)
+    if os.path.exists(CACHE): os.unlink(CACHE)
+    
+    result = subprocess.run([
+        sys.executable, '$S/tools/gen_mini_hpp.py',
+        '--manifest', bf, '--output', f'/tmp/{bid}_check.hpp'
+    ], capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        print(f'FAIL {bid}: exit={result.returncode} err={result.stderr[:100]}')
+        fails += 1
+        continue
+    
+    with open(f'/tmp/{bid}_check.hpp') as f: content = f.read()
+    pos = content.find('static void register_gemm_benchmarks()')
+    preamble = content[:pos] if pos > 0 else ''
+    declares = len([l for l in preamble.split(chr(10))
+                    if l.strip().startswith('BMG_DECLARE_') or l.strip().startswith('BMG_REGISTER_')])
+    
+    expected = sum(1 for k in b['kernels'] if classify(k) in ('ge', 'gs'))
+    if pos < 0 or declares != expected:
+        print(f'FAIL {bid}: {declares} declares expected {expected}')
+        fails += 1
+    
+    os.unlink(f'/tmp/{bid}_check.hpp')
+    if (i+1) % 100 == 0:
+        print(f'  [{i+1}/{len(batches)}] {fails} fails, {time.time()-t0:.0f}s', flush=True)
+
+shutil.copy2(ORIG, SRC)
+print(f'DONE: {fails}/{len(batches)} failures')
+exit(fails)
+"
+    STATUS=$?
     ELAPSED=$(($(date +%s) - START_TIME))
-    log "Phase 0 DONE: $FAILS/$TOTAL gen_mini failures in ${ELAPSED}s"
-    [ "$FAILS" -eq 0 ] && log "✅ ALL BATCHES VALID — ready for Phase 1"
+    if [ "$STATUS" -eq 0 ]; then
+        log "✅ ALL $TOTAL BATCHES gen_mini VALID — 0 leftover declarations"
+    else
+        log "❌ $STATUS gen_mini failures — abort!"
+        exit 1
+    fi
 }
 
 # ---- Phase 1: Smoke test (20 batches) ----
