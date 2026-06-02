@@ -78,7 +78,7 @@ with open('$WS/manifest.json', 'w') as f:
 print(f'Generated {tot} batches ({len(all_k)} kernels)')
 "
 
-    TOTAL=$(python3 -c "import json; print(json.load(open('$WS/manifest.json'))['batches'])")
+    TOTAL=$(python3 -c "import json; print(len(json.load(open('$WS/manifest.json'))['batches']))")
 
     # Validate all batches: run gen_mini_hpp and verify no preamble leftovers
     log "Validating gen_mini_hpp on $TOTAL batches (expect ~3 min)..."
@@ -163,7 +163,7 @@ phase1_smoke() {
     git fetch origin main
     git checkout -- benchmarks/gemm/benchmarks_sycl.hpp benchmarks/gemm/main.cpp 2>/dev/null || true
 
-    TOTAL=$(python3 -c "import json; print(json.load(open('$WS/manifest.json'))['batches'])")
+    TOTAL=$(python3 -c "import json; print(len(json.load(open('$WS/manifest.json'))['batches']))")
     log "Testing first 20 of $TOTAL batches"
 
     COMPILE_FAIL=0
@@ -261,7 +261,7 @@ phase2_full() {
     git checkout -- benchmarks/gemm/benchmarks_sycl.hpp benchmarks/gemm/main.cpp 2>/dev/null || true
     rm -f benchmarks/gemm/benchmarks_sycl.hpp.cache
 
-    TOTAL=$(python3 -c "import json; print(json.load(open('$WS/manifest.json'))['batches'])")
+    TOTAL=$(python3 -c "import json; print(len(json.load(open('$WS/manifest.json'))['batches']))")
     log "Processing $TOTAL batches on GPUs 0,1,2,3 (round-robin)"
 
     COMPILE_FAIL=0
