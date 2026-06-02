@@ -80,8 +80,8 @@ runs:
         export CPLUS_INCLUDE_PATH=$DPCPP_PATH/include:${SYSTEM_CXX_INCLUDE_DIR}:${SYSTEM_CXX_ARCH_INCLUDE_DIR}:/usr/include/x86_64-linux-gnu:/usr/include:\$CPLUS_INCLUDE_PATH
         export LD_LIBRARY_PATH=$DPCPP_PATH/lib:/usr/lib/x86_64-linux-gnu:${SYSTEM_GCC_LIB_DIR}:/usr/lib:\$LD_LIBRARY_PATH
         export LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:${SYSTEM_GCC_LIB_DIR}:/usr/lib:\$LIBRARY_PATH
-        export CC=$DPCPP_PATH/bin/clang
-        export CXX=$DPCPP_PATH/bin/clang++
+        export CC=$DPCPP_PATH/bin/dpclang
+        export CXX=$DPCPP_PATH/bin/dpclang++
         # Configure DPC++ to use system C++ standard library with proper linking
         export CXXFLAGS="-stdlib=libstdc++ -I${SYSTEM_CXX_INCLUDE_DIR} -I${SYSTEM_CXX_ARCH_INCLUDE_DIR} \$CXXFLAGS"
         export LDFLAGS="-L/usr/lib/x86_64-linux-gnu -L${SYSTEM_GCC_LIB_DIR} -L/usr/lib \$LDFLAGS"
