@@ -283,7 +283,11 @@ def exhaustive_regular_gemm_tile_candidates(
     sg_n_values = allowed.get("sg_n", [2, 4, 8])
     stage_values = [stage for stage in stages if stage in allowed.get("stages", list(stages))]
     limits = (constraints or {}).get("limits", {})
-    valid_sg_sizes = limits.get("valid_subgroup_sizes")  # None=B70 default, [32,64]=B60
+    valid_sg_sizes = limits.get("valid_subgroup_sizes")
+    # Hard guard: B70/B60 max subgroup = 32, SG8×8=64 is illegal.
+    # Default to [16, 32] when no explicit constraint is provided.
+    if valid_sg_sizes is None:
+        valid_sg_sizes = [16, 32]
     entries = []
     for tile_m in tile_m_values:
         for tile_n in tile_n_values:

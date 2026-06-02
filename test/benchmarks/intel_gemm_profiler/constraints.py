@@ -235,7 +235,7 @@ def selected_compile_env(profiles, variant_override=None):
 def default_constraints():
     """
     Default B70 (BMG G31) constraints.
-    sg_m × sg_n restricted to {16, 32, 64} to reduce search space.
+    sg_m × sg_n restricted to {16, 32} (B70 max subgroup = 32, SG8×8=64 is illegal).
     Set ``valid_subgroup_sizes`` to null for unrestricted (≤32), or pass
     a device-specific constraints JSON (e.g. constraints_b60.json).
     """
@@ -244,7 +244,7 @@ def default_constraints():
         "generated_at": now_iso(),
         "constraint_source": "b70_default",
         "device_arch": "bmg",
-        "description": "B70 (BMG G31) restricted: sg_m × sg_n ∈ {16, 32, 64}",
+        "description": "B70 (BMG G31) restricted: sg_m × sg_n ∈ {16, 32}",
         "limits": {
             "max_slm_kb": 64,
             "subgroup_size": 16,
@@ -334,7 +334,7 @@ def blocked(seed, constraints):
     Seed-level filter using constraints JSON.
     
     Subgroup product gate (limits.valid_subgroup_sizes):
-      [16,32,64] → B70 default: sg_m × sg_n ∈ {16, 32, 64}
+      [16,32]    → B70 default: sg_m × sg_n ∈ {16, 32}
       [32,64]    → B60:         sg_m × sg_n ∈ {32, 64}
       null       → legacy:      sg_m × sg_n ≤ 32
     """
