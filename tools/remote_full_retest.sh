@@ -14,7 +14,7 @@
 #   bash sycl-tla/tools/remote_full_retest.sh phase2   # full 886-batch
 # =============================================================================
 
-set -euo pipefail
+set -eo pipefail
 
 PHASE="${1:-phase0}"
 REPO_ROOT="/root/cutlass_profile_device7_b70_2500mhz"
