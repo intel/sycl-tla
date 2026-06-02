@@ -316,7 +316,7 @@ public:
       // when causal mask is true. It is not possible to set the scope
       // of the barrier to workgroup level as the number n block is
       // different for each subgroup due to triangular nature of causal based operation
-      static constexpr int barrier_scope = CausalMask ? 3 : 2;
+      static constexpr SPIRVScope barrier_scope = CausalMask ? ScopeSubgroup : ScopeWorkgroup;
       // MAIN LOOP: loop over K and V, perform fused attention + online softmax
       for (int nblock = 0; nblock < nblock_limit - 1; nblock++) {
         barrier_arrive(barrier_scope);
