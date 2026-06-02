@@ -179,3 +179,52 @@ binary --kernel=X       → screen on GPU (15s/kernel)
 | GPU hangs | Check SplitK splits, GPU frequency |
 | Manifest 0 batches | Regenerate with latest catalog code |
 | Git fetch fails | Use git reset --hard origin/main instead of pull |
+| **Script exits immediately** | Check `set -u` in bash (oneAPI vars.sh has unbound SETVARS_CALL) |
+| **Script runs 0 iterations** | Check `len()` wrap on `json.load()['batches']` — returns list not int |
+| **`$!` shows empty** | `export VAR=val nohup ... & echo PID=$!` works; `VAR=val nohup ... & echo PID=$!` may not expand in subprocess |
+
+## 12. Remote Start (Proven Method)
+
+```bash
+# On remote Maginfra2 as root:
+cd /root/cutlass_profile_device7_b70_2500mhz
+cd sycl-tla && git fetch origin && git reset --hard origin/main
+
+# Regenerate manifest in screen_ws (NOT screen_ws_v3 — run_seq.sh uses screen_ws)
+python3 -c "
+import sys, json
+sys.path.insert(0, 'sycl-tla/test/benchmarks')
+sys.path.insert(0, 'sycl-tla/python')
+from intel_gemm_profiler.catalog import generated_layered_bmg_kernel_catalog
+from intel_gemm_profiler.constraints import default_constraints
+cons = default_constraints()
+cat = generated_layered_bmg_kernel_catalog(constraints=cons)
+df = 'bf16'
+all_k = sorted(set(k['kernel_name'] for k in cat['kernels'] if k.get('dtype_family') == df))
+all_k = [k for k in all_k if not k.startswith('03_bmg') and 'streamk_example' not in k]
+batches = [all_k[i:i+2] for i in range(0, len(all_k), 2)]
+tot = len(batches)
+manifest = {'total': len(all_k), 'batch_size': 2, 'batches': []}
+for i, batch in enumerate(batches):
+    bid = f'batch_{i:04d}'
+    mf = f'screen_ws/builds/{bid}.txt'
+    with open(mf, 'w') as f:
+        for k in batch: f.write(k + '\n')
+    manifest['batches'].append({'id': bid, 'count': len(batch), 'gpu': i % 4, 'manifest': mf})
+with open('screen_ws/manifest.json', 'w') as f:
+    json.dump(manifest, f, indent=2)
+print(f'{tot} batches ({len(all_k)} kernels)')
+"
+
+# Start full run (background, survives SSH disconnect):
+source /opt/intel/oneapi/compiler/2025.3/env/vars.sh 2>/dev/null
+export SYCL_PROGRAM_COMPILE_OPTIONS='-ze-opt-large-register-file -gline-tables-only'
+export IGC_VectorAliasBBThreshold=10000 IGC_ExtraOCLOptions='-cl-intel-256-GRF-per-thread'
+for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $gov 2>/dev/null; done
+export RESULTS_DIR=/root/cutlass_profile_device7_b70_2500mhz/screen_ws/results
+export WS=/root/cutlass_profile_device7_b70_2500mhz/screen_ws
+export BATCHES=886
+mkdir -p $RESULTS_DIR
+nohup bash sycl-tla/tools/run_seq.sh >> /tmp/run_v3.log 2>&1 &
+echo "PID=$!"
+```
