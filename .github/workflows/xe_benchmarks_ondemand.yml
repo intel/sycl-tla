@@ -22,7 +22,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - compiler: RELEASE
+          - compiler: NIGHTLY
             gpu: BMG
             intel_graphics: ROLLING
             sycl_target: intel_gpu_bmg_g21
@@ -64,8 +64,8 @@ jobs:
             echo "cmake and ninja already available"
           fi
           . setvars.sh
-          export CC=icx
-          export CXX=icpx
+          export CC=dpclang
+          export CXX=dpclang++
           export CUTLASS_SYCL_PROFILING_ENABLED=ON
           export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
           export CMAKE_BUILD_TYPE=Release
@@ -90,7 +90,7 @@ jobs:
             -DCUTLASS_SYCL_RUNNING_CI=ON \
             -DCUTLASS_ENABLE_BENCHMARKS=ON \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=icpx
+            -DCMAKE_CXX_COMPILER=dpclang++
       - name: Build Benchmarks
         shell: bash
         run: |
