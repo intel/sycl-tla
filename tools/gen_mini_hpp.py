@@ -99,8 +99,7 @@ def gen_mini(kernels, output):
                 M, N, K, SGM, SGN = SEED_KERNEL_MAP[k]
                 c, a = cfg_atom(pfx)
                 declares.append(f'BMG_DECLARE_GEMM_TILE_SG({pfx}, {c}, {a}, {M}, {N}, {K}, {SGM}, {SGN})')
-            else:
-                continue
+            continue
         c, a = cfg_atom(pfx)
         if t == 'ge':
             declares.append(f'BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE({pfx}, {c}, {a}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]}, {p["ST"]})')
