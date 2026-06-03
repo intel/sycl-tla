@@ -41,30 +41,20 @@ for i in $(seq 0 $((BATCHES-1))); do
   touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.ts
   touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.make
   
-  # Remove .DELETE_ON_ERROR to keep .o when link fails (GB stub)
-  sed -i "/^\.DELETE_ON_ERROR/d" $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/build.make 2>/dev/null || true
+  # GB stub fixed: make target now compiles AND links successfully
   make -C $BDIR cutlass_benchmarks_gemm_sycl -j128 > /tmp/mk_${bid}.log 2>&1
-  OBJ=$BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o
-  
-  if [ ! -s "$OBJ" ]; then
-    log "[$bid] COMPILE FAIL"
-    cp /tmp/bak_hpp $S/benchmarks/gemm/benchmarks_sycl.hpp; cp /tmp/bak_main $S/benchmarks/gemm/main.cpp
-    rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache; continue
-  fi
-  
   BIN=$BDIR/benchmarks/gemm/cutlass_benchmarks_gemm_sycl
-  icpx -fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen "-device bmg-g31" \
-    -Xspirv-translator -spirv-ext=+SPV_INTEL_split_barrier,+SPV_INTEL_2d_block_io,+SPV_INTEL_subgroup_matrix_multiply_accumulate \
-    -O3 $OBJ -o $BIN $GB_LIB -L/lib64/stubs -Wl,-rpath,/lib64/stubs: $CUTLASS_LIB \
-    -Wl,-rpath=/opt/intel/oneapi/mkl/2025.3/lib \
-    /opt/intel/oneapi/mkl/2025.3/lib/libmkl_intel_ilp64.so /opt/intel/oneapi/mkl/2025.3/lib/libmkl_intel_thread.so \
-    /opt/intel/oneapi/mkl/2025.3/lib/libmkl_core.so /opt/intel/oneapi/compiler/2025.3/lib/libiomp5.so \
-    -lm -ldl -lpthread /opt/intel/oneapi/compiler/2025.3/lib/libsycl.so > /tmp/lnk_${bid}.log 2>&1
   
   if [ ! -x "$BIN" ]; then
-    log "[$bid] LINK FAIL"
-    cp /tmp/bak_hpp $S/benchmarks/gemm/benchmarks_sycl.hpp; cp /tmp/bak_main $S/benchmarks/gemm/main.cpp
-    rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache; continue
+    if grep -q "1 error generated" /tmp/mk_${bid}.log 2>/dev/null; then
+      log "[$bid] COMPILE FAIL"
+    else
+      log "[$bid] LINK FAIL"
+    fi
+    cp /tmp/bak_hpp $S/benchmarks/gemm/benchmarks_sycl.hpp
+    cp /tmp/bak_main $S/benchmarks/gemm/main.cpp
+    rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
+    continue
   fi
   
   export ZE_AFFINITY_MASK=$gpu

@@ -114,8 +114,8 @@ def gen_mini(kernels, output):
     for line in lines:
         stripped = line.strip()
         # Strip individual macro calls that generate kernel types
-        # Match BMG_DECLARE_GEMM_TILE(, BMG_REGISTER_GEMM_TILE_SG(, etc.
-        if re.match(r'^(BMG_DECLARE_\w+|BMG_REGISTER_\w+|BMG_SOURCE_\w+)\(', stripped):
+        # Match BMG_DECLARE_GEMM_TILE(, CUTLASS_CREATE_GEMM_BENCHMARK(, etc.
+        if re.match(r'^(BMG_DECLARE_\w+|BMG_REGISTER_\w+|BMG_SOURCE_\w+|CUTLASS_CREATE_GEMM_BENCHMARK)\(', stripped):
             continue
         # Strip .def includes (macro generators)
         if '#include "bmg_gemm_source_tile_sg.def"' in stripped:
