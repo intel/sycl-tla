@@ -73,11 +73,24 @@ jobs:
           export IGC_VectorAliasBBThreshold=100000000000
           export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
           export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
+
+          export LIBRARY_PATH=/opt/llvm/build/install/lib/     # to handle oneMath search of DPC++ stuff
+          export LD_LIBRARY_PATH=/opt/llvm/build/install/lib/
+          export PKG_CONFIG_PATH=/opt/llvm/build/install/lib/pkgconfig/
+
           # Persist environment variables to following steps
           env >> $GITHUB_ENV
           which $CXX
           $CXX --version
-          sycl-ls
+          echo "SYCL device inventory:"
+          sycl-ls || echo "sycl-ls failed; continuing to explicit Level Zero check"
+
+          echo "Checking Level Zero GPU availability..."
+          if ! sycl-ls 2>/dev/null | grep -qi "level_zero.*gpu"; then
+            echo "No Level Zero GPU detected on runner"
+            exit 1
+          fi
+
       - name: Build
         shell: bash
         run: |
