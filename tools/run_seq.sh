@@ -19,7 +19,7 @@ cd $S
 git checkout -- benchmarks/gemm/benchmarks_sycl.hpp benchmarks/gemm/main.cpp 2>/dev/null
 rm -f benchmarks/gemm/benchmarks_sycl.hpp.cache
 
-TOTAL=$(python3 -c "import json; print(json.load(open('$WS/manifest.json'))['batches'])")
+TOTAL=$(python3 -c "import json; print(len(json.load(open('$WS/manifest.json'))['batches']))")
 [ "$BATCHES" = "all" ] && BATCHES=$TOTAL
 log "Processing $BATCHES of $TOTAL batches"
 
