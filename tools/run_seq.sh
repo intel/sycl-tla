@@ -38,12 +38,13 @@ for i in $(seq 0 $((BATCHES-1))); do
   python3 $S/tools/gen_main.py "$bf" "$S/benchmarks/gemm/main.cpp"
   
   rm -f $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o $BDIR/benchmarks/gemm/cutlass_benchmarks_gemm_sycl
-  touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.ts
-  touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.make
   
-  # Compile .o only (skip make link — GB stub causes -lbenchmark::benchmark failure)
-  make -C $BDIR benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o -j128 > /tmp/mk_${bid}.log 2>&1
+  # Compile .o directly with cmake-generated flags (bypass make to avoid GB link failure)
   OBJ=$BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o
+  source $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/flags.make 2>/dev/null
+  (cd $BDIR/benchmarks/gemm && icpx $CXX_DEFINES $CXX_INCLUDES $CXX_FLAGS \
+    -o CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o \
+    -c $S/benchmarks/gemm/main.cpp) > /tmp/mk_${bid}.log 2>&1
   
   if [ ! -s "$OBJ" ]; then
     log "[$bid] COMPILE FAIL"
