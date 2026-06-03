@@ -38,13 +38,13 @@ for i in $(seq 0 $((BATCHES-1))); do
   python3 $S/tools/gen_main.py "$bf" "$S/benchmarks/gemm/main.cpp"
   
   rm -f $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o $BDIR/benchmarks/gemm/cutlass_benchmarks_gemm_sycl
+  touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.ts
+  touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.make
   
-  # Compile .o directly with cmake-generated flags (bypass make to avoid GB link failure)
+  # Remove .DELETE_ON_ERROR to keep .o when link fails (GB stub)
+  sed -i "/^\.DELETE_ON_ERROR/d" $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/build.make 2>/dev/null || true
+  make -C $BDIR cutlass_benchmarks_gemm_sycl -j128 > /tmp/mk_${bid}.log 2>&1
   OBJ=$BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o
-  source $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/flags.make 2>/dev/null
-  (cd $BDIR/benchmarks/gemm && icpx $CXX_DEFINES $CXX_INCLUDES $CXX_FLAGS \
-    -o CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/main.cpp.o \
-    -c $S/benchmarks/gemm/main.cpp) > /tmp/mk_${bid}.log 2>&1
   
   if [ ! -s "$OBJ" ]; then
     log "[$bid] COMPILE FAIL"
