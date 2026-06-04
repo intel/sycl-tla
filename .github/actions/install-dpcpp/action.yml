@@ -49,8 +49,8 @@ runs:
         sudo tar -xf sycl_linux.tar.gz
         sudo rm sycl_linux.tar.gz
         popd
-        ln -s $DPCPP_PATH/bin/clang dpclang
-        ln -s $DPCPP_PATH/bin/clang++ dpclang++
+        ln -s clang dpclang
+        ln -s clang++ dpclang++
          
         cat <<EOF | tee setvars.sh
         export PATH=$DPCPP_PATH/bin:$PATH
