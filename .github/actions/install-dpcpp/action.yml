@@ -28,76 +28,33 @@ runs:
       run: |
         shopt -s expand_aliases
         which sudo || alias sudo=""
-
-        # Ensure Python is available for intel/llvm buildbot scripts.
-        if command -v python3 >/dev/null 2>&1; then
-          PYTHON_BIN=python3
-        elif command -v python >/dev/null 2>&1; then
-          PYTHON_BIN=python
-        else
-          sudo apt update
-          sudo apt install -y python3
-          PYTHON_BIN=python3
-        fi
-
         export DPCPP_PATH=${{ inputs.DPCPP_PATH }}
-        mkdir -p "$DPCPP_PATH"
-        pushd "$DPCPP_PATH"
-
-        # Build from sources following intel/llvm SYCL GetStartedGuide:
-        # python <workspace>/llvm/buildbot/configure.py
-        # python <workspace>/llvm/buildbot/compile.py
-        if [[ -d llvm ]]; then
-          rm -rf llvm
-        fi
-
-        git clone --depth=1 https://github.com/intel/llvm -b sycl llvm
-        pushd llvm
-
+        mkdir -p $DPCPP_PATH
+        pushd $DPCPP_PATH
         if [[ "${{ inputs.DPCPP_VERSION }}" != "" ]]; then
-          echo "Will build DPCPP from intel/llvm ref: ${{ inputs.DPCPP_VERSION }}"
-          if git fetch --depth=1 origin "${{ inputs.DPCPP_VERSION }}"; then
-            git checkout --detach FETCH_HEAD
-          else
-            echo "Failed to fetch ref: ${{ inputs.DPCPP_VERSION }}"
-            exit 1
-          fi
+          echo "Will use DPCPP ${{ inputs.DPCPP_VERSION }}"
+          URL=https://github.com/intel/llvm/releases/download/${{ inputs.DPCPP_VERSION }}/sycl_linux.tar.gz;
         else
-          echo "Will build latest nightly DPCPP from intel/llvm"
-          # Use grep and sed instead of jq to avoid additional dependencies.
+          echo "Will use latest DPCPP version"
+          # Use grep and sed instead of jq to avoid additional dependencies
           latest=$(curl -sS https://api.github.com/repos/intel/llvm/releases | \
             grep '"tag_name":' | \
             grep 'nightly-[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' | \
             head -1 | \
             sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-
-          if [[ -z "$latest" ]]; then
-            echo "Unable to detect latest nightly tag from intel/llvm releases"
-            exit 1
-          fi
-
-          echo "Resolved nightly tag: ${latest}"
-          if git fetch --depth=1 origin "${latest}"; then
-            git checkout --detach FETCH_HEAD
-          else
-            echo "Failed to fetch nightly ref: ${latest}"
-            exit 1
-          fi
+          URL=https://github.com/intel/llvm/releases/download/${latest}/sycl_linux.tar.gz;
         fi
-
-        "$PYTHON_BIN" buildbot/configure.py -t Release -o build
-        "$PYTHON_BIN" buildbot/compile.py -o build
-
+        echo "Downloading DPCPP from ${URL}"
+        sudo wget -q $URL
+        sudo tar -xf sycl_linux.tar.gz
+        sudo rm sycl_linux.tar.gz
         popd
-        popd
-
+        ln -s $DPCPP_PATH/bin/clang dpclang
+        ln -s $DPCPP_PATH/bin/clang++ dpclang++
+         
         cat <<EOF | tee setvars.sh
-        export PATH=$DPCPP_PATH/llvm/build/bin:$PATH
-        export LD_LIBRARY_PATH=$DPCPP_PATH/llvm/build/lib:$LD_LIBRARY_PATH
-        export C_INCLUDE_PATH=$DPCPP_PATH/llvm/build/include:$C_INCLUDE_PATH
-        export CPLUS_INCLUDE_PATH=$DPCPP_PATH/llvm/build/include:$CPLUS_INCLUDE_PATH
-        export CC=$DPCPP_PATH/llvm/build/bin/dpclang
-        export CXX=$DPCPP_PATH/llvm/build/bin/dpclang++
+        export CC=$DPCPP_PATH/bin/dpclang
+        export CXX=$DPCPP_PATH/bin/dpclang++
         EOF
     - name: Install DPCPP
       if: inputs.DPCPP_RELEASE == 'RELEASE'
