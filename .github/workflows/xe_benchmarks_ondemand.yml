@@ -90,7 +90,7 @@ jobs:
             -DCUTLASS_SYCL_RUNNING_CI=ON \
             -DCUTLASS_ENABLE_BENCHMARKS=ON \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=dpclang++
+            -DCMAKE_CXX_COMPILER=dpclang++ 
       - name: Build Benchmarks
         shell: bash
         run: |

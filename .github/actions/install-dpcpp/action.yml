@@ -53,6 +53,10 @@ runs:
         ln -s $DPCPP_PATH/bin/clang++ dpclang++
          
         cat <<EOF | tee setvars.sh
+        export PATH=$DPCPP_PATH/bin:$PATH
+        export C_INCLUDE_PATH=$DPCPP_PATH/include:$C_INCLUDE_PATH
+        export CPLUS_INCLUDE_PATH=$DPCPP_PATH/include:$CPLUS_INCLUDE_PATH
+        export LD_LIBRARY_PATH=$DPCPP_PATH/lib:$LD_LIBRARY_PATH
         export CC=$DPCPP_PATH/bin/dpclang
         export CXX=$DPCPP_PATH/bin/dpclang++
         EOF
