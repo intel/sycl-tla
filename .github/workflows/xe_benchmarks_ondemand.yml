@@ -108,7 +108,8 @@ jobs:
             -DDPCPP_SYCL_TARGET=${{ matrix.sycl_target }} \
             -DCUTLASS_SYCL_RUNNING_CI=ON \
             -DCUTLASS_ENABLE_BENCHMARKS=ON \
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=dpclang++
       - name: Build Benchmarks
         shell: bash
         run: |
