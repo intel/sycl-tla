@@ -56,8 +56,12 @@ runs:
 
         if [[ "${{ inputs.DPCPP_VERSION }}" != "" ]]; then
           echo "Will build DPCPP from intel/llvm ref: ${{ inputs.DPCPP_VERSION }}"
-          git fetch --depth=1 origin "${{ inputs.DPCPP_VERSION }}" || true
-          git checkout "${{ inputs.DPCPP_VERSION }}"
+          if git fetch --depth=1 origin "${{ inputs.DPCPP_VERSION }}"; then
+            git checkout --detach FETCH_HEAD
+          else
+            echo "Failed to fetch ref: ${{ inputs.DPCPP_VERSION }}"
+            exit 1
+          fi
         else
           echo "Will build latest nightly DPCPP from intel/llvm"
           # Use grep and sed instead of jq to avoid additional dependencies.
@@ -73,8 +77,12 @@ runs:
           fi
 
           echo "Resolved nightly tag: ${latest}"
-          git fetch --depth=1 origin "${latest}" || true
-          git checkout "${latest}"
+          if git fetch --depth=1 origin "${latest}"; then
+            git checkout --detach FETCH_HEAD
+          else
+            echo "Failed to fetch nightly ref: ${latest}"
+            exit 1
+          fi
         fi
 
         "$PYTHON_BIN" buildbot/configure.py -t Release -o build

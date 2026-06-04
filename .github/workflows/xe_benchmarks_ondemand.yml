@@ -143,7 +143,7 @@ jobs:
             sudo rm -f /usr/share/keyrings/oneapi-archive-keyring.gpg
           fi
           # Clean up environment files
-          # rm -f setvars.sh
+          rm -f setvars.sh
           # Clean up build artifacts
           rm -rf build/ || true
           # Reset environment variables that might interfere
