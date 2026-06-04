@@ -63,8 +63,6 @@ jobs:
           else
             echo "cmake and ninja already available"
           fi
-          ln -s clang dpclang
-          ln -s clang++ dpclang++
           . setvars.sh
           export CC=dpclang
           export CXX=dpclang++
