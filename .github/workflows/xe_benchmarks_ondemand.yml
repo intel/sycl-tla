@@ -77,7 +77,7 @@ jobs:
           env >> $GITHUB_ENV
           which $CXX
           $CXX --version
-          #sycl-ls
+          sycl-ls
       - name: Build
         shell: bash
         run: |
