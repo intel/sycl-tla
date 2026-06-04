@@ -84,11 +84,15 @@ for i in $(seq 0 $((BATCHES-1))); do
   touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.ts
   touch $BDIR/benchmarks/gemm/CMakeFiles/cutlass_benchmarks_gemm_sycl.dir/compiler_depend.make
   
-  # GB stub fixed: make target now compiles AND links successfully
-  make -C $BDIR cutlass_benchmarks_gemm_sycl -j128 > /tmp/mk_${bid}.log 2>&1
+  # Build failures are expected for bad batches; keep screening instead of
+  # exiting the whole run under set -e.
+  BUILD_OK=1
+  if ! make -C $BDIR cutlass_benchmarks_gemm_sycl -j128 > /tmp/mk_${bid}.log 2>&1; then
+    BUILD_OK=0
+  fi
   BIN=$BDIR/benchmarks/gemm/cutlass_benchmarks_gemm_sycl
   
-  if [ ! -x "$BIN" ]; then
+  if [ "$BUILD_OK" -ne 1 ] || [ ! -x "$BIN" ]; then
     if grep -q "1 error generated" /tmp/mk_${bid}.log 2>/dev/null; then
       log "[$bid] COMPILE FAIL"
     else
@@ -105,9 +109,21 @@ for i in $(seq 0 $((BATCHES-1))); do
   echo "kernel,tflops,status,gpu" > $R
   while read kernel; do
     [ -z "$kernel" ] && continue
-    out=$(timeout 120 $BIN --kernel=$kernel --m=8192 --n=4096 --k=1536 2>&1) || true
+    set +e
+    out=$(timeout 120 $BIN --kernel=$kernel --m=8192 --n=4096 --k=1536 2>&1)
+    rc=$?
+    set -e
     tf=$(echo "$out" | grep -oP "median_tflops=\K[0-9.]+" || echo "0")
-    st=$(echo "$out" | grep -oP "STATUS=\K[A-Z]+" || echo "TIMEOUT")
+    if echo "$out" | grep -q "RESULT kernel="; then
+      st="OK"
+    elif [ "$rc" -eq 124 ]; then
+      st="TIMEOUT"
+    elif echo "$out" | grep -q "NOT_FOUND"; then
+      st="NOT_FOUND"
+    else
+      st=$(echo "$out" | grep -oP "STATUS=\K[A-Z]+" | head -1)
+      [ -z "$st" ] && st="FAIL"
+    fi
     echo "$kernel,$tf,$st,$gpu" >> $R
   done < "$bf"
   log "[$((i+1))/$BATCHES] GPU$gpu $bid done"

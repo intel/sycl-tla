@@ -27,28 +27,6 @@ EXPANDED_STREAMK_TILES = {
     (512,64,32),(512,64,64),(512,128,32),(512,128,64),(512,256,32),(512,256,64),
 }
 
-# Seed kernels from catalog SEED_KERNELS — numeric-suffix names that
-# don't match the standard Gemm_ pattern. Must be generated explicitly.
-SEED_KERNEL_MAP = {
-    'BmgGemmBF16BF16FP32_RCR_5':  (8,128,32,1,4),
-    'BmgGemmBF16BF16FP32_RCR_6':  (256,256,32,8,4),
-    'BmgGemmBF16BF16FP32_RCR_7':  (8,128,32,1,8),
-    'BmgGemmBF16BF16FP32_RCR_9':  (8,64,32,1,4),
-    'BmgGemmBF16BF16FP32_RCR_16': (16,64,32,2,4),
-    'BmgGemmBF16BF16FP32_RCR_17': (64,128,32,4,4),
-    'BmgGemmBF16BF16FP32_RCR_18': (128,128,32,4,4),
-    'BmgGemmBF16BF16FP32_RCR_19': (128,256,32,4,4),
-    'BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32': (512,256,32,8,4),
-    'BmgGemmFP16FP16FP32_RCR_5':  (8,128,32,1,4),
-    'BmgGemmFP16FP16FP32_RCR_6':  (256,256,32,8,4),
-    'BmgGemmFP16FP16FP32_RCR_7':  (8,128,32,1,8),
-    'BmgGemmFP16FP16FP32_RCR_9':  (8,64,32,1,4),
-    'BmgGemmFP16FP16FP32_RCR_16': (16,64,32,2,4),
-    'BmgGemmFP16FP16FP32_RCR_17': (64,128,32,4,4),
-    'BmgGemmFP16FP16FP32_RCR_18': (128,128,32,4,4),
-    'BmgGemmFP16FP16FP32_RCR_19': (128,256,32,4,4),
-}
-
 def full_text():
     # Always re-read from canonical source to avoid stale cache
     if CACHE.exists():
@@ -89,16 +67,16 @@ def covered(name, text):
 
 def gen_mini(kernels, output):
     text = full_text()
+    direct_kernels = set(re.findall(r'^\s*using\s+(\w+)\s*=', text, flags=re.M))
     
     declares = []
     registers = []
     for k in sorted(set(kernels)):
         t, pfx, p = classify(k)
         if t == 'hw':
-            if k in SEED_KERNEL_MAP:
-                M, N, K, SGM, SGN = SEED_KERNEL_MAP[k]
-                c, a = cfg_atom(pfx)
-                declares.append(f'BMG_DECLARE_GEMM_TILE_SG({pfx}, {c}, {a}, {M}, {N}, {K}, {SGM}, {SGN})')
+            if k not in direct_kernels:
+                raise ValueError(f"Unsupported non-pattern kernel in manifest: {k}")
+            declares.append(f'CUTLASS_CREATE_GEMM_BENCHMARK({k});')
             continue
         c, a = cfg_atom(pfx)
         if t == 'ge':
@@ -123,11 +101,7 @@ def gen_mini(kernels, output):
     for k in sorted(set(kernels)):
         t, pfx, p = classify(k)
         if t == 'hw':
-            if k in SEED_KERNEL_MAP:
-                M, N, K, SGM, SGN = SEED_KERNEL_MAP[k]
-                registers.append(f'  BMG_REGISTER_GEMM_TILE_SG({pfx}, {M}, {N}, {K}, {SGM}, {SGN})')
-            else:
-                registers.append(f'  CUTLASS_BENCHMARK({k});')
+            registers.append(f'  CUTLASS_BENCHMARK({k});')
         elif t == 'gs':
             registers.append(f'  BMG_REGISTER_GEMM_TILE_SG({pfx}, {p["M"]}, {p["N"]}, {p["K"]}, {p["SGM"]}, {p["SGN"]})')
         elif t == 'ge':
