@@ -26,6 +26,20 @@ cd "$S"
 git checkout -- benchmarks/gemm/benchmarks_sycl.hpp benchmarks/gemm/main.cpp 2>/dev/null
 rm -f benchmarks/gemm/benchmarks_sycl.hpp.cache
 
+ORIG_HPP=$(mktemp /tmp/run_seq_hpp.XXXXXX)
+ORIG_MAIN=$(mktemp /tmp/run_seq_main.XXXXXX)
+cp "$S/benchmarks/gemm/benchmarks_sycl.hpp" "$ORIG_HPP"
+cp "$S/benchmarks/gemm/main.cpp" "$ORIG_MAIN"
+
+cleanup() {
+    cp "$ORIG_HPP" "$S/benchmarks/gemm/benchmarks_sycl.hpp" 2>/dev/null || true
+    cp "$ORIG_MAIN" "$S/benchmarks/gemm/main.cpp" 2>/dev/null || true
+    rm -f "$S/benchmarks/gemm/benchmarks_sycl.hpp.cache"
+    rm -f "$ORIG_HPP" "$ORIG_MAIN"
+}
+
+trap cleanup EXIT INT TERM
+
 # --- Auto-generate manifest if missing or stale ---
 _regenerate_manifest() {
     log "Regenerating kernel manifest..."
@@ -72,8 +86,8 @@ for i in $(seq 0 $((BATCHES-1))); do
   [ ! -f "$bf" ] && continue
   gpu=$(( i % GPU_COUNT ))
   
-  cp $S/benchmarks/gemm/benchmarks_sycl.hpp /tmp/bak_hpp
-  cp $S/benchmarks/gemm/main.cpp /tmp/bak_main
+  cp "$ORIG_HPP" "$S/benchmarks/gemm/benchmarks_sycl.hpp"
+  cp "$ORIG_MAIN" "$S/benchmarks/gemm/main.cpp"
   rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
   
   python3 $S/tools/gen_mini_hpp.py --manifest "$bf" --output /tmp/${bid}.hpp > /dev/null 2>&1
@@ -93,13 +107,13 @@ for i in $(seq 0 $((BATCHES-1))); do
   BIN=$BDIR/benchmarks/gemm/cutlass_benchmarks_gemm_sycl
   
   if [ "$BUILD_OK" -ne 1 ] || [ ! -x "$BIN" ]; then
-    if grep -q "1 error generated" /tmp/mk_${bid}.log 2>/dev/null; then
+    if grep -q "error:" /tmp/mk_${bid}.log 2>/dev/null; then
       log "[$bid] COMPILE FAIL"
     else
       log "[$bid] LINK FAIL"
     fi
-    cp /tmp/bak_hpp $S/benchmarks/gemm/benchmarks_sycl.hpp
-    cp /tmp/bak_main $S/benchmarks/gemm/main.cpp
+    cp "$ORIG_HPP" "$S/benchmarks/gemm/benchmarks_sycl.hpp"
+    cp "$ORIG_MAIN" "$S/benchmarks/gemm/main.cpp"
     rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
     continue
   fi
@@ -128,8 +142,8 @@ for i in $(seq 0 $((BATCHES-1))); do
   done < "$bf"
   log "[$((i+1))/$BATCHES] GPU$gpu $bid done"
   
-  cp /tmp/bak_hpp $S/benchmarks/gemm/benchmarks_sycl.hpp
-  cp /tmp/bak_main $S/benchmarks/gemm/main.cpp
+  cp "$ORIG_HPP" "$S/benchmarks/gemm/benchmarks_sycl.hpp"
+  cp "$ORIG_MAIN" "$S/benchmarks/gemm/main.cpp"
   rm -f $S/benchmarks/gemm/benchmarks_sycl.hpp.cache
 done
 log "Done. Results: $RESULTS_DIR"

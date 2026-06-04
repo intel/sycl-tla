@@ -19,6 +19,7 @@ GIT_REF="${GIT_REF:-origin/main}"
 GPU_COUNT="${GPU_COUNT:-4}"
 BATCHES="${BATCHES:-all}"
 GPU_MAX_FREQ_MHZ="${GPU_MAX_FREQ_MHZ:-2500}"
+RUN_GATE="${RUN_GATE:-1}"
 
 log() {
   echo "[$(date +%H:%M:%S)] $*"
@@ -187,6 +188,16 @@ main() {
   setup_env
   kill_existing_runs
   sync_repo
+  if [ "$RUN_GATE" = "1" ]; then
+    log "Running screening gate before full retest..."
+    RUN_SYNC=0 \
+      ROOT_DIR="$ROOT_DIR" \
+      REPO_ROOT="$REPO_ROOT" \
+      BUILD_DIR="$BUILD_DIR" \
+      RUNS_DIR="$RUNS_DIR" \
+      GATE_RUN_ID="${RUN_ID}_gate" \
+      bash "$REPO_ROOT/tools/remote_screening_gate.sh"
+  fi
   prepare_workspace
   reconfigure_build
   launch_run

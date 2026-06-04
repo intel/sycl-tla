@@ -116,8 +116,17 @@ def gen_mini(kernels, output):
     # Keep only #define macro definitions and template type definitions.
     lines = text[:pos].split('\n')
     preamble_lines = []
+    in_macro_def = False
     for line in lines:
         stripped = line.strip()
+        if stripped.startswith('#define '):
+            in_macro_def = stripped.endswith('\\')
+            preamble_lines.append(line)
+            continue
+        if in_macro_def:
+            preamble_lines.append(line)
+            in_macro_def = stripped.endswith('\\')
+            continue
         # Strip individual macro calls that generate kernel types
         # Match BMG_DECLARE_GEMM_TILE(, CUTLASS_CREATE_GEMM_BENCHMARK(, etc.
         if re.match(r'^(BMG_DECLARE_\w+|BMG_REGISTER_\w+|BMG_SOURCE_\w+|CUTLASS_CREATE_GEMM_BENCHMARK)\(', stripped):
@@ -135,7 +144,6 @@ def gen_mini(kernels, output):
     new_text += '\n'.join(registers) + '\n}\n'
     
     with open(output, 'w') as f: f.write(new_text)
-    shutil.copy2(output, FULL)
     print(f"Generated: {len(kernels)} k, {len(declares)} d, {len(registers)} r")
 
 if __name__ == "__main__":
