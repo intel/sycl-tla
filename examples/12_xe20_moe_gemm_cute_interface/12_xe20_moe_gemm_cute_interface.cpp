@@ -251,10 +251,11 @@ template <class TA, class TB> auto choose_tiled_mma(TA *A, TB *B) {
   using TB_non_CV = cutlass::platform::remove_cv_t<TB>;
   auto op = XE_DPAS_TT<8, float, TA_non_CV, TB_non_CV>{};
   // This tiling scheme performs better than WG_M=256, SG_M=256, WG_K=32, SG_M=32, SG_N=64, SG_K=32
-  // for the hardcoded input-shapes used in this example, which correspond to the prefill step of a
-  // gpt-oss-20b model, from which the number of tokens routed to each expert were extracted, just
-  // to get an idea about how skewed the token (M) distribution among various MoE experts could be.
-  // This example does not serve as an endorsement of this tiling scheme for all input shapes.
+  // for the hardcoded input-shapes used in this example, which correspond to a prefill step of the
+  // gpt-oss-20b model, from which data on the number of tokens routed to each expert was recorded
+  // for a run, just to get an idea about how skewed the token (M) distribution among various MoE
+  // experts could be. This example does not serve as an endorsement of this tiling scheme for
+  // all possible input shapes.
   using WGTile = Shape<_256, _128, _32>; // 256x128 WG tile size
   using SGLayout =
       Layout<Shape<_8, _2, _1>, Stride<_2, _1, _0>>; // 8x2 SG tiling, n-major
