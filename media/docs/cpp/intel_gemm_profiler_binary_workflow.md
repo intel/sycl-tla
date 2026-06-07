@@ -142,6 +142,23 @@ Responsibility:
 
 Generated Intel Xe StreamK kernels are intentionally excluded from generated benchmark build manifests until Xe `GemmUniversal` supports `StreamKScheduler` specialization. `gemm_candidate_space.json` records this as `intel_xe_generated_streamk_tile_scheduler_unsupported` in both `candidate_exceptions` and the aggregated `candidate_exception_summary`, while `candidate_coverage` keeps catalog, matched-signature, accepted, blocked, and exception counts visible for large generated catalogs.
 
+For benchmark-backed scheduler kernels, the current workflow now keeps the C++ registry aligned with the profiler catalog for the fixed-`sg=8x4` search band:
+
+- BF16/F16 benchmark-backed scheduler tiles cover the expanded/layered catalog tile set
+- BF16 `RRR` scheduler variants are registered in the benchmark path
+- the remaining scheduler blind spot is still the fixed `sg=8x4`, `stages=2` policy rather than missing benchmark symbols
+
+### Search strategy and old-standard preservation
+
+The workflow now separates **candidate universe** from **execution routing**:
+
+- `baseline` preserves the old persisted seed search
+- `expanded_bmg` preserves the old expanded BMG search
+- `layered_exhaustive` preserves the old layered exhaustive search
+- `bruteforce_scheduler` keeps the old regular-GEMM universe, but switches scheduler candidates to `layered_bmg_scheduler_expanded`, widens BF16 scheduler `sg/stages`, and forces scheduler-oriented batch-preflight execution with richer scheduler metadata in results/reports
+
+This keeps the old search standards reproducible while letting the new scheduler mode remain additive rather than destructive.
+
 ### `BenchmarkRunner`
 
 Input:

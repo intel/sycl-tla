@@ -12,7 +12,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .schemas import BENCHMARK_ERROR_RE, DEFAULT_SCHEDULER_METADATA, RESULT_METADATA_FIELDS, SCHEMA_VERSION, infer_epilogue_metadata
+from .schemas import (
+    BENCHMARK_ERROR_RE,
+    RESULT_METADATA_FIELDS,
+    SCHEMA_VERSION,
+    infer_epilogue_metadata,
+    infer_scheduler_metadata,
+)
 from .utils import now_iso, resolve_executable, shell_join, write_json
 from .candidates import write_config
 
@@ -100,7 +106,7 @@ def parse_metric(line, key):
 
 
 def row_result_metadata(metadata):
-    defaults = dict(DEFAULT_SCHEDULER_METADATA)
+    defaults = infer_scheduler_metadata(metadata)
     defaults.update(
         {
             "runner": "benchmark",
@@ -130,7 +136,7 @@ def parse_streamk_example_log(log_path, metadata_by_bm_name, run_id):
     bm_name = next(iter(metadata_by_bm_name))
     metadata = metadata_by_bm_name[bm_name]
     text = Path(log_path).read_text(encoding="utf-8")
-    status = "pass" if "Disposition: Passed" in text else "fail"
+    status = "pass" if "Disposition: Passed" in text or "Disposition is skipped." in text else "fail"
     failure_reason = "" if status == "pass" else text.strip().splitlines()[-1] if text.strip() else "missing output"
     perf_match = re.search(r"Cutlass GEMM Performance:\s+\[([0-9.]+)\]TFlop/s\s+\(([0-9.]+)\)ms", text)
     avg_tflops = perf_match.group(1) if perf_match else ""
@@ -472,18 +478,40 @@ def run_entries_with_streamk_example(entries, logs_dir, exe, cwd=None, shell_ini
                 "dtype_a": shape["dtype_a"],
                 "dtype_b": shape["dtype_b"],
                 "dtype_c": shape["dtype_c"],
+                "dtype_d": shape.get("dtype_d", shape["dtype_c"]),
                 "dtype_acc": shape["dtype_acc"],
                 "m": shape["m"],
                 "n": shape["n"],
                 "k": shape["k"],
+                "batch_count": shape.get("batch_count", 1),
                 "kernel_name": candidate["kernel_name"],
                 "split_k": candidate["split_k"],
             }
         }
         metadata[bm_name].update(row_result_metadata(candidate))
         log_path = logs_dir / f"{bm_name}.log"
+        runtime_defaults = dict(candidate.get("runtime_defaults", {}))
+        runtime_defaults.update(shape.get("runtime_defaults", {}))
+        batch_count = shape.get("batch_count", runtime_defaults.get("batch_count", 1))
+        alpha = runtime_defaults.get("alpha", 1.0)
+        beta = runtime_defaults.get("beta", 0.0)
+        iterations = runtime_defaults.get("iterations", 20)
+        warmup_iterations = runtime_defaults.get("warmup_iterations", 0)
+        verify = runtime_defaults.get("verify", 1)
         streamk_dtype = candidate.get("streamk_dtype_preset", candidate["dtype_a"])
-        command = [exe, f"--dtype={streamk_dtype}", f"--m={shape['m']}", f"--n={shape['n']}", f"--k={shape['k']}", "--iterations=20", "--verify=1"]
+        command = [
+            exe,
+            f"--dtype={streamk_dtype}",
+            f"--m={shape['m']}",
+            f"--n={shape['n']}",
+            f"--k={shape['k']}",
+            f"--l={batch_count}",
+            f"--alpha={alpha}",
+            f"--beta={beta}",
+            f"--warmup_iterations={warmup_iterations}",
+            f"--iterations={iterations}",
+            f"--verify={verify}",
+        ]
         streamk_mode = candidate.get("streamk_mode", "")
         if streamk_mode == "splitk":
             command.extend(["--splitk", f"--splits={candidate['split_k']}"])

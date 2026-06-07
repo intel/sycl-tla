@@ -24,9 +24,20 @@ DEFAULT_REMOTE_ROOT = "/root/cutlass_profile_device7_b70_2500mhz"
 DEFAULT_REMOTE_REPO = f"{DEFAULT_REMOTE_ROOT}/sycl-tla"
 DEFAULT_RUNS_DIR = f"{DEFAULT_REMOTE_ROOT}/screen_runs"
 SYNC_FILES = [
+    "benchmarks/common.hpp",
+    "benchmarks/gemm/CMakeLists.txt",
+    "benchmarks/gemm/benchmark_runner.hpp",
+    "benchmarks/gemm/benchmarks_sycl.hpp",
+    "benchmarks/gemm/bmg_streamk_seed_tile.def",
+    "benchmarks/gemm/bmg_streamk_expanded_tile.def",
+    "benchmarks/gemm/bmg_streamk_exhaustive_missing_tile.def",
+    "test/benchmarks/intel_gemm_profiler/catalog.py",
+    "tools/gen_main.py",
+    "tools/gen_mini_hpp.py",
     "tools/remote_exact_shape_search.sh",
     "tools/remote_exact_shape_search_status.sh",
     "tools/remote_exact_shape_search_stop.sh",
+    "tools/exact_shape_search_report.py",
     "media/docs/cpp/intel_b70_exact_shape_search_runbook.md",
 ]
 
@@ -122,6 +133,9 @@ def command_launch(args: argparse.Namespace) -> None:
             ("RUN_DIR", run_dir),
             ("GPU_IDS", args.gpu_ids),
             ("SHAPES", args.shapes),
+            ("LAYOUTS", args.layouts),
+            ("KERNEL_CATALOG_SOURCE", args.kernel_catalog_source),
+            ("BATCH_SIZE", str(args.batch_size)),
             ("STOP_EXISTING", "1" if args.stop_existing else "0"),
             ("SKIP_SYNC", "1" if skip_remote_repo_sync else "0"),
         ]
@@ -199,6 +213,32 @@ def command_stop(args: argparse.Namespace) -> None:
         session.close()
 
 
+def command_report(args: argparse.Namespace) -> None:
+    session = RemoteSession(build_remote_config(args))
+    try:
+        if not args.no_sync_files:
+            sync_files(session)
+        run_dir = args.run_dir or ""
+        if not run_dir:
+            raise SystemExit("--run-dir is required for report")
+        output_dir = args.output_dir or posixpath.join(run_dir, "reports")
+        cmd = (
+            f"cd {shlex.quote(session.config.remote_repo)} && "
+            f"python3 tools/exact_shape_search_report.py "
+            f"--run-dir {shlex.quote(run_dir)} "
+            f"--output-dir {shlex.quote(output_dir)} "
+        )
+        if args.shape_tag:
+            cmd += f"--shape-tag {shlex.quote(args.shape_tag)} "
+        code, out, err = session.run(cmd, timeout=args.timeout)
+        sys.stdout.write(out)
+        if err:
+            sys.stderr.write(err)
+        raise SystemExit(code)
+    finally:
+        session.close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Local controller for remote exact-shape B70 search workflows.")
     parser.add_argument("--host", default="10.239.11.149")
@@ -221,6 +261,9 @@ def build_parser() -> argparse.ArgumentParser:
     launch_parser.add_argument("--run-id", default="")
     launch_parser.add_argument("--gpu-ids", default="0,1,2,3,4")
     launch_parser.add_argument("--shapes", default="2048x384x3584;8192x384x3584")
+    launch_parser.add_argument("--layouts", default="rcr,rrr")
+    launch_parser.add_argument("--kernel-catalog-source", default="layered_bmg_scheduler_expanded")
+    launch_parser.add_argument("--batch-size", type=int, default=1)
     launch_parser.add_argument("--skip-remote-repo-sync", action="store_true", help="Pass SKIP_SYNC=1 to the remote launcher.")
     launch_parser.add_argument("--stop-existing", action="store_true", default=True, help="Stop existing exact-shape runs before launch.")
     launch_parser.add_argument("--no-stop-existing", action="store_false", dest="stop_existing")
@@ -236,6 +279,14 @@ def build_parser() -> argparse.ArgumentParser:
     stop_parser.add_argument("--run-dir", default="")
     stop_parser.add_argument("--no-sync-files", action="store_true", help="Do not upload local scripts/docs before stopping.")
     stop_parser.set_defaults(func=command_stop)
+
+    report_parser = subparsers.add_parser("report", help="Generate exact-shape summary reports on the remote run output.")
+    report_parser.add_argument("--run-dir", required=True)
+    report_parser.add_argument("--shape-tag", default="")
+    report_parser.add_argument("--output-dir", default="")
+    report_parser.add_argument("--timeout", type=int, default=180)
+    report_parser.add_argument("--no-sync-files", action="store_true", help="Do not upload local scripts/docs before reporting.")
+    report_parser.set_defaults(func=command_report)
 
     return parser
 

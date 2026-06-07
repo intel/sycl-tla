@@ -149,7 +149,12 @@ auto benchmark_main(int argc, const char **argv) -> int {
 
   std::stringstream benchmark_name;
   benchmark_name << benchmark_config << "/" << options.benchmark_name();
-  ::benchmark::RegisterBenchmark(benchmark_name.str(), runner, options, hw_info)->UseManualTime();
+  // CUTLASS benchmark runners already do their own warmup/measurement loops and
+  // report a single manual-time sample. Force Google Benchmark to invoke each
+  // registered config once instead of auto-scaling iterations around that inner loop.
+  ::benchmark::RegisterBenchmark(benchmark_name.str(), runner, options, hw_info)
+      ->UseManualTime()
+      ->Iterations(1);
   return 0;
 }
 

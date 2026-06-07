@@ -484,6 +484,7 @@ def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0
                     "split_k": candidate["split_k"],
                     "streamk_mode": candidate.get("streamk_mode", ""),
                     "streamk_dtype_preset": candidate.get("streamk_dtype_preset", ""),
+                    "scheduler_family": candidate.get("scheduler_family", ""),
                     "operator_family": candidate.get("operator_family", ""),
                     "grf_mode": candidate["grf_mode"],
                     "mma_atom": candidate.get("mma_atom", "XE_DPAS_TT"),
@@ -501,6 +502,7 @@ def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0
                     "kernel_schedule": candidate.get("kernel_schedule", ""),
                     "tile_scheduler": candidate.get("tile_scheduler", ""),
                     "decomposition_mode": candidate.get("decomposition_mode", ""),
+                    "reduction_mode": candidate.get("reduction_mode", ""),
                     "epilogue_dispatch_policy": candidate.get("epilogue_dispatch_policy", ""),
                     "example_family": candidate.get("example_family", ""),
                     "padding_mode": candidate.get("padding_mode", ""),
@@ -534,10 +536,13 @@ def build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=0
     cmake_vars["CUTLASS_LIBRARY_INSTANTIATION_LEVEL"] = str(generator_level)
     cmake_vars["BENCHMARK_ENABLE_TESTING"] = "OFF"
     cmake_vars["BENCHMARK_ENABLE_GTEST_TESTS"] = "OFF"
-    if catalog_source in {"expanded_streamk", "expanded_bmg", "layered_bmg"}:
+    if catalog_source in {"expanded_streamk", "expanded_bmg", "layered_bmg", "layered_bmg_scheduler_expanded"}:
         cmake_vars["CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK"] = "ON"
     if catalog_source == "layered_bmg":
         cmake_vars["CUTLASS_BENCHMARK_EXHAUSTIVE_GEMM"] = "ON"
+    if catalog_source == "layered_bmg_scheduler_expanded":
+        cmake_vars["CUTLASS_BENCHMARK_EXHAUSTIVE_GEMM"] = "ON"
+        cmake_vars["CUTLASS_BENCHMARK_EXHAUSTIVE_STREAMK"] = "ON"
     if cmake_vars.get("DPCPP_SYCL_TARGET"):
         cmake_vars.pop("SYCL_INTEL_TARGET", None)
     return {

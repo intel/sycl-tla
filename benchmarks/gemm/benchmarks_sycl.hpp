@@ -53,6 +53,14 @@ CUTLASS_CREATE_GEMM_BENCHMARK(PREFIX##_SplitK_##M##x##N##x##K);
   CUTLASS_BENCHMARK(PREFIX##_DataParallel_##M##x##N##x##K); \
   CUTLASS_BENCHMARK(PREFIX##_SplitK_##M##x##N##x##K);
 
+#define BMG_DECLARE_EXHAUSTIVE_STREAMK_TILE_STAGE(PREFIX, CONFIG, MODE, SCHEDULER, M, N, K, SGM, SGN, STAGES) \
+using PREFIX##_##MODE##_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES = \
+    CONFIG<Shape<_##M, _##N, _##K>, Layout<Shape<_##SGM, _##SGN, _1>, Stride<_##SGN, _1, _0>>, Scheduler::SCHEDULER, STAGES>; \
+CUTLASS_CREATE_GEMM_BENCHMARK(PREFIX##_##MODE##_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES);
+
+#define BMG_REGISTER_EXHAUSTIVE_STREAMK_TILE_STAGE(PREFIX, MODE, M, N, K, SGM, SGN, STAGES) \
+  CUTLASS_BENCHMARK(PREFIX##_##MODE##_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES);
+
 #define BMG_DECLARE_GEMM_TILE(PREFIX, CONFIG, MMA_ATOM, M, N, K) \
 using PREFIX##_Gemm_TileShape_##M##x##N##x##K = Shape<_##M, _##N, _##K>; \
 using PREFIX##_Gemm_Tile_##M##x##N##x##K##_SG8x4 = typename TiledMMAHelper< \
@@ -145,42 +153,6 @@ BMG_REGISTER_GEMM_TILE(PREFIX, 512, 128, 32) \
 BMG_REGISTER_GEMM_TILE(PREFIX, 512, 128, 64) \
 BMG_REGISTER_GEMM_TILE(PREFIX, 512, 256, 32) \
 BMG_REGISTER_GEMM_TILE(PREFIX, 512, 256, 64)
-
-#define BMG_DECLARE_EXPANDED_STREAMK_TILES(PREFIX, CONFIG) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 64, 64, 32) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 64, 64, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 64, 128, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 64, 256, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 128, 64, 32) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 128, 64, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 128, 128, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 128, 256, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 256, 64, 32) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 256, 64, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 256, 128, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 256, 256, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 512, 64, 32) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 512, 64, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 512, 128, 64) \
-BMG_DECLARE_STREAMK_TILE(PREFIX, CONFIG, 512, 256, 64)
-
-#define BMG_REGISTER_EXPANDED_STREAMK_TILES(PREFIX) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 64, 64, 32) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 64, 64, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 64, 128, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 64, 256, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 128, 64, 32) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 128, 64, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 128, 128, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 128, 256, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 256, 64, 32) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 256, 64, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 256, 128, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 256, 256, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 512, 64, 32) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 512, 64, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 512, 128, 64) \
-BMG_REGISTER_STREAMK_TILE(PREFIX, 512, 256, 64)
 
 template <
   typename TileShape,
@@ -277,12 +249,12 @@ BMG_DECLARE_EXPANDED_GEMM_TILES(BmgGemmBF16BF16FP32_RCR, Gemm_Bench_BF16FP32_RCR
 #undef BMG_SOURCE_GEMM_TILE_SG
 #endif
 
-template <typename TileShape>
+template <typename TileShape, typename SubgroupLayout = Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>
 using BmgGemm_BF16BF16FP32_StreamK_Tile =
     typename TiledMMAHelper<
         MMA_Atom<XE_DPAS_TT<8, float, bfloat16_t>>,
         Layout<TileShape>,
-        Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+        SubgroupLayout>::TiledMMA;
 using BmgGemm_BF16BF16FP32_StreamK_Epilogue =
     cutlass::epilogue::fusion::LinearCombination<
         float,
@@ -291,8 +263,8 @@ using BmgGemm_BF16BF16FP32_StreamK_Epilogue =
         float,
         cutlass::FloatRoundStyle::round_to_nearest>;
 
-template <typename TileShape, Scheduler TileScheduler>
-using Gemm_Bench_BF16BF16FP32_RCR_StreamK = cutlass::gemm::device::GemmConfiguration<
+template <typename TileShape, typename SubgroupLayout, Scheduler TileScheduler, int PipelineStages>
+using Gemm_Bench_BF16BF16FP32_RCR_StreamKExhaustive = cutlass::gemm::device::GemmConfiguration<
     cutlass::arch::IntelXe,
     cutlass::bfloat16_t, cutlass::layout::RowMajor,
     cutlass::bfloat16_t, cutlass::layout::ColumnMajor,
@@ -300,60 +272,62 @@ using Gemm_Bench_BF16BF16FP32_RCR_StreamK = cutlass::gemm::device::GemmConfigura
     float,
     TileShape,
     TileScheduler,
-    BmgGemm_BF16BF16FP32_StreamK_Tile<TileShape>,
+    BmgGemm_BF16BF16FP32_StreamK_Tile<TileShape, SubgroupLayout>,
     void,
     void,
     BmgGemm_BF16BF16FP32_StreamK_Epilogue,
-    2,
+    PipelineStages,
     cutlass::gemm::KernelXeCooperative>;
 
-using BmgGemm_BF16BF16FP32_StreamK_TileShape_128_128_32 = Shape<_128, _128, _32>;
-using BmgGemm_BF16BF16FP32_StreamK_TileShape_128_256_32 = Shape<_128, _256, _32>;
-using BmgGemm_BF16BF16FP32_StreamK_TileShape_256_128_32 = Shape<_256, _128, _32>;
-using BmgGemm_BF16BF16FP32_StreamK_TileShape_256_256_32 = Shape<_256, _256, _32>;
+template <typename TileShape, Scheduler TileScheduler>
+using Gemm_Bench_BF16BF16FP32_RCR_StreamK =
+    Gemm_Bench_BF16BF16FP32_RCR_StreamKExhaustive<
+        TileShape,
+        Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
+        TileScheduler,
+        2>;
 
-using BmgGemmBF16BF16FP32_RCR_StreamK_128x128x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_128_128_32, Scheduler::GemmStreamK>;
-using BmgGemmBF16BF16FP32_RCR_DataParallel_128x128x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_128_128_32, Scheduler::GemmDataParallel>;
-using BmgGemmBF16BF16FP32_RCR_SplitK_128x128x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_128_128_32, Scheduler::GemmSplitK>;
-using BmgGemmBF16BF16FP32_RCR_StreamK_128x256x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_128_256_32, Scheduler::GemmStreamK>;
-using BmgGemmBF16BF16FP32_RCR_DataParallel_128x256x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_128_256_32, Scheduler::GemmDataParallel>;
-using BmgGemmBF16BF16FP32_RCR_SplitK_128x256x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_128_256_32, Scheduler::GemmSplitK>;
-using BmgGemmBF16BF16FP32_RCR_StreamK_256x128x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_256_128_32, Scheduler::GemmStreamK>;
-using BmgGemmBF16BF16FP32_RCR_DataParallel_256x128x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_256_128_32, Scheduler::GemmDataParallel>;
-using BmgGemmBF16BF16FP32_RCR_SplitK_256x128x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_256_128_32, Scheduler::GemmSplitK>;
-using BmgGemmBF16BF16FP32_RCR_StreamK_256x256x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_256_256_32, Scheduler::GemmStreamK>;
-using BmgGemmBF16BF16FP32_RCR_DataParallel_256x256x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_256_256_32, Scheduler::GemmDataParallel>;
-using BmgGemmBF16BF16FP32_RCR_SplitK_256x256x32 =
-    Gemm_Bench_BF16BF16FP32_RCR_StreamK<BmgGemm_BF16BF16FP32_StreamK_TileShape_256_256_32, Scheduler::GemmSplitK>;
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_StreamK_128x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_DataParallel_128x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_SplitK_128x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_StreamK_128x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_DataParallel_128x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_SplitK_128x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_StreamK_256x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_DataParallel_256x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_SplitK_256x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_StreamK_256x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_DataParallel_256x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmBF16BF16FP32_RCR_SplitK_256x256x32);
-BMG_DECLARE_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, Gemm_Bench_BF16BF16FP32_RCR_StreamK, 64, 128, 32)
-BMG_DECLARE_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, Gemm_Bench_BF16BF16FP32_RCR_StreamK, 64, 256, 32)
-BMG_DECLARE_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, Gemm_Bench_BF16BF16FP32_RCR_StreamK, 512, 128, 32)
-BMG_DECLARE_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, Gemm_Bench_BF16BF16FP32_RCR_StreamK, 512, 256, 32)
+#define BMG_STREAMK_TILE(M, N, K) \
+  BMG_DECLARE_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, Gemm_Bench_BF16BF16FP32_RCR_StreamK, M, N, K)
+#include "bmg_streamk_seed_tile.def"
+#undef BMG_STREAMK_TILE
+
+template <typename TileShape, typename SubgroupLayout, Scheduler TileScheduler, int PipelineStages>
+using Gemm_Bench_BF16BF16FP32_RRR_StreamKExhaustive = cutlass::gemm::device::GemmConfiguration<
+    cutlass::arch::IntelXe,
+    cutlass::bfloat16_t, cutlass::layout::RowMajor,
+    cutlass::bfloat16_t, cutlass::layout::RowMajor,
+    float, cutlass::layout::RowMajor,
+    float,
+    TileShape,
+    TileScheduler,
+    BmgGemm_BF16BF16FP32_StreamK_Tile<TileShape, SubgroupLayout>,
+    void,
+    void,
+    BmgGemm_BF16BF16FP32_StreamK_Epilogue,
+    PipelineStages,
+    cutlass::gemm::KernelXeCooperative>;
+
+template <typename TileShape, Scheduler TileScheduler>
+using Gemm_Bench_BF16BF16FP32_RRR_StreamK =
+    Gemm_Bench_BF16BF16FP32_RRR_StreamKExhaustive<
+        TileShape,
+        Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
+        TileScheduler,
+        2>;
+
 #if defined(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)
-BMG_DECLARE_EXPANDED_STREAMK_TILES(BmgGemmBF16BF16FP32_RCR, Gemm_Bench_BF16BF16FP32_RCR_StreamK)
+#define BMG_STREAMK_TILE(M, N, K) \
+ BMG_DECLARE_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, Gemm_Bench_BF16BF16FP32_RCR_StreamK, M, N, K)
+#include "bmg_streamk_expanded_tile.def"
+#include "bmg_streamk_exhaustive_missing_tile.def"
+#undef BMG_STREAMK_TILE
+#define BMG_STREAMK_TILE(M, N, K) \
+ BMG_DECLARE_STREAMK_TILE(BmgGemmBF16BF16FP32_RRR, Gemm_Bench_BF16BF16FP32_RRR_StreamK, M, N, K)
+#include "bmg_streamk_seed_tile.def"
+#include "bmg_streamk_expanded_tile.def"
+#include "bmg_streamk_exhaustive_missing_tile.def"
+#undef BMG_STREAMK_TILE
 #endif
 
 using MMAAtomTF32 = MMA_Atom<XE_DPAS_TT<8, float, tfloat32_t, tfloat32_t, float>>;
@@ -458,7 +432,10 @@ BMG_DECLARE_STREAMK_TILE(BmgGemmTF32TF32FP32_RCR, Gemm_Bench_TF32TF32FP32_RCR_St
 BMG_DECLARE_STREAMK_TILE(BmgGemmTF32TF32FP32_RCR, Gemm_Bench_TF32TF32FP32_RCR_StreamK, 512, 128, 32)
 BMG_DECLARE_STREAMK_TILE(BmgGemmTF32TF32FP32_RCR, Gemm_Bench_TF32TF32FP32_RCR_StreamK, 512, 256, 32)
 #if defined(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)
-BMG_DECLARE_EXPANDED_STREAMK_TILES(BmgGemmTF32TF32FP32_RCR, Gemm_Bench_TF32TF32FP32_RCR_StreamK)
+#define BMG_STREAMK_TILE(M, N, K) \
+  BMG_DECLARE_STREAMK_TILE(BmgGemmTF32TF32FP32_RCR, Gemm_Bench_TF32TF32FP32_RCR_StreamK, M, N, K)
+#include "bmg_streamk_expanded_tile.def"
+#undef BMG_STREAMK_TILE
 #endif
 
 using MMAAtomF16 = MMA_Atom<XE_DPAS_TT<8, float, half_t>>;  // modern DPAS (was legacy XE_8x16x16_F32F16F16F32_TT)
@@ -548,53 +525,16 @@ using Gemm_Bench_F16F16FP32_RCR_StreamK = cutlass::gemm::device::GemmConfigurati
     2,
     cutlass::gemm::KernelXeCooperative>;
 
-using BmgGemm_F16F16FP32_StreamK_TileShape_128_128_32 = Shape<_128, _128, _32>;
-using BmgGemm_F16F16FP32_StreamK_TileShape_128_256_32 = Shape<_128, _256, _32>;
-using BmgGemm_F16F16FP32_StreamK_TileShape_256_128_32 = Shape<_256, _128, _32>;
-using BmgGemm_F16F16FP32_StreamK_TileShape_256_256_32 = Shape<_256, _256, _32>;
-
-using BmgGemmF16F16FP32_RCR_StreamK_128x128x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_128_128_32, Scheduler::GemmStreamK>;
-using BmgGemmF16F16FP32_RCR_DataParallel_128x128x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_128_128_32, Scheduler::GemmDataParallel>;
-using BmgGemmF16F16FP32_RCR_SplitK_128x128x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_128_128_32, Scheduler::GemmSplitK>;
-using BmgGemmF16F16FP32_RCR_StreamK_128x256x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_128_256_32, Scheduler::GemmStreamK>;
-using BmgGemmF16F16FP32_RCR_DataParallel_128x256x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_128_256_32, Scheduler::GemmDataParallel>;
-using BmgGemmF16F16FP32_RCR_SplitK_128x256x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_128_256_32, Scheduler::GemmSplitK>;
-using BmgGemmF16F16FP32_RCR_StreamK_256x128x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_256_128_32, Scheduler::GemmStreamK>;
-using BmgGemmF16F16FP32_RCR_DataParallel_256x128x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_256_128_32, Scheduler::GemmDataParallel>;
-using BmgGemmF16F16FP32_RCR_SplitK_256x128x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_256_128_32, Scheduler::GemmSplitK>;
-using BmgGemmF16F16FP32_RCR_StreamK_256x256x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_256_256_32, Scheduler::GemmStreamK>;
-using BmgGemmF16F16FP32_RCR_DataParallel_256x256x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_256_256_32, Scheduler::GemmDataParallel>;
-using BmgGemmF16F16FP32_RCR_SplitK_256x256x32 =
-    Gemm_Bench_F16F16FP32_RCR_StreamK<BmgGemm_F16F16FP32_StreamK_TileShape_256_256_32, Scheduler::GemmSplitK>;
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_StreamK_128x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_DataParallel_128x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_SplitK_128x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_StreamK_128x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_DataParallel_128x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_SplitK_128x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_StreamK_256x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_DataParallel_256x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_SplitK_256x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_StreamK_256x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_DataParallel_256x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16FP32_RCR_SplitK_256x256x32);
-BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16FP32_RCR, Gemm_Bench_F16F16FP32_RCR_StreamK, 64, 128, 32)
-BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16FP32_RCR, Gemm_Bench_F16F16FP32_RCR_StreamK, 64, 256, 32)
-BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16FP32_RCR, Gemm_Bench_F16F16FP32_RCR_StreamK, 512, 128, 32)
-BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16FP32_RCR, Gemm_Bench_F16F16FP32_RCR_StreamK, 512, 256, 32)
+#define BMG_STREAMK_TILE(M, N, K) \
+  BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16FP32_RCR, Gemm_Bench_F16F16FP32_RCR_StreamK, M, N, K)
+#include "bmg_streamk_seed_tile.def"
+#undef BMG_STREAMK_TILE
 #if defined(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)
-BMG_DECLARE_EXPANDED_STREAMK_TILES(BmgGemmF16F16FP32_RCR, Gemm_Bench_F16F16FP32_RCR_StreamK)
+#define BMG_STREAMK_TILE(M, N, K) \
+  BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16FP32_RCR, Gemm_Bench_F16F16FP32_RCR_StreamK, M, N, K)
+#include "bmg_streamk_expanded_tile.def"
+#include "bmg_streamk_exhaustive_missing_tile.def"
+#undef BMG_STREAMK_TILE
 #endif
 
 using MMAAtomF16AccF16 = MMA_Atom<XE_DPAS_TT<8, half_t, half_t, half_t, half_t>>;
@@ -654,57 +594,23 @@ using Gemm_Bench_F16F16F16_RCR_StreamK = cutlass::gemm::device::GemmConfiguratio
     2,
     cutlass::gemm::KernelXeCooperative>;
 
-using BmgGemm_F16F16F16_StreamK_TileShape_128_128_32 = Shape<_128, _128, _32>;
-using BmgGemm_F16F16F16_StreamK_TileShape_128_256_32 = Shape<_128, _256, _32>;
-using BmgGemm_F16F16F16_StreamK_TileShape_256_128_32 = Shape<_256, _128, _32>;
-using BmgGemm_F16F16F16_StreamK_TileShape_256_256_32 = Shape<_256, _256, _32>;
-
-using BmgGemmF16F16F16_RCR_StreamK_128x128x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_128_128_32, Scheduler::GemmStreamK>;
-using BmgGemmF16F16F16_RCR_DataParallel_128x128x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_128_128_32, Scheduler::GemmDataParallel>;
-using BmgGemmF16F16F16_RCR_SplitK_128x128x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_128_128_32, Scheduler::GemmSplitK>;
-using BmgGemmF16F16F16_RCR_StreamK_128x256x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_128_256_32, Scheduler::GemmStreamK>;
-using BmgGemmF16F16F16_RCR_DataParallel_128x256x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_128_256_32, Scheduler::GemmDataParallel>;
-using BmgGemmF16F16F16_RCR_SplitK_128x256x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_128_256_32, Scheduler::GemmSplitK>;
-using BmgGemmF16F16F16_RCR_StreamK_256x128x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_256_128_32, Scheduler::GemmStreamK>;
-using BmgGemmF16F16F16_RCR_DataParallel_256x128x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_256_128_32, Scheduler::GemmDataParallel>;
-using BmgGemmF16F16F16_RCR_SplitK_256x128x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_256_128_32, Scheduler::GemmSplitK>;
-using BmgGemmF16F16F16_RCR_StreamK_256x256x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_256_256_32, Scheduler::GemmStreamK>;
-using BmgGemmF16F16F16_RCR_DataParallel_256x256x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_256_256_32, Scheduler::GemmDataParallel>;
-using BmgGemmF16F16F16_RCR_SplitK_256x256x32 =
-    Gemm_Bench_F16F16F16_RCR_StreamK<BmgGemm_F16F16F16_StreamK_TileShape_256_256_32, Scheduler::GemmSplitK>;
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_StreamK_128x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_DataParallel_128x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_SplitK_128x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_StreamK_128x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_DataParallel_128x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_SplitK_128x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_StreamK_256x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_DataParallel_256x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_SplitK_256x128x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_StreamK_256x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_DataParallel_256x256x32);
-CUTLASS_CREATE_GEMM_BENCHMARK(BmgGemmF16F16F16_RCR_SplitK_256x256x32);
-BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16F16_RCR, Gemm_Bench_F16F16F16_RCR_StreamK, 64, 128, 32)
-BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16F16_RCR, Gemm_Bench_F16F16F16_RCR_StreamK, 64, 256, 32)
-BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16F16_RCR, Gemm_Bench_F16F16F16_RCR_StreamK, 512, 128, 32)
-BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16F16_RCR, Gemm_Bench_F16F16F16_RCR_StreamK, 512, 256, 32)
+#define BMG_STREAMK_TILE(M, N, K) \
+  BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16F16_RCR, Gemm_Bench_F16F16F16_RCR_StreamK, M, N, K)
+#include "bmg_streamk_seed_tile.def"
+#undef BMG_STREAMK_TILE
 #if defined(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)
-BMG_DECLARE_EXPANDED_STREAMK_TILES(BmgGemmF16F16F16_RCR, Gemm_Bench_F16F16F16_RCR_StreamK)
+#define BMG_STREAMK_TILE(M, N, K) \
+  BMG_DECLARE_STREAMK_TILE(BmgGemmF16F16F16_RCR, Gemm_Bench_F16F16F16_RCR_StreamK, M, N, K)
+#include "bmg_streamk_expanded_tile.def"
+#include "bmg_streamk_exhaustive_missing_tile.def"
+#undef BMG_STREAMK_TILE
 #endif
 
 #if defined(CUTLASS_BENCHMARK_EXHAUSTIVE_GEMM)
 #include "cutlass_benchmark_exhaustive_gemm_declare.hpp"
+#endif
+#if defined(CUTLASS_BENCHMARK_EXHAUSTIVE_STREAMK)
+#include "cutlass_benchmark_exhaustive_streamk_declare.hpp"
 #endif
 
 static void register_gemm_benchmarks() {
@@ -735,24 +641,19 @@ static void register_gemm_benchmarks() {
 #include "bmg_gemm_source_tile_sg.def"
 #undef BMG_SOURCE_GEMM_TILE_SG
 #endif
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_StreamK_128x128x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_DataParallel_128x128x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_SplitK_128x128x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_StreamK_128x256x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_DataParallel_128x256x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_SplitK_128x256x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_StreamK_256x128x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_DataParallel_256x128x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_SplitK_256x128x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_StreamK_256x256x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_DataParallel_256x256x32);
-  CUTLASS_BENCHMARK(BmgGemmBF16BF16FP32_RCR_SplitK_256x256x32);
-  BMG_REGISTER_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, 64, 128, 32)
-  BMG_REGISTER_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, 64, 256, 32)
-  BMG_REGISTER_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, 512, 128, 32)
-  BMG_REGISTER_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, 512, 256, 32)
+#define BMG_STREAMK_TILE(M, N, K) BMG_REGISTER_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, M, N, K)
+#include "bmg_streamk_seed_tile.def"
+#undef BMG_STREAMK_TILE
 #if defined(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)
-  BMG_REGISTER_EXPANDED_STREAMK_TILES(BmgGemmBF16BF16FP32_RCR)
+#define BMG_STREAMK_TILE(M, N, K) BMG_REGISTER_STREAMK_TILE(BmgGemmBF16BF16FP32_RCR, M, N, K)
+#include "bmg_streamk_expanded_tile.def"
+#include "bmg_streamk_exhaustive_missing_tile.def"
+#undef BMG_STREAMK_TILE
+#define BMG_STREAMK_TILE(M, N, K) BMG_REGISTER_STREAMK_TILE(BmgGemmBF16BF16FP32_RRR, M, N, K)
+#include "bmg_streamk_seed_tile.def"
+#include "bmg_streamk_expanded_tile.def"
+#include "bmg_streamk_exhaustive_missing_tile.def"
+#undef BMG_STREAMK_TILE
 #endif
   CUTLASS_BENCHMARK(BmgGemmTF32TF32FP32_RCR_StreamK_128x128x32);
   CUTLASS_BENCHMARK(BmgGemmTF32TF32FP32_RCR_DataParallel_128x128x32);
@@ -775,7 +676,9 @@ static void register_gemm_benchmarks() {
 #define BMG_SOURCE_GEMM_TILE_SG(M, N, K, SGM, SGN) BMG_REGISTER_GEMM_TILE_SG(BmgGemmTF32TF32FP32_RCR, M, N, K, SGM, SGN)
 #include "bmg_gemm_source_tile_sg.def"
 #undef BMG_SOURCE_GEMM_TILE_SG
-  BMG_REGISTER_EXPANDED_STREAMK_TILES(BmgGemmTF32TF32FP32_RCR)
+#define BMG_STREAMK_TILE(M, N, K) BMG_REGISTER_STREAMK_TILE(BmgGemmTF32TF32FP32_RCR, M, N, K)
+#include "bmg_streamk_expanded_tile.def"
+#undef BMG_STREAMK_TILE
 #endif
   CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_5);
   CUTLASS_BENCHMARK(BmgGemmFP16FP16FP32_RCR_6);
@@ -791,49 +694,32 @@ static void register_gemm_benchmarks() {
 #include "bmg_gemm_source_tile_sg.def"
 #undef BMG_SOURCE_GEMM_TILE_SG
 #endif
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_StreamK_128x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_DataParallel_128x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_SplitK_128x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_StreamK_128x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_DataParallel_128x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_SplitK_128x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_StreamK_256x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_DataParallel_256x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_SplitK_256x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_StreamK_256x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_DataParallel_256x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16FP32_RCR_SplitK_256x256x32);
-  BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16FP32_RCR, 64, 128, 32)
-  BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16FP32_RCR, 64, 256, 32)
-  BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16FP32_RCR, 512, 128, 32)
-  BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16FP32_RCR, 512, 256, 32)
+#define BMG_STREAMK_TILE(M, N, K) BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16FP32_RCR, M, N, K)
+#include "bmg_streamk_seed_tile.def"
+#undef BMG_STREAMK_TILE
 #if defined(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)
-  BMG_REGISTER_EXPANDED_STREAMK_TILES(BmgGemmF16F16FP32_RCR)
+#define BMG_STREAMK_TILE(M, N, K) BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16FP32_RCR, M, N, K)
+#include "bmg_streamk_expanded_tile.def"
+#include "bmg_streamk_exhaustive_missing_tile.def"
+#undef BMG_STREAMK_TILE
 #endif
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_StreamK_128x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_DataParallel_128x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_SplitK_128x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_StreamK_128x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_DataParallel_128x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_SplitK_128x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_StreamK_256x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_DataParallel_256x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_SplitK_256x128x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_StreamK_256x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_DataParallel_256x256x32);
-  CUTLASS_BENCHMARK(BmgGemmF16F16F16_RCR_SplitK_256x256x32);
-  BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16F16_RCR, 64, 128, 32)
-  BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16F16_RCR, 64, 256, 32)
-  BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16F16_RCR, 512, 128, 32)
-  BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16F16_RCR, 512, 256, 32)
+#define BMG_STREAMK_TILE(M, N, K) BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16F16_RCR, M, N, K)
+#include "bmg_streamk_seed_tile.def"
+#undef BMG_STREAMK_TILE
 #if defined(CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK)
   BMG_REGISTER_EXPANDED_GEMM_TILES(BmgGemmF16F16F16_RCR)
 #define BMG_SOURCE_GEMM_TILE_SG(M, N, K, SGM, SGN) BMG_REGISTER_GEMM_TILE_SG(BmgGemmF16F16F16_RCR, M, N, K, SGM, SGN)
 #include "bmg_gemm_source_tile_sg.def"
 #undef BMG_SOURCE_GEMM_TILE_SG
-  BMG_REGISTER_EXPANDED_STREAMK_TILES(BmgGemmF16F16F16_RCR)
+#define BMG_STREAMK_TILE(M, N, K) BMG_REGISTER_STREAMK_TILE(BmgGemmF16F16F16_RCR, M, N, K)
+#include "bmg_streamk_expanded_tile.def"
+#include "bmg_streamk_exhaustive_missing_tile.def"
+#undef BMG_STREAMK_TILE
 #endif
 #if defined(CUTLASS_BENCHMARK_EXHAUSTIVE_GEMM)
 #include "cutlass_benchmark_exhaustive_gemm_register.hpp"
+#endif
+#if defined(CUTLASS_BENCHMARK_EXHAUSTIVE_STREAMK)
+#include "cutlass_benchmark_exhaustive_streamk_register.hpp"
 #endif
 }

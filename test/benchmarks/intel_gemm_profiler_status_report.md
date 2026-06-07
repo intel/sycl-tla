@@ -210,6 +210,16 @@ python3 test/benchmarks/intel_gemm_profiler.py \
 
 大规模 generated catalog 的构建诊断建议使用 `--candidate-build-batch-size N` 额外生成 `selected_kernel_filter_partXXX.list`、`selected_kernel_batches` metadata 和 `batch_preflight_plans`。默认 screening 仍使用 aggregate benchmark binary；batch filter files 用于更高 instantiation level 下的隔离编译 preflight、失败二分和手动 retry。需要自动执行 batch preflight 时，可加 `--run-candidate-build-preflight`，workflow 会写出 `candidate_build_preflight_summary.json`。如果要直接消费 per-batch build 产物执行 screening/confirmation，可同时开启 `--use-candidate-build-preflight-benchmarks`；该模式要求 preflight 全部通过，并会按 `candidate.kernel_id` 路由到对应 batch executable。
 
+为了在引入新 search 策略时保留旧标准，workflow 现在额外提供 `--search-strategy`：
+
+- `baseline`：保留旧的 persisted baseline 搜索
+- `expanded_bmg`：保留旧的 expanded BMG 搜索
+- `layered_exhaustive`：保留旧的 layered exhaustive 搜索
+- `bruteforce_scheduler`：在 `layered_bmg` 基础上开启 scheduler brute-force 路由
+- `manual`：完全保留显式传入的底层参数
+
+原有 `--kernel-catalog-source` / `--bruteforce-scheduler-search` 仍保留，旧脚本不需要改；`--bruteforce-scheduler-search` 只是 `--search-strategy bruteforce_scheduler` 的兼容别名。
+
 如果需要更可信的最终调优结果，建议打开确认阶段：
 
 ```bash

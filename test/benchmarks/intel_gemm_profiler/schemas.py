@@ -6,14 +6,16 @@
 import re
 
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 
 SCHEDULER_METADATA_FIELDS = [
+    "scheduler_family",
     "operator_family",
     "mainloop_dispatch_policy",
     "kernel_schedule",
     "tile_scheduler",
     "decomposition_mode",
+    "reduction_mode",
     "epilogue_dispatch_policy",
     "example_family",
     "padding_mode",
@@ -24,11 +26,13 @@ SCHEDULER_METADATA_FIELDS = [
 ]
 
 DEFAULT_SCHEDULER_METADATA = {
+    "scheduler_family": "Gemm",
     "operator_family": "gemm",
     "mainloop_dispatch_policy": "MainloopXeL1Staged",
     "kernel_schedule": "KernelXe",
     "tile_scheduler": "Gemm",
     "decomposition_mode": "Gemm",
+    "reduction_mode": "None",
     "epilogue_dispatch_policy": "IntelXeGeneric",
     "example_family": "",
     "padding_mode": "",
@@ -72,6 +76,7 @@ RESULT_METADATA_FIELDS = [
 REPORT_TRACKED_DIMENSIONS = [
     "runner",
     "benchmark_target",
+    "scheduler_family",
     "operator_family",
     "layout",
     "dtype_a",
@@ -88,6 +93,7 @@ REPORT_TRACKED_DIMENSIONS = [
     "kernel_schedule",
     "tile_scheduler",
     "decomposition_mode",
+    "reduction_mode",
     "epilogue_dispatch_policy",
     "element_output_epilogue",
     "element_compute_epilogue",
@@ -124,11 +130,13 @@ SEARCH_RUNTIME_SCHEMA = {
         "split_k",
         "streamk_mode",
         "streamk_dtype_preset",
+        "scheduler_family",
         "operator_family",
         "mainloop_dispatch_policy",
         "kernel_schedule",
         "tile_scheduler",
         "decomposition_mode",
+        "reduction_mode",
         "epilogue_dispatch_policy",
         "element_output_epilogue",
         "element_compute_epilogue",
@@ -198,11 +206,13 @@ CSV_FIELDS = [
     "streamk_dtype_preset",
     "support_status",
     "support_reason",
+    "scheduler_family",
     "operator_family",
     "mainloop_dispatch_policy",
     "kernel_schedule",
     "tile_scheduler",
     "decomposition_mode",
+    "reduction_mode",
     "epilogue_dispatch_policy",
     "example_family",
     "padding_mode",
@@ -246,6 +256,36 @@ def streamk_decomposition_mode(streamk_mode):
         "data_parallel": "DataParallel",
         "splitk": "SplitK",
     }.get(streamk_mode, "Gemm")
+
+
+def scheduler_family_for(entry):
+    if entry.get("tile_scheduler") == "StreamKScheduler" or entry.get("streamk_mode"):
+        return "StreamKScheduler"
+    return "Gemm"
+
+
+def reduction_mode_for(entry):
+    streamk_mode = entry.get("streamk_mode", "")
+    split_k = int(entry.get("split_k", 1) or 1)
+    if streamk_mode == "splitk" or split_k > 1:
+        return "SplitKReduction"
+    if streamk_mode == "streamk":
+        return "StreamKReduction"
+    return "None"
+
+
+def infer_scheduler_metadata(entry):
+    metadata = dict(DEFAULT_SCHEDULER_METADATA)
+    streamk_mode = entry.get("streamk_mode", "")
+    if streamk_mode:
+        metadata["kernel_schedule"] = "KernelXeCooperative"
+        metadata["tile_scheduler"] = "StreamKScheduler"
+        metadata["decomposition_mode"] = streamk_decomposition_mode(streamk_mode)
+    if entry.get("runner") == "streamk_example":
+        metadata.update(STREAMK_EXAMPLE_SCHEDULER_METADATA)
+    metadata["scheduler_family"] = scheduler_family_for({**metadata, **entry})
+    metadata["reduction_mode"] = reduction_mode_for({**metadata, **entry})
+    return metadata
 
 
 def infer_epilogue_metadata(entry):

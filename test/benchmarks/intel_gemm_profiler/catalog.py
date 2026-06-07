@@ -6,14 +6,13 @@
 import copy
 import sys
 from pathlib import Path
+import re
 
 from .schemas import (
-    DEFAULT_SCHEDULER_METADATA,
     SCHEMA_VERSION,
     SEARCH_RUNTIME_SCHEMA,
-    STREAMK_EXAMPLE_SCHEDULER_METADATA,
     infer_epilogue_metadata,
-    streamk_decomposition_mode,
+    infer_scheduler_metadata,
 )
 from .source_templates import observed_bmg_template_space
 from .source_templates import is_valid_xe2_tile_sg
@@ -21,25 +20,26 @@ from .utils import now_iso, read_json
 
 
 DEFAULT_KERNEL_CATALOG_PATH = Path(__file__).resolve().parents[1] / "intel_gemm_kernel_catalog_level0.json"
+BENCHMARK_GEMM_DIR = Path(__file__).resolve().parents[3] / "benchmarks" / "gemm"
+STREAMK_TILE_DEF_RE = re.compile(r"BMG_STREAMK_TILE\((\d+),\s*(\d+),\s*(\d+)\)")
+STREAMK_SEED_TILE_DEF_PATH = BENCHMARK_GEMM_DIR / "bmg_streamk_seed_tile.def"
+STREAMK_EXPANDED_TILE_DEF_PATH = BENCHMARK_GEMM_DIR / "bmg_streamk_expanded_tile.def"
+STREAMK_EXHAUSTIVE_MISSING_TILE_DEF_PATH = BENCHMARK_GEMM_DIR / "bmg_streamk_exhaustive_missing_tile.def"
 
 
-STREAMK_TILE_SHAPES = [
-    (64, 128, 32),
-    (64, 256, 32),
-    (128, 128, 32),
-    (128, 256, 32),
-    (256, 128, 32),
-    (256, 256, 32),
-    (512, 128, 32),
-    (512, 256, 32),
-]
-EXPANDED_STREAMK_TILE_SHAPES = [
-    (tile_m, tile_n, tile_k)
-    for tile_m in (64, 128, 256, 512)
-    for tile_n in (64, 128, 256)
-    for tile_k in (32, 64)
-]
-# All SG=8×4 legal tiles (48, used by layered_bmg exhaustive StreamK)
+def _load_streamk_tile_definitions(path):
+    text = path.read_text(encoding="utf-8")
+    return [tuple(map(int, match)) for match in STREAMK_TILE_DEF_RE.findall(text)]
+
+
+STREAMK_TILE_SHAPES = _load_streamk_tile_definitions(STREAMK_SEED_TILE_DEF_PATH)
+EXPANDED_STREAMK_TILE_SHAPES = _load_streamk_tile_definitions(STREAMK_EXPANDED_TILE_DEF_PATH)
+BENCHMARK_STREAMK_TILE_SHAPES = sorted(
+    set(STREAMK_TILE_SHAPES)
+    | set(EXPANDED_STREAMK_TILE_SHAPES)
+    | set(_load_streamk_tile_definitions(STREAMK_EXHAUSTIVE_MISSING_TILE_DEF_PATH))
+)
+# All benchmark-backed SG=8×4 expansion tiles beyond the retained seed set.
 EXHAUSTIVE_STREAMK_8X4_TILES = None  # computed lazily via _get_exhaustive_8x4_tiles()
 
 def _get_exhaustive_8x4_tiles():
@@ -48,10 +48,21 @@ def _get_exhaustive_8x4_tiles():
     global EXHAUSTIVE_STREAMK_8X4_TILES
     if EXHAUSTIVE_STREAMK_8X4_TILES is None:
         cons = _dc()["allowed_values"]
-        EXHAUSTIVE_STREAMK_8X4_TILES = [
+        legal_8x4_tiles = {
             (m, n, k) for m in cons["tile_m"] for n in cons["tile_n"] for k in cons["tile_k"]
             if _valid((m, n, k), (8, 4, 1))
-        ]
+        }
+        registered_8x4_tiles = sorted(
+            tile for tile in BENCHMARK_STREAMK_TILE_SHAPES if _valid(tile, (8, 4, 1))
+        )
+        missing_tiles = sorted(legal_8x4_tiles - set(registered_8x4_tiles))
+        if missing_tiles:
+            raise RuntimeError(
+                "benchmarks_sycl.hpp scheduler registry is missing legal SG8x4 tiles: "
+                + ", ".join(f"{m}x{n}x{k}" for m, n, k in missing_tiles)
+            )
+        seed_tiles = set(STREAMK_TILE_SHAPES)
+        EXHAUSTIVE_STREAMK_8X4_TILES = [tile for tile in registered_8x4_tiles if tile not in seed_tiles]
     return EXHAUSTIVE_STREAMK_8X4_TILES
 SOURCE_OBSERVED_SG8X4_GEMM_TILE_SHAPES = [
     (128, 256, 16),
@@ -77,6 +88,56 @@ TRUE_BF16_STREAMK_FUTURE_ENABLE_CONDITION = (
 )
 
 
+def benchmark_streamk_scheduler_variants():
+    # Benchmark-backed StreamKScheduler SplitK kernels only support the
+    # decomposition-mode path (`split_k_slices <= 1`). Sweeping runtime split
+    # counts reuses the same compiled kernel but hangs on the current Xe path, so
+    # benchmark-backed catalogs keep a single SplitK variant per tile.
+    return (
+        ("StreamK", "streamk", 1),
+        ("DataParallel", "data_parallel", 1),
+        ("SplitK", "splitk", 1),
+    )
+
+
+def normalize_benchmark_streamk_splitk(entry):
+    if entry.get("runner", "benchmark") == "benchmark" and entry.get("streamk_mode") == "splitk":
+        entry["split_k"] = 1
+    return entry
+
+
+def dedupe_kernel_entries(entries):
+    deduped = []
+    seen_entries = set()
+    for entry in entries:
+        dedupe_key = (
+            entry.get("runner", ""),
+            entry.get("kernel_name", ""),
+            entry.get("kernel_id", ""),
+            entry.get("layout", ""),
+            entry.get("dtype_a", ""),
+            entry.get("dtype_b", ""),
+            entry.get("dtype_c", ""),
+            entry.get("dtype_d", entry.get("dtype_c", "")),
+            entry.get("dtype_acc", ""),
+            entry.get("tile_m", 0),
+            entry.get("tile_n", 0),
+            entry.get("tile_k", 0),
+            entry.get("sg_m", 0),
+            entry.get("sg_n", 0),
+            entry.get("stages", 0),
+            entry.get("split_k", 1),
+            entry.get("streamk_mode", ""),
+            entry.get("support_status", ""),
+            entry.get("support_reason", ""),
+        )
+        if dedupe_key in seen_entries:
+            continue
+        seen_entries.add(dedupe_key)
+        deduped.append(entry)
+    return deduped
+
+
 def benchmark_streamk_tile_candidates(
     name_prefix,
     dtype_a,
@@ -90,11 +151,7 @@ def benchmark_streamk_tile_candidates(
 ):
     entries = []
     for tile_m, tile_n, tile_k in tile_shapes:
-        for name_mode, streamk_mode, split_k in (
-            ("StreamK", "streamk", 1),
-            ("DataParallel", "data_parallel", 1),
-            *[("SplitK", "splitk", split_k) for split_k in STREAMK_SPLIT_SIZES],
-        ):
+        for name_mode, streamk_mode, split_k in benchmark_streamk_scheduler_variants():
             entries.append(
                 {
                     "kernel_name": f"{name_prefix}_RCR_{name_mode}_{tile_m}x{tile_n}x{tile_k}",
@@ -152,15 +209,11 @@ def exhaustive_streamk_tile_candidates(
                 # StreamK uses SG 8x4 fixed
                 if not is_valid_xe2_tile_sg((tile_m, tile_n, tile_k), (8, 4, 1), sg_product_set=valid_sg_sizes):
                     continue
-                for name_mode, streamk_mode, split_k in (
-                    ("StreamK", "streamk", 1),
-                    ("DataParallel", "data_parallel", 1),
-                    *[("SplitK", "splitk", sk) for sk in STREAMK_SPLIT_SIZES if sk > 1],
-                ):
+                for name_mode, streamk_mode, split_k in benchmark_streamk_scheduler_variants():
                     entries.append(
                         {
                             "kernel_name": f"{name_prefix}_{layout.upper()}_{name_mode}_{tile_m}x{tile_n}x{tile_k}",
-                            "layout": "rcr",
+                            "layout": layout,
                             "dtype_a": dtype_a,
                             "dtype_b": dtype_b,
                             "dtype_c": dtype_c,
@@ -180,6 +233,71 @@ def exhaustive_streamk_tile_candidates(
                             "instantiation_level": instantiation_level,
                         }
                     )
+    return entries
+
+
+def exhaustive_streamk_tile_stage_candidates(
+    name_prefix,
+    dtype_a,
+    dtype_b,
+    dtype_c,
+    dtype_acc,
+    dtype_d=None,
+    constraints=None,
+    source="exhaustive_streamk_catalog",
+    instantiation_level=5,
+    min_tile_k=32,
+    layout="rcr",
+):
+    """Generate StreamK/DataParallel/SplitK candidates across legal tile, subgroup,
+    and stage combinations. Split-K remains a runtime sweep on the same compiled
+    scheduler kernel, so `split_k` only affects candidate/runtime metadata.
+    """
+    allowed = (constraints or {}).get("allowed_values", {})
+    limits = (constraints or {}).get("limits", {})
+    valid_sg_sizes = limits.get("valid_subgroup_sizes")
+    tile_m_values = allowed.get("tile_m", [8, 16, 32, 64, 128, 256, 512])
+    tile_n_values = allowed.get("tile_n", [32, 64, 96, 128, 192, 256, 512])
+    tile_k_values = [k for k in allowed.get("tile_k", [16, 32, 64]) if k >= min_tile_k]
+    sg_m_values = allowed.get("sg_m", [1, 2, 4, 8])
+    sg_n_values = allowed.get("sg_n", [2, 4, 8])
+    stage_values = [stage for stage in allowed.get("stages", list(EXHAUSTIVE_REGULAR_GEMM_STAGES)) if stage in EXHAUSTIVE_REGULAR_GEMM_STAGES]
+    entries = []
+    for tile_m in tile_m_values:
+        for tile_n in tile_n_values:
+            for tile_k in tile_k_values:
+                for sg_m in sg_m_values:
+                    for sg_n in sg_n_values:
+                        if not is_valid_xe2_tile_sg((tile_m, tile_n, tile_k), (sg_m, sg_n, 1), sg_product_set=valid_sg_sizes):
+                            continue
+                        for stages in stage_values:
+                            for name_mode, streamk_mode, split_k in benchmark_streamk_scheduler_variants():
+                                entries.append(
+                                    {
+                                        "kernel_name": (
+                                            f"{name_prefix}_{layout.upper()}_{name_mode}_"
+                                            f"{tile_m}x{tile_n}x{tile_k}_SG{sg_m}x{sg_n}_ST{stages}"
+                                        ),
+                                        "layout": layout,
+                                        "dtype_a": dtype_a,
+                                        "dtype_b": dtype_b,
+                                        "dtype_c": dtype_c,
+                                        "dtype_d": dtype_d or dtype_c,
+                                        "dtype_acc": dtype_acc,
+                                        "tile_m": tile_m,
+                                        "tile_n": tile_n,
+                                        "tile_k": tile_k,
+                                        "sg_m": sg_m,
+                                        "sg_n": sg_n,
+                                        "stages": stages,
+                                        "split_k": split_k,
+                                        "streamk_mode": streamk_mode,
+                                        "kernel_schedule": "KernelXeCooperative",
+                                        "tile_scheduler": "StreamKScheduler",
+                                        "source": source,
+                                        "instantiation_level": instantiation_level,
+                                    }
+                                )
     return entries
 
 
@@ -399,12 +517,7 @@ def ilp_class(seed):
 
 
 def apply_scheduler_metadata(entry):
-    scheduler_metadata = dict(DEFAULT_SCHEDULER_METADATA)
-    if entry.get("streamk_mode"):
-        scheduler_metadata["tile_scheduler"] = "StreamKScheduler"
-        scheduler_metadata["decomposition_mode"] = streamk_decomposition_mode(entry["streamk_mode"])
-    if entry.get("runner") == "streamk_example":
-        scheduler_metadata.update(STREAMK_EXAMPLE_SCHEDULER_METADATA)
+    scheduler_metadata = infer_scheduler_metadata(entry)
     for key, value in scheduler_metadata.items():
         entry.setdefault(key, value)
     return entry
@@ -441,6 +554,7 @@ def kernel_catalog_entry(dtype, seed):
     entry.setdefault("epilogue_tile", "auto")
     entry.setdefault("epilogue_copy_atom_c", "auto")
     entry.setdefault("epilogue_copy_atom_d", "auto")
+    normalize_benchmark_streamk_splitk(entry)
     apply_epilogue_metadata(entry)
     apply_scheduler_metadata(entry)
     return entry
@@ -737,6 +851,73 @@ def generated_layered_bmg_kernel_catalog(constraints=None):
     return catalog
 
 
+def generated_layered_bmg_scheduler_expanded_kernel_catalog(constraints=None):
+    catalog = generated_layered_bmg_kernel_catalog(constraints)
+    expanded = {}
+    replaced_bf16_scheduler_entries = 0
+    for entry in catalog["kernels"]:
+        if (
+            entry["dtype_family"] == "bf16"
+            and entry.get("runner") == "benchmark"
+            and entry.get("streamk_mode")
+        ):
+            replaced_bf16_scheduler_entries += 1
+            continue
+        expanded.setdefault(entry["dtype_family"], []).append(entry)
+
+    exhaustive_streamk = exhaustive_streamk_tile_stage_candidates(
+        "BmgGemmBF16BF16FP32",
+        "bf16",
+        "bf16",
+        "f32",
+        "f32",
+        constraints=constraints,
+        layout="rcr",
+        source="exhaustive_streamk_catalog",
+        instantiation_level=5,
+    )
+    exhaustive_streamk_rrr = exhaustive_streamk_tile_stage_candidates(
+        "BmgGemmBF16BF16FP32",
+        "bf16",
+        "bf16",
+        "f32",
+        "f32",
+        constraints=constraints,
+        layout="rrr",
+        source="exhaustive_streamk_catalog",
+        instantiation_level=5,
+    )
+    for dtype, entries in {"bf16": [*exhaustive_streamk, *exhaustive_streamk_rrr]}.items():
+        existing = {entry["kernel_name"] for entry in expanded.get(dtype, [])}
+        expanded.setdefault(dtype, []).extend(
+            kernel_catalog_entry(dtype, entry)
+            for entry in entries
+            if entry["kernel_name"] not in existing
+        )
+
+    kernels = []
+    for dtype in sorted(expanded.keys()):
+        kernels.extend(expanded[dtype])
+    catalog["catalog_version"] = "layered-bmg-scheduler-expanded"
+    catalog["instantiation_levels"]["5"] = (
+        "scheduler exhaustive tile/subgroup/stage enumeration generated from default constraints"
+    )
+    catalog["exhaustive_streamk_space"] = {
+        "modes": ["StreamK", "DataParallel", "SplitK"],
+        "sg_layouts": [
+            [sg_m, sg_n]
+            for sg_m, sg_n in sorted({(entry["sg_m"], entry["sg_n"]) for entry in exhaustive_streamk}, key=lambda item: (item[0], item[1]))
+        ],
+        "stages": list(EXHAUSTIVE_REGULAR_GEMM_STAGES),
+        "min_tile_k": 32,
+        "bf16_kernel_count": len(exhaustive_streamk),
+        "bf16_rrr_kernel_count": len(exhaustive_streamk_rrr),
+        "replaced_fixed_bf16_scheduler_entries": replaced_bf16_scheduler_entries,
+    }
+    catalog["kernels"] = kernels
+    return catalog
+
+
 def load_persisted_kernel_catalog(path=DEFAULT_KERNEL_CATALOG_PATH):
     path = path or DEFAULT_KERNEL_CATALOG_PATH
     if path.exists():
@@ -758,8 +939,10 @@ def load_persisted_kernel_catalog(path=DEFAULT_KERNEL_CATALOG_PATH):
             entry.setdefault("streamk_dtype_preset", entry["dtype_a"] if entry.get("runner") == "streamk_example" else "")
             entry.setdefault("support_status", "supported")
             entry.setdefault("support_reason", "")
+            normalize_benchmark_streamk_splitk(entry)
             apply_epilogue_metadata(entry)
             apply_scheduler_metadata(entry)
+        catalog["kernels"] = dedupe_kernel_entries(catalog.get("kernels", []))
         return catalog
     return generated_level0_kernel_catalog()
 
@@ -924,6 +1107,10 @@ def build_kernel_catalog(
         from .constraints import default_constraints
 
         source_catalog = generated_layered_bmg_kernel_catalog(default_constraints())
+    elif catalog_source == "layered_bmg_scheduler_expanded":
+        from .constraints import default_constraints
+
+        source_catalog = generated_layered_bmg_scheduler_expanded_kernel_catalog(default_constraints())
     else:
         raise ValueError(f"Unsupported kernel catalog source: {catalog_source}")
     selected_dtypes = set(dtypes) if dtypes is not None else None
@@ -934,6 +1121,7 @@ def build_kernel_catalog(
         if entry["runner"] not in allowed_runners:
             continue
         catalog.append(copy.deepcopy(entry))
+    catalog = dedupe_kernel_entries(catalog)
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": now_iso(),

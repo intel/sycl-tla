@@ -32,6 +32,8 @@ def main():
     parser.add_argument("--compiler-profiles-json", default="")
     parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator", "expanded_streamk", "expanded_bmg", "layered_bmg"], default="persisted")
     parser.add_argument("--kernel-catalog-path", default="")
+    parser.add_argument("--search-strategy", choices=["manual", "baseline", "expanded_bmg", "layered_exhaustive", "bruteforce_scheduler"], default="manual")
+    parser.add_argument("--bruteforce-scheduler-search", action="store_true")
     parser.add_argument("--compiled-kernel-list", default="")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg")
     parser.add_argument("--generator-instantiation-level", type=int, default=0)
@@ -70,6 +72,8 @@ def main():
         + (["--compiler-profiles-json", args.compiler_profiles_json] if args.compiler_profiles_json else [])
         + ["--kernel-catalog-source", args.kernel_catalog_source]
         + (["--kernel-catalog-path", args.kernel_catalog_path] if args.kernel_catalog_path else [])
+        + ["--search-strategy", args.search_strategy]
+        + (["--bruteforce-scheduler-search"] if args.bruteforce_scheduler_search else [])
         + (["--compiled-kernel-list", args.compiled_kernel_list] if args.compiled_kernel_list else [])
         + ["--generator-arch", args.generator_arch, "--generator-instantiation-level", str(args.generator_instantiation_level)]
         + (["--shapes-json", args.shapes_json] if args.shapes_json else [])

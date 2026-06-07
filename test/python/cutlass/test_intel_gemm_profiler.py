@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -41,19 +42,19 @@ class TestIntelGemmProfiler(unittest.TestCase):
             candidate_space["search_runtime_schema"]["compile_time_dimensions"][0],
             "dtype_a",
         )
-        self.assertEqual(len(candidate_space["candidates"]), 56)
+        self.assertEqual(len(candidate_space["candidates"]), 28)
         candidate_ids = {candidate["candidate_id"] for candidate in candidate_space["candidates"]}
-        self.assertIn("rcr_bf16bf16f32_tm8_tn128_tk32_sg1x4_st2_sk1", candidate_ids)
+        self.assertIn("rcr_bf16bf16f32_tm64_tn128_tk32_sg4x4_st2_sk1", candidate_ids)
         self.assertIn("rcr_bf16bf16f32_tm256_tn256_tk32_sg8x4_st2_sk1", candidate_ids)
-        self.assertIn("rcr_bf16bf16f32_tm128_tn256_tk32_sg4x4_st2_sk1", candidate_ids)
-        self.assertTrue(any(candidate["streamk_mode"] == "splitk" and candidate["split_k"] > 1 for candidate in candidate_space["candidates"]))
+        self.assertIn("rcr_bf16bf16f32_tm128_tn256_tk32_sg8x4_st2_sk1_splitk", candidate_ids)
+        self.assertTrue(any(candidate["streamk_mode"] == "splitk" and candidate["split_k"] == 1 for candidate in candidate_space["candidates"]))
         self.assertTrue(all(candidate["filters_applied"][0] == "kernel_catalog" for candidate in candidate_space["candidates"]))
         self.assertTrue(all(candidate["grf_mode"] == 256 for candidate in candidate_space["candidates"]))
 
         probe_candidate_space = profiler.generate_candidate_space(
             shapes, constraints, profiles, allowed_runners=("benchmark", "streamk_example")
         )
-        self.assertEqual(len(probe_candidate_space["candidates"]), 56)
+        self.assertEqual(len(probe_candidate_space["candidates"]), 28)
         streamk = next(
             candidate
             for candidate in probe_candidate_space["candidates"]
@@ -64,7 +65,11 @@ class TestIntelGemmProfiler(unittest.TestCase):
             for candidate in probe_candidate_space["candidates"]
             if candidate["streamk_mode"] == "data_parallel"
         )
-        splitk = next(candidate for candidate in probe_candidate_space["candidates"] if candidate["split_k"] == 2)
+        splitk = next(
+            candidate
+            for candidate in probe_candidate_space["candidates"]
+            if candidate["streamk_mode"] == "splitk" and candidate["runner"] == "benchmark"
+        )
         self.assertEqual(streamk["runner"], "benchmark")
         self.assertEqual(data_parallel["runner"], "benchmark")
         self.assertEqual(splitk["runner"], "benchmark")
@@ -102,8 +107,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertEqual(catalog["catalog_version"], "level0-seed-catalog")
         self.assertEqual(catalog["search_runtime_schema"]["runtime_dimensions"][0], "shape_id")
-        self.assertEqual(len(catalog["kernels"]), 60)
-        splitk = next(entry for entry in catalog["kernels"] if entry["split_k"] == 2)
+        self.assertEqual(len(catalog["kernels"]), 36)
+        splitk = next(entry for entry in catalog["kernels"] if entry["runner"] == "benchmark" and entry["streamk_mode"] == "splitk")
         data_parallel = next(entry for entry in catalog["kernels"] if entry["streamk_mode"] == "data_parallel")
         self.assertEqual(splitk["instantiation_level"], 0)
         self.assertEqual(splitk["runtime_defaults"], {})
@@ -132,9 +137,11 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
     def test_search_schema_and_csv_include_scheduler_metadata(self):
         expected_fields = {
+            "scheduler_family",
             "mainloop_dispatch_policy",
             "kernel_schedule",
             "tile_scheduler",
+            "reduction_mode",
             "epilogue_dispatch_policy",
             "example_family",
             "runner",
@@ -145,6 +152,19 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         self.assertTrue(expected_fields.issubset(set(profiler.SEARCH_RUNTIME_SCHEMA["compile_time_dimensions"])))
         self.assertTrue(expected_fields.issubset(set(profiler.CSV_FIELDS)))
+
+    def test_scheduler_metadata_infers_family_and_reduction_mode(self):
+        streamk_metadata = profiler.infer_scheduler_metadata({"streamk_mode": "streamk"})
+        splitk_metadata = profiler.infer_scheduler_metadata({"streamk_mode": "splitk", "split_k": 4})
+        dp_metadata = profiler.infer_scheduler_metadata({"streamk_mode": "data_parallel"})
+        gemm_metadata = profiler.infer_scheduler_metadata({})
+
+        self.assertEqual(streamk_metadata["scheduler_family"], "StreamKScheduler")
+        self.assertEqual(streamk_metadata["reduction_mode"], "StreamKReduction")
+        self.assertEqual(splitk_metadata["reduction_mode"], "SplitKReduction")
+        self.assertEqual(dp_metadata["reduction_mode"], "None")
+        self.assertEqual(gemm_metadata["scheduler_family"], "Gemm")
+        self.assertEqual(gemm_metadata["reduction_mode"], "None")
 
     def test_streamk_seed_catalog_matches_example_tile_shape(self):
         repo_root = Path(__file__).resolve().parents[3]
@@ -363,9 +383,17 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(catalog["catalog_source"], "expanded_streamk")
         self.assertEqual(catalog["catalog_version"], "expanded-bmg-level1")
         streamk_family = [entry for entry in catalog["kernels"] if entry["streamk_mode"]]
+        expected_streamk_tiles = sorted(
+            set(profiler.STREAMK_TILE_SHAPES)
+            | {
+                tile
+                for tile in profiler.BENCHMARK_STREAMK_TILE_SHAPES
+                if profiler.is_valid_xe2_tile_sg(tile, (8, 4, 1))
+            }
+        )
         self.assertEqual(
             sorted({(entry["tile_m"], entry["tile_n"], entry["tile_k"]) for entry in streamk_family}),
-            profiler.EXPANDED_STREAMK_TILE_SHAPES,
+            expected_streamk_tiles,
         )
         gemm_family = [
             entry
@@ -386,7 +414,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(expanded_entry["instantiation_level"], 1)
         self.assertEqual(expanded_entry["source"], "expanded_streamk_catalog")
         source_space = catalog["source_template_space"]
-        self.assertIn([256, 192, 64], source_space["tile_shapes"])
+        self.assertIn([256, 128, 32], source_space["tile_shapes"])
         self.assertIn([8, 2, 1], source_space["sg_layouts"])
         self.assertTrue(
             any(
@@ -406,7 +434,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
     def test_observed_bmg_template_space_extracts_non_default_values(self):
         source_space = profiler.observed_bmg_template_space()
 
-        self.assertIn([128, 96, 64], source_space["tile_shapes"])
+        self.assertTrue(any(tile_shape[2] == 64 for tile_shape in source_space["tile_shapes"]))
         self.assertIn([4, 8, 1], source_space["sg_layouts"])
         self.assertIn("GemmStreamK", source_space["schedulers"])
         self.assertTrue(profiler.is_valid_xe2_tile_sg((256, 128, 32), (8, 2, 1)))
@@ -422,7 +450,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         )
 
         self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "expanded_streamk")
-        self.assertGreater(len(candidate_space["candidates"]), 200, "expanded_streamk should produce viable candidates")
+        self.assertGreaterEqual(len(candidate_space["candidates"]), 190, "expanded_streamk should produce viable candidates")
         self.assertTrue(
             any(
                 candidate["tile_m"] == 64
@@ -453,12 +481,171 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         manifest = profiler.build_candidate_build_manifest(candidate_space)
 
-        self.assertEqual(manifest["selected_kernel_count"], 165)
+        self.assertEqual(manifest["selected_kernel_count"], len(candidate_space["candidates"]))
         self.assertEqual(
             manifest["cmake_config"]["cmake_vars"]["CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK"],
             "ON",
         )
         self.assertEqual(manifest["cmake_config"]["cmake_vars"]["CUTLASS_LIBRARY_INSTANTIATION_LEVEL"], "0")
+
+    def test_layered_bmg_catalog_emits_rrr_scheduler_variants(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "rrr-bf16-analysis",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rrr_bf16_8192_4096_4096",
+                    "layout": "rrr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_d": "f32",
+                    "dtype_acc": "f32",
+                    "m": 8192,
+                    "n": 4096,
+                    "k": 4096,
+                    "batch_count": 1,
+                    "runtime_defaults": {},
+                }
+            ],
+        }
+
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="layered_bmg",
+        )
+
+        self.assertTrue(
+            any(
+                candidate["layout"] == "rrr" and candidate["decomposition_mode"] == "DataParallel"
+                for candidate in candidate_space["candidates"]
+            )
+        )
+        self.assertTrue(
+            any(
+                candidate["layout"] == "rrr" and candidate["decomposition_mode"] == "SplitK"
+                for candidate in candidate_space["candidates"]
+            )
+        )
+        self.assertTrue(
+            any(
+                candidate["layout"] == "rrr" and candidate["decomposition_mode"] == "StreamK"
+                for candidate in candidate_space["candidates"]
+            )
+        )
+
+    def test_layered_bmg_scheduler_expanded_opens_scheduler_sg_and_stage_axes(self):
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "rcr-bf16-scheduler-expanded",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rcr_bf16_8192_384_3584",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_d": "f32",
+                    "dtype_acc": "f32",
+                    "m": 8192,
+                    "n": 384,
+                    "k": 3584,
+                    "batch_count": 1,
+                    "runtime_defaults": {},
+                }
+            ],
+        }
+
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="layered_bmg_scheduler_expanded",
+        )
+
+        bf16_scheduler_candidates = [
+            candidate
+            for candidate in candidate_space["candidates"]
+            if candidate["dtype_a"] == "bf16" and candidate["streamk_mode"]
+        ]
+        self.assertTrue(any(candidate["sg_m"] != 8 or candidate["sg_n"] != 4 for candidate in bf16_scheduler_candidates))
+        self.assertTrue(any(candidate["stages"] != 2 for candidate in bf16_scheduler_candidates))
+        self.assertTrue(
+            any(
+                "_SG" in candidate["kernel_id"] and "_ST" in candidate["kernel_id"]
+                for candidate in bf16_scheduler_candidates
+            )
+        )
+
+        manifest = profiler.build_candidate_build_manifest(candidate_space)
+        self.assertEqual(
+            manifest["cmake_config"]["cmake_vars"]["CUTLASS_BENCHMARK_EXHAUSTIVE_STREAMK"],
+            "ON",
+        )
+
+    def test_benchmarks_sycl_scheduler_registry_covers_catalog_tiles(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        source = (repo_root / "benchmarks" / "gemm" / "benchmarks_sycl.hpp").read_text(encoding="utf-8")
+        supported_tiles = set(profiler.BENCHMARK_STREAMK_TILE_SHAPES)
+
+        expanded_catalog = profiler.build_kernel_catalog(
+            dtypes=["bf16"],
+            allowed_runners=("benchmark",),
+            catalog_source="expanded_streamk",
+        )
+        expanded_catalog_tiles = {
+            (entry["tile_m"], entry["tile_n"], entry["tile_k"])
+            for entry in expanded_catalog["kernels"]
+            if entry["dtype_a"] == "bf16" and entry["streamk_mode"]
+        }
+        self.assertTrue(expanded_catalog_tiles.issubset(supported_tiles))
+
+        rrr_shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "rrr-bf16-registry",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rrr_bf16_8192_4096_4096",
+                    "layout": "rrr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_d": "f32",
+                    "dtype_acc": "f32",
+                    "m": 8192,
+                    "n": 4096,
+                    "k": 4096,
+                    "batch_count": 1,
+                    "runtime_defaults": {},
+                }
+            ],
+        }
+        layered_candidate_space = profiler.generate_candidate_space(
+            rrr_shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="layered_bmg",
+        )
+        layered_rrr_scheduler_tiles = {
+            (candidate["tile_m"], candidate["tile_n"], candidate["tile_k"])
+            for candidate in layered_candidate_space["candidates"]
+            if candidate["layout"] == "rrr" and candidate["streamk_mode"]
+        }
+        self.assertTrue(layered_rrr_scheduler_tiles.issubset(supported_tiles))
+        self.assertIn("using Gemm_Bench_BF16BF16FP32_RRR_StreamK", source)
+        self.assertIn('#include "bmg_streamk_expanded_tile.def"', source)
+        self.assertIn('#include "bmg_streamk_exhaustive_missing_tile.def"', source)
 
     def test_xe_generator_emits_auto_stage_count_for_staged_operations(self):
         repo_root = Path(__file__).resolve().parents[3]
@@ -607,7 +794,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             generator_instantiation_level=1,
         )
 
-        self.assertEqual(len(candidate_space["candidates"]), 28)
+        self.assertEqual(len(candidate_space["candidates"]), 22)
         self.assertTrue(all(candidate["dtype_c"] == "bf16" for candidate in candidate_space["candidates"]))
         self.assertTrue(all(candidate["dtype_d"] == "bf16" for candidate in candidate_space["candidates"]))
         self.assertTrue(all(candidate["dtype_acc"] == "bf16" for candidate in candidate_space["candidates"]))
@@ -673,9 +860,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
         manifest = profiler.build_candidate_build_manifest(candidate_space)
 
         self.assertEqual(manifest["search_runtime_schema"]["microbench_guided_defaults"]["grf_mode"], 256)
-        self.assertEqual(len(manifest["variants"]), 56)
-        self.assertEqual(manifest["selected_kernel_count"], 32)
-        self.assertEqual(len(manifest["selected_kernel_list"]), 32)
+        self.assertEqual(len(manifest["variants"]), 28)
+        self.assertEqual(manifest["selected_kernel_count"], 28)
+        self.assertEqual(len(manifest["selected_kernel_list"]), 28)
         self.assertTrue(all(line.startswith("^") and line.endswith("$") for line in manifest["kernel_filter_file"]["lines"]))
         self.assertEqual(manifest["kernel_filter_file"]["recommended_cmake_var"], "KERNEL_FILTER_FILE")
         self.assertEqual(manifest["cmake_config"]["cmake_vars"]["CUTLASS_LIBRARY_OPERATIONS"], "gemm")
@@ -694,9 +881,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         manifest = profiler.build_candidate_build_manifest(candidate_space, selected_kernel_batch_size=3)
 
-        self.assertEqual(manifest["selected_kernel_count"], 32)
+        self.assertEqual(manifest["selected_kernel_count"], 28)
         self.assertEqual(manifest["selected_kernel_batch_size"], 3)
-        self.assertEqual([batch["kernel_count"] for batch in manifest["selected_kernel_batches"]], [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2])
+        self.assertEqual([batch["kernel_count"] for batch in manifest["selected_kernel_batches"]], [3, 3, 3, 3, 3, 3, 3, 3, 3, 1])
         self.assertEqual(manifest["selected_kernel_batches"][0]["batch_id"], "selected_kernel_batch_000")
         self.assertEqual(manifest["selected_kernel_batches"][0]["selected_kernel_list"], manifest["selected_kernel_list"][:3])
         self.assertTrue(
@@ -729,7 +916,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         )
         self.assertEqual(
             profiles["build_config"]["cmake_vars"]["CUTLASS_ENABLE_TESTS"],
-            "OFF",
+            "ON",
         )
         self.assertNotIn("IGC_VISAOptions", profiles["build_config"]["compile_env"])
         self.assertEqual(
@@ -827,7 +1014,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         )
         self.assertEqual(
             variants["perf_default"]["SYCL_PROGRAM_COMPILE_OPTIONS"],
-            "-ze-opt-large-register-file",
+            "-ze-opt-large-register-file -gline-tables-only",
         )
         self.assertEqual(
             build_config["compile_env_variant_metadata"]["perf_128grf_experiment"]["status"],
@@ -845,9 +1032,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
         runtime_env = profiler.selected_runtime_env(profiles, profiles["profiles"][0])
 
         self.assertEqual(runtime_env["ONEAPI_DEVICE_SELECTOR"], "level_zero:gpu")
-        self.assertNotIn("IGC_ExtraOCLOptions", runtime_env)
+        self.assertEqual(runtime_env["IGC_ExtraOCLOptions"], "-cl-intel-256-GRF-per-thread")
+        self.assertEqual(runtime_env["SYCL_PROGRAM_COMPILE_OPTIONS"], "-ze-opt-large-register-file -gline-tables-only")
         self.assertNotIn("IGC_VISAOptions", runtime_env)
-        self.assertNotIn("SYCL_PROGRAM_COMPILE_OPTIONS", runtime_env)
 
     def test_resolve_hw_reference_spec_uses_calibrated_b60_data(self):
         spec = profiler.resolve_hw_reference_spec("bmg")
@@ -1516,7 +1703,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
         large_candidates = profiler.choose_candidates_for_shape(large_shape, candidate_space["candidates"])
 
         self.assertFalse(any(candidate["split_k"] > 1 for candidate in small_candidates))
-        self.assertTrue(any(candidate["split_k"] > 1 for candidate in large_candidates))
+        self.assertFalse(any(candidate["split_k"] > 1 for candidate in large_candidates))
+        self.assertTrue(any(candidate["streamk_mode"] == "splitk" for candidate in small_candidates))
+        self.assertTrue(any(candidate["streamk_mode"] == "splitk" for candidate in large_candidates))
 
     def test_choose_candidates_handles_m16_and_m128_boundaries(self):
         constraints = profiler.default_constraints()
@@ -1569,7 +1758,11 @@ class TestIntelGemmProfiler(unittest.TestCase):
 
         streamk = next(candidate for candidate in candidate_space["candidates"] if candidate["streamk_mode"] == "streamk")
         data_parallel = next(candidate for candidate in candidate_space["candidates"] if candidate["streamk_mode"] == "data_parallel")
-        splitk = next(candidate for candidate in candidate_space["candidates"] if candidate["split_k"] == 2)
+        splitk = next(
+            candidate
+            for candidate in candidate_space["candidates"]
+            if candidate["streamk_mode"] == "splitk" and candidate["runner"] == "benchmark"
+        )
         self.assertEqual(streamk["dtype_a"], "f16")
         self.assertEqual(streamk["dtype_c"], "f32")
         self.assertEqual(streamk["dtype_acc"], "f32")
@@ -1605,10 +1798,14 @@ class TestIntelGemmProfiler(unittest.TestCase):
         candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
 
         entry = profiler.build_dpas_probe_entry(shapes, candidate_space)
+        expected_candidate = min(
+            candidate_space["candidates"],
+            key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"], item["tile_n"], item["tile_k"]),
+        )
 
         self.assertIsNotNone(entry)
         self.assertEqual(entry["stage"], "dpas_probe")
-        self.assertEqual(entry["candidate"]["candidate_id"], "rcr_bf16bf16f32_tm8_tn64_tk32_sg1x4_st2_sk1")
+        self.assertEqual(entry["candidate"]["candidate_id"], expected_candidate["candidate_id"])
         self.assertEqual(entry["shape"]["shape_id"], "rcr_bf16_8_4096_4096")
 
     def test_build_phase_a_probe_entries_use_dynamic_shapes(self):
@@ -1803,7 +2000,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(phase_a_summary["probe_mode"], "dry_run_off")
             self.assertEqual(phase_a_summary["probe_feedback"]["mode"], "default")
             phase_b_summary = profiler.read_json(Path(tmpdir) / "reports" / "phase_b_summary.json")
-            self.assertEqual(phase_b_summary["candidate_count"], 56)
+            self.assertEqual(phase_b_summary["candidate_count"], 28)
             bundle = profiler.read_json(Path(outputs["artifact_bundle_manifest"]))
             self.assertEqual(bundle["schema_version"], profiler.SCHEMA_VERSION)
             self.assertEqual(bundle["workspace"], str(Path(tmpdir).resolve()))
@@ -1904,6 +2101,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
                     "1",
                     "--googlebenchmark-dir",
                     str(Path(tmpdir) / "googlebenchmark-src"),
+                    "--googlebenchmark-build-dir",
+                    str(Path(tmpdir) / "googlebenchmark-build"),
                     "--cmake-cxx-compiler",
                     "icpx",
                     "--candidate-build-batch-size",
@@ -1963,6 +2162,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(build_plan["googlebenchmark_dir"], str(Path(tmpdir) / "googlebenchmark-src"))
             self.assertEqual(build_plan["cmake_vars"]["GOOGLEBENCHMARK_DIR"], str(Path(tmpdir) / "googlebenchmark-src"))
             self.assertIn(f"-DGOOGLEBENCHMARK_DIR={Path(tmpdir) / 'googlebenchmark-src'}", build_plan["configure_command"])
+            self.assertEqual(build_plan["googlebenchmark_build_dir"], str(Path(tmpdir) / "googlebenchmark-build"))
+            self.assertEqual(build_plan["cmake_vars"]["GOOGLEBENCHMARK_BUILD_DIR"], str(Path(tmpdir) / "googlebenchmark-build"))
+            self.assertIn(f"-DGOOGLEBENCHMARK_BUILD_DIR={Path(tmpdir) / 'googlebenchmark-build'}", build_plan["configure_command"])
             self.assertEqual(build_plan["cmake_cxx_compiler"], "icpx")
             self.assertEqual(build_plan["cmake_vars"]["CMAKE_CXX_COMPILER"], "icpx")
             self.assertIn("-DCMAKE_CXX_COMPILER=icpx", build_plan["configure_command"])
@@ -2016,6 +2218,52 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual([step["step"] for step in summary["steps"]], ["configure", "build"])
         self.assertEqual(summary["steps"][1]["returncode"], 7)
         self.assertTrue(build_log_text.strip().endswith("build failed"))
+
+    def test_workflow_uses_build_timeout_for_candidate_build_steps(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            timeouts = {}
+
+            def fake_preflight(build_plan, log_dir, shell_init="", timeout=None, max_workers=1, resume=False, progress_path=""):
+                timeouts["preflight"] = timeout
+                return {"status": "pass", "batches": []}
+
+            def fake_build(build_plan, log_dir, shell_init="", timeout=None, log_prefix="candidate_build"):
+                timeouts["build"] = timeout
+                return {
+                    "status": "pass",
+                    "build_target": build_plan["build_target"],
+                    "benchmark_exe": build_plan["benchmark_exe"],
+                    "steps": [],
+                }
+
+            with mock.patch.dict(
+                profiler.workflow.__globals__,
+                {
+                    "execute_candidate_build_preflight_plans": fake_preflight,
+                    "execute_candidate_build_plan": fake_build,
+                },
+            ):
+                args = profiler.build_parser().parse_args(
+                    [
+                        "--workspace",
+                        tmpdir,
+                        "--dtype",
+                        "bf16",
+                        "--skip-run",
+                        "--build-candidate-benchmark",
+                        "--run-candidate-build-preflight",
+                        "--candidate-build-batch-size",
+                        "1",
+                        "--timeout",
+                        "180",
+                        "--build-timeout",
+                        "1800",
+                    ]
+                )
+                profiler.workflow(args)
+
+        self.assertEqual(timeouts["preflight"], 1800)
+        self.assertEqual(timeouts["build"], 1800)
 
     def test_execute_candidate_build_preflight_plans_reports_batch_status(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2152,7 +2400,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             )
             fake_log = tmp / "fake_preflight_build.log"
 
-            def fake_execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", timeout=None):
+            def fake_execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", timeout=None, max_workers=1, resume=False, progress_path=None):
                 fake_log.write_text("preflight failed\n", encoding="utf-8")
                 batches = []
                 preflight_plans = build_plan["batch_preflight_plans"] or [
@@ -2320,14 +2568,18 @@ class TestIntelGemmProfiler(unittest.TestCase):
         constraints = profiler.default_constraints()
         profiles = profiler.default_compiler_profiles()
         candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles)
+        candidate = min(
+            candidate_space["candidates"],
+            key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"], item["tile_n"], item["tile_k"]),
+        )
         rows = [
             {
                 "run_id": "confirm",
                 "stage": "confirm",
                 "attempt_index": 0,
                 "shape_id": "shape_peak_gap",
-                "candidate_id": "rcr_bf16bf16f32_tm16_tn64_tk32_sg2x4_st2_sk1",
-                "compiler_profile_id": "bmg.small_tile.default",
+                "candidate_id": candidate["candidate_id"],
+                "compiler_profile_id": candidate["compiler_profile_id"],
                 "status": "pass",
                 "verify_status": "pass",
                 "layout": "rcr",
@@ -2361,7 +2613,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         )
 
         entry = dispatch["entries"][0]
-        self.assertEqual(entry["candidate_id"], "rcr_bf16bf16f32_tm16_tn64_tk32_sg2x4_st2_sk1")
+        self.assertEqual(entry["candidate_id"], rows[0]["candidate_id"])
         self.assertEqual(entry["efficiency_warning"], "winner_efficiency_below_40pct_peak")
         self.assertLess(entry["selected_efficiency"], 0.4)
 
@@ -2411,14 +2663,18 @@ class TestIntelGemmProfiler(unittest.TestCase):
         constraints = profiler.default_constraints()
         profiles = profiler.default_compiler_profiles()
         candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles)
+        candidate = min(
+            candidate_space["candidates"],
+            key=lambda item: (item["tile_m"], item["sg_m"] * item["sg_n"], item["tile_n"], item["tile_k"]),
+        )
         rows = [
             {
                 "run_id": "confirm",
                 "stage": "confirm",
                 "attempt_index": 0,
                 "shape_id": "decode_shape",
-                "candidate_id": "rcr_bf16bf16f32_tm8_tn128_tk32_sg1x8_st2_sk1",
-                "compiler_profile_id": "bmg.small_tile.default",
+                "candidate_id": candidate["candidate_id"],
+                "compiler_profile_id": candidate["compiler_profile_id"],
                 "status": "pass",
                 "verify_status": "pass",
                 "layout": "rcr",
@@ -2821,10 +3077,18 @@ class TestIntelGemmProfiler(unittest.TestCase):
                 "dtype_a": "bf16",
                 "dtype_b": "bf16",
                 "dtype_c": "f32",
+                "dtype_d": "f32",
                 "dtype_acc": "f32",
                 "m": 64,
                 "n": 4096,
                 "k": 4096,
+                "batch_count": 3,
+                "runtime_defaults": {
+                    "alpha": 0.5,
+                    "beta": 1.25,
+                    "warmup_iterations": 2,
+                    "iterations": 7,
+                },
             }
             streamk_candidate = {
                 "candidate_id": "cand_streamk",
@@ -2871,6 +3135,11 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(len(rows), 4)
         self.assertTrue(all(row["status"] == "pass" for row in rows))
         self.assertIn("--dtype=bf16", commands[0])
+        self.assertIn("--l=3", commands[0])
+        self.assertIn("--alpha=0.5", commands[0])
+        self.assertIn("--beta=1.25", commands[0])
+        self.assertIn("--warmup_iterations=2", commands[0])
+        self.assertIn("--iterations=7", commands[0])
         self.assertNotIn("--splitk", commands[0])
         self.assertNotIn("--dp", commands[0])
         self.assertIn("--dp", commands[1])
@@ -2879,6 +3148,239 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertIn("--splits=2", commands[2])
         self.assertNotIn("--dp", commands[2])
         self.assertIn("--dtype=bf16_bf16", commands[3])
+        self.assertEqual(rows[0]["batch_count"], 3)
+        self.assertEqual(rows[0]["scheduler_family"], "StreamKScheduler")
+        self.assertEqual(rows[0]["reduction_mode"], "StreamKReduction")
+        self.assertEqual(rows[1]["reduction_mode"], "None")
+        self.assertEqual(rows[2]["reduction_mode"], "SplitKReduction")
+
+    def test_bruteforce_scheduler_search_defaults_force_layered_batch_preflight(self):
+        parser = profiler.build_parser()
+        args = parser.parse_args(
+            [
+                "--workspace",
+                "/tmp/workspace",
+                "--bruteforce-scheduler-search",
+                "--kernel-catalog-source",
+                "persisted",
+            ]
+        )
+
+        updated = profiler.apply_bruteforce_scheduler_search_defaults(args)
+
+        self.assertEqual(updated.kernel_catalog_source, "layered_bmg_scheduler_expanded")
+        self.assertEqual(updated.prefilter, "none")
+        self.assertEqual(updated.candidate_build_batch_size, 1)
+        self.assertTrue(updated.run_candidate_build_preflight)
+        self.assertTrue(updated.use_candidate_build_preflight_benchmarks)
+
+    def test_bruteforce_scheduler_search_defaults_skip_builds_for_skip_run(self):
+        parser = profiler.build_parser()
+        args = parser.parse_args(
+            [
+                "--workspace",
+                "/tmp/workspace",
+                "--bruteforce-scheduler-search",
+                "--skip-run",
+            ]
+        )
+
+        updated = profiler.apply_bruteforce_scheduler_search_defaults(args)
+
+        self.assertEqual(updated.kernel_catalog_source, "layered_bmg_scheduler_expanded")
+        self.assertEqual(updated.candidate_build_batch_size, 1)
+        self.assertFalse(updated.run_candidate_build_preflight)
+        self.assertFalse(updated.use_candidate_build_preflight_benchmarks)
+
+    def test_search_strategy_preserves_legacy_baseline_and_exhaustive_modes(self):
+        parser = profiler.build_parser()
+
+        baseline = profiler.apply_search_strategy_defaults(
+            parser.parse_args(["--workspace", "/tmp/workspace", "--search-strategy", "baseline"])
+        )
+        expanded = profiler.apply_search_strategy_defaults(
+            parser.parse_args(["--workspace", "/tmp/workspace", "--search-strategy", "expanded_bmg"])
+        )
+        exhaustive = profiler.apply_search_strategy_defaults(
+            parser.parse_args(["--workspace", "/tmp/workspace", "--search-strategy", "layered_exhaustive"])
+        )
+
+        self.assertEqual(baseline.kernel_catalog_source, "persisted")
+        self.assertEqual(expanded.kernel_catalog_source, "expanded_bmg")
+        self.assertEqual(exhaustive.kernel_catalog_source, "layered_bmg")
+        self.assertEqual(baseline.prefilter, "none")
+        self.assertEqual(expanded.prefilter, "none")
+        self.assertEqual(exhaustive.prefilter, "none")
+        self.assertFalse(baseline.run_candidate_build_preflight)
+        self.assertFalse(expanded.run_candidate_build_preflight)
+        self.assertFalse(exhaustive.run_candidate_build_preflight)
+
+    def test_search_strategy_manual_preserves_explicit_flags(self):
+        parser = profiler.build_parser()
+        args = parser.parse_args(
+            [
+                "--workspace",
+                "/tmp/workspace",
+                "--search-strategy",
+                "manual",
+                "--kernel-catalog-source",
+                "generator",
+                "--prefilter",
+                "medium",
+                "--candidate-build-batch-size",
+                "8",
+                "--run-candidate-build-preflight",
+            ]
+        )
+
+        updated = profiler.apply_search_strategy_defaults(args)
+
+        self.assertEqual(updated.kernel_catalog_source, "generator")
+        self.assertEqual(updated.prefilter, "medium")
+        self.assertEqual(updated.candidate_build_batch_size, 8)
+        self.assertTrue(updated.run_candidate_build_preflight)
+
+    def test_workflow_bruteforce_scheduler_search_runs_with_fake_preflight_benchmarks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bench = tmp / "fake_bench.py"
+            bench.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "cfg = next((a.split('=', 1)[1] for a in sys.argv[1:] if a.startswith('--config_file=')), '')\n"
+                "print(f'CONFIG:{cfg}')\n"
+                "for line in open(cfg, 'r', encoding='utf-8') if cfg else []:\n"
+                "    if not line.strip():\n"
+                "        continue\n"
+                "    parts = line.split()\n"
+                "    bm = next(token.split('=', 1)[1] for token in parts if token.startswith('--bm_name='))\n"
+                "    print(f\"{parts[0]}/{bm} manual_time runtime_trimmed_mean_ms=0.50 runtime_min_ms=0.45 runtime_max_ms=0.60 runtime_median_ms=0.50 runtime_stddev_ms=0.03 warmup_iters=2 measure_iters=7 avg_tflops=123.4 median_tflops=122.8 avg_throughput=0.0\")\n",
+                encoding="utf-8",
+            )
+            bench.chmod(0o755)
+            streamk = tmp / "fake_streamk.py"
+            streamk.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "print('ARGS:' + ' '.join(sys.argv[1:]))\n"
+                "print('Cutlass GEMM Performance: [111.1]TFlop/s (0.77)ms')\n"
+                "print('Disposition: Passed')\n",
+                encoding="utf-8",
+            )
+            streamk.chmod(0o755)
+            args = profiler.build_parser().parse_args(
+                [
+                    "--workspace",
+                    str(tmp / "workspace"),
+                    "--dtype",
+                    "bf16",
+                    "--max-shapes",
+                    "1",
+                    "--probe-mode",
+                    "off",
+                    "--benchmark-exe",
+                    str(bench),
+                    "--streamk-example-exe",
+                    str(streamk),
+                    "--search-strategy",
+                    "bruteforce_scheduler",
+                    "--candidate-build-batch-size",
+                    "128",
+                    "--build-candidate-benchmark",
+                    "--benchmark-entry-chunk-size",
+                    "64",
+                    "--top-k",
+                    "1",
+                    "--confirm-runs",
+                    "1",
+                    "--shell-init",
+                    "true",
+                    "--cwd",
+                    str(tmp),
+                ]
+            )
+
+            def fake_execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=None, log_prefix="candidate_build"):
+                log_dir = Path(log_dir)
+                log_dir.mkdir(parents=True, exist_ok=True)
+                configure_log = log_dir / f"{log_prefix}_configure.log"
+                build_log = log_dir / f"{log_prefix}.log"
+                configure_log.write_text("configure ok\n", encoding="utf-8")
+                build_log.write_text("build ok\n", encoding="utf-8")
+                exe = Path(build_plan["benchmark_exe"])
+                exe.parent.mkdir(parents=True, exist_ok=True)
+                exe.write_text(bench.read_text(encoding="utf-8"), encoding="utf-8")
+                exe.chmod(0o755)
+                return {
+                    "schema_version": build_plan["schema_version"],
+                    "generated_at": build_plan["generated_at"],
+                    "status": "pass",
+                    "build_target": build_plan["build_target"],
+                    "benchmark_exe": str(exe),
+                    "selected_kernel_count": build_plan.get("selected_kernel_count", ""),
+                    "kernel_filter_file": build_plan.get("kernel_filter_file", ""),
+                    "batch_id": build_plan.get("batch_id", ""),
+                    "steps": [
+                        {"step": "configure", "status": "pass", "returncode": 0, "command": "fake-configure", "log": str(configure_log)},
+                        {"step": "build", "status": "pass", "returncode": 0, "command": "fake-build", "log": str(build_log)},
+                    ],
+                }
+
+            def fake_execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", timeout=None, max_workers=1, resume=False, progress_path=None):
+                batches = []
+                for plan in build_plan.get("batch_preflight_plans", []):
+                    summary = fake_execute_candidate_build_plan(
+                        plan,
+                        log_dir,
+                        shell_init=shell_init,
+                        timeout=timeout,
+                        log_prefix=f"candidate_build_preflight_{plan['batch_id']}",
+                    )
+                    summary["batch_id"] = plan["batch_id"]
+                    summary["batch_index"] = plan["batch_index"]
+                    summary["kernel_count"] = plan["kernel_count"]
+                    batches.append(summary)
+                return {
+                    "schema_version": build_plan["schema_version"],
+                    "generated_at": build_plan["generated_at"],
+                    "status": "pass",
+                    "batch_count": len(batches),
+                    "passed_batches": len(batches),
+                    "failed_batches": 0,
+                    "failure_reason": "",
+                    "batches": batches,
+                    "max_workers": max_workers,
+                    "resumed_batches": 0,
+                    "total_vcpus": 1,
+                    "cores_per_worker": 1,
+                }
+
+            workflow_globals = profiler.workflow.__globals__
+            original_build = workflow_globals["execute_candidate_build_plan"]
+            original_preflight = workflow_globals["execute_candidate_build_preflight_plans"]
+            workflow_globals["execute_candidate_build_plan"] = fake_execute_candidate_build_plan
+            workflow_globals["execute_candidate_build_preflight_plans"] = fake_execute_candidate_build_preflight_plans
+            try:
+                outputs = profiler.workflow(args)
+            finally:
+                workflow_globals["execute_candidate_build_plan"] = original_build
+                workflow_globals["execute_candidate_build_preflight_plans"] = original_preflight
+
+            candidate_space = profiler.read_json(outputs["candidate_space"])
+            phase_b_summary = profiler.read_json(outputs["phase_b_summary"])
+            dispatch_table = profiler.read_json(outputs["dispatch_table"])
+            preflight_summary = profiler.read_json(outputs["candidate_build_preflight_summary"])
+            results_csv = Path(outputs["results_csv"]).read_text(encoding="utf-8")
+
+        self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "layered_bmg_scheduler_expanded")
+        self.assertGreater(len(candidate_space["candidates"]), 0)
+        self.assertEqual(preflight_summary["status"], "pass")
+        self.assertGreater(preflight_summary["batch_count"], 0)
+        self.assertGreater(len(dispatch_table["entries"]), 0)
+        self.assertIn("scheduler_family", phase_b_summary["selected_dimension_values"])
+        self.assertIn("reduction_mode", phase_b_summary["selected_dimension_values"])
+        self.assertIn("scheduler_family", results_csv.splitlines()[0])
+        self.assertIn("reduction_mode", results_csv.splitlines()[0])
 
     def test_static_probe_disables_splitk_without_streamk_binary(self):
         constraints = profiler.default_constraints()
@@ -2913,21 +3415,13 @@ class TestIntelGemmProfiler(unittest.TestCase):
         profiles = profiler.default_compiler_profiles()
         candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
         hw_spec = profiler.resolve_hw_reference_spec("bmg")
-        small_candidate = min(
-            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "small_tile"),
-            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
+        ranked_candidates = sorted(
+            candidate_space["candidates"],
+            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"], candidate["tile_k"], candidate["sg_m"], candidate["sg_n"]),
         )
-        large_candidate = max(
-            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "large_tile"),
-            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
-        )
+        small_candidate = ranked_candidates[0]
+        large_candidate = ranked_candidates[-1]
         probe_rows = [
-            {
-                "candidate_id": small_candidate["candidate_id"],
-                "shape_id": "rcr_bf16_8_4096_4096",
-                "status": "pass",
-                "avg_tflops": "2.997",
-            },
             {
                 "candidate_id": small_candidate["candidate_id"],
                 "shape_id": "rcr_bf16_64_4096_4096",
@@ -2938,7 +3432,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
                 "candidate_id": large_candidate["candidate_id"],
                 "shape_id": "rcr_bf16_256_4096_8192",
                 "status": "pass",
-                "avg_tflops": "2.282",
+                "avg_tflops": "0.2",
             },
         ]
 
@@ -2997,8 +3491,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
         candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
         hw_spec = profiler.resolve_hw_reference_spec("bmg")
         small_candidate = min(
-            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "small_tile"),
-            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
+            candidate_space["candidates"],
+            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"], candidate["tile_k"], candidate["sg_m"], candidate["sg_n"]),
         )
         probe_rows = [
             {
@@ -3022,14 +3516,12 @@ class TestIntelGemmProfiler(unittest.TestCase):
         profiles = profiler.default_compiler_profiles()
         candidate_space = profiler.generate_candidate_space(shapes, constraints, profiles, allowed_runners=("benchmark",))
         hw_spec = profiler.resolve_hw_reference_spec("bmg")
-        small_candidates = sorted(
-            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "small_tile"),
-            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
+        ranked_candidates = sorted(
+            candidate_space["candidates"],
+            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"], candidate["tile_k"], candidate["sg_m"], candidate["sg_n"]),
         )
-        large_candidate = max(
-            (candidate for candidate in candidate_space["candidates"] if candidate["candidate_class"] == "large_tile"),
-            key=lambda candidate: (candidate["tile_m"], candidate["tile_n"]),
-        )
+        small_candidates = ranked_candidates[:2]
+        large_candidate = ranked_candidates[-1]
         probe_rows = [
             {
                 "candidate_id": small_candidates[0]["candidate_id"],

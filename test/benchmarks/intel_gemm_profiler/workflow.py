@@ -242,6 +242,7 @@ def build_candidate_build_plan(
     build_dir,
     kernel_filter_path,
     googlebenchmark_dir=None,
+    googlebenchmark_build_dir=None,
     cmake_cxx_compiler="",
 ):
     cmake_config = build_manifest["cmake_config"]
@@ -250,6 +251,8 @@ def build_candidate_build_plan(
     cmake_vars[kernel_filter_var] = str(kernel_filter_path)
     if googlebenchmark_dir:
         cmake_vars["GOOGLEBENCHMARK_DIR"] = str(googlebenchmark_dir)
+    if googlebenchmark_build_dir:
+        cmake_vars["GOOGLEBENCHMARK_BUILD_DIR"] = str(googlebenchmark_build_dir)
     if cmake_cxx_compiler:
         cmake_vars["CMAKE_CXX_COMPILER"] = cmake_cxx_compiler
     configure_command, build_command = candidate_build_commands(
@@ -267,6 +270,7 @@ def build_candidate_build_plan(
         "benchmark_exe": benchmark_exe_for_build_plan(build_dir, cmake_config["build_target"]),
         "kernel_filter_file": str(kernel_filter_path),
         "googlebenchmark_dir": str(googlebenchmark_dir) if googlebenchmark_dir else "",
+        "googlebenchmark_build_dir": str(googlebenchmark_build_dir) if googlebenchmark_build_dir else "",
         "cmake_cxx_compiler": cmake_cxx_compiler,
         "selected_kernel_count": build_manifest["selected_kernel_count"],
         "selected_kernel_batch_size": build_manifest.get("selected_kernel_batch_size", 0),
@@ -568,6 +572,59 @@ def validate_candidate_auto_build_mode(args, dry_run_mode, probe_mode):
         "--build-candidate-benchmark builds the generated benchmark after Phase A. "
         "Use --probe-mode=off or --constraints-json when no prebuilt --benchmark-exe is available for Phase A probes."
     )
+
+
+SEARCH_STRATEGY_PRESETS = {
+    "manual": {},
+    "baseline": {
+        "kernel_catalog_source": "persisted",
+        "prefilter": "none",
+        "run_candidate_build_preflight": False,
+        "use_candidate_build_preflight_benchmarks": False,
+    },
+    "expanded_bmg": {
+        "kernel_catalog_source": "expanded_bmg",
+        "prefilter": "none",
+        "run_candidate_build_preflight": False,
+        "use_candidate_build_preflight_benchmarks": False,
+    },
+    "layered_exhaustive": {
+        "kernel_catalog_source": "layered_bmg",
+        "prefilter": "none",
+        "run_candidate_build_preflight": False,
+        "use_candidate_build_preflight_benchmarks": False,
+    },
+    "bruteforce_scheduler": {
+        "kernel_catalog_source": "layered_bmg_scheduler_expanded",
+        "prefilter": "none",
+        "run_candidate_build_preflight": True,
+        "use_candidate_build_preflight_benchmarks": True,
+    },
+}
+
+
+def apply_search_strategy_defaults(args):
+    strategy = getattr(args, "search_strategy", "manual") or "manual"
+    if getattr(args, "bruteforce_scheduler_search", False) and strategy == "manual":
+        strategy = "bruteforce_scheduler"
+    preset = SEARCH_STRATEGY_PRESETS.get(strategy, {})
+    if preset:
+        args.kernel_catalog_source = preset["kernel_catalog_source"]
+        args.prefilter = preset["prefilter"]
+        args.run_candidate_build_preflight = preset["run_candidate_build_preflight"]
+        args.use_candidate_build_preflight_benchmarks = preset["use_candidate_build_preflight_benchmarks"]
+    if strategy == "bruteforce_scheduler" and getattr(args, "candidate_build_batch_size", 0) <= 0:
+        args.candidate_build_batch_size = 1
+    if strategy == "bruteforce_scheduler" and (getattr(args, "skip_run", False) or getattr(args, "dry_run", False)):
+        args.run_candidate_build_preflight = False
+        args.use_candidate_build_preflight_benchmarks = False
+    args.search_strategy = strategy
+    return args
+
+
+def apply_bruteforce_scheduler_search_defaults(args):
+    args.bruteforce_scheduler_search = True
+    return apply_search_strategy_defaults(args)
 
 
 def load_target_shapes_and_reference(args, dry_run_mode):
@@ -1010,6 +1067,7 @@ def workflow(args):
         print(f"Updated runtime_config_bmg_perf.json selected_runtime_variant → {args.update_runtime_variant}")
     if args.update_compile_variant or args.update_runtime_variant:
         profiles = default_compiler_profiles()  # reload after update
+    args = apply_search_strategy_defaults(args)
     profiles, device_target_detection = resolve_profiles_device_target(profiles, shell_init=args.shell_init)
     dry_run_mode = getattr(args, "dry_run", False)
     shapes_doc, reference_doc = load_target_shapes_and_reference(args, dry_run_mode)
@@ -1102,12 +1160,16 @@ def workflow(args):
     source_dir = Path(args.cmake_source_dir).resolve() if args.cmake_source_dir else (Path(args.cwd).resolve() if args.cwd else Path.cwd().resolve())
     build_dir = Path(args.benchmark_build_dir).resolve() if args.benchmark_build_dir else workspace / "build" / "candidate_benchmarks"
     googlebenchmark_dir = Path(args.googlebenchmark_dir).resolve() if args.googlebenchmark_dir else None
+    googlebenchmark_build_dir = (
+        Path(args.googlebenchmark_build_dir).resolve() if args.googlebenchmark_build_dir else None
+    )
     candidate_build_plan = build_candidate_build_plan(
         build_manifest,
         source_dir,
         build_dir,
         selected_kernel_filter_path,
         googlebenchmark_dir,
+        googlebenchmark_build_dir,
         args.cmake_cxx_compiler,
     )
     write_json(candidate_build_plan_path, candidate_build_plan)
@@ -1115,13 +1177,14 @@ def workflow(args):
     candidate_build_preflight_summary_path = reports_dir / "candidate_build_preflight_summary.json"
     candidate_build_summary = {"status": "not_run", "reason": "build_candidate_benchmark disabled"}
     candidate_build_preflight_summary = {"status": "not_run", "reason": "run_candidate_build_preflight disabled"}
+    build_timeout = args.build_timeout or args.timeout
     effective_benchmark_exe = args.benchmark_exe
     if args.run_candidate_build_preflight:
         candidate_build_preflight_summary = execute_candidate_build_preflight_plans(
             candidate_build_plan,
             logs_dir,
             shell_init=compile_shell_init,
-            timeout=args.timeout,
+            timeout=build_timeout,
             max_workers=getattr(args, "candidate_build_parallelism", 1),
             resume=getattr(args, "resume_candidate_build_preflight", False),
             progress_path=str(reports_dir / "preflight_progress.json"),
@@ -1138,7 +1201,7 @@ def workflow(args):
             candidate_build_plan,
             logs_dir,
             shell_init=compile_shell_init,
-            timeout=args.timeout,
+            timeout=build_timeout,
         )
         write_json(candidate_build_summary_path, candidate_build_summary)
         if candidate_build_summary.get("status") != "pass":
@@ -1286,13 +1349,16 @@ def build_parser():
     parser.add_argument("--update-runtime-variant", default="", help="Persist a new runtime variant selection to runtime_config_bmg_perf.json. Use --list-runtime-variants to see available options.")
     parser.add_argument("--list-compile-variants", action="store_true", help="List available compile env variants and exit.")
     parser.add_argument("--list-runtime-variants", action="store_true", help="List available runtime env variants and exit.")
-    parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator", "expanded_streamk", "expanded_bmg", "layered_bmg"], default="persisted", help="Catalog source for Phase B candidates. 'expanded_bmg' enables the opt-in BMG Gemm/StreamK/DataParallel/SplitK tile expansion and requires rebuilding the benchmark with the generated build plan. 'layered_bmg' adds regular GEMM legal tile/subgroup/stage enumeration on top of expanded_bmg. 'expanded_streamk' is kept as a compatibility alias.")
+    parser.add_argument("--kernel-catalog-source", choices=["persisted", "generator", "expanded_streamk", "expanded_bmg", "layered_bmg", "layered_bmg_scheduler_expanded"], default="persisted", help="Catalog source for Phase B candidates. 'expanded_bmg' enables the opt-in BMG Gemm/StreamK/DataParallel/SplitK tile expansion and requires rebuilding the benchmark with the generated build plan. 'layered_bmg' adds regular GEMM legal tile/subgroup/stage enumeration on top of expanded_bmg while preserving the legacy fixed-8x4 scheduler path. 'layered_bmg_scheduler_expanded' keeps the same regular GEMM space but widens BF16 scheduler search across legal subgroup/stage combinations. 'expanded_streamk' is kept as a compatibility alias.")
     parser.add_argument("--kernel-catalog-path", default="", help="Optional path to a persisted kernel catalog JSON. Used when --kernel-catalog-source=persisted.")
+    parser.add_argument("--search-strategy", choices=["manual", "baseline", "expanded_bmg", "layered_exhaustive", "bruteforce_scheduler"], default="manual", help="High-level search preset. 'manual' preserves explicit catalog/build flags. 'baseline' keeps the legacy persisted baseline search. 'expanded_bmg' keeps the legacy expanded BMG search. 'layered_exhaustive' keeps the legacy layered exhaustive search. 'bruteforce_scheduler' widens BF16 scheduler search across legal subgroup/stage combinations and routes Phase B through scheduler-focused preflight batches.")
+    parser.add_argument("--bruteforce-scheduler-search", action="store_true", help="Enable the no-pruning scheduler search profile: force layered_bmg_scheduler_expanded, disable prefiltering, emit per-kernel preflight build batches, and route Phase B benchmark runs through the preflight executables.")
     parser.add_argument("--prefilter", choices=["none", "light", "medium", "aggressive"], default="none", help="Candidate prefilter strategy: skip configs unlikely to perform well for the target shapes. 'light' removes physically incompatible configs. 'medium' adds ILP-based pruning. 'aggressive' is for fastest search with some risk of missing optimal configs.")
     parser.add_argument("--compiled-kernel-list", default="", help="Optional newline-delimited compiled kernel list or regex filter file. When set, Phase B only runs benchmark candidates present in this list.")
     parser.add_argument("--cmake-source-dir", default="", help="Optional source directory used in the generated candidate benchmark CMake build plan. Defaults to --cwd or the current directory.")
     parser.add_argument("--benchmark-build-dir", default="", help="Optional build directory used in the generated candidate benchmark CMake build plan. Defaults to <workspace>/build/candidate_benchmarks.")
     parser.add_argument("--googlebenchmark-dir", default="", help="Optional local Google Benchmark source directory injected into the generated CMake build plan as GOOGLEBENCHMARK_DIR to avoid FetchContent downloads.")
+    parser.add_argument("--googlebenchmark-build-dir", default="", help="Optional prebuilt Google Benchmark build directory injected into the generated CMake build plan as GOOGLEBENCHMARK_BUILD_DIR when isolated workspaces cannot reuse the default build-tree _deps path.")
     parser.add_argument("--cmake-cxx-compiler", default="", help="Optional CMAKE_CXX_COMPILER value injected into the generated candidate benchmark CMake build plan, e.g. 'icpx' for oneAPI SYCL builds.")
     parser.add_argument("--build-candidate-benchmark", action="store_true", help="Execute the generated candidate benchmark CMake configure/build plan before Phase B runs, then use the built benchmark executable for screening and confirmation.")
     parser.add_argument("--candidate-build-batch-size", type=int, default=0, help="Emit additional selected-kernel filter files in batches of N kernels for isolated generated benchmark build preflight/retry. 0 disables batch artifacts.")
@@ -1305,7 +1371,8 @@ def build_parser():
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")
     parser.add_argument("--skip-run", action="store_true", help="Only emit generated artifacts without invoking the benchmark.")
     parser.add_argument("--dry-run", action="store_true", help="Run a minimal benchmark-backed screening smoke with a tiny shape set and no confirmation.")
-    parser.add_argument("--timeout", type=int, default=600, help="Per-subprocess timeout in seconds for benchmark and example runs.")
+    parser.add_argument("--timeout", type=int, default=600, help="Per-subprocess timeout in seconds for benchmark and example runtime execution.")
+    parser.add_argument("--build-timeout", type=int, default=0, help="Optional per-subprocess timeout in seconds for candidate benchmark configure/build steps. 0 reuses --timeout.")
     parser.add_argument("--benchmark-entry-chunk-size", type=int, default=0, help="Split screening and confirmation benchmark config execution into chunks of N entries. 0 runs each stage as one subprocess.")
     parser.add_argument("--top-k", type=int, default=3, help="Top-k candidates kept for confirmation.")
     parser.add_argument("--confirm-runs", type=int, default=3, help="Number of confirmation attempts for top-k candidates.")

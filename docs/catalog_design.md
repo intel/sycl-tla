@@ -13,9 +13,9 @@ packed into **546 batches** (2 kernels/batch, last batch has 1).
 | Gemm_ (RCR, SG exhaustive) | 76 | `.def` file × `BMG_SOURCE_GEMM_TILE_SG` + `BMG_DECLARE_EXPANDED_GEMM_TILES` | `RCR_Gemm_128x128x32_SG2x4` |
 | Gemm_ (RRR, SG exhaustive) | 76 | Same as above but RRR layout | `RRR_Gemm_128x128x32_SG2x4` |
 | GemmExhaustive (RCR, stages) | 783 | `exhaustive_regular_gemm_tile_candidates()` — full tile×sg×stages enumeration | `RCR_GemmExhaustive_128x256x32_SG2x8_ST2` |
-| StreamK | 49 | `BMG_DECLARE_EXPANDED_STREAMK_TILES` in full HPP | `RCR_StreamK_128x128x32` |
-| DataParallel | 49 | Same macro, different scheduler | `RCR_DataParallel_128x128x32` |
-| SplitK | 49 | Same macro, different scheduler | `RCR_SplitK_128x128x32` |
+| StreamK | 49 | shared `bmg_streamk_*.def` tile lists in full HPP | `RCR_StreamK_128x128x32` |
+| DataParallel | 49 | same shared tile lists, different scheduler | `RCR_DataParallel_128x128x32` |
+| SplitK | 49 | same shared tile lists, different scheduler | `RCR_SplitK_128x128x32` |
 
 ## Generation Pipeline
 
@@ -24,7 +24,7 @@ catalog.py
 ├── generated_expanded_streamk_kernel_catalog()
 │   ├── Hand-written kernels (9)
 │   ├── Gemm_ SG exhaustive via .def file (76 RCR + 76 RRR)
-│   └── StreamK/DP/SplitK via BMG_DECLARE_EXPANDED_STREAMK_TILES (49 each)
+│   └── StreamK/DP/SplitK via shared bmg_streamk_*.def tile lists (49 each)
 │
 ├── exhaustive_regular_gemm_tile_candidates()
 │   └── GemmExhaustive: tile_m × tile_n × tile_k × sg_m × sg_n × stages (783 RCR)

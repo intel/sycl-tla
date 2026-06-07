@@ -125,13 +125,26 @@ struct HasSchedulerSplits : std::false_type {};
 template <class T>
 struct HasSchedulerSplits<T, std::void_t<decltype(std::declval<T&>().scheduler.splits)>> : std::true_type {};
 
+template <class T, class = void>
+struct HasSchedulerDecompositionMode : std::false_type {};
+
+template <class T>
+struct HasSchedulerDecompositionMode<T, std::void_t<decltype(std::declval<T&>().scheduler.decomposition_mode)>> : std::true_type {};
+
 template <class Arguments>
-void set_scheduler_splits(Arguments& arguments, int split_k_slices) {
+const char* set_scheduler_splits(Arguments& arguments, int split_k_slices) {
   if constexpr (HasSchedulerSplits<Arguments>::value) {
+    if constexpr (HasSchedulerDecompositionMode<Arguments>::value) {
+      using DecompositionMode = std::remove_cv_t<std::remove_reference_t<decltype(arguments.scheduler.decomposition_mode)>>;
+      if (arguments.scheduler.decomposition_mode == DecompositionMode::SplitK && split_k_slices > 1) {
+        return "Benchmark-backed SplitK kernels only support split_k_slices<=1 on the current Xe path.";
+      }
+    }
     if (split_k_slices > 0) {
       arguments.scheduler.splits = split_k_slices;
     }
   }
+  return nullptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -983,7 +996,10 @@ struct BenchmarkRunnerGemm {
     initialize(state, problem_size);
 
     typename Gemm::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
-    set_scheduler_splits(arguments, options.split_k_slices);
+    if (const char* scheduler_error = set_scheduler_splits(arguments, options.split_k_slices)) {
+      state.SkipWithError(scheduler_error);
+      return;
+    }
     arguments.mode = gemm::GemmUniversalMode::kGemm;
     arguments.problem_shape = problem_size;
 
@@ -1164,7 +1180,10 @@ private:
     initialize(sref, problem_size);
 
     typename GemmConfiguration::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
-    set_scheduler_splits(arguments, options.split_k_slices);
+    if (const char* scheduler_error = set_scheduler_splits(arguments, options.split_k_slices)) {
+      std::cerr << "[DIRECT_FAIL] " << scheduler_error << std::endl;
+      return 0.0;
+    }
     arguments.mode = gemm::GemmUniversalMode::kGemm; arguments.problem_shape = problem_size;
     arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B};
     arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[0].get(), stride_C, block_D.get(), stride_D};

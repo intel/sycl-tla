@@ -3,17 +3,20 @@
 # SPDX-License-Identifier: BSD-3-Clause
 #################################################################################################
 
-from .schemas import BENCHMARK_ERROR_RE, CSV_FIELDS, SCHEMA_VERSION, SEARCH_RUNTIME_SCHEMA
+from .schemas import BENCHMARK_ERROR_RE, CSV_FIELDS, SCHEMA_VERSION, SEARCH_RUNTIME_SCHEMA, infer_scheduler_metadata
 from .utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
 from .catalog import (
     DEFAULT_KERNEL_CATALOG_PATH,
+    BENCHMARK_STREAMK_TILE_SHAPES,
     EXPANDED_GEMM_TILE_SHAPES,
     EXPANDED_STREAMK_TILE_SHAPES,
     SEED_KERNELS,
+    STREAMK_TILE_SHAPES,
     build_kernel_catalog,
     generated_expanded_streamk_kernel_catalog,
     generated_generator_kernel_catalog,
     generated_layered_bmg_kernel_catalog,
+    generated_layered_bmg_scheduler_expanded_kernel_catalog,
     generated_level0_kernel_catalog,
     ilp_class,
     kernel_catalog_entry,
@@ -104,11 +107,12 @@ from .dispatch import (
     validate_dispatch_table,
 )
 from .ali_dataset import build_ali_gemm_docs
-from .workflow import build_artifact_bundle_manifest, build_candidate_build_plan, benchmark_batch_plan_by_kernel_id, benchmark_exe_for_build_plan, execute_candidate_build_plan, execute_candidate_build_preflight_plans, export_product_bundle_manifest, limit_shapes_and_reference, load_target_shapes_and_reference, run_entries_with_batch_benchmarks, validate_candidate_auto_build_mode, validate_product_bundle_manifest
+from .workflow import SEARCH_STRATEGY_PRESETS, apply_bruteforce_scheduler_search_defaults, apply_search_strategy_defaults, build_artifact_bundle_manifest, build_candidate_build_plan, benchmark_batch_plan_by_kernel_id, benchmark_exe_for_build_plan, execute_candidate_build_plan, execute_candidate_build_preflight_plans, export_product_bundle_manifest, limit_shapes_and_reference, load_target_shapes_and_reference, run_entries_with_batch_benchmarks, validate_candidate_auto_build_mode, validate_product_bundle_manifest
 from .workflow import build_compiler_flags_probe_summary, build_parser, dispatch_lookup_from_args, empty_anomaly_report, main, run_phase_a_probe, workflow
 
 __all__ = [
     "BENCHMARK_ERROR_RE",
+    "BENCHMARK_STREAMK_TILE_SHAPES",
     "CSV_FIELDS",
     "DEFAULT_KERNEL_CATALOG_PATH",
     "EXPANDED_GEMM_TILE_SHAPES",
@@ -118,11 +122,15 @@ __all__ = [
     "DEFAULT_HW_REFERENCE_SPECS_PATH",
     "DISPATCH_KEY_FIELDS",
     "SCHEMA_VERSION",
+    "SEARCH_STRATEGY_PRESETS",
     "SEARCH_RUNTIME_SCHEMA",
     "SEED_KERNELS",
+    "STREAMK_TILE_SHAPES",
     "apply_probe_results_to_profiles",
     "apply_run_probe_constraints",
     "apply_static_probe_constraints",
+    "apply_bruteforce_scheduler_search_defaults",
+    "apply_search_strategy_defaults",
     "blocked",
     "blocked_rule_for_row",
     "build_candidate_build_manifest",
@@ -162,10 +170,12 @@ __all__ = [
     "execute_candidate_build_preflight_plans",
     "export_product_bundle_manifest",
     "ensure_dir",
+    "infer_scheduler_metadata",
     "generate_candidate_space",
     "generated_generator_kernel_catalog",
     "generated_expanded_streamk_kernel_catalog",
     "generated_layered_bmg_kernel_catalog",
+    "generated_layered_bmg_scheduler_expanded_kernel_catalog",
     "generate_confirmation_entries",
     "generated_level0_kernel_catalog",
     "ilp_class",

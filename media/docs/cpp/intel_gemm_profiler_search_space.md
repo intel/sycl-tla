@@ -21,13 +21,21 @@ The output of this document feeds:
 
 ## Scope
 
-Phase 1 is intentionally narrow:
+Phase 1 started intentionally narrow:
 
 - GEMM only
 - Intel SYCL path only
 - exact-shape dispatch only
 - `RCR` first-class target
 - `bf16` and `f16` inputs with `f32` accumulation
+
+Current implementation status has expanded beyond the original MVP note:
+
+- legacy `baseline` search is still preserved
+- legacy `expanded_bmg` search is still preserved
+- legacy `layered_exhaustive` search is still preserved
+- `RCR` and `RRR` are both searchable in the layered exhaustive path
+- `bruteforce_scheduler` now widens only the BF16 scheduler axis (`sg_m/sg_n/stages`) while keeping the preserved legacy strategies unchanged
 
 Out of scope for this search-space version:
 
@@ -37,17 +45,65 @@ Out of scope for this search-space version:
 - layout bucketing
 - heuristic online dispatch
 
+## Search strategy preservation
+
+The profiler now exposes a high-level `--search-strategy` preset so new search behavior does not overwrite older standards.
+
+| Strategy | Preserved meaning | Candidate universe |
+| --- | --- | --- |
+| `baseline` | old persisted seed baseline | `persisted` catalog only |
+| `expanded_bmg` | old expanded BMG search | `expanded_bmg` catalog only |
+| `layered_exhaustive` | old layered exhaustive search | `layered_bmg` catalog only |
+| `bruteforce_scheduler` | new scheduler brute-force mode | `layered_bmg_scheduler_expanded`: keep old regular-GEMM space, widen BF16 scheduler candidates across legal `sg_m/sg_n/stages`, and route through preflight batch benchmark execution |
+| `manual` | no preset override | keep explicit low-level flags unchanged |
+
+Compatibility rules:
+
+- `--kernel-catalog-source` remains valid
+- `--bruteforce-scheduler-search` remains valid
+- `--bruteforce-scheduler-search` is treated as a compatibility alias of `--search-strategy bruteforce_scheduler`
+
+This means the new scheduler search mode is additive. It does **not** replace the old baseline or old exhaustive standards.
+
+## Current quantitative snapshot
+
+The numbers below are the current BF16/BF16/FP32 snapshot for one exact-shape probe under:
+
+- layouts: `rcr + rrr`
+- `allowed_runners = (benchmark, streamk_example)`
+- `default_constraints()`
+- no heuristic prefilter
+
+| Search space | Effective candidates |
+| --- | ---: |
+| `baseline` | 53 |
+| `expanded_bmg` | 399 |
+| `layered_exhaustive` | 1857 |
+| `bruteforce_scheduler` | 6843 |
+
+Interpretation:
+
+- the preserved legacy strategies stay unchanged
+- `bruteforce_scheduler` is now strictly wider because it expands BF16 scheduler candidates beyond fixed `sg=8x4, stages=2`
+- the widening is limited to scheduler kernels; it does not rewrite the preserved `baseline`, `expanded_bmg`, or `layered_exhaustive` standards
+
 ## Current repository baseline
 
 ### What the new benchmark path currently exposes
 
-`benchmarks/gemm/benchmarks_sycl.hpp` currently registers only one Intel benchmark:
+`benchmarks/gemm/benchmarks_sycl.hpp` is no longer a single-kernel placeholder.
 
-- `RRR`
-- tile `512x256x32`
-- subgroup layout `8x4`
+It now exposes:
 
-This is not enough for an Intel profiler MVP, because the target workflow is centered on `RCR` search for decode/prefill style shapes.
+- preserved `RCR` / `RRR` GEMM seed kernels
+- benchmark-backed `StreamK` / `DataParallel` / `SplitK` seed tiles
+- under `CUTLASS_BENCHMARK_EXPANDED_BMG_STREAMK=ON`, the benchmark-backed expanded scheduler registry needed by the current profiler catalogs
+- BF16 `RRR` benchmark-backed scheduler registrations, so the layered exhaustive / brute-force scheduler catalog is not Python-only on that layout
+
+The important remaining limitation is different:
+
+- scheduler benchmark registration is now aligned with the current cataloged tile set
+- but the scheduler path still fixes subgroup layout to `8x4` and stages to `2`
 
 ### What the legacy benchmark path already proves
 
@@ -62,7 +118,7 @@ This is not enough for an Intel profiler MVP, because the target workflow is cen
 | `RCR_16` | `rcr` | `16x64x32` | `2x4` | `gemm` |
 | `SplitK_RCR_5` | `rcr` | `8x64x32` | `1x4` | `split_k` |
 
-These seed variants are enough to define the first search bands even though the new benchmark path has not yet re-registered them.
+These seed variants were the original proof points. The current benchmark path now re-registers the relevant seed bands and a much wider scheduler tile set on top of them.
 
 ## Phase 1 target shape sets
 
@@ -125,6 +181,138 @@ The following are not Phase 1 search dimensions:
 | `swizzle_size` | postpone until there is evidence it matters on Intel |
 | `dpas atom shape` | treated as fixed hardware property |
 | `block_copy opcode form` | handled as probe-derived constraints, not the outer search axis |
+
+## How `RCR` / `RRR` scheduler search works now
+
+The current implementation uses two different modes:
+
+1. **legacy preserved search spaces**
+2. **layered exhaustive / brute-force scheduler search**
+
+### 1. Legacy preserved spaces
+
+#### `baseline`
+
+- source: `seed_catalog_level0`
+- purpose: preserve the small, known-good seed set
+- behavior: not brute force
+- scheduler candidates: only what already exists in the seed catalog
+
+For the current BF16/BF16/FP32 snapshot:
+
+- `rcr / Gemm = 4`
+- `rrr / Gemm = 1`
+- `rcr / DataParallel = 8`
+- `rcr / SplitK = 32`
+- `rcr / StreamK = 8`
+
+#### `expanded_bmg`
+
+- sources:
+  - `seed_catalog_level0`
+  - `expanded_gemm_catalog`
+  - `expanded_streamk_catalog`
+  - `source_template_gemm_catalog`
+- purpose: preserve the older expanded search standard
+- behavior: expanded but still not full exhaustive across all legal tiles/subgroups/stages
+- scheduler candidates:
+  - `RCR` scheduler search is explicit enumeration over the benchmark-backed legal `8x4` tile list plus the retained legacy `512x256x32` seed tile
+  - `RRR` remains GEMM-only in this preserved legacy mode
+
+For the current BF16/BF16/FP32 snapshot:
+
+- `rcr / Gemm = 55`
+- `rrr / Gemm = 55`
+- `rcr / DataParallel = 49`
+- `rcr / SplitK = 196`
+- `rcr / StreamK = 49`
+
+### 2. `layered_exhaustive` and `bruteforce_scheduler`
+
+These two strategies now share the same regular-GEMM universe, but not the same scheduler universe:
+
+- `layered_exhaustive`: preserve the old layered exhaustive search standard
+- `bruteforce_scheduler`: keep the old regular GEMM space, but widen BF16 scheduler candidates and force preflight-batch benchmark routing with scheduler-aware reporting
+
+#### Base GEMM enumeration
+
+Regular GEMM candidates are emitted by brute-force enumeration over the legal search domain from `default_constraints()` / `safe_search_constraints.json`:
+
+- `tile_m` from allowed `tile_m`
+- `tile_n` from allowed `tile_n`
+- `tile_k` from allowed `tile_k`
+- `sg_m` from allowed `sg_m`
+- `sg_n` from allowed `sg_n`
+- `stages` from allowed `stages`
+
+Then the generator keeps only combinations that satisfy:
+
+- `is_valid_xe2_tile_sg(tile_shape, sg_layout)`
+- current constraint limits / blocked rules
+
+This is a real legal-space enumeration, not a seed-neighbor expansion.
+
+#### Scheduler enumeration (`StreamK`, `SplitK`, `DataParallel`)
+
+Scheduler candidates are also emitted by explicit enumeration, not by “take top-k base GEMM and expand”.
+
+Implementation contract:
+
+1. iterate legal tile shapes from constraint space
+2. require `tile_k >= 32`
+3. for preserved `layered_exhaustive`, keep the benchmark-backed fixed scheduler baseline:
+   - `sg = 8x4`
+   - `stages = 2`
+4. for `bruteforce_scheduler`, widen the scheduler axis to the currently legal BF16 scheduler domain:
+   - `sg in {(2,8), (4,4), (4,8), (8,2), (8,4)}`
+   - `stages in {1,2,3}`
+5. emit three scheduler families for each legal scheduler point:
+   - `streamk_mode = streamk`, `split_k = 1`
+   - `streamk_mode = data_parallel`, `split_k = 1`
+   - `streamk_mode = splitk`, `split_k = 1`
+6. emit both `layout = rcr` and `layout = rrr`
+
+Current benchmark-backed `StreamKScheduler` SplitK kernels only support the
+decomposition-mode path (`split_k_slices <= 1`) on Xe. Wiring runtime
+`split_k_slices = 2/3/4/6` to these benchmark kernels reuses the same compiled
+kernel but hangs at runtime, so the profiler catalog intentionally keeps a
+single benchmark-backed SplitK candidate per tile/subgroup/stage point.
+
+So:
+
+- `layered_exhaustive` keeps the old fixed-`8x4/st2` scheduler brute-force tile search
+- `bruteforce_scheduler` performs **brute-force over the widened legal BF16 scheduler tile/subgroup/stage domain**
+
+The fixed-path benchmark registry now matches the cataloged fixed-`8x4/st2` scheduler tile domain, including BF16 `RRR` scheduler variants. The widened `bruteforce_scheduler` path does not statically register every expanded scheduler kernel in `benchmarks_sycl.hpp`; instead it relies on filter-generated exhaustive scheduler headers enabled by `CUTLASS_BENCHMARK_EXHAUSTIVE_STREAMK`.
+
+It is **not**:
+
+- local expansion around top-k base kernels
+- heuristic narrowing of the scheduler axis
+- conditional expansion only after a base GEMM winner is known
+
+The only filters are legality / safety constraints.
+
+#### Current BF16/BF16/FP32 snapshot after the `RRR` scheduler fix
+
+| layout / mode | candidates |
+| --- | ---: |
+| `rcr / Gemm` | 686 |
+| `rcr / DataParallel` | 49 |
+| `rcr / SplitK` | 196 |
+| `rcr / StreamK` | 49 |
+| `rrr / Gemm` | 686 |
+| `rrr / DataParallel` | 32 |
+| `rrr / SplitK` | 128 |
+| `rrr / StreamK` | 32 |
+
+This yields:
+
+- total `Gemm = 1372`
+- total `DataParallel = 81`
+- total `SplitK = 324`
+- total `StreamK = 81`
+- total candidates = `1858`
 
 ## Phase 1 candidate domain
 
@@ -229,35 +417,21 @@ Reject any candidate that matches a `blocked_rules` entry from `safe_search_cons
 
 This is where Intel-specific `block_copy` instability is enforced.
 
-### Rule 8: split-k gating
+### Rule 8: strategy-dependent scheduler expansion
 
-Phase 1 only emits `split_k > 1` candidates for large-`n` or large-`k` workloads.
+The original MVP note gated `split_k` and recommended seed-adjacent expansion first.
 
-Recommended initial gate:
+That behavior still exists conceptually in the preserved legacy spaces:
 
-```text
-n >= 4096 or k >= 8192
-```
+- `baseline`
+- `expanded_bmg`
 
-Reason:
+But it is intentionally **not** used in:
 
-- keeps split-k from inflating the search space on small problems
-- aligns with the intended use of the existing `SplitK_RCR_5` style kernels
+- `layered_exhaustive`
+- `bruteforce_scheduler`
 
-### Rule 9: confirmation-first expansion
-
-The first wave should prefer seed-adjacent tile shapes:
-
-- small-`m`: `8x64x32`, `8x128x32`, `16x64x32`
-- medium-`m`: `32x64x32`, `32x128x32`, `64x128x32`
-- large-`m`: `128x128x32`, `128x256x32`, `256x256x32`
-
-`tile_k = 64` should be treated as a second-wave expansion behind `tile_k = 32`.
-
-Reason:
-
-- the existing repository assets skew heavily toward `tile_k = 32`
-- this reduces build cost during early bring-up
+For those two strategies, scheduler search is brute-force over the legal tile domain described above.
 
 ## Candidate classes
 
