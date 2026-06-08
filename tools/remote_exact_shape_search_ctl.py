@@ -137,6 +137,7 @@ def command_launch(args: argparse.Namespace) -> None:
             ("KERNEL_CATALOG_SOURCE", args.kernel_catalog_source),
             ("BATCH_SIZE", str(args.batch_size)),
             ("STOP_EXISTING", "1" if args.stop_existing else "0"),
+            ("RESUME_RUN", "1" if args.resume_run else "0"),
             ("SKIP_SYNC", "1" if skip_remote_repo_sync else "0"),
         ]
         payload = json.dumps(
@@ -267,6 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
     launch_parser.add_argument("--skip-remote-repo-sync", action="store_true", help="Pass SKIP_SYNC=1 to the remote launcher.")
     launch_parser.add_argument("--stop-existing", action="store_true", default=True, help="Stop existing exact-shape runs before launch.")
     launch_parser.add_argument("--no-stop-existing", action="store_false", dest="stop_existing")
+    launch_parser.add_argument("--resume-run", action="store_true", help="Reuse an existing run dir and skip completed batches.")
     launch_parser.add_argument("--no-sync-files", action="store_true", help="Do not upload local scripts/docs before launch.")
     launch_parser.set_defaults(func=command_launch)
 

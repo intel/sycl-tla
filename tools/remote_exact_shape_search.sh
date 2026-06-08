@@ -40,6 +40,7 @@ TIMEOUT="${TIMEOUT:-120}"
 GIT_REF="${GIT_REF:-origin/main}"
 SKIP_SYNC="${SKIP_SYNC:-0}"
 STOP_EXISTING="${STOP_EXISTING:-1}"
+RESUME_RUN="${RESUME_RUN:-0}"
 ACTIVE_SHAPE_TAG=""
 WORKER_SYNC_FILES=(
   benchmarks/common.hpp
@@ -339,6 +340,20 @@ validate_template_build() {
 
 prepare_run_dir() {
   mkdir -p "$RUN_DIR" "$RUNS_DIR"
+  if [ "$RESUME_RUN" = "1" ]; then
+    [ -f "$RUN_DIR/manifest.json" ] || fail "RESUME_RUN=1 requires existing manifest.json in $RUN_DIR"
+    [ -d "$RESULTS_DIR" ] || fail "RESUME_RUN=1 requires existing results dir: $RESULTS_DIR"
+    [ -d "$MANIFEST_DIR" ] || fail "RESUME_RUN=1 requires existing manifest dir: $MANIFEST_DIR"
+    rm -rf "$WORKERS_DIR" "$STATUS_DIR"
+    rm -f "$RUN_DIR/launcher.pid" "$RUN_DIR"/failed_*.txt
+    mkdir -p "$LOG_DIR" "$WORKERS_DIR" "$STATUS_DIR"
+    printf '%s\n' "$RUN_DIR" > "$LATEST_RUN_FILE"
+    printf '%s\n' "$$" > "$RUN_DIR/launcher.pid"
+    : > "$STATUS_DIR/completed_shapes.txt"
+    : > "$STATUS_DIR/worker_pids.txt"
+    rm -f "$STATUS_DIR/current_shape"
+    return
+  fi
   rm -rf "$RESULTS_DIR" "$LOG_DIR" "$MANIFEST_DIR" "$WORKERS_DIR" "$STATUS_DIR"
   rm -f "$RUN_DIR/launcher.pid" "$RUN_DIR/run_meta.txt" "$RUN_DIR/manifest.json" "$RUN_DIR/requested_shapes.json"
   rm -f "$RUN_DIR"/failed_*.txt
@@ -353,6 +368,14 @@ prepare_run_dir() {
 write_metadata() {
   local head_commit
   head_commit=$(cd "$REPO_ROOT" && git rev-parse HEAD)
+  if [ "$RESUME_RUN" = "1" ] && [ -f "$RUN_DIR/run_meta.txt" ]; then
+    cat >> "$RUN_DIR/run_meta.txt" <<EOF
+resumed_at=$(date -Iseconds)
+resume_git_head=$head_commit
+resume_build_jobs=$BUILD_JOBS
+EOF
+    return
+  fi
 
   python3 - <<PY
 import json
@@ -406,6 +429,24 @@ EOF
 }
 
 generate_manifests() {
+  if [ "$RESUME_RUN" = "1" ] && [ -f "$RUN_DIR/manifest.json" ]; then
+    python3 - <<PY
+import json
+manifest = json.load(open("${RUN_DIR}/manifest.json"))
+print(
+    json.dumps(
+        {
+            "total_kernels": manifest["total_kernels"],
+            "batch_count": manifest["batch_count"],
+            "gpu_count": manifest["gpu_count"],
+            "kernel_catalog_source": manifest.get("kernel_catalog_source", ""),
+            "resume": True,
+        }
+    )
+)
+PY
+    return
+  fi
   export REPO_ROOT RUN_DIR MANIFEST_DIR DTYPE_A DTYPE_B DTYPE_C DTYPE_D DTYPE_ACC LAYOUTS BATCH_SIZE KERNEL_CATALOG_SOURCE
   export GPU_IDS_CSV
   python3 - <<'PY'
@@ -614,6 +655,18 @@ run_shape_worker() {
     [ -f "$manifest_path" ] || continue
     cleanup_worker_descendants "$worker_pid" "$shape_tag" "$gpu" "pre_${batch_id}"
 
+    local result_csv="$shape_dir/${batch_id}_gpu${gpu}.csv"
+    if [ "$RESUME_RUN" = "1" ] && [ -f "$result_csv" ]; then
+      local expected_rows existing_rows
+      expected_rows=$(awk 'NF {count++} END {print count + 0}' "$manifest_path")
+      existing_rows=$(tail -n +2 "$result_csv" 2>/dev/null | awk 'NF {count++} END {print count + 0}')
+      if [ "$existing_rows" -eq "$expected_rows" ] && [ "$expected_rows" -gt 0 ]; then
+        log "shape=$shape_tag gpu=$gpu $batch_id already complete, skipping"
+        continue
+      fi
+      rm -f "$result_csv"
+    fi
+
     cp "$orig_hpp" "$worker_repo/benchmarks/gemm/benchmarks_sycl.hpp"
     cp "$orig_main" "$worker_repo/benchmarks/gemm/main.cpp"
     rm -f "$worker_repo/benchmarks/gemm/benchmarks_sycl.hpp.cache"
@@ -645,7 +698,6 @@ run_shape_worker() {
       continue
     fi
 
-    local result_csv="$shape_dir/${batch_id}_gpu${gpu}.csv"
     echo "kernel,tflops,avg_runtime_ms,total_runtime_ms,measure_iters,warmup_iters,latency_source,status,gpu,m,n,k" > "$result_csv"
     mapfile -t kernels < "$manifest_path"
     for kernel in "${kernels[@]}"; do
@@ -702,6 +754,17 @@ run_shapes() {
     shape_tag="${SHAPE_TAGS_ARR[$shape_index]}"
     ACTIVE_SHAPE_TAG="$shape_tag"
     mkdir -p "$RESULTS_DIR/$shape_tag"
+    if [ "$RESUME_RUN" = "1" ]; then
+      count=$(find "$RESULTS_DIR/$shape_tag" -maxdepth 1 -name '*.csv' | wc -l)
+      if [ "$count" -eq "$total_batches" ]; then
+        echo "completed" > "$STATUS_DIR/${shape_tag}.status"
+        touch "$STATUS_DIR/${shape_tag}.done"
+        printf '%s\n' "$shape_tag" >> "$STATUS_DIR/completed_shapes.txt"
+        log "=== Skipping completed shape $shape_tag, csv_count=$count ==="
+        ACTIVE_SHAPE_TAG=""
+        continue
+      fi
+    fi
     echo "$shape_tag" > "$STATUS_DIR/current_shape"
     echo "running" > "$STATUS_DIR/${shape_tag}.status"
     rm -f "$STATUS_DIR/${shape_tag}.done" "$STATUS_DIR/${shape_tag}.failed"
