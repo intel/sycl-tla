@@ -512,27 +512,11 @@ manifest_dir.mkdir(parents=True, exist_ok=True)
 kernel_metadata = {}
 for kernel_name in kernels:
     entry = selected_by_kernel[kernel_name]
-    kernel_metadata[kernel_name] = {
-        "kernel_name": kernel_name,
-        "layout": entry.get("layout"),
-        "runner": entry.get("runner"),
-        "scheduler_family": entry.get("scheduler_family"),
-        "decomposition_mode": entry.get("decomposition_mode"),
-        "streamk_mode": entry.get("streamk_mode"),
-        "reduction_mode": entry.get("reduction_mode"),
-        "tile_m": entry.get("tile_m"),
-        "tile_n": entry.get("tile_n"),
-        "tile_k": entry.get("tile_k"),
-        "sg_m": entry.get("sg_m"),
-        "sg_n": entry.get("sg_n"),
-        "stages": entry.get("stages"),
-        "split_k": entry.get("split_k"),
-        "dtype_a": entry.get("dtype_a"),
-        "dtype_b": entry.get("dtype_b"),
-        "dtype_c": entry.get("dtype_c"),
-        "dtype_d": entry.get("dtype_d", entry.get("dtype_c")),
-        "dtype_acc": entry.get("dtype_acc"),
-    }
+    metadata = dict(entry)
+    metadata["kernel_name"] = kernel_name
+    metadata.setdefault("kernel_id", kernel_name)
+    metadata.setdefault("dtype_d", entry.get("dtype_d", entry.get("dtype_c")))
+    kernel_metadata[kernel_name] = metadata
 (run_dir / "kernel_metadata.json").write_text(json.dumps(kernel_metadata, indent=2) + "\n", encoding="utf-8")
 for gpu_slot in range(len(gpu_ids)):
     (manifest_dir / f"gpu{gpu_ids[gpu_slot]}_batches.txt").write_text("", encoding="utf-8")

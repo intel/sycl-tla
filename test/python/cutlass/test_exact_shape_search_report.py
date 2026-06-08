@@ -29,6 +29,14 @@ class TestExactShapeSearchReport(unittest.TestCase):
                 json.dumps({"shapes": [{"m": 8192, "n": 384, "k": 3584}]}, indent=2) + "\n",
                 encoding="utf-8",
             )
+            (run_dir / "manifest.json").write_text(
+                json.dumps({"total_kernels": 2, "batch_size": 1, "batch_count": 2, "gpu_count": 1}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            (run_dir / "run_meta.txt").write_text(
+                "git_head=deadbeef\nkernel_catalog_source=layered_bmg_scheduler_expanded\n",
+                encoding="utf-8",
+            )
             (run_dir / "kernel_metadata.json").write_text(
                 json.dumps(
                     {
@@ -46,6 +54,10 @@ class TestExactShapeSearchReport(unittest.TestCase):
                             "sg_n": 8,
                             "stages": 2,
                             "split_k": 1,
+                            "kernel_schedule": "KernelXe",
+                            "tile_scheduler": "Gemm",
+                            "source": "exhaustive_regular_gemm_catalog",
+                            "allowed_runtime_sweeps": ["m", "n", "k"],
                             "dtype_a": "bf16",
                             "dtype_b": "bf16",
                             "dtype_c": "f32",
@@ -66,6 +78,10 @@ class TestExactShapeSearchReport(unittest.TestCase):
                             "sg_n": 4,
                             "stages": 2,
                             "split_k": 1,
+                            "kernel_schedule": "KernelXe",
+                            "tile_scheduler": "Gemm",
+                            "source": "exhaustive_regular_gemm_catalog",
+                            "allowed_runtime_sweeps": ["m", "n", "k"],
                             "dtype_a": "bf16",
                             "dtype_b": "bf16",
                             "dtype_c": "f32",
@@ -139,6 +155,9 @@ class TestExactShapeSearchReport(unittest.TestCase):
             self.assertEqual(summary["top5"][0]["latency_source"], "derived_from_tflops")
             self.assertEqual(summary["fastest5_latency"][0]["measure_iters"], "100")
             self.assertIn("total_runtime_ms", summary["latency_stats"])
+            self.assertIn("kernel_schedule", summary["merged_fields"])
+            self.assertEqual(summary["run_meta"]["git_head"], "deadbeef")
+            self.assertEqual(summary["manifest"]["batch_count"], 2)
 
             with (report_dir / "8192_384_3584" / "ranked_by_total_runtime.csv").open(
                 "r", encoding="utf-8", newline=""
@@ -148,6 +167,8 @@ class TestExactShapeSearchReport(unittest.TestCase):
             self.assertEqual(rows[0]["latency_source"], "derived_from_tflops")
             self.assertNotEqual(rows[0]["avg_runtime_ms"], "")
             self.assertNotEqual(rows[0]["total_runtime_ms"], "")
+            self.assertEqual(rows[0]["kernel_schedule"], "KernelXe")
+            self.assertEqual(rows[0]["allowed_runtime_sweeps"], "[\"m\", \"n\", \"k\"]")
 
     def test_gen_main_emits_latency_fields(self):
         with tempfile.TemporaryDirectory() as tmpdir:
