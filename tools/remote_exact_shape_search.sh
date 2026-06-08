@@ -130,13 +130,112 @@ parse_shapes() {
 }
 
 lock_gpu_frequency() {
-  local gpu freq_path
+  local gpu freq_path xpu_discovery=""
   for gpu in "${GPU_IDS_ARR[@]}"; do
     [ -e "/sys/class/drm/card${gpu}" ] || fail "GPU card${gpu} not found"
     freq_path="/sys/class/drm/card${gpu}/gt_max_freq_mhz"
     if [ -f "$freq_path" ]; then
       echo "$GPU_MAX_FREQ_MHZ" > "$freq_path" 2>/dev/null || true
+      continue
     fi
+
+    command -v xpu-smi >/dev/null 2>&1 || fail "GPU card${gpu} has no gt_max_freq_mhz and xpu-smi is unavailable"
+    if [ -z "$xpu_discovery" ]; then
+      xpu_discovery=$(xpu-smi discovery 2>/dev/null) || fail "xpu-smi discovery failed while locking GPU frequency"
+    fi
+
+    local xpu_device_id
+    xpu_device_id=$(
+      XPU_DISCOVERY="$xpu_discovery" GPU_CARD="$gpu" python3 <<'PY'
+import os
+import re
+import sys
+
+card = os.environ["GPU_CARD"]
+text = os.environ.get("XPU_DISCOVERY", "")
+device_id = ""
+current_id = ""
+for raw_line in text.splitlines():
+    line = raw_line.strip()
+    match = re.match(r"^\|\s*([0-9]+)\s*\|", line)
+    if match:
+        current_id = match.group(1)
+        continue
+    drm_match = re.search(r"DRM Device:\s*/dev/dri/card([0-9]+)", line)
+    if drm_match and drm_match.group(1) == card:
+        device_id = current_id
+        break
+
+sys.stdout.write(device_id)
+PY
+    )
+    [ -n "$xpu_device_id" ] || fail "Unable to map card${gpu} to an xpu-smi device id"
+    xpu-smi config -d "$xpu_device_id" -t 0 --frequencyrange "$GPU_MAX_FREQ_MHZ,$GPU_MAX_FREQ_MHZ" > /dev/null \
+      || fail "xpu-smi frequency lock failed for card${gpu} (device ${xpu_device_id})"
+  done
+}
+
+list_descendant_pids() {
+  local root_pid="$1"
+  ROOT_PID="$root_pid" python3 <<'PY'
+import os
+import subprocess
+from collections import defaultdict
+
+root_pid = int(os.environ["ROOT_PID"])
+lines = subprocess.check_output(["ps", "-eo", "pid=,ppid=,stat="], text=True).splitlines()
+children = defaultdict(list)
+stats = {}
+for line in lines:
+    parts = line.strip().split(None, 2)
+    if len(parts) < 3:
+        continue
+    pid, ppid, stat = parts
+    pid = int(pid)
+    ppid = int(ppid)
+    children[ppid].append(pid)
+    stats[pid] = stat
+
+ordered = []
+
+def visit(pid):
+    for child in children.get(pid, []):
+        visit(child)
+        if not stats.get(child, "").startswith("Z"):
+            ordered.append(child)
+
+visit(root_pid)
+seen = set()
+for pid in ordered:
+    if pid not in seen:
+        seen.add(pid)
+        print(pid)
+PY
+}
+
+cleanup_worker_descendants() {
+  local worker_pid="$1"
+  local shape_tag="$2"
+  local gpu="$3"
+  local reason="$4"
+  local -a stale_pids=()
+  local pid
+
+  mapfile -t stale_pids < <(list_descendant_pids "$worker_pid")
+  [ "${#stale_pids[@]}" -gt 0 ] || return 0
+
+  log "shape=$shape_tag gpu=$gpu cleanup[$reason] stale_pids=${stale_pids[*]}"
+  for pid in "${stale_pids[@]}"; do
+    kill "$pid" 2>/dev/null || true
+  done
+  sleep 1
+
+  mapfile -t stale_pids < <(list_descendant_pids "$worker_pid")
+  [ "${#stale_pids[@]}" -gt 0 ] || return 0
+
+  log "shape=$shape_tag gpu=$gpu cleanup[$reason] forcing stale_pids=${stale_pids[*]}"
+  for pid in "${stale_pids[@]}"; do
+    kill -9 "$pid" 2>/dev/null || true
   done
 }
 
@@ -487,6 +586,7 @@ run_shape_worker() {
   local shape_m="$3"
   local shape_n="$4"
   local shape_k="$5"
+  local worker_pid="${BASHPID:-$$}"
 
   local worker_root="$WORKERS_DIR/gpu${gpu}"
   local worker_repo="$worker_root/repo"
@@ -512,6 +612,7 @@ run_shape_worker() {
     [ -n "$batch_id" ] || continue
     local manifest_path="$MANIFEST_DIR/${batch_id}.txt"
     [ -f "$manifest_path" ] || continue
+    cleanup_worker_descendants "$worker_pid" "$shape_tag" "$gpu" "pre_${batch_id}"
 
     cp "$orig_hpp" "$worker_repo/benchmarks/gemm/benchmarks_sycl.hpp"
     cp "$orig_main" "$worker_repo/benchmarks/gemm/main.cpp"
@@ -534,6 +635,7 @@ run_shape_worker() {
 
     local bin="$worker_build/benchmarks/gemm/cutlass_benchmarks_gemm_sycl"
     if [ "$build_ok" -ne 1 ] || [ ! -x "$bin" ]; then
+      cleanup_worker_descendants "$worker_pid" "$shape_tag" "$gpu" "build_fail_${batch_id}"
       echo "$batch_id" >> "$fail_file"
       if grep -q "error:" "$build_log" 2>/dev/null; then
         log "shape=$shape_tag gpu=$gpu [$batch_id] COMPILE FAIL"
@@ -569,6 +671,7 @@ run_shape_worker() {
         status=$(echo "$out" | grep -oP 'STATUS=\K[A-Z]+' | head -1)
         [ -n "$status" ] || status="FAIL"
       fi
+      cleanup_worker_descendants "$worker_pid" "$shape_tag" "$gpu" "kernel_${batch_id}"
 
       latency_source=""
       if [ -n "$total_runtime_ms" ] || [ -n "$avg_runtime_ms" ]; then
@@ -578,9 +681,11 @@ run_shape_worker() {
       echo "$kernel,$tf,$avg_runtime_ms,$total_runtime_ms,$measure_iters,$warmup_iters,$latency_source,$status,$gpu,$shape_m,$shape_n,$shape_k" >> "$result_csv"
     done
 
+    cleanup_worker_descendants "$worker_pid" "$shape_tag" "$gpu" "post_${batch_id}"
     log "shape=$shape_tag gpu=$gpu $batch_id done"
   done
 
+  cleanup_worker_descendants "$worker_pid" "$shape_tag" "$gpu" "worker_exit"
   cp "$orig_hpp" "$worker_repo/benchmarks/gemm/benchmarks_sycl.hpp" 2>/dev/null || true
   cp "$orig_main" "$worker_repo/benchmarks/gemm/main.cpp" 2>/dev/null || true
   rm -f "$worker_repo/benchmarks/gemm/benchmarks_sycl.hpp.cache"
