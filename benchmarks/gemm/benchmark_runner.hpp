@@ -1002,21 +1002,24 @@ struct BenchmarkRunnerGemm {
     }
     arguments.mode = gemm::GemmUniversalMode::kGemm;
     arguments.problem_shape = problem_size;
+    auto bind_iteration_buffers = [&](int iteration_index) {
+      int idx = count > 0 ? iteration_index % count : 0;
+      if constexpr (!is_mixed_dtype<DispatchPolicy>) {
+        arguments.mainloop = {block_A[idx].get(), stride_A, block_B[idx].get(), stride_B};
+      } else {
+        arguments.mainloop = {block_A[idx].get(), stride_A, block_B[idx].get(), stride_B, block_scale.get(),
+                stride_S, block_zero.get(), stride_Z, 128};
+      }
 
-    if constexpr (!is_mixed_dtype<DispatchPolicy>) {
-      arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B};
-    } else {
-      arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B, block_scale.get(),
-              stride_S, block_zero.get(), stride_Z, 128};
-    }
+      arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[idx].get(), stride_C, block_D.get(), stride_D};
+      arguments.hw_info = hw_info;
 
-    arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[0].get(), stride_C, block_D.get(), stride_D};
-    arguments.hw_info = hw_info;
-
-    if constexpr(epi_is_deeltactmul){
-      arguments.epilogue.thread.aux_ptr = block_Aux[0].get();
-      arguments.epilogue.thread.dAux = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
-    }
+      if constexpr(epi_is_deeltactmul){
+        arguments.epilogue.thread.aux_ptr = block_Aux[idx].get();
+        arguments.epilogue.thread.dAux = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
+      }
+    };
+    bind_iteration_buffers(0);
 
     Gemm gemm_op;
 
@@ -1099,6 +1102,11 @@ struct BenchmarkRunnerGemm {
     // --- explicit warmup (discarded, NOT timed) ---
     state.PauseTiming();
     for (int w = 0; w < kWarmupIters; ++w) {
+      bind_iteration_buffers(w);
+      if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
+        state.SkipWithError("GEMM failed to update warmup buffers.");
+        return;
+      }
       gemm_op.run();
     }
 #if defined(CUTLASS_ENABLE_SYCL)
@@ -1110,6 +1118,11 @@ struct BenchmarkRunnerGemm {
     GPU_Clock batch_timer;
     batch_timer.start();
     for (int i = 0; i < kMeasureIters; ++i) {
+      bind_iteration_buffers(i + kWarmupIters);
+      if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
+        state.SkipWithError("GEMM failed to update measured buffers.");
+        return;
+      }
       gemm_op.run();
     }
 #if defined(CUTLASS_ENABLE_SYCL)
@@ -1184,10 +1197,15 @@ private:
       std::cerr << "[DIRECT_FAIL] " << scheduler_error << std::endl;
       return 0.0;
     }
-    arguments.mode = gemm::GemmUniversalMode::kGemm; arguments.problem_shape = problem_size;
-    arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B};
-    arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[0].get(), stride_C, block_D.get(), stride_D};
-    arguments.hw_info = hw_info;
+    arguments.mode = gemm::GemmUniversalMode::kGemm;
+    arguments.problem_shape = problem_size;
+    auto bind_iteration_buffers = [&](int iteration_index) {
+      int idx = count > 0 ? iteration_index % count : 0;
+      arguments.mainloop = {block_A[idx].get(), stride_A, block_B[idx].get(), stride_B};
+      arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[idx].get(), stride_C, block_D.get(), stride_D};
+      arguments.hw_info = hw_info;
+    };
+    bind_iteration_buffers(0);
 
     Gemm gemm_op; size_t ws = Gemm::get_workspace_size(arguments);
     device_memory::allocation<uint8_t> workspace;
@@ -1196,10 +1214,24 @@ private:
     if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess) return 0.0;
 
     gemm_op.run(); compat::wait();  // initial run
-    for (int w = 0; w < 100; ++w) gemm_op.run();
+    for (int w = 0; w < 100; ++w) {
+      bind_iteration_buffers(w);
+      if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
+        std::cerr << "[DIRECT_FAIL] failed to update warmup buffers" << std::endl;
+        return 0.0;
+      }
+      gemm_op.run();
+    }
     compat::wait();
     GPU_Clock timer; timer.start();
-    for (int i = 0; i < 100; ++i) gemm_op.run();
+    for (int i = 0; i < 100; ++i) {
+      bind_iteration_buffers(i + 100);
+      if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
+        std::cerr << "[DIRECT_FAIL] failed to update measured buffers" << std::endl;
+        return 0.0;
+      }
+      gemm_op.run();
+    }
     compat::wait();
     double total_ms = timer.milliseconds();
     double avg_sec = timer.seconds() / 100.0;
