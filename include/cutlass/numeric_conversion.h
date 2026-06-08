@@ -108,7 +108,8 @@ struct NumericConverter<int32_t, float, FloatRoundStyle::round_to_nearest> {
     #if __CUDA_ARCH__
     return __float2int_rn(s);
     #elif defined(__SYCL_DEVICE_ONLY__)
-    return static_cast<result_type>(sycl::rint(s));
+    // rintf and sycl::rint compile to the same rnde instruction
+    return static_cast<result_type>(rintf(s));
     #elif !defined(__CUDACC_RTC__)
     std::fesetround(FE_TONEAREST);
     return static_cast<result_type>(std::nearbyint(s));
@@ -166,7 +167,7 @@ struct NumericConverter<int8_t, float, FloatRoundStyle::round_to_nearest> {
     asm volatile("cvt.rni.sat.s8.f32 %0, %1;" : "=r"(intermediate) : "f"(s));
     return static_cast<result_type>(intermediate);
     #elif defined(__SYCL_DEVICE_ONLY__)
-    int32_t intermediate = static_cast<int32_t>(sycl::rint(s));
+    int32_t intermediate = static_cast<int32_t>(rintf(s));
     intermediate = sycl::max(intermediate, (int32_t)std::numeric_limits<int8_t>::lowest());
     intermediate = sycl::min(intermediate, (int32_t)std::numeric_limits<int8_t>::max());
     return static_cast<result_type>(intermediate);
@@ -236,7 +237,7 @@ struct NumericConverter<uint8_t, float, FloatRoundStyle::round_to_nearest> {
     asm volatile("cvt.rni.sat.u8.f32 %0, %1;" : "=r"(intermediate) : "f"(s));
     return static_cast<result_type>(intermediate);
     #elif defined(__SYCL_DEVICE_ONLY__)
-    int32_t intermediate = static_cast<int32_t>(sycl::rint(s));
+    int32_t intermediate = static_cast<int32_t>(rintf(s));
     intermediate = sycl::max(intermediate, (int32_t)std::numeric_limits<uint8_t>::lowest());
     intermediate = sycl::min(intermediate, (int32_t)std::numeric_limits<uint8_t>::max());
     return static_cast<result_type>(intermediate);
