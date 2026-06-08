@@ -151,18 +151,27 @@ int main(int argc, const char** argv) {
   cutlass::benchmark::GEMMOptions opts;
   cmd.get_cmd_line_argument("m", opts.m, ''' + str(self.shape[0]) + '''); cmd.get_cmd_line_argument("n", opts.n, ''' + str(self.shape[1]) + ''');
   cmd.get_cmd_line_argument("k", opts.k, ''' + str(self.shape[2]) + '''); opts.verify_library = 0;
-  double tflops = 0; bool ok = false;
+  using DirectRunResult = cutlass::benchmark::BenchmarkRunnerGemm<''' + batch["kernels"][0] + '''>::DirectRunResult;
+  DirectRunResult result{};
+  bool ok = false;
 ''')
             for k in batch["kernels"]:
                 f.write(f'#define RUN_{k.replace("BmgGemm", "").replace("::", "_")} 0\n')
             f.write('''
-#define RUN(K) if (kernel == #K) { tflops = cutlass::benchmark::BenchmarkRunnerGemm<K>().run_direct(opts, hw); ok = true; }
+#define RUN(K) if (kernel == #K) { result = cutlass::benchmark::BenchmarkRunnerGemm<K>().run_direct_result(opts, hw); ok = true; }
 ''')
             for k in batch["kernels"]:
                 f.write(f'  RUN({k})\n')
             f.write('''#undef RUN
   if (!ok) { std::cerr << "NOT_FOUND" << std::endl; return 1; }
-  std::cout << "RESULT: kernel=" << kernel << " median_tflops=" << tflops << " STATUS=OK" << std::endl;
+  std::cout << "RESULT: kernel=" << kernel
+            << " median_tflops=" << result.tflops
+            << " avg_runtime_ms=" << result.avg_runtime_ms
+            << " total_runtime_ms=" << result.total_runtime_ms
+            << " pool_buffers=" << result.pool_buffers
+            << " warmup_iters=" << result.warmup_iters
+            << " measure_iters=" << result.measure_iters
+            << " STATUS=OK" << std::endl;
   return 0;
 }
 ''')

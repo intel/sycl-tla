@@ -53,8 +53,9 @@ int main(int argc, const char** argv) {
   cmd.get_cmd_line_argument("alpha", opts.alpha, 1.0f); cmd.get_cmd_line_argument("beta", opts.beta, 0.0f);
   opts.verify_library = 0; opts.split_k_slices = 0;
 
-  double tflops = 0; bool ok = false;
-#define RUN(K) if (kernel == #K) { tflops = cutlass::benchmark::BenchmarkRunnerGemm<K>().run_direct(opts, hw); ok = true; }
+  cutlass::benchmark::BenchmarkRunnerGemm<BmgGemmBF16BF16FP32_RRR_6>::DirectRunResult result;
+  bool ok = false;
+#define RUN(K) if (kernel == #K) { result = cutlass::benchmark::BenchmarkRunnerGemm<K>().run_direct_result(opts, hw); ok = true; }
   RUN(BmgGemmBF16BF16FP32_RRR_Gemm_256x256x32_SG8x4)
   RUN(BmgGemmBF16BF16FP32_RRR_Gemm_256x256x64_SG8x4)
   RUN(BmgGemmBF16BF16FP32_RCR_6)
@@ -64,6 +65,13 @@ int main(int argc, const char** argv) {
   RUN(BmgGemmBF16BF16FP32_RRR_6)
 #undef RUN
   if (!ok) { std::cerr << "not found: " << kernel << std::endl; return 1; }
-  std::cout << "median_tflops=" << tflops << " KERNEL=" << kernel << " STATUS=OK" << std::endl;
+  std::cout << "median_tflops=" << result.tflops
+            << " avg_runtime_ms=" << result.avg_runtime_ms
+            << " total_runtime_ms=" << result.total_runtime_ms
+            << " pool_buffers=" << result.pool_buffers
+            << " warmup_iters=" << result.warmup_iters
+            << " measure_iters=" << result.measure_iters
+            << " KERNEL=" << kernel
+            << " STATUS=OK" << std::endl;
   return 0;
 }

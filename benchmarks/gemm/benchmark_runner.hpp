@@ -497,6 +497,14 @@ inline void cutlass_library_gemm_func(
 
 template <class GemmConfiguration>
 struct BenchmarkRunnerGemm {
+  struct DirectRunResult {
+    double tflops = 0.0;
+    double avg_runtime_ms = 0.0;
+    double total_runtime_ms = 0.0;
+    int pool_buffers = 0;
+    int warmup_iters = 0;
+    int measure_iters = 0;
+  };
 
   using Gemm = typename GemmConfiguration::Gemm;
 
@@ -1220,7 +1228,7 @@ private:
   public:
   // ── GB-free profiler: bypasses Google Benchmark entirely ──
   // Uses batch-wait pattern (matches 00_bmg_gemm example at 126 TFLOPS).
-  double run_direct(const GEMMOptions& options, const KernelHardwareInfo& hw_info) {
+  DirectRunResult run_direct_result(const GEMMOptions& options, const KernelHardwareInfo& hw_info) {
     // Use the PROVEN initialize() code path from run() — identical buffer setup
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
     alignas(64) char state_buf[256] = {};
@@ -1230,7 +1238,7 @@ private:
     typename GemmConfiguration::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
     if (const char* scheduler_error = set_scheduler_splits(arguments, options.split_k_slices)) {
       std::cerr << "[DIRECT_FAIL] " << scheduler_error << std::endl;
-      return 0.0;
+      return {};
     }
     arguments.mode = gemm::GemmUniversalMode::kGemm;
     arguments.problem_shape = problem_size;
@@ -1244,9 +1252,9 @@ private:
 
     Gemm gemm_op; size_t ws = Gemm::get_workspace_size(arguments);
     device_memory::allocation<uint8_t> workspace;
-    try { workspace.reset(ws); } catch (...) { return 0.0; }
-    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess) return 0.0;
-    if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess) return 0.0;
+    try { workspace.reset(ws); } catch (...) { return {}; }
+    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess) return {};
+    if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess) return {};
 
     gemm_op.run(); compat::wait();  // initial run
     auto [warmup_iters, measure_iters] = choose_unique_iteration_counts(100, 100);
@@ -1254,7 +1262,7 @@ private:
       bind_iteration_buffers(w + 1);
       if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
         std::cerr << "[DIRECT_FAIL] failed to update warmup buffers" << std::endl;
-        return 0.0;
+        return {};
       }
       gemm_op.run();
     }
@@ -1264,7 +1272,7 @@ private:
       bind_iteration_buffers(i + 1 + warmup_iters);
       if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
         std::cerr << "[DIRECT_FAIL] failed to update measured buffers" << std::endl;
-        return 0.0;
+        return {};
       }
       GPU_Clock timer;
       timer.start();
@@ -1273,9 +1281,20 @@ private:
       total_ms += timer.milliseconds();
     }
     double avg_sec = (total_ms / measure_iters) * 1.0e-3;
-    std::cerr << "[PERF] pool_buffers=" << count << " warmup_iters=" << warmup_iters << " measure_iters=" << measure_iters
-              << " total_ms=" << total_ms << " avg_us=" << (avg_sec*1e6) << " tf=" << ((2.0 * options.m * options.n * options.k * options.l * 1e-12) / avg_sec) << std::endl;
-    return (2.0 * options.m * options.n * options.k * options.l * 1e-12) / avg_sec;
+    DirectRunResult result;
+    result.tflops = (2.0 * options.m * options.n * options.k * options.l * 1e-12) / avg_sec;
+    result.avg_runtime_ms = avg_sec * 1.0e3;
+    result.total_runtime_ms = total_ms;
+    result.pool_buffers = count;
+    result.warmup_iters = warmup_iters;
+    result.measure_iters = measure_iters;
+    std::cerr << "[PERF] pool_buffers=" << result.pool_buffers << " warmup_iters=" << result.warmup_iters << " measure_iters=" << result.measure_iters
+              << " total_ms=" << result.total_runtime_ms << " avg_us=" << (avg_sec*1e6) << " tf=" << result.tflops << std::endl;
+    return result;
+  }
+
+  double run_direct(const GEMMOptions& options, const KernelHardwareInfo& hw_info) {
+    return run_direct_result(options, hw_info).tflops;
   }
 };
 
