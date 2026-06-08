@@ -68,6 +68,8 @@ int main(int argc, const char** argv) {
   std::cout << "median_tflops=" << result.tflops
             << " avg_runtime_ms=" << result.avg_runtime_ms
             << " total_runtime_ms=" << result.total_runtime_ms
+            << " input_bytes_per_buffer=" << result.input_bytes_per_buffer
+            << " input_pool_target_bytes=" << result.input_pool_target_bytes
             << " pool_buffers=" << result.pool_buffers
             << " warmup_iters=" << result.warmup_iters
             << " measure_iters=" << result.measure_iters
