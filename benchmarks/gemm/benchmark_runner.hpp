@@ -1115,29 +1115,33 @@ struct BenchmarkRunnerGemm {
     state.ResumeTiming();
 
     // --- timed measurement ---
-    GPU_Clock batch_timer;
-    batch_timer.start();
+    std::vector<double> runtimes;
+    runtimes.reserve(kMeasureIters);
+    double total_ms = 0.0;
     for (int i = 0; i < kMeasureIters; ++i) {
       bind_iteration_buffers(i + kWarmupIters);
       if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
         state.SkipWithError("GEMM failed to update measured buffers.");
         return;
       }
+      GPU_Clock iter_timer;
+      iter_timer.start();
       gemm_op.run();
+      #if defined(CUTLASS_ENABLE_SYCL)
+      compat::wait();
+      #endif
+      double iter_ms = iter_timer.milliseconds();
+      total_ms += iter_ms;
+      runtimes.push_back(iter_ms);
     }
-#if defined(CUTLASS_ENABLE_SYCL)
-    compat::wait();
-#endif
-    double total_ms = batch_timer.milliseconds();
     double avg_ms_per_iter = total_ms / kMeasureIters;
-
-    std::vector<double> runtimes(kMeasureIters, avg_ms_per_iter);
     state.SetIterationTime(avg_ms_per_iter / 1000.0);
     state.SetItemsProcessed(kMeasureIters);
 
-    double best = avg_ms_per_iter;
-    double worst = avg_ms_per_iter;
-    double median = avg_ms_per_iter;
+    std::sort(runtimes.begin(), runtimes.end());
+    double best = runtimes.front();
+    double worst = runtimes.back();
+    double median = runtimes[runtimes.size() / 2];
     double avg = avg_ms_per_iter;
     double trimmed_mean = avg_ms_per_iter;
     double stddev = 0.0;
@@ -1223,18 +1227,20 @@ private:
       gemm_op.run();
     }
     compat::wait();
-    GPU_Clock timer; timer.start();
+    double total_ms = 0.0;
     for (int i = 0; i < 100; ++i) {
       bind_iteration_buffers(i + 100);
       if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
         std::cerr << "[DIRECT_FAIL] failed to update measured buffers" << std::endl;
         return 0.0;
       }
+      GPU_Clock timer;
+      timer.start();
       gemm_op.run();
+      compat::wait();
+      total_ms += timer.milliseconds();
     }
-    compat::wait();
-    double total_ms = timer.milliseconds();
-    double avg_sec = timer.seconds() / 100.0;
+    double avg_sec = (total_ms / 100.0) * 1.0e-3;
     std::cerr << "[PERF] total_ms=" << total_ms << " avg_us=" << (avg_sec*1e6) << " tf=" << ((2.0 * options.m * options.n * options.k * options.l * 1e-12) / avg_sec) << std::endl;
     return (2.0 * options.m * options.n * options.k * options.l * 1e-12) / avg_sec;
   }
