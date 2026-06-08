@@ -555,6 +555,9 @@ struct BenchmarkRunnerGemm {
   static constexpr bool epi_is_silu = std::is_same_v<FusionOp, FusionSilu>;
   static constexpr bool epi_is_lincomb = std::is_same_v<FusionOp, FusionLinComb>;
   static constexpr bool epi_is_default = std::is_same_v<CollectiveEpilogue, DefaultEpilogue>;
+  static constexpr std::size_t kRandomInputPoolBytes = std::size_t(1) << 30;  // 1 GiB
+  static constexpr int kWarmupIters = 50;
+  static constexpr int kMeasureIters = 50;
   static_assert(cute::is_base_of_v<cutlass::epilogue::fusion::FusionOperation, FusionOp> ||
                     epi_is_default,
                 "Failed to determine benchmark epilogue");
@@ -918,7 +921,8 @@ struct BenchmarkRunnerGemm {
     std::size_t size_C = cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C));
     std::size_t mem_occupied_ABC = ((size_A * sizeof_bits_v<ElementA>) + (size_B * sizeof_bits_v<ElementB>) +
                                    (size_C * sizeof_bits_v<ElementC>)) / sizeof_bits_v<int8_t>;
-    count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC)) + 1;
+    std::size_t pool_buffers = mem_occupied_ABC == 0 ? 1 : (kRandomInputPoolBytes + mem_occupied_ABC - 1) / mem_occupied_ABC;
+    count = static_cast<int32_t>(std::max<std::size_t>(1, pool_buffers));
 
     if constexpr (is_mixed_dtype<DispatchPolicy>) {
       static constexpr bool IsATransformed = CollectiveMainloop::IsATransformed;
@@ -961,25 +965,26 @@ struct BenchmarkRunnerGemm {
 
     try {
       for (int i = 0; i < count; i++) {
+        uint64_t seed_base = seed + static_cast<uint64_t>(i) * 104729;
         block_A[i].reset(size_A);
         block_B[i].reset(size_B);
         block_C[i].reset(size_C);
         if constexpr (is_mixed_dtype<DispatchPolicy>) {
           if (i == 0) {
-            initialize_mixed_dtype_block(block_A[i], block_A_verify, seed + i);
-            initialize_mixed_dtype_block(block_B[i], block_B_verify, seed + i);
+            initialize_mixed_dtype_block(block_A[i], block_A_verify, seed_base + 2023);
+            initialize_mixed_dtype_block(block_B[i], block_B_verify, seed_base + 2022);
           } else {
-            initialize_block(block_A[i], seed + i);
-            initialize_block(block_B[i], seed + i);
+            initialize_block(block_A[i], seed_base + 2023);
+            initialize_block(block_B[i], seed_base + 2022);
           }
         } else {
-          initialize_block(block_A[i], seed + i);
-          initialize_block(block_B[i], seed + i);
+          initialize_block(block_A[i], seed_base + 2023);
+          initialize_block(block_B[i], seed_base + 2022);
         }
-        initialize_block(block_C[i], seed + i);
+        initialize_block(block_C[i], seed_base + 2021);
         if constexpr (epi_is_deeltactmul) {
           block_Aux[i].reset(size_C);
-          initialize_block(block_Aux[i], seed + i);
+          initialize_block(block_Aux[i], seed_base + 2020);
         }
       }
 
@@ -1064,6 +1069,14 @@ struct BenchmarkRunnerGemm {
     state.counters["alpha"] = options.alpha;
     state.counters["beta"] = options.beta;
     state.counters["split_k_slices"] = options.split_k_slices > 0 ? options.split_k_slices : 1;
+    state.counters["input_pool_target_bytes"] = static_cast<double>(kRandomInputPoolBytes);
+    state.counters["input_bytes_per_buffer"] = static_cast<double>(
+      ((cute::cosize(make_layout(cute::make_shape(options.m, options.k, options.l), stride_A)) * sizeof_bits_v<ElementA>) +
+       (cute::cosize(make_layout(cute::make_shape(options.n, options.k, options.l), stride_B)) * sizeof_bits_v<ElementB>) +
+       (cute::cosize(make_layout(cute::make_shape(options.m, options.n, options.l), stride_C)) * sizeof_bits_v<ElementC>)) /
+      sizeof_bits_v<int8_t>);
+    state.counters["input_pool_buffers"] = count;
+    state.counters["input_pool_bytes"] = state.counters["input_bytes_per_buffer"] * count;
 
     std::stringstream extra_label;
     if constexpr (cute::size<0>(StrideA{}) == 1) {
@@ -1096,13 +1109,12 @@ struct BenchmarkRunnerGemm {
         (options.beta != 0 ? 2 : 1) * options.m * options.n * sizeof_c
       ) * 1e-6 * options.l;
 
-    static constexpr int kWarmupIters = 50;
-    static constexpr int kMeasureIters = 50;
+    auto [warmup_iters, measure_iters] = choose_unique_iteration_counts(kWarmupIters, kMeasureIters);
 
     // --- explicit warmup (discarded, NOT timed) ---
     state.PauseTiming();
-    for (int w = 0; w < kWarmupIters; ++w) {
-      bind_iteration_buffers(w);
+    for (int w = 0; w < warmup_iters; ++w) {
+      bind_iteration_buffers(w + 1);
       if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
         state.SkipWithError("GEMM failed to update warmup buffers.");
         return;
@@ -1116,10 +1128,10 @@ struct BenchmarkRunnerGemm {
 
     // --- timed measurement ---
     std::vector<double> runtimes;
-    runtimes.reserve(kMeasureIters);
+    runtimes.reserve(measure_iters);
     double total_ms = 0.0;
-    for (int i = 0; i < kMeasureIters; ++i) {
-      bind_iteration_buffers(i + kWarmupIters);
+    for (int i = 0; i < measure_iters; ++i) {
+      bind_iteration_buffers(i + 1 + warmup_iters);
       if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
         state.SkipWithError("GEMM failed to update measured buffers.");
         return;
@@ -1134,9 +1146,9 @@ struct BenchmarkRunnerGemm {
       total_ms += iter_ms;
       runtimes.push_back(iter_ms);
     }
-    double avg_ms_per_iter = total_ms / kMeasureIters;
+    double avg_ms_per_iter = total_ms / measure_iters;
     state.SetIterationTime(avg_ms_per_iter / 1000.0);
-    state.SetItemsProcessed(kMeasureIters);
+    state.SetItemsProcessed(measure_iters);
 
     std::sort(runtimes.begin(), runtimes.end());
     double best = runtimes.front();
@@ -1152,8 +1164,8 @@ struct BenchmarkRunnerGemm {
     state.counters["runtime_avg_ms"] = avg;
     state.counters["runtime_trimmed_mean_ms"] = trimmed_mean;
     state.counters["runtime_stddev_ms"] = stddev;
-    state.counters["warmup_iters"] = kWarmupIters;
-    state.counters["measure_iters"] = kMeasureIters;
+    state.counters["warmup_iters"] = warmup_iters;
+    state.counters["measure_iters"] = measure_iters;
 
     state.counters["avg_tflops"] = gflop / trimmed_mean;
     state.counters["avg_throughput"] = mega_bytes_transferred / trimmed_mean;
@@ -1163,6 +1175,25 @@ struct BenchmarkRunnerGemm {
   }
 
 private:
+  std::pair<int, int> choose_unique_iteration_counts(int requested_warmup, int requested_measure) const {
+    int available_after_initial = std::max(1, count) - 1;
+    if (available_after_initial <= 0) {
+      return {0, 1};
+    }
+
+    if (available_after_initial >= requested_warmup + requested_measure) {
+      return {requested_warmup, requested_measure};
+    }
+
+    int warmup_iters = std::min(requested_warmup, available_after_initial / 2);
+    int measure_iters = std::min(requested_measure, available_after_initial - warmup_iters);
+    if (measure_iters <= 0) {
+      measure_iters = 1;
+      warmup_iters = std::max(0, available_after_initial - measure_iters);
+    }
+    return {warmup_iters, measure_iters};
+  }
+
   static void initialize_counters(::benchmark::State& state) {
     state.counters["avg_runtime_ms"] = 0;
     state.counters["best_runtime_ms"] = std::numeric_limits<double>::max();
@@ -1218,8 +1249,9 @@ private:
     if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess) return 0.0;
 
     gemm_op.run(); compat::wait();  // initial run
-    for (int w = 0; w < 100; ++w) {
-      bind_iteration_buffers(w);
+    auto [warmup_iters, measure_iters] = choose_unique_iteration_counts(100, 100);
+    for (int w = 0; w < warmup_iters; ++w) {
+      bind_iteration_buffers(w + 1);
       if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
         std::cerr << "[DIRECT_FAIL] failed to update warmup buffers" << std::endl;
         return 0.0;
@@ -1228,8 +1260,8 @@ private:
     }
     compat::wait();
     double total_ms = 0.0;
-    for (int i = 0; i < 100; ++i) {
-      bind_iteration_buffers(i + 100);
+    for (int i = 0; i < measure_iters; ++i) {
+      bind_iteration_buffers(i + 1 + warmup_iters);
       if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
         std::cerr << "[DIRECT_FAIL] failed to update measured buffers" << std::endl;
         return 0.0;
@@ -1240,8 +1272,9 @@ private:
       compat::wait();
       total_ms += timer.milliseconds();
     }
-    double avg_sec = (total_ms / 100.0) * 1.0e-3;
-    std::cerr << "[PERF] total_ms=" << total_ms << " avg_us=" << (avg_sec*1e6) << " tf=" << ((2.0 * options.m * options.n * options.k * options.l * 1e-12) / avg_sec) << std::endl;
+    double avg_sec = (total_ms / measure_iters) * 1.0e-3;
+    std::cerr << "[PERF] pool_buffers=" << count << " warmup_iters=" << warmup_iters << " measure_iters=" << measure_iters
+              << " total_ms=" << total_ms << " avg_us=" << (avg_sec*1e6) << " tf=" << ((2.0 * options.m * options.n * options.k * options.l * 1e-12) / avg_sec) << std::endl;
     return (2.0 * options.m * options.n * options.k * options.l * 1e-12) / avg_sec;
   }
 };
