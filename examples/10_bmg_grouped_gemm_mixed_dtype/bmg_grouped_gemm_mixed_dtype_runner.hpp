@@ -947,7 +947,7 @@ struct ExampleRunner {
       }
       compat::wait();
 
-      float cute_time = timer.seconds() / options.iterations;
+      float cute_time = timer.seconds() * 1000;
       double cute_average_time = double(cute_time) / double(options.iterations);
       double gflops = options.gflops(cute_average_time / 1000.0, options.problem_sizes_host);
 
