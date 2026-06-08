@@ -567,7 +567,7 @@ struct BenchmarkRunnerGemm {
   static constexpr bool epi_is_default = std::is_same_v<CollectiveEpilogue, DefaultEpilogue>;
   static constexpr std::size_t kRandomInputPoolBytes = std::size_t(1) << 30;  // 1 GiB
   static constexpr int kWarmupIters = 50;
-  static constexpr int kMeasureIters = 50;
+  static constexpr int kMeasureIters = 100;
   static_assert(cute::is_base_of_v<cutlass::epilogue::fusion::FusionOperation, FusionOp> ||
                     epi_is_default,
                 "Failed to determine benchmark epilogue");
@@ -1184,14 +1184,7 @@ struct BenchmarkRunnerGemm {
 
 private:
   std::pair<int, int> choose_iteration_counts(int requested_warmup, int requested_measure) const {
-    int available_buffers = std::max(1, count);
-    if (available_buffers <= 0) {
-      return {0, 1};
-    }
-
-    int warmup_iters = std::min(requested_warmup, available_buffers);
-    int measure_iters = std::min(requested_measure, std::max(1, available_buffers - warmup_iters));
-    return {warmup_iters, measure_iters};
+    return {requested_warmup, requested_measure};
   }
 
   static void initialize_counters(::benchmark::State& state) {
@@ -1249,7 +1242,7 @@ private:
     if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess) return {};
 
     gemm_op.run(); compat::wait();  // initial run
-    auto [warmup_iters, measure_iters] = choose_iteration_counts(50, 100);
+    auto [warmup_iters, measure_iters] = choose_iteration_counts(kWarmupIters, kMeasureIters);
     for (int w = 0; w < warmup_iters; ++w) {
       bind_iteration_buffers(w + 1);
       if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
