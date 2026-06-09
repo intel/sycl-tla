@@ -499,7 +499,7 @@ int main(int argc, const char **argv) {
   
   for (int i = 0; i < num_layers; i++) {
     launcher(total_rows_for_each_expert[i], 2 * options.n, options.k, num_experts, options.verify);
-    launcher(total_rows_for_each_expert[i], options.n, options.k, num_experts, options.verify);
+    launcher(total_rows_for_each_expert[i], options.k, options.n, num_experts, options.verify);
   }
 
   return 0;
