@@ -28,6 +28,7 @@ SYNC_FILES = [
     "benchmarks/gemm/CMakeLists.txt",
     "benchmarks/gemm/benchmark_runner.hpp",
     "benchmarks/gemm/benchmarks_sycl.hpp",
+    "tools/util/include/cutlass/util/sycl_event_manager.hpp",
     "benchmarks/gemm/bmg_streamk_seed_tile.def",
     "benchmarks/gemm/bmg_streamk_expanded_tile.def",
     "benchmarks/gemm/bmg_streamk_exhaustive_missing_tile.def",

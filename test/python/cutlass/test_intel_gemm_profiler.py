@@ -591,6 +591,56 @@ class TestIntelGemmProfiler(unittest.TestCase):
             "ON",
         )
 
+    def test_scheduler_bootstrap_constraints_limit_sg_to_2x8_and_8x2(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        constraints = json.loads(
+            (repo_root / "test" / "benchmarks" / "constraints_b70_scheduler_bootstrap.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "rcr-bf16-scheduler-bootstrap",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rcr_bf16_8192_384_3584",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_d": "f32",
+                    "dtype_acc": "f32",
+                    "m": 8192,
+                    "n": 384,
+                    "k": 3584,
+                    "batch_count": 1,
+                    "runtime_defaults": {},
+                }
+            ],
+        }
+
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            constraints,
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="layered_bmg_scheduler_expanded",
+        )
+
+        observed_sg = {
+            (candidate["sg_m"], candidate["sg_n"])
+            for candidate in candidate_space["candidates"]
+        }
+        self.assertEqual(observed_sg, {(2, 8), (8, 2)})
+        scheduler_sg = {
+            (candidate["sg_m"], candidate["sg_n"])
+            for candidate in candidate_space["candidates"]
+            if candidate["dtype_a"] == "bf16" and candidate["streamk_mode"]
+        }
+        self.assertEqual(scheduler_sg, {(2, 8), (8, 2)})
+
     def test_benchmarks_sycl_scheduler_registry_covers_catalog_tiles(self):
         repo_root = Path(__file__).resolve().parents[3]
         source = (repo_root / "benchmarks" / "gemm" / "benchmarks_sycl.hpp").read_text(encoding="utf-8")
@@ -2149,6 +2199,8 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(build_plan["build_target"], "cutlass_benchmarks_gemm_sycl")
             self.assertTrue(build_plan["benchmark_exe"].endswith("/benchmarks/gemm/cutlass_benchmarks_gemm_sycl"))
             self.assertEqual(build_plan["kernel_filter_file"], outputs["selected_kernel_filter"])
+            self.assertGreater(build_plan["build_parallelism"], 0)
+            self.assertEqual(build_plan["build_command"][-2:], ["--parallel", str(build_plan["build_parallelism"])])
             self.assertEqual(build_plan["selected_kernel_batch_size"], 4)
             self.assertEqual(build_plan["selected_kernel_batches"][0]["kernel_filter_path"], first_batch["kernel_filter_path"])
             self.assertEqual(len(build_plan["batch_preflight_plans"]), len(build_manifest["selected_kernel_batches"]))
@@ -2156,6 +2208,9 @@ class TestIntelGemmProfiler(unittest.TestCase):
             self.assertEqual(first_preflight["batch_id"], first_batch["batch_id"])
             self.assertEqual(first_preflight["kernel_filter_file"], first_batch["kernel_filter_path"])
             self.assertIn("candidate_batch_preflight/selected_kernel_batch_000", first_preflight["build_dir"])
+            self.assertGreater(first_preflight["build_parallelism"], 0)
+            self.assertEqual(build_plan["batch_build_parallelism"], first_preflight["build_parallelism"])
+            self.assertEqual(first_preflight["build_command"][-2:], ["--parallel", str(first_preflight["build_parallelism"])])
             self.assertIn(f"-DKERNEL_FILTER_FILE={first_batch['kernel_filter_path']}", first_preflight["configure_command"])
             self.assertTrue(first_preflight["benchmark_exe"].endswith("/benchmarks/gemm/cutlass_benchmarks_gemm_sycl"))
             self.assertEqual(build_plan["cmake_vars"]["KERNEL_FILTER_FILE"], outputs["selected_kernel_filter"])
@@ -2271,6 +2326,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
             build_plan = {
                 "schema_version": profiler.SCHEMA_VERSION,
                 "generated_at": profiler.now_iso(),
+                "batch_build_parallelism": 3,
                 "batch_preflight_plans": [
                     {
                         "schema_version": profiler.SCHEMA_VERSION,
@@ -2310,6 +2366,7 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertEqual(summary["batches"][1]["status"], "fail")
         self.assertEqual(summary["batches"][1]["batch_id"], "selected_kernel_batch_001")
         self.assertEqual(summary["batches"][1]["kernel_count"], 1)
+        self.assertEqual(summary["effective_build_parallelism"], 3)
         self.assertIn("candidate_build_preflight_selected_kernel_batch_001.log", summary["batches"][1]["steps"][1]["log"])
         self.assertTrue(failed_log_text.strip().endswith("build batch1 failed"))
 
@@ -3192,6 +3249,79 @@ class TestIntelGemmProfiler(unittest.TestCase):
         self.assertFalse(updated.run_candidate_build_preflight)
         self.assertFalse(updated.use_candidate_build_preflight_benchmarks)
 
+    def test_build_scheduler_bruteforce_plan_summarizes_search_axes(self):
+        parser = profiler.build_parser()
+        args = profiler.apply_bruteforce_scheduler_search_defaults(
+            parser.parse_args(
+                [
+                    "--workspace",
+                    "/tmp/workspace",
+                    "--bruteforce-scheduler-search",
+                ]
+            )
+        )
+        shapes = {
+            "schema_version": profiler.SCHEMA_VERSION,
+            "generated_at": profiler.now_iso(),
+            "shape_set_id": "scheduler-plan",
+            "source": "test",
+            "shapes": [
+                {
+                    "shape_id": "rcr_bf16_8192_384_3584",
+                    "layout": "rcr",
+                    "dtype_a": "bf16",
+                    "dtype_b": "bf16",
+                    "dtype_c": "f32",
+                    "dtype_d": "f32",
+                    "dtype_acc": "f32",
+                    "m": 8192,
+                    "n": 384,
+                    "k": 3584,
+                }
+            ],
+        }
+        candidate_space = profiler.generate_candidate_space(
+            shapes,
+            profiler.default_constraints(),
+            profiler.default_compiler_profiles(),
+            allowed_runners=("benchmark",),
+            catalog_source="layered_bmg_scheduler_expanded",
+        )
+        build_manifest = profiler.build_candidate_build_manifest(
+            candidate_space,
+            selected_kernel_batch_size=args.candidate_build_batch_size,
+            build_config=profiler.default_compiler_profiles().get("build_config", {}),
+        )
+        build_plan = profiler.build_candidate_build_plan(
+            build_manifest,
+            Path(__file__).resolve().parents[3],
+            Path("/tmp/workspace/build/candidate_benchmarks"),
+            Path("/tmp/workspace/reports/selected_kernel_filter.list"),
+        )
+
+        plan = profiler.build_scheduler_bruteforce_plan(
+            candidate_space,
+            args,
+            build_manifest=build_manifest,
+            candidate_build_plan=build_plan,
+        )
+
+        self.assertTrue(plan["enabled"])
+        self.assertEqual(plan["search_strategy"], "bruteforce_scheduler")
+        self.assertEqual(plan["kernel_catalog_source"], "layered_bmg_scheduler_expanded")
+        self.assertTrue(plan["design_summary"]["scheduler_candidates_routed_through_preflight"])
+        self.assertIn("streamk", plan["scheduler_search_axes"]["streamk_modes"])
+        self.assertIn("splitk", plan["scheduler_search_axes"]["streamk_modes"])
+        self.assertIn([2, 8], plan["scheduler_search_axes"]["sg_layouts"])
+        self.assertIn([8, 4], plan["scheduler_search_axes"]["sg_layouts"])
+        self.assertGreater(plan["candidate_counts"]["scheduler_bf16_benchmark_candidates"], 0)
+        self.assertEqual(plan["execution_routing"]["aggregate_build_parallelism"], build_plan["build_parallelism"])
+        self.assertEqual(plan["execution_routing"]["preflight_build_parallelism"], build_plan["batch_build_parallelism"])
+        self.assertEqual(
+            plan["candidate_counts"]["selected_kernel_count"],
+            build_manifest["selected_kernel_count"],
+        )
+
     def test_search_strategy_preserves_legacy_baseline_and_exhaustive_modes(self):
         parser = profiler.build_parser()
 
@@ -3370,12 +3500,27 @@ class TestIntelGemmProfiler(unittest.TestCase):
             phase_b_summary = profiler.read_json(outputs["phase_b_summary"])
             dispatch_table = profiler.read_json(outputs["dispatch_table"])
             preflight_summary = profiler.read_json(outputs["candidate_build_preflight_summary"])
+            scheduler_plan = profiler.read_json(outputs["scheduler_bruteforce_plan"])
+            regular_gap_scan = profiler.read_json(outputs["regular_gemm_gap_scan"])
+            regular_full_config = Path(outputs["regular_gemm_full_config"]).read_text(encoding="utf-8")
+            scheduler_gap_scan = profiler.read_json(outputs["scheduler_bruteforce_gap_scan"])
+            scheduler_full_config = Path(outputs["scheduler_bruteforce_full_config"]).read_text(encoding="utf-8")
             results_csv = Path(outputs["results_csv"]).read_text(encoding="utf-8")
 
         self.assertEqual(candidate_space["kernel_catalog"]["catalog_source"], "layered_bmg_scheduler_expanded")
         self.assertGreater(len(candidate_space["candidates"]), 0)
         self.assertEqual(preflight_summary["status"], "pass")
         self.assertGreater(preflight_summary["batch_count"], 0)
+        self.assertTrue(scheduler_plan["enabled"])
+        self.assertEqual(scheduler_plan["search_strategy"], "bruteforce_scheduler")
+        self.assertGreater(scheduler_plan["candidate_counts"]["scheduler_bf16_benchmark_candidates"], 0)
+        self.assertIn("streamk", scheduler_plan["scheduler_search_axes"]["streamk_modes"])
+        self.assertEqual(regular_gap_scan["duplicate_rows_removed"], 0)
+        self.assertEqual(regular_gap_scan["missing_exhaustive_config_count"], 0)
+        self.assertIn("candidate_id,kernel_id,source,layout", regular_full_config.splitlines()[0])
+        self.assertEqual(scheduler_gap_scan["duplicate_rows_removed"], 0)
+        self.assertEqual(scheduler_gap_scan["incomplete_mode_group_count"], 0)
+        self.assertIn("candidate_id,kernel_id,layout", scheduler_full_config.splitlines()[0])
         self.assertGreater(len(dispatch_table["entries"]), 0)
         self.assertIn("scheduler_family", phase_b_summary["selected_dimension_values"])
         self.assertIn("reduction_mode", phase_b_summary["selected_dimension_values"])

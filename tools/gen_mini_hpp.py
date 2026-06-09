@@ -19,7 +19,10 @@ EXPANDED_TILES_SG8x4 = {
 def load_streamk_tiles(*filenames):
     tiles = set()
     for filename in filenames:
-        text = (REPO / "benchmarks/gemm" / filename).read_text(encoding="utf-8")
+        path = REPO / "benchmarks/gemm" / filename
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
         tiles.update(tuple(map(int, match)) for match in STREAMK_TILE_DEF_RE.findall(text))
     return tiles
 

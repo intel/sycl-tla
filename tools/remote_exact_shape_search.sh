@@ -41,12 +41,19 @@ GIT_REF="${GIT_REF:-origin/main}"
 SKIP_SYNC="${SKIP_SYNC:-0}"
 STOP_EXISTING="${STOP_EXISTING:-1}"
 RESUME_RUN="${RESUME_RUN:-0}"
+BENCHMARK_INPUT_MODE="${BENCHMARK_INPUT_MODE:-rotating_vram_pool}"
+BENCHMARK_STRIDE_POLICY="${BENCHMARK_STRIDE_POLICY:-fixed_4_1_0}"
+BENCHMARK_INPUT_POOL_TARGET_BYTES="${BENCHMARK_INPUT_POOL_TARGET_BYTES:-1073741824}"
+BENCHMARK_WARMUP_ITERS="${BENCHMARK_WARMUP_ITERS:-50}"
+BENCHMARK_MEASURE_ITERS="${BENCHMARK_MEASURE_ITERS:-100}"
+BENCHMARK_FIXED_VRAM_INPUT="${CUTLASS_BENCHMARK_FIXED_VRAM_INPUT:-0}"
 ACTIVE_SHAPE_TAG=""
 WORKER_SYNC_FILES=(
   benchmarks/common.hpp
   benchmarks/gemm/CMakeLists.txt
   benchmarks/gemm/benchmark_runner.hpp
   benchmarks/gemm/benchmarks_sycl.hpp
+  tools/util/include/cutlass/util/sycl_event_manager.hpp
   benchmarks/gemm/bmg_streamk_seed_tile.def
   benchmarks/gemm/bmg_streamk_expanded_tile.def
   benchmarks/gemm/bmg_streamk_exhaustive_missing_tile.def
@@ -133,20 +140,13 @@ parse_shapes() {
 lock_gpu_frequency() {
   local gpu freq_path xpu_discovery=""
   for gpu in "${GPU_IDS_ARR[@]}"; do
-    [ -e "/sys/class/drm/card${gpu}" ] || fail "GPU card${gpu} not found"
-    freq_path="/sys/class/drm/card${gpu}/gt_max_freq_mhz"
-    if [ -f "$freq_path" ]; then
-      echo "$GPU_MAX_FREQ_MHZ" > "$freq_path" 2>/dev/null || true
-      continue
-    fi
-
     command -v xpu-smi >/dev/null 2>&1 || fail "GPU card${gpu} has no gt_max_freq_mhz and xpu-smi is unavailable"
     if [ -z "$xpu_discovery" ]; then
       xpu_discovery=$(xpu-smi discovery 2>/dev/null) || fail "xpu-smi discovery failed while locking GPU frequency"
     fi
 
-    local xpu_device_id
-    xpu_device_id=$(
+    local mapping xpu_device_id drm_card
+    mapping=$(
       XPU_DISCOVERY="$xpu_discovery" GPU_CARD="$gpu" python3 <<'PY'
 import os
 import re
@@ -154,25 +154,58 @@ import sys
 
 card = os.environ["GPU_CARD"]
 text = os.environ.get("XPU_DISCOVERY", "")
-device_id = ""
+records = []
 current_id = ""
+current_card = ""
 for raw_line in text.splitlines():
     line = raw_line.strip()
     match = re.match(r"^\|\s*([0-9]+)\s*\|", line)
     if match:
+        if current_id:
+            records.append((current_id, current_card))
         current_id = match.group(1)
+        current_card = ""
         continue
     drm_match = re.search(r"DRM Device:\s*/dev/dri/card([0-9]+)", line)
-    if drm_match and drm_match.group(1) == card:
-        device_id = current_id
+    if drm_match:
+        current_card = drm_match.group(1)
+if current_id:
+    records.append((current_id, current_card))
+
+device_id = ""
+drm_card = ""
+
+# On this BMG node, GPU_IDS (and ZE_AFFINITY_MASK) are xpu-smi device ids 0..7
+# while the matching DRM cards are 1..8. Prefer direct device-id match first.
+for record_device_id, record_card in records:
+    if record_device_id == card:
+        device_id = record_device_id
+        drm_card = record_card
         break
 
-sys.stdout.write(device_id)
+# Fallback for environments where GPU_IDS is already a DRM card id.
+if not device_id:
+    for record_device_id, record_card in records:
+        if record_card == card:
+            device_id = record_device_id
+            drm_card = record_card
+            break
+
+sys.stdout.write(f"{device_id}:{drm_card}")
 PY
     )
-    [ -n "$xpu_device_id" ] || fail "Unable to map card${gpu} to an xpu-smi device id"
-    xpu-smi config -d "$xpu_device_id" -t 0 --frequencyrange "$GPU_MAX_FREQ_MHZ,$GPU_MAX_FREQ_MHZ" > /dev/null \
-      || fail "xpu-smi frequency lock failed for card${gpu} (device ${xpu_device_id})"
+    xpu_device_id="${mapping%%:*}"
+    drm_card="${mapping#*:}"
+    [ -n "$xpu_device_id" ] || fail "Unable to map GPU ${gpu} to an xpu-smi device id"
+    if [ -n "$drm_card" ]; then
+      freq_path="/sys/class/drm/card${drm_card}/gt_max_freq_mhz"
+      if [ -f "$freq_path" ]; then
+        echo "$GPU_MAX_FREQ_MHZ" > "$freq_path" 2>/dev/null || true
+        continue
+      fi
+    fi
+    timeout 20s xpu-smi config -d "$xpu_device_id" -t 0 --frequencyrange "$GPU_MAX_FREQ_MHZ,$GPU_MAX_FREQ_MHZ" > /dev/null \
+      || fail "xpu-smi frequency lock failed or timed out for GPU ${gpu} (device ${xpu_device_id})"
   done
 }
 
@@ -379,9 +412,11 @@ EOF
 
   python3 - <<PY
 import json
+import hashlib
 from pathlib import Path
 
 run_dir = Path("${RUN_DIR}")
+repo_root = Path("${REPO_ROOT}")
 shapes = []
 shape_specs = "${SHAPES}".split(";")
 for spec in shape_specs:
@@ -400,6 +435,28 @@ doc = {
     "shapes": shapes,
 }
 (run_dir / "requested_shapes.json").write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+
+benchmark_doc = {
+    "input_mode": "${BENCHMARK_INPUT_MODE}",
+    "stride_policy": "${BENCHMARK_STRIDE_POLICY}",
+    "input_pool_target_bytes": int("${BENCHMARK_INPUT_POOL_TARGET_BYTES}"),
+    "warmup_iters": int("${BENCHMARK_WARMUP_ITERS}"),
+    "measure_iters": int("${BENCHMARK_MEASURE_ITERS}"),
+    "fixed_vram_input": "${BENCHMARK_FIXED_VRAM_INPUT}" == "1",
+    "phase_timing_enabled": "${CUTLASS_BENCHMARK_PHASE_TIMING:-0}" == "1",
+}
+(run_dir / "benchmark_config.json").write_text(json.dumps(benchmark_doc, indent=2) + "\n", encoding="utf-8")
+
+sync_files = """${WORKER_SYNC_FILES[*]}""".split()
+manifest = []
+for rel in sync_files:
+    path = repo_root / rel
+    if not path.exists():
+        manifest.append({"path": rel, "exists": False, "sha256": ""})
+        continue
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest.append({"path": rel, "exists": True, "sha256": digest})
+(run_dir / "synced_sources.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 PY
 
   cat > "$RUN_DIR/run_meta.txt" <<EOF
@@ -424,6 +481,14 @@ build_jobs=$BUILD_JOBS
 timeout=$TIMEOUT
 execution_mode=shape_serial_multi_gpu
 shape_order=$SHAPES
+benchmark_input_mode=$BENCHMARK_INPUT_MODE
+benchmark_stride_policy=$BENCHMARK_STRIDE_POLICY
+benchmark_input_pool_target_bytes=$BENCHMARK_INPUT_POOL_TARGET_BYTES
+benchmark_warmup_iters=$BENCHMARK_WARMUP_ITERS
+benchmark_measure_iters=$BENCHMARK_MEASURE_ITERS
+benchmark_fixed_vram_input=$BENCHMARK_FIXED_VRAM_INPUT
+benchmark_config_json=$RUN_DIR/benchmark_config.json
+synced_sources_json=$RUN_DIR/synced_sources.json
 started_at=$(date -Iseconds)
 EOF
 }
@@ -692,11 +757,11 @@ run_shape_worker() {
       rc=$?
       set -e
 
-      tf=$(echo "$out" | grep -oP 'median_tflops=\K[0-9.]+' || echo "0")
-      avg_runtime_ms=$(echo "$out" | grep -oP 'avg_runtime_ms=\K[0-9.]+' || echo "")
-      total_runtime_ms=$(echo "$out" | grep -oP 'total_runtime_ms=\K[0-9.]+' || echo "")
-      measure_iters=$(echo "$out" | grep -oP 'measure_iters=\K[0-9]+' || echo "")
-      warmup_iters=$(echo "$out" | grep -oP 'warmup_iters=\K[0-9]+' || echo "")
+      tf=$(echo "$out" | grep -m1 -oP 'median_tflops=\K[0-9.]+' || echo "0")
+      avg_runtime_ms=$(echo "$out" | grep -m1 -oP 'avg_runtime_ms=\K[0-9.]+' || echo "")
+      total_runtime_ms=$(echo "$out" | grep -m1 -oP 'total_runtime_ms=\K[0-9.]+' || echo "")
+      measure_iters=$(echo "$out" | grep -m1 -oP 'measure_iters=\K[0-9]+' || echo "")
+      warmup_iters=$(echo "$out" | grep -m1 -oP 'warmup_iters=\K[0-9]+' || echo "")
       if echo "$out" | grep -q 'RESULT kernel='; then
         status="OK"
       elif [ "$rc" -eq 124 ]; then

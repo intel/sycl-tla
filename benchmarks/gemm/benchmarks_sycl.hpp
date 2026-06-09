@@ -55,7 +55,7 @@ CUTLASS_CREATE_GEMM_BENCHMARK(PREFIX##_SplitK_##M##x##N##x##K);
 
 #define BMG_DECLARE_EXHAUSTIVE_STREAMK_TILE_STAGE(PREFIX, CONFIG, MODE, SCHEDULER, M, N, K, SGM, SGN, STAGES) \
 using PREFIX##_##MODE##_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES = \
-    CONFIG<Shape<_##M, _##N, _##K>, Layout<Shape<_##SGM, _##SGN, _1>, Stride<_##SGN, _1, _0>>, Scheduler::SCHEDULER, STAGES>; \
+    CONFIG<Shape<_##M, _##N, _##K>, Layout<Shape<_##SGM, _##SGN, _1>, Stride<_4, _1, _0>>, Scheduler::SCHEDULER, STAGES>; \
 CUTLASS_CREATE_GEMM_BENCHMARK(PREFIX##_##MODE##_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES);
 
 #define BMG_REGISTER_EXHAUSTIVE_STREAMK_TILE_STAGE(PREFIX, MODE, M, N, K, SGM, SGN, STAGES) \
@@ -75,7 +75,7 @@ CUTLASS_CREATE_GEMM_BENCHMARK(PREFIX##_Gemm_##M##x##N##x##K##_SG8x4);
 #define BMG_DECLARE_EXHAUSTIVE_GEMM_TILE_STAGE(PREFIX, CONFIG, MMA_ATOM, M, N, K, SGM, SGN, STAGES) \
 using PREFIX##_GemmExhaustive_TileShape_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES = Shape<_##M, _##N, _##K>; \
 using PREFIX##_GemmExhaustive_Tile_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES = typename TiledMMAHelper< \
-    MMA_ATOM, Layout<PREFIX##_GemmExhaustive_TileShape_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES>, Layout<Shape<_##SGM, _##SGN, _1>, Stride<_##SGN, _1, _0>>>::TiledMMA; \
+    MMA_ATOM, Layout<PREFIX##_GemmExhaustive_TileShape_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES>, Layout<Shape<_##SGM, _##SGN, _1>, Stride<_4, _1, _0>>>::TiledMMA; \
 using PREFIX##_GemmExhaustive_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES = CONFIG< \
     PREFIX##_GemmExhaustive_TileShape_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES, PREFIX##_GemmExhaustive_Tile_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES, void, void, STAGES>; \
 CUTLASS_CREATE_GEMM_BENCHMARK(PREFIX##_GemmExhaustive_##M##x##N##x##K##_SG##SGM##x##SGN##_ST##STAGES);
@@ -86,7 +86,7 @@ CUTLASS_CREATE_GEMM_BENCHMARK(PREFIX##_GemmExhaustive_##M##x##N##x##K##_SG##SGM#
 #define BMG_DECLARE_GEMM_TILE_SG(PREFIX, CONFIG, MMA_ATOM, M, N, K, SGM, SGN) \
 using PREFIX##_Gemm_TileShape_##M##x##N##x##K = Shape<_##M, _##N, _##K>; \
 using PREFIX##_Gemm_Tile_##M##x##N##x##K##_SG##SGM##x##SGN = typename TiledMMAHelper< \
-    MMA_ATOM, Layout<PREFIX##_Gemm_TileShape_##M##x##N##x##K>, Layout<Shape<_##SGM, _##SGN, _1>, Stride<_##SGN, _1, _0>>>::TiledMMA; \
+    MMA_ATOM, Layout<PREFIX##_Gemm_TileShape_##M##x##N##x##K>, Layout<Shape<_##SGM, _##SGN, _1>, Stride<_4, _1, _0>>>::TiledMMA; \
 using PREFIX##_Gemm_##M##x##N##x##K##_SG##SGM##x##SGN = CONFIG< \
     PREFIX##_Gemm_TileShape_##M##x##N##x##K, PREFIX##_Gemm_Tile_##M##x##N##x##K##_SG##SGM##x##SGN, void, void>; \
 CUTLASS_CREATE_GEMM_BENCHMARK(PREFIX##_Gemm_##M##x##N##x##K##_SG##SGM##x##SGN);

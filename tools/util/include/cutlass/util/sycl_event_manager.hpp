@@ -108,6 +108,30 @@ public:
     return time_event * 1e-6f;
   }
 
+  std::vector<float> getEventDurationsMs(SyclEvent const& begin, SyclEvent const& end) const {
+    if (begin.getIndex() < 0 || begin.getIndex() > end.getIndex() || end.getIndex() > events.size()) {
+      throw std::runtime_error("Index out of bounds");
+    }
+
+    std::vector<float> durations;
+    durations.reserve(end.getIndex() - begin.getIndex());
+ #if defined(CUTLASS_SYCL_PROFILING_ENABLED)
+    for (int i = begin.getIndex(); i < end.getIndex(); ++i) {
+      const auto start_time = events[i].template get_profiling_info<
+              sycl::info::event_profiling::command_start>();
+
+      const auto end_time = events[i].template get_profiling_info<
+              sycl::info::event_profiling::command_end>();
+
+      durations.push_back(static_cast<float>(end_time - start_time) * 1e-6f);
+    }
+ #else
+    CUTLASS_ASSERT(false && "Profiling information can not be collected. "
+                            "Use CUTLASS_SYCL_PROFILING_ENABLED.");
+ #endif
+    return durations;
+  }
+
   void wait(SyclEvent const& begin, SyclEvent const& end) {
     if (begin.getIndex() < 0 || begin.getIndex() > end.getIndex() || end.getIndex() > events.size()) {
       throw std::runtime_error("Index out of bounds");
@@ -133,4 +157,8 @@ inline void syclEventSynchronize(SyclEvent const& begin, SyclEvent const& end) {
 
 inline void syclEventElapsedTime(float* time, SyclEvent const& begin, SyclEvent const& end) {
   *time = EventManager::getInstance().getEventElapsedTimeMs(begin, end);
+}
+
+inline std::vector<float> syclEventElapsedTimes(SyclEvent const& begin, SyclEvent const& end) {
+  return EventManager::getInstance().getEventDurationsMs(begin, end);
 }

@@ -1,14 +1,34 @@
 #include "cutlass/cutlass.h"
 #include "cutlass/kernel_hardware_info.h"
 #include "cutlass/util/command_line.h"
+#include <fstream>
 #include <iostream>
 #include "benchmark_runner.hpp"
 
 #if defined(SYCL_NVIDIA_TARGET) || !defined(CUTLASS_ENABLE_SYCL)
 #include "benchmarks_cuda.hpp"
 #elif defined(SYCL_INTEL_TARGET)
+#if defined(CUTLASS_BENCHMARK_USE_FILTERED_HEADER)
+#include "benchmarks_sycl.filtered.hpp"
+#else
 #include "benchmarks_sycl.hpp"
 #endif
+#endif
+
+template <class Result>
+int print_direct_result(std::string const& kernel, Result const& result) {
+  std::cout << "median_tflops=" << result.tflops
+            << " avg_runtime_ms=" << result.avg_runtime_ms
+            << " total_runtime_ms=" << result.total_runtime_ms
+            << " input_bytes_per_buffer=" << result.input_bytes_per_buffer
+            << " input_pool_target_bytes=" << result.input_pool_target_bytes
+            << " pool_buffers=" << result.pool_buffers
+            << " warmup_iters=" << result.warmup_iters
+            << " measure_iters=" << result.measure_iters
+            << " KERNEL=" << kernel
+            << " STATUS=OK" << std::endl;
+  return 0;
+}
 
 // ── Dual-mode profiler main ──
 // --config_file=PATH  → Google Benchmark path (legacy)
@@ -53,9 +73,7 @@ int main(int argc, const char** argv) {
   cmd.get_cmd_line_argument("alpha", opts.alpha, 1.0f); cmd.get_cmd_line_argument("beta", opts.beta, 0.0f);
   opts.verify_library = 0; opts.split_k_slices = 0;
 
-  cutlass::benchmark::BenchmarkRunnerGemm<BmgGemmBF16BF16FP32_RRR_6>::DirectRunResult result;
-  bool ok = false;
-#define RUN(K) if (kernel == #K) { result = cutlass::benchmark::BenchmarkRunnerGemm<K>().run_direct_result(opts, hw); ok = true; }
+#define RUN(K) if (kernel == #K) { auto result = cutlass::benchmark::BenchmarkRunnerGemm<K>().run_direct_result(opts, hw); return print_direct_result(kernel, result); }
   RUN(BmgGemmBF16BF16FP32_RRR_Gemm_256x256x32_SG8x4)
   RUN(BmgGemmBF16BF16FP32_RRR_Gemm_256x256x64_SG8x4)
   RUN(BmgGemmBF16BF16FP32_RCR_6)
@@ -64,16 +82,6 @@ int main(int argc, const char** argv) {
   RUN(BmgGemmBF16BF16FP32_RCR_19)
   RUN(BmgGemmBF16BF16FP32_RRR_6)
 #undef RUN
-  if (!ok) { std::cerr << "not found: " << kernel << std::endl; return 1; }
-  std::cout << "median_tflops=" << result.tflops
-            << " avg_runtime_ms=" << result.avg_runtime_ms
-            << " total_runtime_ms=" << result.total_runtime_ms
-            << " input_bytes_per_buffer=" << result.input_bytes_per_buffer
-            << " input_pool_target_bytes=" << result.input_pool_target_bytes
-            << " pool_buffers=" << result.pool_buffers
-            << " warmup_iters=" << result.warmup_iters
-            << " measure_iters=" << result.measure_iters
-            << " KERNEL=" << kernel
-            << " STATUS=OK" << std::endl;
-  return 0;
+  std::cerr << "not found: " << kernel << std::endl;
+  return 1;
 }

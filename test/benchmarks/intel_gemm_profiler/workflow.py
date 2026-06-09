@@ -5,6 +5,7 @@
 
 import argparse
 import copy
+import csv
 import hashlib
 import json
 import os
@@ -39,13 +40,14 @@ if __package__ in (None, ""):
         selected_runtime_env,
     )
     from intel_gemm_profiler.hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
+    from intel_gemm_profiler.source_templates import is_valid_xe2_tile_sg
     from intel_gemm_profiler.ali_dataset import build_ali_gemm_docs
     from intel_gemm_profiler.dispatch import DISPATCH_KEY_FIELDS, load_dispatch_table, lookup_dispatch_entry
     from intel_gemm_profiler.device_target import resolve_profiles_device_target
     from intel_gemm_profiler.runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from intel_gemm_profiler.selector import build_candidate_coverage_report, build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from intel_gemm_profiler.utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
-    from intel_gemm_profiler.schemas import SEARCH_RUNTIME_SCHEMA
+    from intel_gemm_profiler.schemas import SCHEMA_VERSION, SEARCH_RUNTIME_SCHEMA
 else:
     from .catalog import SEED_KERNELS, build_kernel_catalog
     from .candidates import (
@@ -69,13 +71,14 @@ else:
         selected_runtime_env,
     )
     from .hw_specs import detect_probe_anomalies, resolve_hw_reference_spec
+    from .source_templates import is_valid_xe2_tile_sg
     from .ali_dataset import build_ali_gemm_docs
     from .dispatch import DISPATCH_KEY_FIELDS, load_dispatch_table, lookup_dispatch_entry
     from .device_target import resolve_profiles_device_target
     from .runner import collect_environment_metadata, run_benchmark, run_entries_with_benchmark, run_entries_with_streamk_example
     from .selector import build_candidate_coverage_report, build_dispatch_table, build_phase_a_summary, build_phase_b_summary, build_reference_comparison, build_run_summary, write_results_csv
     from .utils import ensure_dir, now_iso, read_json, resolve_executable, shell_init_with_env, shell_join, write_json
-    from .schemas import SEARCH_RUNTIME_SCHEMA
+    from .schemas import SCHEMA_VERSION, SEARCH_RUNTIME_SCHEMA
 
 
 def build_compiler_flags_probe_summary(rows, profiles=None):
@@ -182,7 +185,20 @@ def benchmark_exe_for_build_plan(build_dir, build_target):
     return str(Path(build_dir) / "benchmarks" / "gemm" / build_target)
 
 
-def candidate_build_commands(source_dir, build_dir, build_target, cmake_vars):
+def detect_available_vcpus():
+    try:
+        return max(1, len(os.sched_getaffinity(0)))
+    except Exception:
+        return max(1, os.cpu_count() or 1)
+
+
+def resolve_candidate_build_jobs(max_workers, total_vcpus=None):
+    total = max(1, int(total_vcpus or detect_available_vcpus()))
+    workers = max(1, int(max_workers or 1))
+    return max(1, total // workers)
+
+
+def candidate_build_commands(source_dir, build_dir, build_target, cmake_vars, build_parallelism=0):
     configure_command = ["cmake", "-S", str(source_dir), "-B", str(build_dir)]
     configure_command.extend(f"-D{name}={value}" for name, value in sorted(cmake_vars.items()))
     build_command = [
@@ -191,12 +207,15 @@ def candidate_build_commands(source_dir, build_dir, build_target, cmake_vars):
         str(build_dir),
         "--target",
         build_target,
-        "--parallel",
     ]
+    if int(build_parallelism or 0) > 0:
+        build_command.extend(["--parallel", str(int(build_parallelism))])
+    else:
+        build_command.append("--parallel")
     return configure_command, build_command
 
 
-def build_batch_preflight_plans(build_manifest, source_dir, build_dir, base_cmake_vars):
+def build_batch_preflight_plans(build_manifest, source_dir, build_dir, base_cmake_vars, build_parallelism=0):
     cmake_config = build_manifest["cmake_config"]
     build_target = cmake_config["build_target"]
     kernel_filter_var = cmake_config["kernel_filter_cmake_var"]
@@ -213,6 +232,7 @@ def build_batch_preflight_plans(build_manifest, source_dir, build_dir, base_cmak
             batch_build_dir,
             build_target,
             batch_cmake_vars,
+            build_parallelism=build_parallelism,
         )
         plans.append(
             {
@@ -226,6 +246,7 @@ def build_batch_preflight_plans(build_manifest, source_dir, build_dir, base_cmak
                 "kernel_filter_file": batch_filter_path,
                 "build_dir": str(batch_build_dir),
                 "benchmark_exe": benchmark_exe_for_build_plan(batch_build_dir, build_target),
+                "build_parallelism": int(build_parallelism or 0),
                 "cmake_vars": batch_cmake_vars,
                 "configure_command": configure_command,
                 "build_command": build_command,
@@ -244,6 +265,8 @@ def build_candidate_build_plan(
     googlebenchmark_dir=None,
     googlebenchmark_build_dir=None,
     cmake_cxx_compiler="",
+    build_parallelism=0,
+    batch_build_parallelism=0,
 ):
     cmake_config = build_manifest["cmake_config"]
     cmake_vars = dict(cmake_config["cmake_vars"])
@@ -260,6 +283,7 @@ def build_candidate_build_plan(
         build_dir,
         cmake_config["build_target"],
         cmake_vars,
+        build_parallelism=build_parallelism,
     )
     return {
         "schema_version": build_manifest["schema_version"],
@@ -272,10 +296,18 @@ def build_candidate_build_plan(
         "googlebenchmark_dir": str(googlebenchmark_dir) if googlebenchmark_dir else "",
         "googlebenchmark_build_dir": str(googlebenchmark_build_dir) if googlebenchmark_build_dir else "",
         "cmake_cxx_compiler": cmake_cxx_compiler,
+        "build_parallelism": int(build_parallelism or 0),
+        "batch_build_parallelism": int(batch_build_parallelism or 0),
         "selected_kernel_count": build_manifest["selected_kernel_count"],
         "selected_kernel_batch_size": build_manifest.get("selected_kernel_batch_size", 0),
         "selected_kernel_batches": build_manifest.get("selected_kernel_batches", []),
-        "batch_preflight_plans": build_batch_preflight_plans(build_manifest, source_dir, build_dir, cmake_vars),
+        "batch_preflight_plans": build_batch_preflight_plans(
+            build_manifest,
+            source_dir,
+            build_dir,
+            cmake_vars,
+            build_parallelism=batch_build_parallelism,
+        ),
         "cmake_vars": cmake_vars,
         "configure_command": configure_command,
         "build_command": build_command,
@@ -313,6 +345,7 @@ def execute_candidate_build_plan(build_plan, log_dir, shell_init="", timeout=Non
                 "failure_reason": f"Candidate benchmark {step} failed with status {status}. See {log_path}.",
                 "build_target": build_plan["build_target"],
                 "benchmark_exe": build_plan["benchmark_exe"],
+                "build_parallelism": int(build_plan.get("build_parallelism", 0)),
                 "selected_kernel_count": build_plan.get("selected_kernel_count", ""),
                 "kernel_filter_file": build_plan.get("kernel_filter_file", ""),
                 "batch_id": build_plan.get("batch_id", ""),
@@ -432,39 +465,15 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
     else:
         import concurrent.futures
         import threading
-        import os
 
-        # Determine total available vCPUs
-        try:
-            total_vcpus = len(os.sched_getaffinity(0))
-        except Exception:
-            total_vcpus = os.cpu_count() or 1
-
-        # Allocate cores to workers: split total_vcpus into max_workers groups
-        # Each worker gets a dedicated subset to avoid cache thrashing
-        cores_per_worker = max(2, total_vcpus // max_workers)
-        assigned = [None] * max_workers  # round-robin assignment
-
-        semaphore = threading.Semaphore(max_workers)
+        total_vcpus = detect_available_vcpus()
+        cores_per_worker = resolve_candidate_build_jobs(max_workers, total_vcpus=total_vcpus)
         lock = threading.Lock()
         results_by_index = {}
         completed = [0]
-        worker_cores = {}  # worker_idx → [core_list]
 
-        def _build_affinity(plan, worker_idx):
-            # Compute CPU affinity for this worker
-            start = (worker_idx * cores_per_worker) % total_vcpus
-            affinity = list(range(start, min(start + cores_per_worker, total_vcpus)))
-            if len(affinity) < cores_per_worker:
-                affinity += list(range(0, cores_per_worker - len(affinity)))
-
-            with semaphore:
-                # Set affinity INSIDE semaphore to avoid race between threads
-                try:
-                    os.sched_setaffinity(0, affinity)
-                except Exception:
-                    pass
-                result = _build_one(plan)
+        def _build_parallel(plan):
+            result = _build_one(plan)
             with lock:
                 results_by_index[plan["batch_index"]] = result
                 completed[0] += 1
@@ -475,9 +484,8 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
-            for i, plan in enumerate(plans_sorted):
-                worker_idx = i % max_workers
-                futures.append(executor.submit(_build_affinity, plan, worker_idx))
+            for plan in plans_sorted:
+                futures.append(executor.submit(_build_parallel, plan))
             concurrent.futures.wait(futures)
 
         # Reassemble in batch_index order (merge resumed + newly built)
@@ -508,6 +516,7 @@ def execute_candidate_build_preflight_plans(build_plan, log_dir, shell_init="", 
         "batches": batches,
         "max_workers": max_workers,
         "resumed_batches": len(resumed_batches),
+        "effective_build_parallelism": int(build_plan.get("batch_build_parallelism", 0) or cores_per_worker),
     }
     try:
         result["total_vcpus"] = total_vcpus
@@ -601,6 +610,384 @@ SEARCH_STRATEGY_PRESETS = {
         "use_candidate_build_preflight_benchmarks": True,
     },
 }
+
+
+SCHEDULER_BRUTEFORCE_CONFIG_FIELDS = [
+    "candidate_id",
+    "kernel_id",
+    "layout",
+    "dtype_a",
+    "dtype_b",
+    "dtype_c",
+    "dtype_d",
+    "dtype_acc",
+    "tile_m",
+    "tile_n",
+    "tile_k",
+    "sg_m",
+    "sg_n",
+    "stages",
+    "streamk_mode",
+    "decomposition_mode",
+    "reduction_mode",
+    "kernel_schedule",
+    "tile_scheduler",
+    "runner",
+]
+
+
+REGULAR_GEMM_FULL_CONFIG_FIELDS = [
+    "candidate_id",
+    "kernel_id",
+    "source",
+    "layout",
+    "dtype_a",
+    "dtype_b",
+    "dtype_c",
+    "dtype_d",
+    "dtype_acc",
+    "tile_m",
+    "tile_n",
+    "tile_k",
+    "sg_m",
+    "sg_n",
+    "stages",
+    "kernel_schedule",
+    "tile_scheduler",
+    "runner",
+]
+
+
+def collect_scheduler_bruteforce_full_config_rows(candidate_space):
+    scheduler_candidates = [
+        candidate
+        for candidate in candidate_space.get("candidates", [])
+        if candidate.get("runner", "benchmark") == "benchmark"
+        and candidate.get("streamk_mode")
+        and candidate.get("dtype_a") == "bf16"
+    ]
+    rows = []
+    duplicates = []
+    seen = set()
+    for candidate in scheduler_candidates:
+        row = {field: candidate.get(field, "") for field in SCHEDULER_BRUTEFORCE_CONFIG_FIELDS}
+        dedupe_key = tuple(row[field] for field in SCHEDULER_BRUTEFORCE_CONFIG_FIELDS if field != "candidate_id")
+        if dedupe_key in seen:
+            duplicates.append(row)
+            continue
+        seen.add(dedupe_key)
+        rows.append(row)
+    rows.sort(
+        key=lambda row: (
+            row["layout"],
+            row["tile_m"],
+            row["tile_n"],
+            row["tile_k"],
+            row["sg_m"],
+            row["sg_n"],
+            row["stages"],
+            row["streamk_mode"],
+        )
+    )
+    return rows, duplicates
+
+
+def collect_regular_gemm_full_config_rows(candidate_space):
+    regular_candidates = [
+        candidate
+        for candidate in candidate_space.get("candidates", [])
+        if candidate.get("runner", "benchmark") == "benchmark"
+        and not candidate.get("streamk_mode")
+    ]
+    rows = []
+    duplicates = []
+    seen = set()
+    for candidate in regular_candidates:
+        row = {field: candidate.get(field, "") for field in REGULAR_GEMM_FULL_CONFIG_FIELDS}
+        dedupe_key = tuple(row[field] for field in REGULAR_GEMM_FULL_CONFIG_FIELDS if field != "candidate_id")
+        if dedupe_key in seen:
+            duplicates.append(row)
+            continue
+        seen.add(dedupe_key)
+        rows.append(row)
+    rows.sort(
+        key=lambda row: (
+            row["layout"],
+            row["dtype_a"],
+            row["tile_m"],
+            row["tile_n"],
+            row["tile_k"],
+            row["sg_m"],
+            row["sg_n"],
+            row["stages"],
+        )
+    )
+    return rows, duplicates
+
+
+def build_scheduler_bruteforce_gap_scan(config_rows, duplicate_rows=None):
+    duplicate_rows = duplicate_rows or []
+    expected_modes = {"streamk", "data_parallel", "splitk"}
+    grouped_modes = {}
+    for row in config_rows:
+        base_key = (
+            row["layout"],
+            row["dtype_a"],
+            row["dtype_b"],
+            row["dtype_c"],
+            row["dtype_d"],
+            row["dtype_acc"],
+            row["tile_m"],
+            row["tile_n"],
+            row["tile_k"],
+            row["sg_m"],
+            row["sg_n"],
+            row["stages"],
+        )
+        grouped_modes.setdefault(base_key, set()).add(row["streamk_mode"])
+
+    incomplete_groups = []
+    for base_key, modes in sorted(grouped_modes.items()):
+        if modes != expected_modes:
+            incomplete_groups.append(
+                {
+                    "layout": base_key[0],
+                    "dtype_a": base_key[1],
+                    "dtype_b": base_key[2],
+                    "dtype_c": base_key[3],
+                    "dtype_d": base_key[4],
+                    "dtype_acc": base_key[5],
+                    "tile_m": base_key[6],
+                    "tile_n": base_key[7],
+                    "tile_k": base_key[8],
+                    "sg_m": base_key[9],
+                    "sg_n": base_key[10],
+                    "stages": base_key[11],
+                    "present_modes": sorted(modes),
+                    "missing_modes": sorted(expected_modes - modes),
+                }
+            )
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "row_count": len(config_rows),
+        "duplicate_rows_removed": len(duplicate_rows),
+        "base_config_group_count": len(grouped_modes),
+        "expected_modes_per_base_group": sorted(expected_modes),
+        "incomplete_mode_group_count": len(incomplete_groups),
+        "incomplete_mode_groups": incomplete_groups[:100],
+    }
+
+
+def build_regular_gemm_gap_scan(config_rows, constraints, duplicate_rows=None):
+    duplicate_rows = duplicate_rows or []
+    exhaustive_rows = [row for row in config_rows if row.get("source") == "exhaustive_regular_gemm_catalog"]
+    actual_regular_stage_space = {
+        (
+            row["layout"],
+            row["dtype_a"],
+            row["dtype_b"],
+            row["dtype_c"],
+            row["dtype_d"],
+            row["dtype_acc"],
+            int(row["tile_m"]),
+            int(row["tile_n"]),
+            int(row["tile_k"]),
+            int(row["sg_m"]),
+            int(row["sg_n"]),
+            int(row["stages"]),
+        )
+        for row in config_rows
+        if int(row["stages"]) in (1, 2, 3)
+    }
+    signatures = sorted(
+        {
+            (
+                row["layout"],
+                row["dtype_a"],
+                row["dtype_b"],
+                row["dtype_c"],
+                row["dtype_d"],
+                row["dtype_acc"],
+            )
+            for row in exhaustive_rows
+        }
+    )
+    allowed = (constraints or {}).get("allowed_values", {})
+    limits = (constraints or {}).get("limits", {})
+    valid_sg_sizes = limits.get("valid_subgroup_sizes")
+    expected_exhaustive = set()
+    for layout, dtype_a, dtype_b, dtype_c, dtype_d, dtype_acc in signatures:
+        for tile_m in allowed.get("tile_m", []):
+            for tile_n in allowed.get("tile_n", []):
+                for tile_k in allowed.get("tile_k", []):
+                    for sg_m in allowed.get("sg_m", []):
+                        for sg_n in allowed.get("sg_n", []):
+                            if not is_valid_xe2_tile_sg(
+                                (tile_m, tile_n, tile_k),
+                                (sg_m, sg_n, 1),
+                                sg_product_set=valid_sg_sizes,
+                            ):
+                                continue
+                            for stage in [stage for stage in allowed.get("stages", []) if stage in (1, 2, 3)]:
+                                expected_exhaustive.add(
+                                    (
+                                        layout,
+                                        dtype_a,
+                                        dtype_b,
+                                        dtype_c,
+                                        dtype_d,
+                                        dtype_acc,
+                                        tile_m,
+                                        tile_n,
+                                        tile_k,
+                                        sg_m,
+                                        sg_n,
+                                        stage,
+                                    )
+                                )
+
+    missing = sorted(expected_exhaustive - actual_regular_stage_space)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "row_count": len(config_rows),
+        "duplicate_rows_removed": len(duplicate_rows),
+        "exhaustive_regular_row_count": len(exhaustive_rows),
+        "expected_exhaustive_config_count": len(expected_exhaustive),
+        "actual_exhaustive_config_count": len(actual_regular_stage_space),
+        "missing_exhaustive_config_count": len(missing),
+        "missing_exhaustive_configs": [
+            {
+                "layout": item[0],
+                "dtype_a": item[1],
+                "dtype_b": item[2],
+                "dtype_c": item[3],
+                "dtype_d": item[4],
+                "dtype_acc": item[5],
+                "tile_m": item[6],
+                "tile_n": item[7],
+                "tile_k": item[8],
+                "sg_m": item[9],
+                "sg_n": item[10],
+                "stages": item[11],
+            }
+            for item in missing[:100]
+        ],
+        "config_count_by_source": {
+            str(source): sum(1 for row in config_rows if row.get("source", "") == source)
+            for source in sorted({row.get("source", "") for row in config_rows})
+        },
+    }
+
+
+def build_scheduler_bruteforce_plan(candidate_space, args, build_manifest=None, candidate_build_plan=None):
+    candidates = list(candidate_space.get("candidates", []))
+    scheduler_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.get("runner", "benchmark") == "benchmark" and candidate.get("streamk_mode")
+    ]
+    scheduler_bf16_candidates = [
+        candidate for candidate in scheduler_candidates if candidate.get("dtype_a") == "bf16"
+    ]
+    regular_benchmark_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.get("runner", "benchmark") == "benchmark" and not candidate.get("streamk_mode")
+    ]
+
+    def _count_by(items, field):
+        counts = {}
+        for item in items:
+            value = item.get(field, "")
+            if value == "":
+                value = "<empty>"
+            counts[str(value)] = counts.get(str(value), 0) + 1
+        return dict(sorted(counts.items()))
+
+    enabled = bool(
+        getattr(args, "search_strategy", "") == "bruteforce_scheduler"
+        or getattr(args, "bruteforce_scheduler_search", False)
+        or getattr(args, "kernel_catalog_source", "") == "layered_bmg_scheduler_expanded"
+    )
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": now_iso(),
+        "enabled": enabled,
+        "search_strategy": getattr(args, "search_strategy", ""),
+        "kernel_catalog_source": getattr(args, "kernel_catalog_source", ""),
+        "constraint_source": candidate_space.get("constraint_source", ""),
+        "design_summary": {
+            "goal": "Preserve the regular GEMM universe while widening benchmark-backed BF16 scheduler search across legal subgroup and stage combinations.",
+            "regular_gemm_space_preserved": getattr(args, "kernel_catalog_source", "") == "layered_bmg_scheduler_expanded",
+            "scheduler_candidates_routed_through_preflight": bool(getattr(args, "use_candidate_build_preflight_benchmarks", False)),
+            "prefilter_disabled": getattr(args, "prefilter", "none") == "none",
+        },
+        "execution_routing": {
+            "run_candidate_build_preflight": bool(getattr(args, "run_candidate_build_preflight", False)),
+            "use_candidate_build_preflight_benchmarks": bool(getattr(args, "use_candidate_build_preflight_benchmarks", False)),
+            "build_candidate_benchmark": bool(getattr(args, "build_candidate_benchmark", False)),
+            "candidate_build_batch_size": int(getattr(args, "candidate_build_batch_size", 0)),
+            "candidate_build_parallelism": int(getattr(args, "candidate_build_parallelism", 0)),
+            "aggregate_build_parallelism": int(candidate_build_plan.get("build_parallelism", 0)) if candidate_build_plan else 0,
+            "preflight_build_parallelism": int(candidate_build_plan.get("batch_build_parallelism", 0)) if candidate_build_plan else 0,
+            "prefilter": getattr(args, "prefilter", "none"),
+            "skip_run": bool(getattr(args, "skip_run", False)),
+            "dry_run": bool(getattr(args, "dry_run", False)),
+        },
+        "candidate_counts": {
+            "total_candidates": len(candidates),
+            "benchmark_candidates": sum(
+                1 for candidate in candidates if candidate.get("runner", "benchmark") == "benchmark"
+            ),
+            "regular_benchmark_candidates": len(regular_benchmark_candidates),
+            "scheduler_benchmark_candidates": len(scheduler_candidates),
+            "scheduler_bf16_benchmark_candidates": len(scheduler_bf16_candidates),
+            "selected_kernel_count": build_manifest.get("selected_kernel_count", 0) if build_manifest else 0,
+            "selected_kernel_batch_count": len(build_manifest.get("selected_kernel_batches", [])) if build_manifest else 0,
+            "preflight_batch_count": len(candidate_build_plan.get("batch_preflight_plans", [])) if candidate_build_plan else 0,
+        },
+        "scheduler_search_axes": {
+            "layouts": sorted({candidate.get("layout", "") for candidate in scheduler_bf16_candidates}),
+            "streamk_modes": sorted({candidate.get("streamk_mode", "") for candidate in scheduler_bf16_candidates}),
+            "sg_layouts": [
+                [sg_m, sg_n]
+                for sg_m, sg_n in sorted(
+                    {(candidate.get("sg_m", 0), candidate.get("sg_n", 0)) for candidate in scheduler_bf16_candidates}
+                )
+            ],
+            "stages": sorted({int(candidate.get("stages", 0)) for candidate in scheduler_bf16_candidates}),
+            "tile_shape_count": len(
+                {
+                    (candidate.get("layout", ""), candidate.get("tile_m", 0), candidate.get("tile_n", 0), candidate.get("tile_k", 0))
+                    for candidate in scheduler_bf16_candidates
+                }
+            ),
+            "candidate_count_by_layout": _count_by(scheduler_bf16_candidates, "layout"),
+            "candidate_count_by_streamk_mode": _count_by(scheduler_bf16_candidates, "streamk_mode"),
+            "candidate_count_by_decomposition_mode": _count_by(scheduler_bf16_candidates, "decomposition_mode"),
+            "candidate_count_by_stage": _count_by(scheduler_bf16_candidates, "stages"),
+            "candidate_count_by_sg": dict(
+                sorted(
+                    (
+                        f"{sg_m}x{sg_n}",
+                        sum(
+                            1
+                            for candidate in scheduler_bf16_candidates
+                            if candidate.get("sg_m", 0) == sg_m and candidate.get("sg_n", 0) == sg_n
+                        ),
+                    )
+                    for sg_m, sg_n in {
+                        (candidate.get("sg_m", 0), candidate.get("sg_n", 0))
+                        for candidate in scheduler_bf16_candidates
+                    }
+                )
+            ),
+        },
+    }
 
 
 def apply_search_strategy_defaults(args):
@@ -810,6 +1197,11 @@ def build_artifact_bundle_manifest(workspace, artifacts):
         artifact_record("reference_comparison", artifacts["reference_comparison"], "Optional reference-vs-dispatch comparison.", required=False),
         artifact_record("candidate_build_summary", artifacts["candidate_build_summary"], "Candidate benchmark aggregate build status.", required=False),
         artifact_record("candidate_build_preflight_summary", artifacts["candidate_build_preflight_summary"], "Per-batch candidate build preflight status.", required=False),
+        artifact_record("scheduler_bruteforce_plan", artifacts["scheduler_bruteforce_plan"], "Scheduler brute-force search plan, search axes, and execution routing.", required=False),
+        artifact_record("regular_gemm_full_config", artifacts["regular_gemm_full_config"], "Deduplicated full regular GEMM configuration list.", required=False),
+        artifact_record("regular_gemm_gap_scan", artifacts["regular_gemm_gap_scan"], "Duplicate-removal and exhaustive-coverage scan for regular GEMM configs.", required=False),
+        artifact_record("scheduler_bruteforce_full_config", artifacts["scheduler_bruteforce_full_config"], "Deduplicated full BF16 benchmark-backed scheduler configuration list.", required=False),
+        artifact_record("scheduler_bruteforce_gap_scan", artifacts["scheduler_bruteforce_gap_scan"], "Duplicate-removal and missing-mode scan for the scheduler brute-force configuration list.", required=False),
         artifact_record("device_target_detection", artifacts["device_target_detection"], "Auto-detected SYCL device target used for candidate benchmark builds.", required=False),
         artifact_record("verified_hw_caps", artifacts["verified_hw_caps"], "Collected or probed hardware capability metadata.", required=False),
     ]
@@ -1163,6 +1555,10 @@ def workflow(args):
     googlebenchmark_build_dir = (
         Path(args.googlebenchmark_build_dir).resolve() if args.googlebenchmark_build_dir else None
     )
+    detected_vcpus = detect_available_vcpus()
+    candidate_build_workers = max(1, int(getattr(args, "candidate_build_parallelism", 1) or 1))
+    aggregate_build_parallelism = detected_vcpus
+    batch_build_parallelism = resolve_candidate_build_jobs(candidate_build_workers, total_vcpus=detected_vcpus)
     candidate_build_plan = build_candidate_build_plan(
         build_manifest,
         source_dir,
@@ -1171,8 +1567,45 @@ def workflow(args):
         googlebenchmark_dir,
         googlebenchmark_build_dir,
         args.cmake_cxx_compiler,
+        build_parallelism=aggregate_build_parallelism,
+        batch_build_parallelism=batch_build_parallelism,
     )
     write_json(candidate_build_plan_path, candidate_build_plan)
+    regular_gemm_full_config_path = reports_dir / "regular_gemm_full_config.csv"
+    regular_gemm_gap_scan_path = reports_dir / "regular_gemm_gap_scan.json"
+    regular_full_config_rows, regular_duplicate_rows = collect_regular_gemm_full_config_rows(candidate_space)
+    with open(regular_gemm_full_config_path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=REGULAR_GEMM_FULL_CONFIG_FIELDS)
+        writer.writeheader()
+        writer.writerows(regular_full_config_rows)
+    regular_gap_scan = build_regular_gemm_gap_scan(
+        regular_full_config_rows,
+        constraints,
+        duplicate_rows=regular_duplicate_rows,
+    )
+    write_json(regular_gemm_gap_scan_path, regular_gap_scan)
+    scheduler_bruteforce_full_config_path = reports_dir / "scheduler_bruteforce_full_config.csv"
+    scheduler_bruteforce_gap_scan_path = reports_dir / "scheduler_bruteforce_gap_scan.json"
+    scheduler_full_config_rows, scheduler_duplicate_rows = collect_scheduler_bruteforce_full_config_rows(candidate_space)
+    with open(scheduler_bruteforce_full_config_path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SCHEDULER_BRUTEFORCE_CONFIG_FIELDS)
+        writer.writeheader()
+        writer.writerows(scheduler_full_config_rows)
+    scheduler_gap_scan = build_scheduler_bruteforce_gap_scan(
+        scheduler_full_config_rows,
+        duplicate_rows=scheduler_duplicate_rows,
+    )
+    write_json(scheduler_bruteforce_gap_scan_path, scheduler_gap_scan)
+    scheduler_bruteforce_plan_path = reports_dir / "scheduler_bruteforce_plan.json"
+    write_json(
+        scheduler_bruteforce_plan_path,
+        build_scheduler_bruteforce_plan(
+            candidate_space,
+            args,
+            build_manifest=build_manifest,
+            candidate_build_plan=candidate_build_plan,
+        ),
+    )
     candidate_build_summary_path = reports_dir / "candidate_build_summary.json"
     candidate_build_preflight_summary_path = reports_dir / "candidate_build_preflight_summary.json"
     candidate_build_summary = {"status": "not_run", "reason": "build_candidate_benchmark disabled"}
@@ -1185,7 +1618,7 @@ def workflow(args):
             logs_dir,
             shell_init=compile_shell_init,
             timeout=build_timeout,
-            max_workers=getattr(args, "candidate_build_parallelism", 1),
+            max_workers=candidate_build_workers,
             resume=getattr(args, "resume_candidate_build_preflight", False),
             progress_path=str(reports_dir / "preflight_progress.json"),
         )
@@ -1308,6 +1741,11 @@ def workflow(args):
         "candidate_build_plan": str(candidate_build_plan_path),
         "candidate_build_summary": str(candidate_build_summary_path),
         "candidate_build_preflight_summary": str(candidate_build_preflight_summary_path),
+        "scheduler_bruteforce_plan": str(scheduler_bruteforce_plan_path),
+        "regular_gemm_full_config": str(regular_gemm_full_config_path),
+        "regular_gemm_gap_scan": str(regular_gemm_gap_scan_path),
+        "scheduler_bruteforce_full_config": str(scheduler_bruteforce_full_config_path),
+        "scheduler_bruteforce_gap_scan": str(scheduler_bruteforce_gap_scan_path),
         "device_target_detection": str(device_target_detection_path),
         "safe_candidates": str(reports_dir / "bmg_safe_candidates.json"),
         "verified_hw_caps": str(verified_hw_caps_path),
@@ -1365,7 +1803,7 @@ def build_parser():
     parser.add_argument("--run-candidate-build-preflight", action="store_true", help="Execute per-batch candidate benchmark preflight build plans before the aggregate candidate benchmark build. Requires --candidate-build-batch-size to produce batch plans.")
     parser.add_argument("--use-candidate-build-preflight-benchmarks", action="store_true", help="Route benchmark screening and confirmation entries to per-batch benchmark executables produced by --run-candidate-build-preflight instead of the aggregate benchmark executable.")
     parser.add_argument("--resume-candidate-build-preflight", action="store_true", help="Resume a previous preflight build: skip batches whose log shows successful completion. Uses preflight_progress.json in the reports directory.")
-    parser.add_argument("--candidate-build-parallelism", type=int, default=16, help="Number of concurrent batch compilations during preflight. 1 = sequential (default). On a 256-vCPU server, N=8 uses ~30 percent of CPU for ~8x speedup.")
+    parser.add_argument("--candidate-build-parallelism", type=int, default=16, help="Number of concurrent batch compilations during preflight. Each batch build uses an auto-sized subset of host CPUs to avoid oversubscribing the machine. 1 runs preflight sequentially.")
     parser.add_argument("--generator-arch", choices=["bmg", "pvc"], default="bmg", help="Intel Xe generator arch used when --kernel-catalog-source=generator.")
     parser.add_argument("--generator-instantiation-level", type=int, default=0, help="Intel Xe generator instantiation level used when --kernel-catalog-source=generator.")
     parser.add_argument("--hw-spec-id", default="", help="Optional hardware reference spec id override, e.g. 'bmg_g21'.")

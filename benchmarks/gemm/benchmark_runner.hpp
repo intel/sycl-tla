@@ -51,6 +51,9 @@
 #include "cutlass/util/reference/device/tensor_fill.h"
 #include "cutlass/util/reference/device/tensor_silu.h"
 #include "cutlass/util/initialize_block.hpp"
+#if defined(CUTLASS_ENABLE_SYCL)
+#include "cutlass/util/sycl_event_manager.hpp"
+#endif
 #if defined(CUTLASS_BENCHMARK_ENABLE_LIBRARY_GEMM)
 #include "cutlass/library/library.h"
 #include "cutlass/library/singleton.h"
@@ -59,9 +62,12 @@
 #include "../common.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <benchmark/benchmark.h>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
+#include <numeric>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -595,18 +601,147 @@ struct BenchmarkRunnerGemm {
 
   std::vector<DeviceAllocation<ElementA>> block_A;
   std::vector<DeviceAllocation<ElementB>> block_B;
-  std::vector<DeviceAllocation<ElementC>> block_C;
+  DeviceAllocation<ElementA> block_A_pool;
+  DeviceAllocation<ElementB> block_B_pool;
+  DeviceAllocation<ElementC> block_C_pool;
   DeviceAllocation<ElementOutput> block_D;
   DeviceAllocation<ElementOutput> block_ref_D;
-  std::vector<DeviceAllocation<ElementOutput>> block_Aux;
+  DeviceAllocation<ElementOutput> block_Aux_pool;
 
   cutlass::DeviceAllocation<ElementScale> block_scale;
   cutlass::DeviceAllocation<ElementZero> block_zero;
 
   DeviceAllocation<ElementMma> block_A_verify;
   DeviceAllocation<ElementMma> block_B_verify;
+  std::size_t size_A_elements = 0;
+  std::size_t size_B_elements = 0;
+  std::size_t size_C_elements = 0;
 
   BenchmarkRunnerGemm() : seed(0) {};
+
+  static bool use_fixed_vram_input() {
+    return std::getenv("CUTLASS_BENCHMARK_FIXED_VRAM_INPUT") != nullptr;
+  }
+
+  static bool use_prebuilt_variants() {
+    return std::getenv("CUTLASS_BENCHMARK_PREBUILD_VARIANTS") != nullptr;
+  }
+
+  int buffer_index_for_iteration(int iteration_index) const {
+    return count > 0 ? iteration_index % count : 0;
+  }
+
+  ElementA* block_A_ptr(int idx) const {
+    if constexpr (is_mixed_dtype<DispatchPolicy>) {
+      return block_A[idx].get();
+    } else {
+      return block_A_pool.get() + static_cast<std::size_t>(idx) * size_A_elements;
+    }
+  }
+
+  ElementB* block_B_ptr(int idx) const {
+    if constexpr (is_mixed_dtype<DispatchPolicy>) {
+      return block_B[idx].get();
+    } else {
+      return block_B_pool.get() + static_cast<std::size_t>(idx) * size_B_elements;
+    }
+  }
+
+  ElementC* block_C_ptr(int idx) const {
+    return block_C_pool.get() + static_cast<std::size_t>(idx) * size_C_elements;
+  }
+
+  ElementOutput* block_Aux_ptr(int idx) const {
+    if constexpr (epi_is_deeltactmul) {
+      return block_Aux_pool.get() + static_cast<std::size_t>(idx) * size_C_elements;
+    } else {
+      return nullptr;
+    }
+  }
+
+  using Arguments = typename Gemm::GemmKernel::Arguments;
+
+  struct PreparedVariant {
+    Arguments arguments;
+    Gemm gemm_op;
+    device_memory::allocation<uint8_t> workspace;
+
+    explicit PreparedVariant(Arguments args) : arguments(std::move(args)) {}
+    PreparedVariant(PreparedVariant&&) = default;
+    PreparedVariant& operator=(PreparedVariant&&) = default;
+    PreparedVariant(PreparedVariant const&) = delete;
+    PreparedVariant& operator=(PreparedVariant const&) = delete;
+  };
+
+  Arguments make_arguments_for_buffer_idx(
+      int idx,
+      const ProblemShapeType& problem_size,
+      const GEMMOptions& options,
+      const KernelHardwareInfo& hw_info) const {
+    Arguments arguments = GemmConfiguration::defaultArguments();
+    arguments.mode = gemm::GemmUniversalMode::kGemm;
+    arguments.problem_shape = problem_size;
+    if constexpr (!is_mixed_dtype<DispatchPolicy>) {
+      arguments.mainloop = {block_A_ptr(idx), stride_A, block_B_ptr(idx), stride_B};
+    } else {
+      arguments.mainloop = {block_A_ptr(idx), stride_A, block_B_ptr(idx), stride_B, block_scale.get(),
+              stride_S, block_zero.get(), stride_Z, 128};
+    }
+
+    arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C_ptr(idx), stride_C, block_D.get(), stride_D};
+    arguments.hw_info = hw_info;
+
+    if constexpr(epi_is_deeltactmul){
+      arguments.epilogue.thread.aux_ptr = block_Aux_ptr(idx);
+      arguments.epilogue.thread.dAux = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
+    }
+    return arguments;
+  }
+
+  Arguments make_arguments_for_iteration(
+      int iteration_index,
+      const ProblemShapeType& problem_size,
+      const GEMMOptions& options,
+      const KernelHardwareInfo& hw_info) const {
+    return make_arguments_for_buffer_idx(buffer_index_for_iteration(iteration_index), problem_size, options, hw_info);
+  }
+
+  template <typename ErrorHandler>
+  bool prepare_variants(
+      std::vector<PreparedVariant>& variants,
+      const ProblemShapeType& problem_size,
+      const GEMMOptions& options,
+      const KernelHardwareInfo& hw_info,
+      ErrorHandler&& on_error) const {
+    int variant_count = std::max(count, 1);
+    variants.clear();
+    variants.reserve(variant_count);
+
+    for (int idx = 0; idx < variant_count; ++idx) {
+      PreparedVariant variant(make_arguments_for_buffer_idx(idx, problem_size, options, hw_info));
+      if (const char* scheduler_error = set_scheduler_splits(variant.arguments, options.split_k_slices)) {
+        on_error(scheduler_error);
+        return false;
+      }
+      size_t workspace_size = Gemm::get_workspace_size(variant.arguments);
+      try {
+        variant.workspace.reset(workspace_size);
+      } catch (std::exception const& e) {
+        on_error(e.what());
+        return false;
+      }
+      if (variant.gemm_op.can_implement(variant.arguments) != cutlass::Status::kSuccess) {
+        on_error("GEMM unable to implement given args.");
+        return false;
+      }
+      if (variant.gemm_op.initialize(variant.arguments, variant.workspace.get()) != cutlass::Status::kSuccess) {
+        on_error("GEMM failed to initialize.");
+        return false;
+      }
+      variants.emplace_back(std::move(variant));
+    }
+    return true;
+  }
 
   //
   // Methods
@@ -812,12 +947,12 @@ struct BenchmarkRunnerGemm {
     auto& K = cute::get<2>(problem_size);
     auto& L = cute::get<3>(problem_size);
 
-    TensorRef ref_C(block_C[0].get(), LayoutC::packed({M, N}));
+    TensorRef ref_C(block_C_ptr(0), LayoutC::packed({M, N}));
     TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
     auto [ptr_A, ptr_B] = [&]() {
       if constexpr (!is_mixed_dtype<DispatchPolicy>) {
-        return make_tuple(block_A[0].get(), block_B[0].get());
+        return make_tuple(block_A_ptr(0), block_B_ptr(0));
       } else {
         static constexpr bool IsAQuant = cutlass::platform::numeric_limits<ElementA>::is_integer
                                     ^ cutlass::platform::numeric_limits<ElementAccumulator>::is_integer;
@@ -841,7 +976,7 @@ struct BenchmarkRunnerGemm {
 
         auto ptr_A = [&]() {
           if constexpr (IsAQuant) {
-            return dequantize_A(block_A_verify.get(), block_A[0].get(), make_layout(shape_ab, stride_A), block_scale.get(),
+            return dequantize_A(block_A_verify.get(), block_A_ptr(0), make_layout(shape_ab, stride_A), block_scale.get(),
                                 block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
           } else {
             return block_A_verify.get();
@@ -850,7 +985,7 @@ struct BenchmarkRunnerGemm {
 
         auto ptr_B = [&]() {
          if constexpr (IsBQuant) {
-            return dequantize_B(block_B_verify.get(), block_B[0].get(), make_layout(shape_ab, stride_B), block_scale.get(),
+            return dequantize_B(block_B_verify.get(), block_B_ptr(0), make_layout(shape_ab, stride_B), block_scale.get(),
                                 block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
           } else {
             return block_B_verify.get();
@@ -897,7 +1032,7 @@ struct BenchmarkRunnerGemm {
       }
     } else if constexpr (epi_is_deeltactmul) {
       cutlass::reference::device::BlockElementwiseOp<std::multiplies>(
-          block_ref_D.get(), block_ref_D.get(), block_Aux[0].get(), block_D.size());
+          block_ref_D.get(), block_ref_D.get(), block_Aux_ptr(0), block_D.size());
     }
 
     compat::wait();
@@ -918,6 +1053,13 @@ struct BenchmarkRunnerGemm {
 
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(::benchmark::State& state, const ProblemShapeType& problem_size) {
+    using Clock = std::chrono::steady_clock;
+    auto now = [] { return Clock::now(); };
+    auto to_ms = [](auto start, auto end) {
+      return std::chrono::duration<double, std::milli>(end - start).count();
+    };
+    bool enable_phase_timing = std::getenv("CUTLASS_BENCHMARK_PHASE_TIMING") != nullptr;
+    auto init_begin = now();
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
@@ -930,12 +1072,19 @@ struct BenchmarkRunnerGemm {
     std::size_t size_A = cute::cosize(make_layout(cute::make_shape(M, K, L), stride_A));
     std::size_t size_B = cute::cosize(make_layout(cute::make_shape(N, K, L), stride_B));
     std::size_t size_C = cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C));
+    size_A_elements = size_A;
+    size_B_elements = size_B;
+    size_C_elements = size_C;
     std::size_t mem_occupied_ABC = ((size_A * sizeof_bits_v<ElementA>) + (size_B * sizeof_bits_v<ElementB>) +
                                    (size_C * sizeof_bits_v<ElementC>)) / sizeof_bits_v<int8_t>;
     input_bytes_per_buffer = mem_occupied_ABC;
     std::size_t pool_buffers = mem_occupied_ABC == 0 ? 1 : (kRandomInputPoolBytes + mem_occupied_ABC - 1) / mem_occupied_ABC;
     count = static_cast<int32_t>(std::max<std::size_t>(1, pool_buffers));
+    if (use_fixed_vram_input()) {
+      count = 1;
+    }
 
+    double scale_zero_ms = 0.0;
     if constexpr (is_mixed_dtype<DispatchPolicy>) {
       static constexpr bool IsATransformed = CollectiveMainloop::IsATransformed;
 
@@ -959,29 +1108,31 @@ struct BenchmarkRunnerGemm {
       block_A_verify.reset(size_A);
       block_B_verify.reset(size_B);
 
+      auto scale_zero_begin = now();
       block_scale.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
       block_zero.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
-
       initialize_block(block_scale, seed, ElementScale(1), ElementScale(4));
       initialize_block(block_zero, seed);
-    }
-
-    for(int i=0; i < count; i++) {
-      block_A.emplace_back();
-      block_B.emplace_back();
-      block_C.emplace_back();
-      if constexpr (epi_is_deeltactmul) {
-        block_Aux.emplace_back();
-      }
+      scale_zero_ms = to_ms(scale_zero_begin, now());
     }
 
     try {
-      for (int i = 0; i < count; i++) {
-        uint64_t seed_base = seed + static_cast<uint64_t>(i) * 104729;
-        block_A[i].reset(size_A);
-        block_B[i].reset(size_B);
-        block_C[i].reset(size_C);
-        if constexpr (is_mixed_dtype<DispatchPolicy>) {
+      double ab_ms = 0.0;
+      double c_ms = 0.0;
+      double aux_ms = 0.0;
+      double output_alloc_ms = 0.0;
+      if constexpr (is_mixed_dtype<DispatchPolicy>) {
+        auto ab_begin = now();
+        block_A.clear();
+        block_B.clear();
+        block_A.reserve(count);
+        block_B.reserve(count);
+        for (int i = 0; i < count; i++) {
+          uint64_t seed_base = seed + static_cast<uint64_t>(i) * 104729;
+          block_A.emplace_back();
+          block_B.emplace_back();
+          block_A[i].reset(size_A);
+          block_B[i].reset(size_B);
           if (i == 0) {
             initialize_mixed_dtype_block(block_A[i], block_A_verify, seed_base + 2023);
             initialize_mixed_dtype_block(block_B[i], block_B_verify, seed_base + 2022);
@@ -989,19 +1140,62 @@ struct BenchmarkRunnerGemm {
             initialize_block(block_A[i], seed_base + 2023);
             initialize_block(block_B[i], seed_base + 2022);
           }
-        } else {
-          initialize_block(block_A[i], seed_base + 2023);
-          initialize_block(block_B[i], seed_base + 2022);
         }
-        initialize_block(block_C[i], seed_base + 2021);
-        if constexpr (epi_is_deeltactmul) {
-          block_Aux[i].reset(size_C);
-          initialize_block(block_Aux[i], seed_base + 2020);
+        ab_ms = to_ms(ab_begin, now());
+      } else {
+        auto a_begin = now();
+        block_A_pool.reset(static_cast<std::size_t>(count) * size_A_elements);
+        initialize_block(block_A_pool.get(), block_A_pool.size(), seed + 2023);
+        auto a_end = now();
+        auto b_begin = now();
+        block_B_pool.reset(static_cast<std::size_t>(count) * size_B_elements);
+        initialize_block(block_B_pool.get(), block_B_pool.size(), seed + 2022);
+        auto b_end = now();
+        ab_ms = to_ms(a_begin, a_end) + to_ms(b_begin, b_end);
+        if (enable_phase_timing) {
+          std::cerr << "[INIT_TIMING] A_pool_ms=" << to_ms(a_begin, a_end)
+                    << " B_pool_ms=" << to_ms(b_begin, b_end);
         }
       }
 
+      auto c_begin = now();
+      block_C_pool.reset(static_cast<std::size_t>(count) * size_C_elements);
+      initialize_block(block_C_pool.get(), block_C_pool.size(), seed + 2021);
+      auto c_end = now();
+      c_ms = to_ms(c_begin, c_end);
+      if constexpr (epi_is_deeltactmul) {
+        auto aux_begin = now();
+        block_Aux_pool.reset(static_cast<std::size_t>(count) * size_C_elements);
+        initialize_block(block_Aux_pool.get(), block_Aux_pool.size(), seed + 2020);
+        aux_ms = to_ms(aux_begin, now());
+      }
+
+      auto output_alloc_begin = now();
       block_D.reset(size_C);
       block_ref_D.reset(size_C);
+      output_alloc_ms = to_ms(output_alloc_begin, now());
+      if (enable_phase_timing) {
+        auto init_end = now();
+        if constexpr (!is_mixed_dtype<DispatchPolicy>) {
+          std::cerr << " C_pool_ms=" << c_ms;
+          if constexpr (epi_is_deeltactmul) {
+            std::cerr << " Aux_pool_ms=" << aux_ms;
+          }
+          std::cerr << " output_alloc_ms=" << output_alloc_ms
+                    << " init_total_ms=" << to_ms(init_begin, init_end)
+                    << std::endl;
+        } else {
+          std::cerr << "[INIT_TIMING] AB_ms=" << ab_ms
+                    << " scale_zero_ms=" << scale_zero_ms
+                    << " C_pool_ms=" << c_ms;
+          if constexpr (epi_is_deeltactmul) {
+            std::cerr << " Aux_pool_ms=" << aux_ms;
+          }
+          std::cerr << " output_alloc_ms=" << output_alloc_ms
+                    << " init_total_ms=" << to_ms(init_begin, init_end)
+                    << std::endl;
+        }
+      }
     } catch (std::exception const &e) {
       state.SkipWithError(e.what());
     }
@@ -1012,52 +1206,46 @@ struct BenchmarkRunnerGemm {
 
     initialize(state, problem_size);
 
-    typename Gemm::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
+    Arguments arguments = make_arguments_for_iteration(0, problem_size, options, hw_info);
     if (const char* scheduler_error = set_scheduler_splits(arguments, options.split_k_slices)) {
       state.SkipWithError(scheduler_error);
       return;
     }
-    arguments.mode = gemm::GemmUniversalMode::kGemm;
-    arguments.problem_shape = problem_size;
-    auto bind_iteration_buffers = [&](int iteration_index) {
-      int idx = count > 0 ? iteration_index % count : 0;
-      if constexpr (!is_mixed_dtype<DispatchPolicy>) {
-        arguments.mainloop = {block_A[idx].get(), stride_A, block_B[idx].get(), stride_B};
-      } else {
-        arguments.mainloop = {block_A[idx].get(), stride_A, block_B[idx].get(), stride_B, block_scale.get(),
-                stride_S, block_zero.get(), stride_Z, 128};
-      }
-
-      arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[idx].get(), stride_C, block_D.get(), stride_D};
-      arguments.hw_info = hw_info;
-
-      if constexpr(epi_is_deeltactmul){
-        arguments.epilogue.thread.aux_ptr = block_Aux[idx].get();
-        arguments.epilogue.thread.dAux = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
-      }
-    };
-    bind_iteration_buffers(0);
 
     Gemm gemm_op;
-
     device_memory::allocation<uint8_t> workspace;
-    size_t workspace_size = Gemm::get_workspace_size(arguments);
-    try {
-      workspace.reset(workspace_size);
-    } catch (std::exception const &e) {
-      state.SkipWithError(e.what());
+    std::vector<PreparedVariant> prepared_variants;
+    bool prebuilt_variants = use_prebuilt_variants();
+
+    if (prebuilt_variants) {
+      if (!prepare_variants(prepared_variants, problem_size, options, hw_info, [&](char const* message) {
+            state.SkipWithError(message);
+          })) {
+        return;
+      }
+    } else {
+      size_t workspace_size = Gemm::get_workspace_size(arguments);
+      try {
+        workspace.reset(workspace_size);
+      } catch (std::exception const &e) {
+        state.SkipWithError(e.what());
+      }
+
+      if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess)
+        state.SkipWithError("GEMM unable to implement given args.");
+
+      if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess)
+        state.SkipWithError("GEMM failed to initialize.");
     }
-
-    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess)
-      state.SkipWithError("GEMM unable to implement given args.");
-
-    if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess)
-      state.SkipWithError("GEMM failed to initialize.");
 
     if (state.error_occurred()) return;
 
     // Run the GEMM
-    gemm_op.run();
+    if (prebuilt_variants) {
+      prepared_variants[buffer_index_for_iteration(0)].gemm_op.run();
+    } else {
+      gemm_op.run();
+    }
 
 #if defined(CUTLASS_ENABLE_SYCL)
     compat::wait();
@@ -1117,17 +1305,27 @@ struct BenchmarkRunnerGemm {
         (options.beta != 0 ? 2 : 1) * options.m * options.n * sizeof_c
       ) * 1e-6 * options.l;
 
-    auto [warmup_iters, measure_iters] = choose_iteration_counts(kWarmupIters, kMeasureIters);
+    auto iteration_counts = choose_iteration_counts(kWarmupIters, kMeasureIters);
+    int warmup_iters = iteration_counts.first;
+    int measure_iters = iteration_counts.second;
 
     // --- explicit warmup (discarded, NOT timed) ---
     state.PauseTiming();
     for (int w = 0; w < warmup_iters; ++w) {
-      bind_iteration_buffers(w + 1);
-      if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
-        state.SkipWithError("GEMM failed to update warmup buffers.");
-        return;
+      if (prebuilt_variants) {
+        prepared_variants[buffer_index_for_iteration(w + 1)].gemm_op.run();
+      } else {
+        arguments = make_arguments_for_iteration(w + 1, problem_size, options, hw_info);
+        if (const char* scheduler_error = set_scheduler_splits(arguments, options.split_k_slices)) {
+          state.SkipWithError(scheduler_error);
+          return;
+        }
+        if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
+          state.SkipWithError("GEMM failed to update warmup buffers.");
+          return;
+        }
+        gemm_op.run();
       }
-      gemm_op.run();
     }
 #if defined(CUTLASS_ENABLE_SYCL)
     compat::wait();
@@ -1135,25 +1333,28 @@ struct BenchmarkRunnerGemm {
     state.ResumeTiming();
 
     // --- timed measurement ---
-    std::vector<double> runtimes;
-    runtimes.reserve(measure_iters);
-    double total_ms = 0.0;
-    for (int i = 0; i < measure_iters; ++i) {
-      bind_iteration_buffers(i + 1 + warmup_iters);
-      if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
-        state.SkipWithError("GEMM failed to update measured buffers.");
-        return;
+    auto runtimes = measure_iteration_batch(measure_iters, [&](int i) {
+      if (prebuilt_variants) {
+        prepared_variants[buffer_index_for_iteration(i + 1 + warmup_iters)].gemm_op.run();
+        return true;
+      } else {
+        arguments = make_arguments_for_iteration(i + 1 + warmup_iters, problem_size, options, hw_info);
+        if (const char* scheduler_error = set_scheduler_splits(arguments, options.split_k_slices)) {
+          state.SkipWithError(scheduler_error);
+          return false;
+        }
+        if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
+          state.SkipWithError("GEMM failed to update measured buffers.");
+          return false;
+        }
+        gemm_op.run();
+        return true;
       }
-      GPU_Clock iter_timer;
-      iter_timer.start();
-      gemm_op.run();
-      #if defined(CUTLASS_ENABLE_SYCL)
-      compat::wait();
-      #endif
-      double iter_ms = iter_timer.milliseconds();
-      total_ms += iter_ms;
-      runtimes.push_back(iter_ms);
+    });
+    if (state.error_occurred() || runtimes.empty()) {
+      return;
     }
+    double total_ms = std::accumulate(runtimes.begin(), runtimes.end(), 0.0);
     double avg_ms_per_iter = total_ms / measure_iters;
     state.SetIterationTime(avg_ms_per_iter / 1000.0);
     state.SetItemsProcessed(measure_iters);
@@ -1187,6 +1388,31 @@ private:
     return {requested_warmup, requested_measure};
   }
 
+  template <typename SubmitIteration>
+  std::vector<double> measure_iteration_batch(int measure_iters, SubmitIteration&& submit_iteration) const {
+    std::vector<double> runtimes;
+    runtimes.reserve(measure_iters);
+
+#if !defined(CUTLASS_ENABLE_SYCL) || !defined(CUTLASS_SYCL_PROFILING_ENABLED)
+#error "GEMM benchmark timing requires SYCL event profiling."
+#endif
+
+    SyclEvent begin;
+    SyclEvent end;
+    syclEventRecord(begin);
+    for (int i = 0; i < measure_iters; ++i) {
+      if (!submit_iteration(i)) {
+        return {};
+      }
+    }
+    syclEventRecord(end);
+    syclEventSynchronize(begin, end);
+    auto samples_ms = syclEventElapsedTimes(begin, end);
+    runtimes.assign(samples_ms.begin(), samples_ms.end());
+
+    return runtimes;
+  }
+
   static void initialize_counters(::benchmark::State& state) {
     state.counters["avg_runtime_ms"] = 0;
     state.counters["best_runtime_ms"] = std::numeric_limits<double>::max();
@@ -1212,59 +1438,113 @@ private:
 
   public:
   // ── GB-free profiler: bypasses Google Benchmark entirely ──
-  // Uses batch-wait pattern (matches 00_bmg_gemm example at 126 TFLOPS).
+  // Uses the same warmup/measurement submission pattern and SYCL event timing as run().
   DirectRunResult run_direct_result(const GEMMOptions& options, const KernelHardwareInfo& hw_info) {
+    using Clock = std::chrono::steady_clock;
+    auto now = [] { return Clock::now(); };
+    auto to_ms = [](auto start, auto end) {
+      return std::chrono::duration<double, std::milli>(end - start).count();
+    };
+    bool enable_phase_timing = std::getenv("CUTLASS_BENCHMARK_PHASE_TIMING") != nullptr;
+    auto total_begin = now();
+
     // Use the PROVEN initialize() code path from run() — identical buffer setup
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
     alignas(64) char state_buf[256] = {};
     auto& sref = *reinterpret_cast<::benchmark::State*>(state_buf);
+    auto init_begin = now();
     initialize(sref, problem_size);
+    auto init_end = now();
 
-    typename GemmConfiguration::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
+    auto setup_begin = now();
+    Arguments arguments = make_arguments_for_iteration(0, problem_size, options, hw_info);
     if (const char* scheduler_error = set_scheduler_splits(arguments, options.split_k_slices)) {
       std::cerr << "[DIRECT_FAIL] " << scheduler_error << std::endl;
       return {};
     }
-    arguments.mode = gemm::GemmUniversalMode::kGemm;
-    arguments.problem_shape = problem_size;
-    auto bind_iteration_buffers = [&](int iteration_index) {
-      int idx = count > 0 ? iteration_index % count : 0;
-      arguments.mainloop = {block_A[idx].get(), stride_A, block_B[idx].get(), stride_B};
-      arguments.epilogue = {{ElementAccumulator(options.alpha), ElementAccumulator(options.beta)}, block_C[idx].get(), stride_C, block_D.get(), stride_D};
-      arguments.hw_info = hw_info;
-    };
-    bind_iteration_buffers(0);
 
-    Gemm gemm_op; size_t ws = Gemm::get_workspace_size(arguments);
+    Gemm gemm_op;
     device_memory::allocation<uint8_t> workspace;
-    try { workspace.reset(ws); } catch (...) { return {}; }
-    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess) return {};
-    if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess) return {};
-
-    gemm_op.run(); compat::wait();  // initial run
-    auto [warmup_iters, measure_iters] = choose_iteration_counts(kWarmupIters, kMeasureIters);
-    for (int w = 0; w < warmup_iters; ++w) {
-      bind_iteration_buffers(w + 1);
-      if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
-        std::cerr << "[DIRECT_FAIL] failed to update warmup buffers" << std::endl;
+    std::vector<PreparedVariant> prepared_variants;
+    bool prebuilt_variants = use_prebuilt_variants();
+    if (prebuilt_variants) {
+      if (!prepare_variants(prepared_variants, problem_size, options, hw_info, [&](char const* message) {
+            std::cerr << "[DIRECT_FAIL] " << message << std::endl;
+          })) {
         return {};
       }
+    } else {
+      size_t ws = Gemm::get_workspace_size(arguments);
+      try { workspace.reset(ws); } catch (...) { return {}; }
+      if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess) return {};
+      if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess) return {};
+    }
+    auto setup_end = now();
+
+    auto initial_begin = now();
+    if (prebuilt_variants) {
+      prepared_variants[buffer_index_for_iteration(0)].gemm_op.run();
+    } else {
       gemm_op.run();
+    }
+    compat::wait();  // initial run
+    auto initial_end = now();
+    auto iteration_counts = choose_iteration_counts(kWarmupIters, kMeasureIters);
+    int warmup_iters = iteration_counts.first;
+    int measure_iters = iteration_counts.second;
+    auto warmup_begin = now();
+    for (int w = 0; w < warmup_iters; ++w) {
+      if (prebuilt_variants) {
+        prepared_variants[buffer_index_for_iteration(w + 1)].gemm_op.run();
+      } else {
+        arguments = make_arguments_for_iteration(w + 1, problem_size, options, hw_info);
+        if (const char* scheduler_error = set_scheduler_splits(arguments, options.split_k_slices)) {
+          std::cerr << "[DIRECT_FAIL] " << scheduler_error << std::endl;
+          return {};
+        }
+        if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
+          std::cerr << "[DIRECT_FAIL] failed to update warmup buffers" << std::endl;
+          return {};
+        }
+        gemm_op.run();
+      }
     }
     compat::wait();
-    double total_ms = 0.0;
+    auto warmup_end = now();
+
+    std::vector<double> runtimes;
+    runtimes.reserve(measure_iters);
+    auto measure_submit_begin = now();
+    SyclEvent begin;
+    SyclEvent end;
+    syclEventRecord(begin);
     for (int i = 0; i < measure_iters; ++i) {
-      bind_iteration_buffers(i + 1 + warmup_iters);
-      if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
-        std::cerr << "[DIRECT_FAIL] failed to update measured buffers" << std::endl;
-        return {};
+      if (prebuilt_variants) {
+        prepared_variants[buffer_index_for_iteration(i + 1 + warmup_iters)].gemm_op.run();
+      } else {
+        arguments = make_arguments_for_iteration(i + 1 + warmup_iters, problem_size, options, hw_info);
+        if (const char* scheduler_error = set_scheduler_splits(arguments, options.split_k_slices)) {
+          std::cerr << "[DIRECT_FAIL] " << scheduler_error << std::endl;
+          return {};
+        }
+        if (gemm_op.update(arguments, workspace.get()) != cutlass::Status::kSuccess) {
+          std::cerr << "[DIRECT_FAIL] failed to update measured buffers" << std::endl;
+          return {};
+        }
+        gemm_op.run();
       }
-      GPU_Clock timer;
-      timer.start();
-      gemm_op.run();
-      compat::wait();
-      total_ms += timer.milliseconds();
     }
+    syclEventRecord(end);
+    auto measure_submit_end = now();
+    auto measure_collect_begin = now();
+    syclEventSynchronize(begin, end);
+    auto samples_ms = syclEventElapsedTimes(begin, end);
+    runtimes.assign(samples_ms.begin(), samples_ms.end());
+    auto measure_collect_end = now();
+    if (runtimes.empty()) {
+      return {};
+    }
+    double total_ms = std::accumulate(runtimes.begin(), runtimes.end(), 0.0);
     double avg_sec = (total_ms / measure_iters) * 1.0e-3;
     DirectRunResult result;
     result.tflops = (2.0 * options.m * options.n * options.k * options.l * 1e-12) / avg_sec;
@@ -1275,9 +1555,22 @@ private:
     result.pool_buffers = count;
     result.warmup_iters = warmup_iters;
     result.measure_iters = measure_iters;
+    auto total_end = now();
     std::cerr << "[PERF] input_bytes_per_buffer=" << result.input_bytes_per_buffer << " pool_target_bytes=" << result.input_pool_target_bytes
               << " pool_buffers=" << result.pool_buffers << " warmup_iters=" << result.warmup_iters << " measure_iters=" << result.measure_iters
               << " total_ms=" << result.total_runtime_ms << " avg_us=" << (avg_sec*1e6) << " tf=" << result.tflops << std::endl;
+    if (enable_phase_timing) {
+      std::cerr << "[TIMING] init_ms=" << to_ms(init_begin, init_end)
+                << " setup_ms=" << to_ms(setup_begin, setup_end)
+                << " initial_run_ms=" << to_ms(initial_begin, initial_end)
+                << " warmup_ms=" << to_ms(warmup_begin, warmup_end)
+                << " measure_submit_ms=" << to_ms(measure_submit_begin, measure_submit_end)
+                << " measure_wait_collect_ms=" << to_ms(measure_collect_begin, measure_collect_end)
+                << " measured_device_ms=" << result.total_runtime_ms
+                << " measured_host_gap_ms=" << (to_ms(measure_submit_begin, measure_collect_end) - result.total_runtime_ms)
+                << " total_wall_ms=" << to_ms(total_begin, total_end)
+                << std::endl;
+    }
     return result;
   }
 

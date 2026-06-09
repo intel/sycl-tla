@@ -43,7 +43,7 @@
     batch size is defined by `options.l`. The tile shape, which defines how much work is executed by
     a single work-group, is defined at compile time by:
     ```
-      using TileShape = Shape<_256, _256, _32>;
+      using TileShape = Shape<_128, _192, _32>;
     ```
     That is, each work-group processes a tile of M=256, N=256, and iterates over `options.k` in
     blocks of K=32.
@@ -358,24 +358,25 @@ int main(int argc, const char** argv)
   using GmemTiledCopyA = void; //XE_LOAD_2D<16, 32, 32>;
   using GmemTiledCopyB = void; //XE_LOAD_2D_VNNI<16, 32, 32>;
 
-  // Workgroup-level tile
-  using TileShape = Shape<_256, _256, _32>;
+  // Workgroup-level tile. This matches the current historical top1 BMG benchmark kernel:
+  // 128x192x32 tile, SG8x2, PipelineStages=1.
+  using TileShape = Shape<_128, _192, _32>;
 
   // A TiledMMA struct defines a tiling of an MMA atom over M, N and K, combining both additional
   // hardware (sub-groups for Intel BMG) and iterations by each sub-group.
   //
   // The TiledMMAHelper struct defines a specific TiledMMA for a given MMA atom. This example uses
   // the XE_DPAS_TT<8, float, cute::bfloat16_t> atom, which represents an 8x16x16 DPAS operation with
-  //float32 accumulation and bfloat16 inputs, TileShape (<256, 256, 32>) and sub-group layout (8x4x1).
+  //float32 accumulation and bfloat16 inputs, TileShape (<128, 192, 32>) and sub-group layout (8x2x1).
   // The TiledMMA constructed using TiledMMAHelper has the property that each sub-group operates on a
   // single contiguous chunk of the work-group TileShape. For this configuration, this implies that
-  // each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations). See
-  // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 4,1,0) for
+  // each sub-group operates on a contiguous 16x96x32 chunk (2x6x2 iterations). See
+  // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 2,1,0) for
   // performance reasons.
-  using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, Layout<TileShape>, Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+  using TiledMma = typename TiledMMAHelper<MMA_Atom<XE_DPAS_TT<8, float, cute::bfloat16_t>>, Layout<TileShape>, Layout<Shape<_8, _2, _1>, Stride<_2, _1, _0>>>::TiledMMA;
 
   // For Intel BMG, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
-  constexpr int PipelineStages = 2;
+  constexpr int PipelineStages = 1;
   // For older version of copy/mma atom, use cutlass::gemm::MainloopIntelXeXMX16 as dispatch policy
   using GEMMDispatchPolicy = cutlass::gemm::MainloopXeL1Staged<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeGeneric;

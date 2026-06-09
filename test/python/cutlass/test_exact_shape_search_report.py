@@ -34,7 +34,50 @@ class TestExactShapeSearchReport(unittest.TestCase):
                 encoding="utf-8",
             )
             (run_dir / "run_meta.txt").write_text(
-                "git_head=deadbeef\nkernel_catalog_source=layered_bmg_scheduler_expanded\n",
+                "\n".join(
+                    [
+                        "git_head=deadbeef",
+                        "repo_root=/tmp/fake-repo",
+                        "kernel_catalog_source=layered_bmg_scheduler_expanded",
+                        "benchmark_input_mode=rotating_vram_pool",
+                        "benchmark_stride_policy=fixed_4_1_0",
+                        "perf_env_ONEAPI_DEVICE_SELECTOR=level_zero:gpu",
+                        "perf_env_SYCL_PROGRAM_COMPILE_OPTIONS=-ze-opt-large-register-file -gline-tables-only",
+                        "perf_env_IGC_VectorAliasBBThreshold=10000",
+                        "perf_env_IGC_ExtraOCLOptions=-cl-intel-256-GRF-per-thread",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (run_dir / "benchmark_config.json").write_text(
+                json.dumps(
+                    {
+                        "input_mode": "rotating_vram_pool",
+                        "stride_policy": "fixed_4_1_0",
+                        "input_pool_target_bytes": 1073741824,
+                        "warmup_iters": 50,
+                        "measure_iters": 100,
+                        "fixed_vram_input": False,
+                        "phase_timing_enabled": False,
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (run_dir / "synced_sources.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "path": "benchmarks/gemm/benchmark_runner.hpp",
+                            "exists": True,
+                            "sha256": "abc123",
+                        }
+                    ],
+                    indent=2,
+                )
+                + "\n",
                 encoding="utf-8",
             )
             (run_dir / "kernel_metadata.json").write_text(
@@ -67,10 +110,10 @@ class TestExactShapeSearchReport(unittest.TestCase):
                         "KernelSlow": {
                             "layout": "rcr",
                             "runner": "benchmark",
-                            "scheduler_family": "Gemm",
-                            "decomposition_mode": "Gemm",
-                            "streamk_mode": "",
-                            "reduction_mode": "None",
+                            "scheduler_family": "SplitK",
+                            "decomposition_mode": "SplitK",
+                            "streamk_mode": "splitk",
+                            "reduction_mode": "Workspace",
                             "tile_m": 256,
                             "tile_n": 128,
                             "tile_k": 64,
@@ -78,10 +121,10 @@ class TestExactShapeSearchReport(unittest.TestCase):
                             "sg_n": 4,
                             "stages": 2,
                             "split_k": 1,
-                            "kernel_schedule": "KernelXe",
-                            "tile_scheduler": "Gemm",
-                            "source": "exhaustive_regular_gemm_catalog",
-                            "allowed_runtime_sweeps": ["m", "n", "k"],
+                            "kernel_schedule": "KernelXeCooperative",
+                            "tile_scheduler": "StreamKScheduler",
+                            "source": "exhaustive_streamk_catalog",
+                            "allowed_runtime_sweeps": ["m", "n", "k", "split_k_slices"],
                             "dtype_a": "bf16",
                             "dtype_b": "bf16",
                             "dtype_c": "f32",
@@ -158,6 +201,13 @@ class TestExactShapeSearchReport(unittest.TestCase):
             self.assertIn("kernel_schedule", summary["merged_fields"])
             self.assertEqual(summary["run_meta"]["git_head"], "deadbeef")
             self.assertEqual(summary["manifest"]["batch_count"], 2)
+            self.assertEqual(summary["benchmark_config"]["stride_policy"], "fixed_4_1_0")
+            self.assertEqual(summary["synced_sources"][0]["sha256"], "abc123")
+            self.assertEqual(summary["search_limitations"][0]["constraint"], "runtime split_k_slices <= 1")
+            self.assertTrue((report_dir / "8192_384_3584" / "top1_filter.txt").exists())
+            self.assertTrue((report_dir / "8192_384_3584" / "top1_repro.cfg").exists())
+            self.assertTrue((report_dir / "8192_384_3584" / "top1_repro.sh").exists())
+            self.assertIn("top1", summary["repro_artifacts"])
 
             with (report_dir / "8192_384_3584" / "ranked_by_total_runtime.csv").open(
                 "r", encoding="utf-8", newline=""
@@ -169,6 +219,23 @@ class TestExactShapeSearchReport(unittest.TestCase):
             self.assertNotEqual(rows[0]["total_runtime_ms"], "")
             self.assertEqual(rows[0]["kernel_schedule"], "KernelXe")
             self.assertEqual(rows[0]["allowed_runtime_sweeps"], "[\"m\", \"n\", \"k\"]")
+
+            top1_filter = (report_dir / "8192_384_3584" / "top1_filter.txt").read_text(encoding="utf-8")
+            self.assertEqual(top1_filter.strip(), "^KernelFast$")
+            top1_cfg = (report_dir / "8192_384_3584" / "top1_repro.cfg").read_text(encoding="utf-8")
+            self.assertIn("KernelFast", top1_cfg)
+            self.assertIn("--alpha=1", top1_cfg)
+            top5_cfg = (report_dir / "8192_384_3584" / "top5_repro.cfg").read_text(encoding="utf-8")
+            self.assertIn("KernelSlow", top5_cfg)
+            self.assertIn("--split_k_slices=1", top5_cfg)
+            top1_script = (report_dir / "8192_384_3584" / "top1_repro.sh").read_text(encoding="utf-8")
+            self.assertIn("--config_file=\"$CONFIG_FILE\"", top1_script)
+            self.assertIn("KERNEL_FILTER_FILE=\"$FILTER_FILE\"", top1_script)
+            self.assertIn('PATH="/opt/intel/oneapi/compiler/2025.3/bin:$PATH"', top1_script)
+            self.assertIn('-DCMAKE_CXX_COMPILER="${CMAKE_CXX_COMPILER:-/opt/intel/oneapi/compiler/2025.3/bin/icpx}"', top1_script)
+            self.assertIn('SHARED_DEPS_BUILD="${SHARED_DEPS_BUILD:-$RUN_DIR/workers/gpu0/build}"', top1_script)
+            self.assertIn('ln -sfn "$SHARED_DEPS_BUILD/_deps/googlebenchmark-build" "$BUILD_DIR/_deps/googlebenchmark-build"', top1_script)
+            self.assertIn("ZE_AFFINITY_MASK", top1_script)
 
     def test_gen_main_emits_latency_fields(self):
         with tempfile.TemporaryDirectory() as tmpdir:

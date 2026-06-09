@@ -107,7 +107,7 @@ from .dispatch import (
     validate_dispatch_table,
 )
 from .ali_dataset import build_ali_gemm_docs
-from .workflow import SEARCH_STRATEGY_PRESETS, apply_bruteforce_scheduler_search_defaults, apply_search_strategy_defaults, build_artifact_bundle_manifest, build_candidate_build_plan, benchmark_batch_plan_by_kernel_id, benchmark_exe_for_build_plan, execute_candidate_build_plan, execute_candidate_build_preflight_plans, export_product_bundle_manifest, limit_shapes_and_reference, load_target_shapes_and_reference, run_entries_with_batch_benchmarks, validate_candidate_auto_build_mode, validate_product_bundle_manifest
+from .workflow import SEARCH_STRATEGY_PRESETS, apply_bruteforce_scheduler_search_defaults, apply_search_strategy_defaults, build_artifact_bundle_manifest, build_candidate_build_plan, build_scheduler_bruteforce_plan, benchmark_batch_plan_by_kernel_id, benchmark_exe_for_build_plan, execute_candidate_build_plan, execute_candidate_build_preflight_plans, export_product_bundle_manifest, limit_shapes_and_reference, load_target_shapes_and_reference, run_entries_with_batch_benchmarks, validate_candidate_auto_build_mode, validate_product_bundle_manifest
 from .workflow import build_compiler_flags_probe_summary, build_parser, dispatch_lookup_from_args, empty_anomaly_report, main, run_phase_a_probe, workflow
 
 __all__ = [
@@ -154,6 +154,7 @@ __all__ = [
     "build_phase_b_summary",
     "build_reference_comparison",
     "build_run_summary",
+    "build_scheduler_bruteforce_plan",
     "build_ali_gemm_docs",
     "build_artifact_bundle_manifest",
     "build_screening_entries",
