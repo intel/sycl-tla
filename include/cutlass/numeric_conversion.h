@@ -108,7 +108,6 @@ struct NumericConverter<int32_t, float, FloatRoundStyle::round_to_nearest> {
     #if __CUDA_ARCH__
     return __float2int_rn(s);
     #elif defined(__SYCL_DEVICE_ONLY__)
-    // rintf and sycl::rint compile to the same rnde instruction
     return static_cast<result_type>(rintf(s));
     #elif !defined(__CUDACC_RTC__)
     std::fesetround(FE_TONEAREST);
