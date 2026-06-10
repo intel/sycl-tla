@@ -32,13 +32,6 @@ jobs:
           GPU: 'BMG'
           IGC: 'ROLLING'
 
-      - name: Install DPC++
-        id: install_dpcpp
-        uses: ./.github/actions/install-dpcpp
-        with:
-          DPCPP_RELEASE: TORCH_SUPPORTED
-          DPCPP_PATH: ~/dpcpp
-
       - name: Install MKL
         shell: bash
         run: |
@@ -54,9 +47,14 @@ jobs:
           #  bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.mkl.devel
           #  bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.dpcpp-cpp-compiler
           #fi
+          rm -rf ~/intel/oneapi/ ~/intel/installercache/ ~/intel/packagemanager/
+          ls -l /home/ghrunner/intel
+          echo $USER
+          echo $HOME
           wget -q https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
           bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --silent --eula accept
           echo $USER
+          echo $HOME
           ls -lr /home/ghrunner/
           source /home/ghrunner/intel/oneapi/mkl/latest/env/vars.sh
           source /home/ghrunner/intel/oneapi/setvars.sh
@@ -67,8 +65,6 @@ jobs:
         run: |
           python3 -m venv ~/.pytorch-venv
           source ~/.pytorch-venv/bin/activate
-          . setvars.sh
-          env >> $GITHUB_ENV
 
       - name: Install nightly PyTorch
         shell: bash
@@ -100,7 +96,7 @@ jobs:
           cd ${{ runner.temp }}
           git clone https://github.com/pytorch/pytorch.git
           cd pytorch
-          git checkout aff3311fabd30ebffa9153e1bcf577512291a8a1
+          git checkout b0e6c698ed54c38072586530a224a2834d36d222
           python3 -m pip install -r requirements.txt
           python3 -m pip install unittest-xml-reporting
 
@@ -181,5 +177,9 @@ jobs:
         shell: bash
         run: |
           rm -rf ${{ runner.temp }}/pytorch
+          rm -rf ~/.pytorch-venv
+          rm -rf ~/intel/oneapi/ ~/intel/installercache/ ~/intel/packagemanager/
+          bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action remove --silent --eula accept --ignore-errors 
+
 
 
