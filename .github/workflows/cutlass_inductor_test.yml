@@ -42,18 +42,23 @@ jobs:
       - name: Install MKL
         shell: bash
         run: |
-          if [ -d /home/ghrunner/intel/oneapi/mkl ]; then
-            echo "MKL already installed at /home/ghrunner/intel/oneapi/mkl"
-          else
-            echo "Installing MKL..."
-            if [ -f $PWD/intel-deep-learning-essentials-2025.3.2.36_offline.sh ]; then
-              echo "DL Installer exists!"
-            else
-              sudo wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
-            fi
-            bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.mkl.devel
-          fi
+          #if [ -d /home/ghrunner/intel/oneapi/mkl ]; then
+          #  echo "MKL already installed at /home/ghrunner/intel/oneapi/mkl"
+          #else
+          #  echo "Installing MKL..."
+          #  if [ -f $PWD/intel-deep-learning-essentials-2025.3.2.36_offline.sh ]; then
+          #    echo "DL Installer exists!"
+          #  else
+          #    sudo wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
+          #  fi
+          #  bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.mkl.devel
+          #  bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.dpcpp-cpp-compiler
+          #fi
+          wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
+          bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.mkl.devel
+          bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.dpcpp-cpp-compiler
           . /home/ghrunner/intel/oneapi/mkl/latest/env/vars.sh
+          . /home/ghrunner/intel/oneapi/setvars.sh
           env >> $GITHUB_ENV
 
       - name: Setup virtual environment
@@ -82,6 +87,11 @@ jobs:
           source ~/.pytorch-venv/bin/activate
           python3 -m pip list | grep -i torch
 
+      - name: Check sycl-ls
+        shell: bash
+        run: |
+          sycl-ls
+
       - name: Clone PyTorch fork and install requirements
         shell: bash
         run: |
@@ -106,6 +116,7 @@ jobs:
           python -c "import torch; print(torch.xpu.get_device_capability()['device_id'])"
           python3 -m pip list | grep -i triton
 
+
       - name: Debug big GPU detection
         shell: bash
         run: |
@@ -129,6 +140,20 @@ jobs:
           print("is_big_gpu =", is_big_gpu())
           PY
 
+      - name: Run TorchInductor Backend test
+        shell: bash
+        run: |
+          rm -rf /tmp/torchinductor_*
+          source ~/.pytorch-venv/bin/activate
+          export USE_XPU=1
+          export CUTLASS_USE_SYCL=1
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          export TORCH_XPU_ARCH_LIST=bmg
+          export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
+          mkdir -p ${GITHUB_WORKSPACE}/logs/
+          cd ${{ runner.temp }}/pytorch
+          python3 test/inductor/test_cutlass_backend.py -v  2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_backend.log
+
       - name: Run TorchInductor EVT test
         shell: bash
         run: |
@@ -143,19 +168,6 @@ jobs:
           cd ${{ runner.temp }}/pytorch
           python3 test/inductor/test_cutlass_evt.py -v 2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_evt.log
 
-      - name: Run TorchInductor Backend test
-        shell: bash
-        run: |
-          rm -rf /tmp/torchinductor_*
-          source ~/.pytorch-venv/bin/activate
-          export USE_XPU=1
-          export CUTLASS_USE_SYCL=1
-          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-          export TORCH_XPU_ARCH_LIST=bmg
-          export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
-          mkdir -p ${GITHUB_WORKSPACE}/logs/
-          cd ${{ runner.temp }}/pytorch
-          python3 test/inductor/test_cutlass_backend.py -v  2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_backend.log
 
       - name: Upload logs
         uses: actions/upload-artifact@v4
