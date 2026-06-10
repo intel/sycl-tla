@@ -54,11 +54,12 @@ jobs:
           #  bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.mkl.devel
           #  bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.dpcpp-cpp-compiler
           #fi
-          wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
-          bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.mkl.devel
-          bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.dpcpp-cpp-compiler
-          . /home/ghrunner/intel/oneapi/mkl/latest/env/vars.sh
-          . /home/ghrunner/intel/oneapi/setvars.sh
+          wget -q https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
+          bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --silent --eula accept
+          echo $USER
+          ls -lr /home/ghrunner/
+          source /home/ghrunner/intel/oneapi/mkl/latest/env/vars.sh
+          source /home/ghrunner/intel/oneapi/setvars.sh
           env >> $GITHUB_ENV
 
       - name: Setup virtual environment
@@ -74,7 +75,7 @@ jobs:
         run: |
           source ~/.pytorch-venv/bin/activate
           python3 --version
-          python3 -m pip install --pre torch==2.13.0.dev20260515+xpu --index-url https://download.pytorch.org/whl/nightly/xpu --force-reinstall
+          python3 -m pip install --pre torch==2.13.0.dev20260521+xpu --index-url https://download.pytorch.org/whl/nightly/xpu --force-reinstall
 
       - name: Print IGC2 version
         shell: bash
