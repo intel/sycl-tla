@@ -14,7 +14,7 @@ jobs:
   run-cutlass-test:
     name: Run TorchInductor CUTLASS test
     runs-on: bmg
-    timeout-minutes: 120
+    timeout-minutes: 360
   
     steps:
       - name: Checkout sycl-tla repo
@@ -62,7 +62,6 @@ jobs:
           wget -q https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
           bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --silent --eula accept --instance=pt_oneapi --install-dir=$ONEAPI_INSTALL_DIR_FOR_PT
           echo $ONEAPI_INSTALL_DIR_FOR_PT
-          ls -lr $ONEAPI_INSTALL_DIR_FOR_PT
           source $ONEAPI_INSTALL_DIR_FOR_PT/mkl/latest/env/vars.sh
           source $ONEAPI_INSTALL_DIR_FOR_PT/setvars.sh
           export TORCH_WHL=$HOME/pytorch_ut/torch-2.13.0a0+git0002a87-cp312-cp312-linux_x86_64.whl
@@ -71,7 +70,11 @@ jobs:
       - name: Setup virtual environment
         shell: bash
         run: |
-          python3 -m pip install uv
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          ls -lr $HOME/.local/bin
+          export PATH=$PATH:$HOME/.local/bin
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          export UV_VENV_CLEAR=1
           uv venv ~/.pytorch-venv --python 3.12 --seed
           source ~/.pytorch-venv/bin/activate
 
@@ -82,7 +85,9 @@ jobs:
           python3 --version
           echo $TORCH_WHL
           #python3 -m pip install --pre torch==2.13.0.dev20260521+xpu --index-url https://download.pytorch.org/whl/nightly/xpu --force-reinstall
-          python3 -m pip install $TORCH_WHL
+          cp $TORCH_WHL .
+          ls ./
+          python3 -m pip install torch-2.13.0a0+git0002a87-cp312-cp312-linux_x86_64.whl
 
       - name: Clone PyTorch fork and install requirements
         shell: bash
@@ -94,6 +99,7 @@ jobs:
           git checkout 0002a8783abe6623eacc71df6c05d72869cd5ba5
           python3 -m pip install -r requirements.txt
           python3 -m pip install unittest-xml-reporting
+          export PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/xpu
           USE_XPU=1 make triton
 
       - name: Print IGC2 version
@@ -179,6 +185,7 @@ jobs:
 
 
       - name: Upload logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-artifacts
@@ -189,7 +196,7 @@ jobs:
         shell: bash
         run: |
           rm -rf ${{ runner.temp }}/pytorch
-          rm -rf ~/.pytorch-venv
+          rm -rf $HOME/.pytorch-venv
           echo $ONEAPI_INSTALL_DIR_FOR_PT
           rm -rf $ONEAPI_INSTALL_DIR_FOR_PT
           #bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action remove --silent --eula accept --ignore-errors 
