@@ -20,6 +20,11 @@ jobs:
       - name: Checkout sycl-tla repo
         uses: actions/checkout@v4
 
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install Python venv package
         shell: bash
         run: |
@@ -61,14 +66,10 @@ jobs:
           export TORCH_WHL=$HOME/pytorch_ut/torch-2.13.0a0+git0002a87-cp312-cp312-linux_x86_64.whl
           env >> $GITHUB_ENV
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
       - name: Setup virtual environment
         shell: bash
         run: |
+          python3 -m pip install uv
           uv venv ~/.pytorch-venv --python 3.12 --seed
           source ~/.pytorch-venv/bin/activate
 
