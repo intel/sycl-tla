@@ -6,8 +6,8 @@
 
 SYCL*TLA targets Intel GPUs and requires:
 - Intel® oneAPI DPC++/C++ Compiler (`icpx`) — or a recent open-source DPC++ build — supporting C++17 or greater
-- CMake 3.18+
-- Python 3.6+
+- CMake 3.22+
+- Python 3.8+
 
 For full toolchain setup and supported configurations, see
 [Building with SYCL support](build/building_with_sycl_support.md).
