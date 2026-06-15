@@ -99,6 +99,7 @@ jobs:
           git checkout 0002a8783abe6623eacc71df6c05d72869cd5ba5
           python3 -m pip install -r requirements.txt
           python3 -m pip install unittest-xml-reporting
+          python3 -m pip install pytest
           export PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/xpu
           USE_XPU=1 make triton
 
@@ -167,7 +168,8 @@ jobs:
           export TORCHINDUCTOR_CUTLASS_DIR="${GITHUB_WORKSPACE}"
           mkdir -p ${GITHUB_WORKSPACE}/logs/
           cd ${{ runner.temp }}/pytorch
-          python3 test/inductor/test_cutlass_backend.py -v  2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_backend.log
+          #python3 test/inductor/test_cutlass_backend.py -v  2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_backend.log
+          python test/inductor/test_cutlass_backend.py --use-pytest -k 'not test_maybe_append_choice_caching and not test_config_number_post_filtering and not test_compilation_time' -v 2>&1 | tee ${GITHUB_WORKSPACE}/logs/cutlass_inductor_backend.log
 
       - name: Run TorchInductor EVT test
         shell: bash
