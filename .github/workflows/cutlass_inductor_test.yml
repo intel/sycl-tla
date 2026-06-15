@@ -1,11 +1,9 @@
 name: "TorchInductor CUTLASS UTs"
+
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  merge_group:
-    branches: [ "main" ]
+  schedule:
+    # Runs at 00:00 AM UTC alternate days
+    - cron: '0 0 * * 2,4,6'
   workflow_dispatch:
 
 permissions: {}
@@ -35,25 +33,8 @@ jobs:
       - name: Install MKL
         shell: bash
         run: |
-          #if [ -d /home/ghrunner/intel/oneapi/mkl ]; then
-          #  echo "MKL already installed at /home/ghrunner/intel/oneapi/mkl"
-          #else
-          #  echo "Installing MKL..."
-          #  if [ -f $PWD/intel-deep-learning-essentials-2025.3.2.36_offline.sh ]; then
-          #    echo "DL Installer exists!"
-          #  else
-          #    sudo wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
-          #  fi
-          #  bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.mkl.devel
-          #  bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action modify --silent --eula accept --components intel.oneapi.lin.dpcpp-cpp-compiler
-          #fi
-          #rm -rf ~/intel/oneapi/ ~/intel/installercache/ ~/intel/packagemanager/
-          
-          echo $USER
-          echo $HOME
           export PT_DLE_DIR=pt_ut_dle
           export ONEAPI_INSTALL_DIR_FOR_PT=$HOME/$PT_DLE_DIR
-          echo $ONEAPI_INSTALL_DIR_FOR_PT
           if [ -d "$ONEAPI_INSTALL_DIR_FOR_PT" ]; then
             echo "Directory exists. Listing contents:"
             ls "$ONEAPI_INSTALL_DIR_FOR_PT"
@@ -61,7 +42,6 @@ jobs:
           rm -rf $HOME/intel/installercache/instances/pt_oneapi
           wget -q https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
           bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --silent --eula accept --instance=pt_oneapi --install-dir=$ONEAPI_INSTALL_DIR_FOR_PT
-          echo $ONEAPI_INSTALL_DIR_FOR_PT
           source $ONEAPI_INSTALL_DIR_FOR_PT/mkl/latest/env/vars.sh
           source $ONEAPI_INSTALL_DIR_FOR_PT/setvars.sh
           export TORCH_WHL=$HOME/pytorch_ut/torch-2.13.0a0+git0002a87-cp312-cp312-linux_x86_64.whl
@@ -201,7 +181,6 @@ jobs:
           rm -rf $HOME/.pytorch-venv
           echo $ONEAPI_INSTALL_DIR_FOR_PT
           rm -rf $ONEAPI_INSTALL_DIR_FOR_PT
-          #bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --action remove --silent --eula accept --ignore-errors 
 
 
 
