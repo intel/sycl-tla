@@ -10901,11 +10901,30 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
     ]
 
     default_tiles_wg_sg = [
+        # === K=64 ===
+        ([256, 128, 64],[8,4,1]),
+        ([128, 256, 64],[4,8,1]),
+        ([128, 128, 64],[4,4,1]),
+        ([256, 64, 64],[8,2,1]),
+        ([64, 256, 64],[2,8,1]),
+        ([32, 32, 64],[4,2,1]),
+        ([16, 64, 64],[2,4,1]),
+        ([64, 16, 64],[8,1,1]),
+
+        # === K=32 ===
+        ([512, 128, 32],[16,2,1]),
         ([256, 256, 32],[8,4,1]),
-        ([128, 256, 32],[4,8,1]),
         ([256, 128, 32],[8,4,1]),
-        ([128, 128, 32],[4,4,1]),
-        ([64, 128, 32],[2,4,1]),
+        ([256, 64, 32],[8,2,1]),
+        ([128, 256, 32],[4,8,1]),
+        ([128, 64, 32],[4,2,1]),
+        ([32, 32, 32],[4,2,1]),
+        ([16, 64, 32],[2,4,1]),
+        ([64, 128, 32], [2,4,1]),
+        ([128, 128, 32], [4,4,1]),
+
+        # === K=16 ===
+        ([256, 256, 16],[8,4,1]),
     ]
 
     max_cc = min_cc
@@ -10922,8 +10941,8 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
     for tile in custom_tile_shapes:
       default_tiles_wg_sg.append((tile["wg"],tile["sg"]))
 
-    tile_descriptions=[]
     for math_inst in math_instructions:
+        tile_descriptions=[]
         for wg_tile,sg_tile in default_tiles_wg_sg:
           tile_descriptions.append(TileDescription(wg_tile,
                   0, sg_tile, math_inst, min_cc, max_cc, [1, 1, 1]))
@@ -10950,6 +10969,15 @@ def GenerateXe_TensorOp_16b_DPAS_gemm(manifest, cuda_version, min_cc=20):
                 schedules = [[KernelScheduleType.ScheduleAuto, EpilogueScheduleType.ScheduleAuto]]
 
                 CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules, tile_schedulers=[TileSchedulerType.Persistent])
+                # StreamK uses atomic reduction on the accumulator type in fixup()
+                # via BlockStripedReduce::reduce() -> atomic_add<ElementAccumulator>.
+                # SYCL atomic_ref only supports: int, unsigned int, long, unsigned long,
+                # long long, unsigned long long, half, float, double and pointer types.
+                # bfloat16_t is NOT supported, so skip StreamK when accumulator is bf16.
+                sycl_streamk_safe_types = [DataType.f16, DataType.f32, DataType.f64]
+                if data_type["acc_type"] in sycl_streamk_safe_types:
+                    schedules_cooperative = [[KernelScheduleType.XeCooperative, EpilogueScheduleType.ScheduleAuto]]
+                    CreateGemmUniversal3xOperator(manifest, layout_list, tile_descriptions, data_type, schedules_cooperative, tile_schedulers=[TileSchedulerType.StreamK])
    
 def GenerateXe_TensorOp_fp8_DPAS_gemm(manifest, cuda_version, min_cc=20):
     """Generate FP8 (E4M3/E5M2) GEMM kernels for Intel Xe architecture using DPAS.

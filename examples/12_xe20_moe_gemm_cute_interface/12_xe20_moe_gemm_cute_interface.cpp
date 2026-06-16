@@ -206,12 +206,12 @@ struct VerificationHelper {
     for (int32_t i = 0; i < groups; ++i) {
       auto problem = problem_sizes_host.at(i);
       auto M = get<0>(problem);
-      cutlass::TensorRef ref_A(activations + cumulative_sum * k,
+      cutlass::TensorRef ref_A(activations + int64_t(cumulative_sum) * k,
                                LayoutA::packed({M, k}));
-      cutlass::TensorRef ref_B(weights + i * n * k, LayoutB::packed({k, n}));
-      cutlass::TensorRef ref_C(unused_c_matrix.get() + cumulative_sum * n,
+      cutlass::TensorRef ref_B(weights + int64_t(i) * n * k, LayoutB::packed({k, n}));
+      cutlass::TensorRef ref_C(unused_c_matrix.get() + int64_t(cumulative_sum) * n,
                                LayoutC::packed({M, n}));
-      cutlass::TensorRef ref_D(output_ref.get() + cumulative_sum * n,
+      cutlass::TensorRef ref_D(output_ref.get() + int64_t(cumulative_sum) * n,
                                LayoutD::packed({M, n}));
 
       //
@@ -234,7 +234,7 @@ struct VerificationHelper {
       // Check if output from CUTLASS kernel and reference kernel are equal or
       // not
       passed &= cutlass::reference::device::BlockCompareEqual(
-          output_ref.get() + cumulative_sum * n, outputs + cumulative_sum * n,
+          output_ref.get() + int64_t(cumulative_sum) * n, outputs + int64_t(cumulative_sum) * n,
           M * n);
       if (!passed) {
         break;
@@ -250,7 +250,12 @@ template <class TA, class TB> auto choose_tiled_mma(TA *A, TB *B) {
   using TA_non_CV = cutlass::platform::remove_cv_t<TA>;
   using TB_non_CV = cutlass::platform::remove_cv_t<TB>;
   auto op = XE_DPAS_TT<8, float, TA_non_CV, TB_non_CV>{};
-
+  // This tiling scheme performs better than WG_M=256, SG_M=256, WG_K=32, SG_M=32, SG_N=64, SG_K=32
+  // for the hardcoded input-shapes used in this example, which correspond to a prefill step of the
+  // gpt-oss-20b model, from which data on the number of tokens routed to each expert was recorded
+  // for a run, just to get an idea about how skewed the token (M) distribution among various MoE
+  // experts could be. This example does not serve as an endorsement of this tiling scheme for
+  // all possible input shapes.
   using WGTile = Shape<_256, _128, _32>; // 256x128 WG tile size
   using SGLayout =
       Layout<Shape<_8, _2, _1>, Stride<_2, _1, _0>>; // 8x2 SG tiling, n-major
@@ -386,9 +391,9 @@ void launcher(int *M_per_expert, int N, int K, const int &num_experts, const boo
   cutlass::DeviceAllocation<bfloat16_t> activations_data;
   cutlass::DeviceAllocation<bfloat16_t> weights_data;
   cutlass::DeviceAllocation<bfloat16_t> output_data;
-  size_t A_size = num_tokens_incl_duplicated * k_moe;
-  size_t B_size = num_experts * n_moe * k_moe;
-  size_t D_size = num_tokens_incl_duplicated * n_moe;
+  int64_t A_size = int64_t(num_tokens_incl_duplicated) * k_moe;
+  int64_t B_size = int64_t(num_experts) * n_moe * k_moe;
+  int64_t D_size = int64_t(num_tokens_incl_duplicated) * n_moe;
   num_rows_per_expert_device.reset(num_experts);
   num_rows_per_expert_device.copy_from_host(M_per_expert);
   activations_data.reset(A_size);
@@ -494,7 +499,7 @@ int main(int argc, const char **argv) {
   
   for (int i = 0; i < num_layers; i++) {
     launcher(total_rows_for_each_expert[i], 2 * options.n, options.k, num_experts, options.verify);
-    launcher(total_rows_for_each_expert[i], options.n, options.k, num_experts, options.verify);
+    launcher(total_rows_for_each_expert[i], options.k, options.n, num_experts, options.verify);
   }
 
   return 0;

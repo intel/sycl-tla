@@ -1,0 +1,7 @@
+# Network Name: GPT_OSS_120B_Decode_inf.transformer_moe_dense.moe_router
+# Suite: new
+# Config Group: gemm
+
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_moe_dense.moe_router.gate --m=128 --n=128 --k=2880 --l=1
+# BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_moe_dense.expert.up_gate_proj --m=4 --n=5760 --k=2880 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_moe_dense.expert.down_proj --m=4 --n=2880 --k=2880 --l=128

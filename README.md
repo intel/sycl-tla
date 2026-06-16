@@ -46,32 +46,40 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 |0.6 | 4.2.0 |
 |0.7 | 4.2.1 |
 |0.8 | 4.2.1 |
+|0.9 | 4.2.1 |
+|0.9.1 | 4.2.1 |
 
-# What's New in SYCL*TLA 0.8
+# What's New in SYCL*TLA 0.9.1
 
-## [SYCL*TLA 0.8](https://github.com/intel/sycl-tla/releases/tag/v0.8) (2026-03-25)
-
-### Major Architecture Changes
-- **Support BMG G31 Platform ([#755](https://github.com/intel/sycl-tla/pull/755))**
-- **SLM Copy API functionalities and examples**
-  - Support CuTe copy engines for 1D LDSM/STSM operations with vISA ([#753](https://github.com/intel/sycl-tla/pull/753))
-  - Enable fusion example of 2 matmul operations through SLM Copy API ([#747](https://github.com/intel/sycl-tla/pull/747))
-  - Enable subgroup specialization example with SLM Copy API ([#735](https://github.com/intel/sycl-tla/pull/735))
-- **Support default sub-byte reorder for low-precision data types ([#709](https://github.com/intel/sycl-tla/pull/709))**
-
+## [SYCL*TLA 0.9.1](https://github.com/intel/sycl-tla/releases/tag/v0.9.1) (2026-06-11)
 ### Enhancements
-- **Flash Attention Performance Improvements (for BMG and BF16)**:  
-  - Fix long context OOM issue ([#728](https://github.com/intel/sycl-tla/pull/728))
-  - Overall performance improved from ~45% to ~78% of peak([#728](https://github.com/intel/sycl-tla/pull/728), [#743](https://github.com/intel/sycl-tla/pull/743),[#749](https://github.com/intel/sycl-tla/pull/749),[#750](https://github.com/intel/sycl-tla/pull/750))
-  - Refine code and fix bugs ([#715](https://github.com/intel/sycl-tla/pull/715), [#716](https://github.com/intel/sycl-tla/pull/716),[#720](https://github.com/intel/sycl-tla/pull/720))
-- **Epilogue Visitor Tree (EVT) Enhancements**:
-  - Combine with SIGMOID function ([#686](https://github.com/intel/sycl-tla/pull/686))
-  - Add Relu variation test cases ([#693](https://github.com/intel/sycl-tla/pull/693))
-  - Enhance and refine code and test case([#703](https://github.com/intel/sycl-tla/pull/703), [#717](https://github.com/intel/sycl-tla/pull/717))
-- **GEMM Enhancements**:
-  - Support all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
-  - Enhance examples ([#726](https://github.com/intel/sycl-tla/pull/726))
-  
+- **Support Stream-K GEMM ops in Python API ([#800](https://github.com/intel/sycl-tla/pull/800))**
+- **Support fast path for LinearCombination in xe_epilogue ([#802](https://github.com/intel/sycl-tla/pull/802))**
+- **Support event-less launch when profiling is disabled in GemmUniversalAdapter ([#803](https://github.com/intel/sycl-tla/pull/803))**
+- **Support subbyte reorder ([#793](https://github.com/intel/sycl-tla/pull/793))**
+- **Add Handler-less and Event-less support in launch APIs ([#794](https://github.com/intel/sycl-tla/pull/794))**
+- **Add SYCL subgroup lane index to canonical_lane_idx() ([#816](https://github.com/intel/sycl-tla/pull/816))**
+- **Add memory-budget-based bounded buffer for EventManager ([#795](https://github.com/intel/sycl-tla/pull/795))**
+- **Add more PyTorch GEMM configs ([#789](https://github.com/intel/sycl-tla/pull/789))**
+- **Reverse Q scheduling order in FMHA tile scheduler ([#814](https://github.com/intel/sycl-tla/pull/814))**
+- **Refine SLM r2s/s2r to reuse UniversalCopy without vectorization ([#776](https://github.com/intel/sycl-tla/pull/776))**
+- **Refine barrier API ([#810](https://github.com/intel/sycl-tla/pull/810))**
+- **Drop redundant __INTEL_LLVM_COMPILER checks ([#801](https://github.com/intel/sycl-tla/pull/801))**
+
+### Bug Fixes
+- **Fix shapes parameter issue in the MoE grouped GEMMs ([#820](https://github.com/intel/sycl-tla/pull/820))**
+- **Fix average runtime and GFLOPS calculation in example 10 ([#818](https://github.com/intel/sycl-tla/pull/818))**
+- **Fix rem mask of SDPA ([#813](https://github.com/intel/sycl-tla/pull/813))**
+- **Fix int32 overflow in MoE GEMM for large expert counts ([#804](https://github.com/intel/sycl-tla/pull/804))**
+- **Fix sub-byte pointer arithmetic and zero buffer allocation in grouped GEMM ([#790](https://github.com/intel/sycl-tla/pull/790))**
+- **Fix wrong constexpr/lifetime evaluation ([#799](https://github.com/intel/sycl-tla/pull/799))**
+
+### Documentation
+- **Align build commands across README ([#788](https://github.com/intel/sycl-tla/pull/788))**
+- **Update googlebenchmark to v1.9.5 ([#797](https://github.com/intel/sycl-tla/pull/797))**
+- **Update PyTorch commit for cutlass-inductor workflow ([#808](https://github.com/intel/sycl-tla/pull/808))**
+- **Update inductor workflow ([#806](https://github.com/intel/sycl-tla/pull/806))**
+    
 **See the [CHANGELOG](https://github.com/intel/sycl-tla/blob/main/CHANGELOG-SYCL.md) for details of all past releases and updates.**
 
 # CuTe
@@ -222,10 +230,10 @@ $  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_HOST_COMPI
 From the `build/` directory, compile and run the SYCL*TLA unit tests by building the target `test_unit` with make.
 
 The unit tests are organized as several binaries mirroring the top-level namespaces of SYCL*TLA,
-and they may be executed in parallel via make's `-j` command line argument.
+and they may be executed in parallel via Ninja's `-j` command line argument.
 
 ```bash
-$ make test_unit -j
+$ ninja test_unit -j$(nproc)
 ...
 ...
 ...

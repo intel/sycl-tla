@@ -31,6 +31,8 @@
 #pragma once
 
 #include <vector>
+#include <cstddef>
+#include <iostream>
 #include <sycl/sycl.hpp>
 
 class SyclEvent {
@@ -50,21 +52,54 @@ public:
   };
 };
 
+///////////////////////////////////////////////////////////////////////////////
+/// EventManager - Singleton that stores sycl::events for profiling.
+///
+/// Bounded buffer design:
+///   Events are automatically reclaimed when the buffer exceeds `maxCapacity`
+///   to prevent unbounded memory growth (OOM).
+///
+/// Memory model:
+///   Each sycl::event costs ~3 KB of host memory. Without bounding, the
+///   vector grows linearly with kernel submissions.
+///
+/// Default maxCapacity is 1,000,000 events (~2.9 GB). Users can adjust
+/// this via EventManager::getInstance().setMaxCapacity(new_value).
+///////////////////////////////////////////////////////////////////////////////
 class EventManager {
 public:
+  // Default maximum number of events before reclamation.
+  // ~1M events ≈ 2.9 GB host memory. Adjust via setMaxCapacity() if needed.
+  static constexpr size_t defaultMaxCapacity = 1000000;
+
   static EventManager& getInstance()
   {
     static EventManager instance;
     return instance;
   }
+
 private:
   EventManager() {}
   std::vector<sycl::event> events{};
   int recorders = 0;
+  size_t maxCapacity = defaultMaxCapacity;
 
 public:
   EventManager(EventManager const&) = delete;
   void operator=(EventManager const&) = delete;
+
+  /// Set the maximum number of events retained before automatic reclamation.
+  void setMaxCapacity(size_t capacity) {
+    maxCapacity = capacity;
+  }
+
+  size_t getMaxCapacity() const {
+    return maxCapacity;
+  }
+
+  size_t size() const {
+    return events.size();
+  }
 
   void startRecording(SyclEvent &event) {
     if (event.getIndex() != -1) {
@@ -75,7 +110,17 @@ public:
   }
 
   void addEvent(const sycl::event &event) {
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)    
     events.push_back(event);
+    // Bounded buffer: enforce memory cap to prevent OOM.
+    if (events.size() >= maxCapacity) {
+      events.clear();
+      throw std::runtime_error(
+        "[EventManager] Event capacity (" + std::to_string(maxCapacity) +
+        ") exceeded. Reduce iterations or increase capacity via "
+        "EventManager::getInstance().setMaxCapacity().");
+    }
+#endif
   }
 
   void eventDestroy() {

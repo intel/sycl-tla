@@ -1,0 +1,6 @@
+# Network Name: DeepSeekV2_236B_Decode_inf.transformer_ffn_dense.ffn_dense.pre_ffn
+# Suite: new
+# Config Group: gemm
+
+# BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.ffn_dense.ffn_dense.up_gate_proj --m=1 --n=3072 --k=5120 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.ffn_dense.ffn_dense.down_w2_proj --m=1 --n=5120 --k=1536 --l=128

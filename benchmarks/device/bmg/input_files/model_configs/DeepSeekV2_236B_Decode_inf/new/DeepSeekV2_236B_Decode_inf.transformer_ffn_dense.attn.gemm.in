@@ -1,0 +1,15 @@
+# Network Name: DeepSeekV2_236B_Decode_inf.transformer_ffn_dense.attn
+# Suite: new
+# Config Group: gemm
+
+# BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.wq_kv_a_fused --m=1 --n=2112 --k=5120 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.wq_b --m=1 --n=3072 --k=1536 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.attention.av1 --m=16 --n=512 --k=1664 --l=128
+# BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.attention.wo --m=1 --n=5120 --k=2048 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.attention.av1 --m=16 --n=512 --k=1920 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.attention.av1 --m=16 --n=512 --k=1280 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.attention.av1 --m=16 --n=512 --k=2048 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.attention.av1 --m=16 --n=512 --k=1408 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.attention.av1 --m=16 --n=512 --k=1792 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.attention.av1 --m=16 --n=512 --k=1536 --l=128
+BmgGemmBF16BF16FP32_RRR_TileShape_512_256_32 --bm_name=transformer_ffn_dense.attn.attention.av1 --m=16 --n=512 --k=1152 --l=128

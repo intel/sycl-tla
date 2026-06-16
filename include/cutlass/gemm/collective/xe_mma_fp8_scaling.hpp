@@ -655,7 +655,7 @@ public:
   #endif
 
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
-    constexpr int barrier_scope = 2;
+    constexpr SPIRVScope barrier_scope = ScopeWorkgroup;
     int prefetch_k = k_start_idx;
 
     CUTLASS_PRAGMA_UNROLL

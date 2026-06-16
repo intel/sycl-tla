@@ -1,0 +1,335 @@
+name: "Coverity Scan On Demand"
+
+on:
+  workflow_dispatch:
+    inputs:
+      sycl_target:
+        description: "SYCL target to configure"
+        required: false
+        default: "intel_gpu_bmg_g21"
+      runner:
+        description: "Runner label"
+        required: false
+        default: "bmg"
+      coverity_version:
+        description: "Coverity analysis tool version"
+        required: false
+        default: "2025.9.0"
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ARTIFACTORY_BASE_URL: "https://af-amr01.devtools.intel.com/artifactory/coverity-or-local/Archive"
+  COVERITY_INSTALL_DIR: "/opt/coverity/analysis"
+  # COVERITY_REPORT_DIR: Set dynamically in first step as Coverity_WW<ISO_WEEK>
+  # NOTE: Tool installations are preserved across runs to enable conditional skips
+  #       This allows ~70% faster repeating runs by reusing existing installations
+
+jobs:
+  coverity-scan:
+    name: Coverity scan on ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 240
+
+    steps:
+      - name: Set work-week output directory
+        shell: bash
+        run: |
+          # Generate ISO 8601 week number for report folder naming
+          # Example: Week 16 → Coverity_WW16 (updates automatically each week)
+          WW=$(date +%V)
+          REPORT_DIR="Coverity_WW${WW}"
+          echo "COVERITY_REPORT_DIR=${REPORT_DIR}" >> "$GITHUB_ENV"
+          echo "[INFO] Coverity report output directory: ${REPORT_DIR}"
+
+      - name: Checkout repository
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+
+      - name: Install Intel graphics drivers
+        uses: ./.github/actions/install-intel-graphics
+        with:
+          GPU: BMG
+          IGC: ROLLING
+
+      - name: Install DPC++
+        uses: ./.github/actions/install-dpcpp
+        with:
+          DPCPP_RELEASE: RELEASE
+          DPCPP_PATH: ~/dpcpp
+          GPU: BMG
+          IGC: ROLLING
+
+      - name: Check and install OneAPI
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          ensure_icpx_on_path() {
+            # oneAPI packages install under /opt/intel/oneapi but do not always update PATH for non-login shells.
+            if command -v icpx &> /dev/null; then
+              return 0
+            fi
+
+            if [[ -f /opt/intel/oneapi/setvars.sh ]]; then
+              # setvars may return non-zero depending on shell state; ignore and validate via command -v.
+              . /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 || true
+            fi
+
+            # Fallback when setvars is unavailable or does not export compiler paths in this shell.
+            for dir in /opt/intel/oneapi/compiler/*/bin /opt/intel/oneapi/compiler/*/bin-llvm; do
+              [[ -d "${dir}" ]] && export PATH="${dir}:${PATH}"
+            done
+
+            command -v icpx &> /dev/null
+          }
+
+          # OPTIMIZATION: Conditional check to skip redundant installation
+          # Subsequent runs reuse existing installation (~5-10 min saved)
+          if ensure_icpx_on_path; then
+            echo "[INFO] Intel oneAPI DPC++ compiler (icpx) already installed"
+            icpx --version | head -n 2
+          else
+            echo "[INFO] Intel oneAPI DPC++ compiler not found. Installing..."
+            wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+            echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list > /dev/null
+            sudo apt-get update -y
+            sudo apt-get install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp
+            if ! ensure_icpx_on_path; then
+              echo "[ERROR] oneAPI installation completed but icpx is still not in PATH"
+              ls -la /opt/intel/oneapi/compiler || true
+              exit 1
+            fi
+            echo "[INFO] Intel oneAPI DPC++ compiler installed successfully"
+            icpx --version | head -n 2
+          fi
+
+      - name: Prepare build tools and environment
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if ! command -v cmake &> /dev/null || ! command -v ninja &> /dev/null; then
+            sudo apt-get update -y
+            sudo apt-get install -y cmake ninja-build curl
+          fi
+          # Ensure curl is available for Artifactory downloads
+          if ! command -v curl &> /dev/null; then
+            sudo apt-get update -y && sudo apt-get install -y curl
+          fi
+
+          . /opt/intel/oneapi/setvars.sh || . setvars.sh || true
+          export CC=icx
+          export CXX=icpx
+          export CUTLASS_SYCL_PROFILING_ENABLED=ON
+          export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+          export CMAKE_BUILD_TYPE=Release
+          export IGC_VISAOptions="-perfmodel"
+          export IGC_VectorAliasBBThreshold=100000000000
+          export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
+          env >> "$GITHUB_ENV"
+
+          which "$CXX"
+          "$CXX" --version
+          sycl-ls
+
+      - name: Download Coverity license file from Artifactory
+        shell: bash
+        env:
+          ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
+          ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+        run: |
+          set -euxo pipefail
+          # OPTIMIZATION: Skip download if Coverity already installed (~1 sec saved)
+          # Reuses license from previous run when available
+          if test -x "${COVERITY_INSTALL_DIR}/bin/cov-build"; then
+            echo "[INFO] Coverity already installed. Skipping license download."
+            exit 0
+          fi
+          LICENSE_URL="${ARTIFACTORY_BASE_URL}/license.dat"
+          echo "[INFO] Downloading license.dat from ${LICENSE_URL}"
+          curl -fSL \
+            --user "${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}" \
+            --retry 3 --retry-delay 5 \
+            -o license.dat \
+            "${LICENSE_URL}"
+          test -s license.dat || { echo "[ERROR] license.dat is empty or missing after download"; exit 1; }
+          echo "[INFO] license.dat downloaded successfully ($(wc -c < license.dat) bytes)"
+
+      - name: Download Coverity installer from Artifactory
+        shell: bash
+        env:
+          ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
+          ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+        run: |
+          set -euxo pipefail
+          # OPTIMIZATION: Skip download if Coverity already installed (~3-5 min saved)
+          # Avoids repeated 2.7GB download on subsequent runs
+          if test -x "${COVERITY_INSTALL_DIR}/bin/cov-build"; then
+            echo "[INFO] Coverity already installed. Skipping installer download."
+            exit 0
+          fi
+          VERSION="${{ inputs.coverity_version }}"
+          INSTALLER="cov-analysis-linux64-${VERSION}.sh"
+          INSTALLER_URL="${ARTIFACTORY_BASE_URL}/${VERSION}/${INSTALLER}"
+          echo "[INFO] Downloading ${INSTALLER} from ${INSTALLER_URL}"
+          curl -fSL \
+            --user "${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}" \
+            --retry 3 --retry-delay 5 \
+            -o "${INSTALLER}" \
+            "${INSTALLER_URL}"
+          test -s "${INSTALLER}" || { echo "[ERROR] Installer is empty or missing after download"; exit 1; }
+          echo "[INFO] ${INSTALLER} downloaded successfully ($(wc -c < "${INSTALLER}") bytes)"
+
+      - name: Check and install Coverity analysis tool
+        shell: bash
+        run: |
+          set -euxo pipefail
+          VERSION="${{ inputs.coverity_version }}"
+          INSTALLER="cov-analysis-linux64-${VERSION}.sh"
+
+          # OPTIMIZATION: Skip install if Coverity already installed (~3-5 min saved)
+          # Previous run's installation is preserved and reused
+          if test -x "${COVERITY_INSTALL_DIR}/bin/cov-build"; then
+            echo "[INFO] Coverity ${VERSION} already installed at ${COVERITY_INSTALL_DIR}"
+            COVERITY_VERSION=$(/opt/coverity/analysis/bin/cov-build --version 2>&1 | head -n 1 || echo "Unknown")
+            echo "[INFO] Installed Coverity version: ${COVERITY_VERSION}"
+          else
+            echo "[INFO] Coverity not found. Proceeding with installation..."
+            chmod +x "./${INSTALLER}"
+            sudo "./${INSTALLER}" -q \
+              --installation.dir="${COVERITY_INSTALL_DIR}" \
+              --license.agreement=agree \
+              --license.region=0 \
+              --license.type.choice=0 \
+              --license.cov.path="$(pwd)/license.dat" \
+              --component.sdk=false \
+              --component.skip.documentation=true
+
+            # Verify installation succeeded
+            test -x "${COVERITY_INSTALL_DIR}/bin/cov-build" || {
+              echo "[ERROR] Coverity installation failed — cov-build not found"
+              exit 1
+            }
+            echo "[INFO] Coverity ${VERSION} installed successfully at ${COVERITY_INSTALL_DIR}"
+
+            # Clean up installer to free disk space
+            rm -f "./${INSTALLER}"
+          fi
+
+          # Add to PATH for subsequent steps
+          echo "${COVERITY_INSTALL_DIR}/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Coverity tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ls -la "${COVERITY_INSTALL_DIR}/bin/"
+          cov-configure --list-compiler-types
+
+      - name: Generate Coverity compiler config XML
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo cov-configure --template --comptype intel_icpx --compiler icpx
+          ls -la "${COVERITY_INSTALL_DIR}/config/"
+          test -f "${COVERITY_INSTALL_DIR}/config/coverity_config.xml"
+
+      - name: Clean and configure project
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf build
+          mkdir build
+          cd build
+
+          cmake .. -G Ninja \
+            -DCUTLASS_ENABLE_SYCL=ON \
+            -DCUTLASS_SYCL_PROFILING_ENABLED=OFF \
+            -DDPCPP_SYCL_TARGET=${{ inputs.sycl_target }} \
+            -DCUTLASS_ENABLE_BENCHMARKS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=icpx
+
+      - name: Capture build with Coverity
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd build
+
+          # Start fast, then reduce parallelism if resource pressure causes failures.
+          for jobs in 8 6 4 2 1; do
+            rm -rf cutlass_cov-build
+            echo "[INFO] Coverity capture with ninja -j${jobs}"
+            if cov-build \
+              --dir cutlass_cov-build \
+              --config "${COVERITY_INSTALL_DIR}/config/coverity_config.xml" \
+              ninja -j"${jobs}"; then
+              echo "[INFO] Coverity capture succeeded with -j${jobs}"
+              break
+            fi
+            echo "[WARN] Coverity capture failed with -j${jobs}, retrying with lower parallelism"
+            if [[ "${jobs}" == "1" ]]; then
+              echo "[ERROR] Coverity capture failed even with -j1"
+              exit 1
+            fi
+          done
+
+      - name: Analyze captured build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd build
+
+          cov-analyze \
+            --dir cutlass_cov-build \
+            --concurrency \
+            --security \
+            --rule \
+            --enable-constraint-fpp \
+            --enable-virtual \
+            --strip-path "$GITHUB_WORKSPACE"
+
+      - name: Format Coverity HTML report
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd build
+
+          cov-format-errors \
+            --dir cutlass_cov-build \
+            --html-output "${COVERITY_REPORT_DIR}"
+
+      - name: Upload Coverity report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.COVERITY_REPORT_DIR }}
+          path: build/${{ env.COVERITY_REPORT_DIR }}/
+
+      - name: Upload Coverity intermediate directory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverity-cov-build-dir
+          path: build/cutlass_cov-build/
+
+      - name: Cleanup temporary files and build artifacts
+        if: always()
+        shell: bash
+        run: |
+          set -x
+          echo "[INFO] Cleaning up temporary files..."
+          
+          # Remove build artifacts and temporary files only
+          # Tools (Coverity, OneAPI, DPC++) are intentionally PRESERVED for reuse
+          # This enables conditional skips on subsequent runs (~70% performance improvement)
+          
+          rm -f license.dat || true
+          rm -f cov-analysis-linux64-*.sh || true
+          rm -rf build/ || true
+          rm -f setvars.sh || true
+          
+          echo "[INFO] Temporary files cleanup completed"
+          echo "[INFO] Tool installations preserved for next workflow run"

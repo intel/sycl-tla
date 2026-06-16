@@ -829,7 +829,7 @@ public:
     }
 
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
-      constexpr int barrier_scope = 2;
+      constexpr SPIRVScope barrier_scope = ScopeWorkgroup;
 
       barrier_arrive(barrier_scope);
 

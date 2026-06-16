@@ -5,11 +5,16 @@ on:
     # Runs at 00:00 AM UTC on Wednesday and Friday
     - cron: '0 0 * * 3,5'
   workflow_dispatch:
+    inputs:
+      custom_branch:
+        description: "Manual branch based trigger."
+        required: false
+        type: string
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.custom_branch || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,6 +35,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+        with:
+          ref: ${{ inputs.custom_branch || github.ref }}
       # For a specific DPC++ nightly build define the repository variable DPCPP_VERSION
       # for example using the tag: 'nightly-2024-04-22'
       - name: Install Intel graphics drivers
@@ -92,12 +99,7 @@ jobs:
       - name: Run Benchmarks
         shell: bash
         run: |
-          export no_proxy=$no_proxy,${{ secrets.INFLUX_SERVER_IP }}
-          export INFLUX_URL=${{ secrets.INFLUX_URL }}
-          export INFLUX_ORG="cutlass"
-          export INFLUX_BUCKET="benchmarks"
-          export INFLUX_TOKEN=${{ secrets.INFLUX_TOKEN }}
-          python3 test/benchmarks/run_benchmarks.py --push-to-dashboard
+          python3 test/benchmarks/run_benchmarks.py
       - name: Upload logs
         uses: actions/upload-artifact@v4
         with:

@@ -217,7 +217,7 @@ gemm_two_stage_device(ATensor   const& A,     // (M, K)
   auto pBgB       = thr_pf_B.partition_S(gB_1);
 
   const int prefetch_dist = 3;
-  constexpr int barrier_scope = 2;
+  constexpr SPIRVScope barrier_scope = ScopeWorkgroup;
   int k_tile_count   = ceil_div(shape<1>(A), get<2>(wg_tile));
   int k_tile_prefetch = 0;
 

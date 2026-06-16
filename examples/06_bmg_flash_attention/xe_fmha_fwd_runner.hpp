@@ -717,9 +717,12 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
       intelex::grf_size<256>
     };
     compat::experimental::launch_policy policy{sycl_grid, sycl_block, launch_props, kernel_props};
+#if defined(CUTLASS_SYCL_PROFILING_ENABLED)
     auto event = compat::experimental::launch<cutlass::device_kernel<FMHAKernel>, FMHAKernel>(policy, params);
-
     EventManager::getInstance().addEvent(event);
+#else
+    compat::experimental::launch<cutlass::device_kernel<FMHAKernel>, FMHAKernel, false>(policy, params);
+#endif
   }
 
   cutlass::Status run(const Options &options, const cutlass::KernelHardwareInfo &hw_info) {
@@ -837,9 +840,10 @@ template <class FMHAKernel, bool isVarLen = false> struct ExampleRunner {
       double flops_pv = 2.0 * options.num_heads_q * batched_effective_seq_len_qo_x_kv * options.head_size_vo;
       double tflops = ((flops_qk + flops_pv) * 1e-12) / cute_time;
       
+      double batched_seq_len_kv_total = batched_effective_seq_len_kv + batched_seq_len_kv_cache;
       double gbps_qk = options.num_heads_q * batched_effective_seq_len_qo * options.head_size_qk * sizeof_bits_v<ElementQ> / 8 +
-                       options.num_heads_kv * batched_effective_seq_len_kv * options.head_size_qk * sizeof_bits_v<ElementK> / 8;
-      double gbps_pv = options.num_heads_kv * batched_effective_seq_len_kv * options.head_size_vo * sizeof_bits_v<ElementV> / 8 +
+                       options.num_heads_kv * batched_seq_len_kv_total * options.head_size_qk * sizeof_bits_v<ElementK> / 8;
+      double gbps_pv = options.num_heads_kv * batched_seq_len_kv_total * options.head_size_vo * sizeof_bits_v<ElementV> / 8 +
                        options.num_heads_q * batched_effective_seq_len_qo * options.head_size_vo * sizeof_bits_v<ElementO> / 8;
       double gbps = ((gbps_qk + gbps_pv) * 1e-9) / cute_time;
       std::cout << "Batch: " << options.batch << "\tNumHeads_q: " << options.num_heads_q  << "\tNumHeads_kv: " << options.num_heads_kv  << "\tSeq Length QO: " << options.seq_len_qo
