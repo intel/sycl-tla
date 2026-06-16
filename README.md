@@ -47,24 +47,39 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 |0.7 | 4.2.1 |
 |0.8 | 4.2.1 |
 |0.9 | 4.2.1 |
+|0.9.1 | 4.2.1 |
 
-# What's New in SYCL*TLA 0.9
+# What's New in SYCL*TLA 0.9.1
 
-## [SYCL*TLA 0.9](https://github.com/intel/sycl-tla/releases/tag/v0.9) (2026-04-30)
-
-
+## [SYCL*TLA 0.9.1](https://github.com/intel/sycl-tla/releases/tag/v0.9.1) (2026-06-11)
 ### Enhancements
-- **Support FP8 upconversion for CuTe SLM Copy ([#772](https://github.com/intel/sycl-tla/pull/772))**
-- **Support AOT (Ahead-Of-Time) compilation instead of JIT ([#763](https://github.com/intel/sycl-tla/pull/763))**
-- **Add vectorized test cases for CuTe SLM Copy ([#766](https://github.com/intel/sycl-tla/pull/766))**
-- **Add some GEMM and Flash Attention benchmark cases ([#773](https://github.com/intel/sycl-tla/pull/773))**
+- **Support Stream-K GEMM ops in Python API ([#800](https://github.com/intel/sycl-tla/pull/800))**
+- **Support fast path for LinearCombination in xe_epilogue ([#802](https://github.com/intel/sycl-tla/pull/802))**
+- **Support event-less launch when profiling is disabled in GemmUniversalAdapter ([#803](https://github.com/intel/sycl-tla/pull/803))**
+- **Support subbyte reorder ([#793](https://github.com/intel/sycl-tla/pull/793))**
+- **Add Handler-less and Event-less support in launch APIs ([#794](https://github.com/intel/sycl-tla/pull/794))**
+- **Add SYCL subgroup lane index to canonical_lane_idx() ([#816](https://github.com/intel/sycl-tla/pull/816))**
+- **Add memory-budget-based bounded buffer for EventManager ([#795](https://github.com/intel/sycl-tla/pull/795))**
+- **Add more PyTorch GEMM configs ([#789](https://github.com/intel/sycl-tla/pull/789))**
+- **Reverse Q scheduling order in FMHA tile scheduler ([#814](https://github.com/intel/sycl-tla/pull/814))**
+- **Refine SLM r2s/s2r to reuse UniversalCopy without vectorization ([#776](https://github.com/intel/sycl-tla/pull/776))**
+- **Refine barrier API ([#810](https://github.com/intel/sycl-tla/pull/810))**
+- **Drop redundant __INTEL_LLVM_COMPILER checks ([#801](https://github.com/intel/sycl-tla/pull/801))**
 
 ### Bug Fixes
-- **Fix example06 memory bandwidth computation bugs ([#778](https://github.com/intel/sycl-tla/pull/778))**
-- **Fix Python GEMM Generation bugs ([#768](https://github.com/intel/sycl-tla/pull/768))**
-- **Fix Python EVT test cases bugs ([#762](https://github.com/intel/sycl-tla/pull/762))**
-- **Fix AOT multitarget support bugs ([#765](https://github.com/intel/sycl-tla/pull/765))**
-  
+- **Fix shapes parameter issue in the MoE grouped GEMMs ([#820](https://github.com/intel/sycl-tla/pull/820))**
+- **Fix average runtime and GFLOPS calculation in example 10 ([#818](https://github.com/intel/sycl-tla/pull/818))**
+- **Fix rem mask of SDPA ([#813](https://github.com/intel/sycl-tla/pull/813))**
+- **Fix int32 overflow in MoE GEMM for large expert counts ([#804](https://github.com/intel/sycl-tla/pull/804))**
+- **Fix sub-byte pointer arithmetic and zero buffer allocation in grouped GEMM ([#790](https://github.com/intel/sycl-tla/pull/790))**
+- **Fix wrong constexpr/lifetime evaluation ([#799](https://github.com/intel/sycl-tla/pull/799))**
+
+### Documentation
+- **Align build commands across README ([#788](https://github.com/intel/sycl-tla/pull/788))**
+- **Update googlebenchmark to v1.9.5 ([#797](https://github.com/intel/sycl-tla/pull/797))**
+- **Update PyTorch commit for cutlass-inductor workflow ([#808](https://github.com/intel/sycl-tla/pull/808))**
+- **Update inductor workflow ([#806](https://github.com/intel/sycl-tla/pull/806))**
+    
 **See the [CHANGELOG](https://github.com/intel/sycl-tla/blob/main/CHANGELOG-SYCL.md) for details of all past releases and updates.**
 
 # CuTe
