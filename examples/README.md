@@ -19,14 +19,14 @@ examples/
 ├── 00_bmg_gemm/                     # Intel GPU examples
 ├── 01_bmg_gemm_with_collective_builder/
 ├── ...
+├── 11_xe20_cutlass_library/
+├── 12_xe20_moe_gemm_cute_interface/
 ├── 13_bmg_gemm_bias/
 ├── cute/                            # CuTe tutorial examples
 │   └── tutorial/                    
-├── generics/                        # Device-agnostic SYCL examples
-│   └── device_agnostic/
-└── nv_sycl/                         # Legacy validation examples (NVIDIA)
-    ├── 14_ampere_tf32_tensorop_gemm/
-    └── 35_gemm_softmax/
+└── generics/                        # Device-agnostic SYCL examples
+    └── device_agnostic/
+
 ```
 
 ## SYCL*TLA Examples for Intel GPUs
@@ -77,6 +77,14 @@ The following examples are optimized for Intel GPU architectures using SYCL:
 
     Mixed precision Grouped GEMM operations on Intel PVC/BMG
 
+* [11_xe20_cutlass_library](11_xe20_cutlass_library/)
+
+    Builds a shared library exporting a BF16 GEMM on Intel Xe2 (BMG) for use from Python via ctypes
+
+* [12_xe20_moe_gemm_cute_interface](12_xe20_moe_gemm_cute_interface/)
+
+    Mixture-of-Experts (MoE) GEMM on Intel Xe2 (BMG) built on the CuTe Group GEMM interface
+
 * [13_bmg_gemm_bias](13_bmg_gemm_bias/)
 
     Examples for testing simple GEMM with bias addition on Intel PVC/BMG
@@ -88,24 +96,6 @@ These examples work across different SYCL implementations and devices:
 * [generics/device_agnostic](generics/device_agnostic/)
 
     Generic GEMM kernel implementation that can be executed on any SYCL-compatible device
-
-## Legacy Validation Examples (NVIDIA)
-
-> These examples are provided for cross-platform SYCL validation only. For Intel GPU
-> development, start with the Intel examples above.
-
-SYCL implementations of traditional NVIDIA CUDA examples, retained for cross-platform
-build/test coverage when `SYCL_NVIDIA_TARGET=ON`:
-
-* [nv_sycl/14_ampere_tf32_tensorop_gemm](nv_sycl/14_ampere_tf32_tensorop_gemm/)
-
-    SYCL implementation demonstrating FP32 GEMM with implicit TF32 conversion for NVIDIA Ampere architecture
-
-* [nv_sycl/35_gemm_softmax](nv_sycl/35_gemm_softmax/)
-
-    SYCL implementation demonstrating GEMM fused with Softmax in mixed precision using NVIDIA Tensor Cores
-
-
 
 # CuTe - Programming Examples
 
