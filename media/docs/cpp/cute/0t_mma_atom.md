@@ -91,6 +91,12 @@ For example, the Volta section below will refer to the
 `SM70_8x8x4_F32F16F16F32_NT` Operation struct defined in
 [`include/cute/arch/mma_sm70.hpp`](https://github.com/intel/sycl-tla/tree/main/include/cute/arch/mma_sm70.hpp).
 
+> **Note.** `SM70_8x8x4_F32F16F16F32_NT` is used here only as a worked example of the *naming
+> convention* — it is an NVIDIA Volta instruction. The Intel Xe equivalent is the `XE_DPAS_TT`
+> atom in [`include/cute/arch/mma_xe.hpp`](https://github.com/intel/sycl-tla/tree/main/include/cute/arch/mma_xe.hpp);
+> see [11_intel_gemm_companion.md](./11_intel_gemm_companion.md) for how it is selected and used
+> in a real Intel Xe GEMM.
+
 * "SM70" refers to Volta.
 
 * "8x8x4" refers to M = 8, N = 8, and K = 4,
