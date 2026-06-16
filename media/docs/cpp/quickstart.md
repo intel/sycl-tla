@@ -26,8 +26,8 @@ $ mkdir build && cd build
 # compiles for Intel Data Center GPU Max (PVC)
 $ CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc
 
-# compiles for Intel Arc B-series (BMG)
-$ CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_bmg_g31
+# compiles for Intel Arc B580 Graphics (BMG G21)
+$ CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_bmg_g21
 ```
 
 The target architecture is selected via the `DPCPP_SYCL_TARGET` flag; see
@@ -176,9 +176,9 @@ for which kernels require which targets.
 $ CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_pvc
 ```
 
-**Intel Arc B-series — BMG (Battlemage).**
+**Intel Arc B580 Graphics — BMG G21 (Battlemage).**
 ```bash
-$ CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_bmg_g31
+$ CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=intel_gpu_bmg_g21
 ```
 
 > `-DDPCPP_SYCL_TARGET=bmg` compiles for both `intel_gpu_bmg_g21` and `intel_gpu_bmg_g31`.
