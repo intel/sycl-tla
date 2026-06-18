@@ -103,7 +103,7 @@ jobs:
         run: |
           # Clean up environment files
           rm -f setvars.sh
-          echo "DPC++ cleanup completed"
+          echo "DPC++ cleanup done"
 
       - name: Cleanup DPCTL
         if: always()
