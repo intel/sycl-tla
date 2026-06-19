@@ -47,6 +47,16 @@ jobs:
           DPCPP_RELEASE: TORCH_SUPPORTED
           DPCPP_PATH: ~/dpcpp
 
+      - name: Ensure DPC++ compiler present
+        shell: bash
+        run: |
+          # A concurrent job's oneAPI `--action modify` (e.g. adding MKL) can remove
+          # icpx while leaving the compiler dir; reinstall the component if missing.
+          ls /home/ghrunner/intel/oneapi/compiler/*/bin/icpx >/dev/null 2>&1 || {
+            sudo wget -nv https://registrationcenter-download.intel.com/akdlm/IRC_NAS/b3e6c1bf-a6d5-4580-8b1d-80cbfd38c8af/intel-deep-learning-essentials-2025.3.2.36_offline.sh
+            bash intel-deep-learning-essentials-2025.3.2.36_offline.sh -a --silent --eula accept --action modify --components intel.oneapi.lin.dpcpp-cpp-compiler
+          }
+
       - name: Setup virtual environment
         shell: bash
         run: |
