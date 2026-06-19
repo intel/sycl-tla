@@ -1,12 +1,6 @@
 name: "SYCL Python EVT Test"
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  merge_group:
-    branches: [ "main" ]
   schedule:
     # Runs at 05:30 AM UTC on Monday
     - cron: '30 5 * * 1'
