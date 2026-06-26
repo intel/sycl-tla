@@ -52,7 +52,7 @@ setup_pycute.perform_setup()
 
 setup(
     name='sycl_tla_cppgen',
-    version='0.8.0',
+    version='0.9.1',
     description='SYCL*TLA Pythonic Interface based on CUTLASS',
     package_dir={'': '.'},
     packages=[
