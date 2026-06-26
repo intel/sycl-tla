@@ -1,0 +1,317 @@
+###################################################################################################
+# Copyright (C) 2025 - 2026 Intel Corporation, All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# ################################################################################################
+
+from pycute import product
+
+from cutlass_library import DataType, DataTypeSize, DataTypeTag
+from cutlass_cppgen.backend.evt.ir import (
+    # Load Node
+    AccumulatorImpl,
+    AuxLoadImpl,
+    ColumnBroadcastImpl,
+    LoadNode,
+    LoadSrcImpl,
+    RowBroadcastImpl,
+    ScalarBroadcastImpl,
+    # Compute Node
+    ComputeImpl,
+    ComputeNode,
+    # Store Node
+    AuxStoreImpl,
+    ColumnReductionImpl,
+    RowReductionImpl,
+    ScalarReductionImpl,
+    StoreNode,
+    StoreDImpl,
+)
+from cutlass_cppgen.backend.library import (
+    FloatRoundStyleTag,
+    FunctionalOp,
+    op_tag,
+)
+
+ATOMIC_GMEM_OPS = {FunctionalOp.AtomicAdd, FunctionalOp.AtomicMaximum}
+
+def _needs_atomic_float(element_dtype, gmem_reduce_fn):
+    return (
+        gmem_reduce_fn in ATOMIC_GMEM_OPS and
+        element_dtype in (DataType.f16, DataType.bf16)
+    )
+
+
+class xe12AccumulatorImpl(AccumulatorImpl):
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""\nusing {self.name_camel} = cutlass::epilogue::fusion::XeAccFetch;\n"""
+        return self._type_decl
+
+
+class xe12LoadSrcImpl(LoadSrcImpl):
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using ElementC = {DataTypeTag[self.element]};
+using StrideC = {self.stride_mnl};
+using {self.name_camel} = cutlass::epilogue::fusion::XeSrcFetch<{DataTypeTag[self.element]}>;
+"""
+        return self._type_decl
+
+
+class xe12AuxLoadImpl(AuxLoadImpl):
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type using XeAuxLoad directly (no descriptor needed)
+        XeAuxLoad auto-deduces copy operation from Element type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeAuxLoad<
+    {DataTypeTag[self.element]},
+    {self.stride_mnl}
+>;
+"""
+        return self._type_decl
+
+
+class xe12ScalarBroadcastImpl(ScalarBroadcastImpl):
+    def __init__(self, node: LoadNode) -> None:
+        super().__init__(node)
+        self.broadcast_count = 1
+        self.reduction_fn = FunctionalOp.Multiplies
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeScalarBroadcast<
+    {DataTypeTag[self.element]}, {self.stride_mnl}, {self.broadcast_count}, {op_tag(self.reduction_fn)}
+>;
+"""
+        return self._type_decl
+
+
+class xe12RowBroadcastImpl(RowBroadcastImpl):
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeRowBroadcast<
+    0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
+    {self.stride_mnl}
+>;
+"""
+        return self._type_decl
+
+
+class xe12ColumnBroadcastImpl(ColumnBroadcastImpl):
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeColBroadcast<
+    0 /*Stages*/, TileShape_MNK, {DataTypeTag[self.element]}, {DataTypeTag[self.element_output]},
+    {self.stride_mnl}
+>;
+"""
+        return self._type_decl
+
+
+class xe12ComputeImpl(ComputeImpl):
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeCompute<
+    {op_tag(self.fn)}, {DataTypeTag[self.element_output]}, {DataTypeTag[self.element_compute]},
+    {FloatRoundStyleTag[self.round_style]}
+>;
+"""
+        return self._type_decl
+
+
+class xe12AuxStoreImpl(AuxStoreImpl):
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeAuxStore<
+    {DataTypeTag[self.element]},
+    {self.stride_mnl}
+>;
+"""
+        return self._type_decl
+
+
+class xe12StoreDImpl(StoreDImpl):
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        return f"""
+using ElementD = {DataTypeTag[self.element]};
+using StrideD = {self.stride_mnl};
+"""
+
+
+class xe12ColumnReductionImpl(ColumnReductionImpl):
+
+    def __init__(self, node) -> None:
+      super().__init__(node)
+      if _needs_atomic_float(self.element, self.gmem_reduce_fn):
+            raise RuntimeError(
+                f"Xe12 column reduction '{self.name}' uses {DataTypeTag[self.element]} with {op_tag(self.gmem_reduce_fn)}, "
+                "which requires a float output because sycl::atomic_ref does not support half/bfloat16. Please declare the reduction tensor as float32."
+            )
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeColReduction<
+    {op_tag(self.reg_reduce_fn)}, {op_tag(self.reg_reduce_fn)}, {op_tag(self.gmem_reduce_fn)}, 0,
+    TileShape_MNK, {DataTypeTag[self.element]},
+    {DataTypeTag[self.element_compute]}, {FloatRoundStyleTag[self.round_style]},
+    {self.stride_mnl}
+>;
+"""
+        return self._type_decl
+
+
+class xe12RowReductionImpl(RowReductionImpl):
+
+    def __init__(self, node) -> None:
+        super().__init__(node)
+        if _needs_atomic_float(self.element, self.gmem_reduce_fn):
+            raise RuntimeError(
+                f"Xe12 row reduction '{self.name}' uses {DataTypeTag[self.element]} with {op_tag(self.gmem_reduce_fn)}, "
+                "which requires a float output because sycl::atomic_ref does not support half/bfloat16. Please declare the reduction tensor as float32."
+            )
+
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeRowReduction<
+    {op_tag(self.reg_reduce_fn)}, {op_tag(self.reg_reduce_fn)}, {op_tag(self.gmem_reduce_fn)}, 0 /* Stages */,
+    TileShape_MNK, {DataTypeTag[self.element]},
+    {DataTypeTag[self.element_compute]}, {FloatRoundStyleTag[self.round_style]},
+    {self.stride_mnl}
+>;
+"""
+        return self._type_decl
+
+
+class xe12ScalarReductionImpl(ScalarReductionImpl):
+
+    def __init__(self, node) -> None:
+        super().__init__(node)
+        if _needs_atomic_float(self.element, self.gmem_reduce_fn):
+            raise RuntimeError(
+                f"Xe12 scalar reduction '{self.name}' uses {DataTypeTag[self.element]} with {op_tag(self.gmem_reduce_fn)}, "
+                "which requires a float output because sycl::atomic_ref does not support half/bfloat16. Please declare the reduction tensor as float32."
+            )
+
+
+    @property
+    def type_decl(self):
+        """
+        Return the string defining the type
+        """
+        if self._type_decl is not None:
+            return self._type_decl
+
+        self._type_decl = f"""
+using {self.name_camel} = cutlass::epilogue::fusion::XeScalarReduction<
+    {op_tag(self.reg_reduce_fn)}, {op_tag(self.gmem_reduce_fn)},
+    {DataTypeTag[self.element]}, {DataTypeTag[self.element_compute]},
+    {FloatRoundStyleTag[self.round_style]}, {self.stride_mnl}
+>;
+"""
+        return self._type_decl

@@ -1,0 +1,131 @@
+# Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (C) 2025 Intel Corporation, All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+if (CUTLASS_ENABLE_SYCL)
+  message(STATUS "Building CuTE tutorial examples with SYCL")
+
+  if (CUTLASS_TEST_FOR_CRI)
+    set(TEST_BASE "--m=${CRI_GEMM_DEFAULT_SIZE} --n=${CRI_GEMM_DEFAULT_SIZE} --k=${CRI_GEMM_DEFAULT_SIZE} --iterations=${CRI_DEFAULT_ITERATIONS}")
+    set(SGEMM_ARGS ${TEST_BASE})
+    set(BMG_ARGS ${TEST_BASE} "--verify=${CRI_DEFAULT_VERIFY}")
+  else()
+    set(SGEMM_ARGS "")
+    set(BMG_ARGS "")
+  endif()
+
+  # Include quickstart examples subdirectory
+  add_subdirectory(quickstart)
+  # Include layout tutorial examples subdirectory
+  add_subdirectory(layout)
+
+  cutlass_example_add_executable(
+    cute_tutorial_sgemm_1
+    sgemm_1_sycl.cpp
+    TEST_COMMAND_OPTIONS
+    SGEMM_ARGS
+  )
+
+  cutlass_example_add_executable(
+    cute_tutorial_sgemm_2
+    sgemm_2_sycl.cpp
+    TEST_COMMAND_OPTIONS
+    SGEMM_ARGS
+  )
+
+  cutlass_example_add_executable(
+    cute_tutorial_tiled_copy
+    tiled_copy_sycl.cpp
+  )
+
+  cutlass_example_add_executable(
+    cute_tutorial_tiled_copy_if
+    tiled_copy_if_sycl.cpp
+  )
+
+  if (SYCL_INTEL_TARGET)
+    message(STATUS "Building CuTE examples for Intel GPU targets")
+    cutlass_example_add_executable(
+      cute_tutorial_bmg
+      bgemm_bmg_legacy.cpp
+      TEST_COMMAND_OPTIONS
+      BMG_ARGS
+    )
+
+    cutlass_example_add_executable(
+      cute_tutorial_xe_gemm
+      xe_gemm.cpp
+      TEST_COMMAND_OPTIONS
+      BMG_ARGS
+    )
+
+    cutlass_example_add_executable(
+      cute_tutorial_xe_gemm_slm
+      xe_gemm_slm.cpp
+      TEST_COMMAND_OPTIONS
+      BMG_ARGS
+    )
+
+    cutlass_example_add_executable(
+      cute_tutorial_xe_gemm_quantization
+      xe_gemm_quantization.cpp
+      TEST_COMMAND_OPTIONS
+      BMG_ARGS
+    )
+
+    cutlass_example_add_executable(
+      cute_tutorial_xe_gemm_subgroup_specialization_slm
+      xe_gemm_subgroup_specialization_slm.cpp
+      TEST_COMMAND_OPTIONS
+      BMG_ARGS
+    )
+
+    cutlass_example_add_executable(
+      cute_tutorial_xe_two_gemm_fusion
+      xe_two_gemm_fusion.cpp
+      TEST_COMMAND_OPTIONS
+      BMG_ARGS
+    )
+  endif()
+  if (SYCL_NVIDIA_TARGET)
+    message(STATUS "Building CuTE examples for NVIDIA GPU targets with SYCL")
+
+    cutlass_example_add_executable(
+      cute_tutorial_sgemm_sm70
+      sgemm_sm70_sycl.cpp
+    )
+
+    cutlass_example_add_executable(
+      cute_tutorial_sgemm_sm80
+      sgemm_sm80_sycl.cpp
+    )
+  endif()
+else()
+  message(STATUS "CUTLASS_ENABLE_SYCL is OFF - CuTE tutorial examples will not be built")
+  message(STATUS "Enable SYCL support to build CuTE tutorial examples")
+endif()
