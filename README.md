@@ -122,6 +122,7 @@ SYCL*TLA runs successfully on the following Intel GPUs.
 |---|---|
 |Intel Data Center GPU Max Series            |Xe-HPC|
 |Intel Arc GPU B580 Graphics                       |Xe2|
+|Intel Data Center GPU Crescent Island             |Xe3p|
 
 ## Validated Software Configurations
 
@@ -131,9 +132,7 @@ We are regularly testing following setup in CI.
 |-----------------|----------|-----------------|--------|---------------------|-----------------------|
 |Xe-HPC| Ubuntu 24.04 |2025.3+ |G++13  | 25.48 | 2.24 |
 |Xe2| Ubuntu 25.04 |2025.3+  |G++13  | 26.01 | 2.27 |
-
-
-
+|Xe3p| Ubuntu 25.04 |2025.3+  |G++13  | 26.01 | 2.27 |
 
 
 ## Target Architecture
@@ -149,6 +148,12 @@ Or
 ```
 cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" 
 ```
+Or
+
+```
+cmake .. -DDPCPP_SYCL_TARGET="intel_gpu_cri"
+```
+
 
 Or
 
@@ -201,6 +206,7 @@ Create a build directory within the SYCL*TLA project, then run CMake. You need t
 the target Intel GPU architecture using the `DPCPP_SYCL_TARGET` flag.
 For Intel Data Center GPU Max Series (Ponte Vecchio), use `intel_gpu_pvc`.
 For Intel Arc GPU B580 Graphics, use `intel_gpu_bmg_g21`.
+For Intel Data Center GPU Crescent Island, use `intel_gpu_cri`.
 For Intel Arc GPU Battlemage (G31), use `intel_gpu_bmg_g31`.
 
 ```bash
@@ -213,6 +219,12 @@ Or for Intel Arc GPU B580 Graphics:
 
 ```bash
 $  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_bmg_g21" # compiles for Intel Arc GPU B580 Graphics
+```
+
+Or for Intel Data Center GPU Crescent Island:
+
+```bash
+$  CC=icx CXX=icpx cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET="intel_gpu_cri" # compiles for Intel Data Center GPU Crescent Island
 ```
 
 Or for Intel Arc GPU Battlemage (G31):

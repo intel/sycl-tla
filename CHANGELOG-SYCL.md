@@ -63,7 +63,7 @@
 - **GEMM Enhancements**:
   - Support all GEMM tile shapes ([#738](https://github.com/intel/sycl-tla/pull/738))
   - Enhance examples ([#726](https://github.com/intel/sycl-tla/pull/726))
-  
+
 ## [SYCL*TLA 0.7](https://github.com/intel/sycl-tla/releases/tag/v0.7) (2026-01-28)
 ### Major Architecture Improvements
 - **Epilogue Visitor Tree (EVT) Support ([#647](https://github.com/intel/sycl-tla/pull/647))**: EVT support for Intel Xe architecture
@@ -184,7 +184,6 @@
 ### Notes and Known Issues
 - Python Operations for FP8 and INT8 not generated for CUTLASS library in this release.
 - Unit tests and benchmark tests are not yet migrated to newly re architected CuTe APIs.
-
 
 ## [SYCL*TLA 0.5](https://github.com/intel/cutlass-sycl/releases/tag/v0.5) (2025-09-26)
 ### Major Architecture Changes
