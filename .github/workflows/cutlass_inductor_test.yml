@@ -90,7 +90,7 @@ jobs:
           cd ${{ runner.temp }}
           git clone https://github.com/pytorch/pytorch.git
           cd pytorch
-          git checkout 0002a8783abe6623eacc71df6c05d72869cd5ba5
+          git log -1 
           python3 -m pip install -r requirements.txt
           python3 -m pip install unittest-xml-reporting
           python3 -m pip install pytest
