@@ -1,5 +1,22 @@
 # SYCL*TLA (previously referred to as cutlass-sycl) Changelog
 
+## [SYCL*TLA 0.9.3](https://github.com/intel/sycl-tla/releases/tag/v0.9.3) (2026-09-23)
+### Enhancements
+- **Add FMHA LSE output support ([#848](https://github.com/intel/sycl-tla/pull/848))**
+
+### Performance Improvements
+- **Fix BMG GEMM performance regression ([#846](https://github.com/intel/sycl-tla/pull/846))**
+
+### Bug Fixes
+- **Fix launch_policy range initialization ([#854](https://github.com/intel/sycl-tla/pull/854))**
+- **Fix C++20 kernel lambda capture warnings ([#841](https://github.com/intel/sycl-tla/pull/841))**
+- **Fix grouped GEMM verification logic ([#825](https://github.com/intel/sycl-tla/pull/825))**
+- **Fix benchmark failure reporting ([#842](https://github.com/intel/sycl-tla/pull/842))**
+
+### Testing and CI
+- **Migrate GEMM unit tests to new APIs ([#683](https://github.com/intel/sycl-tla/pull/683))**
+- **Improve CI timeout, job allocation, and dpctl setup ([#843](https://github.com/intel/sycl-tla/pull/843), [#844](https://github.com/intel/sycl-tla/pull/844), [#845](https://github.com/intel/sycl-tla/pull/845), [#853](https://github.com/intel/sycl-tla/pull/853))**
+
 ## [SYCL*TLA 0.9.2](https://github.com/intel/sycl-tla/releases/tag/v0.9.2) (2026-07-17)
 ### Enhancements
 - **Support CRI platform ([#833](https://github.com/intel/sycl-tla/pull/833))**
