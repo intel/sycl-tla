@@ -13,9 +13,8 @@
 - **Fix grouped GEMM verification logic ([#825](https://github.com/intel/sycl-tla/pull/825))**
 - **Fix benchmark failure reporting ([#842](https://github.com/intel/sycl-tla/pull/842))**
 
-### Testing and CI
+### Testing
 - **Migrate GEMM unit tests to new APIs ([#683](https://github.com/intel/sycl-tla/pull/683))**
-- **Improve CI timeout, job allocation, and dpctl setup ([#843](https://github.com/intel/sycl-tla/pull/843), [#844](https://github.com/intel/sycl-tla/pull/844), [#845](https://github.com/intel/sycl-tla/pull/845), [#853](https://github.com/intel/sycl-tla/pull/853))**
 
 ## [SYCL*TLA 0.9.2](https://github.com/intel/sycl-tla/releases/tag/v0.9.2) (2026-07-17)
 ### Enhancements
