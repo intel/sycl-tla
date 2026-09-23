@@ -49,23 +49,25 @@ Base NVIDIA CUTLASS Versions for SYCL*TLA releases:
 |0.9 | 4.2.1 |
 |0.9.1 | 4.2.1 |
 |0.9.2 | 4.2.1 |
+|0.9.3 | 4.2.1 |
 
-# What's New in SYCL*TLA 0.9.2
+# What's New in SYCL*TLA 0.9.3
 
-## [SYCL*TLA 0.9.2](https://github.com/intel/sycl-tla/releases/tag/v0.9.2) (2026-07-17)
+## [SYCL*TLA 0.9.3](https://github.com/intel/sycl-tla/releases/tag/v0.9.3) (2026-09-23)
 ### Enhancements
-- **Support CRI platform ([#833](https://github.com/intel/sycl-tla/pull/833))**
-- **Fix register spills in XeRowBroadcast/XeColBroadcast ([#815](https://github.com/intel/sycl-tla/pull/815))**
-- **Fix identity fast path double-rounding and add EpilogueTile divisibility guard ([#832](https://github.com/intel/sycl-tla/pull/832))**
+- **Add FMHA LSE output support ([#848](https://github.com/intel/sycl-tla/pull/848))**
+
+### Performance Improvements
+- **Fix BMG GEMM performance regression ([#846](https://github.com/intel/sycl-tla/pull/846))**
 
 ### Bug Fixes
-- **Fix NumericConverter for SYCL device code (float→int32/int8/uint8) ([#817](https://github.com/intel/sycl-tla/pull/817))**
-- **Fix inductor UTs workflow ([#823](https://github.com/intel/sycl-tla/pull/823))**
-- **Fix BMG EVT workflow to run on any BMG runner ([#831](https://github.com/intel/sycl-tla/pull/831))**
-- **Fix bare ushort in host-context templates on Windows ([#835](https://github.com/intel/sycl-tla/pull/835))**
+- **Fix launch_policy range initialization ([#854](https://github.com/intel/sycl-tla/pull/854))**
+- **Fix C++20 kernel lambda capture warnings ([#841](https://github.com/intel/sycl-tla/pull/841))**
+- **Fix grouped GEMM verification logic ([#825](https://github.com/intel/sycl-tla/pull/825))**
+- **Fix benchmark failure reporting ([#842](https://github.com/intel/sycl-tla/pull/842))**
 
-### Documentation
-- **Clean up NV references, make public repo Intel-first ([#821](https://github.com/intel/sycl-tla/pull/821))**
+### Testing
+- **Migrate GEMM unit tests to new APIs ([#683](https://github.com/intel/sycl-tla/pull/683))**
 
 **See the [CHANGELOG](https://github.com/intel/sycl-tla/blob/main/CHANGELOG-SYCL.md) for details of all past releases and updates.**
 
