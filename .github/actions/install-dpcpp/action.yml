@@ -101,6 +101,7 @@ runs:
         . /opt/intel/oneapi/setvars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh
+        . /opt/intel/oneapi/mkl/latest/env/vars.sh
         export CC=icx
         export CXX=icpx
         export C_INCLUDE_PATH=$CMPLR_ROOT/include:$C_INCLUDE_PATH
