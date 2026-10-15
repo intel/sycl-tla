@@ -54,6 +54,14 @@ cutlass_test_unit_add_executable(
   xe_transpose_2d.cpp
   quantize_block_wise.cpp
   dequantize.cpp
+  reorder_e4m3_half.cpp
+)
+
+# CUTE_XE_E4M3_HALF_UNSCALED changes the e4m3 -> half reorder atoms for the whole translation unit,
+# so its test is a separate executable.
+cutlass_test_unit_add_executable(
+  cutlass_test_unit_cute_intel_xe_e4m3_half_unscaled
+  reorder_e4m3_half_unscaled.cpp
 )
 else()
 cutlass_test_unit_add_executable(

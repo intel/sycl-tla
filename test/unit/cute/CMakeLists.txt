@@ -73,6 +73,9 @@ if (CUTLASS_ENABLE_SYCL)
       cutlass_test_unit_cute_msvc_compilation
       cutlass_test_unit_cute_intel_xe
       )
+    if(SYCL_INTEL_TARGET)
+      add_dependencies(cutlass_test_unit_cute cutlass_test_unit_cute_intel_xe_e4m3_half_unscaled)
+    endif()
 
     add_custom_target(
       test_unit_cute
@@ -83,5 +86,8 @@ if (CUTLASS_ENABLE_SYCL)
       #Intel Tests
       test_unit_cute_intel_xe
       )
+    if(SYCL_INTEL_TARGET)
+      add_dependencies(test_unit_cute test_unit_cute_intel_xe_e4m3_half_unscaled)
+    endif()
   endif()
 endif()
