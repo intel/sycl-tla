@@ -97,10 +97,12 @@ runs:
         echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | \
           sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo apt update
-        sudo apt install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp
+        sudo apt install -y intel-oneapi-runtime-libs intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel
         . /opt/intel/oneapi/setvars.sh
+        . /opt/intel/oneapi/mkl/latest/env/vars.sh
         cat <<EOF | tee setvars.sh
         . /opt/intel/oneapi/setvars.sh
+        . /opt/intel/oneapi/mkl/latest/env/vars.sh
         export CC=icx
         export CXX=icpx
         export C_INCLUDE_PATH=$CMPLR_ROOT/include:$C_INCLUDE_PATH
