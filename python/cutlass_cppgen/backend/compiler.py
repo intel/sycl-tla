@@ -233,7 +233,7 @@ class ArtifactManager:
             op_attr = json.loads(op_attr)
             if self._is_sycl():
                 q = dpctl.SyclQueue(cutlass_cppgen.sycl_device())
-                module = dpctl.program.create_program_from_spirv(
+                module = dpctl.compiler.create_kernel_bundle_from_spirv(
                     q, cubin_image)
                 kernel = module.get_sycl_kernel(f"__sycl_kernel_{operation_name}")
             else:
@@ -394,7 +394,7 @@ class ArtifactManager:
                 for f in spv_files:
                     with open(f, "rb") as spirv_file:
                         spirv_image = spirv_file.read()
-                        program = dpctl.program.create_program_from_spirv(
+                        program = dpctl.compiler.create_kernel_bundle_from_spirv(
                             q, spirv_image)
                         if not program.has_sycl_kernel(op_name):
                             continue
@@ -535,7 +535,7 @@ class ArtifactManager:
                 if cubin_image is None:
                     raise RuntimeError("SYCL compilation failed, see debug log")
                 q = dpctl.SyclQueue(cutlass_cppgen.sycl_device())
-                program = dpctl.program.create_program_from_spirv(
+                program = dpctl.compiler.create_kernel_bundle_from_spirv(
                     q, cubin_image)
             else:
                 err, module = cuda.cuModuleLoadData(cubin_image)
