@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
            sudo apt-get update
-           sudo apt-get install -y python3.13-venv python3.13-dev
+           sudo apt-get install -y python3-venv python3-dev
  
       - name: Install Intel graphics drivers
         uses: ./.github/actions/install-intel-graphics
@@ -75,7 +75,7 @@ jobs:
         uses: ./.github/actions/install-dpctl
         with:
           DPCTL_URL: https://github.com/IntelPython/dpctl.git
-          DPCTL_BRANCH: latest-release
+          DPCTL_BRANCH: 0.23.0dev0
           DPCTL_PATH: ~/dpctl
           VENV_PATH: ~/.venv
 
@@ -83,7 +83,7 @@ jobs:
         shell: bash
         run: |
           source ~/.venv/bin/activate
-          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/test/xpu
+          pip install torch==2.12.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/xpu
           # Keep intel-sycl-rt: torch XPU wheels need the libsycl.so.9 it provides.
 
       - name: Install CUTLASS Python Package
