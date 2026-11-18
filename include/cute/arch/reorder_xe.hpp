@@ -542,6 +542,34 @@ struct Xe_Reorder<ReorderKind::VV, float_e5m2_t, bfloat16_t>
 };
 
 
+// Opt-in fast e4m3 -> half path (Xe2): define CUTE_XE_E4M3_HALF_UNSCALED before
+// including CuTe. The UU/VV e4m3 -> half reorders then emit value * 2^-8 in 3
+// instructions per 64 elements instead of 11: a sign-extending shl by 7 from a
+// signed byte replaces shl 8 + asr 1, and the exponent re-bias multiply and the
+// NaN-preserving multiplies are dropped. Exact for every finite e4m3 code; the
+// NaN codes 0x7F/0xFF decode to +-480 (finite) instead of NaN. The caller must
+// fold the factor 256 into a downstream scale (e.g. attention softmax scale and
+// output scale). CUTE_XE_E4M3_HALF_UNSCALED_ACTIVE is defined when the path is
+// compiled in (not on Xe3p, which converts with fcvt).
+#if defined(CUTE_XE_E4M3_HALF_UNSCALED)
+#if !(defined(SYCL_INTEL_TARGET) && (SYCL_INTEL_TARGET == 35))
+#define CUTE_XE_E4M3_HALF_UNSCALED_ACTIVE 1
+#endif
+#define CUTE_XE_REORDER_E4M3_HALF_UNSCALED_ASM(SRC0, SRC1) \
+    asm ( \
+      "{\n" \
+      ".decl IN_B v_type=G type=B num_elts=64 alias=<%1,0>\n" \
+      ".decl OUT_W v_type=G type=W num_elts=64 alias=<%0,0>\n" \
+      ".decl OUT_UD v_type=G type=UD num_elts=32 alias=<%0,0>\n" \
+      "shl (M1_NM, 32) OUT_W(0,0)<1> IN_B" SRC0 " 7:w\n" \
+      "shl (M1_NM, 32) OUT_W(1,0)<1> IN_B" SRC1 " 7:w\n" \
+      "and (M1_NM, 32) OUT_UD(0,0)<1> OUT_UD(0,0)<1;1,0> 0xBFFFBFFF:ud\n" \
+      "}\n" \
+      : "=rw"(dst0) \
+      : "rw"(src0) \
+    )
+#endif
+
 // Common e4m3 -> half conversion sequence, after shl by 8.
 #define CUTE_XE_REORDER_E4M3_HALF_SEQ \
     ".decl OUT_W v_type=G type=W num_elts=64 alias=<%0,0>\n" \
@@ -581,6 +609,8 @@ struct Xe_Reorder<ReorderKind::UU, float_e4m3_t, half_t>
       : "=rw"(dst0)
       : "rw"(src0)
     );
+#elif defined(CUTE_XE_E4M3_HALF_UNSCALED)
+    CUTE_XE_REORDER_E4M3_HALF_UNSCALED_ASM("(0,0)<1;1,0>", "(0,32)<1;1,0>");
 #else
     asm (     /* 6 cycles/output register */
       "{\n"
@@ -621,6 +651,8 @@ struct Xe_Reorder<ReorderKind::VV, float_e4m3_t, half_t>
       : "=rw"(dst0)
       : "rw"(src0)
     );
+#elif defined(CUTE_XE_E4M3_HALF_UNSCALED)
+    CUTE_XE_REORDER_E4M3_HALF_UNSCALED_ASM("(0,0)<4;2,1>", "(0,2)<4;2,1>");
 #else
     asm (     /* 6 cycles/output register */
       "{\n"
