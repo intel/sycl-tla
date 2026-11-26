@@ -79,7 +79,9 @@ jobs:
           git checkout 0002a8783abe6623eacc71df6c05d72869cd5ba5
           python3 -m pip install -r requirements.txt
           python3 -m pip install unittest-xml-reporting
-          python3 -m pip install pytest
+          # pytest 9.2.0 keys junitxml node reporters by NodeId, which breaks the
+          # LogXMLReruns override in pytorch test/conftest.py (KeyError on skipped tests)
+          python3 -m pip install "pytest==9.1.1"
           export PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/xpu
           USE_XPU=1 make triton
 
