@@ -58,6 +58,14 @@ IncludeTemplate = r"""#include "${include}"
 """
 
 
+def create_kernel_bundle_from_spirv(queue, spirv_image):
+    # dpctl.compiler replaced dpctl.program in dpctl 0.23.0dev1, which needs a
+    # newer DPC++ than 2025.3; fall back to dpctl.program on older dpctl.
+    if hasattr(dpctl, "compiler"):
+        return dpctl.compiler.create_kernel_bundle_from_spirv(queue, spirv_image)
+    return dpctl.program.create_program_from_spirv(queue, spirv_image)
+
+
 def compile_with_nvcc(cmd, source, error_file):
     succeed = True
     try:
@@ -233,7 +241,7 @@ class ArtifactManager:
             op_attr = json.loads(op_attr)
             if self._is_sycl():
                 q = dpctl.SyclQueue(cutlass_cppgen.sycl_device())
-                module = dpctl.compiler.create_kernel_bundle_from_spirv(
+                module = create_kernel_bundle_from_spirv(
                     q, cubin_image)
                 kernel = module.get_sycl_kernel(f"__sycl_kernel_{operation_name}")
             else:
@@ -394,7 +402,7 @@ class ArtifactManager:
                 for f in spv_files:
                     with open(f, "rb") as spirv_file:
                         spirv_image = spirv_file.read()
-                        program = dpctl.compiler.create_kernel_bundle_from_spirv(
+                        program = create_kernel_bundle_from_spirv(
                             q, spirv_image)
                         if not program.has_sycl_kernel(op_name):
                             continue
@@ -535,7 +543,7 @@ class ArtifactManager:
                 if cubin_image is None:
                     raise RuntimeError("SYCL compilation failed, see debug log")
                 q = dpctl.SyclQueue(cutlass_cppgen.sycl_device())
-                program = dpctl.compiler.create_kernel_bundle_from_spirv(
+                program = create_kernel_bundle_from_spirv(
                     q, cubin_image)
             else:
                 err, module = cuda.cuModuleLoadData(cubin_image)

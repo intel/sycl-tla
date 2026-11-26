@@ -75,7 +75,7 @@ jobs:
         uses: ./.github/actions/install-dpctl
         with:
           DPCTL_URL: https://github.com/IntelPython/dpctl.git
-          DPCTL_BRANCH: 0.23.0
+          DPCTL_BRANCH: 0.23.0dev0
           DPCTL_PATH: ~/dpctl
           VENV_PATH: ~/.venv
 
